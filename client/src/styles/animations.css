@@ -1,0 +1,258 @@
+/* RPBox 动画系统 */
+
+/* ========== 基础过渡 ========== */
+.r-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ========== 淡入淡出 ========== */
+.r-fade-enter-active,
+.r-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.r-fade-enter-from,
+.r-fade-leave-to {
+  opacity: 0;
+}
+
+/* ========== 缩放淡入 ========== */
+.r-zoom-enter-active,
+.r-zoom-leave-active {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.r-zoom-enter-from,
+.r-zoom-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+/* ========== 弹性缩放 ========== */
+.r-bounce-enter-active {
+  animation: r-bounce-in 0.5s;
+}
+.r-bounce-leave-active {
+  animation: r-bounce-in 0.3s reverse;
+}
+@keyframes r-bounce-in {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ========== 滑入（上下左右） ========== */
+.r-slide-up-enter-active,
+.r-slide-up-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.r-slide-up-enter-from { opacity: 0; transform: translateY(20px); }
+.r-slide-up-leave-to { opacity: 0; transform: translateY(-20px); }
+
+.r-slide-down-enter-active,
+.r-slide-down-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.r-slide-down-enter-from { opacity: 0; transform: translateY(-20px); }
+.r-slide-down-leave-to { opacity: 0; transform: translateY(20px); }
+
+.r-slide-left-enter-active,
+.r-slide-left-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.r-slide-left-enter-from { opacity: 0; transform: translateX(20px); }
+.r-slide-left-leave-to { opacity: 0; transform: translateX(-20px); }
+
+.r-slide-right-enter-active,
+.r-slide-right-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.r-slide-right-enter-from { opacity: 0; transform: translateX(-20px); }
+.r-slide-right-leave-to { opacity: 0; transform: translateX(20px); }
+
+/* ========== 展开折叠 ========== */
+.r-expand-enter-active,
+.r-expand-leave-active {
+  transition: all 0.3s ease-out;
+  overflow: hidden;
+}
+.r-expand-enter-from,
+.r-expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ========== 翻转 ========== */
+.r-flip-enter-active,
+.r-flip-leave-active {
+  transition: all 0.4s ease;
+}
+.r-flip-enter-from {
+  opacity: 0;
+  transform: rotateY(-90deg);
+}
+.r-flip-leave-to {
+  opacity: 0;
+  transform: rotateY(90deg);
+}
+
+/* ========== 列表动画 ========== */
+.r-list-enter-active,
+.r-list-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.r-list-enter-from {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+.r-list-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
+}
+.r-list-move {
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ========== 脉冲动画 ========== */
+@keyframes r-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.r-pulse {
+  animation: r-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ========== 心跳动画 ========== */
+@keyframes r-heartbeat {
+  0%, 100% { transform: scale(1); }
+  25% { transform: scale(1.1); }
+  50% { transform: scale(1); }
+  75% { transform: scale(1.1); }
+}
+.r-heartbeat {
+  animation: r-heartbeat 1s ease-in-out infinite;
+}
+
+/* ========== 摇晃动画 ========== */
+@keyframes r-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+.r-shake {
+  animation: r-shake 0.6s ease-in-out;
+}
+
+/* ========== 浮动动画 ========== */
+@keyframes r-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.r-float {
+  animation: r-float 3s ease-in-out infinite;
+}
+
+/* ========== 旋转动画 ========== */
+@keyframes r-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.r-spin {
+  animation: r-spin 1s linear infinite;
+}
+
+/* ========== 闪烁动画 ========== */
+@keyframes r-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.r-blink {
+  animation: r-blink 1s step-end infinite;
+}
+
+/* ========== 波纹效果 ========== */
+@keyframes r-ripple {
+  0% { transform: scale(0); opacity: 1; }
+  100% { transform: scale(4); opacity: 0; }
+}
+.r-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.r-ripple::after {
+  content: '';
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  background: rgba(255,255,255,0.3);
+  border-radius: 50%;
+  transform: scale(0);
+  pointer-events: none;
+}
+.r-ripple:active::after {
+  animation: r-ripple 0.6s ease-out;
+}
+
+/* ========== 悬浮提升 ========== */
+.r-hover-lift {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.r-hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(75, 54, 33, 0.15);
+}
+
+/* ========== 悬浮发光 ========== */
+.r-hover-glow {
+  transition: box-shadow 0.3s ease;
+}
+.r-hover-glow:hover {
+  box-shadow: 0 0 20px rgba(184, 115, 51, 0.4);
+}
+
+/* ========== 按下缩放 ========== */
+.r-press-scale {
+  transition: transform 0.15s ease;
+}
+.r-press-scale:active {
+  transform: scale(0.95);
+}
+
+/* ========== 骨架屏闪烁 ========== */
+@keyframes r-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.r-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(75, 54, 33, 0.1) 25%,
+    rgba(75, 54, 33, 0.05) 50%,
+    rgba(75, 54, 33, 0.1) 75%
+  );
+  background-size: 200% 100%;
+  animation: r-shimmer 1.5s infinite;
+}
+
+/* ========== 打字机效果 ========== */
+@keyframes r-typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+.r-typing {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: r-typing 2s steps(30) forwards;
+}
+
+/* ========== 渐变流动 ========== */
+@keyframes r-gradient-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.r-gradient-flow {
+  background-size: 200% 200%;
+  animation: r-gradient-flow 3s ease infinite;
+}

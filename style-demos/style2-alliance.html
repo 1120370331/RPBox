@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox - 联盟城堡风格</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #0a1525;
+            min-height: 100vh;
+            color: #c4d4e8;
+        }
+
+        /* 石墙纹理背景 */
+        .stone-bg {
+            position: fixed;
+            inset: 0;
+            background:
+                url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='50' height='25' x='0' y='0' fill='%23162a4a' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='50' height='25' x='50' y='0' fill='%23142545' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='50' height='25' x='25' y='25' fill='%23152848' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='25' height='25' x='0' y='25' fill='%23132340' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='25' height='25' x='75' y='25' fill='%23142545' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='50' height='25' x='0' y='50' fill='%23152848' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='50' height='25' x='50' y='50' fill='%23162a4a' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='50' height='25' x='25' y='75' fill='%23142545' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='25' height='25' x='0' y='75' fill='%23152848' stroke='%230d1f3c' stroke-width='1'/%3E%3Crect width='25' height='25' x='75' y='75' fill='%23132340' stroke='%230d1f3c' stroke-width='1'/%3E%3C/svg%3E");
+            z-index: -1;
+        }
+
+        /* 城堡塔楼式导航 */
+        .castle-nav {
+            background: linear-gradient(180deg, #1a3a6e 0%, #0f2847 100%);
+            border-bottom: 4px solid #d4af37;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-battlements {
+            height: 15px;
+            background: repeating-linear-gradient(90deg,
+                #1a3a6e 0px, #1a3a6e 30px,
+                transparent 30px, transparent 45px);
+            border-bottom: 2px solid #0f2847;
+        }
+
+        .nav-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo-crest {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* 狮子徽章 */
+        .lion-emblem {
+            width: 55px;
+            height: 55px;
+            background: linear-gradient(135deg, #d4af37 0%, #a08520 100%);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        }
+
+        .logo-title {
+            font-family: 'Cinzel', serif;
+            font-size: 26px;
+            font-weight: 700;
+            color: #d4af37;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 3px;
+        }
+
+        .nav-pillars {
+            display: flex;
+            gap: 0;
+        }
+
+        /* 柱子式导航项 */
+        .pillar-link {
+            padding: 15px 25px;
+            color: #8ab4e8;
+            text-decoration: none;
+            font-size: 14px;
+            position: relative;
+            transition: all 0.3s;
+            border-left: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .pillar-link:last-child {
+            border-right: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .pillar-link::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 3px;
+            background: #d4af37;
+            transition: width 0.3s;
+        }
+
+        .pillar-link:hover, .pillar-link.active {
+            color: #d4af37;
+            background: rgba(212, 175, 55, 0.1);
+        }
+
+        .pillar-link:hover::before, .pillar-link.active::before {
+            width: 100%;
+        }
+
+        .user-shield {
+            width: 40px;
+            height: 48px;
+            background: linear-gradient(180deg, #1a3a6e 0%, #0f2847 100%);
+            clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+            border: 2px solid #d4af37;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 30px;
+        }
+
+        /* 城门式英雄区 */
+        .castle-gate {
+            background: linear-gradient(180deg, #1a3a6e 0%, #0f2847 100%);
+            border: 4px solid #3a5a8a;
+            border-radius: 0 0 50% 50% / 0 0 30px 30px;
+            padding: 60px 40px 80px;
+            text-align: center;
+            position: relative;
+            margin-bottom: 50px;
+        }
+
+        /* 拱门装饰 */
+        .castle-gate::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 8px;
+            background: linear-gradient(90deg, transparent, #d4af37, transparent);
+        }
+
+        .gate-title {
+            font-family: 'Cinzel', serif;
+            font-size: 48px;
+            color: #d4af37;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+        }
+
+        .gate-subtitle {
+            font-size: 18px;
+            color: #8ab4e8;
+            margin-bottom: 35px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .gate-btn {
+            display: inline-block;
+            padding: 16px 45px;
+            background: linear-gradient(135deg, #d4af37 0%, #a08520 100%);
+            color: #0a1525;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 15px;
+            clip-path: polygon(10% 0%, 90% 0%, 100% 50%, 90% 100%, 10% 100%, 0% 50%);
+            transition: all 0.3s;
+        }
+
+        .gate-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(212, 175, 55, 0.6);
+        }
+
+        /* 盾牌形功能卡片 */
+        .shield-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 25px;
+            margin-bottom: 50px;
+        }
+
+        .shield-card {
+            background: linear-gradient(180deg, #1a3a6e 0%, #0f2847 100%);
+            clip-path: polygon(0 0, 100% 0, 100% 75%, 50% 100%, 0 75%);
+            padding: 30px 20px 50px;
+            text-align: center;
+            border: 3px solid #3a5a8a;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .shield-card:hover {
+            border-color: #d4af37;
+            transform: translateY(-8px);
+        }
+
+        .shield-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 15px;
+            background: rgba(212, 175, 55, 0.15);
+            border: 2px solid #5c8fd4;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+        }
+
+        .shield-title {
+            font-family: 'Cinzel', serif;
+            font-size: 16px;
+            color: #d4af37;
+            margin-bottom: 10px;
+        }
+
+        .shield-desc {
+            font-size: 12px;
+            color: #8ab4e8;
+            line-height: 1.6;
+        }
+
+        /* 人物卡旗帜区 */
+        .banner-section {
+            background: linear-gradient(180deg, #1a3a6e 0%, #0f2847 100%);
+            border: 3px solid #3a5a8a;
+            border-radius: 8px;
+            padding: 40px;
+        }
+
+        .section-title {
+            font-family: 'Cinzel', serif;
+            font-size: 24px;
+            color: #d4af37;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .banner-row {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        /* 旗帜式人物卡 */
+        .char-banner {
+            width: 180px;
+            background: linear-gradient(180deg, #0f2847 0%, #0a1525 100%);
+            border: 2px solid #3a5a8a;
+            position: relative;
+            padding-top: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .char-banner:hover {
+            border-color: #d4af37;
+            transform: scale(1.03);
+        }
+
+        /* 旗帜顶部横杆 */
+        .char-banner::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: -10px;
+            right: -10px;
+            height: 16px;
+            background: linear-gradient(180deg, #d4af37, #a08520);
+            border-radius: 3px;
+        }
+
+        .banner-content {
+            padding: 20px 15px 25px;
+            text-align: center;
+        }
+
+        .banner-avatar {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .banner-name {
+            font-size: 14px;
+            color: #d4af37;
+            margin-bottom: 5px;
+        }
+
+        .banner-info {
+            font-size: 11px;
+            color: #5c8fd4;
+        }
+
+        /* 旗帜底部尖角 */
+        .banner-tail {
+            height: 30px;
+            background: linear-gradient(180deg, #0a1525 0%, #0a1525 50%, transparent 50%);
+            clip-path: polygon(0 0, 100% 0, 50% 100%);
+        }
+
+        .style-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #1a3a6e 0%, #0f2847 100%);
+            color: #d4af37;
+            padding: 12px 24px;
+            border-radius: 0;
+            clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+            font-weight: 600;
+            font-size: 14px;
+            border: 2px solid #d4af37;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="stone-bg"></div>
+
+    <nav class="castle-nav">
+        <div class="nav-battlements"></div>
+        <div class="nav-inner">
+            <div class="logo-crest">
+                <div class="lion-emblem">🦁</div>
+                <span class="logo-title">RPBOX</span>
+            </div>
+            <div class="nav-pillars">
+                <a href="#" class="pillar-link active">首页</a>
+                <a href="#" class="pillar-link">人物卡</a>
+                <a href="#" class="pillar-link">剧情档案</a>
+                <a href="#" class="pillar-link">社区</a>
+                <a href="#" class="pillar-link">道具市场</a>
+            </div>
+            <div class="user-shield">👤</div>
+        </div>
+    </nav>
+    <div class="style-badge">方案二：联盟城堡</div>
+
+    <main class="main-content">
+        <section class="castle-gate">
+            <h1 class="gate-title">RPBOX</h1>
+            <p class="gate-subtitle">魔兽世界 RP 玩家工具箱 - 为了联盟的荣耀</p>
+            <a href="#" class="gate-btn">为了联盟</a>
+        </section>
+
+        <div class="shield-grid">
+            <div class="shield-card">
+                <div class="shield-icon">☁️</div>
+                <h3 class="shield-title">人物卡云同步</h3>
+                <p class="shield-desc">跨设备备份管理角色档案</p>
+            </div>
+            <div class="shield-card">
+                <div class="shield-icon">📖</div>
+                <h3 class="shield-title">剧情记录</h3>
+                <p class="shield-desc">保存每段冒险故事</p>
+            </div>
+            <div class="shield-card">
+                <div class="shield-icon">🏰</div>
+                <h3 class="shield-title">社区平台</h3>
+                <p class="shield-desc">与盟友分享交流</p>
+            </div>
+            <div class="shield-card">
+                <div class="shield-icon">⚔️</div>
+                <h3 class="shield-title">道具市场</h3>
+                <p class="shield-desc">TRP3道具一键导入</p>
+            </div>
+        </div>
+
+        <section class="banner-section">
+            <h2 class="section-title">我的英雄</h2>
+            <div class="banner-row">
+                <div class="char-banner">
+                    <div class="banner-content">
+                        <div class="banner-avatar">🧙</div>
+                        <div class="banner-name">安度因·洛萨</div>
+                        <div class="banner-info">人类 · 战士</div>
+                    </div>
+                    <div class="banner-tail"></div>
+                </div>
+                <div class="char-banner">
+                    <div class="banner-content">
+                        <div class="banner-avatar">🌙</div>
+                        <div class="banner-name">泰兰德·语风</div>
+                        <div class="banner-info">暗夜精灵 · 牧师</div>
+                    </div>
+                    <div class="banner-tail"></div>
+                </div>
+                <div class="char-banner">
+                    <div class="banner-content">
+                        <div class="banner-avatar">🔨</div>
+                        <div class="banner-name">穆拉丁·铜须</div>
+                        <div class="banner-info">矮人 · 战士</div>
+                    </div>
+                    <div class="banner-tail"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

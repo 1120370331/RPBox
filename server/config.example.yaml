@@ -1,0 +1,14 @@
+server:
+  port: "8080"
+  mode: "debug"
+
+database:
+  host: "localhost"
+  port: "5432"
+  user: "rpbox"
+  password: "rpbox"
+  dbname: "rpbox"
+
+jwt:
+  secret: "your-secret-key-change-in-production"
+  expire: 72
