@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox - 部落战旗风格</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #1a0a0a;
+            min-height: 100vh;
+            color: #e8d0b0;
+        }
+
+        /* 兽皮纹理背景 */
+        .leather-bg {
+            position: fixed;
+            inset: 0;
+            background:
+                url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.15'/%3E%3C/svg%3E"),
+                linear-gradient(135deg, #2a1510 0%, #1a0a0a 50%, #251008 100%);
+            z-index: -1;
+        }
+
+        /* 图腾柱式导航 */
+        .totem-nav {
+            background: linear-gradient(180deg, #3a1a10 0%, #2a0f08 100%);
+            border-bottom: 4px solid #8b0000;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        /* 尖刺装饰 */
+        .spike-row {
+            height: 12px;
+            background: repeating-linear-gradient(90deg,
+                transparent 0px, transparent 20px,
+                #8b0000 20px, #8b0000 22px,
+                transparent 22px, transparent 40px);
+        }
+
+        .nav-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo-totem {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* 部落徽章 */
+        .horde-emblem {
+            width: 55px;
+            height: 55px;
+            background: radial-gradient(circle, #8b0000 0%, #5a0000 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            border: 3px solid #c41e3a;
+            box-shadow: 0 0 20px rgba(196, 30, 58, 0.5);
+        }
+
+        .logo-title {
+            font-family: 'Cinzel', serif;
+            font-size: 28px;
+            font-weight: 700;
+            color: #c41e3a;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            letter-spacing: 4px;
+        }
+
+        .nav-bones {
+            display: flex;
+            gap: 5px;
+        }
+
+        /* 骨头/木棍式导航 */
+        .bone-link {
+            padding: 12px 22px;
+            color: #c9a87c;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            position: relative;
+            transition: all 0.3s;
+            background: rgba(139, 0, 0, 0.1);
+            border: 2px solid transparent;
+            clip-path: polygon(5% 0%, 95% 0%, 100% 50%, 95% 100%, 5% 100%, 0% 50%);
+        }
+
+        .bone-link:hover, .bone-link.active {
+            color: #c41e3a;
+            background: rgba(139, 0, 0, 0.3);
+            border-color: #8b0000;
+        }
+
+        .user-skull {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(180deg, #3a1a10 0%, #2a0f08 100%);
+            border: 2px solid #8b0000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 30px;
+        }
+
+        /* 战鼓式英雄区 */
+        .war-drum {
+            background: linear-gradient(180deg, #3a1a10 0%, #2a0f08 100%);
+            border: 4px solid #5a2a1a;
+            border-radius: 20px;
+            padding: 60px 40px;
+            text-align: center;
+            position: relative;
+            margin-bottom: 50px;
+        }
+
+        /* 角落尖刺装饰 */
+        .war-drum::before, .war-drum::after {
+            content: '⚔️';
+            position: absolute;
+            font-size: 30px;
+            top: 20px;
+        }
+        .war-drum::before { left: 30px; }
+        .war-drum::after { right: 30px; }
+
+        .drum-title {
+            font-family: 'Cinzel', serif;
+            font-size: 52px;
+            color: #c41e3a;
+            margin-bottom: 20px;
+            text-shadow: 4px 4px 8px rgba(0,0,0,0.8);
+        }
+
+        .drum-subtitle {
+            font-size: 18px;
+            color: #c9a87c;
+            margin-bottom: 35px;
+        }
+
+        .drum-btn {
+            display: inline-block;
+            padding: 18px 50px;
+            background: linear-gradient(180deg, #8b0000 0%, #5a0000 100%);
+            color: #e8d0b0;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            border: 3px solid #c41e3a;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .drum-btn:hover {
+            background: linear-gradient(180deg, #a01010 0%, #6a0000 100%);
+            box-shadow: 0 0 30px rgba(196, 30, 58, 0.6);
+            transform: scale(1.05);
+        }
+
+        /* 图腾柱式功能卡 */
+        .totem-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 50px;
+        }
+
+        .totem-card {
+            background: linear-gradient(180deg, #3a1a10 0%, #2a0f08 100%);
+            border: 3px solid #5a2a1a;
+            padding: 25px 15px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        /* 图腾顶部装饰 */
+        .totem-card::before {
+            content: '▲';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #8b0000;
+            font-size: 20px;
+        }
+
+        .totem-card:hover {
+            border-color: #c41e3a;
+            transform: translateY(-5px);
+        }
+
+        .totem-icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+        }
+
+        .totem-title {
+            font-size: 15px;
+            color: #c41e3a;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .totem-desc {
+            font-size: 12px;
+            color: #a08060;
+            line-height: 1.5;
+        }
+
+        /* 战旗式人物卡 */
+        .warflag-section {
+            background: linear-gradient(180deg, #3a1a10 0%, #2a0f08 100%);
+            border: 3px solid #5a2a1a;
+            padding: 40px;
+        }
+
+        .section-title {
+            font-family: 'Cinzel', serif;
+            font-size: 24px;
+            color: #c41e3a;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .warflag-row {
+            display: flex;
+            gap: 25px;
+            justify-content: center;
+        }
+
+        .char-flag {
+            width: 160px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .char-flag:hover {
+            transform: scale(1.05);
+        }
+
+        /* 旗杆 */
+        .flag-pole {
+            width: 8px;
+            height: 30px;
+            background: linear-gradient(90deg, #5a3a2a, #8b5a4a, #5a3a2a);
+            margin: 0 auto;
+        }
+
+        .flag-body {
+            background: linear-gradient(135deg, #8b0000 0%, #5a0000 100%);
+            border: 2px solid #c41e3a;
+            padding: 20px 15px;
+            text-align: center;
+            clip-path: polygon(0 0, 100% 0, 100% 85%, 50% 100%, 0 85%);
+        }
+
+        .flag-avatar {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        .flag-name {
+            font-size: 13px;
+            color: #e8d0b0;
+            margin-bottom: 5px;
+        }
+
+        .flag-info {
+            font-size: 11px;
+            color: #c9a87c;
+        }
+
+        .style-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #8b0000 0%, #5a0000 100%);
+            color: #e8d0b0;
+            padding: 12px 24px;
+            font-weight: 600;
+            font-size: 14px;
+            border: 2px solid #c41e3a;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="leather-bg"></div>
+    <nav class="totem-nav">
+        <div class="spike-row"></div>
+        <div class="nav-inner">
+            <div class="logo-totem">
+                <div class="horde-emblem">🐺</div>
+                <span class="logo-title">RPBOX</span>
+            </div>
+            <div class="nav-bones">
+                <a href="#" class="bone-link active">首页</a>
+                <a href="#" class="bone-link">人物卡</a>
+                <a href="#" class="bone-link">剧情档案</a>
+                <a href="#" class="bone-link">社区</a>
+                <a href="#" class="bone-link">道具市场</a>
+            </div>
+            <div class="user-skull">💀</div>
+        </div>
+    </nav>
+
+    <div class="style-badge">方案三：部落战旗</div>
+
+    <main class="main-content">
+        <section class="war-drum">
+            <h1 class="drum-title">RPBOX</h1>
+            <p class="drum-subtitle">魔兽世界 RP 玩家工具箱 - 为了部落的荣耀</p>
+            <a href="#" class="drum-btn">为了部落</a>
+        </section>
+
+        <div class="totem-grid">
+            <div class="totem-card">
+                <div class="totem-icon">☁️</div>
+                <h3 class="totem-title">人物卡云同步</h3>
+                <p class="totem-desc">跨设备备份角色档案</p>
+            </div>
+            <div class="totem-card">
+                <div class="totem-icon">📖</div>
+                <h3 class="totem-title">剧情记录</h3>
+                <p class="totem-desc">保存战斗与荣耀</p>
+            </div>
+            <div class="totem-card">
+                <div class="totem-icon">🏰</div>
+                <h3 class="totem-title">社区平台</h3>
+                <p class="totem-desc">与战友分享交流</p>
+            </div>
+            <div class="totem-card">
+                <div class="totem-icon">⚔️</div>
+                <h3 class="totem-title">道具市场</h3>
+                <p class="totem-desc">TRP3道具一键导入</p>
+            </div>
+        </div>
+
+        <section class="warflag-section">
+            <h2 class="section-title">我的战士</h2>
+            <div class="warflag-row">
+                <div class="char-flag">
+                    <div class="flag-pole"></div>
+                    <div class="flag-body">
+                        <div class="flag-avatar">⚔️</div>
+                        <div class="flag-name">格罗姆·地狱咆哮</div>
+                        <div class="flag-info">兽人 · 战士</div>
+                    </div>
+                </div>
+                <div class="char-flag">
+                    <div class="flag-pole"></div>
+                    <div class="flag-body">
+                        <div class="flag-avatar">🧙</div>
+                        <div class="flag-name">希尔瓦娜斯</div>
+                        <div class="flag-info">亡灵 · 猎人</div>
+                    </div>
+                </div>
+                <div class="char-flag">
+                    <div class="flag-pole"></div>
+                    <div class="flag-body">
+                        <div class="flag-avatar">🐂</div>
+                        <div class="flag-name">凯恩·血蹄</div>
+                        <div class="flag-info">牛头人 · 战士</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox - 风格方案选择</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #0f0f15;
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .bg-pattern {
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 30% 20%, rgba(201, 162, 39, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(138, 43, 226, 0.08) 0%, transparent 50%);
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .main-title {
+            font-family: 'Cinzel', serif;
+            font-size: 48px;
+            color: #c9a227;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: #888;
+        }
+
+        .style-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+        }
+
+        .style-card {
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+        }
+
+        .style-card:hover {
+            transform: translateY(-8px);
+        }
+
+        .card-preview {
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            position: relative;
+        }
+
+        .card-info {
+            padding: 25px;
+        }
+
+        .card-title {
+            font-family: 'Cinzel', serif;
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        .card-desc {
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .card-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .feature-tag {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        /* 方案一：羊皮纸 */
+        .card-parchment {
+            background: #2a1f14;
+            border: 2px solid #5a4030;
+        }
+        .card-parchment:hover { border-color: #c9a227; box-shadow: 0 15px 40px rgba(201, 162, 39, 0.2); }
+        .card-parchment .card-preview { background: linear-gradient(135deg, #e8d5b0 0%, #d4c4a0 100%); }
+        .card-parchment .card-title { color: #c9a227; }
+        .card-parchment .card-desc { color: #a89878; }
+        .card-parchment .feature-tag { background: rgba(201, 162, 39, 0.2); color: #c9a227; }
+
+        /* 方案二：联盟 */
+        .card-alliance {
+            background: #0f2847;
+            border: 2px solid #3a5a8a;
+        }
+        .card-alliance:hover { border-color: #d4af37; box-shadow: 0 15px 40px rgba(212, 175, 55, 0.2); }
+        .card-alliance .card-preview { background: linear-gradient(135deg, #1a3a6e 0%, #0f2847 100%); }
+        .card-alliance .card-title { color: #d4af37; }
+        .card-alliance .card-desc { color: #8ab4e8; }
+        .card-alliance .feature-tag { background: rgba(92, 143, 212, 0.2); color: #5c8fd4; }
+
+        /* 方案三：部落 */
+        .card-horde {
+            background: #2a0f08;
+            border: 2px solid #5a2a1a;
+        }
+        .card-horde:hover { border-color: #c41e3a; box-shadow: 0 15px 40px rgba(196, 30, 58, 0.2); }
+        .card-horde .card-preview { background: linear-gradient(135deg, #3a1a10 0%, #2a0f08 100%); }
+        .card-horde .card-title { color: #c41e3a; }
+        .card-horde .card-desc { color: #c9a87c; }
+        .card-horde .feature-tag { background: rgba(139, 0, 0, 0.3); color: #c41e3a; }
+
+        /* 方案四：现代 */
+        .card-modern {
+            background: #14141e;
+            border: 2px solid rgba(138, 43, 226, 0.3);
+        }
+        .card-modern:hover { border-color: #8a2be2; box-shadow: 0 15px 40px rgba(138, 43, 226, 0.2); }
+        .card-modern .card-preview { background: linear-gradient(135deg, #1a1a2e 0%, #0f0f18 100%); }
+        .card-modern .card-title { color: #00bfff; }
+        .card-modern .card-desc { color: #a0a0b0; }
+        .card-modern .feature-tag { background: rgba(138, 43, 226, 0.2); color: #8a2be2; }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    <div class="container">
+        <header class="header">
+            <h1 class="main-title">RPBOX 风格方案</h1>
+            <p class="subtitle">请选择您喜欢的前端设计风格</p>
+        </header>
+
+        <div class="style-grid">
+            <a href="style1-parchment.html" class="style-card card-parchment">
+                <div class="card-preview">📜</div>
+                <div class="card-info">
+                    <h2 class="card-title">经典羊皮纸风格</h2>
+                    <p class="card-desc">采用打开的书本布局，羊皮纸质感背景，蜡封按钮，书架式人物卡展示。适合追求经典魔兽氛围的玩家。</p>
+                    <div class="card-features">
+                        <span class="feature-tag">书本布局</span>
+                        <span class="feature-tag">卷轴导航</span>
+                        <span class="feature-tag">蜡封按钮</span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="style2-alliance.html" class="style-card card-alliance">
+                <div class="card-preview">🦁</div>
+                <div class="card-info">
+                    <h2 class="card-title">联盟城堡风格</h2>
+                    <p class="card-desc">石墙纹理背景，城垛式导航，盾牌形功能卡片，旗帜式人物卡。为了联盟的荣耀！</p>
+                    <div class="card-features">
+                        <span class="feature-tag">城堡布局</span>
+                        <span class="feature-tag">盾牌卡片</span>
+                        <span class="feature-tag">旗帜人物卡</span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="style3-horde.html" class="style-card card-horde">
+                <div class="card-preview">🐺</div>
+                <div class="card-info">
+                    <h2 class="card-title">部落战旗风格</h2>
+                    <p class="card-desc">兽皮纹理背景，尖刺装饰导航，图腾柱式功能卡，战旗式人物卡。为了部落！</p>
+                    <div class="card-features">
+                        <span class="feature-tag">图腾布局</span>
+                        <span class="feature-tag">战鼓英雄区</span>
+                        <span class="feature-tag">战旗人物卡</span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="style4-modern.html" class="style-card card-modern">
+                <div class="card-preview">⚡</div>
+                <div class="card-info">
+                    <h2 class="card-title">现代暗黑风格</h2>
+                    <p class="card-desc">玻璃拟态效果，霓虹渐变光效，动态背景动画，全息式人物卡。现代科技感与魔兽元素的融合。</p>
+                    <div class="card-features">
+                        <span class="feature-tag">玻璃拟态</span>
+                        <span class="feature-tag">霓虹光效</span>
+                        <span class="feature-tag">动态动画</span>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

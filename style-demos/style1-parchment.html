@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox - 便当盒布局风格</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #EED9C4;
+            min-height: 100vh;
+            padding: 40px;
+            font-weight: 500;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* ========== 【重点1】顶部导航 ========== */
+        .nav-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 16px 24px;
+            background: #4B3621;
+            border-radius: 16px;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: #EED9C4;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            color: #EED9C4;
+            text-decoration: none;
+            font-size: 14px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background: #804030;
+        }
+
+        .user-btn {
+            width: 40px;
+            height: 40px;
+            background: #B87333;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4B3621;
+            font-weight: 700;
+        }
+
+        /* ========== 【重点2】便当盒网格布局 ========== */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 120px);
+            gap: 16px;
+        }
+
+        .bento-item {
+            border-radius: 20px;
+            padding: 20px;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bento-item:hover {
+            transform: translateY(-4px);
+        }
+
+        /* ========== 【重点3】主卡片 - 带背景装饰图标 ========== */
+        .hero-card {
+            grid-column: span 2;
+            grid-row: span 2;
+            background: #4B3621;
+            color: #EED9C4;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* 【重点】背景装饰图标 - 半透明大图标 */
+        .hero-card::before {
+            content: '📜';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 80px;
+            opacity: 0.15;
+            transition: transform 0.5s;
+        }
+
+        .hero-card:hover::before {
+            transform: scale(1.1);
+        }
+
+        .hero-card h1 {
+            font-size: 28px;
+            font-weight: 700;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-card p {
+            font-size: 14px;
+            opacity: 0.8;
+            line-height: 1.6;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #B87333;
+            color: #4B3621;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            width: fit-content;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ========== 【重点4】磨砂玻璃卡片 ========== */
+        .glass-card {
+            background: rgba(128, 64, 48, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(128, 64, 48, 0.2);
+            color: #EED9C4;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .glass-card .icon {
+            font-size: 28px;
+        }
+
+        .glass-card span {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* ========== 【重点5】柱状图卡片 - 渐变背景 ========== */
+        .chart-card {
+            grid-row: span 2;
+            background: linear-gradient(to bottom, rgba(128, 64, 48, 0.4), rgba(184, 115, 51, 0.4));
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .chart-bar {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+        }
+
+        .chart-bar-fill {
+            width: 100%;
+            background: #804030;
+            transition: all 0.5s;
+        }
+
+        .chart-card:hover .chart-bar-fill {
+            opacity: 1;
+        }
+
+        /* ========== 【重点6】箭头按钮卡片 ========== */
+        .arrow-btn {
+            background: #B87333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+
+        .arrow-btn:hover {
+            transform: scale(0.95);
+        }
+
+        .arrow-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke: #4B3621;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* ========== 【重点7】开关按钮卡片 ========== */
+        .toggle-card {
+            background: #4B3621;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .toggle-switch {
+            width: 48px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 2px;
+            display: flex;
+            align-items: center;
+        }
+
+        .toggle-dot {
+            width: 20px;
+            height: 20px;
+            background: #D2691E;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+
+        .toggle-card:hover .toggle-dot {
+            transform: translateX(24px);
+        }
+
+        /* ========== 【重点8】任务卡片 - 带进度条 ========== */
+        .task-card {
+            grid-column: span 2;
+            grid-row: span 2;
+            background: #fff;
+            border: 1px solid rgba(75, 54, 33, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .task-item {
+            background: #EED9C4;
+            padding: 12px;
+            border-radius: 10px;
+        }
+
+        .task-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #4B3621;
+            margin-bottom: 8px;
+        }
+
+        /* 【重点】进度条 */
+        .progress-bar {
+            height: 6px;
+            background: rgba(75, 54, 33, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #B87333;
+            border-radius: 3px;
+        }
+
+        /* 【重点】文字标记色 */
+        .highlight {
+            color: #D2691E;
+            font-weight: 700;
+        }
+
+        /* ========== 【重点9】统计数字卡片 ========== */
+        .stat-card {
+            background: #4B3621;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            color: #B87333;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #EED9C4;
+            opacity: 0.8;
+        }
+
+        /* ========== 【重点10】图标按钮卡片 ========== */
+        .icon-btn-card {
+            background: rgba(128, 64, 48, 0.4);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-btn {
+            font-size: 32px;
+            transition: transform 0.3s;
+        }
+
+        .icon-btn-card:hover .icon-btn {
+            transform: scale(1.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="nav-bar">
+            <span class="logo">RPBOX</span>
+            <div class="nav-links">
+                <a href="#" class="nav-link active">首页</a>
+                <a href="#" class="nav-link">人物卡</a>
+                <a href="#" class="nav-link">剧情档案</a>
+                <a href="#" class="nav-link">社区</a>
+                <a href="#" class="nav-link">道具市场</a>
+            </div>
+            <div class="user-btn">U</div>
+        </nav>
+
+        <div class="bento-grid">
+            <!-- 【重点3】主欢迎卡片 - 带背景装饰 -->
+            <div class="bento-item hero-card">
+                <div>
+                    <h1>欢迎来到 RPBox</h1>
+                    <p>魔兽世界 RP 玩家工具箱</p>
+                </div>
+                <a href="#" class="hero-btn">开始使用</a>
+            </div>
+
+            <!-- 【重点5】柱状图卡片 -->
+            <div class="bento-item chart-card">
+                <div class="chart-bar"><div class="chart-bar-fill" style="height:70%"></div></div>
+                <div class="chart-bar"><div class="chart-bar-fill" style="height:45%"></div></div>
+            </div>
+
+            <!-- 【重点6】箭头按钮 -->
+            <div class="bento-item arrow-btn">
+                <svg viewBox="0 0 24 24"><path d="M7 7h10v10M7 17L17 7"/></svg>
+            </div>
+
+            <!-- 【重点7】开关按钮 -->
+            <div class="bento-item toggle-card">
+                <div class="toggle-switch">
+                    <div class="toggle-dot"></div>
+                </div>
+            </div>
+
+            <!-- 【重点8】任务卡片 - 带进度条 -->
+            <div class="bento-item task-card">
+                <div class="task-item">
+                    <div class="task-title">人物卡同步</div>
+                    <div class="progress-bar"><div class="progress-fill" style="width:75%"></div></div>
+                </div>
+                <div class="task-item">
+                    <div class="task-title">剧情归档</div>
+                    <div class="progress-bar"><div class="progress-fill" style="width:40%"></div></div>
+                </div>
+            </div>
+
+            <!-- 【重点4】磨砂玻璃功能卡片 -->
+            <div class="bento-item glass-card">
+                <div class="icon">☁️</div>
+                <span>云同步</span>
+            </div>
+
+            <div class="bento-item glass-card">
+                <div class="icon">📖</div>
+                <span>剧情档案</span>
+            </div>
+
+            <!-- 【重点9】统计数字卡片 -->
+            <div class="bento-item stat-card">
+                <div class="stat-number">128</div>
+                <div class="stat-label">人物卡</div>
+            </div>
+
+            <!-- 【重点10】图标按钮卡片 -->
+            <div class="bento-item icon-btn-card">
+                <div class="icon-btn">⚔️</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

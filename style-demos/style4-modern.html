@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox - 现代暗黑风格</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #0a0a0f;
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        /* 动态渐变背景 */
+        .cyber-bg {
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 20% 20%, rgba(138, 43, 226, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(0, 191, 255, 0.1) 0%, transparent 50%),
+                linear-gradient(180deg, #0a0a0f 0%, #12121a 100%);
+            z-index: -1;
+        }
+
+        /* 网格线背景 */
+        .cyber-bg::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(138, 43, 226, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(138, 43, 226, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        /* 玻璃拟态导航 */
+        .glass-nav {
+            background: rgba(20, 20, 30, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(138, 43, 226, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo-cyber {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .cyber-icon {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #8a2be2 0%, #00bfff 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.5);
+        }
+
+        .logo-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #8a2be2, #00bfff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-pills {
+            display: flex;
+            gap: 8px;
+        }
+
+        .pill-link {
+            padding: 10px 20px;
+            color: #a0a0b0;
+            text-decoration: none;
+            font-size: 14px;
+            border-radius: 20px;
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+
+        .pill-link:hover {
+            color: #00bfff;
+            background: rgba(0, 191, 255, 0.1);
+            border-color: rgba(0, 191, 255, 0.3);
+        }
+
+        .pill-link.active {
+            color: #fff;
+            background: linear-gradient(90deg, rgba(138, 43, 226, 0.3), rgba(0, 191, 255, 0.3));
+            border-color: #8a2be2;
+        }
+
+        .user-glow {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #8a2be2, #00bfff);
+            padding: 2px;
+            cursor: pointer;
+        }
+
+        .user-glow-inner {
+            width: 100%;
+            height: 100%;
+            background: #14141e;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 30px;
+        }
+
+        /* 霓虹英雄区 */
+        .neon-hero {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            border-radius: 24px;
+            padding: 80px 40px;
+            text-align: center;
+            position: relative;
+            margin-bottom: 50px;
+            overflow: hidden;
+        }
+
+        /* 动态光效 */
+        .neon-hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, #8a2be2, transparent, #00bfff, transparent);
+            animation: rotate 10s linear infinite;
+            opacity: 0.1;
+        }
+
+        @keyframes rotate {
+            100% { transform: rotate(360deg); }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .neon-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 56px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #8a2be2, #00bfff, #8a2be2);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shine 3s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes shine {
+            100% { background-position: 200% center; }
+        }
+
+        .neon-subtitle {
+            font-size: 18px;
+            color: #a0a0b0;
+            margin-bottom: 35px;
+        }
+
+        .neon-btn {
+            display: inline-block;
+            padding: 16px 45px;
+            background: linear-gradient(90deg, #8a2be2, #00bfff);
+            color: #fff;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            border-radius: 30px;
+            transition: all 0.3s;
+            box-shadow: 0 0 30px rgba(138, 43, 226, 0.5);
+        }
+
+        .neon-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 50px rgba(138, 43, 226, 0.8);
+        }
+
+        /* 玻璃卡片网格 */
+        .glass-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 50px;
+        }
+
+        .glass-card {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(138, 43, 226, 0.2);
+            border-radius: 16px;
+            padding: 30px 20px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .glass-card:hover {
+            border-color: #8a2be2;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(138, 43, 226, 0.2);
+        }
+
+        .glass-icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+        }
+
+        .glass-title {
+            font-size: 16px;
+            color: #00bfff;
+            margin-bottom: 10px;
+        }
+
+        .glass-desc {
+            font-size: 13px;
+            color: #808090;
+            line-height: 1.5;
+        }
+
+        /* 人物卡全息区 */
+        .holo-section {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(138, 43, 226, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+        }
+
+        .section-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            color: #00bfff;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .holo-row {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .char-holo {
+            width: 200px;
+            background: rgba(10, 10, 15, 0.8);
+            border: 1px solid rgba(0, 191, 255, 0.3);
+            border-radius: 16px;
+            padding: 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .char-holo::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 191, 255, 0.1), transparent);
+            transition: left 0.5s;
+        }
+
+        .char-holo:hover::before {
+            left: 100%;
+        }
+
+        .char-holo:hover {
+            border-color: #00bfff;
+            box-shadow: 0 0 30px rgba(0, 191, 255, 0.3);
+        }
+
+        .holo-avatar {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .holo-name {
+            font-size: 14px;
+            color: #e0e0e0;
+            margin-bottom: 5px;
+        }
+
+        .holo-info {
+            font-size: 12px;
+            color: #8a2be2;
+        }
+
+        .style-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(90deg, #8a2be2, #00bfff);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="cyber-bg"></div>
+
+    <nav class="glass-nav">
+        <div class="nav-inner">
+            <div class="logo-cyber">
+                <div class="cyber-icon">⚡</div>
+                <span class="logo-text">RPBOX</span>
+            </div>
+            <div class="nav-pills">
+                <a href="#" class="pill-link active">首页</a>
+                <a href="#" class="pill-link">人物卡</a>
+                <a href="#" class="pill-link">剧情档案</a>
+                <a href="#" class="pill-link">社区</a>
+                <a href="#" class="pill-link">道具市场</a>
+            </div>
+            <div class="user-glow">
+                <div class="user-glow-inner">👤</div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="style-badge">方案四：现代暗黑</div>
+
+    <main class="main-content">
+        <section class="neon-hero">
+            <div class="hero-content">
+                <h1 class="neon-title">RPBOX</h1>
+                <p class="neon-subtitle">魔兽世界 RP 玩家工具箱 - 新时代的冒险体验</p>
+                <a href="#" class="neon-btn">开始探索</a>
+            </div>
+        </section>
+
+        <div class="glass-grid">
+            <div class="glass-card">
+                <div class="glass-icon">☁️</div>
+                <h3 class="glass-title">人物卡云同步</h3>
+                <p class="glass-desc">跨设备无缝同步</p>
+            </div>
+            <div class="glass-card">
+                <div class="glass-icon">📖</div>
+                <h3 class="glass-title">剧情记录</h3>
+                <p class="glass-desc">智能归档存储</p>
+            </div>
+            <div class="glass-card">
+                <div class="glass-icon">🏰</div>
+                <h3 class="glass-title">社区平台</h3>
+                <p class="glass-desc">连接全球玩家</p>
+            </div>
+            <div class="glass-card">
+                <div class="glass-icon">⚔️</div>
+                <h3 class="glass-title">道具市场</h3>
+                <p class="glass-desc">一键导入使用</p>
+            </div>
+        </div>
+
+        <section class="holo-section">
+            <h2 class="section-title">我的角色</h2>
+            <div class="holo-row">
+                <div class="char-holo">
+                    <div class="holo-avatar">🧙</div>
+                    <div class="holo-name">艾瑞达斯·晨曦</div>
+                    <div class="holo-info">血精灵 · 法师</div>
+                </div>
+                <div class="char-holo">
+                    <div class="holo-avatar">⚔️</div>
+                    <div class="holo-name">格罗姆·碎颅者</div>
+                    <div class="holo-info">兽人 · 战士</div>
+                </div>
+                <div class="char-holo">
+                    <div class="holo-avatar">🌙</div>
+                    <div class="holo-name">月影·星语者</div>
+                    <div class="holo-info">暗夜精灵 · 德鲁伊</div>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
