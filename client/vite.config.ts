@@ -5,8 +5,12 @@ export default defineConfig({
   plugins: [vue()],
   clearScreen: false,
   server: {
-    port: 1420,
+    port: 3101,
     strictPort: true,
   },
   envPrefix: ['VITE_', 'TAURI_'],
+  test: {
+    globals: true,
+    environment: 'happy-dom',
+  },
 })

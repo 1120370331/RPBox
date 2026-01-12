@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, initial-scale=1.0">
+    <title>RPBox 社区广场</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'NotoSerifSC';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSerifCJKsc-Bold.otf') format('opentype');
+            font-weight: bold;
+        }
+        @font-face {
+            font-family: 'NotoSansSC';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Regular.otf') format('opentype');
+            font-weight: normal;
+        }
+        @font-face {
+            font-family: 'NotoSansSC-Bold';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Bold.otf') format('opentype');
+            font-weight: bold;
+        }
+
+        :root {
+            --bg-beige: #EED9C4;
+            --primary-brown: #4B3621;
+            --accent-red: #804030;
+            --accent-copper: #B87333;
+            --card-white: #FFFFFF;
+            --text-dark: #2C1810;
+            --text-light: #8D7B68;
+            --success-green: #5B8C5A;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --shadow-sm: 0 4px 12px rgba(75, 54, 33, 0.05);
+            --shadow-md: 0 8px 24px rgba(75, 54, 33, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            width: 1920px;
+            background-color: var(--bg-beige);
+            font-family: 'NotoSansSC', 'Microsoft YaHei', sans-serif;
+            color: var(--text-dark);
+            overflow-x: hidden;
+            background-image: radial-gradient(circle at 10% 10%, rgba(255, 255, 255, 0.4) 0%, transparent 20%),
+                              radial-gradient(circle at 90% 90%, rgba(255, 255, 255, 0.4) 0%, transparent 20%);
+        }
+
+        /* Header */
+        header {
+            padding: 40px 60px 20px 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'NotoSerifSC', serif;
+            font-size: 32px;
+            color: var(--primary-brown);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo i {
+            font-size: 36px;
+            color: var(--accent-copper);
+        }
+
+        .user-nav {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .nav-icon-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-brown);
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-icon-btn:hover {
+            background: var(--card-white);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Page Title & Tabs */
+        .page-header {
+            padding: 0 60px 30px 60px;
+        }
+
+        .main-title {
+            font-family: 'NotoSerifSC', serif;
+            font-size: 56px;
+            color: var(--primary-brown);
+            margin-bottom: 30px;
+            letter-spacing: 2px;
+        }
+
+        .tab-container {
+            width: 100%;
+            height: 80px;
+            background-color: var(--primary-brown);
+            border-radius: var(--radius-lg);
+            padding: 8px;
+            display: flex;
+            gap: 12px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .tab-item {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-family: 'NotoSansSC-Bold', sans-serif;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            gap: 12px;
+        }
+
+        .tab-item i {
+            font-size: 28px;
+        }
+
+        .tab-item.active {
+            background-color: var(--bg-beige);
+            color: var(--primary-brown);
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-item:not(.active) {
+            color: var(--bg-beige);
+        }
+
+        .tab-item:not(.active):hover {
+            background-color: rgba(238, 217, 196, 0.1);
+        }
+
+        /* Content Layout */
+        .content-layout {
+            display: flex;
+            gap: 30px;
+            padding: 0 60px 60px 60px;
+            height: calc(100vh - 280px); /* Adjust based on header height */
+            min-height: 800px;
+        }
+
+        /* Left Column - Guild List */
+        .left-col {
+            width: 30%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        /* Custom Scrollbar */
+        .left-col::-webkit-scrollbar {
+            width: 6px;
+        }
+        .left-col::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .left-col::-webkit-scrollbar-thumb {
+            background: rgba(75, 54, 33, 0.2);
+            border-radius: 3px;
+        }
+
+        .guild-card {
+            background-color: var(--card-white);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .guild-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .guild-card.active {
+            border-color: var(--accent-copper);
+            background-color: #FFF8F3;
+        }
+
+        .guild-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 12px;
+            object-fit: cover;
+            border: 1px solid rgba(75, 54, 33, 0.1);
+        }
+
+        .guild-info {
+            flex: 1;
+        }
+
+        .guild-name {
+            font-family: 'NotoSansSC-Bold', sans-serif;
+            font-size: 20px;
+            color: var(--primary-brown);
+            margin-bottom: 8px;
+        }
+
+        .guild-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 14px;
+            color: var(--text-light);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-item i {
+            color: var(--accent-copper);
+        }
+
+        /* Right Column - Details */
+        .right-col {
+            width: 70%;
+            background-color: var(--card-white);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow-y: auto;
+        }
+
+        /* Right Scrollbar */
+        .right-col::-webkit-scrollbar {
+            width: 8px;
+        }
+        .right-col::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .right-col::-webkit-scrollbar-thumb {
+            background: rgba(75, 54, 33, 0.1);
+            border-radius: 4px;
+        }
+
+        .banner-container {
+            width: 100%;
+            height: 320px;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .banner-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .banner-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60%;
+            background: linear-gradient(to top, rgba(44, 24, 16, 0.9), transparent);
+            padding: 40px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+        }
+
+        .banner-title h2 {
+            font-family: 'NotoSerifSC', serif;
+            font-size: 48px;
+            color: #fff;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .banner-tags {
+            display: flex;
+            gap: 12px;
+        }
+
+        .tag {
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+            border-radius: 20px;
+            color: #EED9C4;
+            font-size: 14px;
+            border: 1px solid rgba(238, 217, 196, 0.3);
+        }
+
+        .join-btn {
+            padding: 14px 40px;
+            background-color: var(--accent-red);
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(128, 64, 48, 0.4);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .join-btn:hover {
+            background-color: #9A503C;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(128, 64, 48, 0.5);
+        }
+
+        .section-title {
+            font-family: 'NotoSansSC-Bold', sans-serif;
+            font-size: 24px;
+            color: var(--primary-brown);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 6px;
+            height: 24px;
+            background-color: var(--accent-copper);
+            border-radius: 3px;
+        }
+
+        .guild-desc {
+            font-size: 16px;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+
+        .story-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .story-card {
+            background: #FAFAFA;
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            border: 1px solid #EAEAEA;
+            transition: all 0.3s ease;
+        }
+
+        .story-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent-copper);
+        }
+
+        .story-img {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+        }
+
+        .story-content {
+            padding: 16px;
+        }
+
+        .story-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary-brown);
+            margin-bottom: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .story-excerpt {
+            font-size: 14px;
+            color: var(--text-light);
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .members-grid {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .member-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .member-avatar:hover {
+            transform: scale(1.1) rotate(5deg);
+            border-color: var(--accent-copper);
+        }
+
+        /* Pagination */
+        .pagination {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            width: calc(30% - 30px); /* Align with left column */
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            padding-right: 28px;
+        }
+
+        .page-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: rgba(75, 54, 33, 0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .page-dot.active {
+            background-color: var(--primary-brown);
+            transform: scale(1.2);
+        }
+
+        /* Utility */
+        .badge-hot {
+            background: linear-gradient(135deg, #FF6B6B, #EE5253);
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: auto;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <i class="ri-box-3-fill"></i>
+            RPBox
+        </div>
+        <div class="user-nav">
+            <div class="nav-icon-btn"><i class="ri-search-line"></i></div>
+            <div class="nav-icon-btn"><i class="ri-notification-3-line"></i></div>
+            <div class="nav-icon-btn"><i class="ri-user-3-line"></i></div>
+        </div>
+    </header>
+
+    <div class="page-header">
+        <h1 class="main-title">社区广场</h1>
+        
+        <div class="tab-container">
+            <div class="tab-item active">
+                <i class="ri-shield-star-line"></i>
+                公会 Guilds
+            </div>
+            <div class="tab-item">
+                <i class="ri-user-star-line"></i>
+                角色 Characters
+            </div>
+            <div class="tab-item">
+                <i class="ri-git-branch-line"></i>
+                剧情线 Storylines
+            </div>
+        </div>
+    </div>
+
+    <div class="content-layout">
+        <!-- Left Column: Guild List -->
+        <div class="left-col">
+            <!-- Active Guild -->
+            <div class="guild-card active">
+                <img src="https://image.pollinations.ai/prompt/fantasy%20guild%20emblem%20dragon%20crest%20vector%20gold%20and%20red%20minimal?width=160&height=160&nologo=true" alt="Guild Icon" class="guild-icon">
+                <div class="guild-info">
+                    <div class="guild-name">龙语誓约</div>
+                    <div class="guild-stats">
+                        <div class="stat-item"><i class="ri-group-fill"></i> 2,451</div>
+                        <div class="stat-item"><i class="ri-fire-fill"></i> 98°</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Other Guilds -->
+            <div class="guild-card">
+                <img src="https://image.pollinations.ai/prompt/fantasy%20guild%20emblem%20silver%20moon%20crest%20blue%20vector?width=160&height=160&nologo=true" alt="Guild Icon" class="guild-icon">
+                <div class="guild-info">
+                    <div class="guild-name">月影议会</div>
+                    <div class="guild-stats">
+                        <div class="stat-item"><i class="ri-group-fill"></i> 1,890</div>
+                        <div class="stat-item"><i class="ri-fire-fill"></i> 85°</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="guild-card">
+                <img src="https://image.pollinations.ai/prompt/fantasy%20guild%20emblem%20iron%20gear%20steampunk%20vector?width=160&height=160&nologo=true" alt="Guild Icon" class="guild-icon">
+                <div class="guild-info">
+                    <div class="guild-name">蒸汽齿轮工坊</div>
+                    <div class="guild-stats">
+                        <div class="stat-item"><i class="ri-group-fill"></i> 920</div>
+                        <div class="stat-item"><i class="ri-fire-fill"></i> 72°</div>
+                    </div>
+                </div>
+                <div class="badge-hot">NEW</div>
+            </div>
+
+            <div class="guild-card">
+                <img src="https://image.pollinations.ai/prompt/fantasy%20guild%20emblem%20tree%20of%20life%20green%20magic?width=160&height=160&nologo=true" alt="Guild Icon" class="guild-icon">
+                <div class="guild-info">
+                    <div class="guild-name">翡翠之森</div>
+                    <div class="guild-stats">
+                        <div class="stat-item"><i class="ri-group-fill"></i> 3,102</div>
+                        <div class="stat-item"><i class="ri-fire-fill"></i> 95°</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="guild-card">
+                <img src="https://image.pollinations.ai/prompt/fantasy%20guild%20emblem%20crossed%20swords%20shield%20dark?width=160&height=160&nologo=true" alt="Guild Icon" class="guild-icon">
+                <div class="guild-info">
+                    <div class="guild-name">黑鸦佣兵团</div>
+                    <div class="guild-stats">
+                        <div class="stat-item"><i class="ri-group-fill"></i> 850</div>
+                        <div class="stat-item"><i class="ri-fire-fill"></i> 64°</div>
+                    </div>
+                </div>
+            </div>
+            
+             <div class="guild-card">
+                <img src="https://image.pollinations.ai/prompt/fantasy%20guild%20emblem%20magic%20book%20arcane%20purple?width=160&height=160&nologo=true" alt="Guild Icon" class="guild-icon">
+                <div class="guild-info">
+                    <div class="guild-name">奥术真理会</div>
+                    <div class="guild-stats">
+                        <div class="stat-item"><i class="ri-group-fill"></i> 1,205</div>
+                        <div class="stat-item"><i class="ri-fire-fill"></i> 78°</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Detail Area -->
+        <div class="right-col">
+            <!-- Banner Section -->
+            <div class="banner-container">
+                <img src="https://image.pollinations.ai/prompt/epic%20fantasy%20castle%20on%20a%20cliff%20during%20sunset%20with%20dragons?width=1200&height=400&nologo=true" alt="Guild Banner" class="banner-img">
+                <div class="banner-overlay">
+                    <div class="banner-title">
+                        <h2>龙语誓约</h2>
+                        <div class="banner-tags">
+                            <span class="tag">#史诗奇幻</span>
+                            <span class="tag">#大型团本</span>
+                            <span class="tag">#重度RP</span>
+                        </div>
+                    </div>
+                    <button class="join-btn">
+                        加入公会 <i class="ri-arrow-right-line"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Introduction -->
+            <div>
+                <div class="section-title">公会介绍</div>
+                <p class="guild-desc">
+                    欢迎来到龙语誓约！我们是RPBox最古老的角色扮演公会之一，致力于构建一个严肃而充满史诗感的奇幻世界。在这里，每一次掷骰都决定着王国的命运，每一句台词都镌刻着英雄的传说。无论你是久经沙场的老兵，还是初出茅庐的冒险者，这里都有属于你的传奇篇章。
+                </p>
+            </div>
+
+            <!-- Latest Storylines -->
+            <div>
+                <div class="section-title">最新剧情线</div>
+                <div class="story-grid">
+                    <div class="story-card">
+                        <img src="https://image.pollinations.ai/prompt/dark%20cavern%20with%20glowing%20crystals%20and%20adventurers?width=400&height=200&nologo=true" alt="Story" class="story-img">
+                        <div class="story-content">
+                            <div class="story-title">深渊的回响：第三章</div>
+                            <div class="story-excerpt">探险队终于抵达了水晶矿坑的最深处，等待他们的不仅仅是宝藏，还有沉睡千年的...</div>
+                        </div>
+                    </div>
+                    <div class="story-card">
+                        <img src="https://image.pollinations.ai/prompt/medieval%20market%20square%20festival%20colorful?width=400&height=200&nologo=true" alt="Story" class="story-img">
+                        <div class="story-content">
+                            <div class="story-title">丰收祭典的阴谋</div>
+                            <div class="story-excerpt">在这个欢乐的节日里，一位神秘的吟游诗人带来了关于王室血脉的惊人秘密。</div>
+                        </div>
+                    </div>
+                    <div class="story-card">
+                        <img src="https://image.pollinations.ai/prompt/stormy%20sea%20battle%20magic%20ships?width=400&height=200&nologo=true" alt="Story" class="story-img">
+                        <div class="story-content">
+                            <div class="story-title">怒海争锋</div>
+                            <div class="story-excerpt">北方舰队已经集结，海妖的歌声预示着风暴的来临。这是一场关乎制海权的决战。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Members -->
+            <div>
+                <div class="section-title">核心成员</div>
+                <div class="members-grid">
+                    <img src="https://image.pollinations.ai/prompt/fantasy%20warrior%20portrait%20avatar?width=100&height=100&seed=1&nologo=true" alt="Member" class="member-avatar">
+                    <img src="https://image.pollinations.ai/prompt/fantasy%20elf%20mage%20portrait%20avatar?width=100&height=100&seed=2&nologo=true" alt="Member" class="member-avatar">
+                    <img src="https://image.pollinations.ai/prompt/fantasy%20rogue%20assassin%20portrait%20avatar?width=100&height=100&seed=3&nologo=true" alt="Member" class="member-avatar">
+                    <img src="https://image.pollinations.ai/prompt/fantasy%20priestess%20portrait%20avatar?width=100&height=100&seed=4&nologo=true" alt="Member" class="member-avatar">
+                    <img src="https://image.pollinations.ai/prompt/fantasy%20dwarf%20blacksmith%20portrait%20avatar?width=100&height=100&seed=5&nologo=true" alt="Member" class="member-avatar">
+                    <img src="https://image.pollinations.ai/prompt/fantasy%20bard%20portrait%20avatar?width=100&height=100&seed=6&nologo=true" alt="Member" class="member-avatar">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination aligned with Left Column -->
+    <div class="pagination">
+        <div class="page-dot active"></div>
+        <div class="page-dot"></div>
+        <div class="page-dot"></div>
+        <div class="page-dot"></div>
+    </div>
+
+</body>
+</html>
