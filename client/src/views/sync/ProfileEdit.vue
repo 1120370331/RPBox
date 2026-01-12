@@ -47,7 +47,7 @@ async function loadProfile() {
   isLoading.value = true
   try {
     const wowPath = localStorage.getItem('wow_path') || ''
-    const profile = await invoke<any>('get_profile_detail', { wowPath, profileId })
+    const profile = await invoke<any>('get_profile_detail', { wowPath: wowPath, profileId: profileId })
     profileName.value = profile.name
     if (profile.characteristics) {
       form.value.firstName = profile.characteristics.firstName || ''
@@ -74,8 +74,8 @@ async function saveProfile() {
   try {
     const wowPath = localStorage.getItem('wow_path') || ''
     await invoke('update_profile', {
-      wowPath,
-      profileId,
+      wowPath: wowPath,
+      profileId: profileId,
       updates: {
         characteristics: {
           firstName: form.value.firstName,

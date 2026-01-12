@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use serde_json::Value;
+use std::{fs, path::PathBuf};
 
-use crate::lua_parser;
+use crate::{lua_parser, wow_path};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
@@ -29,12 +30,49 @@ pub struct ProfileSummary {
     pub name: String,
     pub icon: Option<String>,
     pub checksum: String,
+    pub raw_lua: String,
+    pub account_id: String,
+    pub saved_variables_path: String,
     pub modified_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileDetail {
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    pub checksum: String,
+    pub raw_lua: String,
+    pub account_id: String,
+    pub saved_variables_path: String,
+    pub characteristics: Option<BasicCharacteristics>,
+    pub about: Option<BasicAbout>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BasicCharacteristics {
+    #[serde(rename = "firstName")]
+    pub first_name: Option<String>,
+    #[serde(rename = "lastName")]
+    pub last_name: Option<String>,
+    pub title: Option<String>,
+    pub race: Option<String>,
+    #[serde(rename = "class")]
+    pub class_value: Option<String>,
+    pub age: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BasicAbout {
+    pub title: Option<String>,
+    pub text: Option<String>,
+}
+
 pub fn scan_profiles(wow_path: &str) -> Result<ScanResult, String> {
-    let base_path = PathBuf::from(wow_path);
-    let account_path = base_path.join("WTF").join("Account");
+    let normalized = wow_path::normalize_wow_path(wow_path)
+        .ok_or_else(|| "未找到有效的WoW路径，请选择包含 WTF/Account 的目录".to_string())?;
+
+    let account_path = normalized.join("Account");
 
     if !account_path.exists() {
         return Err("WTF/Account 目录不存在".to_string());
@@ -88,7 +126,7 @@ fn scan_account(account_path: &PathBuf, account_id: &str) -> Result<AccountInfo,
     // Scan profiles from SavedVariables
     let sv_path = account_path.join("SavedVariables").join("totalRP3.lua");
     if sv_path.exists() {
-        if let Ok(profile_list) = extract_profiles(&sv_path) {
+        if let Ok(profile_list) = extract_profiles(&sv_path, account_id) {
             profiles = profile_list;
         }
     }
@@ -118,14 +156,12 @@ fn scan_realm(realm_path: &PathBuf, realm_name: &str) -> Result<RealmInfo, Strin
     })
 }
 
-fn extract_profiles(lua_path: &PathBuf) -> Result<Vec<ProfileSummary>, String> {
-    let content = std::fs::read(lua_path)
+fn extract_profiles(lua_path: &PathBuf, account_id: &str) -> Result<Vec<ProfileSummary>, String> {
+    let content = fs::read(lua_path)
         .map_err(|e| format!("读取文件失败: {}", e))?;
-
-    let checksum = format!("{:x}", md5::compute(&content));
     let content_str = String::from_utf8_lossy(&content);
 
-    let modified_at = std::fs::metadata(lua_path)
+    let modified_at = fs::metadata(lua_path)
         .and_then(|m| m.modified())
         .map(|t| DateTime::<Utc>::from(t))
         .unwrap_or_else(|_| Utc::now());
@@ -137,24 +173,179 @@ fn extract_profiles(lua_path: &PathBuf) -> Result<Vec<ProfileSummary>, String> {
 
     if let Some(obj) = data.as_object() {
         for (id, profile) in obj {
-            let name = profile["profileName"]
-                .as_str()
+            let name = profile
+                .get("profileName")
+                .and_then(|v| v.as_str())
                 .unwrap_or("未命名")
                 .to_string();
 
-            let icon = profile["player"]["characteristics"]["IC"]
-                .as_str()
+            let icon = profile
+                .get("player")
+                .and_then(|p| p.get("characteristics"))
+                .and_then(|c| c.get("IC"))
+                .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
+
+            let raw_profile = serde_json::to_string(profile)
+                .unwrap_or_else(|_| content_str.to_string());
+            let checksum = format!("{:x}", md5::compute(raw_profile.as_bytes()));
+            let sv_path = lua_path.display().to_string();
 
             profiles.push(ProfileSummary {
                 id: id.clone(),
                 name,
                 icon,
-                checksum: checksum.clone(),
+                checksum,
+                raw_lua: raw_profile,
+                account_id: account_id.to_string(),
+                saved_variables_path: sv_path,
                 modified_at,
             });
         }
     }
 
     Ok(profiles)
+}
+
+pub fn get_profile_detail(wow_path: &str, profile_id: &str) -> Result<ProfileDetail, String> {
+    let normalized = wow_path::normalize_wow_path(wow_path)
+        .ok_or_else(|| "未找到有效的WoW路径，请选择包含 WTF/Account 的目录".to_string())?;
+    let account_root = normalized.join("Account");
+    if !account_root.exists() {
+        return Err("WTF/Account 目录不存在".to_string());
+    }
+
+    let entries = fs::read_dir(&account_root)
+        .map_err(|e| format!("读取目录失败: {}", e))?;
+
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == "SavedVariables" {
+            continue;
+        }
+
+        let lua_path = entry.path().join("SavedVariables").join("totalRP3.lua");
+        if !lua_path.exists() {
+            continue;
+        }
+
+        if let Ok(detail) = load_profile_detail(&lua_path, profile_id, &name) {
+            return Ok(detail);
+        }
+    }
+
+    Err("未找到指定人物卡".to_string())
+}
+
+fn load_profile_detail(lua_path: &PathBuf, profile_id: &str, account_id: &str) -> Result<ProfileDetail, String> {
+    let data = lua_parser::parse_variable(lua_path, "TRP3_Profiles")
+        .map_err(|e| e.to_string())?;
+    let obj = data
+        .as_object()
+        .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
+
+    let profile = obj
+        .get(profile_id)
+        .ok_or_else(|| "未找到指定人物卡".to_string())?;
+
+    let raw_profile = serde_json::to_string(profile).unwrap_or_default();
+    let checksum = format!("{:x}", md5::compute(raw_profile.as_bytes()));
+
+    let name = profile
+        .get("profileName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("未命名")
+        .to_string();
+
+    let icon = profile
+        .get("player")
+        .and_then(|p| p.get("characteristics"))
+        .and_then(|c| c.get("IC"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let characteristics = extract_characteristics(profile);
+    let about = extract_about(profile);
+    let sv_path = lua_path.display().to_string();
+
+    Ok(ProfileDetail {
+        id: profile_id.to_string(),
+        name,
+        icon,
+        checksum,
+        raw_lua: raw_profile,
+        account_id: account_id.to_string(),
+        saved_variables_path: sv_path,
+        characteristics,
+        about,
+    })
+}
+
+fn extract_characteristics(profile: &Value) -> Option<BasicCharacteristics> {
+    let root = profile
+        .get("player")
+        .and_then(|p| p.get("characteristics"))
+        .cloned()
+        .unwrap_or(Value::Null);
+
+    let first_name = get_nested_str(&root, &["FN"]);
+    let last_name = get_nested_str(&root, &["LN"]);
+    let title = get_nested_str(&root, &["TI"]);
+    let race = get_nested_str(&root, &["RA"]);
+    let class_value = get_nested_str(&root, &["CL"]);
+    let age = get_nested_str(&root, &["AG"]);
+
+    if first_name.is_none()
+        && last_name.is_none()
+        && title.is_none()
+        && race.is_none()
+        && class_value.is_none()
+        && age.is_none()
+    {
+        return None;
+    }
+
+    Some(BasicCharacteristics {
+        first_name,
+        last_name,
+        title,
+        race,
+        class_value,
+        age,
+    })
+}
+
+fn extract_about(profile: &Value) -> Option<BasicAbout> {
+    let about = profile
+        .get("player")
+        .and_then(|p| p.get("about"))
+        .cloned()
+        .unwrap_or(Value::Null);
+
+    let text = get_nested_str(&about, &["T1", "TX"])
+        .or_else(|| get_nested_str(&about, &["T3", "HI", "TX"]))
+        .or_else(|| get_nested_str(&about, &["T3", "PH", "TX"]))
+        .or_else(|| get_nested_str(&about, &["T3", "PS", "TX"]));
+
+    let title = profile
+        .get("profileName")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    if text.is_none() && title.is_none() {
+        return None;
+    }
+
+    Some(BasicAbout { title, text })
+}
+
+fn get_nested_str(value: &Value, path: &[&str]) -> Option<String> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_str().map(|s| s.to_string())
 }

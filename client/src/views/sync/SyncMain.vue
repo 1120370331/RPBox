@@ -10,7 +10,9 @@ interface ProfileItem {
   name: string
   icon?: string
   checksum: string
-  raw_lua?: string
+  raw_lua: string
+  account_id: string
+  saved_variables_path: string
 }
 
 interface AccountInfo {
@@ -112,9 +114,9 @@ async function syncAll() {
 
   const data = toSync.map(p => ({
     id: p.id,
-    account_id: selectedAccount.value,
+    account_id: p.account_id,
     profile_name: p.name,
-    raw_lua: p.raw_lua || '',
+    raw_lua: p.raw_lua,
     checksum: p.checksum
   }))
 
