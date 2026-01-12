@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, initial-scale=1.0">
+    <title>RPBox 工作台</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet">
+    <style>
+        /* Global Reset & Fonts */
+        :root {
+            --color-sidebar-bg: #4B3621;
+            --color-main-bg: #EED9C4;
+            --color-panel-bg: #FFFFFF;
+            --color-primary: #804030;
+            --color-text-main: #2C1810;
+            --color-text-light: #FBF5EF;
+            --color-text-secondary: #8C7B70;
+            --color-accent: #D4A373;
+            --color-border: #E8DCCF;
+            --font-serif: 'NotoSerifCJKsc-Bold', serif;
+            --font-sans: 'MiSans-Regular', sans-serif;
+            --font-sans-bold: 'MiSans-Bold', sans-serif;
+            --border-radius: 16px;
+        }
+
+        @font-face {
+            font-family: 'NotoSerifCJKsc-Bold';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSerifCJKsc-Bold.otf');
+        }
+        @font-face {
+            font-family: 'MiSans-Regular';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/MiSans-Regular.ttf');
+        }
+        @font-face {
+            font-family: 'MiSans-Bold';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/MiSans-Bold.ttf');
+        }
+        @font-face {
+            font-family: 'Alibaba-PuHuiTi-Medium';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/Alibaba-PuHuiTi-Medium.otf');
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1920px;
+            background-color: var(--color-main-bg);
+            font-family: var(--font-sans);
+            color: var(--color-text-main);
+            display: flex;
+            height: 1080px; /* Fixed height for design showcase */
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background-color: var(--color-sidebar-bg);
+            color: var(--color-text-light);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            box-shadow: 4px 0 12px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+
+        .logo-area {
+            height: 100px;
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            font-family: var(--font-serif);
+            font-size: 28px;
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(238, 217, 196, 0.1);
+        }
+        .logo-icon {
+            margin-right: 12px;
+            font-size: 32px;
+            color: var(--color-accent);
+        }
+
+        .menu {
+            flex: 1;
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Alibaba-PuHuiTi-Medium', sans-serif;
+            font-size: 16px;
+            color: rgba(251, 245, 239, 0.7);
+            text-decoration: none;
+        }
+
+        .menu-item i {
+            font-size: 20px;
+            margin-right: 12px;
+        }
+
+        .menu-item:hover {
+            background-color: rgba(238, 217, 196, 0.1);
+            color: var(--color-text-light);
+        }
+
+        .menu-item.active {
+            background-color: var(--color-main-bg);
+            color: var(--color-sidebar-bg);
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .user-profile {
+            padding: 24px;
+            border-top: 1px solid rgba(238, 217, 196, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #D4A373, #8C7B70);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #FFF;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .user-info h4 {
+            font-size: 14px;
+            color: var(--color-text-light);
+        }
+        .user-info p {
+            font-size: 12px;
+            color: rgba(251, 245, 239, 0.5);
+            margin-top: 2px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 20px;
+            height: 100vh;
+        }
+
+        /* Top Toolbar Panel */
+        .top-toolbar {
+            background-color: var(--color-panel-bg);
+            border-radius: var(--border-radius);
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            box-shadow: 0 4px 20px rgba(75, 54, 33, 0.05);
+            flex-shrink: 0;
+        }
+
+        .breadcrumbs {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: var(--color-text-secondary);
+        }
+        .breadcrumbs span {
+            display: flex;
+            align-items: center;
+        }
+        .breadcrumbs .separator {
+            margin: 0 8px;
+            color: #D4A373;
+        }
+        .breadcrumbs .current {
+            color: var(--color-primary);
+            font-weight: bold;
+            font-family: var(--font-sans-bold);
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 16px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: white;
+            box-shadow: 0 4px 10px rgba(128, 64, 48, 0.3);
+        }
+        .btn-secondary {
+            background-color: rgba(128, 64, 48, 0.1);
+            color: var(--color-primary);
+        }
+
+        /* Workspace Area */
+        .workspace {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            min-height: 0; /* Important for nested flex scrolling */
+        }
+
+        .panel-container {
+            background-color: var(--color-panel-bg);
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 20px rgba(75, 54, 33, 0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Left Panel - Tree */
+        .left-panel {
+            width: 25%; /* 40% requested, adjusted slightly for visual balance on wide screen */
+            min-width: 320px;
+        }
+
+        /* Right Panel - Editor */
+        .right-panel {
+            flex: 1;
+            /* width 60% implicitly via flex:1 */
+        }
+
+        /* Divider Handle Visual */
+        .divider-handle {
+            width: 6px;
+            background-color: transparent;
+            cursor: col-resize;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 -13px;
+            z-index: 5;
+        }
+        .divider-line {
+            width: 4px;
+            height: 48px;
+            background-color: rgba(128, 64, 48, 0.2);
+            border-radius: 2px;
+        }
+
+        /* Panel Header */
+        .panel-header {
+            height: 60px;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #FFFCF9;
+        }
+        .panel-title {
+            font-family: var(--font-serif);
+            font-size: 18px;
+            color: var(--color-text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .panel-actions i {
+            font-size: 18px;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            margin-left: 12px;
+            transition: color 0.2s;
+        }
+        .panel-actions i:hover {
+            color: var(--color-primary);
+        }
+
+        /* Left Panel Content - Tree */
+        .tree-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        
+        .search-bar {
+            margin-bottom: 16px;
+            position: relative;
+        }
+        .search-bar input {
+            width: 100%;
+            padding: 10px 12px 10px 36px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--color-text-main);
+            background: #FAFAFA;
+            outline: none;
+        }
+        .search-bar input:focus {
+            border-color: var(--color-primary);
+            background: #FFF;
+        }
+        .search-bar i {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--color-text-secondary);
+        }
+
+        .tree-node {
+            margin-bottom: 4px;
+        }
+        .tree-label {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--color-text-main);
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .tree-label:hover {
+            background-color: rgba(238, 217, 196, 0.3);
+        }
+        .tree-label.active {
+            background-color: rgba(128, 64, 48, 0.08);
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+        .tree-icon {
+            margin-right: 8px;
+            color: var(--color-text-secondary);
+            font-size: 16px;
+        }
+        .tree-label.active .tree-icon {
+            color: var(--color-primary);
+        }
+        .tree-arrow {
+            margin-right: 4px;
+            font-size: 12px;
+            color: var(--color-text-secondary);
+            transition: transform 0.2s;
+        }
+        .tree-children {
+            padding-left: 24px;
+            margin-top: 4px;
+            display: none;
+        }
+        .tree-children.expanded {
+            display: block;
+        }
+        .tree-node.open > .tree-label > .tree-arrow {
+            transform: rotate(90deg);
+        }
+        .tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #EEE;
+            color: #666;
+            margin-left: auto;
+        }
+
+        /* Right Panel Content - Form */
+        .editor-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .form-group.full-width {
+            grid-column: span 2;
+        }
+
+        .form-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            padding: 12px 16px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 15px;
+            color: var(--color-text-main);
+            background-color: #FFFCF9;
+            font-family: var(--font-sans);
+            transition: all 0.2s;
+        }
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            background-color: #FFF;
+            box-shadow: 0 0 0 3px rgba(128, 64, 48, 0.1);
+        }
+
+        .form-textarea {
+            resize: none;
+            line-height: 1.6;
+            min-height: 200px;
+        }
+
+        .rich-text-toolbar {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            border: 1px solid var(--color-border);
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            background: #FAFAFA;
+        }
+        .editor-container .form-textarea {
+            border-radius: 0 0 8px 8px;
+            min-height: 300px;
+        }
+        
+        .rt-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #555;
+        }
+        .rt-btn:hover {
+            background-color: #EEE;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #DCC8B8;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #BFA08A;
+        }
+
+        /* Character Header in Editor */
+        .char-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 24px;
+            border-bottom: 1px dashed var(--color-border);
+        }
+        .char-img-placeholder {
+            width: 80px;
+            height: 80px;
+            border-radius: 12px;
+            background-color: #EEE;
+            background-image: url('https://images.unsplash.com/photo-1535581652167-3d6b98c36cd0?q=80&w=200&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            border: 2px solid #FFF;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .char-title h2 {
+            font-family: var(--font-serif);
+            font-size: 28px;
+            color: var(--color-text-main);
+            margin-bottom: 4px;
+        }
+        .char-meta {
+            display: flex;
+            gap: 12px;
+        }
+        .meta-badge {
+            background: rgba(128, 64, 48, 0.1);
+            color: var(--color-primary);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Left Sidebar -->
+    <div class="sidebar">
+        <div class="logo-area">
+            <i class="ri-box-3-fill logo-icon"></i>
+            <span>RPBox</span>
+        </div>
+        <div class="menu">
+            <a href="#" class="menu-item active">
+                <i class="ri-user-star-line"></i>
+                <span>人物卡</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="ri-book-open-line"></i>
+                <span>剧情故事</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="ri-sword-line"></i>
+                <span>道具物品</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="ri-settings-3-line"></i>
+                <span>系统设置</span>
+            </a>
+        </div>
+        <div class="user-profile">
+            <div class="avatar">DM</div>
+            <div class="user-info">
+                <h4>DungeonMaster</h4>
+                <p>Version 2.4.0</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        
+        <!-- Top Toolbar -->
+        <div class="top-toolbar">
+            <div class="breadcrumbs">
+                <span class="icon"><i class="ri-home-4-line"></i></span>
+                <span class="separator">/</span>
+                <span>人物卡管理</span>
+                <span class="separator">/</span>
+                <span>精灵族</span>
+                <span class="separator">/</span>
+                <span class="current">Aerin Moonwhisper</span>
+            </div>
+            <div class="toolbar-actions">
+                <button class="btn btn-secondary">
+                    <i class="ri-share-forward-line"></i> 分享
+                </button>
+                <button class="btn btn-primary">
+                    <i class="ri-save-3-line"></i> 保存修改
+                </button>
+            </div>
+        </div>
+
+        <!-- Split Workspace -->
+        <div class="workspace">
+            
+            <!-- Left Panel: Tree View -->
+            <div class="panel-container left-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <i class="ri-list-check"></i> 角色列表
+                    </div>
+                    <div class="panel-actions">
+                        <i class="ri-folder-add-line"></i>
+                        <i class="ri-user-add-line"></i>
+                    </div>
+                </div>
+                <div class="tree-content">
+                    <div class="search-bar">
+                        <i class="ri-search-line"></i>
+                        <input type="text" placeholder="搜索人物名称...">
+                    </div>
+
+                    <!-- Tree Root -->
+                    <div class="tree-node open">
+                        <div class="tree-label">
+                            <i class="ri-arrow-right-s-line tree-arrow"></i>
+                            <i class="ri-folder-user-line tree-icon"></i>
+                            <span>主要队伍</span>
+                        </div>
+                        <div class="tree-children expanded">
+                            <div class="tree-node">
+                                <div class="tree-label active">
+                                    <span style="width:12px;"></span>
+                                    <i class="ri-file-user-line tree-icon"></i>
+                                    <span>Aerin Moonwhisper</span>
+                                    <span class="tag">Lv.5</span>
+                                </div>
+                            </div>
+                            <div class="tree-node">
+                                <div class="tree-label">
+                                    <span style="width:12px;"></span>
+                                    <i class="ri-file-user-line tree-icon"></i>
+                                    <span>Thorin Oakenshield</span>
+                                    <span class="tag">Lv.4</span>
+                                </div>
+                            </div>
+                            <div class="tree-node">
+                                <div class="tree-label">
+                                    <span style="width:12px;"></span>
+                                    <i class="ri-file-user-line tree-icon"></i>
+                                    <span>Elara Vantage</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tree-node open">
+                        <div class="tree-label">
+                            <i class="ri-arrow-right-s-line tree-arrow"></i>
+                            <i class="ri-folder-shared-line tree-icon"></i>
+                            <span>NPC 资料库</span>
+                        </div>
+                        <div class="tree-children expanded">
+                            <div class="tree-node">
+                                <div class="tree-label">
+                                    <span style="width:12px;"></span>
+                                    <i class="ri-group-line tree-icon"></i>
+                                    <span>村民 (Villagers)</span>
+                                </div>
+                            </div>
+                            <div class="tree-node">
+                                <div class="tree-label">
+                                    <span style="width:12px;"></span>
+                                    <i class="ri-user-voice-line tree-icon"></i>
+                                    <span>神秘商人</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tree-node">
+                        <div class="tree-label">
+                            <i class="ri-arrow-right-s-line tree-arrow"></i>
+                            <i class="ri-archive-line tree-icon"></i>
+                            <span>回收站</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Divider Visual Handle -->
+            <div class="divider-handle">
+                <div class="divider-line"></div>
+            </div>
+
+            <!-- Right Panel: Editor -->
+            <div class="panel-container right-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <i class="ri-edit-2-line"></i> 编辑器
+                    </div>
+                    <div class="panel-actions">
+                        <i class="ri-layout-right-2-line"></i>
+                        <i class="ri-more-2-fill"></i>
+                    </div>
+                </div>
+                <div class="editor-content">
+                    
+                    <div class="char-header">
+                        <div class="char-img-placeholder"></div>
+                        <div class="char-title">
+                            <h2>Aerin Moonwhisper</h2>
+                            <div class="char-meta">
+                                <span class="meta-badge">Elf</span>
+                                <span class="meta-badge">Ranger</span>
+                                <span class="meta-badge">Chaotic Good</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">姓名 (Name)</label>
+                            <input type="text" class="form-input" value="Aerin Moonwhisper">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">称号 (Title)</label>
+                            <input type="text" class="form-input" value="月语者, 迷雾行者">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">种族 (Race)</label>
+                            <select class="form-select">
+                                <option>Human</option>
+                                <option selected>Elf</option>
+                                <option>Dwarf</option>
+                                <option>Orc</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">职业 (Class)</label>
+                            <select class="form-select">
+                                <option>Warrior</option>
+                                <option>Mage</option>
+                                <option selected>Ranger</option>
+                                <option>Rogue</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group full-width editor-container">
+                            <label class="form-label">
+                                <span>背景故事 (Background Story)</span>
+                                <span style="font-size:12px; font-weight:normal; color:#888;">Markdown Supported</span>
+                            </label>
+                            <div class="rich-text-toolbar">
+                                <div class="rt-btn"><i class="ri-bold"></i></div>
+                                <div class="rt-btn"><i class="ri-italic"></i></div>
+                                <div class="rt-btn"><i class="ri-list-unordered"></i></div>
+                                <div class="rt-btn"><i class="ri-link"></i></div>
+                                <div class="rt-btn"><i class="ri-image-line"></i></div>
+                            </div>
+                            <textarea class="form-textarea">Aerin 出生于古老的银月森林，那里终年被神秘的薄雾笼罩。作为家族中最小的女儿，她从小就展现出了与自然沟通的天赋。
+
+在一次对抗黑暗势力的侵袭中，她的村庄被毁，被迫踏上了流浪的旅程。她发誓要寻找传说中的“星辰之泪”，用它的力量净化被污染的土地。
+
+旅途中，她遇到了矮人战士 Thorin，两人结下了深厚的友谊，尽管性格迥异，但在战场上却是默契十足的搭档。
+
+目前状态：
+- 生命值：45/45
+- 精神力：饱满
+- 携带物品：精灵长弓、草药包、神秘的银色吊坠。</textarea>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>

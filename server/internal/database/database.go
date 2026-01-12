@@ -23,7 +23,11 @@ func Init(cfg *config.DatabaseConfig) error {
 	}
 
 	// 自动迁移
-	if err := db.AutoMigrate(&model.User{}); err != nil {
+	if err := db.AutoMigrate(
+		&model.User{},
+		&model.Profile{},
+		&model.ProfileVersion{},
+	); err != nil {
 		return err
 	}
 

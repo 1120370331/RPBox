@@ -18,6 +18,10 @@ func (s *Server) setupRoutes() {
 			auth.GET("/profiles", s.listProfiles)
 			auth.POST("/profiles", s.createProfile)
 			auth.GET("/profiles/:id", s.getProfile)
+			auth.PUT("/profiles/:id", s.updateProfile)
+			auth.DELETE("/profiles/:id", s.deleteProfile)
+			auth.GET("/profiles/:id/versions", s.getProfileVersions)
+			auth.POST("/profiles/:id/rollback", s.rollbackProfile)
 
 			auth.GET("/stories", s.listStories)
 			auth.POST("/stories", s.createStory)

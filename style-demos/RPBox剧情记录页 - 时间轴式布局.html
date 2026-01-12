@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox Story Record</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Noto Serif SC';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSerifCJKsc-Bold.otf') format('opentype');
+            font-weight: bold;
+        }
+        @font-face {
+            font-family: 'Noto Serif SC Regular';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSerifCJKsc-Regular.otf') format('opentype');
+            font-weight: normal;
+        }
+        @font-face {
+            font-family: 'Noto Sans SC';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Regular.otf') format('opentype');
+            font-weight: normal;
+        }
+        @font-face {
+            font-family: 'Noto Sans SC Bold';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Bold.otf') format('opentype');
+            font-weight: bold;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #EED9C4;
+            font-family: 'Noto Sans SC', sans-serif;
+            color: #4B3621;
+            width: 1920px;
+            margin: 0 auto;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 1920px;
+            min-height: 1080px; /* Ensure visual height */
+            position: relative;
+            background-color: #EED9C4;
+            padding-bottom: 100px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 30px 120px;
+            background-color: rgba(238, 217, 196, 0.95);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(75, 54, 33, 0.1);
+        }
+
+        .logo {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 28px;
+            font-weight: bold;
+            color: #4B3621;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo i {
+            font-size: 32px;
+            color: #804030;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .nav-item {
+            cursor: pointer;
+            padding-bottom: 5px;
+            transition: all 0.3s;
+            color: #6d543e;
+        }
+
+        .nav-item.active {
+            color: #804030;
+            border-bottom: 2px solid #804030;
+            font-weight: bold;
+        }
+
+        .user-actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .avatar-top {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #B87333;
+            border: 2px solid #fff;
+        }
+
+        /* Page Content Header */
+        .page-header {
+            padding: 60px 120px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .page-title h1 {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 48px;
+            color: #4B3621;
+            margin-bottom: 10px;
+        }
+
+        .page-subtitle {
+            font-size: 16px;
+            color: #856a52;
+        }
+
+        .create-btn {
+            background-color: #804030;
+            color: white;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(128, 64, 48, 0.3);
+            transition: transform 0.2s;
+        }
+        
+        .create-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Filter Bar */
+        .filter-bar {
+            padding: 0 120px;
+            margin-bottom: 60px;
+            display: flex;
+            gap: 20px;
+        }
+
+        .filter-item {
+            background-color: rgba(255, 255, 255, 0.6);
+            padding: 10px 20px;
+            border-radius: 30px;
+            border: 1px solid #d1bfa8;
+            color: #4B3621;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .filter-item:hover {
+            background-color: #fff;
+            border-color: #B87333;
+            color: #B87333;
+        }
+
+        /* Timeline Section */
+        .timeline-section {
+            position: relative;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 0 100px;
+        }
+
+        /* Central Line */
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: #4B3621;
+            transform: translateX(-50%);
+            border-radius: 2px;
+            opacity: 0.8;
+        }
+
+        /* Timeline Items */
+        .timeline-item {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 80px;
+            position: relative;
+            width: 100%;
+        }
+
+        /* Dot */
+        .timeline-dot {
+            width: 20px;
+            height: 20px;
+            background-color: #EED9C4;
+            border: 4px solid #4B3621;
+            border-radius: 50%;
+            position: absolute;
+            left: 50%;
+            top: 40px; /* Align with card top area */
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        .timeline-item.highlight .timeline-dot {
+            border-color: #B87333;
+            background-color: #fff;
+            box-shadow: 0 0 0 4px rgba(184, 115, 51, 0.3);
+        }
+
+        .timeline-content-wrapper {
+            width: 50%;
+            position: relative;
+        }
+
+        .left-content {
+            padding-right: 60px;
+            text-align: right;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .right-content {
+            padding-left: 60px;
+            text-align: left;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        /* Card Style */
+        .story-card {
+            background-color: #fff;
+            border-radius: 16px;
+            padding: 30px;
+            width: 540px;
+            box-shadow: 0 10px 30px rgba(75, 54, 33, 0.08);
+            position: relative;
+            transition: transform 0.3s;
+        }
+        
+        .story-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(75, 54, 33, 0.12);
+        }
+
+        /* Connector Line */
+        .connector {
+            position: absolute;
+            top: 48px;
+            height: 2px;
+            width: 60px;
+            background-color: #4B3621;
+            opacity: 0.5;
+        }
+
+        .left-content .connector {
+            right: 0;
+        }
+
+        .right-content .connector {
+            left: 0;
+        }
+
+        /* Card Content */
+        .card-header {
+            margin-bottom: 16px;
+        }
+
+        .card-date {
+            display: inline-block;
+            background-color: rgba(184, 115, 51, 0.1);
+            color: #B87333;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            font-family: 'Noto Sans SC Bold', sans-serif;
+            margin-bottom: 10px;
+        }
+
+        .card-title {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 24px;
+            color: #2c1e12;
+            line-height: 1.4;
+        }
+
+        .card-body {
+            font-size: 15px;
+            color: #665242;
+            line-height: 1.8;
+            margin-bottom: 24px;
+            text-align: left; /* Always align text left inside card for readability */
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid #f0e6dc;
+            padding-top: 20px;
+        }
+
+        .avatars {
+            display: flex;
+            padding-left: 10px;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            margin-left: -10px;
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .avatar:nth-child(1) { background-color: #D4A373; z-index: 4; }
+        .avatar:nth-child(2) { background-color: #A98467; z-index: 3; }
+        .avatar:nth-child(3) { background-color: #ADC178; z-index: 2; }
+        .avatar:nth-child(4) { background-color: #A9D6E5; z-index: 1; }
+
+        .view-detail {
+            color: #B87333;
+            font-weight: bold;
+            font-size: 14px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: gap 0.2s;
+        }
+
+        .view-detail:hover {
+            gap: 8px;
+        }
+
+        /* Decorative Elements */
+        .decor-circle {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(184,115,51,0.1) 0%, rgba(238,217,196,0) 70%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <header>
+        <div class="logo">
+            <i class="ri-quill-pen-line"></i>
+            RPBox
+        </div>
+        <nav class="nav-links">
+            <div class="nav-item">首页</div>
+            <div class="nav-item">角色卡</div>
+            <div class="nav-item">公会</div>
+            <div class="nav-item active">剧情记录</div>
+        </nav>
+        <div class="user-actions">
+            <i class="ri-notification-3-line" style="font-size: 24px; color: #4B3621; cursor: pointer;"></i>
+            <div class="avatar-top"></div>
+        </div>
+    </header>
+
+    <!-- Page Title Area -->
+    <div class="page-header">
+        <div class="page-title">
+            <h1>我的剧情记录</h1>
+            <div class="page-subtitle">记录每一个精彩瞬间，编织属于你的冒险史诗。</div>
+        </div>
+        <button class="create-btn">
+            <i class="ri-add-line"></i>
+            新建记录
+        </button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <div class="filter-item">
+            <i class="ri-community-line"></i>
+            全部公会
+            <i class="ri-arrow-down-s-line"></i>
+        </div>
+        <div class="filter-item">
+            <i class="ri-user-3-line"></i>
+            全部角色
+            <i class="ri-arrow-down-s-line"></i>
+        </div>
+        <div class="filter-item">
+            <i class="ri-calendar-line"></i>
+            时间: 近一年
+            <i class="ri-arrow-down-s-line"></i>
+        </div>
+        <div class="filter-item">
+            <i class="ri-search-line"></i>
+            搜索剧情...
+        </div>
+    </div>
+
+    <!-- Timeline Content -->
+    <div class="timeline-section">
+        <!-- Background Decor -->
+        <div class="decor-circle" style="width: 600px; height: 600px; top: 100px; left: -200px;"></div>
+        <div class="decor-circle" style="width: 400px; height: 400px; bottom: 200px; right: -100px;"></div>
+
+        <div class="timeline-line"></div>
+
+        <!-- Item 1: Left -->
+        <div class="timeline-item highlight">
+            <div class="timeline-content-wrapper left-content">
+                <div class="connector"></div>
+                <div class="story-card">
+                    <div class="card-header">
+                        <div class="card-date">2023.11.24</div>
+                        <div class="card-title">遗忘之森的低语：终章决战</div>
+                    </div>
+                    <div class="card-body">
+                        探险队终于抵达了森林深处的祭坛，古老的符文在月光下闪烁。随着仪式的启动，沉睡百年的守护者苏醒了。这一战，决定了精灵族的命运。
+                    </div>
+                    <div class="card-footer">
+                        <div class="avatars">
+                            <div class="avatar">L</div>
+                            <div class="avatar">A</div>
+                            <div class="avatar">K</div>
+                        </div>
+                        <a href="#" class="view-detail">
+                            查看详情 <i class="ri-arrow-right-line"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="timeline-dot"></div>
+            <div class="timeline-content-wrapper right-content"></div>
+        </div>
+
+        <!-- Item 2: Right -->
+        <div class="timeline-item">
+            <div class="timeline-content-wrapper left-content"></div>
+            <div class="timeline-dot"></div>
+            <div class="timeline-content-wrapper right-content">
+                <div class="connector"></div>
+                <div class="story-card">
+                    <div class="card-header">
+                        <div class="card-date">2023.11.18</div>
+                        <div class="card-title">银月港湾的午后茶会</div>
+                    </div>
+                    <div class="card-body">
+                        难得的休闲时光，公会成员聚集在银月港湾的露天酒馆。交换着最近的情报，也分享着各自旅途中的趣闻。空气中弥漫着海风与麦芽酒的香气。
+                    </div>
+                    <div class="card-footer">
+                        <div class="avatars">
+                            <div class="avatar">S</div>
+                            <div class="avatar">M</div>
+                            <div class="avatar">R</div>
+                            <div class="avatar">T</div>
+                        </div>
+                        <a href="#" class="view-detail">
+                            查看详情 <i class="ri-arrow-right-line"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Item 3: Left -->
+        <div class="timeline-item">
+            <div class="timeline-content-wrapper left-content">
+                <div class="connector"></div>
+                <div class="story-card">
+                    <div class="card-header">
+                        <div class="card-date">2023.11.10</div>
+                        <div class="card-title">暗夜公会：潜入作战</div>
+                    </div>
+                    <div class="card-body">
+                        为了获取敌对势力的情报，我们伪装成商队潜入了地下黑市。紧张的氛围，每一句话都可能是陷阱。必须小心翼翼，一旦暴露后果不堪设想。
+                    </div>
+                    <div class="card-footer">
+                        <div class="avatars">
+                            <div class="avatar">Z</div>
+                            <div class="avatar">B</div>
+                        </div>
+                        <a href="#" class="view-detail">
+                            查看详情 <i class="ri-arrow-right-line"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="timeline-dot"></div>
+            <div class="timeline-content-wrapper right-content"></div>
+        </div>
+
+        <!-- Item 4: Right -->
+        <div class="timeline-item">
+            <div class="timeline-content-wrapper left-content"></div>
+            <div class="timeline-dot"></div>
+            <div class="timeline-content-wrapper right-content">
+                <div class="connector"></div>
+                <div class="story-card">
+                    <div class="card-header">
+                        <div class="card-date">2023.11.02</div>
+                        <div class="card-title">初遇：命运的齿轮</div>
+                    </div>
+                    <div class="card-body">
+                        在一个风雨交加的夜晚，流浪的骑士与寻找身世的魔法师在破旧的教堂相遇。这看似偶然的邂逅，却是命运齿轮开始转动的信号。
+                    </div>
+                    <div class="card-footer">
+                        <div class="avatars">
+                            <div class="avatar">L</div>
+                            <div class="avatar">F</div>
+                        </div>
+                        <a href="#" class="view-detail">
+                            查看详情 <i class="ri-arrow-right-line"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Item 5: Left -->
+        <div class="timeline-item">
+            <div class="timeline-content-wrapper left-content">
+                <div class="connector"></div>
+                <div class="story-card">
+                    <div class="card-header">
+                        <div class="card-date">2023.10.25</div>
+                        <div class="card-title">学院祭：魔法料理大赛</div>
+                    </div>
+                    <div class="card-body">
+                        皇家魔法学院一年一度的庆典。本次的主题是用魔法烹饪出不可思议的料理。虽然过程中发生了几次小爆炸，但最终的成品意外地美味。
+                    </div>
+                    <div class="card-footer">
+                        <div class="avatars">
+                            <div class="avatar">A</div>
+                            <div class="avatar">C</div>
+                            <div class="avatar">E</div>
+                        </div>
+                        <a href="#" class="view-detail">
+                            查看详情 <i class="ri-arrow-right-line"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="timeline-dot"></div>
+            <div class="timeline-content-wrapper right-content"></div>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>
