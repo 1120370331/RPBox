@@ -9,6 +9,9 @@ interface LocalProfile {
   name: string
   icon?: string
   checksum: string
+  raw_lua?: string
+  account_id?: string
+  saved_variables_path?: string
   characteristics?: {
     firstName?: string
     lastName?: string
@@ -46,7 +49,7 @@ async function loadProfile() {
   try {
     const wowPath = localStorage.getItem('wow_path') || ''
     const [local, cloud] = await Promise.all([
-      invoke<LocalProfile>('get_profile_detail', { wowPath, profileId: profileId.value }),
+      invoke<LocalProfile>('get_profile_detail', { wowPath: wowPath, profileId: profileId.value }),
       profileApi.getProfile(profileId.value).catch(() => null)
     ])
     profile.value = local
@@ -62,14 +65,31 @@ async function syncProfile() {
   try {
     const data = {
       id: profile.value.id,
-      account_id: '',
+      account_id: profile.value.account_id || '',
       profile_name: profile.value.name,
-      raw_lua: '',
+      raw_lua: profile.value.raw_lua || '',
       checksum: profile.value.checksum
     }
     cloudProfile.value = cloudProfile.value
       ? await profileApi.updateProfile(profileId.value, data)
       : await profileApi.createProfile(data)
+  } finally {
+    isSyncing.value = false
+  }
+}
+
+async function restoreFromCloud() {
+  if (!cloudProfile.value?.raw_lua || !cloudProfile.value.account_id) return
+  const wowPath = localStorage.getItem('wow_path') || ''
+  isSyncing.value = true
+  try {
+    await invoke('apply_cloud_profile', {
+      wowPath: wowPath,
+      accountId: cloudProfile.value.account_id,
+      profileId: profileId.value,
+      profileJson: cloudProfile.value.raw_lua
+    })
+    await loadProfile()
   } finally {
     isSyncing.value = false
   }
@@ -81,9 +101,14 @@ async function syncProfile() {
     <!-- 顶部导航 -->
     <header class="topbar anim-item" style="--delay: 0">
       <button class="back-btn" @click="router.back()">← 返回</button>
-      <button class="btn-primary" @click="syncProfile" :disabled="isSyncing || syncStatus === 'synced'">
-        {{ isSyncing ? '同步中...' : '同步到云端' }}
-      </button>
+      <div class="actions">
+        <button class="btn-primary" @click="restoreFromCloud" :disabled="isSyncing || !cloudProfile?.raw_lua">
+          {{ isSyncing ? '处理中...' : '从云端恢复' }}
+        </button>
+        <button class="btn-primary" @click="syncProfile" :disabled="isSyncing || syncStatus === 'synced'">
+          {{ isSyncing ? '处理中...' : '上传到云端' }}
+        </button>
+      </div>
     </header>
 
     <div v-if="isLoading" class="loading">加载中...</div>
@@ -148,6 +173,11 @@ async function syncProfile() {
   font-size: 15px;
   color: var(--color-primary);
   cursor: pointer;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
 }
 
 .profile-hero {
