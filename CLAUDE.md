@@ -156,7 +156,33 @@ cd server && go mod tidy && go run cmd/server/main.go
 
 - PRD1: 项目介绍
 - PRD2: 人物卡备份同步
-- PRD3: 剧情记录归档
+- **PRD3: 剧情记录归档 ⭐ 核心功能**
 - PRD4: 社区分享交流
 - PRD5: 道具市场
 - PRD6: 配套WoW插件 (RPBox_Addon)
+
+## 任务卡系统
+
+本项目使用分散式任务卡系统管理任务。
+
+### 使用方式
+
+- 任务卡按需创建，在需要的模块下建立 `tasks/` 目录
+- 任务 ID 格式：`[模块前缀]-[4位序号]`（如 `SYNC-0001`）
+- 新任务添加到 `TASK_LIST.md` 表格顶部
+
+### 已有模块前缀
+
+| 模块 | 前缀 | 路径 |
+|------|------|------|
+| 人物卡同步 | SYNC | `client/src/views/sync/` |
+| 剧情归档 | STORY | `client/src/views/story/` |
+| 社区分享 | COMM | `client/src/views/community/` |
+| 道具市场 | ITEM | `client/src/views/market/` |
+| 服务端 | SRV | `server/` |
+
+### 状态与类型
+
+- **状态**: `TODO` 待处理 | `WIP` 进行中 | `DONE` 已完成 | `CANCEL` 已取消
+- **类型**: `DEV` 开发 | `FIX` 修复 | `OPS` 运维 | `DOC` 文档 | `REF` 重构 | `TEST` 测试
+- **优先级**: `P0` 紧急 | `P1` 高 | `P2` 中 | `P3` 低
