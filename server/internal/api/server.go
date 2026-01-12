@@ -25,3 +25,7 @@ func NewServer(cfg *config.Config) *Server {
 func (s *Server) Run() error {
 	return s.router.Run(":" + s.cfg.Server.Port)
 }
+
+func (s *Server) healthCheck(c *gin.Context) {
+	c.JSON(200, gin.H{"status": "ok"})
+}
