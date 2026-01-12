@@ -14,29 +14,27 @@ export interface CloudProfile {
   account_id: string
   profile_name: string
   checksum: string
+  raw_lua?: string
   version: number
   created_at: string
   updated_at: string
 }
 
 export async function listProfiles(): Promise<CloudProfile[]> {
-  const res = await request.get('/profiles')
-  return res.data.profiles || []
+  const res = await request.get<{ profiles?: CloudProfile[] }>('/profiles')
+  return res.profiles || []
 }
 
 export async function getProfile(id: string): Promise<CloudProfile> {
-  const res = await request.get(`/profiles/${id}`)
-  return res.data
+  return request.get<CloudProfile>(`/profiles/${id}`)
 }
 
 export async function createProfile(data: ProfileData): Promise<CloudProfile> {
-  const res = await request.post('/profiles', data)
-  return res.data
+  return request.post<CloudProfile>('/profiles', data)
 }
 
 export async function updateProfile(id: string, data: Partial<ProfileData>): Promise<CloudProfile> {
-  const res = await request.put(`/profiles/${id}`, data)
-  return res.data
+  return request.put<CloudProfile>(`/profiles/${id}`, data)
 }
 
 export async function deleteProfile(id: string): Promise<void> {
@@ -53,11 +51,10 @@ export interface ProfileVersion {
 }
 
 export async function getVersions(id: string): Promise<ProfileVersion[]> {
-  const res = await request.get(`/profiles/${id}/versions`)
-  return res.data.versions || []
+  const res = await request.get<{ versions?: ProfileVersion[] }>(`/profiles/${id}/versions`)
+  return res.versions || []
 }
 
 export async function rollback(id: string, version: number): Promise<CloudProfile> {
-  const res = await request.post(`/profiles/${id}/rollback`, { version })
-  return res.data
+  return request.post<CloudProfile>(`/profiles/${id}/rollback`, { version })
 }

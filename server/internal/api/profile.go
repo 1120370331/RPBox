@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 )
 
 func (s *Server) listProfiles(c *gin.Context) {
@@ -112,6 +113,7 @@ func (s *Server) updateProfile(c *gin.Context) {
 		Checksum:  profile.Checksum,
 	}
 	database.DB.Create(&version)
+	_ = service.CleanOldVersions(profile.ID)
 
 	// 更新 Profile
 	profile.ProfileName = req.ProfileName
@@ -188,6 +190,7 @@ func (s *Server) rollbackProfile(c *gin.Context) {
 		ChangeLog: "回滚前备份",
 	}
 	database.DB.Create(&currentVersion)
+	_ = service.CleanOldVersions(profile.ID)
 
 	// 回滚
 	profile.RawLua = targetVersion.RawLua
