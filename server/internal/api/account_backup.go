@@ -15,7 +15,7 @@ func (s *Server) listAccountBackups(c *gin.Context) {
 
 	var backups []model.AccountBackup
 	database.DB.Where("user_id = ?", userID).
-		Select("id, user_id, account_id, profiles_count, checksum, version, created_at, updated_at").
+		Select("id, user_id, account_id, profiles_count, tools_count, runtime_size_kb, checksum, version, created_at, updated_at").
 		Find(&backups)
 
 	// 调试日志
@@ -48,6 +48,12 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		AccountID     string `json:"account_id" binding:"required"`
 		ProfilesData  string `json:"profiles_data" binding:"required"`
 		ProfilesCount int    `json:"profiles_count"`
+		ToolsData     string `json:"tools_data"`
+		ToolsCount    int    `json:"tools_count"`
+		RuntimeData   string `json:"runtime_data"`
+		RuntimeSizeKB int    `json:"runtime_size_kb"`
+		ConfigData    string `json:"config_data"`
+		ExtraData     string `json:"extra_data"`
 		Checksum      string `json:"checksum" binding:"required"`
 	}
 
@@ -56,10 +62,11 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		return
 	}
 
-	// 使用前端计算的 checksum（基于各 profile checksum 拼接）
-	checksum := req.Checksum
+	// 调试日志：打印接收到的数据长度
+	log.Printf("[AccountBackup] upsert - account=%s, profiles=%d, tools_data_len=%d, tools_count=%d, runtime_data_len=%d, runtime_kb=%d",
+		req.AccountID, req.ProfilesCount, len(req.ToolsData), req.ToolsCount, len(req.RuntimeData), req.RuntimeSizeKB)
 
-	log.Printf("[AccountBackup] upsert - account=%s, count=%d, checksum=%s", req.AccountID, req.ProfilesCount, checksum)
+	checksum := req.Checksum
 
 	var existing model.AccountBackup
 	err := database.DB.Where("user_id = ? AND account_id = ?", userID, req.AccountID).First(&existing).Error
@@ -71,6 +78,12 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 			AccountID:     req.AccountID,
 			ProfilesData:  req.ProfilesData,
 			ProfilesCount: req.ProfilesCount,
+			ToolsData:     req.ToolsData,
+			ToolsCount:    req.ToolsCount,
+			RuntimeData:   req.RuntimeData,
+			RuntimeSizeKB: req.RuntimeSizeKB,
+			ConfigData:    req.ConfigData,
+			ExtraData:     req.ExtraData,
 			Checksum:      checksum,
 			Version:       1,
 		}
@@ -93,6 +106,10 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		BackupID:     existing.ID,
 		Version:      existing.Version,
 		ProfilesData: existing.ProfilesData,
+		ToolsData:    existing.ToolsData,
+		RuntimeData:  existing.RuntimeData,
+		ConfigData:   existing.ConfigData,
+		ExtraData:    existing.ExtraData,
 		Checksum:     existing.Checksum,
 	}
 	database.DB.Create(&version)
@@ -101,6 +118,12 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 	// 更新备份
 	existing.ProfilesData = req.ProfilesData
 	existing.ProfilesCount = req.ProfilesCount
+	existing.ToolsData = req.ToolsData
+	existing.ToolsCount = req.ToolsCount
+	existing.RuntimeData = req.RuntimeData
+	existing.RuntimeSizeKB = req.RuntimeSizeKB
+	existing.ConfigData = req.ConfigData
+	existing.ExtraData = req.ExtraData
 	existing.Checksum = checksum
 	existing.Version++
 	if err := database.DB.Save(&existing).Error; err != nil {
@@ -108,7 +131,6 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
 		return
 	}
-	log.Printf("[AccountBackup] updated - account=%s, checksum=%s, version=%d", existing.AccountID, existing.Checksum, existing.Version)
 
 	c.JSON(http.StatusOK, existing)
 }

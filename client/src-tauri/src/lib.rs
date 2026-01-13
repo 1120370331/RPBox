@@ -274,14 +274,18 @@ async fn apply_account_backup(
     wow_path: String,
     account_id: String,
     profiles_json: String,
+    tools_json: Option<String>,
+    runtime_json: Option<String>,
+    config_json: Option<String>,
+    extra_json: Option<String>,
 ) -> Result<(), String> {
     let normalized = wow_path::normalize_wow_path(&wow_path)
         .ok_or_else(|| "未找到有效的WoW路径，请选择包含 WTF/Account 的目录".to_string())?;
-    let sv_path = normalized
+    let sv_dir = normalized
         .join("Account")
         .join(&account_id)
-        .join("SavedVariables")
-        .join("totalRP3.lua");
+        .join("SavedVariables");
+    let sv_path = sv_dir.join("totalRP3.lua");
 
     // 解析云端备份的所有 profiles
     let cloud_profiles: serde_json::Map<String, Value> = serde_json::from_str(&profiles_json)
@@ -307,5 +311,47 @@ async fn apply_account_backup(
     };
 
     replace_trp3_profiles(&sv_path, &final_profiles)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // 写回道具数据库（如果有）
+    if let Some(tools_data) = tools_json {
+        if !tools_data.is_empty() {
+            let tools_value: Value = serde_json::from_str(&tools_data)
+                .map_err(|e| format!("道具数据解析失败: {}", e))?;
+            writer::write_tools_db(&sv_dir, &tools_value)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    // 写回运行时数据（如果有）
+    if let Some(runtime_data) = runtime_json {
+        if !runtime_data.is_empty() {
+            let runtime_value: Value = serde_json::from_str(&runtime_data)
+                .map_err(|e| format!("运行时数据解析失败: {}", e))?;
+            writer::write_runtime_data(&sv_dir, &runtime_value)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    // 写回配置数据（如果有）
+    if let Some(config_data) = config_json {
+        if !config_data.is_empty() {
+            let config_value: Value = serde_json::from_str(&config_data)
+                .map_err(|e| format!("配置数据解析失败: {}", e))?;
+            writer::write_config(&sv_path, &config_value)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    // 写回额外数据（如果有）
+    if let Some(extra_data) = extra_json {
+        if !extra_data.is_empty() {
+            let extra_value: Value = serde_json::from_str(&extra_data)
+                .map_err(|e| format!("额外数据解析失败: {}", e))?;
+            writer::write_extra_data(&sv_dir, &extra_value)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
 }
