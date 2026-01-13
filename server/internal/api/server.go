@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/config"
+	"github.com/rpbox/server/internal/middleware"
 )
 
 type Server struct {
@@ -13,6 +14,7 @@ type Server struct {
 func NewServer(cfg *config.Config) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	router := gin.Default()
+	router.Use(middleware.CORS())
 
 	s := &Server{
 		cfg:    cfg,

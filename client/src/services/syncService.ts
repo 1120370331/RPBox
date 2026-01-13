@@ -26,11 +26,17 @@ async function retry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promise<T>
 }
 
 export async function uploadProfile(data: ProfileData): Promise<CloudProfile> {
+  console.log(`[Upload] 上传 ${data.profile_name}(${data.id}), checksum: ${data.checksum}`)
   return retry(async () => {
     try {
-      return await profileApi.updateProfile(data.id, data)
-    } catch {
-      return await profileApi.createProfile(data)
+      const result = await profileApi.updateProfile(data.id, data)
+      console.log(`[Upload] ${data.id} 更新成功, 返回checksum: ${result.checksum}`)
+      return result
+    } catch (e) {
+      console.log(`[Upload] ${data.id} 更新失败，尝试创建...`, e)
+      const result = await profileApi.createProfile(data)
+      console.log(`[Upload] ${data.id} 创建成功, 返回checksum: ${result.checksum}`)
+      return result
     }
   })
 }

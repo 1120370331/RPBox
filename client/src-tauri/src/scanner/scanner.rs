@@ -5,6 +5,26 @@ use std::{fs, path::PathBuf};
 
 use crate::{lua_parser, wow_path};
 
+/// 递归规范化 JSON，确保对象键按字母顺序排序
+fn normalize_json(value: &Value) -> String {
+    match value {
+        Value::Object(map) => {
+            let mut keys: Vec<_> = map.keys().collect();
+            keys.sort();
+            let pairs: Vec<String> = keys
+                .iter()
+                .map(|k| format!("\"{}\":{}", k, normalize_json(&map[*k])))
+                .collect();
+            format!("{{{}}}", pairs.join(","))
+        }
+        Value::Array(arr) => {
+            let items: Vec<String> = arr.iter().map(normalize_json).collect();
+            format!("[{}]", items.join(","))
+        }
+        _ => value.to_string(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
     pub accounts: Vec<AccountInfo>,
@@ -45,27 +65,12 @@ pub struct ProfileDetail {
     pub raw_lua: String,
     pub account_id: String,
     pub saved_variables_path: String,
-    pub characteristics: Option<BasicCharacteristics>,
-    pub about: Option<BasicAbout>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BasicCharacteristics {
-    #[serde(rename = "firstName")]
-    pub first_name: Option<String>,
-    #[serde(rename = "lastName")]
-    pub last_name: Option<String>,
-    pub title: Option<String>,
-    pub race: Option<String>,
-    #[serde(rename = "class")]
-    pub class_value: Option<String>,
-    pub age: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BasicAbout {
-    pub title: Option<String>,
-    pub text: Option<String>,
+    /// 完整的 characteristics 数据 (原始 TRP3 格式)
+    pub characteristics: Option<Value>,
+    /// 完整的 about 数据 (原始 TRP3 格式)
+    pub about: Option<Value>,
+    /// 完整的 character 数据 (原始 TRP3 格式)
+    pub character: Option<Value>,
 }
 
 pub fn scan_profiles(wow_path: &str) -> Result<ScanResult, String> {
@@ -188,7 +193,9 @@ fn extract_profiles(lua_path: &PathBuf, account_id: &str) -> Result<Vec<ProfileS
 
             let raw_profile = serde_json::to_string(profile)
                 .unwrap_or_else(|_| content_str.to_string());
-            let checksum = format!("{:x}", md5::compute(raw_profile.as_bytes()));
+            // 使用规范化 JSON 计算 checksum，确保键顺序稳定
+            let normalized = normalize_json(profile);
+            let checksum = format!("{:x}", md5::compute(normalized.as_bytes()));
             let sv_path = lua_path.display().to_string();
 
             profiles.push(ProfileSummary {
@@ -252,7 +259,8 @@ fn load_profile_detail(lua_path: &PathBuf, profile_id: &str, account_id: &str) -
         .ok_or_else(|| "未找到指定人物卡".to_string())?;
 
     let raw_profile = serde_json::to_string(profile).unwrap_or_default();
-    let checksum = format!("{:x}", md5::compute(raw_profile.as_bytes()));
+    let normalized = normalize_json(profile);
+    let checksum = format!("{:x}", md5::compute(normalized.as_bytes()));
 
     let name = profile
         .get("profileName")
@@ -260,15 +268,27 @@ fn load_profile_detail(lua_path: &PathBuf, profile_id: &str, account_id: &str) -
         .unwrap_or("未命名")
         .to_string();
 
-    let icon = profile
-        .get("player")
+    let player = profile.get("player");
+
+    let icon = player
         .and_then(|p| p.get("characteristics"))
         .and_then(|c| c.get("IC"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let characteristics = extract_characteristics(profile);
-    let about = extract_about(profile);
+    // 直接提取完整的原始数据
+    let characteristics = player
+        .and_then(|p| p.get("characteristics"))
+        .cloned();
+
+    let about = player
+        .and_then(|p| p.get("about"))
+        .cloned();
+
+    let character = player
+        .and_then(|p| p.get("character"))
+        .cloned();
+
     let sv_path = lua_path.display().to_string();
 
     Ok(ProfileDetail {
@@ -281,71 +301,7 @@ fn load_profile_detail(lua_path: &PathBuf, profile_id: &str, account_id: &str) -
         saved_variables_path: sv_path,
         characteristics,
         about,
+        character,
     })
 }
 
-fn extract_characteristics(profile: &Value) -> Option<BasicCharacteristics> {
-    let root = profile
-        .get("player")
-        .and_then(|p| p.get("characteristics"))
-        .cloned()
-        .unwrap_or(Value::Null);
-
-    let first_name = get_nested_str(&root, &["FN"]);
-    let last_name = get_nested_str(&root, &["LN"]);
-    let title = get_nested_str(&root, &["TI"]);
-    let race = get_nested_str(&root, &["RA"]);
-    let class_value = get_nested_str(&root, &["CL"]);
-    let age = get_nested_str(&root, &["AG"]);
-
-    if first_name.is_none()
-        && last_name.is_none()
-        && title.is_none()
-        && race.is_none()
-        && class_value.is_none()
-        && age.is_none()
-    {
-        return None;
-    }
-
-    Some(BasicCharacteristics {
-        first_name,
-        last_name,
-        title,
-        race,
-        class_value,
-        age,
-    })
-}
-
-fn extract_about(profile: &Value) -> Option<BasicAbout> {
-    let about = profile
-        .get("player")
-        .and_then(|p| p.get("about"))
-        .cloned()
-        .unwrap_or(Value::Null);
-
-    let text = get_nested_str(&about, &["T1", "TX"])
-        .or_else(|| get_nested_str(&about, &["T3", "HI", "TX"]))
-        .or_else(|| get_nested_str(&about, &["T3", "PH", "TX"]))
-        .or_else(|| get_nested_str(&about, &["T3", "PS", "TX"]));
-
-    let title = profile
-        .get("profileName")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    if text.is_none() && title.is_none() {
-        return None;
-    }
-
-    Some(BasicAbout { title, text })
-}
-
-fn get_nested_str(value: &Value, path: &[&str]) -> Option<String> {
-    let mut current = value;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    current.as_str().map(|s| s.to_string())
-}
