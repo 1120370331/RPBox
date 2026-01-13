@@ -8,6 +8,11 @@ type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
+	Storage  StorageConfig  `mapstructure:"storage"`
+}
+
+type StorageConfig struct {
+	Path string `mapstructure:"path"`
 }
 
 type ServerConfig struct {
@@ -37,6 +42,7 @@ func Load() (*Config, error) {
 	// 默认值
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
+	viper.SetDefault("storage.path", "./storage")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

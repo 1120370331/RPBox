@@ -30,6 +30,8 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.ProfileVersion{},
 		&model.AccountBackup{},
 		&model.AccountBackupVersion{},
+		&model.Story{},
+		&model.StoryEntry{},
 	); err != nil {
 		return err
 	}

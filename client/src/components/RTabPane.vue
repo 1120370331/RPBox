@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, computed } from 'vue'
+import { inject, computed, onMounted } from 'vue'
 
 interface Props {
   name: string
@@ -10,45 +10,24 @@ const props = defineProps<Props>()
 const tabs = inject<any>('tabs')
 
 const isActive = computed(() => tabs?.activeTab.value === props.name)
+
+// 在挂载时注册到父组件
+onMounted(() => {
+  if (tabs?.registerTab) {
+    tabs.registerTab({ name: props.name, label: props.label })
+  }
+})
 </script>
 
 <template>
-  <button
-    class="r-tab-pane"
-    :class="{ 'r-tab-pane--active': isActive }"
-    @click="tabs?.setActive(name)"
-  >
-    {{ label }}
-  </button>
+  <!-- 只渲染内容区，标签头由父组件 RTabs 统一渲染 -->
+  <div v-show="isActive" class="r-tab-pane">
+    <slot />
+  </div>
 </template>
 
 <style scoped>
 .r-tab-pane {
-  padding: 12px 20px;
-  border: none;
-  background: transparent;
-  font-size: 14px;
-  color: var(--color-secondary);
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.r-tab-pane:hover { color: var(--color-primary); }
-
-.r-tab-pane--active {
-  color: var(--color-accent);
-  font-weight: 600;
-}
-
-.r-tab-pane--active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-accent);
+  /* 内容区不需要额外 padding，由父组件 r-tabs__content 控制 */
 }
 </style>

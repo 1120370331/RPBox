@@ -1,0 +1,13 @@
+{
+  "name": "RPBox_Addon",
+  "latest": "1.0.0",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "releaseDate": "2024-01-15",
+      "minClientVersion": "1.0.0",
+      "changelog": "初始版本：聊天记录采集、TRP3集成",
+      "downloadUrl": "/api/v1/addon/download/1.0.0"
+    }
+  ]
+}

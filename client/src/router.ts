@@ -14,6 +14,7 @@ const router = createRouter({
         { path: 'sync/profile/:id', name: 'profile-detail', component: () => import('./views/sync/ProfileDetail.vue') },
         { path: 'sync/profile/:id/edit', name: 'profile-edit', component: () => import('./views/sync/ProfileEdit.vue') },
         { path: 'archives', name: 'archives', component: () => import('./views/archives/ArchivesMain.vue') },
+        { path: 'archives/story/:id', name: 'story-detail', component: () => import('./views/archives/StoryDetail.vue') },
         { path: 'market', name: 'market', component: () => import('./views/market/MarketMain.vue') },
         { path: 'community', name: 'community', component: () => import('./views/community/CommunityMain.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/Settings.vue') },
@@ -21,6 +22,7 @@ const router = createRouter({
     },
     { path: '/login', name: 'login', component: () => import('./views/Login.vue') },
     { path: '/register', name: 'register', component: () => import('./views/Register.vue') },
+    { path: '/story/:code', name: 'story-playback', component: () => import('./views/archives/StoryPlayback.vue') },
   ],
 })
 
