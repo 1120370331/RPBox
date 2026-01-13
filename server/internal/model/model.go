@@ -41,6 +41,12 @@ type AccountBackup struct {
 	AccountID     string    `gorm:"size:32;uniqueIndex:idx_user_account" json:"account_id"`
 	ProfilesData  string    `gorm:"type:text" json:"profiles_data,omitempty"` // JSON: 所有人物卡数据
 	ProfilesCount int       `json:"profiles_count"`
+	ToolsData     string    `gorm:"type:text" json:"tools_data,omitempty"` // JSON: TRP3 Extended 道具数据库
+	ToolsCount    int       `json:"tools_count"`
+	RuntimeData   string    `gorm:"type:text" json:"runtime_data,omitempty"` // JSON: TRP3 运行时数据
+	RuntimeSizeKB int       `json:"runtime_size_kb"`
+	ConfigData    string    `gorm:"type:text" json:"config_data,omitempty"` // JSON: TRP3 配置数据
+	ExtraData     string    `gorm:"type:text" json:"extra_data,omitempty"`  // JSON: TRP3 额外数据(角色绑定、伙伴等)
 	Checksum      string    `gorm:"type:text" json:"checksum"`
 	Version       int       `gorm:"default:1" json:"version"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -53,6 +59,10 @@ type AccountBackupVersion struct {
 	BackupID     uint      `gorm:"index" json:"backup_id"`
 	Version      int       `json:"version"`
 	ProfilesData string    `gorm:"type:text" json:"profiles_data,omitempty"`
+	ToolsData    string    `gorm:"type:text" json:"tools_data,omitempty"`
+	RuntimeData  string    `gorm:"type:text" json:"runtime_data,omitempty"`
+	ConfigData   string    `gorm:"type:text" json:"config_data,omitempty"`
+	ExtraData    string    `gorm:"type:text" json:"extra_data,omitempty"`
 	Checksum     string    `gorm:"type:text" json:"checksum"`
 	ChangeLog    string    `gorm:"type:text" json:"change_log"`
 	CreatedAt    time.Time `json:"created_at"`
