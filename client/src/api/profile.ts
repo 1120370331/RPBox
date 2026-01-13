@@ -21,7 +21,8 @@ export interface CloudProfile {
 }
 
 export async function listProfiles(): Promise<CloudProfile[]> {
-  const res = await request.get<{ profiles?: CloudProfile[] }>('/profiles')
+  // 获取所有数据，避免分页限制
+  const res = await request.get<{ profiles?: CloudProfile[], total?: number }>('/profiles?page_size=1000')
   return res.profiles || []
 }
 

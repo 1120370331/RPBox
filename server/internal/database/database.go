@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/rpbox/server/internal/config"
 	"github.com/rpbox/server/internal/model"
@@ -27,8 +28,21 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.User{},
 		&model.Profile{},
 		&model.ProfileVersion{},
+		&model.AccountBackup{},
+		&model.AccountBackupVersion{},
 	); err != nil {
 		return err
+	}
+
+	// 手动迁移：修改 checksum 列类型为 text
+	migrations := []string{
+		"ALTER TABLE account_backups ALTER COLUMN checksum TYPE text",
+		"ALTER TABLE account_backup_versions ALTER COLUMN checksum TYPE text",
+	}
+	for _, sql := range migrations {
+		if err := db.Exec(sql).Error; err != nil {
+			log.Printf("[DB Migration] %s - %v", sql, err)
+		}
 	}
 
 	DB = db

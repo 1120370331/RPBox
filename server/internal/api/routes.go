@@ -28,6 +28,13 @@ func (s *Server) setupRoutes() {
 
 			auth.GET("/items", s.listItems)
 			auth.POST("/items", s.createItem)
+
+			// 账号备份（以账号为单位）
+			auth.GET("/account-backups", s.listAccountBackups)
+			auth.GET("/account-backups/:account_id", s.getAccountBackup)
+			auth.POST("/account-backups", s.upsertAccountBackup)
+			auth.DELETE("/account-backups/:account_id", s.deleteAccountBackup)
+			auth.GET("/account-backups/:account_id/versions", s.getAccountBackupVersions)
 		}
 	}
 }

@@ -232,7 +232,8 @@ pub fn run() {
             write_profile,
             update_profile,
             clear_sync_cache,
-            apply_cloud_profile
+            apply_cloud_profile,
+            apply_account_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -265,5 +266,46 @@ async fn apply_cloud_profile(
         .insert(profile_id, profile_value);
 
     replace_trp3_profiles(&sv_path, &profiles)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn apply_account_backup(
+    wow_path: String,
+    account_id: String,
+    profiles_json: String,
+) -> Result<(), String> {
+    let normalized = wow_path::normalize_wow_path(&wow_path)
+        .ok_or_else(|| "未找到有效的WoW路径，请选择包含 WTF/Account 的目录".to_string())?;
+    let sv_path = normalized
+        .join("Account")
+        .join(&account_id)
+        .join("SavedVariables")
+        .join("totalRP3.lua");
+
+    // 解析云端备份的所有 profiles
+    let cloud_profiles: serde_json::Map<String, Value> = serde_json::from_str(&profiles_json)
+        .map_err(|e| format!("云端数据解析失败: {}", e))?;
+
+    // 如果本地文件存在，读取并合并；否则直接使用云端数据
+    let final_profiles = if sv_path.exists() {
+        let mut local_profiles = lua_parser::parse_variable(&sv_path, "TRP3_Profiles")
+            .map_err(|e| e.to_string())?;
+
+        let local_map = local_profiles
+            .as_object_mut()
+            .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
+
+        // 将云端的所有 profiles 合并到本地（覆盖同名的）
+        for (profile_id, profile_data) in cloud_profiles {
+            local_map.insert(profile_id, profile_data);
+        }
+        local_profiles
+    } else {
+        // 文件不存在，直接使用云端数据
+        Value::Object(cloud_profiles)
+    };
+
+    replace_trp3_profiles(&sv_path, &final_profiles)
         .map_err(|e| e.to_string())
 }
