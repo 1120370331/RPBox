@@ -10,6 +10,7 @@ interface WowInstallation {
 }
 
 const router = useRouter()
+const mounted = ref(false)
 const wowPath = ref('')
 const detectedPaths = ref<WowInstallation[]>([])
 const isScanning = ref(false)
@@ -20,6 +21,7 @@ onMounted(() => {
   wowPath.value = localStorage.getItem('wow_path') || ''
   autoSync.value = localStorage.getItem('auto_sync') === 'true'
   syncOnStartup.value = localStorage.getItem('sync_on_startup') !== 'false'
+  setTimeout(() => mounted.value = true, 50)
 })
 
 async function detectPaths() {
@@ -56,177 +58,530 @@ function resetSetup() {
 </script>
 
 <template>
-  <div class="settings">
-    <div class="header">
-      <button class="back-btn" @click="router.back()">&larr; 返回</button>
-      <h2>设置</h2>
-    </div>
-
-    <div class="section">
-      <h3>WoW 安装路径</h3>
-      <div class="path-input">
-        <input v-model="wowPath" type="text" placeholder="魔兽世界安装路径" />
-        <button class="btn" @click="detectPaths" :disabled="isScanning">
-          {{ isScanning ? '扫描中...' : '自动检测' }}
+  <div class="settings-page" :class="{ 'animate-in': mounted }">
+    <!-- 顶部工具栏 -->
+    <div class="top-toolbar anim-item" style="--delay: 0">
+      <div class="breadcrumbs">
+        <i class="ri-settings-3-line"></i>
+        <span class="current">系统设置</span>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-secondary" @click="router.back()">
+          <i class="ri-arrow-left-line"></i> 返回
         </button>
       </div>
-      <div v-if="detectedPaths.length > 0" class="detected-paths">
-        <div
-          v-for="p in detectedPaths"
-          :key="p.path"
-          class="path-item"
-          :class="{ selected: wowPath === p.path }"
-          @click="selectPath(p.path)"
-        >
-          <span class="path">{{ p.path }}</span>
-          <span class="flavor">{{ p.flavor }} ({{ p.version }})</span>
+    </div>
+
+    <!-- 设置内容区 -->
+    <div class="settings-content">
+      <!-- WoW 安装路径 -->
+      <div class="setting-card anim-item" style="--delay: 1">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-folder-3-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>WoW 安装路径</h3>
+            <p>配置魔兽世界的安装目录</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="path-input-group">
+            <input
+              v-model="wowPath"
+              type="text"
+              placeholder="请输入或选择魔兽世界安装路径"
+              class="path-input"
+            />
+            <button class="btn btn-primary" @click="detectPaths" :disabled="isScanning">
+              <i :class="isScanning ? 'ri-loader-4-line spin' : 'ri-search-line'"></i>
+              {{ isScanning ? '扫描中...' : '自动检测' }}
+            </button>
+          </div>
+          <div v-if="detectedPaths.length > 0" class="detected-paths">
+            <div
+              v-for="p in detectedPaths"
+              :key="p.path"
+              class="path-item"
+              :class="{ selected: wowPath === p.path }"
+              @click="selectPath(p.path)"
+            >
+              <div class="path-info">
+                <i class="ri-gamepad-line"></i>
+                <span class="path-text">{{ p.path }}</span>
+              </div>
+              <span class="flavor-tag">{{ p.flavor }} · {{ p.version }}</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="section">
-      <h3>同步设置</h3>
-      <label class="checkbox-item">
-        <input type="checkbox" v-model="syncOnStartup" @change="saveSettings" />
-        <span>启动时自动同步</span>
-      </label>
-      <label class="checkbox-item">
-        <input type="checkbox" v-model="autoSync" @change="saveSettings" />
-        <span>检测到变更时自动同步</span>
-      </label>
-    </div>
-
-    <div class="section">
-      <h3>数据管理</h3>
-      <div class="action-buttons">
-        <button class="btn btn-secondary" @click="clearCache">清除本地缓存</button>
-        <button class="btn btn-danger" @click="resetSetup">重新配置</button>
+      <!-- 同步设置 -->
+      <div class="setting-card anim-item" style="--delay: 2">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-refresh-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>同步设置</h3>
+            <p>配置数据同步行为</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <label class="switch-item" @click="syncOnStartup = !syncOnStartup; saveSettings()">
+            <div class="switch-info">
+              <span class="switch-label">启动时自动同步</span>
+              <span class="switch-desc">应用启动后自动检查并同步数据</span>
+            </div>
+            <div class="switch" :class="{ active: syncOnStartup }">
+              <div class="switch-thumb"></div>
+            </div>
+          </label>
+          <label class="switch-item" @click="autoSync = !autoSync; saveSettings()">
+            <div class="switch-info">
+              <span class="switch-label">变更时自动同步</span>
+              <span class="switch-desc">检测到本地文件变更时自动上传</span>
+            </div>
+            <div class="switch" :class="{ active: autoSync }">
+              <div class="switch-thumb"></div>
+            </div>
+          </label>
+        </div>
       </div>
-    </div>
 
-    <div class="section">
-      <h3>关于</h3>
-      <p class="about-text">RPBox v0.1.0</p>
-      <p class="about-text">人物卡备份同步工具</p>
+      <!-- 数据管理 -->
+      <div class="setting-card anim-item" style="--delay: 3">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-database-2-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>数据管理</h3>
+            <p>管理本地缓存和配置</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="action-buttons">
+            <button class="btn btn-outline" @click="clearCache">
+              <i class="ri-delete-bin-line"></i>
+              清除本地缓存
+            </button>
+            <button class="btn btn-danger" @click="resetSetup">
+              <i class="ri-restart-line"></i>
+              重新配置
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 关于 -->
+      <div class="setting-card about-card anim-item" style="--delay: 4">
+        <div class="about-content">
+          <div class="about-logo">
+            <i class="ri-box-3-line"></i>
+          </div>
+          <div class="about-info">
+            <h3>RPBox</h3>
+            <p class="version">v0.1.0</p>
+            <p class="desc">魔兽世界 RP 玩家的工具箱</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.settings {
-  padding: 1.5rem;
-  max-width: 600px;
-  margin: 0 auto;
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.header {
+/* 顶部工具栏 */
+.top-toolbar {
+  background-color: #FFFFFF;
+  border-radius: 16px;
+  height: 64px;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  justify-content: space-between;
+  padding: 0 24px;
+  box-shadow: 0 4px 20px rgba(75, 54, 33, 0.05);
 }
 
-.header h2 {
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #8C7B70;
+}
+
+.breadcrumbs i {
+  font-size: 18px;
+  color: #804030;
+}
+
+.breadcrumbs .current {
+  color: #804030;
+  font-weight: 600;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* 设置内容区 */
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+}
+
+/* 设置卡片 */
+.setting-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(75, 54, 33, 0.05);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #E8DCCF;
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(128, 64, 48, 0.1);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-icon i {
+  font-size: 24px;
+  color: #804030;
+}
+
+.card-title h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2C1810;
+}
+
+.card-title p {
   margin: 0;
+  font-size: 13px;
+  color: #8C7B70;
 }
 
-.back-btn {
-  background: none;
-  border: none;
-  font-size: 1rem;
-  cursor: pointer;
-  color: var(--color-primary);
-}
-
-.section {
-  background: var(--color-bg-secondary);
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-}
-
-.section h3 {
-  margin: 0 0 1rem 0;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0.5rem;
+/* 路径输入 */
+.path-input-group {
+  display: flex;
+  gap: 12px;
 }
 
 .path-input {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.path-input input {
   flex: 1;
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-bg);
-  color: var(--color-text);
+  padding: 12px 16px;
+  border: 1px solid #E8DCCF;
+  border-radius: 10px;
+  background: #FDFBF9;
+  color: #2C1810;
+  font-size: 14px;
+  transition: all 0.2s;
 }
 
+.path-input:focus {
+  outline: none;
+  border-color: #804030;
+  box-shadow: 0 0 0 3px rgba(128, 64, 48, 0.1);
+}
+
+.path-input::placeholder {
+  color: #8C7B70;
+}
+
+/* 检测到的路径 */
 .detected-paths {
-  margin-top: 1rem;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .path-item {
   display: flex;
   justify-content: space-between;
-  padding: 0.75rem;
-  background: var(--color-bg);
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
+  align-items: center;
+  padding: 14px 16px;
+  background: #FDFBF9;
+  border: 1px solid #E8DCCF;
+  border-radius: 10px;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.path-item:hover {
+  background: rgba(128, 64, 48, 0.05);
+  border-color: #D4A373;
 }
 
 .path-item.selected {
-  outline: 2px solid var(--color-primary);
+  background: rgba(128, 64, 48, 0.08);
+  border-color: #804030;
 }
 
-.path-item .flavor {
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-}
-
-.checkbox-item {
+.path-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  cursor: pointer;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
+.path-info i {
+  font-size: 18px;
+  color: #804030;
+}
+
+.path-text {
+  font-size: 13px;
+  color: #2C1810;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flavor-tag {
+  font-size: 12px;
+  color: #8C7B70;
+  background: rgba(128, 64, 48, 0.1);
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* 开关项 */
+.switch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: #FDFBF9;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 10px;
+}
+
+.switch-item:last-child {
+  margin-bottom: 0;
+}
+
+.switch-item:hover {
+  background: rgba(128, 64, 48, 0.05);
+}
+
+.switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.switch-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2C1810;
+}
+
+.switch-desc {
+  font-size: 12px;
+  color: #8C7B70;
+}
+
+/* 开关组件 */
+.switch {
+  width: 44px;
+  height: 24px;
+  background: #D4D4D4;
+  border-radius: 12px;
+  position: relative;
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.switch.active {
+  background: #804030;
+}
+
+.switch-thumb {
+  width: 20px;
+  height: 20px;
+  background: #FFFFFF;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: all 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.switch.active .switch-thumb {
+  left: 22px;
+}
+
+/* 操作按钮区 */
 .action-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: 12px;
 }
 
+/* 按钮样式 */
 .btn {
-  padding: 0.5rem 1rem;
+  padding: 10px 18px;
   border: none;
-  border-radius: 4px;
+  border-radius: 10px;
   cursor: pointer;
-  background: var(--color-primary);
-  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: #804030;
+  color: #FFFFFF;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #6B3528;
+  box-shadow: 0 4px 12px rgba(128, 64, 48, 0.3);
 }
 
 .btn-secondary {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text);
+  background: rgba(128, 64, 48, 0.1);
+  color: #804030;
+}
+
+.btn-secondary:hover {
+  background: rgba(128, 64, 48, 0.15);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid #E8DCCF;
+  color: #2C1810;
+}
+
+.btn-outline:hover {
+  background: rgba(128, 64, 48, 0.05);
+  border-color: #D4A373;
 }
 
 .btn-danger {
-  background: #c00;
-  color: white;
+  background: #DC3545;
+  color: #FFFFFF;
 }
 
-.about-text {
-  margin: 0.25rem 0;
-  color: var(--color-text-secondary);
+.btn-danger:hover {
+  background: #C82333;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+/* 关于卡片 */
+.about-card {
+  background: linear-gradient(135deg, #804030 0%, #4B3621 100%);
+}
+
+.about-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.about-logo {
+  width: 64px;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-logo i {
+  font-size: 32px;
+  color: #FBF5EF;
+}
+
+.about-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #FBF5EF;
+}
+
+.about-info .version {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  color: rgba(251, 245, 239, 0.7);
+}
+
+.about-info .desc {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(251, 245, 239, 0.6);
+}
+
+/* 动画 */
+.anim-item {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.animate-in .anim-item {
+  animation: fadeUp 0.5s ease forwards;
+  animation-delay: calc(var(--delay) * 0.1s);
+}
+
+@keyframes fadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 旋转动画 */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
