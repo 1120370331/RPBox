@@ -6,6 +6,12 @@ export interface AccountBackup {
   account_id: string
   profiles_data?: string
   profiles_count: number
+  tools_data?: string
+  tools_count: number
+  runtime_data?: string
+  runtime_size_kb: number
+  config_data?: string
+  extra_data?: string
   checksum: string
   version: number
   created_at: string
@@ -17,6 +23,10 @@ export interface AccountBackupVersion {
   backup_id: number
   version: number
   profiles_data?: string
+  tools_data?: string
+  runtime_data?: string
+  config_data?: string
+  extra_data?: string
   checksum: string
   change_log: string
   created_at: string
@@ -38,6 +48,12 @@ export async function upsertAccountBackup(data: {
   account_id: string
   profiles_data: string
   profiles_count: number
+  tools_data?: string
+  tools_count?: number
+  runtime_data?: string
+  runtime_size_kb?: number
+  config_data?: string
+  extra_data?: string
   checksum: string
 }): Promise<AccountBackup> {
   return request.post<AccountBackup>('/account-backups', data)

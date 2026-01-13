@@ -16,9 +16,35 @@ interface ProfileItem {
   modified_at?: string
 }
 
+interface ToolsDbSummary {
+  item_count: number
+  checksum: string
+  raw_data: string
+}
+
+interface RuntimeDataSummary {
+  size_kb: number
+  checksum: string
+  raw_data: string
+}
+
+interface ConfigSummary {
+  checksum: string
+  raw_data: string
+}
+
+interface ExtraDataSummary {
+  checksum: string
+  raw_data: string
+}
+
 interface AccountInfo {
   account_id: string
   profiles: ProfileItem[]
+  tools_db?: ToolsDbSummary
+  runtime_data?: RuntimeDataSummary
+  config?: ConfigSummary
+  extra_data?: ExtraDataSummary
 }
 
 type WorkflowStep = 'scan' | 'backup' | 'upload' | 'verify' | 'finish'
@@ -45,6 +71,105 @@ const currentProfiles = computed(() => {
   return acc?.profiles || []
 })
 
+// 当前账号的道具数据库
+const currentToolsDb = computed(() => {
+  const acc = accounts.value.find(a => a.account_id === selectedAccount.value)
+  return acc?.tools_db || null
+})
+
+// 当前账号的运行时数据
+const currentRuntimeData = computed(() => {
+  const acc = accounts.value.find(a => a.account_id === selectedAccount.value)
+  return acc?.runtime_data || null
+})
+
+// 当前账号的配置数据
+const currentConfig = computed(() => {
+  const acc = accounts.value.find(a => a.account_id === selectedAccount.value)
+  return acc?.config || null
+})
+
+// 当前账号的额外数据
+const currentExtraData = computed(() => {
+  const acc = accounts.value.find(a => a.account_id === selectedAccount.value)
+  return acc?.extra_data || null
+})
+
+// 额外数据变量名称映射
+const extraVarNames: Record<string, string> = {
+  TRP3_Characters: '角色绑定',
+  TRP3_Companions: '伙伴数据',
+  TRP3_Presets: '预设',
+  TRP3_Notes: '笔记',
+  TRP3_Flyway: '数据迁移',
+  TRP3_MatureFilter: '成人过滤',
+  TRP3_Colors: '颜色设置',
+  TRP3_SavedAutomation: '自动化',
+  TRP3_Exchange_DB: '交换数据',
+  TRP3_Stashes: '储藏',
+  TRP3_Drop: '掉落',
+  TRP3_Security: '安全设置',
+  TRP3_Extended_Flyway: 'Ext迁移'
+}
+
+// 解析额外数据列表
+interface ExtraVarItem {
+  key: string
+  name: string
+  hasData: boolean
+}
+const extraDataList = computed<ExtraVarItem[]>(() => {
+  const extra = currentExtraData.value
+  if (!extra?.raw_data) return []
+  try {
+    const data = JSON.parse(extra.raw_data)
+    return Object.keys(data).map(key => ({
+      key,
+      name: extraVarNames[key] || key,
+      hasData: data[key] && Object.keys(data[key]).length > 0
+    })).filter(item => item.hasData)
+  } catch {
+    return []
+  }
+})
+
+// 云端额外数据列表
+const cloudExtraDataList = computed<ExtraVarItem[]>(() => {
+  const backup = fullBackupData.value
+  if (!backup?.extra_data) return []
+  try {
+    const data = JSON.parse(backup.extra_data)
+    return Object.keys(data).map(key => ({
+      key,
+      name: extraVarNames[key] || key,
+      hasData: data[key] && Object.keys(data[key]).length > 0
+    })).filter(item => item.hasData)
+  } catch {
+    return []
+  }
+})
+
+// 解析道具列表
+interface ToolItem {
+  id: string
+  name: string
+  type?: string
+}
+const toolsList = computed<ToolItem[]>(() => {
+  const toolsDb = currentToolsDb.value
+  if (!toolsDb?.raw_data) return []
+  try {
+    const data = JSON.parse(toolsDb.raw_data)
+    return Object.entries(data).map(([id, itemData]: [string, any]) => ({
+      id,
+      name: itemData?.MD?.NA || itemData?.BA?.NA || id.slice(0, 8),
+      type: itemData?.TY || 'item'
+    }))
+  } catch {
+    return []
+  }
+})
+
 const hasCloudData = computed(() => cloudBackups.value.size > 0)
 
 // 当前账号的同步状态
@@ -65,12 +190,37 @@ const accountSyncStatus = computed<'synced' | 'pending' | 'conflict'>(() => {
   return 'conflict'
 })
 
-// 计算本地profiles的整体checksum
+// 计算本地数据的整体checksum（包含人物卡、道具、运行时数据、配置）
 function computeLocalChecksum(): string {
+  const parts: string[] = []
+
+  // 人物卡 checksum
   const profiles = currentProfiles.value
-  if (profiles.length === 0) return ''
-  // 简单拼接所有checksum
-  return profiles.map(p => p.checksum).sort().join('')
+  if (profiles.length > 0) {
+    parts.push(...profiles.map(p => p.checksum).sort())
+  }
+
+  // 道具数据库 checksum
+  if (currentToolsDb.value?.checksum) {
+    parts.push(currentToolsDb.value.checksum)
+  }
+
+  // 运行时数据 checksum
+  if (currentRuntimeData.value?.checksum) {
+    parts.push(currentRuntimeData.value.checksum)
+  }
+
+  // 配置数据 checksum
+  if (currentConfig.value?.checksum) {
+    parts.push(currentConfig.value.checksum)
+  }
+
+  // 额外数据 checksum
+  if (currentExtraData.value?.checksum) {
+    parts.push(currentExtraData.value.checksum)
+  }
+
+  return parts.join('')
 }
 
 const stats = computed(() => {
@@ -133,6 +283,29 @@ const cloudProfilesList = computed<CloudProfileItem[]>(() => {
   } catch {
     return []
   }
+})
+
+// 检测本地数据是否少于云端（需要警告）
+const dataLossWarning = computed(() => {
+  const backup = currentBackup.value
+  if (!backup) return null
+
+  const warnings: string[] = []
+  const localProfiles = currentProfiles.value.length
+  const localTools = currentToolsDb.value?.item_count || 0
+  const localRuntime = currentRuntimeData.value?.size_kb || 0
+
+  if (localProfiles < backup.profiles_count) {
+    warnings.push(`人物卡: ${localProfiles} < 云端 ${backup.profiles_count}`)
+  }
+  if (localTools < (backup.tools_count || 0)) {
+    warnings.push(`道具: ${localTools} < 云端 ${backup.tools_count}`)
+  }
+  if (localRuntime < (backup.runtime_size_kb || 0)) {
+    warnings.push(`他人数据: ${localRuntime}KB < 云端 ${backup.runtime_size_kb}KB`)
+  }
+
+  return warnings.length > 0 ? warnings : null
 })
 
 // 删除确认弹窗
@@ -260,12 +433,33 @@ async function confirmUpload() {
     }
   }
 
+  // 获取当前账号的道具数据库
+  const currentAccount = accounts.value.find(a => a.account_id === selectedAccount.value)
+  const toolsDb = currentAccount?.tools_db
+  const runtimeData = currentAccount?.runtime_data
+  const configData = currentAccount?.config
+  const extraData = currentAccount?.extra_data
+
+  // 调试日志
+  console.log('[Upload] currentAccount:', currentAccount)
+  console.log('[Upload] toolsDb:', toolsDb)
+  console.log('[Upload] toolsDb?.raw_data length:', toolsDb?.raw_data?.length)
+  console.log('[Upload] runtimeData:', runtimeData)
+  console.log('[Upload] configData:', configData)
+  console.log('[Upload] extraData:', extraData)
+
   isSyncing.value = true
   try {
     await accountBackupApi.upsertAccountBackup({
       account_id: selectedAccount.value,
       profiles_data: JSON.stringify(profilesData),
       profiles_count: currentProfiles.value.length,
+      tools_data: toolsDb?.raw_data,
+      tools_count: toolsDb?.item_count || 0,
+      runtime_data: runtimeData?.raw_data,
+      runtime_size_kb: runtimeData?.size_kb || 0,
+      config_data: configData?.raw_data,
+      extra_data: extraData?.raw_data,
       checksum: computeLocalChecksum()
     })
     await loadProfiles()
@@ -324,9 +518,13 @@ async function restoreAll() {
     await dialog.alert({ title: '提示', message: '当前账号在云端暂无备份', type: 'info' })
     return
   }
+  const extras = [
+    backup.tools_count ? `${backup.tools_count} 个道具` : '',
+    backup.runtime_size_kb ? `${backup.runtime_size_kb}KB 运行时数据` : ''
+  ].filter(Boolean).join('、')
   const ok = await dialog.confirm({
     title: '确认写回',
-    message: `将从云端写回账号 ${selectedAccount.value} 的 ${backup.profiles_count} 个人物卡到本地，需保证游戏已关闭。是否继续？`,
+    message: `将从云端写回账号 ${selectedAccount.value} 的 ${backup.profiles_count} 个人物卡${extras ? `、${extras}` : ''}到本地，需保证游戏已关闭。是否继续？`,
     type: 'warning'
   })
   if (!ok) return
@@ -343,9 +541,31 @@ async function restoreAll() {
     await invoke('apply_account_backup', {
       wowPath: wowPath.value,
       accountId: selectedAccount.value,
-      profilesJson: fullBackup.profiles_data
+      profilesJson: fullBackup.profiles_data,
+      toolsJson: fullBackup.tools_data || null,
+      runtimeJson: fullBackup.runtime_data || null,
+      configJson: fullBackup.config_data || null,
+      extraJson: fullBackup.extra_data || null
     })
+    // 重新扫描本地数据
     await loadProfiles()
+    // 写回后本地checksum可能变化，同步到云端避免显示冲突
+    const newChecksum = computeLocalChecksum()
+    if (newChecksum && newChecksum !== fullBackup.checksum) {
+      await accountBackupApi.upsertAccountBackup({
+        account_id: selectedAccount.value,
+        profiles_data: fullBackup.profiles_data,
+        profiles_count: fullBackup.profiles_count,
+        tools_data: fullBackup.tools_data,
+        tools_count: fullBackup.tools_count,
+        runtime_data: fullBackup.runtime_data,
+        runtime_size_kb: fullBackup.runtime_size_kb,
+        config_data: fullBackup.config_data,
+        extra_data: fullBackup.extra_data,
+        checksum: newChecksum
+      })
+      await loadProfiles()
+    }
     await dialog.alert({ title: '成功', message: '写回完成，重启游戏后生效', type: 'success' })
   } catch (e: any) {
     await dialog.alert({ title: '错误', message: `写回失败：${e?.message || e}`, type: 'error' })
@@ -451,8 +671,8 @@ const workflowSteps = [
         <div class="summary-row">
           <div class="pill">自动备份</div>
           <div class="pill">增量同步</div>
-          <div class="pill" :class="{ danger: stats.conflict > 0 }">
-            冲突 {{ stats.conflict }}
+          <div class="pill" :class="{ warning: stats.conflict > 0 }">
+            有差异 {{ stats.conflict }}
           </div>
         </div>
       </div>
@@ -466,7 +686,7 @@ const workflowSteps = [
       </div>
       <div class="stat-card conflict">
         <div class="stat-value">{{ stats.conflict }}</div>
-        <div class="stat-label">冲突待处理</div>
+        <div class="stat-label">有差异</div>
       </div>
   </div>
 
@@ -475,11 +695,10 @@ const workflowSteps = [
     <div class="modal">
       <div class="modal-header">
         <h3>确认备份到云端</h3>
-        <span class="tag" v-if="stats.conflict > 0">发现冲突</span>
+        <span class="tag" v-if="stats.conflict > 0">云端已有备份</span>
       </div>
       <p class="muted">
-        即将上传账号「{{ selectedAccount }}」的 {{ currentProfiles.length }} 个人物卡到云端。
-        云端已有数据时将覆盖为本地版本。
+        即将上传账号「{{ selectedAccount }}」的数据到云端，云端已有数据时将覆盖为本地版本。
       </p>
       <div class="confirm-info">
         <div class="info-row">
@@ -487,19 +706,46 @@ const workflowSteps = [
           <span class="value">{{ selectedAccount }}</span>
         </div>
         <div class="info-row">
-          <span class="label">人物卡数量</span>
+          <span class="label">人物卡</span>
           <span class="value">{{ currentProfiles.length }} 个</span>
+        </div>
+        <div class="info-row">
+          <span class="label">道具数据库</span>
+          <span class="value">{{ currentToolsDb ? `${currentToolsDb.item_count} 个` : '无' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">他人数据</span>
+          <span class="value">{{ currentRuntimeData ? `${currentRuntimeData.size_kb} KB` : '无' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">TRP3配置</span>
+          <span class="value">{{ currentConfig ? '有' : '无' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="label">额外数据</span>
+          <span class="value">{{ extraDataList.length > 0 ? `${extraDataList.length} 项` : '无' }}</span>
         </div>
         <div class="info-row">
           <span class="label">同步状态</span>
           <span class="value status" :class="accountSyncStatus">
-            {{ accountSyncStatus === 'synced' ? '已同步' : accountSyncStatus === 'pending' ? '待备份' : '有变更' }}
+            {{ accountSyncStatus === 'synced' ? '已同步' : accountSyncStatus === 'pending' ? '待备份' : '有差异' }}
           </span>
         </div>
         <div class="info-row" v-if="currentBackup">
           <span class="label">云端版本</span>
           <span class="value">v{{ currentBackup.version }} · {{ formatTime(currentBackup.updated_at) }}</span>
         </div>
+      </div>
+      <!-- 数据量减少警告 -->
+      <div v-if="dataLossWarning" class="data-loss-warning">
+        <div class="warning-header">
+          <i class="ri-alert-line"></i>
+          <span>警告：本地数据少于云端</span>
+        </div>
+        <ul class="warning-list">
+          <li v-for="(w, i) in dataLossWarning" :key="i">{{ w }}</li>
+        </ul>
+        <p class="warning-tip">继续上传将覆盖云端数据，可能导致数据丢失。请确认是否继续？</p>
       </div>
       <div class="modal-actions">
         <button class="btn-secondary ghost" @click="showConfirmModal = false">取消</button>
@@ -598,12 +844,111 @@ const workflowSteps = [
                   <span class="status" :class="getStatus(p.id)">
                     <template v-if="getStatus(p.id) === 'synced'">✓ 已同步</template>
                     <template v-else-if="getStatus(p.id) === 'pending'">○ 待备份</template>
-                    <template v-else>⚠ 冲突</template>
+                    <template v-else>↔ 有差异</template>
                   </span>
                   <span class="hint">ID: {{ p.id.slice(0, 6) }}…</span>
                 </div>
               </div>
               <div class="arrow">→</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 道具列表 (仅云端备份模式且有道具时显示) -->
+      <aside v-if="viewMode === 'upload'" class="panel tools-panel anim-item" style="--delay: 1.25">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i class="ri-box-3-line"></i> 道具数据库
+          </div>
+          <div class="badge" v-if="currentToolsDb">{{ currentToolsDb.item_count }} 个</div>
+          <div class="badge empty" v-else>未安装 Extended</div>
+        </div>
+
+        <div class="panel-body">
+          <div v-if="!currentToolsDb" class="empty-state small">
+            <div class="empty-icon">📦</div>
+            <p>未检测到 TRP3 Extended 道具数据库</p>
+          </div>
+
+          <div v-else-if="toolsList.length === 0" class="empty-state small">
+            <div class="empty-icon">📦</div>
+            <p>道具数据库为空</p>
+          </div>
+
+          <div v-else class="tools-list">
+            <div
+              v-for="(tool, index) in toolsList"
+              :key="tool.id"
+              class="tool-card anim-item"
+              :style="{ '--delay': 1.5 + index * 0.03 }"
+            >
+              <div class="tool-icon">
+                <i class="ri-box-3-line"></i>
+              </div>
+              <div class="tool-info">
+                <span class="tool-name">{{ tool.name }}</span>
+                <span class="tool-id">{{ tool.id.slice(0, 8) }}…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 运行时数据预览 (仅云端备份模式显示) -->
+      <aside v-if="viewMode === 'upload'" class="panel runtime-panel anim-item" style="--delay: 1.28">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i class="ri-database-2-line"></i> 他人数据
+          </div>
+          <div class="badge" v-if="currentRuntimeData">{{ currentRuntimeData.size_kb }} KB</div>
+          <div class="badge empty" v-else>无数据</div>
+        </div>
+
+        <div class="panel-body">
+          <div v-if="!currentRuntimeData" class="empty-state small">
+            <div class="empty-icon">💾</div>
+            <p>未检测到他人数据</p>
+          </div>
+
+          <div v-else class="runtime-info">
+            <div class="runtime-stat">
+              <i class="ri-file-list-line"></i>
+              <span>他人人物卡缓存</span>
+            </div>
+            <div class="runtime-meta">
+              <span class="size">{{ currentRuntimeData.size_kb }} KB</span>
+              <span class="checksum">{{ currentRuntimeData.checksum.slice(0, 8) }}…</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 额外数据预览 (仅云端备份模式显示) -->
+      <aside v-if="viewMode === 'upload'" class="panel extra-panel anim-item" style="--delay: 1.3">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i class="ri-settings-3-line"></i> 额外数据
+          </div>
+          <div class="badge" v-if="extraDataList.length">{{ extraDataList.length }} 项</div>
+          <div class="badge empty" v-else>无数据</div>
+        </div>
+
+        <div class="panel-body">
+          <div v-if="extraDataList.length === 0" class="empty-state small">
+            <div class="empty-icon">⚙️</div>
+            <p>未检测到额外数据</p>
+          </div>
+
+          <div v-else class="extra-list">
+            <div
+              v-for="(item, index) in extraDataList"
+              :key="item.key"
+              class="extra-item anim-item"
+              :style="{ '--delay': 1.5 + index * 0.03 }"
+            >
+              <i class="ri-checkbox-circle-fill"></i>
+              <span class="extra-name">{{ item.name }}</span>
             </div>
           </div>
         </div>
@@ -646,7 +991,7 @@ const workflowSteps = [
                           : '已选择子账号'
                   }}
                 </span>
-                <span class="pill ghost" v-if="stats.conflict > 0">冲突待处理</span>
+                <span class="pill ghost" v-if="stats.conflict > 0">本地与云端有差异</span>
               </div>
             </div>
             <div class="steps-row">
@@ -671,7 +1016,7 @@ const workflowSteps = [
             <div class="next-actions">
               <div class="muted">下一步指引</div>
               <div class="actions-row">
-                <span v-if="workflowStep === 'verify' && stats.conflict > 0">发现冲突，请先在详情页对比后再写回</span>
+                <span v-if="workflowStep === 'verify' && stats.conflict > 0">本地与云端数据有差异，可上传覆盖或写回本地</span>
                 <span v-else-if="workflowStep === 'upload'">正在上传，完成后会自动校验</span>
                 <span v-else-if="workflowStep === 'backup'">准备备份，确认选中角色后点击一键备份</span>
                 <span v-else-if="workflowStep === 'finish'">已完成，可查看版本历史或写回本地</span>
@@ -712,11 +1057,9 @@ const workflowSteps = [
               <i class="ri-cloud-line"></i>
               <span>云端备份管理</span>
             </div>
-            <div class="cloud-stats">
-              <span class="stat-pill" v-if="currentBackup">
-                账号 {{ selectedAccount }} · v{{ currentBackup.version }} · {{ cloudProfilesList.length }} 个人物卡
-              </span>
-              <span class="stat-pill" v-else>当前账号暂无云端备份</span>
+            <div class="cloud-stats" v-if="currentBackup">
+              <span class="stat-pill">v{{ currentBackup.version }}</span>
+              <span class="stat-pill">{{ formatTime(currentBackup.updated_at) }}</span>
             </div>
           </div>
 
@@ -731,27 +1074,80 @@ const workflowSteps = [
             <p>正在加载云端数据...</p>
           </div>
 
-          <div v-else class="cloud-list">
-            <div
-              v-for="p in cloudProfilesList"
-              :key="p.id"
-              class="cloud-card"
-              @click="goToDetail(p.id)"
-            >
-              <div class="cloud-card-main">
-                <div class="avatar">
-                  <i class="ri-user-3-line"></i>
-                </div>
-                <div class="info">
-                  <div class="title-row">
-                    <span class="name">{{ p.name }}</span>
-                  </div>
-                  <div class="meta-row">
-                    <span class="hint">ID: {{ p.id.slice(0, 8) }}…</span>
-                  </div>
+          <div v-else class="cloud-content">
+            <!-- 数据概览 -->
+            <div class="cloud-summary">
+              <div class="summary-card">
+                <i class="ri-user-star-line"></i>
+                <div class="summary-info">
+                  <span class="summary-value">{{ cloudProfilesList.length }}</span>
+                  <span class="summary-label">人物卡</span>
                 </div>
               </div>
-              <div class="arrow">→</div>
+              <div class="summary-card">
+                <i class="ri-box-3-line"></i>
+                <div class="summary-info">
+                  <span class="summary-value">{{ currentBackup.tools_count || 0 }}</span>
+                  <span class="summary-label">道具</span>
+                </div>
+              </div>
+              <div class="summary-card">
+                <i class="ri-database-2-line"></i>
+                <div class="summary-info">
+                  <span class="summary-value">{{ currentBackup.runtime_size_kb || 0 }} KB</span>
+                  <span class="summary-label">他人数据</span>
+                </div>
+              </div>
+              <div class="summary-card">
+                <i class="ri-settings-3-line"></i>
+                <div class="summary-info">
+                  <span class="summary-value">{{ cloudExtraDataList.length }}</span>
+                  <span class="summary-label">额外数据</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 人物卡列表 -->
+            <div class="cloud-section">
+              <div class="section-title">人物卡列表</div>
+              <div class="cloud-list">
+                <div
+                  v-for="p in cloudProfilesList"
+                  :key="p.id"
+                  class="cloud-card"
+                  @click="goToDetail(p.id)"
+                >
+                  <div class="cloud-card-main">
+                    <div class="avatar">
+                      <i class="ri-user-3-line"></i>
+                    </div>
+                    <div class="info">
+                      <div class="title-row">
+                        <span class="name">{{ p.name }}</span>
+                      </div>
+                      <div class="meta-row">
+                        <span class="hint">ID: {{ p.id.slice(0, 8) }}…</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="arrow">→</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 额外数据列表 -->
+            <div class="cloud-section" v-if="cloudExtraDataList.length > 0">
+              <div class="section-title">额外数据</div>
+              <div class="extra-tags">
+                <span
+                  v-for="item in cloudExtraDataList"
+                  :key="item.key"
+                  class="extra-tag"
+                >
+                  <i class="ri-checkbox-circle-fill"></i>
+                  {{ item.name }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1014,6 +1410,11 @@ const workflowSteps = [
   color: #d32f2f;
 }
 
+.pill.warning {
+  background: #fff3e0;
+  color: #e65100;
+}
+
 .stat-card {
   background: #fff;
   border-radius: 16px;
@@ -1033,7 +1434,7 @@ const workflowSteps = [
 
 .stat-card.synced .stat-value { color: #2e7d32; }
 .stat-card.pending .stat-value { color: #ed6c02; }
-.stat-card.conflict .stat-value { color: #d32f2f; }
+.stat-card.conflict .stat-value { color: #e65100; }
 
 .workspace {
   display: flex;
@@ -1052,7 +1453,180 @@ const workflowSteps = [
 .left-panel {
   width: 32%;
   min-width: 320px;
+  max-height: 420px;
   overflow: hidden;
+}
+
+.tools-panel {
+  width: 220px;
+  min-width: 180px;
+  max-height: 420px;
+  overflow: hidden;
+}
+
+.tools-panel .panel-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--color-border, #E8DCCF);
+  border-radius: 10px;
+  background: #fffdfb;
+  align-items: center;
+}
+
+.tool-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #7eb8da, #5a9bc7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.tool-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-id {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.empty-state.small {
+  padding: 20px 0;
+}
+
+.empty-state.small .empty-icon {
+  font-size: 32px;
+  margin-bottom: 6px;
+}
+
+.empty-state.small p {
+  font-size: 12px;
+}
+
+.badge.empty {
+  background: rgba(140, 123, 112, 0.1);
+  color: var(--color-text-secondary);
+}
+
+.runtime-panel {
+  width: 200px;
+  min-width: 160px;
+  max-height: 420px;
+  overflow: hidden;
+}
+
+.runtime-panel .panel-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.extra-panel {
+  width: 180px;
+  min-width: 140px;
+  max-height: 420px;
+  overflow: hidden;
+}
+
+.extra-panel .panel-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.extra-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.extra-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #E8DCCF);
+  border-radius: 8px;
+  background: #fffdfb;
+  font-size: 12px;
+}
+
+.extra-item i {
+  color: #2e7d32;
+  font-size: 14px;
+}
+
+.extra-name {
+  color: var(--color-text-main);
+}
+
+.runtime-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--color-border, #E8DCCF);
+  border-radius: 10px;
+  background: #fffdfb;
+}
+
+.runtime-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-main);
+  font-size: 13px;
+}
+
+.runtime-stat i {
+  font-size: 18px;
+  color: var(--color-primary);
+}
+
+.runtime-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.runtime-meta .size {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.runtime-meta .checksum {
+  font-family: monospace;
+  opacity: 0.7;
 }
 
 .right-panel {
@@ -1127,7 +1701,7 @@ const workflowSteps = [
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
-  max-height: calc(100vh - 280px);
+  max-height: 320px;
 }
 
 .task-card {
@@ -1537,6 +2111,83 @@ const workflowSteps = [
   gap: 14px;
 }
 
+.cloud-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cloud-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #fffdfb;
+  border: 1px solid var(--color-border, #E8DCCF);
+  border-radius: 12px;
+}
+
+.summary-card i {
+  font-size: 24px;
+  color: var(--color-primary);
+}
+
+.summary-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+.summary-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.cloud-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.extra-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.extra-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #f4faf4;
+  border: 1px solid #c8e6c9;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #2e7d32;
+}
+
+.extra-tag i {
+  font-size: 12px;
+}
+
 .cloud-header {
   display: flex;
   justify-content: space-between;
@@ -1770,6 +2421,46 @@ const workflowSteps = [
 .btn-danger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* 数据量减少警告样式 */
+.data-loss-warning {
+  margin: 12px 0;
+  padding: 12px;
+  background: #fff8e6;
+  border: 1px solid #ffcc00;
+  border-radius: 10px;
+}
+
+.warning-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b8860b;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.warning-header i {
+  font-size: 18px;
+}
+
+.warning-list {
+  margin: 0 0 8px 0;
+  padding-left: 24px;
+  font-size: 13px;
+  color: #8b6914;
+}
+
+.warning-list li {
+  margin: 4px 0;
+}
+
+.warning-tip {
+  margin: 0;
+  font-size: 13px;
+  color: #b8860b;
+  font-weight: 600;
 }
 
 @media (max-width: 1280px) {

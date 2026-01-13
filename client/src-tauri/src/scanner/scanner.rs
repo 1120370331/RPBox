@@ -36,6 +36,44 @@ pub struct AccountInfo {
     pub account_id: String,
     pub realms: Vec<RealmInfo>,
     pub profiles: Vec<ProfileSummary>,
+    /// TRP3 Extended 道具数据库
+    pub tools_db: Option<ToolsDbSummary>,
+    /// TRP3 运行时数据 (他人人物卡等)
+    pub runtime_data: Option<RuntimeDataSummary>,
+    /// TRP3 配置数据
+    pub config: Option<ConfigSummary>,
+    /// TRP3 额外数据 (角色绑定、伙伴、预设等)
+    pub extra_data: Option<ExtraDataSummary>,
+}
+
+/// TRP3 Extended 道具数据库摘要
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolsDbSummary {
+    pub item_count: usize,
+    pub checksum: String,
+    pub raw_data: String,
+}
+
+/// TRP3 运行时数据摘要
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeDataSummary {
+    pub size_kb: usize,
+    pub checksum: String,
+    pub raw_data: String,
+}
+
+/// TRP3 配置数据摘要
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigSummary {
+    pub checksum: String,
+    pub raw_data: String,
+}
+
+/// TRP3 额外数据摘要（包含所有其他重要变量）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtraDataSummary {
+    pub checksum: String,
+    pub raw_data: String,  // JSON 对象，包含所有额外变量
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,10 +174,26 @@ fn scan_account(account_path: &PathBuf, account_id: &str) -> Result<AccountInfo,
         }
     }
 
+    // Scan TRP3 Extended tools database
+    let tools_db = scan_tools_db(account_path);
+
+    // Scan TRP3 runtime data (other players' profiles)
+    let runtime_data = scan_runtime_data(account_path);
+
+    // Scan TRP3 configuration
+    let config = scan_config(account_path);
+
+    // Scan TRP3 extra data (characters, companions, presets, etc.)
+    let extra_data = scan_extra_data(account_path);
+
     Ok(AccountInfo {
         account_id: account_id.to_string(),
         realms,
         profiles,
+        tools_db,
+        runtime_data,
+        config,
+        extra_data,
     })
 }
 
@@ -305,3 +359,162 @@ fn load_profile_detail(lua_path: &PathBuf, profile_id: &str, account_id: &str) -
     })
 }
 
+/// 扫描 TRP3 Extended 道具数据库
+fn scan_tools_db(account_path: &PathBuf) -> Option<ToolsDbSummary> {
+    let tools_path = account_path
+        .join("SavedVariables")
+        .join("totalRP3_Extended.lua");
+
+    if !tools_path.exists() {
+        return None;
+    }
+
+    let data = lua_parser::parse_variable(&tools_path, "TRP3_Tools_DB").ok()?;
+
+    // 计算道具数量
+    let item_count = data.as_object().map(|obj| obj.len()).unwrap_or(0);
+
+    // 计算 checksum
+    let normalized = normalize_json(&data);
+    let checksum = format!("{:x}", md5::compute(normalized.as_bytes()));
+
+    // 序列化为 JSON
+    let raw_data = serde_json::to_string(&data).unwrap_or_default();
+
+    Some(ToolsDbSummary {
+        item_count,
+        checksum,
+        raw_data,
+    })
+}
+
+/// 扫描 TRP3 运行时数据 (他人人物卡等)
+fn scan_runtime_data(account_path: &PathBuf) -> Option<RuntimeDataSummary> {
+    let data_path = account_path
+        .join("SavedVariables")
+        .join("totalRP3_Data.lua");
+
+    if !data_path.exists() {
+        return None;
+    }
+
+    // 读取文件内容计算大小和 checksum
+    let content = fs::read(&data_path).ok()?;
+    let size_kb = content.len() / 1024;
+    let checksum = format!("{:x}", md5::compute(&content));
+
+    // 解析为 JSON (可能很大，但我们需要完整数据用于备份)
+    let data = lua_parser::parse_variable(&data_path, "TRP3_Register").ok()?;
+    let raw_data = serde_json::to_string(&data).unwrap_or_default();
+
+    Some(RuntimeDataSummary {
+        size_kb,
+        checksum,
+        raw_data,
+    })
+}
+
+/// 扫描 TRP3 配置数据
+fn scan_config(account_path: &PathBuf) -> Option<ConfigSummary> {
+    let config_path = account_path
+        .join("SavedVariables")
+        .join("totalRP3.lua");
+
+    if !config_path.exists() {
+        return None;
+    }
+
+    let data = lua_parser::parse_variable(&config_path, "TRP3_Configuration").ok()?;
+
+    // 计算 checksum
+    let normalized = normalize_json(&data);
+    let checksum = format!("{:x}", md5::compute(normalized.as_bytes()));
+
+    // 序列化为 JSON
+    let raw_data = serde_json::to_string(&data).unwrap_or_default();
+
+    Some(ConfigSummary {
+        checksum,
+        raw_data,
+    })
+}
+
+/// 扫描 TRP3 额外数据（角色绑定、伙伴、预设等）
+fn scan_extra_data(account_path: &PathBuf) -> Option<ExtraDataSummary> {
+    let sv_dir = account_path.join("SavedVariables");
+    let trp3_path = sv_dir.join("totalRP3.lua");
+    let extended_path = sv_dir.join("totalRP3_Extended.lua");
+
+    let mut extra = serde_json::Map::new();
+
+    // 从 totalRP3.lua 提取额外变量
+    if trp3_path.exists() {
+        // TRP3_Characters - 角色绑定（最重要）
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_Characters") {
+            extra.insert("TRP3_Characters".to_string(), data);
+        }
+        // TRP3_Companions - 伙伴数据
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_Companions") {
+            extra.insert("TRP3_Companions".to_string(), data);
+        }
+        // TRP3_Presets - 预设
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_Presets") {
+            extra.insert("TRP3_Presets".to_string(), data);
+        }
+        // TRP3_Notes - 笔记
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_Notes") {
+            extra.insert("TRP3_Notes".to_string(), data);
+        }
+        // TRP3_Flyway - 迁移记录
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_Flyway") {
+            extra.insert("TRP3_Flyway".to_string(), data);
+        }
+        // TRP3_MatureFilter - 成人过滤
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_MatureFilter") {
+            extra.insert("TRP3_MatureFilter".to_string(), data);
+        }
+        // TRP3_Colors - 颜色
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_Colors") {
+            extra.insert("TRP3_Colors".to_string(), data);
+        }
+        // TRP3_SavedAutomation - 自动化
+        if let Ok(data) = lua_parser::parse_variable(&trp3_path, "TRP3_SavedAutomation") {
+            extra.insert("TRP3_SavedAutomation".to_string(), data);
+        }
+    }
+
+    // 从 totalRP3_Extended.lua 提取额外变量
+    if extended_path.exists() {
+        // TRP3_Exchange_DB - 交易所
+        if let Ok(data) = lua_parser::parse_variable(&extended_path, "TRP3_Exchange_DB") {
+            extra.insert("TRP3_Exchange_DB".to_string(), data);
+        }
+        // TRP3_Stashes - 隐藏物品
+        if let Ok(data) = lua_parser::parse_variable(&extended_path, "TRP3_Stashes") {
+            extra.insert("TRP3_Stashes".to_string(), data);
+        }
+        // TRP3_Drop - 掉落
+        if let Ok(data) = lua_parser::parse_variable(&extended_path, "TRP3_Drop") {
+            extra.insert("TRP3_Drop".to_string(), data);
+        }
+        // TRP3_Security - 安全
+        if let Ok(data) = lua_parser::parse_variable(&extended_path, "TRP3_Security") {
+            extra.insert("TRP3_Security".to_string(), data);
+        }
+        // TRP3_Extended_Flyway - Extended迁移
+        if let Ok(data) = lua_parser::parse_variable(&extended_path, "TRP3_Extended_Flyway") {
+            extra.insert("TRP3_Extended_Flyway".to_string(), data);
+        }
+    }
+
+    if extra.is_empty() {
+        return None;
+    }
+
+    let value = Value::Object(extra);
+    let normalized = normalize_json(&value);
+    let checksum = format!("{:x}", md5::compute(normalized.as_bytes()));
+    let raw_data = serde_json::to_string(&value).unwrap_or_default();
+
+    Some(ExtraDataSummary { checksum, raw_data })
+}
