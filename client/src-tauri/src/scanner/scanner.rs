@@ -369,7 +369,16 @@ fn scan_tools_db(account_path: &PathBuf) -> Option<ToolsDbSummary> {
         return None;
     }
 
-    let data = lua_parser::parse_variable(&tools_path, "TRP3_Tools_DB").ok()?;
+    let mut data = lua_parser::parse_variable(&tools_path, "TRP3_Tools_DB").ok()?;
+
+    // 合并 TRP3_Exchange_DB 的数据（来自其他玩家的道具）
+    if let Ok(exchange_data) = lua_parser::parse_variable(&tools_path, "TRP3_Exchange_DB") {
+        if let (Some(tools_map), Some(exchange_map)) = (data.as_object_mut(), exchange_data.as_object()) {
+            for (key, value) in exchange_map {
+                tools_map.insert(key.clone(), value.clone());
+            }
+        }
+    }
 
     // 计算道具数量
     let item_count = data.as_object().map(|obj| obj.len()).unwrap_or(0);
@@ -485,7 +494,7 @@ fn scan_extra_data(account_path: &PathBuf) -> Option<ExtraDataSummary> {
 
     // 从 totalRP3_Extended.lua 提取额外变量
     if extended_path.exists() {
-        // TRP3_Exchange_DB - 交易所
+        // TRP3_Exchange_DB - 交易所（来自其他玩家的数据）
         if let Ok(data) = lua_parser::parse_variable(&extended_path, "TRP3_Exchange_DB") {
             extra.insert("TRP3_Exchange_DB".to_string(), data);
         }
