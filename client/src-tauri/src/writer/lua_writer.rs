@@ -69,7 +69,15 @@ pub fn to_lua_table(value: &Value, indent: usize) -> String {
         Value::Null => "nil".to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
-        Value::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+        Value::String(s) => {
+            let escaped = s
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+                .replace('\r', "\\r")
+                .replace('\t', "\\t");
+            format!("\"{}\"", escaped)
+        }
         Value::Array(arr) => {
             if arr.is_empty() {
                 return "{}".to_string();
@@ -90,10 +98,20 @@ pub fn to_lua_table(value: &Value, indent: usize) -> String {
             }
             let mut parts = Vec::new();
             for (k, v) in map {
-                let key = if k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                // Lua identifiers must start with letter or underscore, not digit
+                let is_valid_identifier = k.chars().next().map_or(false, |c| c.is_ascii_alphabetic() || c == '_')
+                    && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+                let key = if is_valid_identifier {
                     k.clone()
                 } else {
-                    format!("[\"{}\"]", k)
+                    // Escape special characters in key
+                    let escaped_key = k
+                        .replace('\\', "\\\\")
+                        .replace('"', "\\\"")
+                        .replace('\n', "\\n")
+                        .replace('\r', "\\r")
+                        .replace('\t', "\\t");
+                    format!("[\"{}\"]", escaped_key)
                 };
                 parts.push(format!(
                     "{}{} = {}",
@@ -113,10 +131,51 @@ pub fn replace_trp3_profiles(lua_path: &PathBuf, profiles: &Value) -> Result<(),
         return Err(WriteError::WowRunning);
     }
 
+    let new_table = to_lua_table(profiles, 0);
+
+    // 如果文件不存在，创建父目录并写入完整的 Lua 文件
+    if !lua_path.exists() {
+        if let Some(parent) = lua_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| WriteError::WriteFailed(format!("创建目录失败: {}", e)))?;
+        }
+
+        // 找到一个 profile ID 作为默认 profile
+        let default_profile_id = profiles
+            .as_object()
+            .and_then(|obj| {
+                // 优先找名为"默认人物卡"的 profile
+                for (id, profile) in obj {
+                    if let Some(name) = profile.get("profileName").and_then(|v| v.as_str()) {
+                        if name == "默认人物卡" || name == "Default profile" {
+                            return Some(id.clone());
+                        }
+                    }
+                }
+                // 否则用第一个 profile
+                obj.keys().next().cloned()
+            })
+            .unwrap_or_default();
+
+        // 创建完整的 TRP3 SavedVariables 文件
+        let config_table = if !default_profile_id.is_empty() {
+            format!("{{\n  [\"default_profile_id\"] = \"{}\"\n}}", default_profile_id)
+        } else {
+            "{}".to_string()
+        };
+
+        let full_content = format!(
+            "TRP3_Profiles = {}\nTRP3_Characters = {{}}\nTRP3_Configuration = {}\nTRP3_Flyway = {{}}\n",
+            new_table, config_table
+        );
+        fs::write(lua_path, full_content)
+            .map_err(|e| WriteError::WriteFailed(e.to_string()))?;
+        return Ok(());
+    }
+
     let original = fs::read_to_string(lua_path)
         .map_err(|e| WriteError::WriteFailed(e.to_string()))?;
 
-    let new_table = to_lua_table(profiles, 0);
     let replacement = format!("TRP3_Profiles = {}\n", new_table);
 
     // 查找 TRP3_Profiles 赋值块并替换

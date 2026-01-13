@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -12,14 +13,15 @@ import (
 
 func (s *Server) listProfiles(c *gin.Context) {
 	userID := c.GetUint("user_id")
+	log.Printf("[Profile] listProfiles - userID: %d", userID)
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	if page < 1 {
 		page = 1
 	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
+	if pageSize < 1 || pageSize > 1000 {
+		pageSize = 100
 	}
 
 	var profiles []model.Profile
@@ -28,6 +30,10 @@ func (s *Server) listProfiles(c *gin.Context) {
 	db := database.DB.Where("user_id = ?", userID)
 	db.Model(&model.Profile{}).Count(&total)
 	db.Offset((page - 1) * pageSize).Limit(pageSize).Find(&profiles)
+
+	for _, p := range profiles {
+		log.Printf("[Profile] 返回: id=%s, name=%s, checksum=%s", p.ID, p.ProfileName, p.Checksum)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"profiles":  profiles,
@@ -52,6 +58,8 @@ func (s *Server) createProfile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Printf("[Profile] createProfile - id=%s, name=%s, checksum=%s", req.ID, req.ProfileName, req.Checksum)
 
 	profile := model.Profile{
 		ID:          req.ID,
@@ -104,6 +112,8 @@ func (s *Server) updateProfile(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Printf("[Profile] updateProfile - id=%s, 旧checksum=%s, 新checksum=%s", id, profile.Checksum, req.Checksum)
 
 	// 保存版本历史
 	version := model.ProfileVersion{

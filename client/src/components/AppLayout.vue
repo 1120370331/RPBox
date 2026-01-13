@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useRouter, useRoute } from 'vue-router'
+import RDialog from './RDialog.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -45,16 +46,16 @@ const activeMenu = computed(() => {
       </div>
 
       <nav class="menu">
-        <a
+        <RouterLink
           v-for="item in menuItems"
           :key="item.id"
           class="menu-item"
           :class="{ active: activeMenu === item.id }"
-          @click="router.push(item.route)"
+          :to="item.route"
         >
           <i :class="item.icon"></i>
           <span>{{ item.label }}</span>
-        </a>
+        </RouterLink>
       </nav>
 
       <div class="user-profile">
@@ -76,6 +77,9 @@ const activeMenu = computed(() => {
     <main class="main-content">
       <router-view />
     </main>
+
+    <!-- 全局弹窗 -->
+    <RDialog />
   </div>
 </template>
 
