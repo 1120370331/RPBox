@@ -1,18 +1,174 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { invoke } from '@tauri-apps/api/core'
+import RTabs from '@/components/RTabs.vue'
+import RTabPane from '@/components/RTabPane.vue'
+import RModal from '@/components/RModal.vue'
+import RButton from '@/components/RButton.vue'
+import RInput from '@/components/RInput.vue'
+import AddonInstaller from '@/components/AddonInstaller.vue'
+import StagingPool from './StagingPool.vue'
+import StoryList from './StoryList.vue'
+import { createStory, addStoryEntries, type CreateStoryEntryRequest } from '@/api/story'
+
+// ChatRecord 类型定义
+interface TRP3Info {
+  FN?: string
+  LN?: string
+  TI?: string
+  IC?: string
+  CH?: string  // 名字颜色
+}
+
+interface ChatRecord {
+  timestamp: number
+  channel: string
+  sender: {
+    gameID: string
+    trp3?: TRP3Info
+  }
+  content: string
+  mark?: string  // P(Player), N(NPC), B(Background)
+  npc?: string   // NPC名字
+  nt?: string    // NPC说话类型
+}
 
 const mounted = ref(false)
+const router = useRouter()
+const activeTab = ref('staging')
+const wowPath = ref(localStorage.getItem('wow_path') || '')
+
+// 创建剧情对话框
+const showCreateModal = ref(false)
+const newStoryTitle = ref('')
+const newStoryDesc = ref('')
+const creating = ref(false)
+const storyListRef = ref<InstanceType<typeof StoryList> | null>(null)
+const stagingPoolRef = ref<InstanceType<typeof StagingPool> | null>(null)
+
+// 待归档的记录
+const pendingRecords = ref<ChatRecord[]>([])
+
+// 插件状态
+const showAddonInstaller = ref(false)
+const addonInstalled = ref(false)
+const selectedFlavor = ref('_retail_')
+
+async function checkAddonStatus() {
+  if (!wowPath.value) return
+  try {
+    const info = await invoke<{ installed: boolean }>('check_addon_installed', {
+      wowPath: wowPath.value,
+      flavor: selectedFlavor.value,
+    })
+    addonInstalled.value = info.installed
+  } catch (e) {
+    console.error('检测插件失败:', e)
+  }
+}
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
+  checkAddonStatus()
 })
 
-const stories = [
-  { id: 1, date: '2023.11.24', title: '遗忘之森的低语：终章决战', content: '探险队终于抵达了森林深处的祭坛，古老的符文在月光下闪烁。随着仪式的启动，沉睡百年的守护者苏醒了。', avatars: ['L', 'A', 'K'], highlight: true },
-  { id: 2, date: '2023.11.18', title: '银月港湾的午后茶会', content: '难得的休闲时光，公会成员聚集在银月港湾的露天酒馆。交换着最近的情报，也分享着各自旅途中的趣闻。', avatars: ['S', 'M', 'R', 'T'] },
-  { id: 3, date: '2023.11.10', title: '暗夜公会：潜入作战', content: '为了获取敌对势力的情报，我们伪装成商队潜入了地下黑市。紧张的氛围，每一句话都可能是陷阱。', avatars: ['Z', 'B'] },
-  { id: 4, date: '2023.11.02', title: '初遇：命运的齿轮', content: '在一个风雨交加的夜晚，流浪的骑士与寻找身世的魔法师在破旧的教堂相遇。', avatars: ['L', 'F'] },
-]
+// 清理TRP3特殊格式字符
+function cleanTRP3Content(content: string): string {
+  return content
+    .replace(/\{[^}]+\}/g, '') // 移除 {icon:xxx} {col:xxx} 等标记
+    .replace(/\|c[0-9a-fA-F]{8}/g, '') // 移除颜色开始标记 |cFFFFFFFF
+    .replace(/\|r/g, '') // 移除颜色结束标记 |r
+    .replace(/\|T[^|]+\|t/g, '') // 移除纹理标记 |Txxx|t
+    .replace(/\|H[^|]+\|h/g, '') // 移除超链接标记
+    .replace(/\|h/g, '')
+    .replace(/[\uE000-\uF8FF]/g, '') // 移除私用区Unicode字符
+    .replace(/\uFFFD/g, '') // 移除替换字符 �
+    .replace(/[\u0000-\u001F]/g, '') // 移除控制字符
+    .trim()
+}
+
+async function handleArchive(records: ChatRecord[]) {
+  pendingRecords.value = records
+  showCreateModal.value = true
+}
+
+async function handleCreateStory() {
+  if (!newStoryTitle.value.trim()) return
+  creating.value = true
+  try {
+    const story = await createStory({
+      title: newStoryTitle.value,
+      description: newStoryDesc.value,
+    })
+    // 如果有待归档记录，添加到剧情
+    if (pendingRecords.value.length > 0 && story.id) {
+      console.log('[Archive] pendingRecords:', pendingRecords.value)
+      const entries: CreateStoryEntryRequest[] = pendingRecords.value.map(record => {
+        const trp3 = record.sender.trp3
+        console.log('[Archive] record.sender:', record.sender)
+        console.log('[Archive] trp3:', trp3)
+
+        // 根据mark类型确定speaker和type
+        let speaker: string
+        let type: string = 'dialogue'
+        let channel: string = record.channel
+        let speakerIc: string = trp3?.IC || ''
+
+        console.log('[Archive] mark:', record.mark, 'channel:', record.channel, 'nt:', record.nt, 'npc:', record.npc)
+
+        if (record.mark === 'N' && record.npc) {
+          // NPC消息，使用nt字段作为频道，设置NPC图标
+          speaker = record.npc
+          speakerIc = '_NPC_' // NPC专用标记
+          if (record.nt) {
+            channel = record.nt.toUpperCase() // say -> SAY, yell -> YELL, whisper -> WHISPER
+          }
+        } else if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
+          // 旁白/背景，或者没有NPC名字的NPC消息也当作旁白
+          speaker = ''
+          speakerIc = '_NARRATION_' // 旁白专用标记
+          type = 'narration'
+        } else {
+          // 玩家消息
+          speaker = trp3?.FN
+            ? (trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
+            : record.sender.gameID.split('-')[0]
+        }
+
+        return {
+          source_id: `chat_${record.timestamp}`,
+          type: type,
+          speaker: speaker,
+          speaker_ic: speakerIc,
+          speaker_color: trp3?.CH || '',
+          content: cleanTRP3Content(record.content),
+          channel: channel,
+          timestamp: new Date(record.timestamp * 1000).toISOString(),
+        }
+      })
+      await addStoryEntries(story.id, entries)
+      // 从待归档池移除已归档的记录
+      const archivedTimestamps = pendingRecords.value.map(r => r.timestamp)
+      stagingPoolRef.value?.removeArchivedRecords?.(archivedTimestamps)
+      pendingRecords.value = []
+    }
+    showCreateModal.value = false
+    newStoryTitle.value = ''
+    newStoryDesc.value = ''
+    activeTab.value = 'stories'
+    // 刷新剧情列表
+    storyListRef.value?.loadStories?.()
+  } catch (e) {
+    console.error('创建失败:', e)
+  } finally {
+    creating.value = false
+  }
+}
+
+function handleViewStory(id: number) {
+  router.push({ name: 'story-detail', params: { id } })
+}
 </script>
 
 <template>
@@ -20,52 +176,60 @@ const stories = [
     <!-- 顶部工具栏 -->
     <div class="top-toolbar anim-item" style="--delay: 0">
       <div class="page-title">
-        <h1>我的剧情记录</h1>
+        <h1>剧情记录</h1>
         <p>记录每一个精彩瞬间，编织属于你的冒险史诗</p>
       </div>
-      <button class="btn-create">
-        <i class="ri-add-line"></i> 新建记录
+      <button class="btn-create" @click="showCreateModal = true">
+        <i class="ri-add-line"></i> 新建剧情
       </button>
     </div>
 
-    <!-- 筛选栏 -->
-    <div class="filter-bar anim-item" style="--delay: 1">
-      <div class="filter-item">
-        <i class="ri-community-line"></i> 全部公会
-        <i class="ri-arrow-down-s-line"></i>
-      </div>
-      <div class="filter-item">
-        <i class="ri-user-3-line"></i> 全部角色
-        <i class="ri-arrow-down-s-line"></i>
-      </div>
-      <div class="filter-item">
-        <i class="ri-search-line"></i> 搜索剧情...
-      </div>
+    <!-- 插件状态提示 -->
+    <div v-if="wowPath && !addonInstalled" class="addon-notice anim-item" style="--delay: 0.5">
+      <i class="ri-plug-line"></i>
+      <span>需要安装 RPBox 插件才能采集聊天记录</span>
+      <RButton size="small" type="primary" @click="showAddonInstaller = true">
+        安装插件
+      </RButton>
     </div>
 
-    <!-- 时间轴 -->
-    <div class="timeline-section anim-item" style="--delay: 2">
-      <div class="timeline-line"></div>
-      <div
-        v-for="(story, index) in stories"
-        :key="story.id"
-        class="timeline-item"
-        :class="{ highlight: story.highlight, left: index % 2 === 0, right: index % 2 === 1 }"
-      >
-        <div class="timeline-dot"></div>
-        <div class="story-card">
-          <div class="card-date">{{ story.date }}</div>
-          <div class="card-title">{{ story.title }}</div>
-          <div class="card-body">{{ story.content }}</div>
-          <div class="card-footer">
-            <div class="avatars">
-              <div v-for="(a, i) in story.avatars" :key="i" class="avatar">{{ a }}</div>
-            </div>
-            <a class="view-detail">查看详情 <i class="ri-arrow-right-line"></i></a>
-          </div>
+    <!-- Tab切换 -->
+    <RTabs v-model="activeTab" class="anim-item" style="--delay: 1">
+      <RTabPane name="staging" label="待归档池">
+        <StagingPool ref="stagingPoolRef" @archive="handleArchive" />
+      </RTabPane>
+      <RTabPane name="stories" label="我的剧情">
+        <StoryList ref="storyListRef" @create="showCreateModal = true" @view="handleViewStory" />
+      </RTabPane>
+    </RTabs>
+
+    <!-- 创建剧情对话框 -->
+    <RModal v-model="showCreateModal" title="新建剧情" width="480px">
+      <div class="create-form">
+        <div class="form-field">
+          <label>剧情标题</label>
+          <RInput v-model="newStoryTitle" placeholder="输入剧情标题" />
         </div>
+        <div class="form-field">
+          <label>剧情描述</label>
+          <textarea v-model="newStoryDesc" placeholder="简要描述这个剧情..." rows="3"></textarea>
+        </div>
+        <p v-if="pendingRecords.length > 0" class="pending-info">
+          将归档 {{ pendingRecords.length }} 条对话记录
+        </p>
       </div>
-    </div>
+      <template #footer>
+        <RButton @click="showCreateModal = false">取消</RButton>
+        <RButton type="primary" :loading="creating" @click="handleCreateStory">创建</RButton>
+      </template>
+    </RModal>
+
+    <!-- 插件安装器 -->
+    <AddonInstaller
+      v-model="showAddonInstaller"
+      :wow-path="wowPath"
+      @installed="checkAddonStatus"
+    />
   </div>
 </template>
 
@@ -247,4 +411,70 @@ const stories = [
   animation-delay: calc(var(--delay) * 0.15s);
 }
 @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4B3621;
+}
+
+.form-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1bfa8;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
+  background: #fff;
+  color: #4B3621;
+}
+
+.form-field textarea:focus {
+  outline: none;
+  border-color: #B87333;
+  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.1);
+}
+
+.pending-info {
+  font-size: 13px;
+  color: #B87333;
+  background: rgba(184, 115, 51, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin: 0;
+}
+
+.addon-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(184, 115, 51, 0.1);
+  border: 1px solid rgba(184, 115, 51, 0.2);
+  border-radius: 8px;
+  color: #804030;
+  font-size: 14px;
+}
+
+.addon-notice i {
+  font-size: 18px;
+  color: #B87333;
+}
+
+.addon-notice span {
+  flex: 1;
+}
 </style>

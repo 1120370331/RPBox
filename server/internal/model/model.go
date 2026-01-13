@@ -67,3 +67,37 @@ type AccountBackupVersion struct {
 	ChangeLog    string    `gorm:"type:text" json:"change_log"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+// Story 剧情
+type Story struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	UserID       uint      `gorm:"index;not null" json:"user_id"`
+	Title        string    `gorm:"size:256" json:"title"`
+	Description  string    `gorm:"type:text" json:"description"`
+	Participants string    `gorm:"type:text" json:"participants"` // JSON数组
+	Tags         string    `gorm:"size:512" json:"tags"`          // 逗号分隔
+	StartTime    time.Time `json:"start_time"`
+	EndTime      time.Time `json:"end_time"`
+	Status       string    `gorm:"size:20;default:draft" json:"status"` // draft, published
+	IsPublic     bool      `gorm:"default:false" json:"is_public"`      // 是否公开分享
+	ShareCode    string    `gorm:"size:16;index" json:"share_code"`     // 分享码
+	ViewCount    int       `gorm:"default:0" json:"view_count"`         // 浏览次数
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// StoryEntry 剧情条目
+type StoryEntry struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	StoryID      uint      `gorm:"index;not null" json:"story_id"`
+	SourceID     string    `gorm:"size:64" json:"source_id"`             // 来源聊天记录ID
+	Type         string    `gorm:"size:20;default:dialogue" json:"type"` // dialogue, narration, image
+	Speaker      string    `gorm:"size:128" json:"speaker"`
+	SpeakerIC    string    `gorm:"size:64" json:"speaker_ic"`    // 角色图标
+	SpeakerColor string    `gorm:"size:8" json:"speaker_color"`  // 角色名字颜色(hex)
+	Content      string    `gorm:"type:text" json:"content"`
+	Channel      string    `gorm:"size:32" json:"channel"`
+	Timestamp    time.Time `json:"timestamp"`
+	SortOrder    int       `gorm:"default:0" json:"sort_order"`
+	CreatedAt    time.Time `json:"created_at"`
+}

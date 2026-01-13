@@ -17,8 +17,12 @@ local CHANNEL_NAMES = {
     CHAT_MSG_PARTY_LEADER = "小队",
     CHAT_MSG_RAID = "团队",
     CHAT_MSG_RAID_LEADER = "团队",
-    CHAT_MSG_WHISPER = "密语",
-    CHAT_MSG_WHISPER_INFORM = "密语",
+    CHAT_MSG_WHISPER = "收到密语",
+    CHAT_MSG_WHISPER_INFORM = "发送密语",
+    WHISPER_IN = "收到密语",
+    WHISPER_OUT = "发送密语",
+    CHAT_MSG_GUILD = "公会",
+    GUILD = "公会",
 }
 
 -- WoW 原生频道颜色
@@ -32,6 +36,10 @@ local CHANNEL_COLORS = {
     CHAT_MSG_RAID_LEADER = "FF7F00",
     CHAT_MSG_WHISPER = "FF80FF",       -- 粉色
     CHAT_MSG_WHISPER_INFORM = "FF80FF",
+    WHISPER_IN = "FF80FF",
+    WHISPER_OUT = "FF80FF",
+    CHAT_MSG_GUILD = "40FF40",         -- 绿色
+    GUILD = "40FF40",
 }
 
 -- TRP3 NPC/旁白颜色
@@ -40,34 +48,74 @@ local NPC_WHISPER_COLOR = "CC99FF"  -- 淡紫色 (悄悄说)
 local NPC_YELL_COLOR = "FF4040"     -- 红色 (喊)
 local NPC_EMOTE_COLOR = "FF8040"    -- 橙色 (旁白/动作)
 
+-- 获取职业颜色（十六进制字符串）
+local function GetClassColor(classFilename)
+    if not classFilename then return nil end
+    local classColor = RAID_CLASS_COLORS[classFilename]
+    if classColor then
+        return format("%02X%02X%02X", classColor.r * 255, classColor.g * 255, classColor.b * 255)
+    end
+    return nil
+end
+
+-- 获取内联图标字符串
+local function GetInlineIcon(record)
+    if not RPBox_Config.showIcon then return "" end
+
+    -- 优先使用TRP3头像
+    if record.ref then
+        local profile = ns.GetCachedProfile(record.ref)
+        if profile and profile.IC then
+            return format("|TInterface\\Icons\\%s:14:14|t ", profile.IC)
+        end
+    end
+    -- 使用职业图标
+    if record.cls then
+        local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[record.cls]
+        if coords then
+            return format("|TInterface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES:14:14:0:0:64:64:%d:%d:%d:%d|t ",
+                coords[1]*64, coords[2]*64, coords[3]*64, coords[4]*64)
+        end
+    end
+    return ""
+end
+
 -- 解析 TRP3 NPC 对话格式
 -- 格式: | NPC名字 说话方式 内容
 local function ParseNPCMessage(content)
     if not content:match("^|") then
         return nil
     end
+    -- 跳过 WoW 颜色代码 |cFFxxxxxx 开头的情况
+    if content:match("^|c") then return nil end
 
     local text = content:sub(2):match("^%s*(.+)") -- 移除 | 和前导空格
     if not text then return nil end
 
+    -- 清理末尾的颜色代码 |r
+    text = text:gsub("|r%s*$", "")
+
     -- 尝试匹配不同的说话方式
-    local npcName, speechType, message
+    local npcName, message
 
     -- 悄悄说：
-    npcName, message = text:match("^(.-)%s*悄悄说[：:]%s*(.*)$")
+    npcName, message = text:match("^(.-)%s*悄悄说%s*[：:]%s*(.*)$")
     if npcName and message then
+        message = message:gsub("|r%s*$", "")
         return { name = npcName, type = "whisper", message = message, color = NPC_WHISPER_COLOR }
     end
 
     -- 喊:
-    npcName, message = text:match("^(.-)%s*喊[：:]%s*(.*)$")
+    npcName, message = text:match("^(.-)%s*喊%s*[：:]%s*(.*)$")
     if npcName and message then
+        message = message:gsub("|r%s*$", "")
         return { name = npcName, type = "yell", message = message, color = NPC_YELL_COLOR }
     end
 
     -- 说:
-    npcName, message = text:match("^(.-)%s*说[：:]%s*(.*)$")
+    npcName, message = text:match("^(.-)%s*说%s*[：:]%s*(.*)$")
     if npcName and message then
+        message = message:gsub("|r%s*$", "")
         return { name = npcName, type = "say", message = message, color = NPC_SAY_COLOR }
     end
 
@@ -163,30 +211,137 @@ end
 
 -- 当前筛选条件
 local currentFilter = {
-    date = nil,
+    days = nil,  -- nil=全部, 0=今天, 3=3天内, 7=7天内, 30=30天内
     channel = nil,
     search = "",
 }
+
+-- 获取可用的日期列表
+local function GetAvailableDates()
+    local dates = {}
+    local chatLog = RPBox_ChatLog or {}
+    for dateStr, _ in pairs(chatLog) do
+        table.insert(dates, dateStr)
+    end
+    table.sort(dates, function(a, b) return a > b end)  -- 降序，最新的在前
+    return dates
+end
+
+-- 初始化日期下拉框（改为天数范围选择）
+local function InitDateDropdown()
+    if not MainFrame or not MainFrame.dateDropdown then return end
+
+    local dayOptions = {
+        { value = nil, text = "全部" },
+        { value = 0, text = "今天" },
+        { value = 3, text = "3天内" },
+        { value = 7, text = "7天内" },
+        { value = 30, text = "30天内" },
+    }
+
+    UIDropDownMenu_Initialize(MainFrame.dateDropdown, function(self, level)
+        for _, opt in ipairs(dayOptions) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt.text
+            info.value = opt.value
+            info.checked = (currentFilter.days == opt.value)
+            info.func = function()
+                currentFilter.days = opt.value
+                UIDropDownMenu_SetText(MainFrame.dateDropdown, opt.text)
+                RefreshLogContent()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    UIDropDownMenu_SetText(MainFrame.dateDropdown, "全部")
+end
+
+-- 初始化频道下拉框
+local function InitChannelDropdown()
+    if not MainFrame or not MainFrame.channelDropdown then return end
+
+    local channelOptions = {
+        { value = nil, text = "全部" },
+        { value = "SAY", text = "说话" },
+        { value = "YELL", text = "大喊" },
+        { value = "EMOTE", text = "表情" },
+        { value = "PARTY", text = "小队" },
+        { value = "RAID", text = "团队" },
+        { value = "WHISPER_IN", text = "收到密语" },
+        { value = "WHISPER_OUT", text = "发送密语" },
+        { value = "GUILD", text = "公会" },
+    }
+
+    UIDropDownMenu_Initialize(MainFrame.channelDropdown, function(self, level)
+        for _, opt in ipairs(channelOptions) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt.text
+            info.value = opt.value
+            info.checked = (currentFilter.channel == opt.value)
+            info.func = function()
+                currentFilter.channel = opt.value
+                UIDropDownMenu_SetText(MainFrame.channelDropdown, opt.text)
+                RefreshLogContent()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    UIDropDownMenu_SetText(MainFrame.channelDropdown, "全部")
+end
 
 -- 获取筛选后的记录
 local function GetFilteredRecords()
     local records = {}
     local chatLog = RPBox_ChatLog or {}
+    local now = time()
+
+    -- 计算时间范围
+    local minTime = nil
+    if currentFilter.days ~= nil then
+        if currentFilter.days == 0 then
+            -- 今天：从今天0点开始
+            local today = date("*t", now)
+            today.hour, today.min, today.sec = 0, 0, 0
+            minTime = time(today)
+        else
+            -- x天内
+            minTime = now - (currentFilter.days * 24 * 60 * 60)
+        end
+    end
 
     for dateStr, hours in pairs(chatLog) do
-        if not currentFilter.date or currentFilter.date == dateStr then
-            for hourStr, hourRecords in pairs(hours) do
-                for _, record in ipairs(hourRecords) do
-                    -- 兼容新旧字段
-                    local channel = record.c or record.channel
-                    local content = record.m or record.content
-                    local channelMatch = not currentFilter.channel or channel == currentFilter.channel
-                    local searchMatch = currentFilter.search == "" or
-                        (content and content:lower():find(currentFilter.search:lower(), 1, true))
+        for hourStr, hourRecords in pairs(hours) do
+            for _, record in ipairs(hourRecords) do
+                local timestamp = record.t or record.timestamp or 0
+                local channel = record.c or record.channel
+                local content = record.m or record.content
 
-                    if channelMatch and searchMatch then
-                        table.insert(records, record)
+                -- 时间筛选
+                local timeMatch = (minTime == nil) or (timestamp >= minTime)
+                -- 频道筛选
+                local channelMatch = not currentFilter.channel or channel == currentFilter.channel
+                -- 搜索筛选（搜索内容、发送者、NPC名）
+                local searchMatch = true
+                if currentFilter.search ~= "" then
+                    local searchLower = currentFilter.search:lower()
+                    local sender = record.s or record.sender
+                    local senderName = sender
+                    if type(sender) == "table" then
+                        senderName = sender.name or sender.gameID or ""
                     end
+                    local npcName = record.npc or ""
+
+                    local contentMatch = content and content:lower():find(searchLower, 1, true)
+                    local senderMatch = senderName and tostring(senderName):lower():find(searchLower, 1, true)
+                    local npcMatch = npcName and npcName:lower():find(searchLower, 1, true)
+
+                    searchMatch = contentMatch or senderMatch or npcMatch
+                end
+
+                if timeMatch and channelMatch and searchMatch then
+                    table.insert(records, record)
                 end
             end
         end
@@ -224,8 +379,11 @@ local function RefreshLogContent()
     local yOffset = 0
     content.rows = content.rows or {}
 
+    -- 保存纯文本用于复制
+    MainFrame.logPlainText = {}
+
     for i, record in ipairs(records) do
-        if i > 100 then break end
+        if i > 200 then break end
 
         local row = content.rows[i]
         if not row then
@@ -235,7 +393,7 @@ local function RefreshLogContent()
 
             row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.text:SetPoint("TOPLEFT", 0, 0)
-            row.text:SetWidth(480)
+            row.text:SetWidth(500)
             row.text:SetJustifyH("LEFT")
             row.text:SetWordWrap(true)
         end
@@ -248,73 +406,131 @@ local function RefreshLogContent()
         local channel = record.c or record.channel or ""
         local msgContent = record.m or record.content or ""
 
-        local timeStr = date("%H:%M", timestamp)
+        -- 清理开头的 | 标记和空格
+        if msgContent:match("^|[^c]") then
+            msgContent = msgContent:sub(2):match("^%s*(.*)") or msgContent
+        end
+
+        local timeStr = date("[%H:%M:%S]", timestamp)
         local displayName, gameID, colorCode = GetDisplayName(record)
         local channelColor = CHANNEL_COLORS[channel] or CHANNEL_COLORS["CHAT_MSG_" .. channel] or "FFFFFF"
 
-        -- 名字颜色：优先 TRP3 自定义颜色
-        local nameColor = colorCode and colorCode:gsub("^#", "") or "FFD100"
+        -- 名字颜色优先级：TRP3自定义颜色 > 职业色 > 默认白色
+        local nameColor = nil
+        if colorCode then
+            nameColor = colorCode:gsub("^#", "")
+        end
+        if not nameColor then
+            nameColor = GetClassColor(record.cls)
+        end
+        if not nameColor then
+            nameColor = "FFFFFF"  -- 默认白色
+        end
 
-        -- 检测 TRP3 NPC 对话语法（兼容新旧结构）
+        -- 检测 NPC 对话
         local npcData = nil
         local mk = record.mk
 
-        -- 新结构：直接使用 mk 标记
         if mk == "N" then
-            npcData = { name = record.npc, type = "npc", message = msgContent, color = NPC_SAY_COLOR }
+            local npcColor = NPC_SAY_COLOR
+            local npcSpeechType = record.nt or "say"
+            if npcSpeechType == "whisper" then
+                npcColor = NPC_WHISPER_COLOR
+            elseif npcSpeechType == "yell" then
+                npcColor = NPC_YELL_COLOR
+            end
+            local cleanNpcName = record.npc
+            if cleanNpcName then
+                cleanNpcName = cleanNpcName:gsub("^|%s*", "")
+            end
+            local cleanMsg = msgContent
+            -- 清理消息中的纹理代码 |Txxx|t
+            cleanMsg = cleanMsg:gsub("|T.-|t", "")
+            -- 清理开头的空格
+            cleanMsg = cleanMsg:gsub("^%s+", "")
+            if msgContent:match("^|[^c]") then
+                local parsed = ParseNPCMessage(msgContent)
+                if parsed then cleanMsg = parsed.message end
+            end
+            npcData = { name = cleanNpcName, type = npcSpeechType, message = cleanMsg, color = npcColor }
         elseif mk == "B" then
-            npcData = { name = nil, type = "emote", message = msgContent, color = NPC_EMOTE_COLOR }
+            local cleanMsg = msgContent
+            if msgContent:match("^|[^c]") then
+                local parsed = ParseNPCMessage(msgContent)
+                if parsed then cleanMsg = parsed.message end
+            end
+            npcData = { name = nil, type = "emote", message = cleanMsg, color = NPC_EMOTE_COLOR }
         elseif not mk then
-            -- 旧结构：解析消息内容
             npcData = ParseNPCMessage(msgContent)
         end
 
-        -- 构建显示文本
-        local lineText
+        -- 构建显示文本（带颜色）和纯文本（用于复制）
+        local lineText, plainText
+        local icon = GetInlineIcon(record)
+        local senderTag = format("|cFF666666[来自%s]|r%s", displayName, icon)
+        local plainSenderTag = format("[来自%s]", displayName)
+
         if npcData then
-            -- NPC 对话 (标注原始发送者)
-            local senderTag = format("|cFF666666[%s]|r ", displayName)
             if npcData.name and npcData.name ~= "" then
                 local npcColor = "|cFF" .. npcData.color
                 if npcData.type == "whisper" then
-                    lineText = format("|cFF888888%s|r %s%s%s 悄悄说：%s|r",
-                        timeStr, senderTag, npcColor, npcData.name, npcData.message)
+                    lineText = format("|cFF888888%s|r %s[%s]|r 悄悄说：%s %s",
+                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                    plainText = format("%s [%s] 悄悄说：%s %s",
+                        timeStr, npcData.name, npcData.message, plainSenderTag)
                 elseif npcData.type == "yell" then
-                    lineText = format("|cFF888888%s|r %s%s%s 大喊：%s|r",
-                        timeStr, senderTag, npcColor, npcData.name, npcData.message)
+                    lineText = format("|cFF888888%s|r %s[%s]|r 大喊：%s %s",
+                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                    plainText = format("%s [%s] 大喊：%s %s",
+                        timeStr, npcData.name, npcData.message, plainSenderTag)
                 elseif npcData.type == "say" then
-                    lineText = format("|cFF888888%s|r %s%s%s 说：%s|r",
-                        timeStr, senderTag, npcColor, npcData.name, npcData.message)
+                    lineText = format("|cFF888888%s|r %s[%s]|r 说：%s %s",
+                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                    plainText = format("%s [%s] 说：%s %s",
+                        timeStr, npcData.name, npcData.message, plainSenderTag)
                 else
-                    lineText = format("|cFF888888%s|r %s%s%s %s|r",
-                        timeStr, senderTag, npcColor, npcData.name, npcData.message)
+                    lineText = format("|cFF888888%s|r %s[%s] %s|r %s",
+                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                    plainText = format("%s [%s] %s %s",
+                        timeStr, npcData.name, npcData.message, plainSenderTag)
                 end
             else
-                -- 无名字的旁白
                 local npcColor = "|cFF" .. npcData.color
-                lineText = format("|cFF888888%s|r %s%s%s|r",
-                    timeStr, senderTag, npcColor, npcData.message)
+                lineText = format("|cFF888888%s|r %s%s|r %s",
+                    timeStr, npcColor, npcData.message, senderTag)
+                plainText = format("%s %s %s", timeStr, npcData.message, plainSenderTag)
             end
         elseif channel == "CHAT_MSG_EMOTE" or channel == "EMOTE" then
-            -- 表情
-            lineText = format("|cFF888888%s|r |cFF%s%s %s|r",
-                timeStr, channelColor, displayName, msgContent)
+            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
+                timeStr, nameColor, displayName, icon, channelColor, msgContent)
+            plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
         elseif channel == "CHAT_MSG_YELL" or channel == "YELL" then
-            -- 大喊
-            lineText = format("|cFF888888%s|r |cFF%s%s|r |cFF%s大喊：%s|r",
-                timeStr, nameColor, displayName, channelColor, msgContent)
+            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 大喊：|cFF%s%s|r",
+                timeStr, nameColor, displayName, icon, channelColor, msgContent)
+            plainText = format("%s [%s] 大喊：%s", timeStr, displayName, msgContent)
+        elseif channel == "WHISPER_IN" or channel == "CHAT_MSG_WHISPER" then
+            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 悄悄地说：|cFF%s%s|r",
+                timeStr, nameColor, displayName, icon, channelColor, msgContent)
+            plainText = format("%s [%s] 悄悄地说：%s", timeStr, displayName, msgContent)
+        elseif channel == "WHISPER_OUT" or channel == "CHAT_MSG_WHISPER_INFORM" then
+            lineText = format("|cFF888888%s|r 你悄悄地对 |cFF%s[%s]|r%s 说：|cFF%s%s|r",
+                timeStr, nameColor, displayName, icon, channelColor, msgContent)
+            plainText = format("%s 你悄悄地对 [%s] 说：%s", timeStr, displayName, msgContent)
+        elseif channel == "GUILD" or channel == "CHAT_MSG_GUILD" then
+            lineText = format("|cFF888888%s|r |cFF40FF40[公会]|r|cFF%s[%s]|r%s 说：|cFF40FF40%s|r",
+                timeStr, nameColor, displayName, icon, msgContent)
+            plainText = format("%s [公会][%s] 说：%s", timeStr, displayName, msgContent)
         else
-            -- 普通说话
-            lineText = format("|cFF888888%s|r |cFF%s%s|r 说：|cFF%s%s|r",
-                timeStr, nameColor, displayName, channelColor, msgContent)
+            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 说：|cFF%s%s|r",
+                timeStr, nameColor, displayName, icon, channelColor, msgContent)
+            plainText = format("%s [%s] 说：%s", timeStr, displayName, msgContent)
         end
 
         row.text:SetText(lineText)
+        table.insert(MainFrame.logPlainText, plainText)
 
-        -- 动态计算行高
         local textHeight = row.text:GetStringHeight() or 16
         row:SetHeight(textHeight + 4)
-
         row:Show()
         yOffset = yOffset + textHeight + 6
     end
@@ -422,53 +638,52 @@ local function RefreshDebugContent()
         local record = records[i]
         table.insert(lines, "")
         table.insert(lines, format("[记录 %d]", i))
-        table.insert(lines, "  gameID: " .. tostring(record.sender.gameID))
-        table.insert(lines, "  channel: " .. tostring(record.channel))
-        table.insert(lines, "  content: " .. tostring(record.content):sub(1, 50))
+
+        -- 兼容新旧字段
+        local senderID = record.s or (record.sender and record.sender.gameID) or "unknown"
+        local channel = record.c or record.channel or ""
+        local content = record.m or record.content or ""
+        local mk = record.mk
+        local nt = record.nt
+        local npc = record.npc
+
+        table.insert(lines, "  senderID: " .. tostring(senderID))
+        table.insert(lines, "  channel: " .. tostring(channel))
+        table.insert(lines, "  mk: " .. tostring(mk))
+        table.insert(lines, "  nt: " .. tostring(nt))
+        table.insert(lines, "  npc: " .. tostring(npc))
+        table.insert(lines, "  content (原始): [" .. tostring(content) .. "]")
+
+        -- 检查是否以 | 开头
+        local startsWithPipe = content:match("^|") and "是" or "否"
+        local startsWithPipeNotC = content:match("^|[^c]") and "是" or "否"
+        table.insert(lines, "  以|开头: " .. startsWithPipe)
+        table.insert(lines, "  以|[^c]开头: " .. startsWithPipeNotC)
 
         -- 保存的 TRP3 数据
-        if record.sender.trp3 then
-            table.insert(lines, "  [保存的TRP3数据]")
+        if record.sender and record.sender.trp3 then
+            table.insert(lines, "  [保存的TRP3数据(旧结构)]")
             table.insert(lines, "    FN: " .. tostring(record.sender.trp3.FN))
-            table.insert(lines, "    LN: " .. tostring(record.sender.trp3.LN))
-            table.insert(lines, "    rpName: " .. tostring(record.sender.trp3.rpName))
-            table.insert(lines, "    CH: " .. tostring(record.sender.trp3.CH))
-        else
-            table.insert(lines, "  [保存的TRP3数据] 无")
-        end
-
-        -- 实时查询 TRP3
-        local realtimeTRP3 = GetTRP3InfoRealtime(record.sender.gameID)
-        if realtimeTRP3 then
-            table.insert(lines, "  [实时TRP3查询]")
-            table.insert(lines, "    rpName: " .. tostring(realtimeTRP3.rpName))
-            table.insert(lines, "    CH: " .. tostring(realtimeTRP3.CH))
-        else
-            table.insert(lines, "  [实时TRP3查询] 无数据")
-            -- 详细诊断
-            if TRP3_API and TRP3_API.register then
-                local known = TRP3_API.register.isUnitIDKnown(record.sender.gameID)
-                table.insert(lines, "    isUnitIDKnown: " .. tostring(known))
+        elseif record.ref then
+            table.insert(lines, "  [ProfileCache ref]: " .. tostring(record.ref))
+            local cached = ns.GetCachedProfile(record.ref)
+            if cached then
+                table.insert(lines, "    FN: " .. tostring(cached.FN))
             end
+        else
+            table.insert(lines, "  [TRP3数据] 无")
         end
 
         -- NPC 解析结果
-        local npcData = ParseNPCMessage(record.content)
+        local npcData = ParseNPCMessage(content)
         if npcData then
             table.insert(lines, "  [NPC解析结果]")
             table.insert(lines, "    type: " .. tostring(npcData.type))
-            table.insert(lines, "    name: " .. tostring(npcData.name))
-            table.insert(lines, "    message: " .. tostring(npcData.message))
-            table.insert(lines, "    color: " .. tostring(npcData.color))
+            table.insert(lines, "    name: [" .. tostring(npcData.name) .. "]")
+            table.insert(lines, "    message: [" .. tostring(npcData.message) .. "]")
         else
-            table.insert(lines, "  [NPC解析结果] 非NPC语法")
+            table.insert(lines, "  [NPC解析结果] 返回nil")
         end
-
-        -- 最终显示结果
-        local displayName, gameID, colorCode = GetDisplayName(record.sender)
-        table.insert(lines, "  [最终显示]")
-        table.insert(lines, "    displayName: " .. tostring(displayName))
-        table.insert(lines, "    colorCode: " .. tostring(colorCode))
     end
 
     table.insert(lines, "")
@@ -477,6 +692,99 @@ local function RefreshDebugContent()
 
     MainFrame.debugEdit:SetText(table.concat(lines, "\n"))
     MainFrame.statusText:SetText("调试信息已生成")
+end
+
+-- 频道配置列表
+local CHANNEL_CONFIG = {
+    { key = "SAY", name = "说话" },
+    { key = "YELL", name = "大喊" },
+    { key = "EMOTE", name = "表情" },
+    { key = "PARTY", name = "小队" },
+    { key = "RAID", name = "团队" },
+    { key = "WHISPER_IN", name = "收到密语" },
+    { key = "WHISPER_OUT", name = "发送密语" },
+    { key = "GUILD", name = "公会" },
+}
+
+-- 刷新设置内容
+local function RefreshSettingsContent()
+    if not MainFrame or not MainFrame.settingsContent then return end
+
+    local content = MainFrame.settingsContent
+    -- 清空
+    for _, child in pairs({content:GetChildren()}) do
+        child:Hide()
+    end
+
+    local yOffset = 0
+
+    -- 标题
+    local title = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 5, -yOffset)
+    title:SetText("频道监听设置")
+    yOffset = yOffset + 30
+
+    -- 说明
+    local desc = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    desc:SetPoint("TOPLEFT", 5, -yOffset)
+    desc:SetText("选择要记录的聊天频道：")
+    yOffset = yOffset + 25
+
+    -- 频道复选框
+    content.checkboxes = content.checkboxes or {}
+    for i, channelInfo in ipairs(CHANNEL_CONFIG) do
+        local cb = content.checkboxes[i]
+        if not cb then
+            cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+            cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            cb.text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+            content.checkboxes[i] = cb
+        end
+
+        cb:SetPoint("TOPLEFT", 10, -yOffset)
+        cb.text:SetText(channelInfo.name)
+        cb.channelKey = channelInfo.key
+
+        -- 读取当前配置
+        local channels = RPBox_Config and RPBox_Config.channels or {}
+        local enabled = channels[channelInfo.key]
+        if enabled == nil then enabled = true end
+        cb:SetChecked(enabled)
+
+        -- 点击事件
+        cb:SetScript("OnClick", function(self)
+            RPBox_Config.channels = RPBox_Config.channels or {}
+            RPBox_Config.channels[self.channelKey] = self:GetChecked()
+        end)
+
+        cb:Show()
+        yOffset = yOffset + 26
+    end
+
+    -- 显示设置标题
+    yOffset = yOffset + 15
+    local displayTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    displayTitle:SetPoint("TOPLEFT", 5, -yOffset)
+    displayTitle:SetText("显示设置")
+    yOffset = yOffset + 30
+
+    -- 显示图标复选框
+    if not content.showIconCb then
+        content.showIconCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.showIconCb.text = content.showIconCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.showIconCb.text:SetPoint("LEFT", content.showIconCb, "RIGHT", 2, 0)
+    end
+    content.showIconCb:SetPoint("TOPLEFT", 10, -yOffset)
+    content.showIconCb.text:SetText("在记录中显示头像图标")
+    content.showIconCb:SetChecked(RPBox_Config.showIcon ~= false)
+    content.showIconCb:SetScript("OnClick", function(self)
+        RPBox_Config.showIcon = self:GetChecked()
+    end)
+    content.showIconCb:Show()
+    yOffset = yOffset + 26
+
+    content:SetHeight(yOffset + 20)
+    MainFrame.statusText:SetText("设置")
 end
 
 -- 切换标签页
@@ -488,6 +796,8 @@ local function SwitchTab(tabName)
     if MainFrame.logScroll then MainFrame.logScroll:Hide() end
     if MainFrame.listScroll then MainFrame.listScroll:Hide() end
     if MainFrame.debugScroll then MainFrame.debugScroll:Hide() end
+    if MainFrame.settingsScroll then MainFrame.settingsScroll:Hide() end
+    if MainFrame.filterFrame then MainFrame.filterFrame:Hide() end
 
     -- 更新按钮状态
     for _, btn in pairs(MainFrame.tabButtons or {}) do
@@ -500,7 +810,10 @@ local function SwitchTab(tabName)
 
     -- 显示对应内容
     if tabName == "log" then
+        MainFrame.filterFrame:Show()
         MainFrame.logScroll:Show()
+        InitDateDropdown()
+        InitChannelDropdown()
         RefreshLogContent()
     elseif tabName == "whitelist" or tabName == "blacklist" then
         MainFrame.listScroll:Show()
@@ -508,6 +821,9 @@ local function SwitchTab(tabName)
     elseif tabName == "debug" then
         MainFrame.debugScroll:Show()
         RefreshDebugContent()
+    elseif tabName == "settings" then
+        MainFrame.settingsScroll:Show()
+        RefreshSettingsContent()
     end
 end
 
@@ -533,11 +849,13 @@ local function CreateMainFrame()
     local tabLog = CreateTabButton(MainFrame, "聊天记录", "log", 0)
     local tabWhite = CreateTabButton(MainFrame, "白名单", "whitelist", 85)
     local tabBlack = CreateTabButton(MainFrame, "黑名单", "blacklist", 170)
-    local tabDebug = CreateTabButton(MainFrame, "调试", "debug", 255)
+    local tabSettings = CreateTabButton(MainFrame, "设置", "settings", 255)
+    local tabDebug = CreateTabButton(MainFrame, "调试", "debug", 340)
 
     table.insert(MainFrame.tabButtons, tabLog)
     table.insert(MainFrame.tabButtons, tabWhite)
     table.insert(MainFrame.tabButtons, tabBlack)
+    table.insert(MainFrame.tabButtons, tabSettings)
     table.insert(MainFrame.tabButtons, tabDebug)
 
     for _, btn in pairs(MainFrame.tabButtons) do
@@ -546,9 +864,61 @@ local function CreateMainFrame()
         end)
     end
 
+    -- 日志筛选栏
+    local filterFrame = CreateFrame("Frame", nil, MainFrame)
+    filterFrame:SetPoint("TOPLEFT", 12, -58)
+    filterFrame:SetPoint("TOPRIGHT", -30, -58)
+    filterFrame:SetHeight(28)
+
+    -- 日期下拉框标签
+    local dateLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    dateLabel:SetPoint("LEFT", 0, 0)
+    dateLabel:SetText("日期:")
+
+    -- 日期下拉框
+    local dateDropdown = CreateFrame("Frame", "RPBoxDateDropdown", filterFrame, "UIDropDownMenuTemplate")
+    dateDropdown:SetPoint("LEFT", dateLabel, "RIGHT", -10, -2)
+    UIDropDownMenu_SetWidth(dateDropdown, 100)
+
+    MainFrame.filterFrame = filterFrame
+    MainFrame.dateDropdown = dateDropdown
+
+    -- 频道下拉框标签
+    local channelLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    channelLabel:SetPoint("LEFT", dateDropdown, "RIGHT", 10, 2)
+    channelLabel:SetText("频道:")
+
+    -- 频道下拉框
+    local channelDropdown = CreateFrame("Frame", "RPBoxChannelDropdown", filterFrame, "UIDropDownMenuTemplate")
+    channelDropdown:SetPoint("LEFT", channelLabel, "RIGHT", -10, -2)
+    UIDropDownMenu_SetWidth(channelDropdown, 80)
+
+    MainFrame.channelDropdown = channelDropdown
+
+    -- 搜索框标签
+    local searchLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    searchLabel:SetPoint("LEFT", channelDropdown, "RIGHT", 10, 2)
+    searchLabel:SetText("搜索:")
+
+    -- 搜索框
+    local searchBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
+    searchBox:SetSize(100, 20)
+    searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 5, 0)
+    searchBox:SetAutoFocus(false)
+    searchBox:SetScript("OnEnterPressed", function(self)
+        currentFilter.search = self:GetText()
+        RefreshLogContent()
+        self:ClearFocus()
+    end)
+    searchBox:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+
+    MainFrame.searchBox = searchBox
+
     -- 日志滚动框架
     local logScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
-    logScroll:SetPoint("TOPLEFT", 12, -60)
+    logScroll:SetPoint("TOPLEFT", 12, -88)
     logScroll:SetPoint("BOTTOMRIGHT", -30, 40)
 
     local logContent = CreateFrame("Frame", nil, logScroll)
@@ -589,6 +959,19 @@ local function CreateMainFrame()
     MainFrame.debugScroll = debugScroll
     MainFrame.debugEdit = debugEdit
 
+    -- 设置滚动框架
+    local settingsScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
+    settingsScroll:SetPoint("TOPLEFT", 12, -60)
+    settingsScroll:SetPoint("BOTTOMRIGHT", -30, 40)
+    settingsScroll:Hide()
+
+    local settingsContent = CreateFrame("Frame", nil, settingsScroll)
+    settingsContent:SetSize(480, 300)
+    settingsScroll:SetScrollChild(settingsContent)
+
+    MainFrame.settingsScroll = settingsScroll
+    MainFrame.settingsContent = settingsContent
+
     -- 底部状态栏
     local statusText = MainFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     statusText:SetPoint("BOTTOMLEFT", 12, 12)
@@ -603,8 +986,93 @@ local function CreateMainFrame()
         SwitchTab(currentTab)
     end)
 
+    -- 复制按钮
+    local copyBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate")
+    copyBtn:SetSize(60, 22)
+    copyBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
+    copyBtn:SetText("复制")
+    copyBtn:SetScript("OnClick", function()
+        if MainFrame.logPlainText and #MainFrame.logPlainText > 0 then
+            if not MainFrame.copyDialog then
+                local dialog = CreateFrame("Frame", "RPBoxCopyDialog", UIParent, "BasicFrameTemplateWithInset")
+                dialog:SetSize(450, 350)
+                dialog:SetPoint("CENTER")
+                dialog:SetMovable(true)
+                dialog:EnableMouse(true)
+                dialog:RegisterForDrag("LeftButton")
+                dialog:SetScript("OnDragStart", dialog.StartMoving)
+                dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
+                dialog:SetFrameStrata("DIALOG")
+                dialog.TitleText:SetText("复制日志 (Ctrl+A 全选, Ctrl+C 复制)")
+
+                local scroll = CreateFrame("ScrollFrame", nil, dialog, "UIPanelScrollFrameTemplate")
+                scroll:SetPoint("TOPLEFT", 10, -30)
+                scroll:SetPoint("BOTTOMRIGHT", -30, 10)
+
+                local editBox = CreateFrame("EditBox", nil, scroll)
+                editBox:SetMultiLine(true)
+                editBox:SetFontObject(GameFontHighlightSmall)
+                editBox:SetWidth(390)
+                editBox:SetAutoFocus(false)
+                editBox:EnableMouse(true)
+                editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+                scroll:SetScrollChild(editBox)
+
+                dialog.editBox = editBox
+                MainFrame.copyDialog = dialog
+            end
+
+            local text = table.concat(MainFrame.logPlainText, "\n")
+            MainFrame.copyDialog.editBox:SetText(text)
+            -- 设置高度以显示所有内容
+            MainFrame.copyDialog.editBox:SetHeight(MainFrame.copyDialog.editBox:GetStringHeight() + 20)
+            MainFrame.copyDialog:Show()
+            MainFrame.copyDialog.editBox:HighlightText()
+            MainFrame.copyDialog.editBox:SetFocus()
+        end
+    end)
+    MainFrame.copyBtn = copyBtn
+
+    -- 导出按钮 (reload)
+    local exportBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate")
+    exportBtn:SetSize(60, 22)
+    exportBtn:SetPoint("RIGHT", copyBtn, "LEFT", -5, 0)
+    exportBtn:SetText("导出")
+    exportBtn:SetScript("OnClick", function()
+        ReloadUI()
+    end)
+    MainFrame.exportBtn = exportBtn
+
+    -- 清空按钮
+    local clearBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate")
+    clearBtn:SetSize(60, 22)
+    clearBtn:SetPoint("RIGHT", exportBtn, "LEFT", -5, 0)
+    clearBtn:SetText("清空")
+    clearBtn:SetScript("OnClick", function()
+        StaticPopup_Show("RPBOX_CLEAR_LOG_CONFIRM")
+    end)
+    MainFrame.clearBtn = clearBtn
+
     return MainFrame
 end
+
+-- 清空日志确认弹窗
+StaticPopupDialogs["RPBOX_CLEAR_LOG_CONFIRM"] = {
+    text = "确定要清空所有聊天记录吗？\n此操作不可撤销！",
+    button1 = "确定",
+    button2 = "取消",
+    OnAccept = function()
+        RPBox_ChatLog = {}
+        if MainFrame and MainFrame:IsShown() and currentTab == "log" then
+            RefreshLogContent()
+        end
+        print("|cFF00FF00[RPBox]|r 聊天记录已清空")
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 -- 打开主界面
 function ns.OpenMainFrame()
@@ -628,3 +1096,19 @@ function ns.ToggleMainFrame()
         ns.OpenMainFrame()
     end
 end
+
+-- 注册新消息回调，自动刷新日志面板
+ns.RegisterOnNewMessage(function()
+    if MainFrame and MainFrame:IsShown() and currentTab == "log" then
+        RefreshLogContent()
+    end
+end)
+
+-- 注册名单变更回调，自动刷新名单面板
+ns.RegisterOnListChange(function()
+    if MainFrame and MainFrame:IsShown() then
+        if currentTab == "whitelist" or currentTab == "blacklist" then
+            RefreshListContent(currentTab)
+        end
+    end
+end)

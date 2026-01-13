@@ -1,15 +1,288 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rpbox/server/internal/database"
+	"github.com/rpbox/server/internal/model"
 )
 
+// CreateStoryRequest 创建剧情请求
+type CreateStoryRequest struct {
+	Title        string   `json:"title" binding:"required"`
+	Description  string   `json:"description"`
+	Participants []string `json:"participants"`
+	Tags         []string `json:"tags"`
+	StartTime    string   `json:"start_time"`
+	EndTime      string   `json:"end_time"`
+}
+
+// CreateStoryEntryRequest 创建剧情条目请求
+type CreateStoryEntryRequest struct {
+	SourceID     string `json:"source_id"`
+	Type         string `json:"type"`
+	Speaker      string `json:"speaker"`
+	SpeakerIC    string `json:"speaker_ic"`
+	SpeakerColor string `json:"speaker_color"`
+	Content      string `json:"content" binding:"required"`
+	Channel      string `json:"channel"`
+	Timestamp    string `json:"timestamp"`
+}
+
 func (s *Server) listStories(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"stories": []any{}})
+	userID := c.GetUint("userID")
+
+	var stories []model.Story
+	if err := database.DB.Where("user_id = ?", userID).
+		Order("updated_at DESC").
+		Find(&stories).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"stories": stories})
 }
 
 func (s *Server) createStory(c *gin.Context) {
-	c.JSON(http.StatusCreated, gin.H{"message": "created"})
+	userID := c.GetUint("userID")
+
+	var req CreateStoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	story := model.Story{
+		UserID:      userID,
+		Title:       req.Title,
+		Description: req.Description,
+		Status:      "draft",
+	}
+
+	// 处理参与者
+	if len(req.Participants) > 0 {
+		data, _ := json.Marshal(req.Participants)
+		story.Participants = string(data)
+	}
+
+	// 处理标签
+	if len(req.Tags) > 0 {
+		story.Tags = strings.Join(req.Tags, ",")
+	}
+
+	// 处理时间
+	if req.StartTime != "" {
+		if t, err := time.Parse(time.RFC3339, req.StartTime); err == nil {
+			story.StartTime = t
+		}
+	}
+	if req.EndTime != "" {
+		if t, err := time.Parse(time.RFC3339, req.EndTime); err == nil {
+			story.EndTime = t
+		}
+	}
+
+	if err := database.DB.Create(&story).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, story)
+}
+
+func (s *Server) getStory(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", id, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	// 获取剧情条目
+	var entries []model.StoryEntry
+	database.DB.Where("story_id = ?", id).Order("sort_order, timestamp").Find(&entries)
+
+	c.JSON(http.StatusOK, gin.H{
+		"story":   story,
+		"entries": entries,
+	})
+}
+
+func (s *Server) updateStory(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", id, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	var req CreateStoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	story.Title = req.Title
+	story.Description = req.Description
+
+	if len(req.Participants) > 0 {
+		data, _ := json.Marshal(req.Participants)
+		story.Participants = string(data)
+	}
+	if len(req.Tags) > 0 {
+		story.Tags = strings.Join(req.Tags, ",")
+	}
+
+	if err := database.DB.Save(&story).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, story)
+}
+
+func (s *Server) deleteStory(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", id, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	// 删除剧情条目
+	database.DB.Where("story_id = ?", id).Delete(&model.StoryEntry{})
+	// 删除剧情
+	database.DB.Delete(&story)
+
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+func (s *Server) addStoryEntries(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", id, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	var entries []CreateStoryEntryRequest
+	if err := c.ShouldBindJSON(&entries); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 获取当前最大排序号
+	var maxOrder int
+	database.DB.Model(&model.StoryEntry{}).
+		Where("story_id = ?", id).
+		Select("COALESCE(MAX(sort_order), 0)").
+		Scan(&maxOrder)
+
+	for i, req := range entries {
+		entry := model.StoryEntry{
+			StoryID:      uint(id),
+			SourceID:     req.SourceID,
+			Type:         req.Type,
+			Speaker:      req.Speaker,
+			SpeakerIC:    req.SpeakerIC,
+			SpeakerColor: req.SpeakerColor,
+			Content:      req.Content,
+			Channel:      req.Channel,
+			SortOrder:    maxOrder + i + 1,
+		}
+		if req.Timestamp != "" {
+			if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
+				entry.Timestamp = t
+			}
+		}
+		database.DB.Create(&entry)
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "添加成功", "count": len(entries)})
+}
+
+// publishStory 发布/取消发布剧情
+func (s *Server) publishStory(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", id, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	var req struct {
+		IsPublic bool `json:"is_public"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	story.IsPublic = req.IsPublic
+	if req.IsPublic && story.ShareCode == "" {
+		story.ShareCode = generateShareCode()
+	}
+
+	database.DB.Save(&story)
+	c.JSON(http.StatusOK, story)
+}
+
+// getPublicStory 获取公开剧情（无需登录）
+func (s *Server) getPublicStory(c *gin.Context) {
+	code := c.Param("code")
+
+	var story model.Story
+	if err := database.DB.Where("share_code = ? AND is_public = ?", code, true).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在或未公开"})
+		return
+	}
+
+	// 增加浏览次数
+	database.DB.Model(&story).Update("view_count", story.ViewCount+1)
+
+	// 获取条目
+	var entries []model.StoryEntry
+	database.DB.Where("story_id = ?", story.ID).Order("sort_order, timestamp").Find(&entries)
+
+	// 获取作者信息
+	var user model.User
+	database.DB.First(&user, story.UserID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"story":   story,
+		"entries": entries,
+		"author":  user.Username,
+	})
+}
+
+// generateShareCode 生成分享码
+func generateShareCode() string {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	code := make([]byte, 8)
+	for i := range code {
+		code[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+		time.Sleep(time.Nanosecond)
+	}
+	return string(code)
 }

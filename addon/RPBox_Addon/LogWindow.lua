@@ -14,7 +14,7 @@ local currentFilter = {
     search = "",
 }
 
--- 频道名称映射
+-- 频道名称映射（兼容新旧格式）
 local CHANNEL_NAMES = {
     CHAT_MSG_SAY = "说",
     CHAT_MSG_YELL = "喊",
@@ -25,18 +25,43 @@ local CHANNEL_NAMES = {
     CHAT_MSG_RAID_LEADER = "团队",
     CHAT_MSG_WHISPER = "密语",
     CHAT_MSG_WHISPER_INFORM = "密语",
+    -- 新格式简写
+    SAY = "说",
+    YELL = "喊",
+    EMOTE = "表情",
+    PARTY = "小队",
+    RAID = "团队",
+    WHISPER = "密语",
 }
 
--- 获取 TRP3 显示名称
-local function GetDisplayName(sender)
-    if sender.trp3 then
-        local name = sender.trp3.FN or ""
-        if sender.trp3.LN then
-            name = name .. " " .. sender.trp3.LN
+-- 获取 TRP3 显示名称（兼容新旧结构）
+local function GetDisplayName(record)
+    local senderID = record.s or (record.sender and record.sender.gameID)
+
+    -- 新结构：从 ProfileCache 获取
+    if record.ref then
+        local cached = ns.GetCachedProfile(record.ref)
+        if cached then
+            local name = cached.FN or ""
+            if cached.LN and cached.LN ~= "" then
+                name = name .. " " .. cached.LN
+            end
+            if name ~= "" then return name end
+        end
+    end
+
+    -- 旧结构：从 sender.trp3 获取
+    if record.sender and record.sender.trp3 then
+        local trp3 = record.sender.trp3
+        local name = trp3.FN or ""
+        if trp3.LN then
+            name = name .. " " .. trp3.LN
         end
         if name ~= "" then return name end
     end
-    return strsplit("-", sender.gameID)
+
+    -- 回退到游戏名
+    return senderID and strsplit("-", senderID) or "未知"
 end
 
 -- 获取所有日期列表
@@ -59,11 +84,14 @@ local function GetFilteredRecords()
         if not currentFilter.date or currentFilter.date == dateStr then
             for hourStr, hourRecords in pairs(hours) do
                 for _, record in ipairs(hourRecords) do
+                    -- 兼容新旧字段
+                    local channel = record.c or record.channel
+                    local content = record.m or record.content
                     -- 频道筛选
-                    local channelMatch = not currentFilter.channel or record.channel == currentFilter.channel
+                    local channelMatch = not currentFilter.channel or channel == currentFilter.channel
                     -- 搜索筛选
                     local searchMatch = currentFilter.search == "" or
-                        record.content:lower():find(currentFilter.search:lower(), 1, true)
+                        (content and content:lower():find(currentFilter.search:lower(), 1, true))
 
                     if channelMatch and searchMatch then
                         table.insert(records, record)
@@ -73,8 +101,12 @@ local function GetFilteredRecords()
         end
     end
 
-    -- 按时间排序
-    table.sort(records, function(a, b) return a.timestamp > b.timestamp end)
+    -- 按时间排序（兼容新旧字段）
+    table.sort(records, function(a, b)
+        local ta = a.t or a.timestamp or 0
+        local tb = b.t or b.timestamp or 0
+        return ta > tb
+    end)
     return records
 end
 
@@ -142,24 +174,27 @@ local function RefreshContent()
         row:SetPoint("TOPLEFT", 0, -yOffset)
         row:SetPoint("TOPRIGHT", 0, -yOffset)
 
-        -- 时间和发送者
+        -- 时间和发送者（兼容新旧字段）
         if not row.header then
             row.header = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.header:SetPoint("TOPLEFT", 0, 0)
         end
-        local timeStr = date("%H:%M", record.timestamp)
-        local name = GetDisplayName(record.sender)
-        local channel = CHANNEL_NAMES[record.channel] or ""
-        row.header:SetText(format("|cFF00FF00%s|r [%s] |cFFFFD100%s|r", timeStr, channel, name))
+        local timestamp = record.t or record.timestamp or 0
+        local timeStr = date("%H:%M", timestamp)
+        local name = GetDisplayName(record)
+        local channel = record.c or record.channel or ""
+        local channelName = CHANNEL_NAMES[channel] or ""
+        row.header:SetText(format("|cFF00FF00%s|r [%s] |cFFFFD100%s|r", timeStr, channelName, name))
 
-        -- 内容
+        -- 内容（兼容新旧字段）
         if not row.text then
             row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             row.text:SetPoint("TOPLEFT", 10, -16)
             row.text:SetWidth(420)
             row.text:SetJustifyH("LEFT")
         end
-        row.text:SetText(record.content)
+        local msgContent = record.m or record.content or ""
+        row.text:SetText(msgContent)
 
         row:Show()
         yOffset = yOffset + 44

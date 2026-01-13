@@ -3,6 +3,8 @@ mod wow_path;
 mod scanner;
 mod sync_meta;
 mod writer;
+mod addon_installer;
+mod chat_log;
 
 use std::path::{Path, PathBuf};
 use serde_json::Value;
@@ -233,7 +235,11 @@ pub fn run() {
             update_profile,
             clear_sync_cache,
             apply_cloud_profile,
-            apply_account_backup
+            apply_account_backup,
+            check_addon_installed,
+            install_addon,
+            uninstall_addon,
+            scan_chat_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -354,4 +360,24 @@ async fn apply_account_backup(
     }
 
     Ok(())
+}
+
+#[tauri::command]
+async fn check_addon_installed(wow_path: String, flavor: String) -> addon_installer::InstalledAddonInfo {
+    addon_installer::check_addon_installed(&wow_path, &flavor)
+}
+
+#[tauri::command]
+async fn install_addon(wow_path: String, flavor: String, zip_data: Vec<u8>) -> Result<String, String> {
+    addon_installer::install_addon(&wow_path, &flavor, &zip_data)
+}
+
+#[tauri::command]
+async fn uninstall_addon(wow_path: String, flavor: String) -> Result<(), String> {
+    addon_installer::uninstall_addon(&wow_path, &flavor)
+}
+
+#[tauri::command]
+async fn scan_chat_logs(wow_path: String) -> Result<Vec<chat_log::AccountChatLogs>, String> {
+    chat_log::scan_chat_logs(&wow_path)
 }

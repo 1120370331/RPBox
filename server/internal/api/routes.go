@@ -11,6 +11,17 @@ func (s *Server) setupRoutes() {
 		v1.POST("/auth/register", s.register)
 		v1.POST("/auth/login", s.login)
 
+		// 插件版本管理（公开）
+		v1.GET("/addon/manifest", s.getAddonManifest)
+		v1.GET("/addon/latest", s.getAddonLatest)
+		v1.GET("/addon/download/:version", s.downloadAddon)
+
+		// 公开剧情（无需登录）
+		v1.GET("/public/stories/:code", s.getPublicStory)
+
+		// 图标服务（公开）
+		v1.GET("/icons/:name", s.getIcon)
+
 		// 需要认证的接口
 		auth := v1.Group("")
 		auth.Use(middleware.JWTAuth())
@@ -25,6 +36,11 @@ func (s *Server) setupRoutes() {
 
 			auth.GET("/stories", s.listStories)
 			auth.POST("/stories", s.createStory)
+			auth.GET("/stories/:id", s.getStory)
+			auth.PUT("/stories/:id", s.updateStory)
+			auth.DELETE("/stories/:id", s.deleteStory)
+			auth.POST("/stories/:id/entries", s.addStoryEntries)
+			auth.POST("/stories/:id/publish", s.publishStory)
 
 			auth.GET("/items", s.listItems)
 			auth.POST("/items", s.createItem)
