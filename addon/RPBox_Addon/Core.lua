@@ -20,6 +20,19 @@ local DEFAULT_CONFIG = {
     warnedThisSession = false,
     maxRecords = 10000,
     warnThreshold = 9000,
+    -- 监听的频道配置
+    channels = {
+        SAY = true,
+        YELL = true,
+        EMOTE = true,
+        PARTY = false,
+        RAID = false,
+        WHISPER_IN = false,
+        WHISPER_OUT = false,
+        GUILD = false,
+    },
+    -- 显示设置
+    showIcon = true,  -- 是否显示头像图标
 }
 
 -- 初始化 SavedVariables
@@ -81,6 +94,7 @@ function ns.AddToWhitelist(unitID)
     RPBox_Config.whitelist[unitID] = true
     RPBox_Config.blacklist[unitID] = nil
     print(format(L["WHITELIST_ADDED"] or "[RPBox] %s 已加入白名单", unitID))
+    ns.TriggerOnListChange()
 end
 
 -- 添加到黑名单
@@ -89,12 +103,14 @@ function ns.AddToBlacklist(unitID)
     RPBox_Config.blacklist[unitID] = true
     RPBox_Config.whitelist[unitID] = nil
     print(format(L["BLACKLIST_ADDED"] or "[RPBox] %s 已加入黑名单", unitID))
+    ns.TriggerOnListChange()
 end
 
 -- 从白名单移除
 function ns.RemoveFromWhitelist(unitID)
     if unitID then
         RPBox_Config.whitelist[unitID] = nil
+        ns.TriggerOnListChange()
     end
 end
 
@@ -102,6 +118,7 @@ end
 function ns.RemoveFromBlacklist(unitID)
     if unitID then
         RPBox_Config.blacklist[unitID] = nil
+        ns.TriggerOnListChange()
     end
 end
 
@@ -244,6 +261,36 @@ function ns.UpdateSyncState()
     }
 end
 
+-- 新消息回调列表
+local onNewMessageCallbacks = {}
+
+-- 注册新消息回调
+function ns.RegisterOnNewMessage(callback)
+    table.insert(onNewMessageCallbacks, callback)
+end
+
+-- 触发新消息回调
+function ns.TriggerOnNewMessage()
+    for _, callback in ipairs(onNewMessageCallbacks) do
+        pcall(callback)
+    end
+end
+
+-- 名单变更回调列表
+local onListChangeCallbacks = {}
+
+-- 注册名单变更回调
+function ns.RegisterOnListChange(callback)
+    table.insert(onListChangeCallbacks, callback)
+end
+
+-- 触发名单变更回调
+function ns.TriggerOnListChange()
+    for _, callback in ipairs(onListChangeCallbacks) do
+        pcall(callback)
+    end
+end
+
 -- 获取总记录数
 function ns.GetTotalRecordCount()
     local count = 0
@@ -270,7 +317,8 @@ function ns.ClearRecordsBefore(timestamp)
         for hour, records in pairs(hours) do
             local newRecords = {}
             for _, record in ipairs(records) do
-                if record.timestamp >= timestamp then
+                local recordTime = record.t or record.timestamp or 0
+                if recordTime >= timestamp then
                     table.insert(newRecords, record)
                 else
                     cleared = cleared + 1

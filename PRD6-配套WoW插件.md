@@ -119,6 +119,7 @@ RPBox_ChatLog = {
                 s = "玩家名-服务器",       -- 创建者
                 ref = "profileID_001",    -- 创建者的角色卡
                 npc = "恩佐斯",            -- NPC 名字
+                nt = "say",               -- NPC 说话类型: say/yell/whisper
             },
             -- 旁白消息
             {

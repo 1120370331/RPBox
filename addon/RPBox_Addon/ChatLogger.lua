@@ -15,6 +15,7 @@ local CHAT_EVENTS = {
     "CHAT_MSG_RAID_LEADER",
     "CHAT_MSG_WHISPER",
     "CHAT_MSG_WHISPER_INFORM",
+    "CHAT_MSG_GUILD",
 }
 
 -- 频道简写映射
@@ -26,8 +27,9 @@ local CHANNEL_SHORT = {
     CHAT_MSG_PARTY_LEADER = "PARTY",
     CHAT_MSG_RAID = "RAID",
     CHAT_MSG_RAID_LEADER = "RAID",
-    CHAT_MSG_WHISPER = "WHISPER",
-    CHAT_MSG_WHISPER_INFORM = "WHISPER",
+    CHAT_MSG_WHISPER = "WHISPER_IN",
+    CHAT_MSG_WHISPER_INFORM = "WHISPER_OUT",
+    CHAT_MSG_GUILD = "GUILD",
 }
 
 -- 获取 TRP3 角色信息并缓存
@@ -62,8 +64,20 @@ local function GetSelfTRP3InfoAndCache()
     return profileID, player
 end
 
+-- 检查频道是否启用
+local function IsChannelEnabled(channelShort)
+    local channels = RPBox_Config and RPBox_Config.channels
+    if not channels then return true end  -- 默认全部启用
+    local enabled = channels[channelShort]
+    if enabled == nil then return true end  -- 未配置的默认启用
+    return enabled
+end
+
 -- 判断是否应该记录
-local function ShouldRecord(unitID, isFromSelf)
+local function ShouldRecord(unitID, isFromSelf, channelShort)
+    -- 先检查频道是否启用
+    if not IsChannelEnabled(channelShort) then return false end
+
     if isFromSelf then return true end
     if ns.IsBlacklisted(unitID) then return false end
     local profileID = GetTRP3InfoAndCache(unitID)
@@ -86,7 +100,7 @@ end
 
 -- 保存聊天记录
 local function SaveChatLog(record)
-    local timestamp = record.timestamp
+    local timestamp = record.t or record.timestamp
     local dateStr = date("%Y-%m-%d", timestamp)
     local hourStr = date("%H", timestamp)
 
@@ -98,33 +112,46 @@ local function SaveChatLog(record)
     -- 更新同步状态
     ns.UpdateSyncState()
 
+    -- 触发新消息回调（用于自动刷新面板）
+    ns.TriggerOnNewMessage()
+
     -- 检查记录上限
     CheckRecordLimit()
 end
 
 -- 解析 NPC/旁白消息
+-- 返回: mk, npcName, message, npcType
 local function ParseNPCMessage(content)
     if not content:match("^|") then return nil end
+    -- 跳过 WoW 颜色代码 |cFFxxxxxx 开头的情况
+    if content:match("^|c") then return nil end
+
     local text = content:sub(2):match("^%s*(.+)")
     if not text then return nil end
 
+    -- 清理末尾的颜色代码 |r
+    text = text:gsub("|r%s*$", "")
+
     -- 悄悄说
-    local npcName, message = text:match("^(.-)%s*悄悄说[：:]%s*(.*)$")
+    local npcName, message = text:match("^(.-)%s*悄悄说%s*[：:]%s*(.*)$")
     if npcName and message then
-        return "N", npcName ~= "" and npcName or nil, message
+        message = message:gsub("|r%s*$", "")
+        return "N", npcName ~= "" and npcName or nil, message, "whisper"
     end
     -- 喊
-    npcName, message = text:match("^(.-)%s*喊[：:]%s*(.*)$")
+    npcName, message = text:match("^(.-)%s*喊%s*[：:]%s*(.*)$")
     if npcName and message then
-        return "N", npcName ~= "" and npcName or nil, message
+        message = message:gsub("|r%s*$", "")
+        return "N", npcName ~= "" and npcName or nil, message, "yell"
     end
     -- 说
-    npcName, message = text:match("^(.-)%s*说[：:]%s*(.*)$")
+    npcName, message = text:match("^(.-)%s*说%s*[：:]%s*(.*)$")
     if npcName and message then
-        return "N", npcName ~= "" and npcName or nil, message
+        message = message:gsub("|r%s*$", "")
+        return "N", npcName ~= "" and npcName or nil, message, "say"
     end
     -- 旁白
-    return "B", nil, text
+    return "B", nil, text, nil
 end
 
 -- 聊天消息处理
@@ -137,21 +164,34 @@ local function OnChatMessage(self, event, msg, sender, ...)
     end
 
     local isFromSelf = (senderID == playerID)
+    local channelShort = CHANNEL_SHORT[event] or event
 
-    if not ShouldRecord(senderID, isFromSelf) then
+    if not ShouldRecord(senderID, isFromSelf, channelShort) then
         return false
+    end
+
+    -- 获取发送者GUID和职业
+    local senderGUID = select(12, ...)
+    local senderClass = nil
+    if senderGUID then
+        local _, classFilename = GetPlayerInfoByGUID(senderGUID)
+        senderClass = classFilename
     end
 
     -- 获取 profileID
     local profileID
     if isFromSelf then
         profileID = GetSelfTRP3InfoAndCache()
+        if not senderClass then
+            local _, classFilename = UnitClass("player")
+            senderClass = classFilename
+        end
     else
         profileID = GetTRP3InfoAndCache(senderID)
     end
 
     -- 解析消息类型
-    local mk, npcName, parsedMsg = ParseNPCMessage(msg)
+    local mk, npcName, parsedMsg, npcType = ParseNPCMessage(msg)
     if not mk then
         mk = "P"  -- 普通玩家消息
     end
@@ -166,9 +206,18 @@ local function OnChatMessage(self, event, msg, sender, ...)
         ref = profileID,
     }
 
-    -- NPC 消息添加 npc 字段
-    if mk == "N" and npcName then
-        record.npc = npcName
+    -- 保存职业信息
+    if senderClass then
+        record.cls = senderClass
+    end
+
+    -- NPC 消息添加 npc 和 nt 字段
+    if mk == "N" then
+        if npcName then
+            local cleanName = npcName:gsub("^|%s*", "")
+            if cleanName ~= "" then record.npc = cleanName end
+        end
+        if npcType then record.nt = npcType end
     end
 
     SaveChatLog(record)
