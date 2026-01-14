@@ -2,12 +2,16 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getStory, updateStory, addStoryEntries, publishStory, type Story, type StoryEntry } from '@/api/story'
+import { getCharacter, updateCharacter, type Character } from '@/api/character'
 import RButton from '@/components/RButton.vue'
 import RCard from '@/components/RCard.vue'
 import RInput from '@/components/RInput.vue'
 import RModal from '@/components/RModal.vue'
 import WowIcon from '@/components/WowIcon.vue'
 import RichEditor from '@/components/RichEditor.vue'
+import CharacterCard from '@/components/CharacterCard.vue'
+import RColorPicker from '@/components/RColorPicker.vue'
+import RAvatarPicker from '@/components/RAvatarPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +38,10 @@ const showShareModal = ref(false)
 // 角色信息弹窗
 const showCharacterModal = ref(false)
 const selectedCharacter = ref<StoryEntry | null>(null)
+const characterCardPosition = ref({ x: 0, y: 0 })
+
+// 角色数据缓存 (character_id -> Character)
+const charactersMap = ref<Map<number, Character>>(new Map())
 
 const storyId = computed(() => Number(route.params.id))
 
@@ -47,6 +55,26 @@ async function loadStory() {
     console.log('[StoryDetail] 第一条entry:', entries.value[0])
     editTitle.value = res.story.title
     editDesc.value = res.story.description
+
+    // 加载所有关联的角色信息
+    const characterIds = new Set<number>()
+    for (const entry of entries.value) {
+      if (entry.character_id) {
+        characterIds.add(entry.character_id)
+      }
+    }
+
+    // 并行获取所有角色信息
+    const characterPromises = Array.from(characterIds).map(async (id) => {
+      try {
+        const character = await getCharacter(id)
+        charactersMap.value.set(id, character)
+      } catch (e) {
+        console.error(`加载角色 ${id} 失败:`, e)
+      }
+    })
+    await Promise.all(characterPromises)
+    console.log('[StoryDetail] charactersMap:', charactersMap.value)
   } catch (e) {
     console.error('加载失败:', e)
   } finally {
@@ -132,10 +160,84 @@ function copyShareLink() {
   navigator.clipboard.writeText(shareUrl.value)
 }
 
-function showCharacterInfo(entry: StoryEntry) {
+function showCharacterInfo(entry: StoryEntry, event: MouseEvent) {
   if (entry.type === 'narration') return
   selectedCharacter.value = entry
+  // 记录点击位置
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  characterCardPosition.value = {
+    x: rect.right,
+    y: rect.top
+  }
   showCharacterModal.value = true
+}
+
+// 获取条目对应的角色信息
+function getEntryCharacter(entry: StoryEntry): Character | undefined {
+  if (entry.character_id) {
+    return charactersMap.value.get(entry.character_id)
+  }
+  return undefined
+}
+
+// 获取条目的头像图标
+function getEntryIcon(entry: StoryEntry): string {
+  const character = getEntryCharacter(entry)
+  if (character) {
+    return character.custom_avatar || character.icon || ''
+  }
+  return ''
+}
+
+// 获取条目的名字颜色
+function getEntryColor(entry: StoryEntry): string {
+  const character = getEntryCharacter(entry)
+  if (character) {
+    return character.custom_color || character.color || ''
+  }
+  return ''
+}
+
+// 判断是否是NPC
+function isNpcEntry(entry: StoryEntry): boolean {
+  const character = getEntryCharacter(entry)
+  return character?.is_npc || false
+}
+
+// 判断是否是旁白
+function isNarrationEntry(entry: StoryEntry): boolean {
+  return entry.type === 'narration'
+}
+
+// 编辑角色信息
+const showEditModal = ref(false)
+const editingCharacter = ref<Character | null>(null)
+
+function handleEditCharacter(character: Character) {
+  editingCharacter.value = { ...character }
+  showCharacterModal.value = false
+  showEditModal.value = true
+}
+
+const savingCharacter = ref(false)
+
+async function saveCharacterEdit() {
+  if (!editingCharacter.value) return
+  savingCharacter.value = true
+  try {
+    const updated = await updateCharacter(editingCharacter.value.id, {
+      custom_name: editingCharacter.value.custom_name,
+      custom_color: editingCharacter.value.custom_color,
+      custom_avatar: editingCharacter.value.custom_avatar,
+    })
+    // 更新缓存
+    charactersMap.value.set(updated.id, updated)
+    showEditModal.value = false
+  } catch (e) {
+    console.error('保存失败:', e)
+  } finally {
+    savingCharacter.value = false
+  }
 }
 
 function getChannelLabel(channel: string): string {
@@ -154,6 +256,19 @@ function getChannelClass(channel: string): string {
   if (channel === 'YELL') return 'channel-yell'
   if (channel === 'WHISPER') return 'channel-whisper'
   return ''
+}
+
+// 获取频道对应的文字颜色
+function getChannelTextColor(channel: string): string {
+  const colorMap: Record<string, string> = {
+    'SAY': '',  // 默认颜色
+    'YELL': '#FF3333',  // 红色
+    'WHISPER': '#B39DDB',  // 紫色
+    'EMOTE': '#FF8C00',  // 橙色
+    'PARTY': '#AAAAFF',  // 蓝色
+    'RAID': '#FF7F00',  // 橙色
+  }
+  return colorMap[channel] || ''
 }
 
 onMounted(loadStory)
@@ -236,20 +351,20 @@ onMounted(loadStory)
             <div
               class="entry-avatar"
               :class="{ clickable: entry.type !== 'narration' }"
-              @click="showCharacterInfo(entry)"
+              @click="showCharacterInfo(entry, $event)"
             >
-              <span v-if="entry.speaker_ic === '_NPC_'" class="avatar-npc">NPC</span>
-              <span v-else-if="entry.speaker_ic === '_NARRATION_'" class="avatar-narration">旁白</span>
-              <WowIcon v-else-if="entry.speaker_ic" :icon="entry.speaker_ic" :size="40" :fallback="entry.speaker?.charAt(0) || '?'" />
+              <span v-if="isNpcEntry(entry)" class="avatar-npc">NPC</span>
+              <span v-else-if="isNarrationEntry(entry)" class="avatar-narration">旁白</span>
+              <WowIcon v-else-if="getEntryIcon(entry)" :icon="getEntryIcon(entry)" :size="40" :fallback="entry.speaker?.charAt(0) || '?'" />
               <span v-else class="avatar-fallback">{{ entry.speaker?.charAt(0) || '?' }}</span>
             </div>
             <div class="entry-content">
               <div class="entry-header">
-                <span class="speaker" :style="entry.speaker_color ? { color: '#' + entry.speaker_color } : {}">{{ entry.speaker || '旁白' }}</span>
+                <span class="speaker" :style="getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">{{ entry.speaker || '旁白' }}</span>
                 <span v-if="entry.channel" class="channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
                 <span class="timestamp">{{ formatDate(entry.timestamp) }}</span>
               </div>
-              <div class="entry-text">{{ entry.content }}</div>
+              <div class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
             </div>
           </div>
         </div>
@@ -298,25 +413,62 @@ onMounted(loadStory)
       </template>
     </RModal>
 
-    <!-- 角色信息弹窗 -->
-    <RModal v-model="showCharacterModal" title="角色信息" width="360px">
-      <div v-if="selectedCharacter" class="character-info">
-        <div class="character-avatar">
-          <WowIcon
-            v-if="selectedCharacter.speaker_ic"
-            :icon="selectedCharacter.speaker_ic"
-            :size="80"
-            :fallback="selectedCharacter.speaker?.charAt(0) || '?'"
+    <!-- 角色信息卡片 -->
+    <CharacterCard
+      v-model:visible="showCharacterModal"
+      :character="selectedCharacter ? getEntryCharacter(selectedCharacter) : undefined"
+      :speaker="selectedCharacter?.speaker"
+      :position="characterCardPosition"
+      @edit="handleEditCharacter"
+    />
+
+    <!-- 编辑角色对话框 -->
+    <RModal v-model="showEditModal" title="编辑角色信息（本剧情）" width="480px">
+      <div v-if="editingCharacter" class="edit-character-form">
+        <div class="form-field">
+          <label>自定义头像</label>
+          <RAvatarPicker
+            v-model="editingCharacter.custom_avatar"
+            :fallback-icon="editingCharacter.first_name?.charAt(0) || '?'"
           />
-          <span v-else class="avatar-large">{{ selectedCharacter.speaker?.charAt(0) || '?' }}</span>
         </div>
-        <div class="character-name" :style="selectedCharacter.speaker_color ? { color: '#' + selectedCharacter.speaker_color } : {}">{{ selectedCharacter.speaker }}</div>
-        <div v-if="selectedCharacter.channel" class="character-channel">
-          频道: {{ getChannelLabel(selectedCharacter.channel) }}
+
+        <div class="form-row">
+          <div class="form-field">
+            <label>自定义显示名</label>
+            <RInput v-model="editingCharacter.custom_name" :placeholder="editingCharacter.first_name || ''" />
+          </div>
+          <div class="form-field">
+            <label>自定义颜色</label>
+            <RColorPicker v-model="editingCharacter.custom_color" />
+          </div>
+        </div>
+
+        <div class="original-info">
+          <h4>原始TRP3信息</h4>
+          <div class="info-list">
+            <div v-if="editingCharacter.first_name" class="info-row">
+              <span class="label">名字:</span>
+              <span>{{ editingCharacter.first_name }} {{ editingCharacter.last_name }}</span>
+            </div>
+            <div v-if="editingCharacter.title" class="info-row">
+              <span class="label">头衔:</span>
+              <span>{{ editingCharacter.title }}</span>
+            </div>
+            <div v-if="editingCharacter.race" class="info-row">
+              <span class="label">种族:</span>
+              <span>{{ editingCharacter.race }}</span>
+            </div>
+            <div v-if="editingCharacter.class" class="info-row">
+              <span class="label">职业:</span>
+              <span>{{ editingCharacter.class }}</span>
+            </div>
+          </div>
         </div>
       </div>
       <template #footer>
-        <RButton @click="showCharacterModal = false">关闭</RButton>
+        <RButton @click="showEditModal = false">取消</RButton>
+        <RButton type="primary" :loading="savingCharacter" @click="saveCharacterEdit">保存</RButton>
       </template>
     </RModal>
   </div>
@@ -690,5 +842,59 @@ onMounted(loadStory)
 .character-channel {
   font-size: 14px;
   color: var(--color-secondary);
+}
+
+.character-title {
+  font-size: 14px;
+  color: var(--color-accent);
+  font-style: italic;
+}
+
+.character-race-class {
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+
+/* 编辑角色表单 */
+.edit-character-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.original-info {
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.original-info h4 {
+  font-size: 13px;
+  color: var(--color-secondary);
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-row {
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+}
+
+.info-row .label {
+  color: var(--color-secondary);
+  min-width: 48px;
 }
 </style>

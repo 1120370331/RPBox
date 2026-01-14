@@ -22,9 +22,8 @@ export interface StoryEntry {
   story_id: number
   source_id: string
   type: 'dialogue' | 'narration' | 'image'
+  character_id?: number  // 关联的角色ID
   speaker: string
-  speaker_ic: string
-  speaker_color: string
   content: string
   channel: string
   timestamp: string
@@ -44,11 +43,14 @@ export interface CreateStoryEntryRequest {
   source_id?: string
   type?: string
   speaker?: string
-  speaker_ic?: string
-  speaker_color?: string
   content: string
   channel?: string
   timestamp?: string
+  // 角色信息（用于创建/关联Character）
+  ref_id?: string      // TRP3 ref ID
+  game_id?: string     // 游戏内ID
+  trp3_data?: string   // 完整TRP3 profile JSON
+  is_npc?: boolean     // 是否NPC
 }
 
 export async function listStories(): Promise<{ stories: Story[] }> {
@@ -82,6 +84,7 @@ export async function publishStory(id: number, isPublic: boolean): Promise<Story
 export interface PublicStoryResponse {
   story: Story
   entries: StoryEntry[]
+  characters: Record<number, import('./character').Character>
   author: string
 }
 

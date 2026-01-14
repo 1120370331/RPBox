@@ -2,7 +2,9 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { getPublicStory, type Story, type StoryEntry } from '@/api/story'
+import { type Character } from '@/api/character'
 import WowIcon from '@/components/WowIcon.vue'
+import CharacterCard from '@/components/CharacterCard.vue'
 
 const route = useRoute()
 
@@ -10,7 +12,13 @@ const loading = ref(true)
 const error = ref('')
 const story = ref<Story | null>(null)
 const entries = ref<StoryEntry[]>([])
+const characters = ref<Record<number, Character>>({})
 const author = ref('')
+
+// 角色卡片弹窗
+const showCharacterCard = ref(false)
+const selectedEntry = ref<StoryEntry | null>(null)
+const characterCardPosition = ref({ x: 0, y: 0 })
 
 // 播放控制
 const isPlaying = ref(false)
@@ -34,7 +42,15 @@ async function loadStory() {
     const res = await getPublicStory(shareCode.value)
     story.value = res.story
     entries.value = res.entries || []
+    characters.value = res.characters || {}
     author.value = res.author
+    console.log('[StoryPlayback] entries:', entries.value)
+    console.log('[StoryPlayback] characters:', characters.value)
+    console.log('[StoryPlayback] 第一条entry:', entries.value[0])
+    if (entries.value[0]?.character_id) {
+      console.log('[StoryPlayback] 第一条entry的character_id:', entries.value[0].character_id)
+      console.log('[StoryPlayback] 对应角色:', getEntryCharacter(entries.value[0]))
+    }
   } catch (e: any) {
     error.value = e.message || '加载失败'
   } finally {
@@ -94,6 +110,87 @@ function getParticipants(): string[] {
   }
 }
 
+// 获取条目对应的角色
+function getEntryCharacter(entry: StoryEntry): Character | undefined {
+  if (entry.character_id) {
+    // Go map[uint] 序列化后 key 是字符串
+    return characters.value[entry.character_id] || characters.value[String(entry.character_id) as any]
+  }
+  return undefined
+}
+
+// 获取条目的头像图标
+function getEntryIcon(entry: StoryEntry): string {
+  const character = getEntryCharacter(entry)
+  if (character) {
+    return character.custom_avatar || character.icon || ''
+  }
+  return ''
+}
+
+// 获取条目的名字颜色
+function getEntryColor(entry: StoryEntry): string {
+  const character = getEntryCharacter(entry)
+  if (character) {
+    return character.custom_color || character.color || ''
+  }
+  return ''
+}
+
+// 获取频道标签
+function getChannelLabel(channel: string): string {
+  const map: Record<string, string> = {
+    'SAY': '说',
+    'YELL': '喊',
+    'EMOTE': '表情',
+    'PARTY': '小队',
+    'RAID': '团队',
+    'WHISPER': '密语',
+  }
+  return map[channel] || channel
+}
+
+// 获取频道对应的文字颜色
+function getChannelTextColor(channel: string): string {
+  const colorMap: Record<string, string> = {
+    'SAY': '',
+    'YELL': '#FF3333',
+    'WHISPER': '#B39DDB',
+    'EMOTE': '#FF8C00',
+    'PARTY': '#AAAAFF',
+    'RAID': '#FF7F00',
+  }
+  return colorMap[channel] || ''
+}
+
+// 获取频道CSS类
+function getChannelClass(channel: string): string {
+  if (channel === 'YELL') return 'channel-yell'
+  if (channel === 'WHISPER') return 'channel-whisper'
+  return ''
+}
+
+// 判断是否是NPC消息
+function isNpcEntry(entry: StoryEntry): boolean {
+  const character = getEntryCharacter(entry)
+  return character?.is_npc || false
+}
+
+// 点击头像显示角色卡片
+function showCharacterInfo(entry: StoryEntry, event: MouseEvent) {
+  if (entry.type === 'narration') return
+  if (isNpcEntry(entry)) return  // NPC不显示角色卡片
+  if (!getEntryCharacter(entry)) return
+
+  selectedEntry.value = entry
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  characterCardPosition.value = {
+    x: rect.right,
+    y: rect.top
+  }
+  showCharacterCard.value = true
+}
+
 onMounted(loadStory)
 onUnmounted(stopPlay)
 </script>
@@ -133,16 +230,30 @@ onUnmounted(stopPlay)
           class="entry-item"
           :class="[entry.type, { 'fade-in': isPlaying && idx === currentIndex }]"
         >
-          <div class="entry-avatar">
-            <WowIcon v-if="entry.speaker_ic" :icon="entry.speaker_ic" :size="44" :fallback="entry.speaker?.charAt(0) || '?'" />
-            <span v-else>{{ entry.speaker?.charAt(0) || '?' }}</span>
+          <div
+            class="entry-avatar"
+            :class="{ clickable: entry.type !== 'narration' && !isNpcEntry(entry) && !!getEntryCharacter(entry) }"
+            @click="showCharacterInfo(entry, $event)"
+          >
+            <template v-if="entry.type === 'narration'">
+              <span class="avatar-narration">旁白</span>
+            </template>
+            <template v-else-if="isNpcEntry(entry)">
+              <span class="avatar-npc">NPC</span>
+            </template>
+            <template v-else>
+              <WowIcon v-if="getEntryIcon(entry)" :icon="getEntryIcon(entry)" :size="44" :fallback="entry.speaker?.charAt(0) || '?'" />
+              <span v-else>{{ entry.speaker?.charAt(0) || '?' }}</span>
+            </template>
           </div>
           <div class="entry-body">
             <div class="entry-speaker">
-              {{ entry.speaker || '未知' }}
-              <span v-if="entry.type === 'narration'" class="entry-type">旁白</span>
+              <span :style="entry.type !== 'narration' && getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">
+                {{ entry.type === 'narration' ? '旁白' : (entry.speaker || '未知') }}
+              </span>
+              <span v-if="entry.channel && entry.type !== 'narration'" class="entry-channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
             </div>
-            <div class="entry-text">{{ entry.content }}</div>
+            <div class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
           </div>
         </div>
       </div>
@@ -173,6 +284,15 @@ onUnmounted(stopPlay)
       </div>
     </template>
   </div>
+
+  <!-- 角色信息卡片（只读） -->
+  <CharacterCard
+    v-model:visible="showCharacterCard"
+    :character="selectedEntry ? getEntryCharacter(selectedEntry) : undefined"
+    :speaker="selectedEntry?.speaker"
+    :position="characterCardPosition"
+    :editable="false"
+  />
 </template>
 
 <style scoped>
@@ -270,6 +390,50 @@ onUnmounted(stopPlay)
   flex-shrink: 0;
 }
 
+.entry-avatar.clickable {
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.entry-avatar.clickable:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.avatar-narration {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #a98467;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.avatar-npc {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #9b59b6;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.entry-item.narration .entry-avatar {
+  background: #a98467;
+}
+
+.entry-item.narration .entry-speaker {
+  color: #856a52;
+}
+
 .entry-body {
   flex: 1;
 }
@@ -285,6 +449,22 @@ onUnmounted(stopPlay)
   color: #856a52;
   font-weight: normal;
   margin-left: 8px;
+}
+
+.entry-channel {
+  font-size: 12px;
+  color: #856a52;
+  font-weight: normal;
+  margin-left: 8px;
+}
+
+.entry-channel.channel-yell {
+  color: #FF3333;
+  font-weight: bold;
+}
+
+.entry-channel.channel-whisper {
+  color: #B39DDB;
 }
 
 .entry-text {

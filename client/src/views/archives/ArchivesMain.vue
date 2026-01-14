@@ -32,6 +32,8 @@ interface ChatRecord {
   mark?: string  // P(Player), N(NPC), B(Background)
   npc?: string   // NPC名字
   nt?: string    // NPC说话类型
+  ref_id?: string  // TRP3 profile ref ID
+  raw_profile?: string  // 完整的TRP3 profile JSON
 }
 
 const mounted = ref(false)
@@ -108,26 +110,27 @@ async function handleCreateStory() {
         const trp3 = record.sender.trp3
         console.log('[Archive] record.sender:', record.sender)
         console.log('[Archive] trp3:', trp3)
+        console.log('[Archive] ref_id:', record.ref_id)
+        console.log('[Archive] raw_profile:', record.raw_profile)
 
         // 根据mark类型确定speaker和type
         let speaker: string
         let type: string = 'dialogue'
         let channel: string = record.channel
-        let speakerIc: string = trp3?.IC || ''
+        let isNpc: boolean = false
 
         console.log('[Archive] mark:', record.mark, 'channel:', record.channel, 'nt:', record.nt, 'npc:', record.npc)
 
         if (record.mark === 'N' && record.npc) {
-          // NPC消息，使用nt字段作为频道，设置NPC图标
+          // NPC消息
           speaker = record.npc
-          speakerIc = '_NPC_' // NPC专用标记
+          isNpc = true
           if (record.nt) {
-            channel = record.nt.toUpperCase() // say -> SAY, yell -> YELL, whisper -> WHISPER
+            channel = record.nt.toUpperCase()
           }
         } else if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
-          // 旁白/背景，或者没有NPC名字的NPC消息也当作旁白
+          // 旁白/背景
           speaker = ''
-          speakerIc = '_NARRATION_' // 旁白专用标记
           type = 'narration'
         } else {
           // 玩家消息
@@ -140,11 +143,14 @@ async function handleCreateStory() {
           source_id: `chat_${record.timestamp}`,
           type: type,
           speaker: speaker,
-          speaker_ic: speakerIc,
-          speaker_color: trp3?.CH || '',
           content: cleanTRP3Content(record.content),
           channel: channel,
           timestamp: new Date(record.timestamp * 1000).toISOString(),
+          // 传递角色信息用于创建/关联Character
+          ref_id: record.ref_id,
+          game_id: record.sender.gameID,
+          trp3_data: record.raw_profile,
+          is_npc: isNpc,
         }
       })
       await addStoryEntries(story.id, entries)
