@@ -42,6 +42,13 @@ func (s *Server) setupRoutes() {
 			auth.POST("/stories/:id/entries", s.addStoryEntries)
 			auth.POST("/stories/:id/publish", s.publishStory)
 
+			// 角色管理
+			auth.GET("/characters", s.listCharacters)
+			auth.POST("/characters", s.createOrUpdateCharacter)
+			auth.GET("/characters/:id", s.getCharacter)
+			auth.PUT("/characters/:id", s.updateCharacter)
+			auth.DELETE("/characters/:id", s.deleteCharacter)
+
 			auth.GET("/items", s.listItems)
 			auth.POST("/items", s.createItem)
 

@@ -45,6 +45,12 @@ pub struct ChatRecord {
     /// NPC说话类型: say/yell/whisper（仅NPC消息）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nt: Option<String>,
+    /// TRP3 profile ref ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ref_id: Option<String>,
+    /// 完整的TRP3 profile JSON（用于服务端存储）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,23 +275,25 @@ fn parse_single_record(entry: &Value, profile_cache: &Value) -> Option<ChatRecor
         let profile_ref = obj.get("ref").and_then(|v| v.as_str());
 
         // 从ProfileCache获取TRP3信息
-        let trp3 = profile_ref.and_then(|ref_id| {
+        let (trp3, raw_profile) = profile_ref.map(|ref_id| {
             eprintln!("[RPBox] 查找ProfileCache: ref={}", ref_id);
-            let result = profile_cache.get(ref_id).and_then(|p| {
+            if let Some(p) = profile_cache.get(ref_id) {
                 eprintln!("[RPBox]   找到Profile: {:?}", p);
-                Some(TRP3Info {
+                let trp3_info = TRP3Info {
                     first_name: p.get("FN").and_then(|v| v.as_str()).map(|s| s.to_string()),
                     last_name: p.get("LN").and_then(|v| v.as_str()).map(|s| s.to_string()),
                     title: p.get("TI").and_then(|v| v.as_str()).map(|s| s.to_string()),
                     icon: p.get("IC").and_then(|v| v.as_str()).map(|s| s.to_string()),
                     color: p.get("CH").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                })
-            });
-            if result.is_none() {
+                };
+                // 序列化完整的profile JSON
+                let raw = serde_json::to_string(p).ok();
+                (Some(trp3_info), raw)
+            } else {
                 eprintln!("[RPBox]   未找到Profile");
+                (None, None)
             }
-            result
-        });
+        }).unwrap_or((None, None));
 
         return Some(ChatRecord {
             timestamp: t,
@@ -295,6 +303,8 @@ fn parse_single_record(entry: &Value, profile_cache: &Value) -> Option<ChatRecor
             mark,
             npc,
             nt,
+            ref_id: profile_ref.map(|s| s.to_string()),
+            raw_profile,
         });
     }
 
@@ -318,5 +328,7 @@ fn parse_single_record(entry: &Value, profile_cache: &Value) -> Option<ChatRecor
         mark: None,
         npc: None,
         nt: None,
+        ref_id: None,
+        raw_profile: None,
     })
 }

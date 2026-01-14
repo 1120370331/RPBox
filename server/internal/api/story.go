@@ -24,14 +24,17 @@ type CreateStoryRequest struct {
 
 // CreateStoryEntryRequest 创建剧情条目请求
 type CreateStoryEntryRequest struct {
-	SourceID     string `json:"source_id"`
-	Type         string `json:"type"`
-	Speaker      string `json:"speaker"`
-	SpeakerIC    string `json:"speaker_ic"`
-	SpeakerColor string `json:"speaker_color"`
-	Content      string `json:"content" binding:"required"`
-	Channel      string `json:"channel"`
-	Timestamp    string `json:"timestamp"`
+	SourceID  string `json:"source_id"`
+	Type      string `json:"type"`
+	Speaker   string `json:"speaker"`
+	Content   string `json:"content" binding:"required"`
+	Channel   string `json:"channel"`
+	Timestamp string `json:"timestamp"`
+	// 角色信息
+	RefID    string `json:"ref_id"`    // TRP3 ref ID
+	GameID   string `json:"game_id"`   // 游戏内ID
+	TRP3Data string `json:"trp3_data"` // 完整TRP3 profile JSON
+	IsNPC    bool   `json:"is_npc"`    // 是否NPC
 }
 
 func (s *Server) listStories(c *gin.Context) {
@@ -196,16 +199,25 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		Scan(&maxOrder)
 
 	for i, req := range entries {
+		var characterID *uint
+
+		// 如果有角色信息，查找或创建角色
+		if req.RefID != "" || req.GameID != "" {
+			character := findOrCreateCharacter(userID, req.RefID, req.GameID, req.TRP3Data, req.IsNPC)
+			if character != nil {
+				characterID = &character.ID
+			}
+		}
+
 		entry := model.StoryEntry{
-			StoryID:      uint(id),
-			SourceID:     req.SourceID,
-			Type:         req.Type,
-			Speaker:      req.Speaker,
-			SpeakerIC:    req.SpeakerIC,
-			SpeakerColor: req.SpeakerColor,
-			Content:      req.Content,
-			Channel:      req.Channel,
-			SortOrder:    maxOrder + i + 1,
+			StoryID:     uint(id),
+			SourceID:    req.SourceID,
+			Type:        req.Type,
+			CharacterID: characterID,
+			Speaker:     req.Speaker,
+			Content:     req.Content,
+			Channel:     req.Channel,
+			SortOrder:   maxOrder + i + 1,
 		}
 		if req.Timestamp != "" {
 			if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
@@ -265,14 +277,33 @@ func (s *Server) getPublicStory(c *gin.Context) {
 	var entries []model.StoryEntry
 	database.DB.Where("story_id = ?", story.ID).Order("sort_order, timestamp").Find(&entries)
 
+	// 收集所有角色ID
+	characterIDs := make([]uint, 0)
+	for _, entry := range entries {
+		if entry.CharacterID != nil {
+			characterIDs = append(characterIDs, *entry.CharacterID)
+		}
+	}
+
+	// 获取角色信息
+	charactersMap := make(map[uint]model.Character)
+	if len(characterIDs) > 0 {
+		var characters []model.Character
+		database.DB.Where("id IN ?", characterIDs).Find(&characters)
+		for _, char := range characters {
+			charactersMap[char.ID] = char
+		}
+	}
+
 	// 获取作者信息
 	var user model.User
 	database.DB.First(&user, story.UserID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"story":   story,
-		"entries": entries,
-		"author":  user.Username,
+		"story":      story,
+		"entries":    entries,
+		"characters": charactersMap,
+		"author":     user.Username,
 	})
 }
 
