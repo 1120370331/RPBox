@@ -26,9 +26,16 @@
     "targets": "all",
     "icon": [
       "icons/icon.png"
-    ]
+    ],
+    "createUpdaterArtifacts": true
   },
   "plugins": {
-    "dialog": null
+    "dialog": null,
+    "updater": {
+      "endpoints": [
+        "https://api.rpbox.app/api/v1/updater/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": ""
+    }
   }
 }
