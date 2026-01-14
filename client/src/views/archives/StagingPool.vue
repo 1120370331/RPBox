@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import RCheckbox from '@/components/RCheckbox.vue'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
+import WowIcon from '@/components/WowIcon.vue'
 
 interface TRP3Info {
   FN?: string
@@ -24,6 +25,8 @@ interface ChatRecord {
   mark?: string  // P(Player), N(NPC), B(Background)
   npc?: string   // NPC名字（仅NPC消息）
   nt?: string    // NPC说话类型: say/yell/whisper（仅NPC消息）
+  ref_id?: string  // TRP3 profile ref ID
+  raw_profile?: string  // 完整的TRP3 profile JSON
 }
 
 interface AccountChatLogs {
@@ -241,6 +244,14 @@ function getSenderName(record: ChatRecord): string {
   return record.sender.gameID.split('-')[0]
 }
 
+function getSenderIcon(record: ChatRecord): string {
+  return record.sender.trp3?.IC || ''
+}
+
+function getSenderColor(record: ChatRecord): string {
+  return record.sender.trp3?.CH || ''
+}
+
 function getMarkClass(mark?: string): string {
   if (mark === 'N') return 'mark-npc'
   if (mark === 'B') return 'mark-background'
@@ -281,6 +292,32 @@ function getChannelLabel(channel: string): string {
     'CHAT_MSG_WHISPER': '密语',
   }
   return map[channel] || channel
+}
+
+// 获取频道对应的文字颜色
+function getChannelTextColor(channel: string): string {
+  const colorMap: Record<string, string> = {
+    'SAY': '',
+    'YELL': '#FF3333',
+    'WHISPER': '#B39DDB',
+    'EMOTE': '#FF8C00',
+    'PARTY': '#AAAAFF',
+    'RAID': '#FF7F00',
+    'CHAT_MSG_SAY': '',
+    'CHAT_MSG_YELL': '#FF3333',
+    'CHAT_MSG_WHISPER': '#B39DDB',
+    'CHAT_MSG_EMOTE': '#FF8C00',
+    'CHAT_MSG_PARTY': '#AAAAFF',
+    'CHAT_MSG_RAID': '#FF7F00',
+  }
+  return colorMap[channel] || ''
+}
+
+// 获取频道标签的CSS类
+function getChannelClass(channel: string): string {
+  if (channel === 'YELL' || channel === 'CHAT_MSG_YELL') return 'channel-yell'
+  if (channel === 'WHISPER' || channel === 'CHAT_MSG_WHISPER') return 'channel-whisper'
+  return ''
 }
 
 onMounted(() => {
@@ -368,9 +405,12 @@ defineExpose({
                 <RCheckbox :model-value="selectedRecords.has(record.timestamp)" />
                 <span class="record-time">{{ formatTime(record.timestamp) }}</span>
                 <span v-if="record.mark === 'N' && record.nt" class="record-channel npc-talk">[NPC{{ getNpcTalkLabel(record.nt) }}]</span>
-                <span v-else class="record-channel">[{{ getChannelLabel(record.channel) }}]</span>
-                <span v-if="record.mark !== 'B'" class="record-sender" :style="record.sender.trp3?.CH ? { color: '#' + record.sender.trp3.CH } : {}">{{ getSenderName(record) }}:</span>
-                <span class="record-content">{{ record.content }}</span>
+                <span v-else class="record-channel" :class="getChannelClass(record.channel)">[{{ getChannelLabel(record.channel) }}]</span>
+                <template v-if="record.mark !== 'B'">
+                  <WowIcon v-if="getSenderIcon(record)" :icon="getSenderIcon(record)" :size="18" class="record-avatar" />
+                  <span class="record-sender" :style="getSenderColor(record) ? { color: '#' + getSenderColor(record) } : {}">{{ getSenderName(record) }}:</span>
+                </template>
+                <span class="record-content" :style="getChannelTextColor(record.channel) ? { color: getChannelTextColor(record.channel) } : {}">{{ record.content }}</span>
               </div>
             </div>
           </div>
@@ -506,6 +546,19 @@ defineExpose({
 
 .record-channel.npc-talk {
   color: #9b59b6;  /* 紫色表示NPC */
+}
+
+.record-channel.channel-yell {
+  color: #FF3333;
+}
+
+.record-channel.channel-whisper {
+  color: #B39DDB;
+}
+
+.record-avatar {
+  flex-shrink: 0;
+  border-radius: 3px;
 }
 
 .record-sender {

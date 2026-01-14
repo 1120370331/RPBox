@@ -122,6 +122,8 @@ function ChatLogger:CacheProfile(unitID)
 
     -- 缓存角色卡数据
     local chars = profile.player.characteristics or {}
+    local misc = profile.player.misc or {}
+
     RPBox_ProfileCache[profileID] = {
         v = 1,
         FN = chars.FN,
@@ -138,6 +140,8 @@ function ChatLogger:CacheProfile(unitID)
         RE = chars.RE,
         IC = chars.IC,
         CH = chars.CH,
+        -- 杂项数据
+        PE = misc.PE,  -- 第一印象 (Glance)
     }
 
     return profileID
