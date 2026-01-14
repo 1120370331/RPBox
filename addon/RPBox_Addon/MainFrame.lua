@@ -467,7 +467,7 @@ local function RefreshLogContent()
         -- 构建显示文本（带颜色）和纯文本（用于复制）
         local lineText, plainText
         local icon = GetInlineIcon(record)
-        local senderTag = format("|cFF666666[来自%s]|r%s", displayName, icon)
+        local senderTag = format("|cFF666666[来自%s]|r", displayName)
         local plainSenderTag = format("[来自%s]", displayName)
 
         if npcData then
@@ -718,16 +718,32 @@ local function RefreshSettingsContent()
 
     local yOffset = 0
 
-    -- 标题
+    -- 功能开关区域
+    local enableTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    enableTitle:SetPoint("TOPLEFT", 5, -yOffset)
+    enableTitle:SetText("功能开关")
+    yOffset = yOffset + 30
+
+    -- 总开关
+    if not content.enabledCb then
+        content.enabledCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.enabledCb.text = content.enabledCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.enabledCb.text:SetPoint("LEFT", content.enabledCb, "RIGHT", 2, 0)
+    end
+    content.enabledCb:SetPoint("TOPLEFT", 10, -yOffset)
+    content.enabledCb.text:SetText("开启聊天记录功能")
+    content.enabledCb:SetChecked(RPBox_Config.enabled ~= false)
+    content.enabledCb:SetScript("OnClick", function(self)
+        RPBox_Config.enabled = self:GetChecked()
+    end)
+    content.enabledCb:Show()
+    yOffset = yOffset + 26
+
+    -- 频道监听设置标题
+    yOffset = yOffset + 15
     local title = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 5, -yOffset)
     title:SetText("频道监听设置")
-    yOffset = yOffset + 30
-
-    -- 说明
-    local desc = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    desc:SetPoint("TOPLEFT", 5, -yOffset)
-    desc:SetText("选择要记录的聊天频道：")
     yOffset = yOffset + 25
 
     -- 频道复选框
@@ -761,12 +777,49 @@ local function RefreshSettingsContent()
         yOffset = yOffset + 26
     end
 
+    -- 屏蔽设置标题
+    yOffset = yOffset + 15
+    local filterTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    filterTitle:SetPoint("TOPLEFT", 5, -yOffset)
+    filterTitle:SetText("屏蔽设置")
+    yOffset = yOffset + 25
+
+    -- 屏蔽自己复选框
+    if not content.ignoreSelfCb then
+        content.ignoreSelfCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.ignoreSelfCb.text = content.ignoreSelfCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.ignoreSelfCb.text:SetPoint("LEFT", content.ignoreSelfCb, "RIGHT", 2, 0)
+    end
+    content.ignoreSelfCb:SetPoint("TOPLEFT", 10, -yOffset)
+    content.ignoreSelfCb.text:SetText("屏蔽自己的消息")
+    content.ignoreSelfCb:SetChecked(RPBox_Config.ignoreSelf == true)
+    content.ignoreSelfCb:SetScript("OnClick", function(self)
+        RPBox_Config.ignoreSelf = self:GetChecked()
+    end)
+    content.ignoreSelfCb:Show()
+    yOffset = yOffset + 26
+
+    -- 只接受公会成员复选框
+    if not content.guildOnlyCb then
+        content.guildOnlyCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.guildOnlyCb.text = content.guildOnlyCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.guildOnlyCb.text:SetPoint("LEFT", content.guildOnlyCb, "RIGHT", 2, 0)
+    end
+    content.guildOnlyCb:SetPoint("TOPLEFT", 10, -yOffset)
+    content.guildOnlyCb.text:SetText("只接受公会成员的消息")
+    content.guildOnlyCb:SetChecked(RPBox_Config.guildOnly == true)
+    content.guildOnlyCb:SetScript("OnClick", function(self)
+        RPBox_Config.guildOnly = self:GetChecked()
+    end)
+    content.guildOnlyCb:Show()
+    yOffset = yOffset + 26
+
     -- 显示设置标题
     yOffset = yOffset + 15
     local displayTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     displayTitle:SetPoint("TOPLEFT", 5, -yOffset)
     displayTitle:SetText("显示设置")
-    yOffset = yOffset + 30
+    yOffset = yOffset + 25
 
     -- 显示图标复选框
     if not content.showIconCb then

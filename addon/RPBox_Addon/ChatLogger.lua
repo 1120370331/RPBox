@@ -75,10 +75,35 @@ end
 
 -- 判断是否应该记录
 local function ShouldRecord(unitID, isFromSelf, channelShort)
+    -- 检查总开关
+    if RPBox_Config.enabled == false then return false end
+
     -- 先检查频道是否启用
     if not IsChannelEnabled(channelShort) then return false end
 
-    if isFromSelf then return true end
+    -- 检查是否屏蔽自己
+    if isFromSelf then
+        if RPBox_Config.ignoreSelf then return false end
+        return true
+    end
+
+    -- 检查是否只接受公会成员
+    if RPBox_Config.guildOnly then
+        if not IsInGuild() then return false end
+        local isGuildMember = false
+        for i = 1, GetNumGuildMembers() do
+            local name = GetGuildRosterInfo(i)
+            if name then
+                local shortName = name:match("^([^-]+)")
+                if shortName == unitID or name == unitID then
+                    isGuildMember = true
+                    break
+                end
+            end
+        end
+        if not isGuildMember then return false end
+    end
+
     if ns.IsBlacklisted(unitID) then return false end
     local profileID = GetTRP3InfoAndCache(unitID)
     if profileID then return true end
