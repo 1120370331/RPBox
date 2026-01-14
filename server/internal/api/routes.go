@@ -22,6 +22,9 @@ func (s *Server) setupRoutes() {
 		// 图标服务（公开）
 		v1.GET("/icons/:name", s.getIcon)
 
+		// 客户端更新检查（公开）
+		v1.GET("/updater/:target/:arch/:current_version", s.checkUpdate)
+
 		// 需要认证的接口
 		auth := v1.Group("")
 		auth.Use(middleware.JWTAuth())
