@@ -9,6 +9,22 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Storage  StorageConfig  `mapstructure:"storage"`
+	Updater  UpdaterConfig  `mapstructure:"updater"`
+}
+
+type UpdaterConfig struct {
+	LatestVersion string `mapstructure:"latest_version"`
+	BaseURL       string `mapstructure:"base_url"`
+	ReleaseNotes  string `mapstructure:"release_notes"`
+	PubDate       string `mapstructure:"pub_date"`
+	SignatureDir  string `mapstructure:"signature_dir"`
+}
+
+var globalConfig *Config
+
+// Get 获取全局配置
+func Get() *Config {
+	return globalConfig
 }
 
 type StorageConfig struct {
@@ -55,5 +71,6 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	globalConfig = &cfg
 	return &cfg, nil
 }
