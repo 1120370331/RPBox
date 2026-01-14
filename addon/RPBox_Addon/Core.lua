@@ -15,6 +15,9 @@ ns.L = L
 
 -- 默认配置
 local DEFAULT_CONFIG = {
+    -- 功能开关
+    enabled = true,  -- 是否开启记录功能
+    -- 名单
     whitelist = {},
     blacklist = {},
     warnedThisSession = false,
@@ -33,6 +36,8 @@ local DEFAULT_CONFIG = {
     },
     -- 显示设置
     showIcon = true,  -- 是否显示头像图标
+    ignoreSelf = false,  -- 是否屏蔽自己的消息
+    guildOnly = false,  -- 是否只接受公会成员的消息
 }
 
 -- 初始化 SavedVariables
@@ -91,6 +96,12 @@ end
 -- 添加到白名单
 function ns.AddToWhitelist(unitID)
     if not unitID then return end
+    -- 排斥自己
+    local playerName = UnitName("player")
+    if unitID == playerName then
+        print("[RPBox] 不能将自己添加到白名单")
+        return
+    end
     RPBox_Config.whitelist[unitID] = true
     RPBox_Config.blacklist[unitID] = nil
     print(format(L["WHITELIST_ADDED"] or "[RPBox] %s 已加入白名单", unitID))
@@ -195,18 +206,30 @@ local function HandleSlashCommand(msg)
     end
 
     if cmd == "whitelist" then
-        if subcmd == "add" and param ~= "" then
-            ns.AddToWhitelist(param)
-        elseif subcmd == "remove" and param ~= "" then
-            ns.RemoveFromWhitelist(param)
-            print("|cFF00FF00[RPBox]|r " .. param .. " 已从白名单移除")
+        local targetName = param
+        if targetName == "" and UnitExists("target") and UnitIsPlayer("target") then
+            targetName = UnitName("target")
+        end
+        if subcmd == "add" and targetName ~= "" then
+            ns.AddToWhitelist(targetName)
+        elseif subcmd == "remove" and targetName ~= "" then
+            ns.RemoveFromWhitelist(targetName)
+            print("|cFF00FF00[RPBox]|r " .. targetName .. " 已从白名单移除")
+        elseif targetName == "" then
+            print("[RPBox] 请指定玩家名或选中一个玩家目标")
         end
     elseif cmd == "blacklist" then
-        if subcmd == "add" and param ~= "" then
-            ns.AddToBlacklist(param)
-        elseif subcmd == "remove" and param ~= "" then
-            ns.RemoveFromBlacklist(param)
-            print("|cFF00FF00[RPBox]|r " .. param .. " 已从黑名单移除")
+        local targetName = param
+        if targetName == "" and UnitExists("target") and UnitIsPlayer("target") then
+            targetName = UnitName("target")
+        end
+        if subcmd == "add" and targetName ~= "" then
+            ns.AddToBlacklist(targetName)
+        elseif subcmd == "remove" and targetName ~= "" then
+            ns.RemoveFromBlacklist(targetName)
+            print("|cFF00FF00[RPBox]|r " .. targetName .. " 已从黑名单移除")
+        elseif targetName == "" then
+            print("[RPBox] 请指定玩家名或选中一个玩家目标")
         end
     elseif cmd == "export" then
         ns.ExportProfile(subcmd == "target" and "target" or "player")
