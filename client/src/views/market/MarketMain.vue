@@ -78,6 +78,11 @@ function goToUpload() {
   router.push('/market/upload')
 }
 
+// 跳转到我的道具
+function goToMyItems() {
+  router.push('/market/my-items')
+}
+
 watch([sortBy], () => {
   currentPage.value = 1
   loadItems()
@@ -90,9 +95,14 @@ watch([sortBy], () => {
     <div class="header anim-item" style="--delay: 0">
       <div class="header-top">
         <h1>道具市场</h1>
-        <button class="upload-btn" @click="goToUpload">
-          <i class="ri-upload-line"></i> 上传道具
-        </button>
+        <div class="header-actions">
+          <button class="my-items-btn" @click="goToMyItems">
+            <i class="ri-folder-user-line"></i> 我的道具
+          </button>
+          <button class="upload-btn" @click="goToUpload">
+            <i class="ri-upload-line"></i> 上传道具
+          </button>
+        </div>
       </div>
       <div class="search-box">
         <input
@@ -165,10 +175,36 @@ watch([sortBy], () => {
   margin-bottom: 20px;
 }
 
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
 .header h1 {
   font-size: 36px;
   color: #3E2723;
   margin: 0;
+}
+
+.my-items-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: #fff;
+  color: #B87333;
+  border: 2px solid #B87333;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  z-index: 10;
+}
+
+.my-items-btn:hover {
+  background: #FFF8F0;
 }
 
 .upload-btn {
