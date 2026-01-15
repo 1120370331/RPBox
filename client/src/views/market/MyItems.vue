@@ -25,21 +25,35 @@ if (userStr) {
   }
 }
 
+// 判断道具的显示状态
+function getItemDisplayStatus(item: Item): 'draft' | 'pending' | 'published' | 'rejected' {
+  if (item.review_status === 'rejected') {
+    return 'rejected'
+  }
+  if (item.status === 'published' && item.review_status === 'pending') {
+    return 'pending'
+  }
+  if (item.status === 'published' && item.review_status === 'approved') {
+    return 'published'
+  }
+  return 'draft'
+}
+
 // 过滤后的道具列表
 const filteredItems = computed(() => {
   if (filterStatus.value === 'all') {
     return items.value
   }
-  return items.value.filter(item => item.status === filterStatus.value)
+  return items.value.filter(item => getItemDisplayStatus(item) === filterStatus.value)
 })
 
 // 统计数据
 const stats = computed(() => {
   return {
     total: items.value.length,
-    published: items.value.filter(i => i.status === 'published').length,
-    pending: items.value.filter(i => i.status === 'pending').length,
-    draft: items.value.filter(i => i.status === 'draft').length,
+    published: items.value.filter(i => getItemDisplayStatus(i) === 'published').length,
+    pending: items.value.filter(i => getItemDisplayStatus(i) === 'pending').length,
+    draft: items.value.filter(i => getItemDisplayStatus(i) === 'draft').length,
   }
 })
 
@@ -104,22 +118,18 @@ function formatDate(dateStr: string) {
 
 // 获取状态显示信息
 function getStatusInfo(item: Item) {
-  if (item.status === 'draft') {
-    return { text: '草稿', class: 'draft' }
-  }
-  if (item.status === 'pending') {
-    return { text: '待审核', class: 'pending' }
-  }
-  if (item.status === 'published') {
-    if (item.review_status === 'approved') {
+  const displayStatus = getItemDisplayStatus(item)
+  switch (displayStatus) {
+    case 'rejected':
+      return { text: '审核拒绝', class: 'rejected' }
+    case 'pending':
+      return { text: '待审核', class: 'pending' }
+    case 'published':
       return { text: '已发布', class: 'published' }
-    }
-    return { text: '已发布', class: 'published' }
+    case 'draft':
+    default:
+      return { text: '草稿', class: 'draft' }
   }
-  if (item.review_status === 'rejected') {
-    return { text: '审核拒绝', class: 'rejected' }
-  }
-  return { text: item.status, class: '' }
 }
 
 // 获取类型显示
