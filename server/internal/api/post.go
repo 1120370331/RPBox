@@ -11,25 +11,31 @@ import (
 
 // CreatePostRequest 创建帖子请求
 type CreatePostRequest struct {
-	Title       string  `json:"title" binding:"required"`
-	Content     string  `json:"content" binding:"required"`
-	ContentType string  `json:"content_type"`
-	Category    string  `json:"category"` // profile|guild|report|novel|item|event|other
-	GuildID     *uint   `json:"guild_id"`
-	StoryID     *uint   `json:"story_id"`
-	TagIDs      []uint  `json:"tag_ids"`
-	Status      string  `json:"status"` // draft|published
+	Title          string  `json:"title" binding:"required"`
+	Content        string  `json:"content" binding:"required"`
+	ContentType    string  `json:"content_type"`
+	Category       string  `json:"category"` // profile|guild|report|novel|item|event|other
+	GuildID        *uint   `json:"guild_id"`
+	StoryID        *uint   `json:"story_id"`
+	TagIDs         []uint  `json:"tag_ids"`
+	Status         string  `json:"status"`          // draft|published
+	EventType      string  `json:"event_type"`      // server|guild
+	EventStartTime *string `json:"event_start_time"` // ISO8601格式
+	EventEndTime   *string `json:"event_end_time"`
 }
 
 // UpdatePostRequest 更新帖子请求
 type UpdatePostRequest struct {
-	Title       string  `json:"title"`
-	Content     string  `json:"content"`
-	ContentType string  `json:"content_type"`
-	Category    string  `json:"category"`
-	GuildID     *uint   `json:"guild_id"`
-	StoryID     *uint   `json:"story_id"`
-	Status      string  `json:"status"`
+	Title          string  `json:"title"`
+	Content        string  `json:"content"`
+	ContentType    string  `json:"content_type"`
+	Category       string  `json:"category"`
+	GuildID        *uint   `json:"guild_id"`
+	StoryID        *uint   `json:"story_id"`
+	Status         string  `json:"status"`
+	EventType      string  `json:"event_type"`
+	EventStartTime *string `json:"event_start_time"`
+	EventEndTime   *string `json:"event_end_time"`
 }
 
 // listPosts 获取帖子列表
