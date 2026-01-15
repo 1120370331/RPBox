@@ -6,8 +6,10 @@ import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { addPostTag, removePostTag } from '@/api/post'
 import TiptapEditor from '@/components/TiptapEditor.vue'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
+const toast = useToast()
 const route = useRoute()
 const mounted = ref(false)
 const loading = ref(false)
@@ -69,7 +71,7 @@ async function loadPost() {
     }
   } catch (error) {
     console.error('加载帖子失败:', error)
-    alert('帖子不存在')
+    toast.error('帖子不存在')
     router.back()
   } finally {
     loading.value = false
@@ -117,11 +119,11 @@ function toggleTag(tagId: number) {
 
 async function handleSubmit(status: 'draft' | 'published') {
   if (!form.value.title?.trim()) {
-    alert('请输入标题')
+    toast.warning('请输入标题')
     return
   }
   if (!form.value.content?.trim()) {
-    alert('请输入内容')
+    toast.warning('请输入内容')
     return
   }
 
@@ -142,11 +144,11 @@ async function handleSubmit(status: 'draft' | 'published') {
       await removePostTag(id, tagId)
     }
 
-    alert('更新成功')
+    toast.success('更新成功')
     router.push({ name: 'post-detail', params: { id } })
   } catch (error) {
     console.error('更新失败:', error)
-    alert('更新失败，请重试')
+    toast.error('更新失败，请重试')
   } finally {
     loading.value = false
   }
