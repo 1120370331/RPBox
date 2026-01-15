@@ -177,6 +177,8 @@ func (s *Server) setupRoutes() {
 				mod.GET("/manage/posts", s.listAllPosts)
 				mod.DELETE("/manage/posts/:id", s.deletePostByMod)
 				mod.POST("/manage/posts/:id/hide", s.hidePostByMod)
+				mod.POST("/manage/posts/:id/pin", s.pinPost)
+				mod.POST("/manage/posts/:id/feature", s.featurePost)
 
 				// 管理中心 - 道具
 				mod.GET("/manage/items", s.listAllItems)
