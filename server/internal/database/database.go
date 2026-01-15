@@ -44,6 +44,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.ItemComment{},
 		&model.ItemLike{},
 		&model.ItemFavorite{},
+		&model.ItemDownload{},
 		&model.ItemPendingEdit{},
 		&model.Post{},
 		&model.PostEditRequest{},
