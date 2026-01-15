@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { createPost, type CreatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { listTags, type Tag } from '@/api/tag'
@@ -19,6 +19,21 @@ const form = ref<CreatePostRequest>({
   category: 'other',
   tag_ids: [],
   status: 'published',
+  event_type: undefined,
+  event_start_time: undefined,
+  event_end_time: undefined,
+})
+
+// 是否为活动分区
+const isEventCategory = computed(() => form.value.category === 'event')
+
+// 监听分区变化，重置活动相关字段
+watch(() => form.value.category, (newVal) => {
+  if (newVal !== 'event') {
+    form.value.event_type = undefined
+    form.value.event_start_time = undefined
+    form.value.event_end_time = undefined
+  }
 })
 
 const tags = ref<Tag[]>([])
@@ -74,11 +89,12 @@ async function handleSubmit(status: 'draft' | 'published') {
     form.value.status = status
     form.value.tag_ids = selectedTags.value
     await createPost(form.value)
-    toast.success(status === 'published' ? '发布成功' : '保存草稿成功')
-    router.push({ name: 'community' })
-  } catch (error) {
+    toast.success(status === 'published' ? '发布成功，等待审核' : '保存草稿成功')
+    router.push({ name: 'my-posts' })
+  } catch (error: any) {
     console.error('提交失败:', error)
-    toast.error('提交失败，请重试')
+    const msg = error?.message || '提交失败，请重试'
+    toast.error(msg)
   } finally {
     loading.value = false
   }
@@ -129,6 +145,55 @@ function handleCancel() {
             <i :class="cat.icon"></i>
             <span>{{ cat.label }}</span>
           </div>
+        </div>
+      </div>
+
+      <!-- 活动分区特殊字段 -->
+      <div v-if="isEventCategory" class="form-group event-fields">
+        <label>活动类型</label>
+        <div class="event-type-list">
+          <div
+            class="event-type-item"
+            :class="{ selected: form.event_type === 'server' }"
+            @click="form.event_type = 'server'"
+          >
+            <i class="ri-global-line"></i>
+            <span>服务器活动</span>
+            <small>需要版主权限</small>
+          </div>
+          <div
+            class="event-type-item"
+            :class="{ selected: form.event_type === 'guild' }"
+            @click="form.event_type = 'guild'"
+          >
+            <i class="ri-team-line"></i>
+            <span>公会活动</span>
+            <small>需要公会管理员权限</small>
+          </div>
+        </div>
+
+        <div v-if="form.event_type" class="event-time-fields">
+          <div class="time-field">
+            <label>开始时间</label>
+            <input
+              v-model="form.event_start_time"
+              type="datetime-local"
+              class="time-input"
+            />
+          </div>
+          <div class="time-field">
+            <label>结束时间（可选）</label>
+            <input
+              v-model="form.event_end_time"
+              type="datetime-local"
+              class="time-input"
+            />
+          </div>
+        </div>
+
+        <div v-if="form.event_type === 'guild'" class="guild-required-notice">
+          <i class="ri-information-line"></i>
+          <span>公会活动需要选择关联公会</span>
         </div>
       </div>
 
@@ -369,6 +434,106 @@ function handleCancel() {
 .guild-select:focus {
   outline: none;
   border-color: #804030;
+}
+
+/* 活动分区样式 */
+.event-fields {
+  background: #FFF9F0;
+  border-radius: 12px;
+  padding: 20px;
+  border: 2px solid #E5D4C1;
+}
+
+.event-type-list {
+  display: flex;
+  gap: 16px;
+}
+
+.event-type-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  background: #fff;
+  border: 2px solid #E5D4C1;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.event-type-item:hover {
+  border-color: #804030;
+}
+
+.event-type-item.selected {
+  background: #804030;
+  border-color: #804030;
+  color: #fff;
+}
+
+.event-type-item i {
+  font-size: 28px;
+}
+
+.event-type-item span {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.event-type-item small {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.event-time-fields {
+  display: flex;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.time-field {
+  flex: 1;
+}
+
+.time-field label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4B3621;
+  margin-bottom: 8px;
+}
+
+.time-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: 2px solid #E5D4C1;
+  border-radius: 10px;
+  color: #2C1810;
+  transition: all 0.3s;
+}
+
+.time-input:focus {
+  outline: none;
+  border-color: #804030;
+}
+
+.guild-required-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  background: #FFF3E0;
+  border-radius: 8px;
+  color: #E65100;
+  font-size: 14px;
+}
+
+.guild-required-notice i {
+  font-size: 18px;
 }
 
 .anim-item { opacity: 0; transform: translateY(20px); }

@@ -11,6 +11,7 @@ import (
 
 // listItems 获取道具列表
 func (s *Server) listItems(c *gin.Context) {
+	userID := c.GetUint("user_id")
 	var items []model.Item
 	query := database.DB.Model(&model.Item{})
 
@@ -19,9 +20,25 @@ func (s *Server) listItems(c *gin.Context) {
 		query = query.Where("type = ?", itemType)
 	}
 
-	// 状态筛选（默认只显示已发布）
-	status := c.DefaultQuery("status", "published")
-	query = query.Where("status = ?", status)
+	// 作者筛选
+	authorID := c.Query("author_id")
+
+	// 权限控制：查看自己的道具 vs 查看他人的道具
+	if authorID != "" && authorID == strconv.Itoa(int(userID)) {
+		// 查看自己的道具：可以看到所有状态
+		query = query.Where("author_id = ?", authorID)
+		// 如果指定了状态，则过滤
+		if status := c.Query("status"); status != "" && status != "all" {
+			query = query.Where("status = ?", status)
+		}
+	} else {
+		// 查看他人道具：只能看到已发布且审核通过的
+		query = query.Where("status = ?", "published")
+		query = query.Where("review_status = ?", "approved")
+		if authorID != "" {
+			query = query.Where("author_id = ?", authorID)
+		}
+	}
 
 	// 搜索
 	if search := c.Query("search"); search != "" {
@@ -113,6 +130,22 @@ func (s *Server) createItem(c *gin.Context) {
 		Status:      req.Status,
 	}
 
+	// 设置审核状态：版主/管理员自动通过，普通用户需要审核
+	// 草稿状态不需要审核
+	isModerator := checkModerator(userID)
+	if req.Status == "published" {
+		if isModerator {
+			item.Status = "published"
+			item.ReviewStatus = "approved"
+		} else {
+			item.Status = "pending"
+			item.ReviewStatus = "pending"
+		}
+	} else {
+		// 草稿状态，不需要审核
+		item.ReviewStatus = ""
+	}
+
 	if err := database.DB.Create(&item).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -136,11 +169,12 @@ func (s *Server) createItem(c *gin.Context) {
 
 // getItem 获取道具详情
 func (s *Server) getItem(c *gin.Context) {
+	userID := c.GetUint("user_id")
 	id := c.Param("id")
 	var item model.Item
 
 	if err := database.DB.First(&item, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Item not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
 		return
 	}
 
@@ -154,13 +188,23 @@ func (s *Server) getItem(c *gin.Context) {
 		Where("item_tags.item_id = ?", item.ID).
 		Find(&tags)
 
+	response := gin.H{
+		"item":   item,
+		"author": author,
+		"tags":   tags,
+	}
+
+	// 如果是作者，返回待审核编辑信息
+	if item.AuthorID == userID {
+		var pendingEdit model.ItemPendingEdit
+		if err := database.DB.Where("item_id = ?", item.ID).First(&pendingEdit).Error; err == nil {
+			response["pending_edit"] = pendingEdit
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
-		"data": gin.H{
-			"item":   item,
-			"author": author,
-			"tags":   tags,
-		},
+		"data": response,
 	})
 }
 
@@ -171,13 +215,13 @@ func (s *Server) updateItem(c *gin.Context) {
 
 	var item model.Item
 	if err := database.DB.First(&item, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Item not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
 		return
 	}
 
-	// 验证权限
+	// 验证权限：只有作者可以编辑
 	if item.AuthorID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权编辑此道具"})
 		return
 	}
 
@@ -185,6 +229,7 @@ func (s *Server) updateItem(c *gin.Context) {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		Icon        string `json:"icon"`
+		ImportCode  string `json:"import_code"`
 		Status      string `json:"status"`
 	}
 
@@ -193,21 +238,89 @@ func (s *Server) updateItem(c *gin.Context) {
 		return
 	}
 
-	updates := make(map[string]interface{})
-	if req.Name != "" {
-		updates["name"] = req.Name
-	}
-	if req.Description != "" {
-		updates["description"] = req.Description
-	}
-	if req.Icon != "" {
-		updates["icon"] = req.Icon
-	}
-	if req.Status != "" {
-		updates["status"] = req.Status
+	isModerator := checkModerator(userID)
+
+	// 如果道具已发布且审核通过，普通用户编辑需要创建待审核记录
+	if item.Status == "published" && item.ReviewStatus == "approved" && !isModerator {
+		// 创建或更新待审核编辑记录
+		var pendingEdit model.ItemPendingEdit
+		err := database.DB.Where("item_id = ?", item.ID).First(&pendingEdit).Error
+
+		if err != nil {
+			// 创建新的待审核编辑
+			pendingEdit = model.ItemPendingEdit{
+				ItemID:       item.ID,
+				AuthorID:     userID,
+				Name:         item.Name,
+				Icon:         item.Icon,
+				Description:  item.Description,
+				ImportCode:   item.ImportCode,
+				ReviewStatus: "pending",
+			}
+		}
+
+		// 更新待审核编辑的字段
+		if req.Name != "" {
+			pendingEdit.Name = req.Name
+		}
+		if req.Description != "" {
+			pendingEdit.Description = req.Description
+		}
+		if req.Icon != "" {
+			pendingEdit.Icon = req.Icon
+		}
+		if req.ImportCode != "" {
+			pendingEdit.ImportCode = req.ImportCode
+		}
+		pendingEdit.ReviewStatus = "pending"
+		pendingEdit.ReviewerID = nil
+		pendingEdit.ReviewComment = ""
+		pendingEdit.ReviewedAt = nil
+
+		if err != nil {
+			database.DB.Create(&pendingEdit)
+		} else {
+			database.DB.Save(&pendingEdit)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"code":    0,
+			"message": "编辑已提交审核，原道具保持不变",
+			"data":    item,
+			"pending": pendingEdit,
+		})
+		return
 	}
 
-	if err := database.DB.Model(&item).Updates(updates).Error; err != nil {
+	// 版主/管理员或未发布道具：直接修改
+	if req.Name != "" {
+		item.Name = req.Name
+	}
+	if req.Description != "" {
+		item.Description = req.Description
+	}
+	if req.Icon != "" {
+		item.Icon = req.Icon
+	}
+	if req.ImportCode != "" {
+		item.ImportCode = req.ImportCode
+	}
+
+	// 处理状态变更
+	if req.Status == "published" {
+		if isModerator {
+			item.Status = "published"
+			item.ReviewStatus = "approved"
+		} else {
+			item.Status = "pending"
+			item.ReviewStatus = "pending"
+		}
+	} else if req.Status == "draft" {
+		item.Status = "draft"
+		item.ReviewStatus = ""
+	}
+
+	if err := database.DB.Save(&item).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -225,24 +338,32 @@ func (s *Server) deleteItem(c *gin.Context) {
 
 	var item model.Item
 	if err := database.DB.First(&item, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Item not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
 		return
 	}
 
-	// 验证权限
+	// 验证权限：只有作者可以删除
 	if item.AuthorID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权删除此道具"})
 		return
 	}
 
+	// 删除关联数据
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemTag{})
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemComment{})
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemLike{})
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemFavorite{})
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemRating{})
+
+	// 删除道具
 	if err := database.DB.Delete(&item).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"message": "Item deleted",
+		"code":    0,
+		"message": "删除成功",
 	})
 }
 

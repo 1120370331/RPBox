@@ -15,6 +15,9 @@ export interface Post {
   like_count: number
   comment_count: number
   favorite_count: number
+  event_type?: 'server' | 'guild'
+  event_start_time?: string
+  event_end_time?: string
   created_at: string
   updated_at: string
 }
@@ -61,6 +64,9 @@ export interface CreatePostRequest {
   story_id?: number
   tag_ids?: number[]
   status?: 'draft' | 'published'
+  event_type?: 'server' | 'guild'
+  event_start_time?: string
+  event_end_time?: string
 }
 
 export interface UpdatePostRequest {
@@ -71,6 +77,9 @@ export interface UpdatePostRequest {
   guild_id?: number
   story_id?: number
   status?: 'draft' | 'published'
+  event_type?: 'server' | 'guild'
+  event_start_time?: string
+  event_end_time?: string
 }
 
 export interface ListPostsParams {
@@ -171,4 +180,18 @@ export async function removePostTag(postId: number, tagId: number): Promise<void
 
 export async function listMyFavorites(): Promise<{ posts: PostWithAuthor[] }> {
   return request.get('/posts/favorites')
+}
+
+// ========== 活动日历 ==========
+
+export interface EventItem extends Post {
+  author_name: string
+  guild_name?: string
+}
+
+export async function listEvents(start?: string, end?: string): Promise<{ events: EventItem[] }> {
+  const params: Record<string, string> = {}
+  if (start) params.start = start
+  if (end) params.end = end
+  return request.get('/posts/events', { params })
 }

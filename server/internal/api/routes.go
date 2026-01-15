@@ -120,6 +120,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/posts", s.listPosts)
 			auth.POST("/posts", s.createPost)
 			auth.GET("/posts/favorites", s.listMyFavorites)
+			auth.GET("/posts/events", s.listEvents) // 活动日历
 			auth.GET("/posts/:id", s.getPost)
 			auth.PUT("/posts/:id", s.updatePost)
 			auth.DELETE("/posts/:id", s.deletePost)
@@ -142,6 +143,55 @@ func (s *Server) setupRoutes() {
 			auth.GET("/user/info", s.getUserInfo)
 			auth.PUT("/user/info", s.updateUserInfo)
 			auth.POST("/user/avatar", s.updateAvatar)
+			auth.GET("/users/:id", s.getUserProfile)
+			auth.GET("/users/:id/guilds", s.getUserGuilds)
+
+			// 版主中心（需要版主权限）
+			mod := auth.Group("/moderator")
+			mod.Use(middleware.ModeratorAuth())
+			{
+				// 统计数据
+				mod.GET("/stats", s.getModeratorStats)
+
+				// 审核中心 - 帖子
+				mod.GET("/review/posts", s.listPendingPosts)
+				mod.POST("/review/posts/:id", s.reviewPost)
+
+				// 审核中心 - 帖子编辑
+				mod.GET("/review/post-edits", s.listPendingEdits)
+				mod.POST("/review/post-edits/:id", s.reviewPostEdit)
+
+				// 审核中心 - 道具
+				mod.GET("/review/items", s.listPendingItems)
+				mod.POST("/review/items/:id", s.reviewItem)
+
+				// 审核中心 - 道具编辑
+				mod.GET("/review/item-edits", s.listPendingItemEdits)
+				mod.POST("/review/item-edits/:id", s.reviewItemEdit)
+
+				// 管理中心 - 帖子
+				mod.GET("/manage/posts", s.listAllPosts)
+				mod.DELETE("/manage/posts/:id", s.deletePostByMod)
+
+				// 管理中心 - 道具
+				mod.GET("/manage/items", s.listAllItems)
+				mod.DELETE("/manage/items/:id", s.deleteItemByMod)
+
+				// 公会管理
+				mod.GET("/review/guilds", s.listPendingGuilds)
+				mod.POST("/review/guilds/:id", s.reviewGuild)
+				mod.GET("/manage/guilds", s.listAllGuilds)
+				mod.PUT("/manage/guilds/:id/owner", s.changeGuildOwner)
+				mod.DELETE("/manage/guilds/:id", s.deleteGuildByMod)
+			}
+
+			// 管理员中心（需要管理员权限）
+			admin := auth.Group("/admin")
+			admin.Use(middleware.AdminAuth())
+			{
+				admin.GET("/users", s.listUsers)
+				admin.PUT("/users/:id/role", s.setUserRole)
+			}
 		}
 	}
 }
