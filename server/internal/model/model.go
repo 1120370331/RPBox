@@ -335,6 +335,9 @@ type Post struct {
 	LikeCount     int        `gorm:"default:0" json:"like_count"`
 	CommentCount  int        `gorm:"default:0" json:"comment_count"`
 	FavoriteCount int        `gorm:"default:0" json:"favorite_count"`
+	// 版主管理字段
+	IsPinned   bool `gorm:"default:false" json:"is_pinned"`   // 置顶
+	IsFeatured bool `gorm:"default:false" json:"is_featured"` // 精华
 	// 活动相关字段
 	EventType      string     `gorm:"size:20" json:"event_type"`       // server|guild (服务器活动/公会活动)
 	EventStartTime *time.Time `json:"event_start_time"`                // 活动开始时间
