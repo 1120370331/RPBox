@@ -5,10 +5,18 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 async function baseRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token')
 
+  // 检查是否是 FormData（不需要设置 Content-Type）
+  const isFormData = options.body instanceof FormData
+
   const headers: Record<string, string> = {
-    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string> | undefined),
+  }
+
+  // 如果是 FormData，删除 Content-Type 让浏览器自动设置
+  if (isFormData) {
+    delete headers['Content-Type']
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -53,8 +61,12 @@ function buildRequest(method: HttpMethod) {
         finalPath = `${path}?${queryString}`
       }
     } else if (body !== undefined && method !== 'GET') {
-      // 非 GET 请求：将 body 序列化为 JSON
-      merged.body = typeof body === 'string' ? body : JSON.stringify(body)
+      // 非 GET 请求：FormData 直接使用，其他序列化为 JSON
+      if (body instanceof FormData) {
+        merged.body = body
+      } else {
+        merged.body = typeof body === 'string' ? body : JSON.stringify(body)
+      }
     }
 
     return baseRequest<T>(finalPath, merged)

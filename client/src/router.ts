@@ -26,6 +26,7 @@ const router = createRouter({
         { path: 'community/post/:id', name: 'post-detail', component: () => import('./views/community/PostDetail.vue') },
         { path: 'community/post/:id/edit', name: 'post-edit', component: () => import('./views/community/PostEdit.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/Settings.vue') },
+        { path: 'guide', name: 'guide', component: () => import('./views/Guide.vue') },
         { path: 'guild', name: 'guild', component: () => import('./views/guild/GuildList.vue') },
         { path: 'guild/create', name: 'guild-create', component: () => import('./views/guild/GuildCreate.vue') },
         { path: 'guild/:id', name: 'guild-detail', component: () => import('./views/guild/GuildDetail.vue') },

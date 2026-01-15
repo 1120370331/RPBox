@@ -51,8 +51,8 @@ function handleImageUpload(event: Event) {
   const file = input.files?.[0]
   if (!file) return
 
-  if (file.size > 5 * 1024 * 1024) {
-    alert('图片不能超过5MB')
+  if (file.size > 20 * 1024 * 1024) {
+    alert('图片不能超过20MB')
     return
   }
 
