@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { dialog } from '@/composables/useDialog'
 import { getPost } from '@/api/post'
 import { getItem } from '@/api/item'
 import { getGuild } from '@/api/guild'
@@ -332,9 +333,17 @@ async function submitPreviewReview() {
 // 快速审核（直接通过/拒绝）
 async function quickReview(type: 'post' | 'item' | 'guild', id: number, action: 'approve' | 'reject') {
   const actionText = action === 'approve' ? '通过' : '拒绝'
-  if (!confirm(`确定要${actionText}这个${type === 'post' ? '帖子' : type === 'item' ? '道具' : '公会'}吗？`)) {
-    return
-  }
+  const typeText = type === 'post' ? '帖子' : type === 'item' ? '道具' : '公会'
+
+  const confirmed = await dialog.confirm({
+    title: `${actionText}${typeText}`,
+    message: `确定要${actionText}这个${typeText}吗？`,
+    type: action === 'approve' ? 'success' : 'warning',
+    confirmText: actionText,
+    cancelText: '取消'
+  })
+
+  if (!confirmed) return
 
   const data: ReviewRequest = { action, comment: '' }
 
@@ -391,7 +400,14 @@ async function submitReview() {
 }
 
 async function handleDeletePost(id: number) {
-  if (!confirm('确定要删除这篇帖子吗？此操作不可恢复。')) return
+  const confirmed = await dialog.confirm({
+    title: '删除帖子',
+    message: '确定要删除这篇帖子吗？此操作不可恢复。',
+    type: 'error',
+    confirmText: '删除',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
   try {
     await deletePostByMod(id)
     await loadAllPosts()
@@ -403,7 +419,14 @@ async function handleDeletePost(id: number) {
 }
 
 async function handleDeleteItem(id: number) {
-  if (!confirm('确定要删除这个道具吗？此操作不可恢复。')) return
+  const confirmed = await dialog.confirm({
+    title: '删除道具',
+    message: '确定要删除这个道具吗？此操作不可恢复。',
+    type: 'error',
+    confirmText: '删除',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
   try {
     await deleteItemByMod(id)
     await loadAllItems()
@@ -415,7 +438,14 @@ async function handleDeleteItem(id: number) {
 }
 
 async function handleDeleteGuild(id: number) {
-  if (!confirm('确定要删除这个公会吗？此操作不可恢复。')) return
+  const confirmed = await dialog.confirm({
+    title: '删除公会',
+    message: '确定要删除这个公会吗？此操作不可恢复。',
+    type: 'error',
+    confirmText: '删除',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
   try {
     await deleteGuildByMod(id)
     await loadAllGuilds()
