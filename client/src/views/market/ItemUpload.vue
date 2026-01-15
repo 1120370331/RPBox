@@ -3,8 +3,10 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createItem } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
+const toast = useToast()
 const loading = ref(false)
 const itemTags = ref<Tag[]>([])
 
@@ -35,7 +37,7 @@ async function loadTags() {
 // 提交表单
 async function handleSubmit() {
   if (!form.value.name || !form.value.import_code) {
-    alert('请填写道具名称和导入代码')
+    toast.warning('请填写道具名称和导入代码')
     return
   }
 
@@ -43,12 +45,12 @@ async function handleSubmit() {
   try {
     const res: any = await createItem(form.value)
     if (res.code === 0) {
-      alert('上传成功！')
+      toast.success('上传成功！')
       router.push('/market')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('上传失败:', error)
-    alert('上传失败，请重试')
+    toast.error(error.message || '上传失败，请重试')
   } finally {
     loading.value = false
   }

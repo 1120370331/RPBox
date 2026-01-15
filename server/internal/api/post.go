@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
@@ -18,8 +19,8 @@ type CreatePostRequest struct {
 	GuildID        *uint   `json:"guild_id"`
 	StoryID        *uint   `json:"story_id"`
 	TagIDs         []uint  `json:"tag_ids"`
-	Status         string  `json:"status"`          // draft|published
-	EventType      string  `json:"event_type"`      // server|guild
+	Status         string  `json:"status"`           // draft|published
+	EventType      string  `json:"event_type"`       // server|guild
 	EventStartTime *string `json:"event_start_time"` // ISO8601格式
 	EventEndTime   *string `json:"event_end_time"`
 }
@@ -64,9 +65,10 @@ func (s *Server) listPosts(c *gin.Context) {
 			query = query.Where("status = ?", status)
 		}
 	} else {
-		// 查看他人帖子：只能看到已发布的公开帖子
+		// 查看他人帖子：只能看到已发布且审核通过的公开帖子
 		query = query.Where("is_public = ?", true)
 		query = query.Where("status = ?", "published")
+		query = query.Where("review_status = ?", "approved")
 		if authorID != "" {
 			query = query.Where("author_id = ?", authorID)
 		}
@@ -158,6 +160,27 @@ func (s *Server) createPost(c *gin.Context) {
 		req.Category = "other"
 	}
 
+	// 活动分区权限验证
+	if req.Category == "event" && req.EventType != "" {
+		if req.EventType == "server" {
+			// 服务器活动需要版主权限
+			if !checkModerator(userID) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "发布服务器活动需要版主权限"})
+				return
+			}
+		} else if req.EventType == "guild" {
+			// 公会活动需要公会管理员权限
+			if req.GuildID == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
+				return
+			}
+			if !checkGuildAdmin(*req.GuildID, userID) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "发布公会活动需要公会管理员权限"})
+				return
+			}
+		}
+	}
+
 	post := model.Post{
 		AuthorID:    userID,
 		Title:       req.Title,
@@ -168,6 +191,37 @@ func (s *Server) createPost(c *gin.Context) {
 		StoryID:     req.StoryID,
 		Status:      req.Status,
 		IsPublic:    true,
+		EventType:   req.EventType,
+	}
+
+	// 设置审核状态：版主/管理员自动通过，普通用户需要审核
+	// 草稿状态不需要审核
+	isModerator := checkModerator(userID)
+	if req.Status == "published" {
+		if isModerator {
+			post.Status = "published"
+			post.ReviewStatus = "approved" // 版主/管理员自动通过
+		} else {
+			post.Status = "pending"        // 改为待发布状态
+			post.ReviewStatus = "pending"  // 待审核
+		}
+	} else {
+		// 草稿状态，不需要审核
+		post.ReviewStatus = ""
+	}
+
+	// 解析活动时间
+	if req.EventStartTime != nil {
+		t, err := time.Parse(time.RFC3339, *req.EventStartTime)
+		if err == nil {
+			post.EventStartTime = &t
+		}
+	}
+	if req.EventEndTime != nil {
+		t, err := time.Parse(time.RFC3339, *req.EventEndTime)
+		if err == nil {
+			post.EventEndTime = &t
+		}
 	}
 
 	if err := database.DB.Create(&post).Error; err != nil {
@@ -271,7 +325,48 @@ func (s *Server) updatePost(c *gin.Context) {
 		return
 	}
 
-	// 更新字段
+	isModerator := checkModerator(userID)
+
+	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
+	if post.Status == "published" && post.ReviewStatus == "approved" && !isModerator {
+		// 创建或更新编辑请求
+		var editReq model.PostEditRequest
+		database.DB.Where("post_id = ?", post.ID).First(&editReq)
+
+		editReq.PostID = post.ID
+		editReq.AuthorID = userID
+		editReq.Status = "pending"
+		if req.Title != "" {
+			editReq.Title = req.Title
+		} else {
+			editReq.Title = post.Title
+		}
+		if req.Content != "" {
+			editReq.Content = req.Content
+		} else {
+			editReq.Content = post.Content
+		}
+		if req.ContentType != "" {
+			editReq.ContentType = req.ContentType
+		} else {
+			editReq.ContentType = post.ContentType
+		}
+		if req.Category != "" {
+			editReq.Category = req.Category
+		} else {
+			editReq.Category = post.Category
+		}
+
+		database.DB.Save(&editReq)
+		c.JSON(http.StatusOK, gin.H{
+			"code":    0,
+			"message": "编辑请求已提交，等待审核",
+			"data":    editReq,
+		})
+		return
+	}
+
+	// 版主或草稿状态：直接修改
 	if req.Title != "" {
 		post.Title = req.Title
 	}
@@ -290,8 +385,21 @@ func (s *Server) updatePost(c *gin.Context) {
 	post.GuildID = req.GuildID
 	post.StoryID = req.StoryID
 
+	// 处理发布时的审核逻辑
+	if req.Status == "published" && post.ReviewStatus != "approved" {
+		if isModerator {
+			post.Status = "published"
+			post.ReviewStatus = "approved"
+		} else {
+			post.Status = "pending"
+			post.ReviewStatus = "pending"
+		}
+	} else if req.Status == "draft" {
+		post.ReviewStatus = ""
+	}
+
 	database.DB.Save(&post)
-	c.JSON(http.StatusOK, post)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": post})
 }
 
 // deletePost 删除帖子
@@ -566,4 +674,164 @@ func (s *Server) listMyFavorites(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"posts": result})
+}
+
+// checkModerator 检查用户是否为社区版主
+func checkModerator(userID uint) bool {
+	var user model.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		return false
+	}
+	// 版主或管理员都有权限
+	return user.Role == "moderator" || user.Role == "admin"
+}
+
+// listEvents 获取活动列表（用于日历）
+func (s *Server) listEvents(c *gin.Context) {
+	userID := c.GetUint("userID")
+	startDate := c.Query("start") // YYYY-MM-DD
+	endDate := c.Query("end")     // YYYY-MM-DD
+
+	query := database.DB.Model(&model.Post{}).
+		Where("category = ? AND status = ?", "event", "published").
+		Where("event_start_time IS NOT NULL")
+
+	// 时间范围过滤
+	if startDate != "" {
+		query = query.Where("event_start_time >= ?", startDate)
+	}
+	if endDate != "" {
+		query = query.Where("event_start_time <= ?", endDate+" 23:59:59")
+	}
+
+	// 获取用户所在公会
+	var memberGuildIDs []uint
+	var members []model.GuildMember
+	database.DB.Where("user_id = ?", userID).Find(&members)
+	for _, m := range members {
+		memberGuildIDs = append(memberGuildIDs, m.GuildID)
+	}
+
+	// 只显示：服务器活动 或 用户所在公会的活动
+	if len(memberGuildIDs) > 0 {
+		query = query.Where("event_type = ? OR (event_type = ? AND guild_id IN ?)",
+			"server", "guild", memberGuildIDs)
+	} else {
+		query = query.Where("event_type = ?", "server")
+	}
+
+	var posts []model.Post
+	query.Order("event_start_time ASC").Find(&posts)
+
+	// 获取作者和公会信息
+	type EventItem struct {
+		model.Post
+		AuthorName string `json:"author_name"`
+		GuildName  string `json:"guild_name,omitempty"`
+	}
+
+	// 收集ID
+	authorIDs := make([]uint, len(posts))
+	guildIDs := []uint{}
+	for i, p := range posts {
+		authorIDs[i] = p.AuthorID
+		if p.GuildID != nil {
+			guildIDs = append(guildIDs, *p.GuildID)
+		}
+	}
+
+	// 查询用户名
+	userMap := make(map[uint]string)
+	if len(authorIDs) > 0 {
+		var users []model.User
+		database.DB.Where("id IN ?", authorIDs).Find(&users)
+		for _, u := range users {
+			userMap[u.ID] = u.Username
+		}
+	}
+
+	// 查询公会名
+	guildMap := make(map[uint]string)
+	if len(guildIDs) > 0 {
+		var guilds []model.Guild
+		database.DB.Where("id IN ?", guildIDs).Find(&guilds)
+		for _, g := range guilds {
+			guildMap[g.ID] = g.Name
+		}
+	}
+
+	// 组装结果
+	result := make([]EventItem, len(posts))
+	for i, p := range posts {
+		item := EventItem{Post: p, AuthorName: userMap[p.AuthorID]}
+		if p.GuildID != nil {
+			item.GuildName = guildMap[*p.GuildID]
+		}
+		result[i] = item
+	}
+
+	c.JSON(http.StatusOK, gin.H{"events": result})
+}
+
+// ========== 编辑请求审核 ==========
+
+// listPendingEdits 获取待审核的编辑请求
+func (s *Server) listPendingEdits(c *gin.Context) {
+	userID := c.GetUint("userID")
+
+	if !checkModerator(userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "需要版主权限"})
+		return
+	}
+
+	var edits []model.PostEditRequest
+	database.DB.Where("status = ?", "pending").
+		Order("created_at DESC").Find(&edits)
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": edits})
+}
+
+// reviewPostEdit 审核编辑请求
+func (s *Server) reviewPostEdit(c *gin.Context) {
+	userID := c.GetUint("userID")
+	editID := c.Param("id")
+
+	if !checkModerator(userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "需要版主权限"})
+		return
+	}
+
+	var req struct {
+		Action string `json:"action" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var edit model.PostEditRequest
+	if err := database.DB.First(&edit, editID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "编辑请求不存在"})
+		return
+	}
+
+	now := time.Now()
+	if req.Action == "approve" {
+		// 应用编辑到原帖子
+		database.DB.Model(&model.Post{}).Where("id = ?", edit.PostID).Updates(map[string]interface{}{
+			"title":        edit.Title,
+			"content":      edit.Content,
+			"content_type": edit.ContentType,
+			"category":     edit.Category,
+		})
+		edit.Status = "approved"
+	} else {
+		edit.Status = "rejected"
+	}
+
+	edit.ReviewerID = &userID
+	edit.ReviewedAt = &now
+	database.DB.Save(&edit)
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "审核完成"})
 }

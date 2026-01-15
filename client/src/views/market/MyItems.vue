@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { listPosts, deletePost, type PostWithAuthor } from '@/api/post'
+import { listItems, deleteItem, type Item } from '@/api/item'
+import { useToast } from '@/composables/useToast'
+import { useDialog } from '@/composables/useDialog'
 
 const router = useRouter()
+const toast = useToast()
+const dialog = useDialog()
 const mounted = ref(false)
 const loading = ref(false)
-const posts = ref<PostWithAuthor[]>([])
+const items = ref<Item[]>([])
 const currentUserId = ref<number>(0)
-const filterStatus = ref<'published' | 'pending'>('published')
+const filterStatus = ref<'all' | 'draft' | 'pending' | 'published'>('all')
 
 // 获取当前用户ID
 const userStr = localStorage.getItem('user')
@@ -21,70 +25,76 @@ if (userStr) {
   }
 }
 
-// 过滤后的帖子列表
-const filteredPosts = computed(() => {
-  if (filterStatus.value === 'pending') {
-    // 审核中：status为pending或review_status为pending
-    return posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending')
+// 过滤后的道具列表
+const filteredItems = computed(() => {
+  if (filterStatus.value === 'all') {
+    return items.value
   }
-  // 我发布的：已发布且审核通过
-  return posts.value.filter(p => p.status === 'published' && p.review_status === 'approved')
+  return items.value.filter(item => item.status === filterStatus.value)
 })
 
 // 统计数据
 const stats = computed(() => {
-  const published = posts.value.filter(p => p.status === 'published' && p.review_status === 'approved').length
-  const pending = posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending').length
-  return { published, pending }
+  return {
+    total: items.value.length,
+    published: items.value.filter(i => i.status === 'published').length,
+    pending: items.value.filter(i => i.status === 'pending').length,
+    draft: items.value.filter(i => i.status === 'draft').length,
+  }
 })
 
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
-  await loadMyPosts()
+  await loadMyItems()
 })
 
-async function loadMyPosts() {
+async function loadMyItems() {
   loading.value = true
   try {
-    // 传 status: 'all' 获取所有状态的帖子（包括草稿）
-    const res = await listPosts({ author_id: currentUserId.value, status: 'all' })
-    posts.value = res.posts || []
+    const res: any = await listItems({ author_id: currentUserId.value, status: 'all' })
+    items.value = res.data?.items || []
   } catch (error) {
-    console.error('加载我的帖子失败:', error)
+    console.error('加载我的道具失败:', error)
   } finally {
     loading.value = false
   }
 }
 
 function goToDetail(id: number) {
-  router.push({ name: 'post-detail', params: { id } })
+  router.push({ name: 'item-detail', params: { id } })
 }
 
 function goToEdit(id: number) {
-  router.push({ name: 'post-edit', params: { id } })
+  router.push({ name: 'item-edit', params: { id } })
 }
 
-async function handleDelete(post: PostWithAuthor) {
-  if (!confirm(`确定要删除帖子"${post.title}"吗？`)) {
-    return
-  }
+async function handleDelete(item: Item) {
+  const confirmed = await dialog.confirm({
+    title: '确认删除',
+    message: `确定要删除道具"${item.name}"吗？此操作不可恢复。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'danger'
+  })
+
+  if (!confirmed) return
 
   try {
-    await deletePost(post.id)
-    alert('删除成功')
-    await loadMyPosts()
-  } catch (error) {
+    await deleteItem(item.id)
+    toast.success('删除成功')
+    await loadMyItems()
+  } catch (error: any) {
     console.error('删除失败:', error)
-    alert('删除失败，请重试')
+    toast.error(error.message || '删除失败，请重试')
   }
 }
 
-function goToCreate() {
-  router.push({ name: 'post-create' })
+function goToUpload() {
+  router.push({ name: 'item-upload' })
 }
 
 function goBack() {
-  router.push({ name: 'community' })
+  router.push({ name: 'market' })
 }
 
 function formatDate(dateStr: string) {
@@ -92,109 +102,160 @@ function formatDate(dateStr: string) {
   return date.toLocaleString('zh-CN')
 }
 
-// 去除HTML标签，只保留纯文本
-function stripHtml(html: string) {
-  const div = document.createElement('div')
-  div.innerHTML = html
-  return div.textContent || div.innerText || ''
+// 获取状态显示信息
+function getStatusInfo(item: Item) {
+  if (item.status === 'draft') {
+    return { text: '草稿', class: 'draft' }
+  }
+  if (item.status === 'pending') {
+    return { text: '待审核', class: 'pending' }
+  }
+  if (item.status === 'published') {
+    if (item.review_status === 'approved') {
+      return { text: '已发布', class: 'published' }
+    }
+    return { text: '已发布', class: 'published' }
+  }
+  if (item.review_status === 'rejected') {
+    return { text: '审核拒绝', class: 'rejected' }
+  }
+  return { text: item.status, class: '' }
+}
+
+// 获取类型显示
+function getTypeText(type: string) {
+  return type === 'item' ? '道具' : '剧本'
 }
 </script>
 
 <template>
-  <div class="my-posts-page" :class="{ 'animate-in': mounted }">
+  <div class="my-items-page" :class="{ 'animate-in': mounted }">
     <div class="header anim-item" style="--delay: 0">
       <div class="header-left">
         <button class="back-btn" @click="goBack">
           <i class="ri-arrow-left-line"></i>
           返回
         </button>
-        <h1 class="page-title">我的帖子</h1>
+        <h1 class="page-title">我的道具</h1>
       </div>
-      <button class="create-btn" @click="goToCreate">
+      <button class="create-btn" @click="goToUpload">
         <i class="ri-add-line"></i>
-        创建帖子
+        上传道具
       </button>
     </div>
 
     <div class="stats anim-item" style="--delay: 1">
+      <div class="stat-item">
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">全部</div>
+      </div>
       <div class="stat-item">
         <div class="stat-value">{{ stats.published }}</div>
         <div class="stat-label">已发布</div>
       </div>
       <div class="stat-item">
         <div class="stat-value">{{ stats.pending }}</div>
-        <div class="stat-label">审核中</div>
+        <div class="stat-label">待审核</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">{{ stats.draft }}</div>
+        <div class="stat-label">草稿</div>
       </div>
     </div>
 
     <div class="filters anim-item" style="--delay: 2">
       <button
         class="filter-btn"
+        :class="{ active: filterStatus === 'all' }"
+        @click="filterStatus = 'all'"
+      >
+        全部
+      </button>
+      <button
+        class="filter-btn"
         :class="{ active: filterStatus === 'published' }"
         @click="filterStatus = 'published'"
       >
-        我发布的
+        已发布
       </button>
       <button
         class="filter-btn"
         :class="{ active: filterStatus === 'pending' }"
         @click="filterStatus = 'pending'"
       >
-        审核中
+        待审核
+      </button>
+      <button
+        class="filter-btn"
+        :class="{ active: filterStatus === 'draft' }"
+        @click="filterStatus = 'draft'"
+      >
+        草稿
       </button>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
 
-    <div v-else-if="filteredPosts.length === 0" class="empty anim-item" style="--delay: 3">
-      <i class="ri-file-list-3-line"></i>
-      <p>{{ filterStatus === 'all' ? '还没有创建任何帖子' : `没有${filterStatus === 'draft' ? '草稿' : '已发布的帖子'}` }}</p>
-      <button class="create-btn-large" @click="goToCreate">
+    <div v-else-if="filteredItems.length === 0" class="empty anim-item" style="--delay: 3">
+      <i class="ri-box-3-line"></i>
+      <p>{{ filterStatus === 'all' ? '还没有上传任何道具' : `没有${filterStatus === 'draft' ? '草稿' : filterStatus === 'pending' ? '待审核' : '已发布'}的道具` }}</p>
+      <button class="create-btn-large" @click="goToUpload">
         <i class="ri-add-line"></i>
-        创建第一篇帖子
+        上传第一个道具
       </button>
     </div>
 
-    <div v-else class="posts-list">
+    <div v-else class="items-list">
       <div
-        v-for="(post, index) in filteredPosts"
-        :key="post.id"
-        class="post-card anim-item"
+        v-for="(item, index) in filteredItems"
+        :key="item.id"
+        class="item-card anim-item"
         :style="`--delay: ${index + 3}`"
       >
-        <div class="post-header">
-          <h2 class="post-title" @click="goToDetail(post.id)">{{ post.title }}</h2>
-          <span v-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">审核中</span>
+        <div class="item-header">
+          <div class="item-info">
+            <h2 class="item-name" @click="goToDetail(item.id)">{{ item.name }}</h2>
+            <span class="item-type">{{ getTypeText(item.type) }}</span>
+          </div>
+          <span class="status-badge" :class="getStatusInfo(item).class">
+            {{ getStatusInfo(item).text }}
+          </span>
         </div>
 
-        <div class="post-content">{{ stripHtml(post.content).substring(0, 150) }}{{ stripHtml(post.content).length > 150 ? '...' : '' }}</div>
+        <!-- 审核拒绝原因 -->
+        <div v-if="item.review_status === 'rejected' && item.review_comment" class="reject-reason">
+          <i class="ri-error-warning-line"></i>
+          拒绝原因：{{ item.review_comment }}
+        </div>
 
-        <div class="post-footer">
-          <div class="post-meta">
+        <div class="item-content">{{ item.description || '暂无描述' }}</div>
+
+        <div class="item-footer">
+          <div class="item-meta">
             <span class="meta-item">
-              <i class="ri-eye-line"></i>
-              {{ post.view_count }}
+              <i class="ri-download-line"></i>
+              {{ item.downloads }}
+            </span>
+            <span class="meta-item">
+              <i class="ri-star-line"></i>
+              {{ item.rating.toFixed(1) }}
             </span>
             <span class="meta-item">
               <i class="ri-heart-line"></i>
-              {{ post.like_count }}
-            </span>
-            <span class="meta-item">
-              <i class="ri-chat-3-line"></i>
-              {{ post.comment_count }}
+              {{ item.like_count }}
             </span>
             <span class="meta-item">
               <i class="ri-time-line"></i>
-              {{ formatDate(post.updated_at) }}
+              {{ formatDate(item.updated_at) }}
             </span>
           </div>
 
-          <div class="post-actions">
-            <button class="action-btn edit" @click="goToEdit(post.id)">
+          <div class="item-actions">
+            <button class="action-btn edit" @click="goToEdit(item.id)">
               <i class="ri-edit-line"></i>
               编辑
             </button>
-            <button class="action-btn delete" @click="handleDelete(post)">
+            <button class="action-btn delete" @click="handleDelete(item)">
               <i class="ri-delete-bin-line"></i>
               删除
             </button>
@@ -206,7 +267,7 @@ function stripHtml(html: string) {
 </template>
 
 <style scoped>
-.my-posts-page {
+.my-items-page {
   max-width: 1000px;
   margin: 0 auto;
   display: flex;
@@ -256,7 +317,7 @@ function stripHtml(html: string) {
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: #804030;
+  background: #B87333;
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -267,13 +328,13 @@ function stripHtml(html: string) {
 }
 
 .create-btn:hover {
-  background: #6B3528;
+  background: #A66629;
   transform: translateY(-2px);
 }
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
 
@@ -288,7 +349,7 @@ function stripHtml(html: string) {
 .stat-value {
   font-size: 36px;
   font-weight: 700;
-  color: #804030;
+  color: #B87333;
   margin-bottom: 8px;
 }
 
@@ -319,8 +380,8 @@ function stripHtml(html: string) {
 }
 
 .filter-btn.active {
-  background: #804030;
-  border-color: #804030;
+  background: #B87333;
+  border-color: #B87333;
   color: #fff;
 }
 
@@ -360,7 +421,7 @@ function stripHtml(html: string) {
   align-items: center;
   gap: 8px;
   padding: 14px 28px;
-  background: #804030;
+  background: #B87333;
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -371,17 +432,17 @@ function stripHtml(html: string) {
 }
 
 .create-btn-large:hover {
-  background: #6B3528;
+  background: #A66629;
   transform: translateY(-2px);
 }
 
-.posts-list {
+.items-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.post-card {
+.item-card {
   background: #fff;
   border-radius: 16px;
   padding: 24px;
@@ -389,49 +450,99 @@ function stripHtml(html: string) {
   transition: all 0.3s;
 }
 
-.post-card:hover {
+.item-card:hover {
   box-shadow: 0 6px 16px rgba(75,54,33,0.1);
   transform: translateY(-2px);
 }
 
-.post-header {
+.item-header {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 12px;
 }
 
-.post-title {
+.item-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.item-name {
   font-size: 22px;
   font-weight: 700;
   color: #2C1810;
   margin: 0;
   cursor: pointer;
   transition: color 0.3s;
-  flex: 1;
 }
 
-.post-title:hover {
-  color: #804030;
+.item-name:hover {
+  color: #B87333;
 }
 
-.draft-badge {
-  padding: 4px 12px;
-  background: #FFA500;
-  color: #fff;
+.item-type {
+  padding: 4px 10px;
+  background: #F5EFE7;
+  color: #8D7B68;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
 }
 
-.post-content {
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.draft {
+  background: #9E9E9E;
+  color: #fff;
+}
+
+.status-badge.pending {
+  background: #FFA500;
+  color: #fff;
+}
+
+.status-badge.published {
+  background: #4CAF50;
+  color: #fff;
+}
+
+.status-badge.rejected {
+  background: #F44336;
+  color: #fff;
+}
+
+.reject-reason {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #FFF3F3;
+  border: 1px solid #FFCDD2;
+  border-radius: 8px;
+  color: #C62828;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.reject-reason i {
+  font-size: 18px;
+}
+
+.item-content {
   font-size: 15px;
   line-height: 1.6;
   color: #4B3621;
   margin-bottom: 16px;
 }
 
-.post-footer {
+.item-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -439,7 +550,7 @@ function stripHtml(html: string) {
   border-top: 2px solid #F5EFE7;
 }
 
-.post-meta {
+.item-meta {
   display: flex;
   gap: 16px;
 }
@@ -456,7 +567,7 @@ function stripHtml(html: string) {
   font-size: 16px;
 }
 
-.post-actions {
+.item-actions {
   display: flex;
   gap: 8px;
 }

@@ -7,8 +7,17 @@ type User struct {
 	Username  string    `gorm:"uniqueIndex;size:50" json:"username"`
 	Email     string    `gorm:"uniqueIndex;size:100" json:"email"`
 	Avatar    string    `gorm:"size:512" json:"avatar"` // 头像URL或base64
+	Role      string    `gorm:"size:20;default:user" json:"role"` // user|moderator|admin
 	Password  string    `gorm:"-" json:"-"`
 	PassHash  string    `json:"-"`
+	// 个人资料字段
+	Bio      string `gorm:"size:500" json:"bio"`      // 个人简介
+	Location string `gorm:"size:100" json:"location"` // 地区
+	Website  string `gorm:"size:256" json:"website"`  // 个人网站
+	// 统计数据
+	PostCount    int `gorm:"default:0" json:"post_count"`    // 帖子数
+	StoryCount   int `gorm:"default:0" json:"story_count"`   // 剧情数
+	ProfileCount int `gorm:"default:0" json:"profile_count"` // 人物卡数
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -178,8 +187,13 @@ type Guild struct {
 	StoryCount  int       `gorm:"default:0" json:"story_count"`
 	IsPublic    bool      `gorm:"default:true" json:"is_public"`
 	InviteCode  string    `gorm:"size:16;uniqueIndex" json:"invite_code"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// 审核相关字段
+	Status        string     `gorm:"size:20;default:pending" json:"status"`               // pending|approved|rejected
+	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                            // 审核人ID
+	ReviewComment string     `gorm:"size:512" json:"review_comment"`                      // 审核意见
+	ReviewedAt    *time.Time `json:"reviewed_at"`                                         // 审核时间
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // GuildMember 公会成员
@@ -216,9 +230,14 @@ type Item struct {
 	RatingCount   int       `gorm:"default:0" json:"rating_count"`   // 评分人数
 	LikeCount     int       `gorm:"default:0" json:"like_count"`     // 点赞数
 	FavoriteCount int       `gorm:"default:0" json:"favorite_count"` // 收藏数
-	Status        string    `gorm:"size:20;default:published" json:"status"` // draft|published|removed
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Status        string    `gorm:"size:20;default:draft" json:"status"`     // draft|pending|published|removed
+	// 审核相关字段
+	ReviewStatus  string     `gorm:"size:20;default:pending;index" json:"review_status"` // pending|approved|rejected
+	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                           // 审核人ID
+	ReviewComment string     `gorm:"size:512" json:"review_comment"`                     // 审核意见
+	ReviewedAt    *time.Time `json:"reviewed_at"`                                        // 审核时间
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // ItemTag 道具-标签关联
@@ -267,6 +286,23 @@ type ItemFavorite struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ItemPendingEdit 道具待审核编辑
+type ItemPendingEdit struct {
+	ID            uint       `gorm:"primarykey" json:"id"`
+	ItemID        uint       `gorm:"uniqueIndex;not null" json:"item_id"` // 每个道具只能有一个待审核编辑
+	AuthorID      uint       `gorm:"index;not null" json:"author_id"`
+	Name          string     `gorm:"size:256" json:"name"`
+	Icon          string     `gorm:"size:128" json:"icon"`
+	Description   string     `gorm:"type:text" json:"description"`
+	ImportCode    string     `gorm:"type:text" json:"import_code"`
+	ReviewStatus  string     `gorm:"size:20;default:pending" json:"review_status"` // pending|approved|rejected
+	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`
+	ReviewComment string     `gorm:"size:512" json:"review_comment"`
+	ReviewedAt    *time.Time `json:"reviewed_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 // ========== 社区系统 ==========
 
 // Post 社区帖子
@@ -279,7 +315,7 @@ type Post struct {
 	Category      string     `gorm:"size:20;default:other;index" json:"category"`  // 分区: profile|guild|report|novel|item|event|other
 	GuildID       *uint      `gorm:"index" json:"guild_id"`                        // 关联公会（可选）
 	StoryID       *uint      `gorm:"index" json:"story_id"`                        // 关联剧情（可选）
-	Status        string     `gorm:"size:20;default:draft" json:"status"`          // draft|published
+	Status        string     `gorm:"size:20;default:draft" json:"status"`          // draft|pending|published
 	IsPublic      bool       `gorm:"default:true" json:"is_public"`
 	ViewCount     int        `gorm:"default:0" json:"view_count"`
 	LikeCount     int        `gorm:"default:0" json:"like_count"`
@@ -289,8 +325,29 @@ type Post struct {
 	EventType      string     `gorm:"size:20" json:"event_type"`       // server|guild (服务器活动/公会活动)
 	EventStartTime *time.Time `json:"event_start_time"`                // 活动开始时间
 	EventEndTime   *time.Time `json:"event_end_time"`                  // 活动结束时间
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	// 审核相关字段
+	ReviewStatus  string     `gorm:"size:20;default:pending;index" json:"review_status"` // pending|approved|rejected
+	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                           // 审核人ID
+	ReviewComment string     `gorm:"size:512" json:"review_comment"`                     // 审核意见
+	ReviewedAt    *time.Time `json:"reviewed_at"`                                        // 审核时间
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// PostEditRequest 帖子编辑请求（待审核）
+type PostEditRequest struct {
+	ID          uint       `gorm:"primarykey" json:"id"`
+	PostID      uint       `gorm:"uniqueIndex;not null" json:"post_id"`
+	AuthorID    uint       `gorm:"index;not null" json:"author_id"`
+	Title       string     `gorm:"size:256" json:"title"`
+	Content     string     `gorm:"type:text" json:"content"`
+	ContentType string     `gorm:"size:20" json:"content_type"`
+	Category    string     `gorm:"size:20" json:"category"`
+	Status      string     `gorm:"size:20;default:pending" json:"status"`
+	ReviewerID  *uint      `gorm:"index" json:"reviewer_id"`
+	ReviewedAt  *time.Time `json:"reviewed_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // PostTag 帖子-标签关联

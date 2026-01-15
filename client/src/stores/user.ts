@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 interface UserData {
   id: number
   username: string
   avatar?: string
+  role?: string // user|moderator|admin
 }
 
 export const useUserStore = defineStore('user', () => {
@@ -21,6 +22,15 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // 计算属性：是否为版主或管理员
+  const isModerator = computed(() => {
+    return user.value?.role === 'moderator' || user.value?.role === 'admin'
+  })
+
+  const isAdmin = computed(() => {
+    return user.value?.role === 'admin'
+  })
+
   function setAuth(t: string, u: UserData) {
     token.value = t
     user.value = u
@@ -35,6 +45,13 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  function updateRole(role: string) {
+    if (user.value) {
+      user.value.role = role
+      localStorage.setItem('user', JSON.stringify(user.value))
+    }
+  }
+
   function logout() {
     token.value = ''
     user.value = null
@@ -42,5 +59,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('user')
   }
 
-  return { token, user, setAuth, updateAvatar, logout }
+  return { token, user, isModerator, isAdmin, setAuth, updateAvatar, updateRole, logout }
 })

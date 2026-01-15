@@ -103,6 +103,12 @@ const count = ref(0)
 </script>
 ```
 
+### UI 规范
+
+- **弹窗**: 使用内置弹窗组件 `RDialog`，不要使用浏览器原生 `alert`/`confirm`
+- **消息提示**: 使用内置 `RToast` 组件
+- **确认操作**: 危险操作（删除、解散等）必须使用确认弹窗
+
 ## API 规范
 
 ```
@@ -150,6 +156,37 @@ cd server && go mod tidy && go run cmd/server/main.go
 
 # 一键启动
 .\dev.bat  或  .\dev.ps1
+```
+
+## 用户角色管理
+
+### 角色层级
+
+| 角色 | 权限 | 设置方式 |
+|------|------|----------|
+| `user` | 普通用户，默认角色 | 注册时自动分配 |
+| `moderator` | 版主，可审核帖子/道具 | 管理员通过 API 设置 |
+| `admin` | 超级管理员，最高权限 | 仅通过后台脚本设置 |
+
+### 设置超级管理员
+
+超级管理员只能通过后台脚本设置，不能通过 API 设置：
+
+```bash
+cd server
+go run cmd/setadmin/main.go <用户名>
+
+# 示例
+go run cmd/setadmin/main.go admin
+```
+
+### 管理员 API
+
+管理员可通过 API 管理版主（不能设置 admin 角色）：
+
+```
+GET  /api/v1/admin/users           # 获取用户列表
+PUT  /api/v1/admin/users/:id/role  # 设置用户角色 (仅 user/moderator)
 ```
 
 ## PRD 文档

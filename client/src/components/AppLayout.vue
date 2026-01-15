@@ -28,6 +28,14 @@ const menuItems = [
   { id: 'settings', icon: 'ri-settings-3-line', label: '系统设置', route: '/settings' },
 ]
 
+// 版主菜单项（仅版主可见）
+const moderatorMenuItem = computed(() => {
+  if (userStore.isModerator) {
+    return { id: 'moderator', icon: 'ri-shield-star-line', label: '版主中心', route: '/moderator' }
+  }
+  return null
+})
+
 const activeMenu = computed(() => {
   const path = route.path
   if (path.startsWith('/sync')) return 'sync'
@@ -35,6 +43,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/market')) return 'market'
   if (path.startsWith('/community')) return 'community'
   if (path.startsWith('/settings')) return 'settings'
+  if (path.startsWith('/moderator')) return 'moderator'
   return 'home'
 })
 </script>
@@ -59,14 +68,29 @@ const activeMenu = computed(() => {
           <i :class="item.icon"></i>
           <span>{{ item.label }}</span>
         </RouterLink>
+
+        <!-- 版主中心（仅版主可见） -->
+        <RouterLink
+          v-if="moderatorMenuItem"
+          class="menu-item moderator-item"
+          :class="{ active: activeMenu === 'moderator' }"
+          :to="moderatorMenuItem.route"
+        >
+          <i :class="moderatorMenuItem.icon"></i>
+          <span>{{ moderatorMenuItem.label }}</span>
+        </RouterLink>
       </nav>
 
       <div class="user-profile">
         <template v-if="userStore.token">
-          <div class="avatar">{{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}</div>
-          <div class="user-info" @click="handleLogout">
-            <h4>{{ userStore.user?.username }}</h4>
-            <p>点击退出</p>
+          <router-link :to="`/user/${userStore.user?.id}`" class="avatar-link">
+            <div class="avatar">{{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}</div>
+          </router-link>
+          <div class="user-info">
+            <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
+              <h4>{{ userStore.user?.username }}</h4>
+            </router-link>
+            <p class="logout-link" @click="handleLogout">退出登录</p>
           </div>
         </template>
         <router-link v-else to="/login" class="login-btn">
@@ -184,20 +208,41 @@ const activeMenu = computed(() => {
   border: 2px solid rgba(255,255,255,0.2);
 }
 
-.user-info {
-  cursor: pointer;
+.avatar-link {
+  text-decoration: none;
 }
 
-.user-info h4 {
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.username-link {
+  text-decoration: none;
+}
+
+.username-link h4 {
   font-size: 14px;
   color: var(--color-text-light, #FBF5EF);
   margin: 0;
+  transition: color 0.3s;
 }
 
-.user-info p {
+.username-link:hover h4 {
+  color: var(--color-accent, #D4A373);
+}
+
+.logout-link {
   font-size: 12px;
   color: rgba(251, 245, 239, 0.5);
-  margin: 2px 0 0 0;
+  margin: 0;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.logout-link:hover {
+  color: rgba(251, 245, 239, 0.8);
 }
 
 .login-btn {
@@ -211,6 +256,22 @@ const activeMenu = computed(() => {
 
 .login-btn:hover {
   color: var(--color-text-light, #FBF5EF);
+}
+
+/* 版主菜单项特殊样式 */
+.menu-item.moderator-item {
+  margin-top: auto;
+  background: linear-gradient(135deg, rgba(184, 115, 51, 0.2), rgba(128, 64, 48, 0.2));
+  border: 1px solid rgba(184, 115, 51, 0.3);
+}
+
+.menu-item.moderator-item:hover {
+  background: linear-gradient(135deg, rgba(184, 115, 51, 0.3), rgba(128, 64, 48, 0.3));
+}
+
+.menu-item.moderator-item.active {
+  background: linear-gradient(135deg, #B87333, #804030);
+  color: #fff;
 }
 
 /* 主内容区 */
