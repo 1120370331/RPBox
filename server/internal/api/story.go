@@ -40,10 +40,65 @@ type CreateStoryEntryRequest struct {
 func (s *Server) listStories(c *gin.Context) {
 	userID := c.GetUint("userID")
 
+	// 构建查询
+	query := database.DB.Where("user_id = ?", userID)
+
+	// 标签筛选
+	if tagIDs := c.Query("tag_ids"); tagIDs != "" {
+		ids := strings.Split(tagIDs, ",")
+		var storyIDs []uint
+		database.DB.Model(&model.StoryTag{}).
+			Where("tag_id IN ?", ids).
+			Distinct("story_id").
+			Pluck("story_id", &storyIDs)
+		if len(storyIDs) > 0 {
+			query = query.Where("id IN ?", storyIDs)
+		} else {
+			// 没有匹配的剧情
+			c.JSON(http.StatusOK, gin.H{"stories": []model.Story{}})
+			return
+		}
+	}
+
+	// 公会筛选
+	if guildID := c.Query("guild_id"); guildID != "" {
+		var storyIDs []uint
+		database.DB.Model(&model.StoryGuild{}).
+			Where("guild_id = ?", guildID).
+			Pluck("story_id", &storyIDs)
+		if len(storyIDs) > 0 {
+			query = query.Where("id IN ?", storyIDs)
+		} else {
+			c.JSON(http.StatusOK, gin.H{"stories": []model.Story{}})
+			return
+		}
+	}
+
+	// 搜索关键词
+	if search := c.Query("search"); search != "" {
+		query = query.Where("title LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+
+	// 日期范围筛选
+	if startDate := c.Query("start_date"); startDate != "" {
+		if t, err := time.Parse("2006-01-02", startDate); err == nil {
+			query = query.Where("created_at >= ?", t)
+		}
+	}
+	if endDate := c.Query("end_date"); endDate != "" {
+		if t, err := time.Parse("2006-01-02", endDate); err == nil {
+			query = query.Where("created_at <= ?", t.Add(24*time.Hour))
+		}
+	}
+
+	// 排序
+	sortBy := c.DefaultQuery("sort", "created_at")
+	sortOrder := c.DefaultQuery("order", "desc")
+	orderClause := sortBy + " " + strings.ToUpper(sortOrder)
+	query = query.Order(orderClause)
+
 	var stories []model.Story
-	if err := database.DB.Where("user_id = ?", userID).
-		Order("updated_at DESC").
-		Find(&stories).Error; err != nil {
+	if err := query.Find(&stories).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}

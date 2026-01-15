@@ -11,6 +11,7 @@ import AddonInstaller from '@/components/AddonInstaller.vue'
 import StagingPool from './StagingPool.vue'
 import StoryList from './StoryList.vue'
 import { createStory, addStoryEntries, type CreateStoryEntryRequest } from '@/api/story'
+import { listTags, addStoryTag, type Tag } from '@/api/tag'
 
 // ChatRecord 类型定义
 interface TRP3Info {
@@ -49,6 +50,10 @@ const creating = ref(false)
 const storyListRef = ref<InstanceType<typeof StoryList> | null>(null)
 const stagingPoolRef = ref<InstanceType<typeof StagingPool> | null>(null)
 
+// 标签选择
+const allTags = ref<Tag[]>([])
+const selectedTagIds = ref<number[]>([])
+
 // 待归档的记录
 const pendingRecords = ref<ChatRecord[]>([])
 
@@ -73,7 +78,17 @@ async function checkAddonStatus() {
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   checkAddonStatus()
+  loadTags()
 })
+
+async function loadTags() {
+  try {
+    const res = await listTags('story')
+    allTags.value = res.tags || []
+  } catch (e) {
+    console.error('加载标签失败:', e)
+  }
+}
 
 // 清理TRP3特殊格式字符
 function cleanTRP3Content(content: string): string {
@@ -159,9 +174,20 @@ async function handleCreateStory() {
       stagingPoolRef.value?.removeArchivedRecords?.(archivedTimestamps)
       pendingRecords.value = []
     }
+    // 添加选中的标签
+    if (selectedTagIds.value.length > 0 && story.id) {
+      for (const tagId of selectedTagIds.value) {
+        try {
+          await addStoryTag(story.id, tagId)
+        } catch (e) {
+          console.error('添加标签失败:', e)
+        }
+      }
+    }
     showCreateModal.value = false
     newStoryTitle.value = ''
     newStoryDesc.value = ''
+    selectedTagIds.value = []
     activeTab.value = 'stories'
     // 刷新剧情列表
     storyListRef.value?.loadStories?.()
@@ -219,6 +245,21 @@ function handleViewStory(id: number) {
         <div class="form-field">
           <label>剧情描述</label>
           <textarea v-model="newStoryDesc" placeholder="简要描述这个剧情..." rows="3"></textarea>
+        </div>
+        <div class="form-field">
+          <label>添加标签</label>
+          <div class="tag-selector">
+            <span
+              v-for="tag in allTags"
+              :key="tag.id"
+              class="tag-option"
+              :class="{ selected: selectedTagIds.includes(tag.id) }"
+              :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: '#fff' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+              @click="selectedTagIds.includes(tag.id) ? selectedTagIds = selectedTagIds.filter(id => id !== tag.id) : selectedTagIds.push(tag.id)"
+            >
+              {{ tag.name }}
+            </span>
+          </div>
         </div>
         <p v-if="pendingRecords.length > 0" class="pending-info">
           将归档 {{ pendingRecords.length }} 条对话记录
@@ -482,5 +523,30 @@ function handleViewStory(id: number) {
 
 .addon-notice span {
   flex: 1;
+}
+
+.tag-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-option {
+  padding: 6px 12px;
+  border: 1.5px solid;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.tag-option:hover {
+  opacity: 0.8;
+}
+
+.tag-option.selected {
+  font-weight: 600;
 }
 </style>

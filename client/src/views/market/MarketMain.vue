@@ -1,63 +1,144 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { listItems, type Item } from '@/api/item'
 
+const router = useRouter()
 const mounted = ref(false)
+const loading = ref(false)
+const items = ref<Item[]>([])
+const total = ref(0)
+const searchText = ref('')
+const activeType = ref<'item' | 'script' | ''>('')
+const sortBy = ref<'created_at' | 'downloads' | 'rating'>('created_at')
+const currentPage = ref(1)
+
+const typeMap = {
+  '': '全部',
+  'item': '道具',
+  'script': '剧本'
+}
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
+  loadItems()
 })
 
-const categories = ['全部', '武器', '护甲', '消耗品', '环境', '其他']
-const activeCategory = ref('全部')
+// 加载道具列表
+async function loadItems() {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      page_size: 12,
+      sort: sortBy.value,
+      order: 'desc'
+    }
 
-const items = [
-  { id: 1, name: '霓虹武士刀', creator: 'NeonMaster', desc: '一把充满赛博朋克风格的武士刀，挥动时带有发光的粒子轨迹。', tags: ['武器', '科幻'], downloads: 12405, rating: 4.8 },
-  { id: 2, name: '龙血药剂', creator: 'AlchemyQueen', desc: '瞬间恢复大量生命值，并提供短暂的火焰抗性。', tags: ['消耗品', '魔法'], downloads: 8332, rating: 5.0 },
-  { id: 3, name: '维多利亚煤气灯', creator: 'SteamPunkJoe', desc: '经典的街头煤气灯模型，拥有真实的闪烁火光效果。', tags: ['环境', '装饰'], downloads: 5621, rating: 4.2 },
-  { id: 4, name: '圣光塔盾', creator: 'PaladinX', desc: '坚不可摧的重型盾牌，表面镀金，能在黑暗中发出微弱的光芒。', tags: ['护甲', '重装'], downloads: 10998, rating: 4.7 },
-  { id: 5, name: '禁忌卷轴', creator: 'MageElder', desc: '记载着古老咒语的羊皮卷，展开时会有漂浮的符文特效。', tags: ['消耗品', '剧情'], downloads: 6700, rating: 4.9 },
-  { id: 6, name: '暗影匕首', creator: 'RogueOne', desc: '淬毒的匕首，攻击时有一定几率造成持续伤害。', tags: ['武器', '近战'], downloads: 9870, rating: 4.6 },
-]
+    if (activeType.value) {
+      params.type = activeType.value
+    }
+
+    if (searchText.value) {
+      params.search = searchText.value
+    }
+
+    const res: any = await listItems(params)
+    if (res.code === 0) {
+      items.value = res.data.items || []
+      total.value = res.data.total || 0
+    }
+  } catch (error) {
+    console.error('加载道具列表失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 切换类型
+function changeType(type: '' | 'item' | 'script') {
+  activeType.value = type
+  currentPage.value = 1
+  loadItems()
+}
+
+// 搜索
+function handleSearch() {
+  currentPage.value = 1
+  loadItems()
+}
+
+// 查看详情
+function viewDetail(id: number) {
+  router.push(`/market/${id}`)
+}
+
+// 跳转到上传页面
+function goToUpload() {
+  router.push('/market/upload')
+}
+
+watch([sortBy], () => {
+  currentPage.value = 1
+  loadItems()
+})
 </script>
 
 <template>
   <div class="market-page" :class="{ 'animate-in': mounted }">
     <!-- 头部 -->
     <div class="header anim-item" style="--delay: 0">
-      <h1>道具市场</h1>
+      <div class="header-top">
+        <h1>道具市场</h1>
+        <button class="upload-btn" @click="goToUpload">
+          <i class="ri-upload-line"></i> 上传道具
+        </button>
+      </div>
       <div class="search-box">
-        <input type="text" placeholder="搜索道具名称、类型或标签..." />
-        <i class="ri-search-line"></i>
+        <input
+          v-model="searchText"
+          type="text"
+          placeholder="搜索道具名称、类型或标签..."
+          @keyup.enter="handleSearch"
+        />
+        <i class="ri-search-line" @click="handleSearch"></i>
       </div>
     </div>
 
     <!-- 筛选 -->
     <div class="filter-bar anim-item" style="--delay: 1">
       <span
-        v-for="cat in categories"
-        :key="cat"
+        v-for="(label, type) in typeMap"
+        :key="type"
         class="tag"
-        :class="{ active: activeCategory === cat }"
-        @click="activeCategory = cat"
-      >{{ cat }}</span>
+        :class="{ active: activeType === type }"
+        @click="changeType(type as any)"
+      >{{ label }}</span>
+
+      <select v-model="sortBy" class="sort-select">
+        <option value="created_at">最新</option>
+        <option value="downloads">最热</option>
+        <option value="rating">评分</option>
+      </select>
     </div>
 
     <!-- 卡片网格 -->
     <div class="card-grid anim-item" style="--delay: 2">
-      <div v-for="item in items" :key="item.id" class="card">
+      <div v-if="loading" class="loading-state">加载中...</div>
+      <div v-else-if="items.length === 0" class="empty-state">暂无道具</div>
+      <div v-else v-for="item in items" :key="item.id" class="card" @click="viewDetail(item.id)">
         <div class="card-image"></div>
         <div class="card-content">
           <h3>{{ item.name }}</h3>
-          <p class="creator">by {{ item.creator }}</p>
-          <p class="desc">{{ item.desc }}</p>
-          <div class="tags">
-            <span v-for="t in item.tags" :key="t" class="mini-tag">{{ t }}</span>
-          </div>
+          <p class="creator">{{ item.type === 'item' ? '道具' : '剧本' }}</p>
+          <p class="desc">{{ item.description || '暂无描述' }}</p>
           <div class="card-footer">
             <span class="stat"><i class="ri-download-line"></i> {{ item.downloads }}</span>
-            <span class="rating"><i class="ri-star-fill"></i> {{ item.rating }}</span>
+            <span class="rating"><i class="ri-star-fill"></i> {{ item.rating.toFixed(1) }}</span>
           </div>
-          <button class="import-btn"><i class="ri-download-line"></i> 一键导入</button>
+          <button class="import-btn" @click.stop="viewDetail(item.id)">
+            <i class="ri-eye-line"></i> 查看详情
+          </button>
         </div>
       </div>
     </div>
@@ -76,10 +157,39 @@ const items = [
   padding: 20px 0;
 }
 
+.header-top {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
 .header h1 {
   font-size: 36px;
   color: #3E2723;
-  margin-bottom: 20px;
+  margin: 0;
+}
+
+.upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: #B87333;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+  position: relative;
+  z-index: 10;
+}
+
+.upload-btn:hover {
+  background: #A66629;
 }
 
 .search-box {
@@ -105,6 +215,7 @@ const items = [
   transform: translateY(-50%);
   font-size: 20px;
   color: #B87333;
+  cursor: pointer;
 }
 
 .filter-bar {
@@ -129,10 +240,29 @@ const items = [
   color: #fff;
 }
 
+.sort-select {
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid transparent;
+  font-size: 14px;
+  color: #5D4037;
+  cursor: pointer;
+}
+
 .card-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 24px;
+  min-height: 200px;
+}
+
+.loading-state, .empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  font-size: 16px;
 }
 
 .card {
@@ -210,10 +340,16 @@ const items = [
   gap: 6px;
 }
 
-.anim-item { opacity: 0; transform: translateY(20px); }
+.anim-item { opacity: 0; transform: translateY(20px); pointer-events: auto; }
 .animate-in .anim-item {
   animation: fadeUp 0.5s ease forwards;
   animation-delay: calc(var(--delay) * 0.15s);
 }
 @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+/* 确保按钮始终可点击 */
+.header-top button {
+  pointer-events: auto !important;
+  opacity: 1;
+}
 </style>

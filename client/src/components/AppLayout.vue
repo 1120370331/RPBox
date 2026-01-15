@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
+import RToast from './RToast.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -23,6 +24,7 @@ const menuItems = [
   { id: 'sync', icon: 'ri-user-star-line', label: '人物卡', route: '/sync' },
   { id: 'archives', icon: 'ri-book-open-line', label: '剧情故事', route: '/archives' },
   { id: 'market', icon: 'ri-sword-line', label: '道具物品', route: '/market' },
+  { id: 'community', icon: 'ri-chat-smile-2-line', label: '社区广场', route: '/community' },
   { id: 'settings', icon: 'ri-settings-3-line', label: '系统设置', route: '/settings' },
 ]
 
@@ -31,6 +33,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/sync')) return 'sync'
   if (path.startsWith('/archives')) return 'archives'
   if (path.startsWith('/market')) return 'market'
+  if (path.startsWith('/community')) return 'community'
   if (path.startsWith('/settings')) return 'settings'
   return 'home'
 })
@@ -80,6 +83,9 @@ const activeMenu = computed(() => {
 
     <!-- 全局弹窗 -->
     <RDialog />
+
+    <!-- 全局消息通知 -->
+    <RToast />
   </div>
 </template>
 
