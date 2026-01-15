@@ -1,21 +1,26 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createItem } from '@/api/item'
+import { createItem, uploadImage } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
+import TiptapEditor from '@/components/TiptapEditor.vue'
 
 const router = useRouter()
 const toast = useToast()
 const loading = ref(false)
+const uploadingImage = ref(false)
 const itemTags = ref<Tag[]>([])
+const previewImageInput = ref<HTMLInputElement | null>(null)
 
 // 表单数据
 const form = ref({
   name: '',
   type: 'item' as 'item' | 'script',
   icon: '',
+  preview_image: '',
   description: '',
+  detail_content: '',
   import_code: '',
   raw_data: '',
   tag_ids: [] as number[],
@@ -61,6 +66,36 @@ function goBack() {
   router.push('/market')
 }
 
+// 上传预览图
+async function handlePreviewImageUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+
+  const file = input.files[0]
+  if (file.size > 5 * 1024 * 1024) {
+    toast.warning('图片大小不能超过5MB')
+    return
+  }
+
+  uploadingImage.value = true
+  try {
+    const res: any = await uploadImage(file)
+    if (res.code === 0) {
+      form.value.preview_image = res.data.url
+      toast.success('预览图上传成功')
+    }
+  } catch (error: any) {
+    toast.error(error.message || '上传失败')
+  } finally {
+    uploadingImage.value = false
+  }
+}
+
+// 移除预览图
+function removePreviewImage() {
+  form.value.preview_image = ''
+}
+
 loadTags()
 </script>
 
@@ -100,14 +135,49 @@ loadTags()
           </select>
         </div>
 
+        <!-- 预览图上传 -->
+        <div class="form-group">
+          <label>预览图</label>
+          <div class="preview-upload">
+            <div v-if="form.preview_image" class="preview-image">
+              <img :src="form.preview_image" alt="预览图" />
+              <button type="button" class="remove-btn" @click="removePreviewImage">
+                <i class="ri-close-line"></i>
+              </button>
+            </div>
+            <div v-else class="upload-area" @click="previewImageInput?.click()">
+              <i class="ri-image-add-line"></i>
+              <span>{{ uploadingImage ? '上传中...' : '点击上传预览图' }}</span>
+            </div>
+            <input
+              ref="previewImageInput"
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handlePreviewImageUpload"
+            />
+          </div>
+          <p class="hint">建议尺寸 400x300，最大 5MB</p>
+        </div>
+
         <!-- 描述 -->
         <div class="form-group">
-          <label>描述</label>
+          <label>简短描述</label>
           <textarea
             v-model="form.description"
-            placeholder="请描述这个道具的功能和特点..."
-            rows="4"
+            placeholder="请简短描述这个道具的功能和特点..."
+            rows="3"
           ></textarea>
+        </div>
+
+        <!-- 详细介绍（富文本） -->
+        <div class="form-group">
+          <label>详细介绍</label>
+          <TiptapEditor
+            v-model="form.detail_content"
+            placeholder="可以添加图片、详细说明道具的使用方法..."
+          />
+          <p class="hint">支持插入图片，可以展示道具的详细效果</p>
         </div>
 
         <!-- 导入代码 -->
@@ -261,6 +331,71 @@ loadTags()
   font-size: 12px;
   color: #999;
   margin-top: 4px;
+}
+
+.preview-upload {
+  width: 100%;
+}
+
+.upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  border: 2px dashed #E0E0E0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.upload-area:hover {
+  border-color: #B87333;
+  background: #FFF8F0;
+}
+
+.upload-area i {
+  font-size: 48px;
+  color: #B87333;
+}
+
+.upload-area span {
+  color: #999;
+  font-size: 14px;
+}
+
+.preview-image {
+  position: relative;
+  display: inline-block;
+}
+
+.preview-image img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.preview-image .remove-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.preview-image .remove-btn:hover {
+  background: rgba(0,0,0,0.8);
 }
 
 .tag-selector {

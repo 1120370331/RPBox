@@ -6,7 +6,9 @@ export interface Item {
   name: string
   type: 'item' | 'script'  // item=道具, script=剧本
   icon: string
+  preview_image: string    // 预览图
   description: string
+  detail_content: string   // 富文本详情
   import_code: string
   raw_data: string
   downloads: number
@@ -36,7 +38,9 @@ export interface CreateItemRequest {
   name: string
   type: 'item' | 'script'
   icon?: string
+  preview_image?: string
   description?: string
+  detail_content?: string
   import_code: string
   raw_data?: string
   tag_ids?: number[]
@@ -140,4 +144,13 @@ export function favoriteItem(id: number) {
 // 取消收藏
 export function unfavoriteItem(id: number) {
   return request.delete(`/items/${id}/favorite`)
+}
+
+// 上传图片
+export function uploadImage(file: File) {
+  const formData = new FormData()
+  formData.append('image', file)
+  return request.post('/upload/image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }

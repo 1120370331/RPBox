@@ -93,14 +93,16 @@ func (s *Server) createItem(c *gin.Context) {
 	userID := c.GetUint("user_id")
 
 	var req struct {
-		Name        string   `json:"name" binding:"required"`
-		Type        string   `json:"type" binding:"required"`
-		Icon        string   `json:"icon"`
-		Description string   `json:"description"`
-		ImportCode  string   `json:"import_code" binding:"required"`
-		RawData     string   `json:"raw_data"`
-		TagIDs      []uint   `json:"tag_ids"`
-		Status      string   `json:"status"`
+		Name          string   `json:"name" binding:"required"`
+		Type          string   `json:"type" binding:"required"`
+		Icon          string   `json:"icon"`
+		PreviewImage  string   `json:"preview_image"`
+		Description   string   `json:"description"`
+		DetailContent string   `json:"detail_content"`
+		ImportCode    string   `json:"import_code" binding:"required"`
+		RawData       string   `json:"raw_data"`
+		TagIDs        []uint   `json:"tag_ids"`
+		Status        string   `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -120,14 +122,16 @@ func (s *Server) createItem(c *gin.Context) {
 	}
 
 	item := model.Item{
-		AuthorID:    userID,
-		Name:        req.Name,
-		Type:        req.Type,
-		Icon:        req.Icon,
-		Description: req.Description,
-		ImportCode:  req.ImportCode,
-		RawData:     req.RawData,
-		Status:      req.Status,
+		AuthorID:      userID,
+		Name:          req.Name,
+		Type:          req.Type,
+		Icon:          req.Icon,
+		PreviewImage:  req.PreviewImage,
+		Description:   req.Description,
+		DetailContent: req.DetailContent,
+		ImportCode:    req.ImportCode,
+		RawData:       req.RawData,
+		Status:        req.Status,
 	}
 
 	// 设置审核状态：版主/管理员自动通过，普通用户需要审核

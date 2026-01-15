@@ -236,7 +236,9 @@ type Item struct {
 	Name          string    `gorm:"size:256;not null" json:"name"`
 	Type          string    `gorm:"size:20;index" json:"type"` // item|document|campaign
 	Icon          string    `gorm:"size:128" json:"icon"`
+	PreviewImage  string    `gorm:"type:text" json:"preview_image"`   // 预览图（base64）
 	Description   string    `gorm:"type:text" json:"description"`
+	DetailContent string    `gorm:"type:text" json:"detail_content"`  // 富文本详情
 	ImportCode    string    `gorm:"type:text;not null" json:"import_code"` // TRP3导入代码
 	RawData       string    `gorm:"type:text" json:"raw_data"`             // 原始Lua数据
 	Downloads     int       `gorm:"default:0" json:"downloads"`

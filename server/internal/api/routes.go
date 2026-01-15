@@ -150,6 +150,9 @@ func (s *Server) setupRoutes() {
 			auth.GET("/users/:id", s.getUserProfile)
 			auth.GET("/users/:id/guilds", s.getUserGuilds)
 
+			// 通用图片上传
+			auth.POST("/upload/image", s.uploadImage)
+
 			// 版主中心（需要版主权限）
 			mod := auth.Group("/moderator")
 			mod.Use(middleware.ModeratorAuth())
