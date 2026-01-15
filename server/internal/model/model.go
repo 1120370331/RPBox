@@ -6,6 +6,7 @@ type User struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	Username  string    `gorm:"uniqueIndex;size:50" json:"username"`
 	Email     string    `gorm:"uniqueIndex;size:100" json:"email"`
+	Avatar    string    `gorm:"size:512" json:"avatar"` // 头像URL或base64
 	Password  string    `gorm:"-" json:"-"`
 	PassHash  string    `json:"-"`
 	CreatedAt time.Time `json:"created_at"`
@@ -139,4 +140,200 @@ type Character struct {
 
 	// 原始TRP3数据备份
 	RawTRP3Data string `gorm:"type:text" json:"raw_trp3_data"` // 完整原始JSON备份
+}
+
+// Tag 标签
+type Tag struct {
+	ID         uint      `gorm:"primarykey" json:"id"`
+	Name       string    `gorm:"size:64;not null" json:"name"`
+	Color      string    `gorm:"size:8" json:"color"`
+	Category   string    `gorm:"size:20;default:story" json:"category"` // story|item|post
+	Type       string    `gorm:"size:20;default:custom" json:"type"`    // preset|custom|guild
+	GuildID    *uint     `gorm:"index" json:"guild_id"`
+	CreatorID  uint      `gorm:"index" json:"creator_id"`
+	IsPublic   bool      `gorm:"default:false" json:"is_public"`
+	UsageCount int       `gorm:"default:0" json:"usage_count"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// StoryTag 剧情-标签关联
+type StoryTag struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	StoryID   uint      `gorm:"uniqueIndex:idx_story_tag;not null" json:"story_id"`
+	TagID     uint      `gorm:"uniqueIndex:idx_story_tag;not null" json:"tag_id"`
+	AddedBy   uint      `gorm:"index" json:"added_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Guild 公会
+type Guild struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	Name        string    `gorm:"size:128;not null" json:"name"`
+	Description string    `gorm:"type:text" json:"description"`
+	Icon        string    `gorm:"size:128" json:"icon"`
+	Color       string    `gorm:"size:8" json:"color"`
+	OwnerID     uint      `gorm:"index;not null" json:"owner_id"`
+	MemberCount int       `gorm:"default:1" json:"member_count"`
+	StoryCount  int       `gorm:"default:0" json:"story_count"`
+	IsPublic    bool      `gorm:"default:true" json:"is_public"`
+	InviteCode  string    `gorm:"size:16;uniqueIndex" json:"invite_code"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// GuildMember 公会成员
+type GuildMember struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	GuildID   uint      `gorm:"uniqueIndex:idx_guild_user;not null" json:"guild_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_guild_user;not null" json:"user_id"`
+	Role      string    `gorm:"size:20;default:member" json:"role"` // owner|admin|member
+	JoinedAt  time.Time `json:"joined_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// StoryGuild 剧情-公会归档
+type StoryGuild struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	StoryID   uint      `gorm:"uniqueIndex:idx_story_guild;not null" json:"story_id"`
+	GuildID   uint      `gorm:"uniqueIndex:idx_story_guild;not null" json:"guild_id"`
+	AddedBy   uint      `gorm:"index" json:"added_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Item TRP3道具
+type Item struct {
+	ID            uint      `gorm:"primarykey" json:"id"`
+	AuthorID      uint      `gorm:"index;not null" json:"author_id"`
+	Name          string    `gorm:"size:256;not null" json:"name"`
+	Type          string    `gorm:"size:20;index" json:"type"` // item|document|campaign
+	Icon          string    `gorm:"size:128" json:"icon"`
+	Description   string    `gorm:"type:text" json:"description"`
+	ImportCode    string    `gorm:"type:text;not null" json:"import_code"` // TRP3导入代码
+	RawData       string    `gorm:"type:text" json:"raw_data"`             // 原始Lua数据
+	Downloads     int       `gorm:"default:0" json:"downloads"`
+	Rating        float64   `gorm:"default:0" json:"rating"`         // 平均评分
+	RatingCount   int       `gorm:"default:0" json:"rating_count"`   // 评分人数
+	LikeCount     int       `gorm:"default:0" json:"like_count"`     // 点赞数
+	FavoriteCount int       `gorm:"default:0" json:"favorite_count"` // 收藏数
+	Status        string    `gorm:"size:20;default:published" json:"status"` // draft|published|removed
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// ItemTag 道具-标签关联
+type ItemTag struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"uniqueIndex:idx_item_tag;not null" json:"item_id"`
+	TagID     uint      `gorm:"uniqueIndex:idx_item_tag;not null" json:"tag_id"`
+	AddedBy   uint      `gorm:"index" json:"added_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ItemRating 道具评分
+type ItemRating struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"uniqueIndex:idx_item_user;not null" json:"item_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_item_user;not null" json:"user_id"`
+	Rating    int       `gorm:"not null" json:"rating"` // 1-5星
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// ItemComment 道具评论（带评分）
+type ItemComment struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"index;not null" json:"item_id"`
+	UserID    uint      `gorm:"index;not null" json:"user_id"`
+	Rating    int       `gorm:"not null" json:"rating"` // 1-5星评分
+	Content   string    `gorm:"type:text;not null" json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// ItemLike 道具点赞
+type ItemLike struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"uniqueIndex:idx_item_like_user;not null" json:"item_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_item_like_user;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ItemFavorite 道具收藏
+type ItemFavorite struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"uniqueIndex:idx_item_fav_user;not null" json:"item_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_item_fav_user;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ========== 社区系统 ==========
+
+// Post 社区帖子
+type Post struct {
+	ID            uint       `gorm:"primarykey" json:"id"`
+	AuthorID      uint       `gorm:"index;not null" json:"author_id"`
+	Title         string     `gorm:"size:256;not null" json:"title"`
+	Content       string     `gorm:"type:text;not null" json:"content"`
+	ContentType   string     `gorm:"size:20;default:markdown" json:"content_type"` // markdown|html
+	Category      string     `gorm:"size:20;default:other;index" json:"category"`  // 分区: profile|guild|report|novel|item|event|other
+	GuildID       *uint      `gorm:"index" json:"guild_id"`                        // 关联公会（可选）
+	StoryID       *uint      `gorm:"index" json:"story_id"`                        // 关联剧情（可选）
+	Status        string     `gorm:"size:20;default:draft" json:"status"`          // draft|published
+	IsPublic      bool       `gorm:"default:true" json:"is_public"`
+	ViewCount     int        `gorm:"default:0" json:"view_count"`
+	LikeCount     int        `gorm:"default:0" json:"like_count"`
+	CommentCount  int        `gorm:"default:0" json:"comment_count"`
+	FavoriteCount int        `gorm:"default:0" json:"favorite_count"`
+	// 活动相关字段
+	EventType      string     `gorm:"size:20" json:"event_type"`       // server|guild (服务器活动/公会活动)
+	EventStartTime *time.Time `json:"event_start_time"`                // 活动开始时间
+	EventEndTime   *time.Time `json:"event_end_time"`                  // 活动结束时间
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// PostTag 帖子-标签关联
+type PostTag struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	PostID    uint      `gorm:"uniqueIndex:idx_post_tag;not null" json:"post_id"`
+	TagID     uint      `gorm:"uniqueIndex:idx_post_tag;not null" json:"tag_id"`
+	AddedBy   uint      `gorm:"index" json:"added_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Comment 评论
+type Comment struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	PostID    uint      `gorm:"index;not null" json:"post_id"`
+	AuthorID  uint      `gorm:"index;not null" json:"author_id"`
+	Content   string    `gorm:"type:text;not null" json:"content"`
+	ParentID  *uint     `gorm:"index" json:"parent_id"` // 父评论ID（支持回复）
+	LikeCount int       `gorm:"default:0" json:"like_count"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// PostLike 帖子点赞
+type PostLike struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	PostID    uint      `gorm:"uniqueIndex:idx_post_user;not null" json:"post_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_post_user;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// PostFavorite 帖子收藏
+type PostFavorite struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	PostID    uint      `gorm:"uniqueIndex:idx_post_fav;not null" json:"post_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_post_fav;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// CommentLike 评论点赞
+type CommentLike struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CommentID uint      `gorm:"uniqueIndex:idx_comment_user;not null" json:"comment_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_comment_user;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
 }

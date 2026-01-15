@@ -53,8 +53,30 @@ export interface CreateStoryEntryRequest {
   is_npc?: boolean     // 是否NPC
 }
 
-export async function listStories(): Promise<{ stories: Story[] }> {
-  return request.get('/stories')
+export interface StoryFilterParams {
+  tag_ids?: string      // 标签ID列表，逗号分隔
+  guild_id?: string     // 公会ID
+  search?: string       // 搜索关键词
+  start_date?: string   // 开始日期 YYYY-MM-DD
+  end_date?: string     // 结束日期 YYYY-MM-DD
+  sort?: string         // 排序字段 created_at|updated_at|start_time
+  order?: 'asc' | 'desc' // 排序方向
+}
+
+export async function listStories(params?: StoryFilterParams): Promise<{ stories: Story[] }> {
+  // 构建查询字符串（GET请求不能有body）
+  const searchParams = new URLSearchParams()
+  if (params) {
+    if (params.tag_ids) searchParams.set('tag_ids', params.tag_ids)
+    if (params.guild_id) searchParams.set('guild_id', params.guild_id)
+    if (params.search) searchParams.set('search', params.search)
+    if (params.start_date) searchParams.set('start_date', params.start_date)
+    if (params.end_date) searchParams.set('end_date', params.end_date)
+    if (params.sort) searchParams.set('sort', params.sort)
+    if (params.order) searchParams.set('order', params.order)
+  }
+  const query = searchParams.toString()
+  return request.get(`/stories${query ? '?' + query : ''}`)
 }
 
 export async function getStory(id: number): Promise<{ story: Story; entries: StoryEntry[] }> {
