@@ -137,7 +137,11 @@ watch([sortBy], () => {
       <div v-if="loading" class="loading-state">加载中...</div>
       <div v-else-if="items.length === 0" class="empty-state">暂无道具</div>
       <div v-else v-for="item in items" :key="item.id" class="card" @click="viewDetail(item.id)">
-        <div class="card-image"></div>
+        <div class="card-image" :style="item.preview_image ? { backgroundImage: `url(${item.preview_image})` } : {}">
+          <div v-if="!item.preview_image" class="placeholder-icon">
+            <i class="ri-box-3-line"></i>
+          </div>
+        </div>
         <div class="card-content">
           <h3>{{ item.name }}</h3>
           <p class="creator">{{ item.type === 'item' ? '道具' : '剧本' }}</p>
@@ -316,6 +320,16 @@ watch([sortBy], () => {
 .card-image {
   height: 140px;
   background: linear-gradient(135deg, #D4A373 0%, #8C7B70 100%);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .card-content {
