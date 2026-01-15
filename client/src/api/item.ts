@@ -14,7 +14,9 @@ export interface Item {
   rating_count: number
   like_count: number
   favorite_count: number
-  status: 'draft' | 'published' | 'removed'
+  status: 'draft' | 'pending' | 'published' | 'removed'
+  review_status: 'pending' | 'approved' | 'rejected' | ''
+  review_comment?: string
   created_at: string
   updated_at: string
 }
@@ -53,6 +55,7 @@ export interface ListItemsParams {
   status?: string
   search?: string
   tag_id?: number
+  author_id?: number
   sort?: 'created_at' | 'downloads' | 'rating'
   order?: 'asc' | 'desc'
   page?: number

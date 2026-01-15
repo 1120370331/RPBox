@@ -22,10 +22,18 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":       user.ID,
-		"username": user.Username,
-		"email":    user.Email,
-		"avatar":   user.Avatar,
+		"id":            user.ID,
+		"username":      user.Username,
+		"email":         user.Email,
+		"avatar":        user.Avatar,
+		"role":          user.Role,
+		"bio":           user.Bio,
+		"location":      user.Location,
+		"website":       user.Website,
+		"post_count":    user.PostCount,
+		"story_count":   user.StoryCount,
+		"profile_count": user.ProfileCount,
+		"created_at":    user.CreatedAt,
 	})
 }
 
@@ -83,6 +91,9 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 	var req struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`
+		Bio      string `json:"bio"`
+		Location string `json:"location"`
+		Website  string `json:"website"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -96,6 +107,15 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 	if req.Email != "" {
 		updates["email"] = req.Email
 	}
+	if req.Bio != "" {
+		updates["bio"] = req.Bio
+	}
+	if req.Location != "" {
+		updates["location"] = req.Location
+	}
+	if req.Website != "" {
+		updates["website"] = req.Website
+	}
 
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "没有要更新的内容"})
@@ -108,4 +128,66 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
+}
+
+// getUserProfile 获取指定用户的公开信息
+func (s *Server) getUserProfile(c *gin.Context) {
+	userID := c.Param("id")
+
+	var user model.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	// 返回公开信息（不包括email等敏感信息）
+	c.JSON(http.StatusOK, gin.H{
+		"id":            user.ID,
+		"username":      user.Username,
+		"avatar":        user.Avatar,
+		"role":          user.Role,
+		"bio":           user.Bio,
+		"location":      user.Location,
+		"website":       user.Website,
+		"post_count":    user.PostCount,
+		"story_count":   user.StoryCount,
+		"profile_count": user.ProfileCount,
+		"created_at":    user.CreatedAt,
+	})
+}
+
+// getUserGuilds 获取用户加入的公会列表
+func (s *Server) getUserGuilds(c *gin.Context) {
+	userID := c.Param("id")
+
+	var memberships []model.GuildMember
+	if err := database.DB.Where("user_id = ?", userID).Find(&memberships).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	// 获取公会详情
+	var guilds []gin.H
+	for _, membership := range memberships {
+		var guild model.Guild
+		if err := database.DB.First(&guild, membership.GuildID).Error; err != nil {
+			continue
+		}
+		// 只显示已通过审核的公会，或者用户是会长的待审核公会
+		if guild.Status != "approved" && membership.Role != "owner" {
+			continue
+		}
+		guilds = append(guilds, gin.H{
+			"id":           guild.ID,
+			"name":         guild.Name,
+			"icon":         guild.Icon,
+			"color":        guild.Color,
+			"member_count": guild.MemberCount,
+			"status":       guild.Status,
+			"role":         membership.Role,
+			"joined_at":    membership.JoinedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
 }

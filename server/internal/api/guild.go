@@ -95,6 +95,7 @@ func (s *Server) createGuild(c *gin.Context) {
 		OwnerID:     userID,
 		InviteCode:  generateInviteCode(),
 		MemberCount: 1,
+		Status:      "pending", // 需要版主审核
 	}
 
 	if err := database.DB.Create(&guild).Error; err != nil {

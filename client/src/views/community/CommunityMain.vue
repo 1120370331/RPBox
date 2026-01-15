@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { listPosts, type PostWithAuthor, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { listGuilds, type Guild } from '@/api/guild'
+import EventCalendar from '@/components/EventCalendar.vue'
 
 const router = useRouter()
 const mounted = ref(false)
@@ -152,6 +153,9 @@ function stripHtml(html: string) {
         <span>{{ tab.label }}</span>
       </div>
     </div>
+
+    <!-- 活动日历 -->
+    <EventCalendar class="anim-item" style="--delay: 2" />
 
     <!-- 公会列表 -->
     <div v-if="activeTab === 'guilds'" class="guild-list anim-item" style="--delay: 2">

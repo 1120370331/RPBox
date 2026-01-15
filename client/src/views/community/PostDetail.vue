@@ -230,14 +230,14 @@ function goBack() {
               <i :class="favorited ? 'ri-star-fill' : 'ri-star-line'"></i>
               {{ post.favorite_count }}
             </button>
-            <button class="action-btn">
+            <span class="stat-item">
               <i class="ri-eye-line"></i>
               {{ post.view_count }}
-            </button>
+            </span>
           </div>
         </div>
 
-        <div class="post-content">{{ post.content }}</div>
+        <div class="post-content" v-html="post.content"></div>
       </div>
 
       <div class="comments-section anim-item" style="--delay: 2">
@@ -463,6 +463,14 @@ function goBack() {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8B7355;
+  font-size: 14px;
 }
 
 .action-btn:hover {

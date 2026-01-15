@@ -8,7 +8,7 @@ const mounted = ref(false)
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
 const currentUserId = ref<number>(0)
-const filterStatus = ref<'all' | 'draft' | 'published'>('all')
+const filterStatus = ref<'published' | 'pending'>('published')
 
 // 获取当前用户ID
 const userStr = localStorage.getItem('user')
@@ -23,19 +23,19 @@ if (userStr) {
 
 // 过滤后的帖子列表
 const filteredPosts = computed(() => {
-  if (filterStatus.value === 'all') {
-    return posts.value
+  if (filterStatus.value === 'pending') {
+    // 审核中：status为pending或review_status为pending
+    return posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending')
   }
-  return posts.value.filter(p => p.status === filterStatus.value)
+  // 我发布的：已发布且审核通过
+  return posts.value.filter(p => p.status === 'published' && p.review_status === 'approved')
 })
 
 // 统计数据
 const stats = computed(() => {
-  return {
-    total: posts.value.length,
-    published: posts.value.filter(p => p.status === 'published').length,
-    draft: posts.value.filter(p => p.status === 'draft').length,
-  }
+  const published = posts.value.filter(p => p.status === 'published' && p.review_status === 'approved').length
+  const pending = posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending').length
+  return { published, pending }
 })
 
 onMounted(async () => {
@@ -118,40 +118,29 @@ function stripHtml(html: string) {
 
     <div class="stats anim-item" style="--delay: 1">
       <div class="stat-item">
-        <div class="stat-value">{{ stats.total }}</div>
-        <div class="stat-label">全部</div>
-      </div>
-      <div class="stat-item">
         <div class="stat-value">{{ stats.published }}</div>
         <div class="stat-label">已发布</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value">{{ stats.draft }}</div>
-        <div class="stat-label">草稿</div>
+        <div class="stat-value">{{ stats.pending }}</div>
+        <div class="stat-label">审核中</div>
       </div>
     </div>
 
     <div class="filters anim-item" style="--delay: 2">
       <button
         class="filter-btn"
-        :class="{ active: filterStatus === 'all' }"
-        @click="filterStatus = 'all'"
-      >
-        全部
-      </button>
-      <button
-        class="filter-btn"
         :class="{ active: filterStatus === 'published' }"
         @click="filterStatus = 'published'"
       >
-        已发布
+        我发布的
       </button>
       <button
         class="filter-btn"
-        :class="{ active: filterStatus === 'draft' }"
-        @click="filterStatus = 'draft'"
+        :class="{ active: filterStatus === 'pending' }"
+        @click="filterStatus = 'pending'"
       >
-        草稿
+        审核中
       </button>
     </div>
 
@@ -175,7 +164,7 @@ function stripHtml(html: string) {
       >
         <div class="post-header">
           <h2 class="post-title" @click="goToDetail(post.id)">{{ post.title }}</h2>
-          <span v-if="post.status === 'draft'" class="draft-badge">草稿</span>
+          <span v-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">审核中</span>
         </div>
 
         <div class="post-content">{{ stripHtml(post.content).substring(0, 150) }}{{ stripHtml(post.content).length > 150 ? '...' : '' }}</div>
