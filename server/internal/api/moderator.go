@@ -458,6 +458,46 @@ func (s *Server) hidePostByMod(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "已屏蔽，帖子已打回待审核"})
 }
 
+// pinPost 置顶/取消置顶帖子
+func (s *Server) pinPost(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var post model.Post
+	if err := database.DB.First(&post, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
+	}
+
+	post.IsPinned = !post.IsPinned
+	database.DB.Save(&post)
+
+	msg := "已置顶"
+	if !post.IsPinned {
+		msg = "已取消置顶"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": msg, "is_pinned": post.IsPinned})
+}
+
+// featurePost 设为精华/取消精华
+func (s *Server) featurePost(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var post model.Post
+	if err := database.DB.First(&post, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
+	}
+
+	post.IsFeatured = !post.IsFeatured
+	database.DB.Save(&post)
+
+	msg := "已设为精华"
+	if !post.IsFeatured {
+		msg = "已取消精华"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": msg, "is_featured": post.IsFeatured})
+}
+
 // listAllItems 获取所有道具（管理用）
 func (s *Server) listAllItems(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))

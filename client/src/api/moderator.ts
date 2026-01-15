@@ -65,6 +65,14 @@ export function hidePostByMod(id: number) {
   return request.post<{ message: string }>(`/moderator/manage/posts/${id}/hide`)
 }
 
+export function pinPost(id: number) {
+  return request.post<{ message: string; is_pinned: boolean }>(`/moderator/manage/posts/${id}/pin`)
+}
+
+export function featurePost(id: number) {
+  return request.post<{ message: string; is_featured: boolean }>(`/moderator/manage/posts/${id}/feature`)
+}
+
 // ========== 管理中心 - 道具 ==========
 
 export interface ItemQueryParams {

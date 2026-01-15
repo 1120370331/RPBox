@@ -18,6 +18,8 @@ import {
   deleteItemByMod,
   hidePostByMod,
   hideItemByMod,
+  pinPost,
+  featurePost,
   getPendingGuilds,
   reviewGuild,
   getAllGuilds,
@@ -436,6 +438,26 @@ async function handleHidePost(id: number) {
   } catch (error) {
     console.error('屏蔽失败:', error)
     alert('屏蔽失败: ' + (error as Error).message)
+  }
+}
+
+async function handlePinPost(id: number, isPinned: boolean) {
+  try {
+    await pinPost(id)
+    await loadAllPosts()
+  } catch (error) {
+    console.error('操作失败:', error)
+    alert('操作失败: ' + (error as Error).message)
+  }
+}
+
+async function handleFeaturePost(id: number, isFeatured: boolean) {
+  try {
+    await featurePost(id)
+    await loadAllPosts()
+  } catch (error) {
+    console.error('操作失败:', error)
+    alert('操作失败: ' + (error as Error).message)
   }
 }
 
@@ -949,7 +971,11 @@ function formatBanTime(dateStr: string | null) {
         <div v-else class="item-list">
           <div v-for="post in allPosts" :key="post.id" class="item-card">
             <div class="item-header">
-              <span class="item-title">{{ post.title }}</span>
+              <div class="title-with-tags">
+                <span class="item-title">{{ post.title }}</span>
+                <span v-if="post.is_pinned" class="mod-tag pinned"><i class="ri-pushpin-fill"></i> 置顶</span>
+                <span v-if="post.is_featured" class="mod-tag featured"><i class="ri-star-fill"></i> 精华</span>
+              </div>
               <div class="status-badges">
                 <span class="status-badge" :class="post.status">{{ getStatusLabel(post.status) }}</span>
                 <span class="status-badge" :class="post.review_status">{{ getReviewStatusLabel(post.review_status) }}</span>
@@ -960,6 +986,15 @@ function formatBanTime(dateStr: string | null) {
               <span><i class="ri-time-line"></i> {{ formatDate(post.created_at) }}</span>
             </div>
             <div class="item-actions">
+              <button class="btn-preview" @click="router.push({ name: 'post-detail', params: { id: post.id } })">
+                <i class="ri-eye-line"></i> 查看
+              </button>
+              <button class="btn-pin" :class="{ active: post.is_pinned }" @click="handlePinPost(post.id, post.is_pinned)">
+                <i class="ri-pushpin-line"></i> {{ post.is_pinned ? '取消置顶' : '置顶' }}
+              </button>
+              <button class="btn-feature" :class="{ active: post.is_featured }" @click="handleFeaturePost(post.id, post.is_featured)">
+                <i class="ri-star-line"></i> {{ post.is_featured ? '取消精华' : '精华' }}
+              </button>
               <button class="btn-warning" @click="handleHidePost(post.id)">
                 <i class="ri-eye-off-line"></i> 屏蔽
               </button>
@@ -1800,6 +1835,82 @@ function formatBanTime(dateStr: string | null) {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* 置顶按钮 */
+.btn-pin {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #9C27B0;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-pin:hover {
+  background: #7B1FA2;
+}
+
+.btn-pin.active {
+  background: #E1BEE7;
+  color: #7B1FA2;
+}
+
+/* 精华按钮 */
+.btn-feature {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #FF9800;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-feature:hover {
+  background: #F57C00;
+}
+
+.btn-feature.active {
+  background: #FFE0B2;
+  color: #E65100;
+}
+
+/* 标题带标签 */
+.title-with-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mod-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mod-tag.pinned {
+  background: #F3E5F5;
+  color: #7B1FA2;
+}
+
+.mod-tag.featured {
+  background: #FFF3E0;
+  color: #E65100;
 }
 
 .modal-overlay {
