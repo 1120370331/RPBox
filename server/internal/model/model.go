@@ -6,7 +6,7 @@ type User struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	Username  string    `gorm:"uniqueIndex;size:50" json:"username"`
 	Email     string    `gorm:"uniqueIndex;size:100" json:"email"`
-	Avatar    string    `gorm:"size:512" json:"avatar"` // 头像URL或base64
+	Avatar    string    `gorm:"type:text" json:"avatar"` // 头像(base64)
 	Role      string    `gorm:"size:20;default:user" json:"role"` // user|moderator|admin
 	Password  string    `gorm:"-" json:"-"`
 	PassHash  string    `json:"-"`
@@ -191,7 +191,7 @@ type Guild struct {
 	Description string    `gorm:"type:text" json:"description"`
 	Icon        string    `gorm:"size:128" json:"icon"`
 	Color       string    `gorm:"size:8" json:"color"`
-	Banner      string    `gorm:"size:512" json:"banner"`  // 头图URL
+	Banner      string    `gorm:"type:text" json:"banner"` // 头图(base64)
 	Slogan      string    `gorm:"size:256" json:"slogan"`  // 公会标语
 	Lore        string    `gorm:"type:text" json:"lore"`   // 公会设定(富文本HTML)
 	Faction     string    `gorm:"size:20" json:"faction"`  // 阵营: alliance|horde|neutral

@@ -8,7 +8,7 @@ export interface Guild {
   color: string
   banner: string
   slogan: string
-  server: string
+  lore: string
   faction: 'alliance' | 'horde' | 'neutral' | ''
   layout: 1 | 2 | 3 | 4
   owner_id: number
@@ -38,7 +38,7 @@ export interface CreateGuildRequest {
   color?: string
   banner?: string
   slogan?: string
-  server?: string
+  lore?: string
   faction?: string
   layout?: 1 | 2 | 3 | 4
 }
@@ -121,7 +121,5 @@ export async function listPublicGuilds(query?: PublicGuildsQuery): Promise<{ gui
 export async function uploadGuildBanner(guildId: number, file: File): Promise<{ banner: string }> {
   const formData = new FormData()
   formData.append('banner', file)
-  return request.post(`/guilds/${guildId}/banner`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  return request.post(`/guilds/${guildId}/banner`, formData)
 }

@@ -2,9 +2,12 @@ package api
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +21,11 @@ type CreateGuildRequest struct {
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 	Color       string `json:"color"`
+	Banner      string `json:"banner"`
+	Slogan      string `json:"slogan"`
+	Lore        string `json:"lore"`
+	Faction     string `json:"faction"`
+	Layout      int    `json:"layout"`
 }
 
 // UpdateGuildRequest 更新公会请求
@@ -26,6 +34,11 @@ type UpdateGuildRequest struct {
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 	Color       string `json:"color"`
+	Banner      string `json:"banner"`
+	Slogan      string `json:"slogan"`
+	Lore        string `json:"lore"`
+	Faction     string `json:"faction"`
+	Layout      int    `json:"layout"`
 }
 
 // JoinGuildRequest 加入公会请求
@@ -87,11 +100,21 @@ func (s *Server) createGuild(c *gin.Context) {
 		return
 	}
 
+	layout := req.Layout
+	if layout < 1 || layout > 4 {
+		layout = 3 // 默认布局3
+	}
+
 	guild := model.Guild{
 		Name:        req.Name,
 		Description: req.Description,
 		Icon:        req.Icon,
 		Color:       req.Color,
+		Banner:      req.Banner,
+		Slogan:      req.Slogan,
+		Lore:        req.Lore,
+		Faction:     req.Faction,
+		Layout:      layout,
 		OwnerID:     userID,
 		InviteCode:  generateInviteCode(),
 		MemberCount: 1,
@@ -170,6 +193,21 @@ func (s *Server) updateGuild(c *gin.Context) {
 	}
 	if req.Color != "" {
 		guild.Color = req.Color
+	}
+	if req.Banner != "" {
+		guild.Banner = req.Banner
+	}
+	if req.Slogan != "" {
+		guild.Slogan = req.Slogan
+	}
+	if req.Lore != "" {
+		guild.Lore = req.Lore
+	}
+	if req.Faction != "" {
+		guild.Faction = req.Faction
+	}
+	if req.Layout >= 1 && req.Layout <= 4 {
+		guild.Layout = req.Layout
 	}
 
 	database.DB.Save(&guild)
@@ -508,4 +546,82 @@ func (s *Server) getStoryGuilds(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
+}
+
+// listPublicGuilds 获取公开公会列表（社区广场）
+func (s *Server) listPublicGuilds(c *gin.Context) {
+	var guilds []model.Guild
+	query := database.DB.Where("status = ? AND is_public = ?", "approved", true)
+
+	// 支持搜索
+	if keyword := c.Query("keyword"); keyword != "" {
+		query = query.Where("name LIKE ? OR description LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+	}
+
+	// 支持阵营筛选
+	if faction := c.Query("faction"); faction != "" {
+		query = query.Where("faction = ?", faction)
+	}
+
+	// 支持服务器筛选
+	if server := c.Query("server"); server != "" {
+		query = query.Where("server = ?", server)
+	}
+
+	query.Order("member_count DESC, created_at DESC").Find(&guilds)
+	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
+}
+
+// uploadGuildBanner 上传公会头图
+func (s *Server) uploadGuildBanner(c *gin.Context) {
+	userID := c.GetUint("userID")
+	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	// 检查权限
+	if !checkGuildAdmin(uint(guildID), userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("banner")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择头图文件"})
+		return
+	}
+	defer file.Close()
+
+	// 检查文件大小 (最大 20MB)
+	if header.Size > 20*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "头图文件不能超过20MB"})
+		return
+	}
+
+	// 检查文件类型
+	contentType := header.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只支持图片格式"})
+		return
+	}
+
+	// 读取文件内容
+	data, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+		return
+	}
+
+	// 转换为 base64
+	base64Data := base64.StdEncoding.EncodeToString(data)
+	bannerURL := "data:" + contentType + ";base64," + base64Data
+
+	// 更新数据库
+	if err := database.DB.Model(&model.Guild{}).Where("id = ?", guildID).Update("banner", bannerURL).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新头图失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "头图更新成功",
+		"banner":  bannerURL,
+	})
 }

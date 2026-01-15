@@ -1,45 +1,58 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { listPosts, type PostWithAuthor, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
-import { listGuilds, type Guild } from '@/api/guild'
-import EventCalendar from '@/components/EventCalendar.vue'
+import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 
 const router = useRouter()
 const mounted = ref(false)
-const activeTab = ref('posts')
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
-const guilds = ref<Guild[]>([])
 const total = ref(0)
 
+// 活动日历
+const events = ref<EventItem[]>([])
+const eventsExpanded = ref(true)
+const eventsLoading = ref(false)
+
 const sortBy = ref<'created_at' | 'view_count' | 'like_count'>('created_at')
-const filterGuildId = ref<number>()
 const filterCategory = ref<PostCategory | ''>('')
+const searchKeyword = ref('')
+
+// 置顶帖子
+const pinnedPosts = computed(() => posts.value.filter(p => p.is_pinned))
+
+// 精华帖子（非置顶）
+const featuredPosts = computed(() => posts.value.filter(p => p.is_featured && !p.is_pinned))
+
+// 普通帖子（非置顶非精华）
+const normalPosts = computed(() => posts.value.filter(p => !p.is_pinned && !p.is_featured))
 
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
-  await loadPosts()
-  await loadGuilds()
+  await Promise.all([loadPosts(), loadEvents()])
 })
 
-const tabs = [
-  { id: 'guilds', icon: 'ri-team-line', label: '公会' },
-  { id: 'posts', icon: 'ri-article-line', label: '帖子' },
-]
+async function loadEvents() {
+  eventsLoading.value = true
+  try {
+    const res = await listEvents()
+    events.value = res.events || []
+  } catch (error) {
+    console.error('加载活动失败:', error)
+  } finally {
+    eventsLoading.value = false
+  }
+}
 
 async function loadPosts() {
   loading.value = true
   try {
     const params: ListPostsParams = {
       page: 1,
-      page_size: 20,
+      page_size: 12,
       sort: sortBy.value,
       order: 'desc',
       status: 'published',
-    }
-    if (filterGuildId.value) {
-      params.guild_id = filterGuildId.value
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -51,15 +64,6 @@ async function loadPosts() {
     console.error('加载帖子失败:', error)
   } finally {
     loading.value = false
-  }
-}
-
-async function loadGuilds() {
-  try {
-    const res = await listGuilds()
-    guilds.value = res.guilds || []
-  } catch (error) {
-    console.error('加载公会失败:', error)
   }
 }
 
@@ -75,30 +79,17 @@ function goToMyPosts() {
   router.push({ name: 'my-posts' })
 }
 
-function goToGuild(id: number) {
-  router.push({ name: 'guild-detail', params: { id } })
-}
-
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const hours = Math.floor(diff / (1000 * 60 * 60))
 
-  if (days === 0) return '今天'
-  if (days === 1) return '昨天'
+  if (hours < 1) return '刚刚'
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
   if (days < 7) return `${days}天前`
   return date.toLocaleDateString('zh-CN')
-}
-
-async function changeSortBy(sort: 'created_at' | 'view_count' | 'like_count') {
-  sortBy.value = sort
-  await loadPosts()
-}
-
-async function changeGuildFilter(guildId?: number) {
-  filterGuildId.value = guildId
-  await loadPosts()
 }
 
 async function changeCategoryFilter(category: PostCategory | '') {
@@ -106,492 +97,1020 @@ async function changeCategoryFilter(category: PostCategory | '') {
   await loadPosts()
 }
 
-// 获取分区标签
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
   return cat ? cat.label : '其他'
 }
 
-function getCategoryIcon(category: string) {
-  const cat = POST_CATEGORIES.find(c => c.value === category)
-  return cat ? cat.icon : 'ri-more-line'
-}
-
-// 去除HTML标签，只保留纯文本
 function stripHtml(html: string) {
   const div = document.createElement('div')
   div.innerHTML = html
   return div.textContent || div.innerText || ''
 }
+
+function formatEventTime(dateStr: string) {
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatEventMonth(dateStr: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', { month: 'short' })
+}
+
+function formatEventDay(dateStr: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.getDate().toString()
+}
+
+function getCategoryClass(category: string) {
+  const classMap: Record<string, string> = {
+    profile: 'cat-profile',
+    guild: 'cat-guild',
+    report: 'cat-report',
+    novel: 'cat-novel',
+    item: 'cat-item',
+    event: 'cat-event',
+    other: 'cat-other'
+  }
+  return classMap[category] || 'cat-other'
+}
+
+// 从内容中提取第一张图片
+function extractFirstImage(html: string): string | null {
+  const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/)
+  return imgMatch ? imgMatch[1] : null
+}
+
+// 从内容中提取所有图片
+function extractAllImages(html: string): string[] {
+  const imgRegex = /<img[^>]+src=["']([^"']+)["']/g
+  const images: string[] = []
+  let match
+  while ((match = imgRegex.exec(html)) !== null) {
+    images.push(match[1])
+  }
+  return images
+}
+
+// 获取帖子所有图片（优先使用 cover_image，否则从内容提取）
+function getPostImages(post: PostWithAuthor): string[] {
+  const images: string[] = []
+  if (post.cover_image) images.push(post.cover_image)
+  const contentImages = extractAllImages(post.content)
+  return [...images, ...contentImages]
+}
 </script>
 
 <template>
   <div class="community-page" :class="{ 'animate-in': mounted }">
-    <div class="header anim-item" style="--delay: 0">
-      <h1 class="page-title">社区广场</h1>
+    <!-- Header -->
+    <header class="header anim-item" style="--delay: 0">
+      <div class="header-left">
+        <h1 class="page-title">酒馆布告栏</h1>
+        <p class="page-subtitle">"这里汇聚了来自艾泽拉斯各地的故事与委托..."</p>
+      </div>
       <div class="header-actions">
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input v-model="searchKeyword" type="text" placeholder="搜索帖子..." />
+        </div>
         <button class="my-posts-btn" @click="goToMyPosts">
           <i class="ri-file-list-3-line"></i>
-          我的帖子
+          我的卷轴
         </button>
         <button class="create-btn" @click="goToCreatePost">
-          <i class="ri-add-line"></i>
-          发布帖子
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          发布
         </button>
       </div>
-    </div>
+    </header>
 
-    <div class="tab-container anim-item" style="--delay: 1">
-      <div
-        v-for="tab in tabs"
-        :key="tab.id"
-        class="tab-item"
-        :class="{ active: activeTab === tab.id }"
-        @click="activeTab = tab.id"
-      >
-        <i :class="tab.icon"></i>
-        <span>{{ tab.label }}</span>
-      </div>
-    </div>
-
-    <!-- 活动日历 -->
-    <EventCalendar class="anim-item" style="--delay: 2" />
-
-    <!-- 公会列表 -->
-    <div v-if="activeTab === 'guilds'" class="guild-list anim-item" style="--delay: 2">
-      <div v-for="guild in guilds" :key="guild.id" class="guild-card" @click="goToGuild(guild.id)">
-        <div class="guild-avatar">{{ guild.name.charAt(0) }}</div>
-        <div class="guild-info">
-          <h3>{{ guild.name }}</h3>
-          <p>{{ guild.description || '暂无描述' }}</p>
-          <div class="guild-stats">
-            <span><i class="ri-group-line"></i> {{ guild.member_count }} 成员</span>
-            <span><i class="ri-article-line"></i> {{ guild.story_count }} 剧情</span>
-          </div>
-        </div>
-      </div>
-      <div v-if="guilds.length === 0" class="empty-state">
-        <i class="ri-team-line"></i>
-        <p>暂无公会</p>
-      </div>
-    </div>
-
-    <!-- 帖子列表 -->
-    <div v-if="activeTab === 'posts'" class="posts-section">
-      <!-- 分区筛选 -->
-      <div class="category-filter anim-item" style="--delay: 2">
+    <!-- Filters & Sort -->
+    <div class="filter-section anim-item" style="--delay: 1">
+      <div class="category-filter">
         <button
           :class="{ active: filterCategory === '' }"
           @click="changeCategoryFilter('')"
-        >
-          全部
-        </button>
+        >全部</button>
         <button
           v-for="cat in POST_CATEGORIES"
           :key="cat.value"
           :class="{ active: filterCategory === cat.value }"
           @click="changeCategoryFilter(cat.value)"
-        >
-          <i :class="cat.icon"></i>
-          {{ cat.label }}
-        </button>
+        >{{ cat.label }}</button>
       </div>
-
-      <div class="filter-bar anim-item" style="--delay: 3">
-        <div class="sort-buttons">
-          <button
-            :class="{ active: sortBy === 'created_at' }"
-            @click="changeSortBy('created_at')"
-          >
-            最新
-          </button>
-          <button
-            :class="{ active: sortBy === 'like_count' }"
-            @click="changeSortBy('like_count')"
-          >
-            最热
-          </button>
-          <button
-            :class="{ active: sortBy === 'view_count' }"
-            @click="changeSortBy('view_count')"
-          >
-            浏览最多
-          </button>
-        </div>
-        <select v-model="filterGuildId" @change="loadPosts" class="guild-filter">
-          <option :value="undefined">全部公会</option>
-          <option v-for="guild in guilds" :key="guild.id" :value="guild.id">
-            {{ guild.name }}
-          </option>
+      <div class="sort-select">
+        <span class="sort-label">排序:</span>
+        <select v-model="sortBy" @change="loadPosts">
+          <option value="created_at">最新发布</option>
+          <option value="like_count">热门讨论</option>
+          <option value="view_count">最多浏览</option>
         </select>
       </div>
+    </div>
 
-      <div v-if="loading" class="loading">加载中...</div>
+    <!-- Loading -->
+    <div v-if="loading" class="loading anim-item" style="--delay: 2">加载中...</div>
 
-      <div v-else class="post-list anim-item" style="--delay: 3">
-        <div
-          v-for="post in posts"
-          :key="post.id"
-          class="post-card"
-          @click="goToPost(post.id)"
-        >
-          <div class="post-header">
-            <div class="author-info">
-              <div class="author-avatar">{{ post.author_name.charAt(0) }}</div>
-              <div>
-                <div class="author-name">{{ post.author_name }}</div>
-                <div class="post-time">{{ formatDate(post.created_at) }}</div>
+    <template v-else>
+      <!-- 置顶帖子区域 -->
+      <div v-if="pinnedPosts.length > 0" class="pinned-section anim-item" style="--delay: 2">
+        <div class="section-header">
+          <i class="ri-pushpin-fill"></i>
+          <span>置顶公告</span>
+        </div>
+        <div class="pinned-list">
+          <div
+            v-for="post in pinnedPosts"
+            :key="post.id"
+            class="pinned-item"
+            @click="goToPost(post.id)"
+          >
+            <span class="pinned-tag">置顶</span>
+            <span class="pinned-title">{{ post.title }}</span>
+            <span class="pinned-time">{{ formatDate(post.created_at) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 活动日历（可展开收缩） -->
+      <div class="events-section anim-item" style="--delay: 2.5">
+        <div class="events-header" @click="eventsExpanded = !eventsExpanded">
+          <div class="events-title">
+            <i class="ri-calendar-event-line"></i>
+            <span>近期活动</span>
+            <span class="events-count">{{ events.length }}</span>
+          </div>
+          <i :class="eventsExpanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'" class="expand-icon"></i>
+        </div>
+        <div v-show="eventsExpanded" class="events-body">
+          <div v-if="eventsLoading" class="events-loading">加载中...</div>
+          <div v-else-if="events.length === 0" class="events-empty">暂无近期活动</div>
+          <div v-else class="events-list">
+            <div
+              v-for="event in events"
+              :key="event.id"
+              class="event-item"
+              @click="goToPost(event.id)"
+            >
+              <div class="event-date">
+                <span class="event-month">{{ formatEventMonth(event.event_start_time) }}</span>
+                <span class="event-day">{{ formatEventDay(event.event_start_time) }}</span>
+              </div>
+              <div class="event-info">
+                <h4 class="event-title">{{ event.title }}</h4>
+                <div class="event-meta">
+                  <span class="event-type" :class="event.event_type">
+                    {{ event.event_type === 'server' ? '服务器活动' : '公会活动' }}
+                  </span>
+                  <span class="event-time">{{ formatEventTime(event.event_start_time) }}</span>
+                </div>
               </div>
             </div>
-            <span class="category-badge">
-              <i :class="getCategoryIcon(post.category)"></i>
-              {{ getCategoryLabel(post.category) }}
-            </span>
           </div>
-          <h3 class="post-title">{{ post.title }}</h3>
-          <div class="post-content">{{ stripHtml(post.content).substring(0, 150) }}...</div>
-          <div class="post-stats">
-            <span><i class="ri-eye-line"></i> {{ post.view_count }}</span>
-            <span><i class="ri-heart-line"></i> {{ post.like_count }}</span>
-            <span><i class="ri-chat-3-line"></i> {{ post.comment_count }}</span>
+        </div>
+      </div>
+
+      <!-- 帖子瀑布流 -->
+      <div class="posts-grid anim-item" style="--delay: 3">
+        <!-- 精华帖子（大卡片） -->
+        <div
+          v-for="post in featuredPosts"
+          :key="'f-' + post.id"
+          class="post-card featured"
+          @click="goToPost(post.id)"
+        >
+          <div class="featured-badge">
+            <i class="ri-star-fill"></i>
+            精华
+          </div>
+          <div class="card-body">
+            <div class="card-meta">
+              <span class="category-tag" :class="getCategoryClass(post.category)">
+                {{ getCategoryLabel(post.category) }}
+              </span>
+              <span class="post-time">{{ formatDate(post.created_at) }}</span>
+            </div>
+            <h2 class="post-title">{{ post.title }}</h2>
+            <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
+            <!-- 图片预览区域 -->
+            <div v-if="getPostImages(post).length > 0" class="image-preview">
+              <div
+                v-for="(img, idx) in getPostImages(post).slice(0, 3)"
+                :key="idx"
+                class="preview-item"
+              >
+                <img :src="img" alt="" />
+              </div>
+              <div v-if="getPostImages(post).length > 3" class="preview-more">
+                +{{ getPostImages(post).length - 3 }}
+              </div>
+            </div>
+            <div class="card-footer">
+              <div class="author-info">
+                <div class="author-avatar">{{ post.author_name?.charAt(0) || 'U' }}</div>
+                <span class="author-name">{{ post.author_name }}</span>
+              </div>
+              <div class="post-stats">
+                <span class="stat-item">
+                  <i class="ri-eye-line"></i>
+                  {{ post.view_count }}
+                </span>
+                <span class="stat-item">
+                  <i class="ri-chat-3-line"></i>
+                  {{ post.comment_count }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
+        <!-- 普通帖子（小卡片） -->
+        <div
+          v-for="post in normalPosts"
+          :key="'n-' + post.id"
+          class="post-card standard"
+          @click="goToPost(post.id)"
+        >
+          <div class="card-content">
+            <span class="category-tag" :class="getCategoryClass(post.category)">
+              {{ getCategoryLabel(post.category) }}
+            </span>
+            <h3 class="post-title">{{ post.title }}</h3>
+            <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
+            <!-- 图片预览区域 -->
+            <div v-if="getPostImages(post).length > 0" class="image-preview small">
+              <div
+                v-for="(img, idx) in getPostImages(post).slice(0, 3)"
+                :key="idx"
+                class="preview-item"
+              >
+                <img :src="img" alt="" />
+              </div>
+              <div v-if="getPostImages(post).length > 3" class="preview-more">
+                +{{ getPostImages(post).length - 3 }}
+              </div>
+            </div>
+            <div class="card-footer">
+              <div class="author-info">
+                <div class="author-avatar small">{{ post.author_name?.charAt(0) || 'U' }}</div>
+                <span class="author-name">{{ post.author_name }}</span>
+              </div>
+              <span class="comment-count">
+                <i class="ri-chat-3-line"></i>
+                {{ post.comment_count }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
         <div v-if="posts.length === 0" class="empty-state">
           <i class="ri-article-line"></i>
           <p>暂无帖子</p>
-          <button class="create-btn-secondary" @click="goToCreatePost">
+          <button class="create-btn" @click="goToCreatePost">
+            <i class="ri-add-line"></i>
             发布第一篇帖子
           </button>
         </div>
       </div>
+    </template>
+
+    <!-- Pagination -->
+    <div v-if="posts.length > 0" class="pagination anim-item" style="--delay: 4">
+      <button class="page-btn" disabled>上一页</button>
+      <button class="page-btn active">1</button>
+      <button class="page-btn">2</button>
+      <button class="page-btn">3</button>
+      <button class="page-btn">下一页</button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .community-page {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
+/* ========== Header ========== */
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 40px;
 }
 
 .page-title {
-  font-size: 42px;
-  color: #4B3621;
+  font-family: 'Cinzel', serif;
+  font-size: 30px;
+  font-weight: 700;
+  color: #2C1810;
+  margin: 0 0 4px 0;
+}
+
+.page-subtitle {
+  font-family: 'Merriweather', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: #8D7B68;
   margin: 0;
 }
 
 .header-actions {
   display: flex;
+  align-items: center;
   gap: 12px;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: #8D7B68;
+}
+
+.search-box input {
+  padding: 8px 16px 8px 36px;
+  width: 256px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #4B3621;
+  outline: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  transition: all 0.2s;
+}
+
+.search-box input:focus {
+  border-color: #B87333;
+  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.1);
 }
 
 .my-posts-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
+  gap: 6px;
+  padding: 8px 16px;
   background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
   color: #4B3621;
-  border: 2px solid #E5D4C1;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
 }
 
 .my-posts-btn:hover {
-  background: #F5EFE7;
+  border-color: #B87333;
 }
 
 .create-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 8px 20px;
   background: #804030;
   color: #fff;
   border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(128, 64, 48, 0.2);
+  transition: all 0.2s;
+}
+
+.create-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .create-btn:hover {
   background: #6B3528;
-  transform: translateY(-2px);
 }
 
-.tab-container {
-  background: #4B3621;
-  border-radius: 16px;
-  padding: 8px;
+/* ========== Filter Section ========== */
+.filter-section {
   display: flex;
-  gap: 8px;
-}
-
-.tab-item {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 600;
-  color: #EED9C4;
-  transition: all 0.3s;
-}
-
-.tab-item.active {
-  background: #EED9C4;
-  color: #4B3621;
-}
-
-.guild-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.guild-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.guild-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(75,54,33,0.1);
-}
-
-.guild-avatar {
-  width: 56px;
-  height: 56px;
-  background: linear-gradient(135deg, #B87333, #804030);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.guild-info { flex: 1; }
-.guild-info h3 { font-size: 18px; color: #2C1810; margin-bottom: 4px; }
-.guild-info p { font-size: 14px; color: #8D7B68; margin-bottom: 8px; }
-
-.guild-stats {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: #8D7B68;
-}
-
-.posts-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  margin-bottom: 32px;
 }
 
 .category-filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
+  gap: 10px;
 }
 
 .category-filter button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background: #F5EFE7;
-  border: 2px solid transparent;
+  padding: 8px 18px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
   border-radius: 8px;
   color: #4B3621;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s;
+  white-space: nowrap;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
 .category-filter button:hover {
-  background: #E5D4C1;
+  border-color: #B87333;
+  color: #B87333;
 }
 
 .category-filter button.active {
-  background: #804030;
+  background: #2C1810;
+  border-color: #2C1810;
   color: #fff;
+  box-shadow: 0 2px 6px rgba(44, 24, 16, 0.2);
 }
 
-.category-filter button i {
-  font-size: 14px;
-}
-
-.filter-bar {
+.sort-select {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
-}
-
-.sort-buttons {
-  display: flex;
   gap: 8px;
+  font-size: 14px;
+  color: #8D7B68;
 }
 
-.sort-buttons button {
-  padding: 8px 16px;
+.sort-select select {
+  background: transparent;
+  border: none;
+  color: #2C1810;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+/* ========== Pinned Section ========== */
+.pinned-section {
   background: #fff;
-  border: 2px solid #E5D4C1;
+  border: 1px solid #E5D4C1;
   border-radius: 8px;
-  color: #8D7B68;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.sort-buttons button.active {
-  background: #804030;
-  border-color: #804030;
-  color: #fff;
-}
-
-.guild-filter {
-  padding: 8px 16px;
-  background: #fff;
-  border: 2px solid #E5D4C1;
-  border-radius: 8px;
-  color: #4B3621;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.post-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.post-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(75,54,33,0.1);
-}
-
-.post-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  color: #804030;
   margin-bottom: 12px;
 }
 
-.category-badge {
+.pinned-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pinned-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #F5EFE7;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pinned-item:hover {
+  background: #E5D4C1;
+}
+
+.pinned-tag {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  background: #804030;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+}
+
+/* ========== Events Section ========== */
+.events-section {
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.events-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.events-header:hover {
+  background: #F5EFE7;
+}
+
+.events-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #D97706;
+}
+
+.events-title i {
+  font-size: 18px;
+}
+
+.events-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: #8D7B68;
+  background: #F5EFE7;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.expand-icon {
+  font-size: 20px;
+  color: #8D7B68;
+  transition: transform 0.3s;
+}
+
+.events-body {
+  border-top: 1px solid #F5EFE7;
+  padding: 16px 20px;
+}
+
+.events-loading,
+.events-empty {
+  text-align: center;
+  padding: 20px;
+  color: #8D7B68;
+  font-size: 14px;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-item {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+  background: #FFFBF5;
+  border: 1px solid #FDE68A;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.event-item:hover {
+  background: #FEF3C7;
+  border-color: #D97706;
+}
+
+.event-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  padding: 8px;
+  background: #D97706;
+  border-radius: 6px;
+  color: #fff;
+}
+
+.event-month {
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.event-day {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.event-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2C1810;
+  margin: 0 0 6px 0;
+}
+
+.event-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.event-type {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.event-type.server {
+  background: #EBF5FF;
+  color: #1D4ED8;
+}
+
+.event-type.guild {
+  background: #F0FDF4;
+  color: #16A34A;
+}
+
+.event-time {
+  color: #8D7B68;
+}
+
+.pinned-title {
+  flex: 1;
+  font-size: 14px;
+  color: #2C1810;
+  font-weight: 500;
+}
+
+.pinned-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #8D7B68;
+}
+
+/* ========== Posts Grid (Masonry) ========== */
+.posts-grid {
+  column-count: 3;
+  column-gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .posts-grid { column-count: 2; }
+}
+@media (max-width: 600px) {
+  .posts-grid { column-count: 1; }
+}
+
+/* ========== Post Card Base ========== */
+.post-card {
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.08);
+  break-inside: avoid;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.post-card:hover {
+  box-shadow: 0 10px 25px -5px rgba(75, 54, 33, 0.15);
+  transform: translateY(-2px);
+}
+
+/* ========== Featured Card (大卡片) ========== */
+.post-card.featured {
+  position: relative;
+}
+
+.featured-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  background: rgba(128, 64, 48, 0.1);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #804030;
-}
-
-.category-badge i {
-  font-size: 12px;
-}
-
-.author-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.author-avatar {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #B87333, #804030);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
+  background: linear-gradient(135deg, #E6A23C, #D97706);
   color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  z-index: 2;
 }
 
-.author-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2C1810;
+.card-image {
+  width: 100%;
+  height: 180px;
+  overflow: hidden;
 }
+
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.post-card:hover .card-image img {
+  transform: scale(1.05);
+}
+
+.card-body {
+  padding: 16px;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.category-tag {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  background: #F5EFE7;
+  border: 1px solid #E5D4C1;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #B87333;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Category Colors */
+.cat-guild { background: #EBF5FF; color: #1D4ED8; border-color: #BFDBFE; }
+.cat-report { background: #F5EFE7; color: #B87333; border-color: #E5D4C1; }
+.cat-event { background: #FEF3C7; color: #D97706; border-color: #FDE68A; }
+.cat-profile { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
+.cat-novel { background: #FDF4FF; color: #A855F7; border-color: #E9D5FF; }
+.cat-item { background: #FFF7ED; color: #EA580C; border-color: #FED7AA; }
+.cat-other { background: #F3F4F6; color: #6B7280; border-color: #E5E7EB; }
 
 .post-time {
   font-size: 12px;
   color: #8D7B68;
 }
 
-.post-title {
-  font-size: 20px;
+.post-card.featured .post-title {
+  font-family: 'Merriweather', serif;
+  font-size: 18px;
   font-weight: 700;
   color: #2C1810;
   margin-bottom: 8px;
+  line-height: 1.4;
+  transition: color 0.3s;
 }
 
-.post-content {
-  font-size: 14px;
-  color: #8D7B68;
+.post-card.featured:hover .post-title {
+  color: #804030;
+}
+
+.post-card.featured .post-excerpt {
+  font-size: 13px;
+  color: #4B3621;
   line-height: 1.6;
   margin-bottom: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ========== Image Preview ========== */
+.image-preview {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.preview-item {
+  width: 100px;
+  height: 100px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.post-card:hover .preview-item img {
+  transform: scale(1.05);
+}
+
+.preview-more {
+  width: 100px;
+  height: 100px;
+  border-radius: 10px;
+  background: #F5EFE7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #8D7B68;
+  flex-shrink: 0;
+}
+
+/* 小卡片的图片预览 */
+.image-preview.small {
+  gap: 8px;
+}
+
+.image-preview.small .preview-item,
+.image-preview.small .preview-more {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+}
+
+.image-preview.small .preview-more {
+  font-size: 14px;
+}
+
+.post-card.featured .card-footer {
+  padding-top: 12px;
+  border-top: 1px solid #F5EFE7;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #F5EFE7;
+  margin-top: auto;
+}
+
+.author-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.author-avatar {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #B87333, #804030);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.author-avatar.small {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+.author-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2C1810;
 }
 
 .post-stats {
   display: flex;
   gap: 16px;
-  font-size: 13px;
-  color: #8D7B68;
 }
 
-.post-stats span {
+.stat-item {
   display: flex;
   align-items: center;
   gap: 4px;
+  font-size: 12px;
+  color: #8D7B68;
 }
 
+.stat-item svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ========== Standard Card (小卡片) ========== */
+.post-card.standard {
+  display: flex;
+  flex-direction: column;
+}
+
+.card-thumb {
+  width: 100%;
+  height: 120px;
+  overflow: hidden;
+}
+
+.card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.post-card.standard:hover .card-thumb img {
+  transform: scale(1.05);
+}
+
+.card-content {
+  padding: 12px;
+}
+
+.post-card.standard .post-title {
+  font-family: 'Merriweather', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2C1810;
+  margin: 6px 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.2s;
+}
+
+.post-card.standard:hover .post-title {
+  color: #804030;
+}
+
+.post-card.standard .post-excerpt {
+  font-size: 12px;
+  color: #8D7B68;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.post-card.standard .card-footer {
+  padding-top: 10px;
+  border-top: 1px solid #F5EFE7;
+}
+
+.post-card.standard .author-name {
+  font-size: 12px;
+  color: #8D7B68;
+}
+
+.comment-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #8D7B68;
+}
+
+/* ========== Empty State ========== */
 .empty-state {
+  column-span: all;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -611,26 +1130,65 @@ function stripHtml(html: string) {
   margin-bottom: 16px;
 }
 
-.create-btn-secondary {
-  padding: 10px 24px;
-  background: #804030;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
+/* ========== Pagination ========== */
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 40px;
+}
+
+.page-btn {
+  padding: 8px 16px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  color: #4B3621;
+  font-size: 14px;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
+.page-btn:hover:not(:disabled) {
+  border-color: #B87333;
+}
+
+.page-btn.active {
+  background: #2C1810;
+  border-color: #2C1810;
+  color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ========== Loading ========== */
 .loading {
+  column-span: all;
   text-align: center;
-  padding: 40px;
+  padding: 60px;
   color: #8D7B68;
+  font-size: 16px;
 }
 
-.anim-item { opacity: 0; transform: translateY(20px); }
-.animate-in .anim-item {
-  animation: fadeUp 0.5s ease forwards;
-  animation-delay: calc(var(--delay) * 0.15s);
+/* ========== Animation ========== */
+.anim-item {
+  opacity: 0;
+  transform: translateY(20px);
 }
-@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+.animate-in .anim-item {
+  animation: fadeUp 0.4s ease-out forwards;
+  animation-delay: calc(var(--delay) * 0.1s);
+}
+
+@keyframes fadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 </style>
