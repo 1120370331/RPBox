@@ -11,6 +11,9 @@ export interface Post {
   story_id?: number
   status: 'draft' | 'published'
   is_public: boolean
+  is_pinned: boolean      // 置顶
+  is_featured: boolean    // 精华
+  cover_image?: string    // 封面图
   view_count: number
   like_count: number
   comment_count: number

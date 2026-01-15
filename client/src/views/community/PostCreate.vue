@@ -5,10 +5,12 @@ import { createPost, type CreatePostRequest, POST_CATEGORIES, type PostCategory 
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { useToastStore } from '@/stores/toast'
+import { useUserStore } from '@/stores/user'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 
 const router = useRouter()
 const toast = useToastStore()
+const userStore = useUserStore()
 const mounted = ref(false)
 const loading = ref(false)
 
@@ -26,6 +28,17 @@ const form = ref<CreatePostRequest>({
 
 // 是否为活动分区
 const isEventCategory = computed(() => form.value.category === 'event')
+
+// 权限检查：是否可以发布服务器活动
+const canPostServerEvent = computed(() => userStore.isModerator)
+
+// 有管理权限的公会列表（owner 或 admin）
+const adminGuilds = computed(() => {
+  return guilds.value.filter(g => g.my_role === 'owner' || g.my_role === 'admin')
+})
+
+// 权限检查：是否可以发布公会活动
+const canPostGuildEvent = computed(() => adminGuilds.value.length > 0)
 
 // 监听分区变化，重置活动相关字段
 watch(() => form.value.category, (newVal) => {
@@ -82,6 +95,24 @@ async function handleSubmit(status: 'draft' | 'published') {
   if (!form.value.content.trim()) {
     toast.warning('请输入内容')
     return
+  }
+
+  // 活动分区权限验证
+  if (form.value.category === 'event') {
+    if (form.value.event_type === 'server' && !canPostServerEvent.value) {
+      toast.error('你没有发布服务器活动的权限')
+      return
+    }
+    if (form.value.event_type === 'guild') {
+      if (!canPostGuildEvent.value) {
+        toast.error('你没有发布公会活动的权限')
+        return
+      }
+      if (!form.value.guild_id) {
+        toast.warning('请选择要发布活动的公会')
+        return
+      }
+    }
   }
 
   loading.value = true
@@ -154,22 +185,35 @@ function handleCancel() {
         <div class="event-type-list">
           <div
             class="event-type-item"
-            :class="{ selected: form.event_type === 'server' }"
-            @click="form.event_type = 'server'"
+            :class="{ selected: form.event_type === 'server', disabled: !canPostServerEvent }"
+            @click="canPostServerEvent && (form.event_type = 'server')"
           >
             <i class="ri-global-line"></i>
             <span>服务器活动</span>
-            <small>需要版主权限</small>
+            <small v-if="canPostServerEvent">需要版主权限</small>
+            <small v-else class="no-permission">你没有发布的权限</small>
           </div>
           <div
             class="event-type-item"
-            :class="{ selected: form.event_type === 'guild' }"
-            @click="form.event_type = 'guild'"
+            :class="{ selected: form.event_type === 'guild', disabled: !canPostGuildEvent }"
+            @click="canPostGuildEvent && (form.event_type = 'guild')"
           >
             <i class="ri-team-line"></i>
             <span>公会活动</span>
-            <small>需要公会管理员权限</small>
+            <small v-if="canPostGuildEvent">需要公会管理员权限</small>
+            <small v-else class="no-permission">你没有发布的权限</small>
           </div>
+        </div>
+
+        <!-- 公会活动：选择公会 -->
+        <div v-if="form.event_type === 'guild'" class="guild-select-section">
+          <label>选择公会</label>
+          <select v-model="form.guild_id" class="guild-select" required>
+            <option :value="undefined" disabled>请选择要发布活动的公会</option>
+            <option v-for="guild in adminGuilds" :key="guild.id" :value="guild.id">
+              {{ guild.name }}（{{ guild.my_role === 'owner' ? '会长' : '管理员' }}）
+            </option>
+          </select>
         </div>
 
         <div v-if="form.event_type" class="event-time-fields">
@@ -189,11 +233,6 @@ function handleCancel() {
               class="time-input"
             />
           </div>
-        </div>
-
-        <div v-if="form.event_type === 'guild'" class="guild-required-notice">
-          <i class="ri-information-line"></i>
-          <span>公会活动需要选择关联公会</span>
         </div>
       </div>
 
@@ -485,6 +524,38 @@ function handleCancel() {
 .event-type-item small {
   font-size: 12px;
   opacity: 0.7;
+}
+
+.event-type-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #F5F5F5;
+  border-color: #E0E0E0;
+}
+
+.event-type-item.disabled:hover {
+  border-color: #E0E0E0;
+}
+
+.event-type-item.disabled i {
+  color: #999;
+}
+
+.event-type-item small.no-permission {
+  color: #C44536;
+  opacity: 1;
+}
+
+.guild-select-section {
+  margin-top: 20px;
+}
+
+.guild-select-section label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4B3621;
+  margin-bottom: 8px;
 }
 
 .event-time-fields {

@@ -8,7 +8,7 @@ const mounted = ref(false)
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
 const currentUserId = ref<number>(0)
-const filterStatus = ref<'published' | 'pending'>('published')
+const filterStatus = ref<'published' | 'pending' | 'draft'>('published')
 
 // 获取当前用户ID
 const userStr = localStorage.getItem('user')
@@ -27,6 +27,10 @@ const filteredPosts = computed(() => {
     // 审核中：status为pending或review_status为pending
     return posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending')
   }
+  if (filterStatus.value === 'draft') {
+    // 草稿
+    return posts.value.filter(p => p.status === 'draft')
+  }
   // 我发布的：已发布且审核通过
   return posts.value.filter(p => p.status === 'published' && p.review_status === 'approved')
 })
@@ -35,7 +39,8 @@ const filteredPosts = computed(() => {
 const stats = computed(() => {
   const published = posts.value.filter(p => p.status === 'published' && p.review_status === 'approved').length
   const pending = posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending').length
-  return { published, pending }
+  const draft = posts.value.filter(p => p.status === 'draft').length
+  return { published, pending, draft }
 })
 
 onMounted(async () => {
@@ -125,6 +130,10 @@ function stripHtml(html: string) {
         <div class="stat-value">{{ stats.pending }}</div>
         <div class="stat-label">审核中</div>
       </div>
+      <div class="stat-item">
+        <div class="stat-value">{{ stats.draft }}</div>
+        <div class="stat-label">草稿</div>
+      </div>
     </div>
 
     <div class="filters anim-item" style="--delay: 2">
@@ -142,13 +151,20 @@ function stripHtml(html: string) {
       >
         审核中
       </button>
+      <button
+        class="filter-btn"
+        :class="{ active: filterStatus === 'draft' }"
+        @click="filterStatus = 'draft'"
+      >
+        草稿箱
+      </button>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
 
     <div v-else-if="filteredPosts.length === 0" class="empty anim-item" style="--delay: 3">
       <i class="ri-file-list-3-line"></i>
-      <p>{{ filterStatus === 'all' ? '还没有创建任何帖子' : `没有${filterStatus === 'draft' ? '草稿' : '已发布的帖子'}` }}</p>
+      <p>{{ filterStatus === 'draft' ? '没有草稿' : filterStatus === 'pending' ? '没有审核中的帖子' : '没有已发布的帖子' }}</p>
       <button class="create-btn-large" @click="goToCreate">
         <i class="ri-add-line"></i>
         创建第一篇帖子
@@ -164,7 +180,8 @@ function stripHtml(html: string) {
       >
         <div class="post-header">
           <h2 class="post-title" @click="goToDetail(post.id)">{{ post.title }}</h2>
-          <span v-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">审核中</span>
+          <span v-if="post.status === 'draft'" class="draft-badge">草稿</span>
+          <span v-else-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">审核中</span>
         </div>
 
         <div class="post-content">{{ stripHtml(post.content).substring(0, 150) }}{{ stripHtml(post.content).length > 150 ? '...' : '' }}</div>
@@ -415,9 +432,18 @@ function stripHtml(html: string) {
   color: #804030;
 }
 
+.pending-badge {
+  padding: 4px 12px;
+  background: #E6A23C;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .draft-badge {
   padding: 4px 12px;
-  background: #FFA500;
+  background: #909399;
   color: #fff;
   border-radius: 6px;
   font-size: 12px;

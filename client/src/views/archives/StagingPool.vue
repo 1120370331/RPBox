@@ -347,7 +347,11 @@ defineExpose({
       </div>
     </div>
 
-    <REmpty v-if="!loading && totalRecords === 0" description="需要安装 RPBox Addon 插件才能采集聊天记录" />
+    <REmpty v-if="!loading && totalRecords === 0" description="需要安装 RPBox Addon 插件才能采集聊天记录">
+      <router-link class="tutorial-link" :to="{ name: 'guide' }">
+        <i class="ri-book-open-line"></i> 查看使用教程
+      </router-link>
+    </REmpty>
 
     <div v-else class="staging-content">
       <div
@@ -592,5 +596,21 @@ defineExpose({
   padding: 16px;
   border-top: 1px solid var(--color-border);
   background: var(--color-bg);
+}
+
+.tutorial-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #B87333;
+  font-size: 14px;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tutorial-link:hover {
+  background: rgba(184, 115, 51, 0.1);
 }
 </style>
