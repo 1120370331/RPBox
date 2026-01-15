@@ -300,6 +300,14 @@ type ItemFavorite struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ItemDownload 道具下载记录（每用户每道具最多1次）
+type ItemDownload struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"uniqueIndex:idx_item_download_user;not null" json:"item_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_item_download_user;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // ItemPendingEdit 道具待审核编辑
 type ItemPendingEdit struct {
 	ID            uint       `gorm:"primarykey" json:"id"`

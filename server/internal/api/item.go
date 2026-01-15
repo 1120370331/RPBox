@@ -369,6 +369,7 @@ func (s *Server) deleteItem(c *gin.Context) {
 
 // downloadItem 记录下载
 func (s *Server) downloadItem(c *gin.Context) {
+	userID := c.GetUint("user_id")
 	id := c.Param("id")
 	var item model.Item
 
@@ -377,8 +378,20 @@ func (s *Server) downloadItem(c *gin.Context) {
 		return
 	}
 
-	// 增加下载次数
-	database.DB.Model(&item).Update("downloads", item.Downloads+1)
+	// 检查用户是否已经下载过（每用户每道具最多贡献1次下载量）
+	var existingDownload model.ItemDownload
+	err := database.DB.Where("item_id = ? AND user_id = ?", item.ID, userID).First(&existingDownload).Error
+
+	if err != nil {
+		// 用户首次下载，记录并增加下载次数
+		download := model.ItemDownload{
+			ItemID: item.ID,
+			UserID: userID,
+		}
+		database.DB.Create(&download)
+		database.DB.Model(&item).Update("downloads", item.Downloads+1)
+	}
+	// 如果已下载过，不增加下载次数，但仍返回导入代码
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
