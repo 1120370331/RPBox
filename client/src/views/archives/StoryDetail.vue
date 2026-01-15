@@ -3,6 +3,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getStory, updateStory, addStoryEntries, publishStory, type Story, type StoryEntry } from '@/api/story'
 import { getCharacter, updateCharacter, type Character } from '@/api/character'
+import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
+import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
 import RButton from '@/components/RButton.vue'
 import RCard from '@/components/RCard.vue'
 import RInput from '@/components/RInput.vue'
@@ -12,6 +14,7 @@ import RichEditor from '@/components/RichEditor.vue'
 import CharacterCard from '@/components/CharacterCard.vue'
 import RColorPicker from '@/components/RColorPicker.vue'
 import RAvatarPicker from '@/components/RAvatarPicker.vue'
+import TagSelector from '@/components/TagSelector.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -42,6 +45,16 @@ const characterCardPosition = ref({ x: 0, y: 0 })
 
 // 角色数据缓存 (character_id -> Character)
 const charactersMap = ref<Map<number, Character>>(new Map())
+
+// 标签管理
+const storyTags = ref<Tag[]>([])
+const allTags = ref<Tag[]>([])
+const showTagModal = ref(false)
+
+// 公会归档
+const storyGuilds = ref<Guild[]>([])
+const myGuilds = ref<Guild[]>([])
+const showGuildModal = ref(false)
 
 const storyId = computed(() => Number(route.params.id))
 
@@ -133,6 +146,78 @@ function formatDate(dateStr: string): string {
 function goBack() {
   router.push({ name: 'archives' })
 }
+
+// ========== 标签管理 ==========
+async function loadTags() {
+  try {
+    const [tagsRes, storyTagsRes] = await Promise.all([
+      listTags('story'),
+      getStoryTags(storyId.value)
+    ])
+    allTags.value = tagsRes.tags || []
+    storyTags.value = storyTagsRes.tags || []
+  } catch (e) {
+    console.error('加载标签失败:', e)
+  }
+}
+
+async function handleAddTag(tagId: number) {
+  try {
+    await addStoryTag(storyId.value, tagId)
+    await loadTags()
+  } catch (e) {
+    console.error('添加标签失败:', e)
+  }
+}
+
+async function handleRemoveTag(tagId: number) {
+  try {
+    await removeStoryTag(storyId.value, tagId)
+    await loadTags()
+  } catch (e) {
+    console.error('移除标签失败:', e)
+  }
+}
+
+// ========== 公会归档 ==========
+async function loadGuilds() {
+  try {
+    const [guildsRes, storyGuildsRes] = await Promise.all([
+      listGuilds(),
+      getStoryGuilds(storyId.value)
+    ])
+    myGuilds.value = guildsRes.guilds || []
+    storyGuilds.value = storyGuildsRes.guilds || []
+  } catch (e) {
+    console.error('加载公会失败:', e)
+  }
+}
+
+async function handleArchiveToGuild(guildId: number) {
+  try {
+    await archiveStoryToGuild(guildId, storyId.value)
+    await loadGuilds()
+    showGuildModal.value = false
+  } catch (e: any) {
+    alert(e.message || '归档失败')
+  }
+}
+
+async function handleRemoveFromGuild(guildId: number) {
+  if (!confirm('确定要从该公会移除归档吗？')) return
+  try {
+    await removeStoryFromGuild(guildId, storyId.value)
+    await loadGuilds()
+  } catch (e) {
+    console.error('移除归档失败:', e)
+  }
+}
+
+// 获取未归档的公会列表
+const availableGuilds = computed(() => {
+  const archivedIds = new Set(storyGuilds.value.map(g => g.id))
+  return myGuilds.value.filter(g => !archivedIds.has(g.id))
+})
 
 // 分享链接
 const shareUrl = computed(() => {
@@ -271,7 +356,11 @@ function getChannelTextColor(channel: string): string {
   return colorMap[channel] || ''
 }
 
-onMounted(loadStory)
+onMounted(() => {
+  loadStory()
+  loadTags()
+  loadGuilds()
+})
 </script>
 
 <template>
@@ -305,10 +394,45 @@ onMounted(loadStory)
                   {{ story.status === 'published' ? '已发布' : '草稿' }}
                 </span>
               </div>
+              <!-- 标签显示 -->
+              <div class="tags-section">
+                <div class="tags-list">
+                  <span
+                    v-for="tag in storyTags"
+                    :key="tag.id"
+                    class="tag-item"
+                    :style="{ background: `#${tag.color}20`, color: `#${tag.color}` }"
+                  >
+                    {{ tag.name }}
+                    <i class="ri-close-line" @click.stop="handleRemoveTag(tag.id)"></i>
+                  </span>
+                  <button class="add-tag-btn" @click="showTagModal = true">
+                    <i class="ri-add-line"></i> 添加标签
+                  </button>
+                </div>
+              </div>
+              <!-- 公会归档显示 -->
+              <div v-if="storyGuilds.length > 0" class="guilds-section">
+                <span class="guilds-label">已归档到:</span>
+                <div class="guilds-list">
+                  <span
+                    v-for="guild in storyGuilds"
+                    :key="guild.id"
+                    class="guild-badge"
+                    :style="{ borderColor: `#${guild.color || 'B87333'}` }"
+                  >
+                    {{ guild.name }}
+                    <i class="ri-close-line" @click.stop="handleRemoveFromGuild(guild.id)"></i>
+                  </span>
+                </div>
+              </div>
             </div>
             <div class="header-actions">
               <RButton @click="startEdit">编辑</RButton>
               <RButton @click="showAddModal = true">添加条目</RButton>
+              <RButton @click="showGuildModal = true">
+                <i class="ri-folder-add-line"></i> 归档到公会
+              </RButton>
               <RButton
                 :type="story.is_public ? 'default' : 'primary'"
                 :loading="publishing"
@@ -469,6 +593,48 @@ onMounted(loadStory)
       <template #footer>
         <RButton @click="showEditModal = false">取消</RButton>
         <RButton type="primary" :loading="savingCharacter" @click="saveCharacterEdit">保存</RButton>
+      </template>
+    </RModal>
+
+    <!-- 标签选择对话框 -->
+    <RModal v-model="showTagModal" title="管理标签" width="500px">
+      <TagSelector
+        :selected-tags="storyTags"
+        :all-tags="allTags"
+        @add="handleAddTag"
+        @remove="handleRemoveTag"
+        @create="(tag) => allTags.push(tag)"
+      />
+      <template #footer>
+        <RButton @click="showTagModal = false">关闭</RButton>
+      </template>
+    </RModal>
+
+    <!-- 公会归档对话框 -->
+    <RModal v-model="showGuildModal" title="归档到公会" width="500px">
+      <div class="guild-archive-content">
+        <p v-if="availableGuilds.length === 0" class="empty-tip">
+          暂无可归档的公会，请先加入公会
+        </p>
+        <div v-else class="guild-list">
+          <div
+            v-for="guild in availableGuilds"
+            :key="guild.id"
+            class="guild-item"
+            @click="handleArchiveToGuild(guild.id)"
+          >
+            <div class="guild-info">
+              <div class="guild-name" :style="{ color: `#${guild.color || 'B87333'}` }">
+                {{ guild.name }}
+              </div>
+              <div class="guild-desc">{{ guild.description || '暂无描述' }}</div>
+            </div>
+            <i class="ri-arrow-right-line"></i>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showGuildModal = false">取消</RButton>
       </template>
     </RModal>
   </div>
@@ -896,5 +1062,157 @@ onMounted(loadStory)
 .info-row .label {
   color: var(--color-secondary);
   min-width: 48px;
+}
+
+/* 标签区域 */
+.tags-section {
+  margin-top: 12px;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+  transition: opacity 0.2s;
+}
+
+.tag-item i {
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.tag-item i:hover {
+  opacity: 1;
+}
+
+.add-tag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-tag-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(184, 115, 51, 0.05);
+}
+
+/* 公会归档区域 */
+.guilds-section {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guilds-label {
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+
+.guilds-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.guild-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1.5px solid;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(184, 115, 51, 0.05);
+  cursor: default;
+}
+
+.guild-badge i {
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.guild-badge i:hover {
+  opacity: 1;
+}
+
+/* 公会归档对话框 */
+.guild-archive-content {
+  min-height: 200px;
+}
+
+.empty-tip {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--color-secondary);
+  font-size: 14px;
+}
+
+.guild-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guild-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.guild-item:hover {
+  border-color: var(--color-accent);
+  background: rgba(184, 115, 51, 0.05);
+}
+
+.guild-info {
+  flex: 1;
+}
+
+.guild-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.guild-desc {
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+
+.guild-item i {
+  color: var(--color-secondary);
+  font-size: 18px;
 }
 </style>

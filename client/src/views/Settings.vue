@@ -2,6 +2,9 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
+import { useUserStore } from '@/stores/user'
+import { useToastStore } from '@/stores/toast'
+import { uploadAvatar } from '@/api/user'
 
 interface WowInstallation {
   path: string
@@ -10,12 +13,17 @@ interface WowInstallation {
 }
 
 const router = useRouter()
+const userStore = useUserStore()
+const toast = useToastStore()
+
 const mounted = ref(false)
 const wowPath = ref('')
 const detectedPaths = ref<WowInstallation[]>([])
 const isScanning = ref(false)
 const autoSync = ref(false)
 const syncOnStartup = ref(true)
+const avatarUploading = ref(false)
+const avatarInputRef = ref<HTMLInputElement | null>(null)
 
 onMounted(() => {
   wowPath.value = localStorage.getItem('wow_path') || ''
@@ -55,6 +63,33 @@ function resetSetup() {
   localStorage.removeItem('wow_path')
   router.push('/sync/setup')
 }
+
+function triggerAvatarUpload() {
+  avatarInputRef.value?.click()
+}
+
+async function handleAvatarChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (file.size > 2 * 1024 * 1024) {
+    toast.warning('头像文件不能超过2MB')
+    return
+  }
+
+  avatarUploading.value = true
+  try {
+    const res = await uploadAvatar(file)
+    userStore.updateAvatar(res.avatar)
+    toast.success('头像更新成功')
+  } catch (error: any) {
+    toast.error(error.message || '上传失败')
+  } finally {
+    avatarUploading.value = false
+    input.value = ''
+  }
+}
 </script>
 
 <template>
@@ -74,8 +109,45 @@ function resetSetup() {
 
     <!-- 设置内容区 -->
     <div class="settings-content">
-      <!-- WoW 安装路径 -->
+      <!-- 个人资料 -->
       <div class="setting-card anim-item" style="--delay: 1">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-user-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>个人资料</h3>
+            <p>管理您的头像和账户信息</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="avatar-section">
+            <div class="avatar-preview" @click="triggerAvatarUpload">
+              <img v-if="userStore.user?.avatar" :src="userStore.user.avatar" alt="头像" />
+              <span v-else class="avatar-placeholder">
+                {{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}
+              </span>
+              <div class="avatar-overlay">
+                <i :class="avatarUploading ? 'ri-loader-4-line spin' : 'ri-camera-line'"></i>
+              </div>
+            </div>
+            <div class="avatar-info">
+              <h4>{{ userStore.user?.username || '未登录' }}</h4>
+              <p>点击头像更换，支持 JPG、PNG 格式，最大 2MB</p>
+            </div>
+            <input
+              ref="avatarInputRef"
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleAvatarChange"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- WoW 安装路径 -->
+      <div class="setting-card anim-item" style="--delay: 2">
         <div class="card-header">
           <div class="card-icon">
             <i class="ri-folder-3-line"></i>
@@ -117,7 +189,7 @@ function resetSetup() {
       </div>
 
       <!-- 同步设置 -->
-      <div class="setting-card anim-item" style="--delay: 2">
+      <div class="setting-card anim-item" style="--delay: 3">
         <div class="card-header">
           <div class="card-icon">
             <i class="ri-refresh-line"></i>
@@ -150,7 +222,7 @@ function resetSetup() {
       </div>
 
       <!-- 数据管理 -->
-      <div class="setting-card anim-item" style="--delay: 3">
+      <div class="setting-card anim-item" style="--delay: 4">
         <div class="card-header">
           <div class="card-icon">
             <i class="ri-database-2-line"></i>
@@ -175,7 +247,7 @@ function resetSetup() {
       </div>
 
       <!-- 关于 -->
-      <div class="setting-card about-card anim-item" style="--delay: 4">
+      <div class="setting-card about-card anim-item" style="--delay: 5">
         <div class="about-content">
           <div class="about-logo">
             <i class="ri-box-3-line"></i>
@@ -281,6 +353,74 @@ function resetSetup() {
 }
 
 .card-title p {
+  margin: 0;
+  font-size: 13px;
+  color: #8C7B70;
+}
+
+/* 头像区域 */
+.avatar-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.avatar-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #FFF;
+}
+
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.avatar-preview:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.avatar-overlay i {
+  font-size: 24px;
+  color: #FFF;
+}
+
+.avatar-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2C1810;
+}
+
+.avatar-info p {
   margin: 0;
   font-size: 13px;
   color: #8C7B70;

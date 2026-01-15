@@ -1,25 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { useToastStore } from '@/stores/toast'
 
-interface ToastItem {
-  id: number
-  type: 'success' | 'error' | 'warning' | 'info'
-  message: string
-}
-
-const toasts = ref<ToastItem[]>([])
-let id = 0
-
-function show(type: ToastItem['type'], message: string, duration = 3000) {
-  const toast = { id: ++id, type, message }
-  toasts.value.push(toast)
-  setTimeout(() => remove(toast.id), duration)
-}
-
-function remove(id: number) {
-  const index = toasts.value.findIndex(t => t.id === id)
-  if (index > -1) toasts.value.splice(index, 1)
-}
+const toastStore = useToastStore()
 
 const icons = {
   success: '✓',
@@ -27,20 +9,13 @@ const icons = {
   warning: '!',
   info: 'i',
 }
-
-defineExpose({
-  success: (msg: string) => show('success', msg),
-  error: (msg: string) => show('error', msg),
-  warning: (msg: string) => show('warning', msg),
-  info: (msg: string) => show('info', msg),
-})
 </script>
 
 <template>
   <Teleport to="body">
     <div class="r-toast-container">
       <TransitionGroup name="r-toast">
-        <div v-for="t in toasts" :key="t.id" class="r-toast" :class="`r-toast--${t.type}`">
+        <div v-for="t in toastStore.toasts" :key="t.id" class="r-toast" :class="`r-toast--${t.type}`">
           <span class="r-toast__icon">{{ icons[t.type] }}</span>
           <span class="r-toast__message">{{ t.message }}</span>
         </div>

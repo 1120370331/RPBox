@@ -34,14 +34,30 @@ async function baseRequest<T>(path: string, options: RequestInit = {}): Promise<
 
 function buildRequest(method: HttpMethod) {
   return async function <T>(path: string, body?: any, options: RequestInit = {}): Promise<T> {
+    let finalPath = path
     const merged: RequestInit = {
       ...options,
       method,
     }
-    if (body !== undefined) {
+
+    // GET 请求：将 params 转换为 URL 查询字符串
+    if (method === 'GET' && body?.params) {
+      const params = new URLSearchParams()
+      for (const [key, value] of Object.entries(body.params)) {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value))
+        }
+      }
+      const queryString = params.toString()
+      if (queryString) {
+        finalPath = `${path}?${queryString}`
+      }
+    } else if (body !== undefined && method !== 'GET') {
+      // 非 GET 请求：将 body 序列化为 JSON
       merged.body = typeof body === 'string' ? body : JSON.stringify(body)
     }
-    return baseRequest<T>(path, merged)
+
+    return baseRequest<T>(finalPath, merged)
   }
 }
 

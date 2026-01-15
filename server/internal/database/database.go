@@ -33,6 +33,23 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.Story{},
 		&model.StoryEntry{},
 		&model.Character{},
+		&model.Tag{},
+		&model.StoryTag{},
+		&model.Guild{},
+		&model.GuildMember{},
+		&model.StoryGuild{},
+		&model.Item{},
+		&model.ItemTag{},
+		&model.ItemRating{},
+		&model.ItemComment{},
+		&model.ItemLike{},
+		&model.ItemFavorite{},
+		&model.Post{},
+		&model.PostTag{},
+		&model.Comment{},
+		&model.PostLike{},
+		&model.PostFavorite{},
+		&model.CommentLike{},
 	); err != nil {
 		return err
 	}
@@ -49,5 +66,39 @@ func Init(cfg *config.DatabaseConfig) error {
 	}
 
 	DB = db
+
+	// 初始化预设标签
+	initPresetTags()
+
 	return nil
+}
+
+// initPresetTags 初始化预设标签
+func initPresetTags() {
+	// 剧情标签
+	storyTags := []model.Tag{
+		{Name: "主线剧情", Color: "B87333", Type: "preset", Category: "story", IsPublic: true},
+		{Name: "日常互动", Color: "4682B4", Type: "preset", Category: "story", IsPublic: true},
+		{Name: "战斗场景", Color: "DC143C", Type: "preset", Category: "story", IsPublic: true},
+		{Name: "社交活动", Color: "9370DB", Type: "preset", Category: "story", IsPublic: true},
+	}
+
+	// 道具细分标签
+	itemTags := []model.Tag{
+		{Name: "普通道具", Color: "A08060", Type: "preset", Category: "item", IsPublic: true},
+		{Name: "可使用道具", Color: "6B9B6B", Type: "preset", Category: "item", IsPublic: true},
+		{Name: "消耗品", Color: "C98B7B", Type: "preset", Category: "item", IsPublic: true},
+		{Name: "书籍", Color: "7B9BC7", Type: "preset", Category: "item", IsPublic: true},
+		{Name: "多道具", Color: "A88BC7", Type: "preset", Category: "item", IsPublic: true},
+		{Name: "画作", Color: "C9B370", Type: "preset", Category: "item", IsPublic: true},
+	}
+
+	allTags := append(storyTags, itemTags...)
+
+	for _, tag := range allTags {
+		var existing model.Tag
+		if err := DB.Where("name = ? AND type = ? AND category = ?", tag.Name, "preset", tag.Category).First(&existing).Error; err != nil {
+			DB.Create(&tag)
+		}
+	}
 }
