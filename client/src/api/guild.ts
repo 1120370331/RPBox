@@ -6,11 +6,17 @@ export interface Guild {
   description: string
   icon: string
   color: string
+  banner: string
+  slogan: string
+  server: string
+  faction: 'alliance' | 'horde' | 'neutral' | ''
+  layout: 1 | 2 | 3 | 4
   owner_id: number
   member_count: number
   story_count: number
   is_public: boolean
   invite_code: string
+  status?: 'pending' | 'approved' | 'rejected'
   my_role?: 'owner' | 'admin' | 'member'
   created_at: string
   updated_at: string
@@ -30,6 +36,11 @@ export interface CreateGuildRequest {
   description?: string
   icon?: string
   color?: string
+  banner?: string
+  slogan?: string
+  server?: string
+  faction?: string
+  layout?: 1 | 2 | 3 | 4
 }
 
 export async function listGuilds(): Promise<{ guilds: Guild[] }> {
@@ -88,4 +99,29 @@ export async function removeStoryFromGuild(guildId: number, storyId: number): Pr
 
 export async function getStoryGuilds(storyId: number): Promise<{ guilds: Guild[] }> {
   return request.get(`/stories/${storyId}/guilds`)
+}
+
+// ========== 公开公会 ==========
+
+export interface PublicGuildsQuery {
+  keyword?: string
+  faction?: string
+  server?: string
+}
+
+export async function listPublicGuilds(query?: PublicGuildsQuery): Promise<{ guilds: Guild[] }> {
+  const params = new URLSearchParams()
+  if (query?.keyword) params.append('keyword', query.keyword)
+  if (query?.faction) params.append('faction', query.faction)
+  if (query?.server) params.append('server', query.server)
+  const queryStr = params.toString()
+  return request.get(`/public/guilds${queryStr ? '?' + queryStr : ''}`)
+}
+
+export async function uploadGuildBanner(guildId: number, file: File): Promise<{ banner: string }> {
+  const formData = new FormData()
+  formData.append('banner', file)
+  return request.post(`/guilds/${guildId}/banner`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
