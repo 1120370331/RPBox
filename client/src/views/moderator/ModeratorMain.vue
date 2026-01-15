@@ -16,6 +16,8 @@ import {
   getAllItems,
   deletePostByMod,
   deleteItemByMod,
+  hidePostByMod,
+  hideItemByMod,
   getPendingGuilds,
   reviewGuild,
   getAllGuilds,
@@ -418,6 +420,25 @@ async function handleDeletePost(id: number) {
   }
 }
 
+async function handleHidePost(id: number) {
+  const confirmed = await dialog.confirm({
+    title: '屏蔽帖子',
+    message: '确定要屏蔽这篇帖子吗？帖子将被打回待审核状态。',
+    type: 'warning',
+    confirmText: '屏蔽',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
+  try {
+    await hidePostByMod(id)
+    await loadAllPosts()
+    await loadStats()
+  } catch (error) {
+    console.error('屏蔽失败:', error)
+    alert('屏蔽失败: ' + (error as Error).message)
+  }
+}
+
 async function handleDeleteItem(id: number) {
   const confirmed = await dialog.confirm({
     title: '删除道具',
@@ -434,6 +455,25 @@ async function handleDeleteItem(id: number) {
   } catch (error) {
     console.error('删除失败:', error)
     alert('删除失败: ' + (error as Error).message)
+  }
+}
+
+async function handleHideItem(id: number) {
+  const confirmed = await dialog.confirm({
+    title: '屏蔽道具',
+    message: '确定要屏蔽这个道具吗？道具将被打回待审核状态。',
+    type: 'warning',
+    confirmText: '屏蔽',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
+  try {
+    await hideItemByMod(id)
+    await loadAllItems()
+    await loadStats()
+  } catch (error) {
+    console.error('屏蔽失败:', error)
+    alert('屏蔽失败: ' + (error as Error).message)
   }
 }
 
@@ -920,6 +960,9 @@ function formatBanTime(dateStr: string | null) {
               <span><i class="ri-time-line"></i> {{ formatDate(post.created_at) }}</span>
             </div>
             <div class="item-actions">
+              <button class="btn-warning" @click="handleHidePost(post.id)">
+                <i class="ri-eye-off-line"></i> 屏蔽
+              </button>
               <button class="btn-delete" @click="handleDeletePost(post.id)">
                 <i class="ri-delete-bin-line"></i> 删除
               </button>
@@ -963,6 +1006,9 @@ function formatBanTime(dateStr: string | null) {
               <span><i class="ri-time-line"></i> {{ formatDate(item.created_at) }}</span>
             </div>
             <div class="item-actions">
+              <button class="btn-warning" @click="handleHideItem(item.id)">
+                <i class="ri-eye-off-line"></i> 屏蔽
+              </button>
               <button class="btn-delete" @click="handleDeleteItem(item.id)">
                 <i class="ri-delete-bin-line"></i> 删除
               </button>

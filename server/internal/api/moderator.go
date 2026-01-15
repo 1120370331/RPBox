@@ -441,6 +441,23 @@ func (s *Server) deletePostByMod(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
+// hidePostByMod 版主屏蔽帖子（打回待审核）
+func (s *Server) hidePostByMod(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var post model.Post
+	if err := database.DB.First(&post, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
+	}
+
+	post.ReviewStatus = "pending"
+	post.Status = "pending"
+	database.DB.Save(&post)
+
+	c.JSON(http.StatusOK, gin.H{"message": "已屏蔽，帖子已打回待审核"})
+}
+
 // listAllItems 获取所有道具（管理用）
 func (s *Server) listAllItems(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -518,6 +535,23 @@ func (s *Server) deleteItemByMod(c *gin.Context) {
 	database.DB.Delete(&item)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+// hideItemByMod 版主屏蔽道具（打回待审核）
+func (s *Server) hideItemByMod(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var item model.Item
+	if err := database.DB.First(&item, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
+		return
+	}
+
+	item.ReviewStatus = "pending"
+	item.Status = "pending"
+	database.DB.Save(&item)
+
+	c.JSON(http.StatusOK, gin.H{"message": "已屏蔽，道具已打回待审核"})
 }
 
 // getModeratorStats 获取版主统计数据

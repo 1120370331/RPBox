@@ -61,6 +61,10 @@ export function deletePostByMod(id: number) {
   return request.delete<{ message: string }>(`/moderator/manage/posts/${id}`)
 }
 
+export function hidePostByMod(id: number) {
+  return request.post<{ message: string }>(`/moderator/manage/posts/${id}/hide`)
+}
+
 // ========== 管理中心 - 道具 ==========
 
 export interface ItemQueryParams {
@@ -78,6 +82,10 @@ export function getAllItems(params?: ItemQueryParams) {
 
 export function deleteItemByMod(id: number) {
   return request.delete<{ message: string }>(`/moderator/manage/items/${id}`)
+}
+
+export function hideItemByMod(id: number) {
+  return request.post<{ message: string }>(`/moderator/manage/items/${id}/hide`)
 }
 
 // ========== 公会管理 ==========

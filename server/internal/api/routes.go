@@ -176,10 +176,12 @@ func (s *Server) setupRoutes() {
 				// 管理中心 - 帖子
 				mod.GET("/manage/posts", s.listAllPosts)
 				mod.DELETE("/manage/posts/:id", s.deletePostByMod)
+				mod.POST("/manage/posts/:id/hide", s.hidePostByMod)
 
 				// 管理中心 - 道具
 				mod.GET("/manage/items", s.listAllItems)
 				mod.DELETE("/manage/items/:id", s.deleteItemByMod)
+				mod.POST("/manage/items/:id/hide", s.hideItemByMod)
 
 				// 公会管理
 				mod.GET("/review/guilds", s.listPendingGuilds)
