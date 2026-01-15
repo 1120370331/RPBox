@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import UpdateNotification from '@/components/UpdateNotification.vue'
+import RDialog from '@/components/RDialog.vue'
 </script>
 
 <template>
   <router-view />
   <UpdateNotification />
+  <RDialog />
 </template>
 
 <style>
