@@ -191,3 +191,44 @@ func (s *Server) getUserGuilds(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
 }
+
+// uploadImage 通用图片上传（返回base64）
+func (s *Server) uploadImage(c *gin.Context) {
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择图片文件"})
+		return
+	}
+	defer file.Close()
+
+	// 检查文件大小 (最大 5MB)
+	if header.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "图片文件不能超过5MB"})
+		return
+	}
+
+	// 检查文件类型
+	contentType := header.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只支持图片格式"})
+		return
+	}
+
+	// 读取文件内容
+	data, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+		return
+	}
+
+	// 转换为 base64
+	base64Data := base64.StdEncoding.EncodeToString(data)
+	imageURL := "data:" + contentType + ";base64," + base64Data
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"url": imageURL,
+		},
+	})
+}

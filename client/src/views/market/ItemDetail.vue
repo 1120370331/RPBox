@@ -168,6 +168,11 @@ function goBack() {
 
       <!-- 道具信息 -->
       <div class="item-info">
+        <!-- 预览图 -->
+        <div v-if="item.preview_image" class="item-preview">
+          <img :src="item.preview_image" alt="预览图" />
+        </div>
+
         <div class="item-header">
           <h1>{{ item.name }}</h1>
           <div class="item-meta">
@@ -205,6 +210,12 @@ function goBack() {
         <div class="item-description">
           <h3>描述</h3>
           <p>{{ item.description || '暂无描述' }}</p>
+        </div>
+
+        <!-- 详细介绍 -->
+        <div v-if="item.detail_content" class="item-detail-content">
+          <h3>详细介绍</h3>
+          <div class="rich-content" v-html="item.detail_content"></div>
         </div>
 
         <div class="item-tags" v-if="tags.length > 0">
@@ -351,6 +362,41 @@ function goBack() {
   border-radius: 16px;
   padding: 32px;
   box-shadow: 0 8px 20px rgba(93,64,55,0.05);
+}
+
+.item-preview {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.item-preview img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.item-detail-content {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #E0E0E0;
+}
+
+.item-detail-content h3 {
+  font-size: 18px;
+  color: #3E2723;
+  margin-bottom: 16px;
+}
+
+.rich-content {
+  line-height: 1.8;
+  color: #5D4037;
+}
+
+.rich-content img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 16px 0;
 }
 
 .item-header h1 {
