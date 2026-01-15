@@ -28,6 +28,9 @@ func (s *Server) setupRoutes() {
 		// 客户端更新检查（公开）
 		v1.GET("/updater/:target/:arch/:current_version", s.checkUpdate)
 
+		// 公开公会列表（社区广场）
+		v1.GET("/public/guilds", s.listPublicGuilds)
+
 		// 需要认证的接口
 		auth := v1.Group("")
 		auth.Use(middleware.JWTAuth())
@@ -105,6 +108,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/guilds/:id/members", s.listGuildMembers)
 			auth.PUT("/guilds/:id/members/:uid", s.updateMemberRole)
 			auth.DELETE("/guilds/:id/members/:uid", s.removeMember)
+			auth.POST("/guilds/:id/banner", s.uploadGuildBanner)
 
 			// 公会标签
 			auth.GET("/guilds/:id/tags", s.listGuildTags)
@@ -183,6 +187,15 @@ func (s *Server) setupRoutes() {
 				mod.GET("/manage/guilds", s.listAllGuilds)
 				mod.PUT("/manage/guilds/:id/owner", s.changeGuildOwner)
 				mod.DELETE("/manage/guilds/:id", s.deleteGuildByMod)
+
+				// 用户管理
+				mod.GET("/users", s.listUsers)
+				mod.POST("/users/:id/mute", s.muteUser)
+				mod.DELETE("/users/:id/mute", s.unmuteUser)
+				mod.POST("/users/:id/ban", s.banUser)
+				mod.DELETE("/users/:id/ban", s.unbanUser)
+				mod.POST("/users/:id/posts/disable", s.disableUserPosts)
+				mod.DELETE("/users/:id/posts", s.deleteUserPosts)
 			}
 
 			// 管理员中心（需要管理员权限）

@@ -18,6 +18,15 @@ type User struct {
 	PostCount    int `gorm:"default:0" json:"post_count"`    // 帖子数
 	StoryCount   int `gorm:"default:0" json:"story_count"`   // 剧情数
 	ProfileCount int `gorm:"default:0" json:"profile_count"` // 人物卡数
+	// 封禁状态
+	IsMuted       bool       `gorm:"default:false" json:"is_muted"`        // 禁言状态
+	MutedUntil    *time.Time `json:"muted_until"`                          // 禁言截止时间（空=永久）
+	MuteReason    string     `gorm:"size:512" json:"mute_reason"`          // 禁言原因
+	IsBanned      bool       `gorm:"default:false" json:"is_banned"`       // 禁止登录状态
+	BannedUntil   *time.Time `json:"banned_until"`                         // 禁止登录截止时间（空=永久）
+	BanReason     string     `gorm:"size:512" json:"ban_reason"`           // 禁止登录原因
+	BannedBy      *uint      `json:"banned_by"`                            // 执行封禁的版主ID
+	BannedAt      *time.Time `json:"banned_at"`                            // 封禁时间
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -182,6 +191,11 @@ type Guild struct {
 	Description string    `gorm:"type:text" json:"description"`
 	Icon        string    `gorm:"size:128" json:"icon"`
 	Color       string    `gorm:"size:8" json:"color"`
+	Banner      string    `gorm:"size:512" json:"banner"`  // 头图URL
+	Slogan      string    `gorm:"size:256" json:"slogan"`  // 公会标语
+	Lore        string    `gorm:"type:text" json:"lore"`   // 公会设定(富文本HTML)
+	Faction     string    `gorm:"size:20" json:"faction"`  // 阵营: alliance|horde|neutral
+	Layout      int       `gorm:"default:3" json:"layout"` // 主页布局: 1-4, 默认3
 	OwnerID     uint      `gorm:"index;not null" json:"owner_id"`
 	MemberCount int       `gorm:"default:1" json:"member_count"`
 	StoryCount  int       `gorm:"default:0" json:"story_count"`

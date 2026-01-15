@@ -22,6 +22,13 @@ import {
   deleteGuildByMod,
   getUsers,
   setUserRole,
+  getModeratorUsers,
+  muteUser,
+  unmuteUser,
+  banUser,
+  unbanUser,
+  disableUserPosts,
+  deleteUserPosts,
   type ModeratorStats,
   type ReviewRequest,
   type SafeUser
@@ -37,7 +44,7 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'admin'>('review')
-const activeSubTab = ref<'posts' | 'items' | 'guilds'>('posts')
+const activeSubTab = ref<'posts' | 'items' | 'guilds' | 'users'>('posts')
 const adminSubTab = ref<'moderators' | 'guilds'>('guilds')
 
 // 数据
@@ -85,6 +92,14 @@ const newOwnerId = ref('')
 // 设置角色弹窗
 const showRoleModal = ref(false)
 const roleTarget = ref<{ userId: number; username: string; currentRole: string; newRole: 'user' | 'moderator' } | null>(null)
+
+// 用户管理弹窗
+const showUserActionModal = ref(false)
+const userActionType = ref<'mute' | 'ban' | 'disablePosts' | 'deletePosts'>('mute')
+const userActionTarget = ref<SafeUser | null>(null)
+const userActionDuration = ref(24) // 默认24小时
+const userActionReason = ref('')
+const userActionPermanent = ref(false)
 
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
@@ -234,7 +249,7 @@ function switchTab(tab: 'review' | 'manage' | 'admin') {
   }
 }
 
-function switchSubTab(subTab: 'posts' | 'items' | 'guilds') {
+function switchSubTab(subTab: 'posts' | 'items' | 'guilds' | 'users') {
   activeSubTab.value = subTab
   page.value = 1
   if (activeTab.value === 'review') {
@@ -244,7 +259,8 @@ function switchSubTab(subTab: 'posts' | 'items' | 'guilds') {
   } else {
     if (subTab === 'posts') loadAllPosts()
     else if (subTab === 'items') loadAllItems()
-    else loadAllGuilds()
+    else if (subTab === 'guilds') loadAllGuilds()
+    else if (subTab === 'users') loadModeratorUsers()
   }
 }
 
@@ -306,6 +322,33 @@ async function submitPreviewReview() {
     // 刷新对应列表
     if (previewType.value === 'post') await loadPendingPosts()
     else if (previewType.value === 'item') await loadPendingItems()
+    else await loadPendingGuilds()
+  } catch (error) {
+    console.error('审核失败:', error)
+    alert('审核失败: ' + (error as Error).message)
+  }
+}
+
+// 快速审核（直接通过/拒绝）
+async function quickReview(type: 'post' | 'item' | 'guild', id: number, action: 'approve' | 'reject') {
+  const actionText = action === 'approve' ? '通过' : '拒绝'
+  if (!confirm(`确定要${actionText}这个${type === 'post' ? '帖子' : type === 'item' ? '道具' : '公会'}吗？`)) {
+    return
+  }
+
+  const data: ReviewRequest = { action, comment: '' }
+
+  try {
+    if (type === 'post') {
+      await reviewPost(id, data)
+    } else if (type === 'item') {
+      await reviewItem(id, data)
+    } else {
+      await reviewGuild(id, data)
+    }
+    await loadStats()
+    if (type === 'post') await loadPendingPosts()
+    else if (type === 'item') await loadPendingItems()
     else await loadPendingGuilds()
   } catch (error) {
     console.error('审核失败:', error)
@@ -458,6 +501,104 @@ function getRoleLabel(role: string) {
   }
   return map[role] || role
 }
+
+// ========== 用户管理功能 ==========
+
+function openUserActionModal(user: SafeUser, action: 'mute' | 'ban' | 'disablePosts' | 'deletePosts') {
+  userActionTarget.value = user
+  userActionType.value = action
+  userActionDuration.value = 24
+  userActionReason.value = ''
+  userActionPermanent.value = false
+  showUserActionModal.value = true
+}
+
+function getUserActionTitle() {
+  const titles: Record<string, string> = {
+    mute: '禁言用户',
+    ban: '禁止登录',
+    disablePosts: '禁用所有帖子',
+    deletePosts: '删除所有帖子'
+  }
+  return titles[userActionType.value] || ''
+}
+
+function getUserActionDescription() {
+  const descriptions: Record<string, string> = {
+    mute: '禁言后，该用户将无法发帖和评论。',
+    ban: '禁止登录后，该用户将无法登录账号。',
+    disablePosts: '将该用户的所有帖子设为不可见状态。',
+    deletePosts: '永久删除该用户的所有帖子，此操作不可恢复！'
+  }
+  return descriptions[userActionType.value] || ''
+}
+
+async function submitUserAction() {
+  if (!userActionTarget.value) return
+
+  const userId = userActionTarget.value.id
+  const duration = userActionPermanent.value ? 0 : userActionDuration.value
+
+  try {
+    if (userActionType.value === 'mute') {
+      await muteUser(userId, { duration, reason: userActionReason.value })
+    } else if (userActionType.value === 'ban') {
+      await banUser(userId, { duration, reason: userActionReason.value })
+    } else if (userActionType.value === 'disablePosts') {
+      await disableUserPosts(userId)
+    } else if (userActionType.value === 'deletePosts') {
+      await deleteUserPosts(userId)
+    }
+    showUserActionModal.value = false
+    await loadModeratorUsers()
+  } catch (error) {
+    console.error('操作失败:', error)
+    alert('操作失败: ' + (error as Error).message)
+  }
+}
+
+async function handleUnmute(userId: number) {
+  try {
+    await unmuteUser(userId)
+    await loadModeratorUsers()
+  } catch (error) {
+    console.error('解除禁言失败:', error)
+    alert('解除禁言失败: ' + (error as Error).message)
+  }
+}
+
+async function handleUnban(userId: number) {
+  try {
+    await unbanUser(userId)
+    await loadModeratorUsers()
+  } catch (error) {
+    console.error('解除封禁失败:', error)
+    alert('解除封禁失败: ' + (error as Error).message)
+  }
+}
+
+async function loadModeratorUsers() {
+  loading.value = true
+  try {
+    const res = await getModeratorUsers({
+      page: page.value,
+      page_size: pageSize.value,
+      role: filterRole.value || undefined,
+      keyword: filterKeyword.value || undefined
+    })
+    allUsers.value = res.users || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载用户失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+function formatBanTime(dateStr: string | null) {
+  if (!dateStr) return '永久'
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
 </script>
 
 <template>
@@ -580,6 +721,14 @@ function getRoleLabel(role: string) {
           <i class="ri-team-line"></i>
           公会
         </button>
+        <button
+          v-if="activeTab === 'manage'"
+          :class="{ active: activeSubTab === 'users' }"
+          @click="switchSubTab('users')"
+        >
+          <i class="ri-user-settings-line"></i>
+          用户
+        </button>
       </div>
 
       <!-- 子标签页 - 管理标签 -->
@@ -622,8 +771,14 @@ function getRoleLabel(role: string) {
               <span><i class="ri-time-line"></i> {{ formatDate(post.created_at) }}</span>
             </div>
             <div class="item-actions">
+              <button class="btn-approve" @click="quickReview('post', post.id, 'approve')">
+                <i class="ri-checkbox-circle-line"></i> 通过
+              </button>
+              <button class="btn-reject" @click="quickReview('post', post.id, 'reject')">
+                <i class="ri-close-circle-line"></i> 拒绝
+              </button>
               <button class="btn-preview" @click="openPreview('post', post.id)">
-                <i class="ri-eye-line"></i> 预览审核
+                <i class="ri-eye-line"></i> 预览
               </button>
             </div>
           </div>
@@ -651,8 +806,14 @@ function getRoleLabel(role: string) {
               <span><i class="ri-time-line"></i> {{ formatDate(item.created_at) }}</span>
             </div>
             <div class="item-actions">
+              <button class="btn-approve" @click="quickReview('item', item.id, 'approve')">
+                <i class="ri-checkbox-circle-line"></i> 通过
+              </button>
+              <button class="btn-reject" @click="quickReview('item', item.id, 'reject')">
+                <i class="ri-close-circle-line"></i> 拒绝
+              </button>
               <button class="btn-preview" @click="openPreview('item', item.id)">
-                <i class="ri-eye-line"></i> 预览审核
+                <i class="ri-eye-line"></i> 预览
               </button>
             </div>
           </div>
@@ -680,8 +841,14 @@ function getRoleLabel(role: string) {
               <span><i class="ri-time-line"></i> {{ formatDate(guild.created_at) }}</span>
             </div>
             <div class="item-actions">
+              <button class="btn-approve" @click="quickReview('guild', guild.id, 'approve')">
+                <i class="ri-checkbox-circle-line"></i> 通过
+              </button>
+              <button class="btn-reject" @click="quickReview('guild', guild.id, 'reject')">
+                <i class="ri-close-circle-line"></i> 拒绝
+              </button>
               <button class="btn-preview" @click="openPreview('guild', guild.id)">
-                <i class="ri-eye-line"></i> 预览审核
+                <i class="ri-eye-line"></i> 预览
               </button>
             </div>
           </div>
@@ -806,6 +973,77 @@ function getRoleLabel(role: string) {
               </button>
               <button class="btn-delete" @click="handleDeleteGuild(guild.id)">
                 <i class="ri-delete-bin-line"></i> 删除
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 管理中心 - 用户列表 -->
+      <div v-if="activeTab === 'manage' && activeSubTab === 'users'" class="content-list anim-item" style="--delay: 4">
+        <div class="filter-bar">
+          <input v-model="filterKeyword" placeholder="搜索用户名或邮箱..." @keyup.enter="loadModeratorUsers" />
+          <select v-model="filterRole" @change="loadModeratorUsers">
+            <option value="">全部角色</option>
+            <option value="user">普通用户</option>
+            <option value="moderator">版主</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="allUsers.length === 0" class="empty-state">
+          <i class="ri-user-search-line"></i>
+          <p>暂无用户数据</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="user in allUsers" :key="user.id" class="item-card user-card">
+            <div class="item-header">
+              <div class="user-info">
+                <img v-if="user.avatar" :src="user.avatar" class="user-avatar" />
+                <i v-else class="ri-user-line user-avatar-placeholder"></i>
+                <span class="item-title">{{ user.username }}</span>
+              </div>
+              <div class="user-status-tags">
+                <span class="role-tag" :class="user.role">{{ getRoleLabel(user.role) }}</span>
+                <span v-if="user.is_muted" class="status-tag muted">禁言中</span>
+                <span v-if="user.is_banned" class="status-tag banned">已封禁</span>
+              </div>
+            </div>
+            <div class="item-meta">
+              <span><i class="ri-mail-line"></i> {{ user.email }}</span>
+              <span><i class="ri-article-line"></i> {{ user.post_count }} 帖子</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(user.created_at) }}</span>
+            </div>
+            <div v-if="user.is_muted || user.is_banned" class="ban-info">
+              <span v-if="user.is_muted">
+                <i class="ri-volume-mute-line"></i> 禁言至: {{ formatBanTime(user.muted_until) }}
+                <template v-if="user.mute_reason"> - {{ user.mute_reason }}</template>
+              </span>
+              <span v-if="user.is_banned">
+                <i class="ri-forbid-line"></i> 封禁至: {{ formatBanTime(user.banned_until) }}
+                <template v-if="user.ban_reason"> - {{ user.ban_reason }}</template>
+              </span>
+            </div>
+            <div class="item-actions" v-if="user.role !== 'admin' && user.role !== 'moderator'">
+              <button v-if="!user.is_muted" class="btn-warning" @click="openUserActionModal(user, 'mute')">
+                <i class="ri-volume-mute-line"></i> 禁言
+              </button>
+              <button v-else class="btn-approve" @click="handleUnmute(user.id)">
+                <i class="ri-volume-up-line"></i> 解除禁言
+              </button>
+              <button v-if="!user.is_banned" class="btn-danger" @click="openUserActionModal(user, 'ban')">
+                <i class="ri-forbid-line"></i> 封禁
+              </button>
+              <button v-else class="btn-approve" @click="handleUnban(user.id)">
+                <i class="ri-checkbox-circle-line"></i> 解除封禁
+              </button>
+              <button class="btn-warning" @click="openUserActionModal(user, 'disablePosts')">
+                <i class="ri-eye-off-line"></i> 禁用帖子
+              </button>
+              <button class="btn-delete" @click="openUserActionModal(user, 'deletePosts')">
+                <i class="ri-delete-bin-line"></i> 删除帖子
               </button>
             </div>
           </div>
@@ -1003,6 +1241,81 @@ function getRoleLabel(role: string) {
           <div class="modal-footer">
             <button class="btn-cancel" @click="showRoleModal = false">取消</button>
             <button class="btn-submit" @click="submitRoleChange">确认</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 用户操作弹窗 -->
+      <div v-if="showUserActionModal" class="modal-overlay" @click.self="showUserActionModal = false">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>{{ getUserActionTitle() }}</h3>
+            <button class="close-btn" @click="showUserActionModal = false">
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="user-action-info">
+              <div class="user-preview">
+                <img v-if="userActionTarget?.avatar" :src="userActionTarget.avatar" class="user-avatar" />
+                <i v-else class="ri-user-line user-avatar-placeholder"></i>
+                <span class="username">{{ userActionTarget?.username }}</span>
+              </div>
+              <p class="action-description">{{ getUserActionDescription() }}</p>
+            </div>
+
+            <!-- 禁言/封禁需要设置时长和原因 -->
+            <template v-if="userActionType === 'mute' || userActionType === 'ban'">
+              <div class="form-group">
+                <label>时长</label>
+                <div class="duration-options">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="userActionPermanent" />
+                    <span>永久</span>
+                  </label>
+                  <input
+                    v-if="!userActionPermanent"
+                    v-model.number="userActionDuration"
+                    type="number"
+                    min="1"
+                    placeholder="小时数"
+                    class="form-input duration-input"
+                  />
+                  <span v-if="!userActionPermanent" class="duration-unit">小时</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>原因</label>
+                <textarea
+                  v-model="userActionReason"
+                  placeholder="请输入原因（可选）"
+                  rows="3"
+                ></textarea>
+              </div>
+            </template>
+
+            <!-- 禁用/删除帖子的警告 -->
+            <template v-else>
+              <div class="warning-box" :class="{ danger: userActionType === 'deletePosts' }">
+                <i :class="userActionType === 'deletePosts' ? 'ri-error-warning-line' : 'ri-information-line'"></i>
+                <span v-if="userActionType === 'disablePosts'">
+                  此操作将把该用户的所有帖子设为不可见状态。
+                </span>
+                <span v-else>
+                  此操作将永久删除该用户的所有帖子，包括相关的评论、点赞和收藏数据。此操作不可恢复！
+                </span>
+              </div>
+            </template>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="showUserActionModal = false">取消</button>
+            <button
+              class="btn-submit"
+              :class="{ danger: userActionType === 'deletePosts' || userActionType === 'ban' }"
+              @click="submitUserAction"
+            >
+              确认{{ getUserActionTitle() }}
+            </button>
           </div>
         </div>
       </div>
@@ -1375,6 +1688,28 @@ function getRoleLabel(role: string) {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.btn-approve:hover {
+  background: #388E3C;
+}
+
+.btn-reject {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #FF5722;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-reject:hover {
+  background: #E64A19;
 }
 
 .btn-delete {
@@ -1823,5 +2158,146 @@ function getRoleLabel(role: string) {
   margin: 0 0 12px 0;
   color: #4B3621;
   font-size: 14px;
+}
+
+/* 危险按钮 */
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #D32F2F;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background: #B71C1C;
+}
+
+/* 用户状态标签 */
+.user-status-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.status-tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.status-tag.muted {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+.status-tag.banned {
+  background: #FFEBEE;
+  color: #C62828;
+}
+
+/* 封禁信息 */
+.ban-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #FFF8E1;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #5D4037;
+  margin-bottom: 12px;
+}
+
+.ban-info i {
+  margin-right: 4px;
+}
+
+/* 用户操作弹窗样式 */
+.user-action-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #F5F0EB;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.action-description {
+  font-size: 14px;
+  color: #5D4E37;
+  text-align: center;
+  margin: 0;
+}
+
+.duration-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #4B3621;
+}
+
+.duration-input {
+  width: 80px !important;
+}
+
+.duration-unit {
+  font-size: 14px;
+  color: #8D7B68;
+}
+
+/* 警告框 */
+.warning-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #FFF8E1;
+  border: 1px solid #FFE082;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #5D4037;
+}
+
+.warning-box i {
+  font-size: 20px;
+  color: #FF9800;
+  flex-shrink: 0;
+}
+
+.warning-box.danger {
+  background: #FFEBEE;
+  border-color: #EF9A9A;
+  color: #B71C1C;
+}
+
+.warning-box.danger i {
+  color: #D32F2F;
+}
+
+/* 危险提交按钮 */
+.btn-submit.danger {
+  background: #D32F2F;
+}
+
+.btn-submit.danger:hover {
+  background: #B71C1C;
 }
 </style>
