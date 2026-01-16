@@ -15,8 +15,9 @@ func NewServer(cfg *config.Config) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	router := gin.Default()
 	router.Use(middleware.CORS())
+	router.Use(middleware.BodyLimit(10 << 20)) // 限制请求体 10MB
 
-	// 设置请求体大小限制为 10MB，支持大型备份数据
+	// 设置 multipart 内存限制为 10MB
 	router.MaxMultipartMemory = 10 << 20 // 10 MB
 
 	s := &Server{
