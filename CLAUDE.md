@@ -189,6 +189,56 @@ GET  /api/v1/admin/users           # 获取用户列表
 PUT  /api/v1/admin/users/:id/role  # 设置用户角色 (仅 user/moderator)
 ```
 
+## 客户端自动更新
+
+### 配置文件
+
+更新配置位于 `client/src-tauri/tauri.conf.json`：
+
+```json
+"plugins": {
+  "updater": {
+    "endpoints": ["https://api.rpbox.app/api/v1/updater/{{target}}/{{arch}}/{{current_version}}"],
+    "pubkey": "公钥内容",
+    "dangerousInsecureTransportProtocol": true  // 仅开发环境需要
+  }
+}
+```
+
+### ⚠️ 重要注意事项
+
+**HTTPS 强制要求**：Tauri updater 在 release 模式下默认要求 HTTPS 协议。如果使用 HTTP 端点，必须添加 `dangerousInsecureTransportProtocol: true`，否则应用启动时会崩溃：
+
+```
+error: The configured updater endpoint must use a secure protocol like `https`.
+```
+
+**生产环境**：正式发布时应使用 HTTPS 端点并移除 `dangerousInsecureTransportProtocol` 配置。
+
+### 构建和签名
+
+```bash
+# 生成签名密钥（仅首次）
+cd client
+npx tauri signer generate -w .tauri/rpbox.key
+
+# 构建并签名
+npx tauri signer sign -k "密钥内容" -p "密码" "安装包路径"
+```
+
+### 服务端配置
+
+`server/config.yaml`：
+
+```yaml
+updater:
+  latest_version: "0.2.0"
+  base_url: "http://localhost:8080/releases"
+  release_notes: "更新说明"
+```
+
+更新包放置于 `server/releases/{version}/` 目录。
+
 ## PRD 文档
 
 - PRD1: 项目介绍
