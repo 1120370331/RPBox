@@ -20,14 +20,53 @@ const isLiked = ref(false)
 const isFavorited = ref(false)
 const submitting = ref(false)
 
+// 预览模式
+const isPreview = ref(false)
+const previewFrom = ref('')
+
 // 计算评论字数
 const commentLength = computed(() => [...newComment.value].length)
 const canSubmit = computed(() => newRating.value > 0 && commentLength.value >= 30)
 
 onMounted(() => {
-  loadItemDetail()
-  loadComments()
+  // 检测预览模式
+  if (route.query.preview === '1') {
+    isPreview.value = true
+    previewFrom.value = sessionStorage.getItem('item_preview_from') || ''
+    loadPreviewData()
+    // 预览模式不加载评论
+  } else {
+    loadItemDetail()
+    loadComments()
+  }
 })
+
+// 加载预览数据
+function loadPreviewData() {
+  const previewDataStr = sessionStorage.getItem('item_preview_data')
+  if (previewDataStr) {
+    try {
+      item.value = JSON.parse(previewDataStr)
+    } catch (e) {
+      console.error('解析预览数据失败:', e)
+      loadItemDetail()
+    }
+  } else {
+    loadItemDetail()
+  }
+}
+
+// 返回编辑
+function backToEdit() {
+  if (previewFrom.value) {
+    router.push(previewFrom.value)
+  } else {
+    router.back()
+  }
+  // 清理预览数据
+  sessionStorage.removeItem('item_preview_data')
+  sessionStorage.removeItem('item_preview_from')
+}
 
 // 加载道具详情
 async function loadItemDetail() {
@@ -162,9 +201,20 @@ function goBack() {
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="item" class="detail-container">
       <!-- 返回按钮 -->
-      <button class="back-btn" @click="goBack">
+      <button class="back-btn" @click="goBack" v-if="!isPreview">
         <i class="ri-arrow-left-line"></i> 返回列表
       </button>
+
+      <!-- 预览模式横幅 -->
+      <div v-if="isPreview" class="preview-banner">
+        <div class="preview-info">
+          <i class="ri-eye-line"></i>
+          <span>预览模式 - 这是道具发布后的效果预览</span>
+        </div>
+        <button class="back-edit-btn" @click="backToEdit">
+          <i class="ri-arrow-left-line"></i> 返回编辑
+        </button>
+      </div>
 
       <!-- 道具信息 -->
       <div class="item-info">
@@ -308,16 +358,22 @@ function goBack() {
             暂无评价，快来抢沙发吧！
           </div>
           <div v-else v-for="comment in comments" :key="comment.id" class="comment-item">
-            <div class="comment-header">
-              <div class="comment-user-info">
-                <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
-                <div class="comment-rating">
-                  <i v-for="star in 5" :key="star" class="ri-star-fill" :class="{ active: star <= comment.rating }"></i>
-                </div>
-              </div>
-              <span class="comment-time">{{ new Date(comment.created_at).toLocaleDateString() }}</span>
+            <div class="comment-avatar">
+              <img v-if="comment.avatar" :src="comment.avatar" alt="" />
+              <span v-else>{{ comment.username?.charAt(0) || 'U' }}</span>
             </div>
-            <p class="comment-content">{{ comment.content }}</p>
+            <div class="comment-body">
+              <div class="comment-header">
+                <div class="comment-user-info">
+                  <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
+                  <div class="comment-rating">
+                    <i v-for="star in 5" :key="star" class="ri-star-fill" :class="{ active: star <= comment.rating }"></i>
+                  </div>
+                </div>
+                <span class="comment-time">{{ new Date(comment.created_at).toLocaleDateString() }}</span>
+              </div>
+              <p class="comment-content">{{ comment.content }}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -355,6 +411,49 @@ function goBack() {
 
 .back-btn:hover {
   background: rgba(255,255,255,1);
+}
+
+.preview-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+  border: 2px solid #FFB74D;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.preview-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #E65100;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.preview-info i {
+  font-size: 20px;
+}
+
+.back-edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #B87333;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.back-edit-btn:hover {
+  background: #A66629;
 }
 
 .item-info {
@@ -816,6 +915,34 @@ function goBack() {
   padding: 16px;
   background: #F5F0EB;
   border-radius: 8px;
+  display: flex;
+  gap: 12px;
+}
+
+.comment-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #B87333, #4B3621);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comment-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .comment-header {

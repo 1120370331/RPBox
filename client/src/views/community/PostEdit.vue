@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPost, updatePost, getPostTags, type UpdatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { listTags, type Tag } from '@/api/tag'
@@ -13,6 +13,9 @@ const toast = useToast()
 const route = useRoute()
 const mounted = ref(false)
 const loading = ref(false)
+
+// 草稿 key 基于帖子 ID
+const getDraftKey = () => `post_edit_draft_${route.params.id}`
 
 const form = ref<UpdatePostRequest>({
   title: '',
@@ -41,14 +44,76 @@ const tags = ref<Tag[]>([])
 const guilds = ref<Guild[]>([])
 const selectedTags = ref<number[]>([])
 const originalTags = ref<number[]>([])
+let autoSaveTimer: ReturnType<typeof setInterval> | null = null
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+// 保存草稿
+function saveDraft() {
+  const draft = {
+    form: form.value,
+    selectedTags: selectedTags.value,
+    savedAt: Date.now()
+  }
+  localStorage.setItem(getDraftKey(), JSON.stringify(draft))
+}
+
+// 防抖保存
+function debouncedSaveDraft() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(saveDraft, 1000)
+}
+
+// 恢复草稿
+function loadDraft() {
+  const saved = localStorage.getItem(getDraftKey())
+  if (saved) {
+    try {
+      const draft = JSON.parse(saved)
+      if (draft.form) {
+        form.value = { ...form.value, ...draft.form }
+      }
+      if (draft.selectedTags) {
+        selectedTags.value = draft.selectedTags
+      }
+      return true
+    } catch (e) {
+      console.error('恢复草稿失败:', e)
+    }
+  }
+  return false
+}
+
+// 清除草稿
+function clearDraft() {
+  localStorage.removeItem(getDraftKey())
+}
 
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
-  await loadPost()
+
+  // 先尝试恢复草稿
+  const hasDraft = loadDraft()
+
+  // 如果没有草稿，从服务器加载
+  if (!hasDraft) {
+    await loadPost()
+  }
+
   await loadTags()
   await loadGuilds()
   await loadPostTags()
+
+  // 每 10 秒自动保存
+  autoSaveTimer = setInterval(saveDraft, 10000)
 })
+
+onUnmounted(() => {
+  if (autoSaveTimer) clearInterval(autoSaveTimer)
+  if (debounceTimer) clearTimeout(debounceTimer)
+})
+
+// 监听表单变化，自动保存
+watch([() => form.value.title, () => form.value.content, selectedTags], debouncedSaveDraft, { deep: true })
 
 async function loadPost() {
   loading.value = true
@@ -144,6 +209,7 @@ async function handleSubmit(status: 'draft' | 'published') {
       await removePostTag(id, tagId)
     }
 
+    clearDraft() // 保存成功后清除草稿
     toast.success('更新成功')
     router.push({ name: 'post-detail', params: { id } })
   } catch (error) {
@@ -157,133 +223,139 @@ async function handleSubmit(status: 'draft' | 'published') {
 function handleCancel() {
   router.back()
 }
+
+function handlePreview() {
+  // 先保存草稿
+  saveDraft()
+
+  const previewData = {
+    title: form.value.title,
+    content: form.value.content,
+    category: form.value.category,
+    tag_ids: selectedTags.value,
+    guild_id: form.value.guild_id,
+    event_type: form.value.event_type,
+    event_start_time: form.value.event_start_time,
+    event_end_time: form.value.event_end_time,
+    selectedTagNames: tags.value.filter(t => selectedTags.value.includes(t.id)).map(t => t.name),
+  }
+  sessionStorage.setItem('post_preview', JSON.stringify(previewData))
+  router.push({ name: 'post-preview' })
+}
 </script>
 
 <template>
   <div class="post-edit-page" :class="{ 'animate-in': mounted }">
-    <div class="header anim-item" style="--delay: 0">
-      <h1 class="page-title">编辑帖子</h1>
-      <div class="actions">
-        <button class="cancel-btn" @click="handleCancel">取消</button>
-        <button class="draft-btn" @click="handleSubmit('draft')" :disabled="loading">
-          保存草稿
-        </button>
-        <button class="publish-btn" @click="handleSubmit('published')" :disabled="loading">
-          <i class="ri-save-line"></i>
-          保存
-        </button>
-      </div>
+    <!-- 头部 -->
+    <div class="page-header anim-item" style="--delay: 0">
+      <h1 class="page-title">编辑卷轴</h1>
     </div>
 
     <div v-if="loading && !form.title" class="loading">加载中...</div>
 
-    <div v-else class="form-container anim-item" style="--delay: 1">
-      <div class="form-group">
-        <label>标题</label>
+    <!-- 编辑区域 -->
+    <div v-else class="editor-container anim-item" style="--delay: 1">
+      <!-- 标题输入 -->
+      <div class="title-group">
         <input
           v-model="form.title"
           type="text"
-          placeholder="输入帖子标题..."
+          placeholder="输入一个吸引人的标题..."
           class="title-input"
         />
       </div>
 
-      <div class="form-group">
-        <label>分区</label>
-        <div class="category-list">
-          <div
-            v-for="cat in POST_CATEGORIES"
-            :key="cat.value"
-            class="category-item"
-            :class="{ selected: form.category === cat.value }"
-            @click="form.category = cat.value"
-          >
-            <i :class="cat.icon"></i>
-            <span>{{ cat.label }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 活动分区特殊字段 -->
-      <div v-if="isEventCategory" class="form-group event-fields">
-        <label>活动类型</label>
-        <div class="event-type-list">
-          <div
-            class="event-type-item"
-            :class="{ selected: form.event_type === 'server' }"
-            @click="form.event_type = 'server'"
-          >
-            <i class="ri-global-line"></i>
-            <span>服务器活动</span>
-            <small>需要版主权限</small>
-          </div>
-          <div
-            class="event-type-item"
-            :class="{ selected: form.event_type === 'guild' }"
-            @click="form.event_type = 'guild'"
-          >
-            <i class="ri-team-line"></i>
-            <span>公会活动</span>
-            <small>需要公会管理员权限</small>
-          </div>
-        </div>
-
-        <div v-if="form.event_type" class="event-time-fields">
-          <div class="time-field">
-            <label>开始时间</label>
-            <input
-              v-model="form.event_start_time"
-              type="datetime-local"
-              class="time-input"
-            />
-          </div>
-          <div class="time-field">
-            <label>结束时间（可选）</label>
-            <input
-              v-model="form.event_end_time"
-              type="datetime-local"
-              class="time-input"
-            />
-          </div>
-        </div>
-
-        <div v-if="form.event_type === 'guild'" class="guild-required-notice">
-          <i class="ri-information-line"></i>
-          <span>公会活动需要选择关联公会</span>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>内容</label>
+      <!-- 内容编辑器 -->
+      <div class="content-group">
         <TiptapEditor
           v-model="form.content"
-          placeholder="分享你的故事..."
+          placeholder="开始书写你的传奇..."
         />
       </div>
+    </div>
 
-      <div class="form-group">
-        <label>标签</label>
-        <div class="tag-list">
-          <div
-            v-for="tag in tags"
-            :key="tag.id"
-            class="tag-item"
-            :class="{ selected: selectedTags.includes(tag.id) }"
-            @click="toggleTag(tag.id)"
-          >
-            {{ tag.name }}
-          </div>
+    <!-- 设置区域 -->
+    <div v-if="!loading || form.title" class="settings-bar anim-item" style="--delay: 2">
+      <!-- 分区选择 -->
+      <div class="setting-item">
+        <label class="setting-label">分区</label>
+        <div class="category-select">
+          <select v-model="form.category">
+            <option v-for="cat in POST_CATEGORIES" :key="cat.value" :value="cat.value">
+              {{ cat.label }}
+            </option>
+          </select>
         </div>
       </div>
 
-      <div class="form-group">
-        <label>关联公会（可选）</label>
+      <!-- 标签 -->
+      <div class="setting-item tags-setting">
+        <label class="setting-label">标签</label>
+        <div class="tags-list">
+          <span
+            v-for="tag in tags"
+            :key="tag.id"
+            class="tag-chip"
+            :class="{ selected: selectedTags.includes(tag.id) }"
+            @click="toggleTag(tag.id)"
+          >{{ tag.name }}</span>
+        </div>
+      </div>
+
+      <!-- 关联公会 -->
+      <div v-if="!isEventCategory" class="setting-item setting-vertical">
+        <label class="setting-label">公会</label>
         <select v-model="form.guild_id" class="guild-select">
-          <option :value="undefined">不关联公会</option>
-          <option v-for="guild in guilds" :key="guild.id" :value="guild.id">
-            {{ guild.name }}
-          </option>
+          <option :value="undefined">不关联</option>
+          <option v-for="g in guilds" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
+      </div>
+
+      <!-- 活动设置 -->
+      <div v-if="isEventCategory" class="setting-item setting-vertical">
+        <label class="setting-label">活动类型</label>
+        <div class="event-type-toggle">
+          <button
+            :class="{ active: form.event_type === 'server' }"
+            @click="form.event_type = 'server'"
+          >服务器</button>
+          <button
+            :class="{ active: form.event_type === 'guild' }"
+            @click="form.event_type = 'guild'"
+          >公会</button>
+        </div>
+      </div>
+
+      <div v-if="isEventCategory && form.event_type === 'guild'" class="setting-item setting-vertical">
+        <label class="setting-label">公会</label>
+        <select v-model="form.guild_id" class="guild-select">
+          <option :value="undefined">请选择</option>
+          <option v-for="g in guilds" :key="g.id" :value="g.id">{{ g.name }}</option>
+        </select>
+      </div>
+
+      <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical">
+        <label class="setting-label">开始时间</label>
+        <input type="datetime-local" v-model="form.event_start_time" class="time-input" />
+      </div>
+
+      <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical">
+        <label class="setting-label">结束时间</label>
+        <input type="datetime-local" v-model="form.event_end_time" class="time-input" />
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="actions-group">
+        <button class="action-btn preview" @click="handlePreview">
+          <i class="ri-eye-line"></i>
+          预览
+        </button>
+        <button class="action-btn cancel" @click="handleCancel">
+          取消
+        </button>
+        <button class="action-btn publish" @click="handleSubmit('published')" :disabled="loading">
+          保存
+        </button>
       </div>
     </div>
   </div>
@@ -291,70 +363,21 @@ function handleCancel() {
 
 <style scoped>
 .post-edit-page {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* ========== Page Header ========== */
+.page-header {
+  margin-bottom: 24px;
 }
 
 .page-title {
-  font-size: 42px;
-  color: #4B3621;
+  font-family: 'Merriweather', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #2C1810;
   margin: 0;
-}
-
-.actions {
-  display: flex;
-  gap: 12px;
-}
-
-.cancel-btn,
-.draft-btn,
-.publish-btn {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.cancel-btn {
-  background: #E5D4C1;
-  color: #4B3621;
-}
-
-.draft-btn {
-  background: #fff;
-  color: #804030;
-  border: 2px solid #804030;
-}
-
-.publish-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #804030;
-  color: #fff;
-}
-
-.publish-btn:hover {
-  background: #6B3528;
-  transform: translateY(-2px);
-}
-
-.publish-btn:disabled,
-.draft-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .loading {
@@ -364,245 +387,270 @@ function handleCancel() {
   font-size: 18px;
 }
 
-.form-container {
+/* ========== Editor Container ========== */
+.editor-container {
   background: #fff;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
+  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
+  padding: 32px 48px;
+  margin-bottom: 20px;
 }
 
-.form-group {
+.title-group {
   margin-bottom: 24px;
-}
-
-.form-group:last-child {
-  margin-bottom: 0;
-}
-
-.form-group label {
-  display: block;
-  font-size: 16px;
-  font-weight: 600;
-  color: #2C1810;
-  margin-bottom: 12px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #F5EFE7;
 }
 
 .title-input {
   width: 100%;
-  padding: 16px;
-  font-size: 18px;
-  border: 2px solid #E5D4C1;
-  border-radius: 12px;
+  padding: 8px 0;
+  font-family: 'Merriweather', serif;
+  font-size: 28px;
+  font-weight: 700;
   color: #2C1810;
-  transition: all 0.3s;
-}
-
-.title-input:focus {
+  background: transparent;
+  border: none;
   outline: none;
-  border-color: #804030;
 }
 
-.content-textarea {
-  width: 100%;
-  padding: 16px;
-  font-size: 16px;
-  line-height: 1.6;
-  border: 2px solid #E5D4C1;
-  border-radius: 12px;
-  color: #2C1810;
-  resize: vertical;
-  font-family: inherit;
-  transition: all 0.3s;
+.title-input::placeholder {
+  color: #E5D4C1;
 }
 
-.content-textarea:focus {
-  outline: none;
-  border-color: #804030;
+.content-group {
+  min-height: 400px;
 }
 
-.tag-list {
+/* ========== Settings Bar ========== */
+.settings-bar {
+  background: #fff;
+  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
+  padding: 20px 24px;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 24px;
 }
 
-.tag-item {
-  padding: 8px 16px;
-  background: #F5EFE7;
-  border: 2px solid #E5D4C1;
-  border-radius: 8px;
-  color: #4B3621;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.tag-item:hover {
-  background: #E5D4C1;
-}
-
-.tag-item.selected {
-  background: #804030;
-  border-color: #804030;
-  color: #fff;
-}
-
-.category-list {
+.setting-item {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
 }
 
-.category-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  background: #F5EFE7;
-  border: 2px solid #E5D4C1;
-  border-radius: 10px;
-  color: #4B3621;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.category-item:hover {
-  background: #E5D4C1;
-}
-
-.category-item.selected {
-  background: #804030;
-  border-color: #804030;
-  color: #fff;
-}
-
-.category-item i {
-  font-size: 16px;
-}
-
-.guild-select {
-  width: 100%;
-  padding: 12px 16px;
-  font-size: 16px;
-  border: 2px solid #E5D4C1;
-  border-radius: 12px;
-  color: #2C1810;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.guild-select:focus {
-  outline: none;
-  border-color: #804030;
-}
-
-/* 活动分区样式 */
-.event-fields {
-  background: #FFF9F0;
-  border-radius: 12px;
-  padding: 20px;
-  border: 2px solid #E5D4C1;
-}
-
-.event-type-list {
-  display: flex;
-  gap: 16px;
-}
-
-.event-type-item {
+.setting-item.tags-setting {
   flex: 1;
-  display: flex;
+  min-width: 200px;
+}
+
+.setting-item.setting-vertical {
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 20px;
-  background: #fff;
-  border: 2px solid #E5D4C1;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s;
+  align-items: flex-start;
+  gap: 6px;
 }
 
-.event-type-item:hover {
-  border-color: #804030;
-}
-
-.event-type-item.selected {
-  background: #804030;
-  border-color: #804030;
-  color: #fff;
-}
-
-.event-type-item i {
-  font-size: 28px;
-}
-
-.event-type-item span {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.event-type-item small {
+.setting-label {
   font-size: 12px;
-  opacity: 0.7;
+  font-weight: 500;
+  color: #8D7B68;
+  white-space: nowrap;
 }
 
-.event-time-fields {
-  display: flex;
-  gap: 16px;
-  margin-top: 20px;
+/* Category Select */
+.category-select {
+  position: relative;
 }
 
-.time-field {
-  flex: 1;
-}
-
-.time-field label {
-  display: block;
+.category-select select {
+  width: 100%;
+  appearance: none;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  padding: 12px 36px 12px 16px;
   font-size: 14px;
-  font-weight: 600;
   color: #4B3621;
-  margin-bottom: 8px;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s;
+}
+
+.category-select select:hover {
+  border-color: #B87333;
+}
+
+.category-select select:focus {
+  border-color: #804030;
+  box-shadow: 0 0 0 2px rgba(128, 64, 48, 0.1);
+}
+
+.category-select::after {
+  content: '';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #8D7B68;
+  pointer-events: none;
+}
+
+/* Event Settings */
+.event-type-toggle {
+  display: flex;
+  background: #F5EFE7;
+  padding: 4px;
+}
+
+.event-type-toggle button {
+  flex: 1;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8D7B68;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.event-type-toggle button:hover {
+  color: #4B3621;
+}
+
+.event-type-toggle button.active {
+  background: #fff;
+  color: #804030;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .time-input {
-  width: 100%;
-  padding: 12px 16px;
-  font-size: 16px;
-  border: 2px solid #E5D4C1;
-  border-radius: 10px;
-  color: #2C1810;
-  transition: all 0.3s;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  font-size: 13px;
+  color: #4B3621;
+  outline: none;
 }
 
 .time-input:focus {
-  outline: none;
   border-color: #804030;
 }
 
-.guild-required-notice {
+/* Tags */
+.tags-list {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 16px;
-  padding: 12px;
-  background: #FFF3E0;
-  border-radius: 8px;
-  color: #E65100;
+}
+
+.tag-chip {
+  padding: 6px 12px;
+  background: #F5EFE7;
+  border: 1px solid #E5D4C1;
+  font-size: 12px;
+  color: #4B3621;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-chip:hover {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.tag-chip.selected {
+  background: rgba(128, 64, 48, 0.1);
+  border-color: rgba(128, 64, 48, 0.2);
+  color: #804030;
+}
+
+/* Guild Select */
+.guild-select {
+  width: 100%;
+  appearance: none;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  padding: 12px 16px;
   font-size: 14px;
+  color: #4B3621;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s;
 }
 
-.guild-required-notice i {
-  font-size: 18px;
+.guild-select:hover {
+  border-color: #B87333;
 }
 
+.guild-select:focus {
+  border-color: #804030;
+}
+
+/* ========== Animation ========== */
 .anim-item { opacity: 0; transform: translateY(20px); }
 .animate-in .anim-item {
   animation: fadeUp 0.5s ease forwards;
   animation-delay: calc(var(--delay) * 0.15s);
 }
 @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+/* ========== Actions Group ========== */
+.actions-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.actions-group .action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.actions-group .action-btn.preview {
+  background: #F5EFE7;
+  border: 1px solid #E5D4C1;
+  color: #4B3621;
+}
+
+.actions-group .action-btn.preview:hover {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.actions-group .action-btn.cancel {
+  background: transparent;
+  border: none;
+  color: #8D7B68;
+}
+
+.actions-group .action-btn.cancel:hover {
+  color: #2C1810;
+}
+
+.actions-group .action-btn.publish {
+  background: #804030;
+  border: none;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(128, 64, 48, 0.2);
+}
+
+.actions-group .action-btn.publish:hover {
+  background: #6B3528;
+}
+
+.actions-group .action-btn.publish:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 </style>

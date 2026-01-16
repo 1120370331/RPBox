@@ -290,7 +290,10 @@ onMounted(loadGuild)
               </div>
               <div class="member-list">
                 <div v-for="m in members" :key="m.id" class="member-item">
-                  <div class="avatar">{{ m.username?.charAt(0) || '?' }}</div>
+                  <div class="avatar">
+                    <img v-if="m.avatar" :src="m.avatar" alt="" />
+                    <span v-else>{{ m.username?.charAt(0) || '?' }}</span>
+                  </div>
                   <div class="info">
                     <span class="name">{{ m.username }}</span>
                     <span class="role" :class="m.role">{{ getRoleLabel(m.role) }}</span>
@@ -841,6 +844,13 @@ onMounted(loadGuild)
   justify-content: center;
   font-weight: 600;
   font-size: 14px;
+  overflow: hidden;
+}
+
+.member-item .avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .member-item .info {

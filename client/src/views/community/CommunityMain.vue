@@ -315,7 +315,10 @@ function getPostImages(post: PostWithAuthor): string[] {
             </div>
             <div class="card-footer">
               <div class="author-info">
-                <div class="author-avatar">{{ post.author_name?.charAt(0) || 'U' }}</div>
+                <div class="author-avatar">
+                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" />
+                  <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
+                </div>
                 <span class="author-name">{{ post.author_name }}</span>
               </div>
               <div class="post-stats">
@@ -360,7 +363,10 @@ function getPostImages(post: PostWithAuthor): string[] {
             </div>
             <div class="card-footer">
               <div class="author-info">
-                <div class="author-avatar small">{{ post.author_name?.charAt(0) || 'U' }}</div>
+                <div class="author-avatar small">
+                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" />
+                  <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
+                </div>
                 <span class="author-name">{{ post.author_name }}</span>
               </div>
               <span class="comment-count">
@@ -1001,6 +1007,13 @@ function getPostImages(post: PostWithAuthor): string[] {
   font-size: 14px;
   font-weight: 600;
   color: #fff;
+  overflow: hidden;
+}
+
+.author-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .author-avatar.small {

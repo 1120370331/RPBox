@@ -84,7 +84,10 @@ const activeMenu = computed(() => {
       <div class="user-profile">
         <template v-if="userStore.token">
           <router-link :to="`/user/${userStore.user?.id}`" class="avatar-link">
-            <div class="avatar">{{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}</div>
+            <div class="avatar">
+              <img v-if="userStore.user?.avatar" :src="userStore.user.avatar" alt="头像" />
+              <span v-else>{{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}</span>
+            </div>
           </router-link>
           <div class="user-info">
             <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
@@ -206,6 +209,13 @@ const activeMenu = computed(() => {
   font-weight: bold;
   color: #FFF;
   border: 2px solid rgba(255,255,255,0.2);
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .avatar-link {

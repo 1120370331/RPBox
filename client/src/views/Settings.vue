@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
 import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { uploadAvatar } from '@/api/user'
@@ -26,12 +27,20 @@ const autoSync = ref(false)
 const syncOnStartup = ref(true)
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
+const appVersion = ref('0.0.0')
 
-onMounted(() => {
+onMounted(async () => {
   wowPath.value = localStorage.getItem('wow_path') || ''
   autoSync.value = localStorage.getItem('auto_sync') === 'true'
   syncOnStartup.value = localStorage.getItem('sync_on_startup') !== 'false'
   setTimeout(() => mounted.value = true, 50)
+
+  // 获取应用版本
+  try {
+    appVersion.value = await getVersion()
+  } catch (e) {
+    console.error('获取版本失败:', e)
+  }
 })
 
 async function detectPaths() {
@@ -270,7 +279,7 @@ async function handleAvatarChange(event: Event) {
           </div>
           <div class="about-info">
             <h3>RPBox</h3>
-            <p class="version">v0.1.0</p>
+            <p class="version">v{{ appVersion }}</p>
             <p class="desc">魔兽世界 RP 玩家的工具箱</p>
           </div>
           <div class="about-actions">

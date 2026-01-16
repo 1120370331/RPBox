@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { createItem, uploadImage } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
@@ -12,6 +12,8 @@ const loading = ref(false)
 const uploadingImage = ref(false)
 const itemTags = ref<Tag[]>([])
 const previewImageInput = ref<HTMLInputElement | null>(null)
+
+const DRAFT_KEY = 'item_upload_draft'
 
 // 表单数据
 const form = ref({
@@ -27,6 +29,40 @@ const form = ref({
   status: 'draft' as 'draft' | 'published'
 })
 
+// 挂载时恢复草稿
+onMounted(() => {
+  loadTags()
+  restoreDraft()
+})
+
+// 监听表单变化，自动保存草稿
+watch(form, () => {
+  saveDraft()
+}, { deep: true })
+
+// 保存草稿到 sessionStorage
+function saveDraft() {
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form.value))
+}
+
+// 恢复草稿
+function restoreDraft() {
+  const draftStr = sessionStorage.getItem(DRAFT_KEY)
+  if (draftStr) {
+    try {
+      const draft = JSON.parse(draftStr)
+      Object.assign(form.value, draft)
+    } catch (e) {
+      console.error('恢复草稿失败:', e)
+    }
+  }
+}
+
+// 清除草稿
+function clearDraft() {
+  sessionStorage.removeItem(DRAFT_KEY)
+}
+
 // 加载道具标签
 async function loadTags() {
   try {
@@ -40,18 +76,23 @@ async function loadTags() {
 }
 
 // 提交表单
-async function handleSubmit() {
+async function handleSubmit(status: 'draft' | 'published') {
   if (!form.value.name || !form.value.import_code) {
     toast.warning('请填写道具名称和导入代码')
     return
   }
 
+  form.value.status = status
   loading.value = true
   try {
     const res: any = await createItem(form.value)
-    if (res.code === 0) {
-      toast.success('上传成功！')
-      router.push('/market')
+    if (res.code === 0 || res.data) {
+      clearDraft()
+      const msg = status === 'draft' ? '草稿已保存！' : '发布成功，等待审核！'
+      toast.success(msg)
+      router.push('/market/my-items')
+    } else {
+      toast.error(res.error || res.message || '保存失败')
     }
   } catch (error: any) {
     console.error('上传失败:', error)
@@ -64,6 +105,38 @@ async function handleSubmit() {
 // 返回列表
 function goBack() {
   router.push('/market')
+}
+
+// 预览
+function handlePreview() {
+  if (!form.value.name) {
+    toast.warning('请先填写道具名称')
+    return
+  }
+
+  // 构建预览数据
+  const previewData = {
+    id: 0,
+    name: form.value.name,
+    type: form.value.type,
+    icon: form.value.icon,
+    preview_image: form.value.preview_image,
+    description: form.value.description,
+    detail_content: form.value.detail_content,
+    import_code: form.value.import_code,
+    downloads: 0,
+    rating: 0,
+    rating_count: 0,
+    like_count: 0,
+    favorite_count: 0,
+    status: 'draft',
+    created_at: new Date().toISOString(),
+  }
+
+  sessionStorage.setItem('item_preview_data', JSON.stringify(previewData))
+  sessionStorage.setItem('item_preview_from', '/market/upload')
+
+  router.push('/market/preview')
 }
 
 // 上传预览图
@@ -213,20 +286,17 @@ loadTags()
           </div>
         </div>
 
-        <!-- 发布状态 -->
-        <div class="form-group">
-          <label>发布状态</label>
-          <select v-model="form.status">
-            <option value="draft">草稿（仅自己可见）</option>
-            <option value="published">发布（所有人可见）</option>
-          </select>
-        </div>
-
         <!-- 提交按钮 -->
         <div class="form-actions">
           <button type="button" class="cancel-btn" @click="goBack">取消</button>
-          <button type="submit" class="submit-btn" :disabled="loading">
-            {{ loading ? '上传中...' : '上传道具' }}
+          <button type="button" class="preview-btn" @click="handlePreview" :disabled="loading">
+            <i class="ri-eye-line"></i> 预览
+          </button>
+          <button type="button" class="draft-btn" @click="handleSubmit('draft')" :disabled="loading">
+            保存草稿
+          </button>
+          <button type="button" class="publish-btn" @click="handleSubmit('published')" :disabled="loading">
+            <i class="ri-upload-line"></i> 发布
           </button>
         </div>
       </form>
@@ -439,7 +509,9 @@ loadTags()
 }
 
 .cancel-btn,
-.submit-btn {
+.preview-btn,
+.draft-btn,
+.publish-btn {
   flex: 1;
   height: 48px;
   border: none;
@@ -448,35 +520,57 @@ loadTags()
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .cancel-btn {
   background: #F5F0EB;
   color: #795548;
+  flex: 0.8;
 }
 
 .cancel-btn:hover {
   background: #E8DED3;
 }
 
-.submit-btn {
-  background: #B87333;
-  color: #fff;
-  position: relative;
-  z-index: 10;
+.preview-btn {
+  background: #fff;
+  color: #5D4037;
+  border: 2px solid #E5D4C1;
+  flex: 0.8;
 }
 
-.submit-btn:hover:not(:disabled) {
+.preview-btn:hover {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.draft-btn {
+  background: #fff;
+  color: #B87333;
+  border: 2px solid #B87333;
+}
+
+.draft-btn:hover {
+  background: #FFF8F0;
+}
+
+.publish-btn {
+  background: #B87333;
+  color: #fff;
+}
+
+.publish-btn:hover:not(:disabled) {
   background: #A66629;
 }
 
-.submit-btn:disabled {
+.publish-btn:disabled,
+.draft-btn:disabled,
+.preview-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.form-actions {
-  position: relative;
-  z-index: 5;
 }
 </style>

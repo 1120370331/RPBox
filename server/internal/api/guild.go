@@ -334,18 +334,20 @@ func (s *Server) listGuildMembers(c *gin.Context) {
 
 	var users []model.User
 	database.DB.Where("id IN ?", userIDs).Find(&users)
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	type MemberInfo struct {
 		model.GuildMember
 		Username string `json:"username"`
+		Avatar   string `json:"avatar"`
 	}
 	result := make([]MemberInfo, len(members))
 	for i, m := range members {
-		result[i] = MemberInfo{GuildMember: m, Username: userMap[m.UserID]}
+		user := userMap[m.UserID]
+		result[i] = MemberInfo{GuildMember: m, Username: user.Username, Avatar: user.Avatar}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"members": result})

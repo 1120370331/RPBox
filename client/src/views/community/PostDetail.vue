@@ -12,11 +12,22 @@ const submittingComment = ref(false)
 const actionLoading = ref(false)
 
 const post = ref<any>(null)
+const authorAvatar = ref('')
 const comments = ref<CommentWithAuthor[]>([])
 const liked = ref(false)
 const favorited = ref(false)
 const commentContent = ref('')
 const currentUserId = ref<number>(0)
+
+// 评论分页
+const commentPage = ref(1)
+const commentPageSize = 10
+const commentTotal = ref(0)
+
+// 回复功能
+const replyingTo = ref<CommentWithAuthor | null>(null)
+const replyContent = ref('')
+const submittingReply = ref(false)
 
 const errorMessage = ref('')
 const commentError = ref('')
@@ -36,6 +47,60 @@ const isAuthor = computed(() => {
   return post.value && currentUserId.value === post.value.author_id
 })
 
+// 将评论组织成树形结构
+interface CommentWithReplies extends CommentWithAuthor {
+  replies: CommentWithAuthor[]
+  replyToName?: string  // 回复的目标用户名
+}
+
+const organizedComments = computed(() => {
+  const allComments = comments.value
+  // 创建评论ID到评论的映射
+  const commentMap = new Map<number, CommentWithAuthor>()
+  allComments.forEach(c => commentMap.set(c.id, c))
+
+  // 顶级评论（没有parent_id的）
+  const topLevel: CommentWithReplies[] = []
+  // 回复（有parent_id的）
+  const replies: CommentWithAuthor[] = []
+
+  allComments.forEach(c => {
+    if (!c.parent_id) {
+      topLevel.push({ ...c, replies: [] })
+    } else {
+      replies.push(c)
+    }
+  })
+
+  // 将回复挂载到对应的顶级评论下
+  replies.forEach(reply => {
+    // 找到父评论
+    const parentComment = commentMap.get(reply.parent_id!)
+    const replyToName = parentComment?.author_name
+
+    // 找到顶级评论（可能是直接父评论，也可能需要向上查找）
+    let topLevelParent = topLevel.find(t => t.id === reply.parent_id)
+    if (!topLevelParent) {
+      // 父评论可能也是回复，找到其所属的顶级评论
+      for (const top of topLevel) {
+        if (top.replies.some(r => r.id === reply.parent_id)) {
+          topLevelParent = top
+          break
+        }
+      }
+    }
+
+    if (topLevelParent) {
+      topLevelParent.replies.push({ ...reply, replyToName } as any)
+    } else {
+      // 如果找不到父评论，作为顶级评论显示
+      topLevel.push({ ...reply, replies: [], replyToName } as any)
+    }
+  })
+
+  return topLevel
+})
+
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
   await loadPost()
@@ -51,6 +116,7 @@ async function loadPost() {
     const res = await getPost(id)
     post.value = res.post
     post.value.author_name = res.author_name  // author_name 在响应顶层
+    authorAvatar.value = res.author_avatar || ''
     liked.value = res.liked
     favorited.value = res.favorited
   } catch (error: any) {
@@ -129,6 +195,43 @@ async function handleComment() {
   }
 }
 
+// 回复评论
+function startReply(comment: CommentWithAuthor) {
+  replyingTo.value = comment
+  replyContent.value = ''
+}
+
+function cancelReply() {
+  replyingTo.value = null
+  replyContent.value = ''
+}
+
+async function submitReply() {
+  if (!replyContent.value.trim() || !replyingTo.value) return
+  if (submittingReply.value) return
+  submittingReply.value = true
+  try {
+    await createComment(post.value.id, replyContent.value, replyingTo.value.id)
+    replyContent.value = ''
+    replyingTo.value = null
+    await loadComments()
+    post.value.comment_count++
+  } catch (error: any) {
+    console.error('回复失败:', error)
+  } finally {
+    submittingReply.value = false
+  }
+}
+
+// 分页
+const totalPages = computed(() => Math.ceil(commentTotal.value / commentPageSize))
+
+function goToCommentPage(page: number) {
+  if (page < 1 || page > totalPages.value) return
+  commentPage.value = page
+  loadComments()
+}
+
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
   return date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -200,7 +303,8 @@ async function handleDelete() {
           <div class="article-top">
             <div class="author-section">
               <div class="author-avatar">
-                {{ post.author_name?.charAt(0) || 'U' }}
+                <img v-if="authorAvatar" :src="authorAvatar" alt="" />
+                <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
               </div>
               <div class="author-info">
                 <h4 class="author-name">{{ post.author_name }}</h4>
@@ -255,7 +359,94 @@ async function handleDelete() {
             讨论 <span class="comment-badge">{{ post.comment_count }}</span>
           </h3>
 
-          <!-- 评论输入 -->
+          <!-- 评论列表 -->
+          <div class="comments-list">
+            <div v-for="comment in organizedComments" :key="comment.id" class="comment-item">
+              <div class="comment-avatar">
+                <img v-if="comment.author_avatar" :src="comment.author_avatar" alt="" />
+                <span v-else>{{ comment.author_name.charAt(0) }}</span>
+              </div>
+              <div class="comment-body">
+                <div class="comment-meta">
+                  <span class="comment-author">{{ comment.author_name }}</span>
+                  <span class="comment-time">{{ formatCommentTime(comment.created_at) }}</span>
+                </div>
+                <p class="comment-text">{{ comment.content }}</p>
+                <button class="reply-btn" @click="startReply(comment)">
+                  <i class="ri-reply-line"></i> 回复
+                </button>
+
+                <!-- 回复输入框 -->
+                <div v-if="replyingTo?.id === comment.id" class="reply-input-box">
+                  <textarea
+                    v-model="replyContent"
+                    :placeholder="'回复 @' + comment.author_name"
+                    :disabled="submittingReply"
+                  ></textarea>
+                  <div class="reply-actions">
+                    <button class="cancel-btn" @click="cancelReply">取消</button>
+                    <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                  </div>
+                </div>
+
+                <div v-if="comment.replies && comment.replies.length > 0" class="replies-list">
+                  <div v-for="reply in comment.replies" :key="reply.id" class="reply-item">
+                    <div class="reply-avatar">
+                      <img v-if="reply.author_avatar" :src="reply.author_avatar" alt="" />
+                      <span v-else>{{ reply.author_name.charAt(0) }}</span>
+                    </div>
+                    <div class="reply-body">
+                      <div class="reply-meta">
+                        <span class="reply-author">{{ reply.author_name }}</span>
+                        <span v-if="reply.replyToName" class="reply-to">
+                          回复 <span class="reply-to-name">@{{ reply.replyToName }}</span>
+                        </span>
+                        <span class="reply-time">{{ formatCommentTime(reply.created_at) }}</span>
+                      </div>
+                      <p class="reply-text">{{ reply.content }}</p>
+                      <button class="reply-btn" @click="startReply(reply)">
+                        <i class="ri-reply-line"></i> 回复
+                      </button>
+
+                      <!-- 回复的回复输入框 -->
+                      <div v-if="replyingTo?.id === reply.id" class="reply-input-box">
+                        <textarea
+                          v-model="replyContent"
+                          :placeholder="'回复 @' + reply.author_name"
+                          :disabled="submittingReply"
+                        ></textarea>
+                        <div class="reply-actions">
+                          <button class="cancel-btn" @click="cancelReply">取消</button>
+                          <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="organizedComments.length === 0" class="empty-comments">
+              暂无评论，快来发表第一条评论吧
+            </div>
+          </div>
+
+          <!-- 分页 -->
+          <div v-if="totalPages > 1" class="comments-pagination">
+            <button
+              class="page-btn"
+              :disabled="commentPage === 1"
+              @click="goToCommentPage(commentPage - 1)"
+            >上一页</button>
+            <span class="page-info">{{ commentPage }} / {{ totalPages }}</span>
+            <button
+              class="page-btn"
+              :disabled="commentPage === totalPages"
+              @click="goToCommentPage(commentPage + 1)"
+            >下一页</button>
+          </div>
+
+          <!-- 评论输入（底部） -->
           <div class="comment-input-box">
             <textarea
               v-model="commentContent"
@@ -265,28 +456,8 @@ async function handleDelete() {
             <div class="input-footer">
               <div></div>
               <button class="post-btn" :disabled="submittingComment" @click="handleComment">
-                发表
+                发表评论
               </button>
-            </div>
-          </div>
-
-          <!-- 评论列表 -->
-          <div class="comments-list">
-            <div v-for="comment in comments" :key="comment.id" class="comment-item">
-              <div class="comment-avatar">
-                {{ comment.author_name.charAt(0) }}
-              </div>
-              <div class="comment-body">
-                <div class="comment-meta">
-                  <span class="comment-author">{{ comment.author_name }}</span>
-                  <span class="comment-time">{{ formatCommentTime(comment.created_at) }}</span>
-                </div>
-                <p class="comment-text">{{ comment.content }}</p>
-              </div>
-            </div>
-
-            <div v-if="comments.length === 0" class="empty-comments">
-              暂无评论，快来发表第一条评论吧
             </div>
           </div>
         </section>
@@ -756,6 +927,13 @@ async function handleDelete() {
   flex-shrink: 0;
   filter: grayscale(100%);
   transition: filter 0.5s;
+  overflow: hidden;
+}
+
+.comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .comment-item:hover .comment-avatar {
@@ -797,6 +975,195 @@ async function handleDelete() {
   padding: 40px 16px;
   color: #8D7B68;
   font-size: 14px;
+}
+
+/* ========== 回复功能 ========== */
+.reply-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: #8D7B68;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.reply-btn:hover {
+  color: #804030;
+}
+
+.reply-input-box {
+  margin-top: 12px;
+  padding: 12px;
+  background: #F5EFE7;
+  border-radius: 6px;
+}
+
+.reply-input-box textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid #E5D4C1;
+  border-radius: 4px;
+  font-size: 13px;
+  resize: none;
+  outline: none;
+}
+
+.reply-input-box textarea:focus {
+  border-color: #B87333;
+}
+
+.reply-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cancel-btn {
+  padding: 6px 12px;
+  background: none;
+  border: 1px solid #E5D4C1;
+  border-radius: 4px;
+  color: #8D7B68;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.submit-btn {
+  padding: 6px 12px;
+  background: #804030;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+}
+
+/* ========== 子回复列表 ========== */
+.replies-list {
+  margin-top: 16px;
+  padding-left: 12px;
+  border-left: 2px solid #F5EFE7;
+}
+
+.reply-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.reply-item:not(:last-child) {
+  border-bottom: 1px solid #F5EFE7;
+}
+
+.reply-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #B87333, #804030);
+  border: 1px solid #E5D4C1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.reply-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reply-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.reply-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.reply-author {
+  font-size: 13px;
+  font-weight: 500;
+  color: #2C1810;
+}
+
+.reply-to {
+  font-size: 12px;
+  color: #8D7B68;
+}
+
+.reply-to-name {
+  color: #804030;
+  font-weight: 500;
+}
+
+.reply-time {
+  font-size: 11px;
+  color: #8D7B68;
+}
+
+.reply-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #4B3621;
+  margin: 0;
+}
+
+/* ========== 评论分页 ========== */
+.comments-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+  border-top: 1px solid #F5EFE7;
+  margin-top: 20px;
+}
+
+.comments-pagination .page-btn {
+  padding: 6px 14px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 4px;
+  color: #4B3621;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.comments-pagination .page-btn:hover:not(:disabled) {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.comments-pagination .page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 13px;
+  color: #8D7B68;
 }
 
 /* ========== 动画 ========== */

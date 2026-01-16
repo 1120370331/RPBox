@@ -121,19 +121,25 @@ func (s *Server) listPosts(c *gin.Context) {
 
 	var users []model.User
 	database.DB.Where("id IN ?", authorIDs).Find(&users)
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	// 组装响应
 	type PostWithAuthor struct {
 		model.Post
-		AuthorName string `json:"author_name"`
+		AuthorName   string `json:"author_name"`
+		AuthorAvatar string `json:"author_avatar"`
 	}
 	result := make([]PostWithAuthor, len(posts))
 	for i, p := range posts {
-		result[i] = PostWithAuthor{Post: p, AuthorName: userMap[p.AuthorID]}
+		author := userMap[p.AuthorID]
+		result[i] = PostWithAuthor{
+			Post:         p,
+			AuthorName:   author.Username,
+			AuthorAvatar: author.Avatar,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"posts": result, "total": total})
@@ -294,11 +300,12 @@ func (s *Server) getPost(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"post":        post,
-		"author_name": author.Username,
-		"tags":        tags,
-		"liked":       liked,
-		"favorited":   favorited,
+		"post":          post,
+		"author_name":   author.Username,
+		"author_avatar": author.Avatar,
+		"tags":          tags,
+		"liked":         liked,
+		"favorited":     favorited,
 	})
 }
 
