@@ -999,6 +999,9 @@ function getPostImages(post: PostWithAuthor): string[] {
 .author-avatar {
   width: 32px;
   height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
   background: linear-gradient(135deg, #B87333, #804030);
   border-radius: 6px;
   display: flex;
@@ -1019,6 +1022,8 @@ function getPostImages(post: PostWithAuthor): string[] {
 .author-avatar.small {
   width: 24px;
   height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   font-size: 11px;
   border-radius: 4px;
 }

@@ -5,12 +5,14 @@ interface Props {
   modelValue: string
   placeholder?: string
   minHeight?: string
+  simple?: boolean  // 简单模式，只有内省按钮
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: '',
   placeholder: '输入内容...',
-  minHeight: '150px'
+  minHeight: '150px',
+  simple: false
 })
 
 const emit = defineEmits<{
@@ -29,6 +31,30 @@ function execCommand(cmd: string, value?: string) {
   document.execCommand(cmd, false, value)
   editorRef.value?.focus()
   updateContent()
+}
+
+// 插入内省标记（用斜体表示内心独白）
+function insertIntrospection() {
+  const selection = window.getSelection()
+  if (selection && selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0)
+    const selectedText = range.toString()
+    if (selectedText) {
+      // 包裹选中文本
+      const em = document.createElement('em')
+      em.className = 'introspection'
+      em.textContent = selectedText
+      range.deleteContents()
+      range.insertNode(em)
+    } else {
+      // 插入占位符
+      const em = document.createElement('em')
+      em.className = 'introspection'
+      em.textContent = '（内心独白）'
+      range.insertNode(em)
+    }
+    updateContent()
+  }
 }
 
 function insertImage() {
@@ -54,26 +80,30 @@ onMounted(() => {
 <template>
   <div class="rich-editor">
     <div class="toolbar">
-      <button type="button" @click="execCommand('bold')" title="粗体">
-        <i class="ri-bold"></i>
-      </button>
-      <button type="button" @click="execCommand('italic')" title="斜体">
-        <i class="ri-italic"></i>
-      </button>
-      <button type="button" @click="execCommand('underline')" title="下划线">
-        <i class="ri-underline"></i>
-      </button>
-      <span class="divider"></span>
-      <button type="button" @click="execCommand('insertUnorderedList')" title="无序列表">
-        <i class="ri-list-unordered"></i>
-      </button>
-      <button type="button" @click="execCommand('insertOrderedList')" title="有序列表">
-        <i class="ri-list-ordered"></i>
-      </button>
-      <span class="divider"></span>
-      <button type="button" @click="insertImage" title="插入图片">
-        <i class="ri-image-line"></i>
-      </button>
+      <!-- 简单模式：只有内省按钮 -->
+      <template v-if="simple">
+        <button type="button" @click="insertIntrospection" title="内省/内心独白">
+          <i class="ri-mind-map"></i>
+          <span class="btn-text">内省</span>
+        </button>
+      </template>
+      <!-- 完整模式 -->
+      <template v-else>
+        <button type="button" @click="insertIntrospection" title="内省/内心独白">
+          <i class="ri-mind-map"></i>
+        </button>
+        <span class="divider"></span>
+        <button type="button" @click="execCommand('insertUnorderedList')" title="无序列表">
+          <i class="ri-list-unordered"></i>
+        </button>
+        <button type="button" @click="execCommand('insertOrderedList')" title="有序列表">
+          <i class="ri-list-ordered"></i>
+        </button>
+        <span class="divider"></span>
+        <button type="button" @click="insertImage" title="插入图片">
+          <i class="ri-image-line"></i>
+        </button>
+      </template>
     </div>
     <div
       ref="editorRef"
@@ -105,8 +135,9 @@ onMounted(() => {
 }
 
 .toolbar button {
-  width: 32px;
+  min-width: 32px;
   height: 32px;
+  padding: 0 8px;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -115,6 +146,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
+}
+
+.toolbar button .btn-text {
+  font-size: 12px;
 }
 
 .toolbar button:hover {
@@ -144,5 +180,15 @@ onMounted(() => {
 .editor-content img {
   max-width: 100%;
   border-radius: 4px;
+}
+
+/* 内省/内心独白样式 */
+.editor-content :deep(.introspection),
+.editor-content :deep(em.introspection) {
+  font-style: italic;
+  color: #9b59b6;
+  background: rgba(155, 89, 182, 0.1);
+  padding: 0 4px;
+  border-radius: 2px;
 }
 </style>
