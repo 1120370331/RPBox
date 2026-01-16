@@ -234,11 +234,11 @@ function goBack() {
           <div class="item-meta">
             <span class="type-badge">{{ item.type === 'item' ? '道具' : '剧本' }}</span>
             <span class="author">作者: {{ author?.username || '未知' }}</span>
-            <span class="permission-badge" v-if="item.type === 'item'">
+            <span class="permission-badge" v-if="item.requires_permission">
               <i class="ri-shield-keyhole-line"></i> 需要权限
               <div class="permission-tooltip">
                 <p><strong>道具作者：</strong>{{ author?.username || '未知' }}</p>
-                <p>这种道具需要你在游戏内对道具 <strong>Shift+右键点击</strong> 来调整安全性设置。</p>
+                <p>这个道具需要你在游戏内对道具 <strong>Shift+右键点击</strong> 来调整安全性设置后才能正常使用。</p>
               </div>
             </span>
           </div>

@@ -888,9 +888,14 @@ function formatBanTime(dateStr: string | null) {
           <p>暂无待审核道具</p>
         </div>
         <div v-else class="item-list">
-          <div v-for="item in pendingItems" :key="item.id" class="item-card">
+          <div v-for="item in pendingItems" :key="item.id" class="item-card" :class="{ 'has-permission': item.requires_permission }">
             <div class="item-header">
-              <span class="item-title">{{ item.name }}</span>
+              <div class="title-with-tags">
+                <span class="item-title">{{ item.name }}</span>
+                <span v-if="item.requires_permission" class="permission-warning-tag">
+                  <i class="ri-shield-keyhole-line"></i> 需要权限
+                </span>
+              </div>
               <span class="status-badge pending">待审核</span>
             </div>
             <div class="item-meta">
@@ -1464,6 +1469,14 @@ function formatBanTime(dateStr: string | null) {
 
               <!-- 道具预览 -->
               <template v-else-if="previewType === 'item'">
+                <!-- 权限警告横幅 -->
+                <div v-if="previewData.requires_permission" class="permission-warning-banner">
+                  <i class="ri-shield-keyhole-line"></i>
+                  <div class="warning-content">
+                    <strong>此道具需要 TRP3 权限授权</strong>
+                    <p>用户需要在游戏内对道具 Shift+右键点击 来调整安全性设置后才能正常使用。请确认道具功能是否需要此权限。</p>
+                  </div>
+                </div>
                 <div class="preview-header">
                   <h2 class="preview-title">{{ previewData.name }}</h2>
                   <div class="preview-meta">
@@ -2486,5 +2499,72 @@ function formatBanTime(dateStr: string | null) {
 
 .btn-submit.danger:hover {
   background: #B71C1C;
+}
+
+/* 权限警告标签 - 道具列表 */
+.title-with-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.permission-warning-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #FFF3E0;
+  color: #E65100;
+  border: 1px solid #FFB74D;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.permission-warning-tag i {
+  font-size: 12px;
+}
+
+/* 需要权限的道具卡片高亮 */
+.item-card.has-permission {
+  border-left: 3px solid #E65100;
+  background: linear-gradient(90deg, #FFF8E1 0%, #fff 20%);
+}
+
+/* 权限警告横幅 - 预览弹窗 */
+.permission-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+  border: 2px solid #FFB74D;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.permission-warning-banner > i {
+  font-size: 24px;
+  color: #E65100;
+  flex-shrink: 0;
+}
+
+.permission-warning-banner .warning-content {
+  flex: 1;
+}
+
+.permission-warning-banner .warning-content strong {
+  display: block;
+  font-size: 15px;
+  color: #E65100;
+  margin-bottom: 4px;
+}
+
+.permission-warning-banner .warning-content p {
+  margin: 0;
+  font-size: 13px;
+  color: #5D4037;
+  line-height: 1.5;
 }
 </style>
