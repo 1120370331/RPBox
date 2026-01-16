@@ -147,6 +147,7 @@ async function handleAddEntry() {
     newEntryType.value = 'dialogue'
     newEntryChannel.value = 'SAY'
     newEntryTimestamp.value = ''
+    newEntryCharacterId.value = null
     await loadStory()
   } catch (e) {
     console.error('添加失败:', e)
@@ -218,6 +219,32 @@ async function loadAvailableCharacters() {
   } catch (e) {
     console.error('加载人物卡失败:', e)
   }
+}
+
+// 选择人物卡时自动填充说话者名称
+function handleCharacterSelect(characterId: number | null) {
+  newEntryCharacterId.value = characterId
+  if (characterId) {
+    const character = availableCharacters.value.find(c => c.id === characterId)
+    if (character) {
+      const name = character.custom_name ||
+        (character.first_name ?
+          (character.last_name ? `${character.first_name} ${character.last_name}` : character.first_name)
+          : character.game_id?.split('-')[0] || '')
+      newEntrySpeaker.value = name
+    }
+  }
+}
+
+// 获取人物卡显示名称
+function getCharacterDisplayName(character: Character): string {
+  if (character.custom_name) return character.custom_name
+  if (character.first_name) {
+    return character.last_name
+      ? `${character.first_name} ${character.last_name}`
+      : character.first_name
+  }
+  return character.game_id?.split('-')[0] || '未知角色'
 }
 
 async function handleArchiveToGuild(guildId: number) {
@@ -387,6 +414,7 @@ onMounted(() => {
   loadStory()
   loadTags()
   loadGuilds()
+  loadAvailableCharacters()
 })
 </script>
 
@@ -553,6 +581,21 @@ onMounted(() => {
             class="datetime-input"
           />
           <span class="field-hint">留空则使用当前时间</span>
+        </div>
+        <div class="form-field">
+          <label>选择人物卡</label>
+          <select
+            :value="newEntryCharacterId"
+            @change="handleCharacterSelect(($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+            class="character-select"
+          >
+            <option :value="null">-- 不关联人物卡 --</option>
+            <option v-for="char in availableCharacters" :key="char.id" :value="char.id">
+              {{ getCharacterDisplayName(char) }}
+              <template v-if="char.is_npc"> (NPC)</template>
+            </option>
+          </select>
+          <span class="field-hint">选择后自动填充说话者名称</span>
         </div>
         <div class="form-field">
           <label>说话者</label>
@@ -845,6 +888,23 @@ onMounted(() => {
   font-size: 12px;
   color: var(--color-secondary);
   margin-top: 4px;
+}
+
+.character-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.character-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
 }
 
 .edit-actions {
