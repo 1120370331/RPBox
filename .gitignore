@@ -260,3 +260,10 @@ nul
 # CI/CD
 coverage.out
 *.coverprofile
+
+# SSH keys
+*sealos_devbox*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
