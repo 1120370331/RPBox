@@ -140,21 +140,18 @@ jobs:
       - name: Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p ${{ secrets.SERVER_PORT }} -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy to server
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            cd /path/to/rpbox
+          ssh -p ${{ secrets.SERVER_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ~/RPBox
             git pull origin main
 
-            # 重启后端服务
+            # 重建后端
             cd server
             go build -o rpbox-server cmd/server/main.go
-            sudo systemctl restart rpbox
 
-            # 构建前端 (如需要)
-            cd ../client
-            npm ci
-            npm run build
+            # 重启服务 (supervisor)
+            sudo supervisorctl restart rpbox
           EOF

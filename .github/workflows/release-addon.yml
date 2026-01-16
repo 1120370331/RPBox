@@ -1,0 +1,52 @@
+name: Release Addon
+
+on:
+  push:
+    tags:
+      - 'addon-v*'  # 触发条件：推送 addon-v 开头的 tag
+
+jobs:
+  release:
+    name: Release WoW Addon
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/addon-v}" >> $GITHUB_OUTPUT
+
+      - name: Update TOC version
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/## Version:.*/## Version: $VERSION/" addon/RPBox_Addon/RPBox_Addon.toc
+
+      - name: Package addon
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p releases/addon/$VERSION
+          cd addon && zip -r ../releases/addon/$VERSION/RPBox_Addon_$VERSION.zip RPBox_Addon
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy addon
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          REMOTE_PATH="${{ secrets.ADDON_PATH }}"
+
+          # 上传版本目录
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH/$VERSION"
+          scp releases/addon/$VERSION/*.zip ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/$VERSION/
+
+          # 更新 latest
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cp $REMOTE_PATH/$VERSION/*.zip $REMOTE_PATH/latest.zip"
