@@ -26,7 +26,13 @@ const previewFrom = ref('')
 
 // 计算评论字数
 const commentLength = computed(() => [...newComment.value].length)
-const canSubmit = computed(() => newRating.value > 0 && commentLength.value >= 30)
+// 提交条件：有评分时需要30字，无评分时只需要有内容
+const canSubmit = computed(() => {
+  if (newRating.value > 0) {
+    return commentLength.value >= 30
+  }
+  return commentLength.value > 0
+})
 
 onMounted(() => {
   // 检测预览模式
@@ -112,13 +118,13 @@ async function handleDownload() {
   }
 }
 
-// 添加评论（带评分）
+// 添加评论（可选评分）
 async function handleAddComment() {
   if (!canSubmit.value) {
-    if (newRating.value === 0) {
-      toast.error('请先选择评分')
+    if (newRating.value > 0 && commentLength.value < 30) {
+      toast.error('带评分的评价至少需要30个字符')
     } else {
-      toast.error('评论内容至少需要30个字符')
+      toast.error('请输入评论内容')
     }
     return
   }
@@ -332,15 +338,18 @@ function goBack() {
               ></i>
             </div>
             <span class="rating-value" v-if="newRating">{{ newRating }} 星</span>
+            <button v-if="newRating" class="clear-rating-btn" @click="newRating = 0" type="button">
+              <i class="ri-close-line"></i>
+            </button>
           </div>
           <textarea
             v-model="newComment"
-            placeholder="写下你的评价（至少30字）..."
+            placeholder="写下你的评价...（带评分需至少30字）"
             rows="4"
           ></textarea>
           <div class="review-footer">
-            <span class="char-count" :class="{ warning: commentLength < 30 }">
-              {{ commentLength }}/30 字
+            <span class="char-count" :class="{ warning: newRating > 0 && commentLength < 30 }">
+              {{ commentLength }}{{ newRating > 0 ? '/30' : '' }} 字
             </span>
             <button
               class="submit-review-btn"
@@ -843,6 +852,22 @@ function goBack() {
   font-size: 14px;
   color: #FFB300;
   font-weight: 600;
+}
+
+.clear-rating-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.clear-rating-btn:hover {
+  color: #E53935;
+  background: rgba(229, 57, 53, 0.1);
 }
 
 .review-input-box textarea {

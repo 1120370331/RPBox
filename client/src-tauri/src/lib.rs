@@ -241,7 +241,8 @@ pub fn run() {
             check_addon_installed,
             install_addon,
             uninstall_addon,
-            scan_chat_logs
+            scan_chat_logs,
+            save_text_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -382,4 +383,10 @@ async fn uninstall_addon(wow_path: String, flavor: String) -> Result<(), String>
 #[tauri::command]
 async fn scan_chat_logs(wow_path: String) -> Result<Vec<chat_log::AccountChatLogs>, String> {
     chat_log::scan_chat_logs(&wow_path)
+}
+
+#[tauri::command]
+async fn save_text_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content)
+        .map_err(|e| format!("保存文件失败: {}", e))
 }

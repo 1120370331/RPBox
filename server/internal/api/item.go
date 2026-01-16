@@ -516,7 +516,7 @@ func (s *Server) addItemComment(c *gin.Context) {
 	id := c.Param("id")
 
 	var req struct {
-		Rating  int    `json:"rating" binding:"required,min=1,max=5"`
+		Rating  int    `json:"rating" binding:"min=0,max=5"`
 		Content string `json:"content" binding:"required"`
 	}
 
@@ -525,9 +525,9 @@ func (s *Server) addItemComment(c *gin.Context) {
 		return
 	}
 
-	// 验证评论长度（至少30字）
-	if len([]rune(req.Content)) < 30 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "评论内容至少需要30个字符"})
+	// 验证评论长度：带评分时至少30字
+	if req.Rating > 0 && len([]rune(req.Content)) < 30 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "带评分的评价至少需要30个字符"})
 		return
 	}
 

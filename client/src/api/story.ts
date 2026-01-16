@@ -99,6 +99,22 @@ export async function addStoryEntries(id: number, entries: CreateStoryEntryReque
   return request.post(`/stories/${id}/entries`, entries)
 }
 
+export interface UpdateStoryEntryRequest {
+  content?: string
+  speaker?: string
+  channel?: string
+  type?: string
+  character_id?: number | null
+}
+
+export async function updateStoryEntry(storyId: number, entryId: number, data: UpdateStoryEntryRequest): Promise<StoryEntry> {
+  return request.put(`/stories/${storyId}/entries/${entryId}`, data)
+}
+
+export async function deleteStoryEntry(storyId: number, entryId: number): Promise<void> {
+  return request.delete(`/stories/${storyId}/entries/${entryId}`)
+}
+
 export async function publishStory(id: number, isPublic: boolean): Promise<Story> {
   return request.post(`/stories/${id}/publish`, { is_public: isPublic })
 }
