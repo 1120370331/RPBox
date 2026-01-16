@@ -220,6 +220,10 @@ pnpm-debug.log*
 client/src-tauri/target/
 client/src-tauri/WixTools/
 client/src-tauri/Cargo.lock
+client/.tauri/
+
+# Releases
+releases/
 
 # Rust
 *.rs.bk
