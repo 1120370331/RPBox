@@ -300,18 +300,9 @@ function getPostImages(post: PostWithAuthor): string[] {
             </div>
             <h2 class="post-title">{{ post.title }}</h2>
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
-            <!-- 图片预览区域 -->
-            <div v-if="getPostImages(post).length > 0" class="image-preview">
-              <div
-                v-for="(img, idx) in getPostImages(post).slice(0, 3)"
-                :key="idx"
-                class="preview-item"
-              >
-                <img :src="img" alt="" />
-              </div>
-              <div v-if="getPostImages(post).length > 3" class="preview-more">
-                +{{ getPostImages(post).length - 3 }}
-              </div>
+            <!-- 封面图 -->
+            <div v-if="post.cover_image" class="cover-image">
+              <img :src="post.cover_image" alt="" />
             </div>
             <div class="card-footer">
               <div class="author-info">
@@ -348,18 +339,9 @@ function getPostImages(post: PostWithAuthor): string[] {
             </span>
             <h3 class="post-title">{{ post.title }}</h3>
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
-            <!-- 图片预览区域 -->
-            <div v-if="getPostImages(post).length > 0" class="image-preview small">
-              <div
-                v-for="(img, idx) in getPostImages(post).slice(0, 3)"
-                :key="idx"
-                class="preview-item"
-              >
-                <img :src="img" alt="" />
-              </div>
-              <div v-if="getPostImages(post).length > 3" class="preview-more">
-                +{{ getPostImages(post).length - 3 }}
-              </div>
+            <!-- 封面图 -->
+            <div v-if="post.cover_image" class="cover-image small">
+              <img :src="post.cover_image" alt="" />
             </div>
             <div class="card-footer">
               <div class="author-info">
@@ -919,6 +901,35 @@ function getPostImages(post: PostWithAuthor): string[] {
   overflow: hidden;
 }
 
+/* ========== Cover Image ========== */
+.cover-image {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.cover-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+  transition: transform 0.3s;
+}
+
+.post-card:hover .cover-image img {
+  transform: scale(1.03);
+}
+
+.cover-image.small {
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.cover-image.small img {
+  max-height: 150px;
+  object-fit: cover;
+}
+
 /* ========== Image Preview ========== */
 .image-preview {
   display: flex;
@@ -1000,32 +1011,43 @@ function getPostImages(post: PostWithAuthor): string[] {
   width: 32px;
   height: 32px;
   min-width: 32px;
+  max-width: 32px;
   min-height: 32px;
+  max-height: 32px;
   flex-shrink: 0;
   background: linear-gradient(135deg, #B87333, #804030);
   border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   font-size: 14px;
   font-weight: 600;
   color: #fff;
   overflow: hidden;
+  text-align: center;
+  line-height: 32px;
 }
 
 .author-avatar img {
-  width: 100%;
-  height: 100%;
+  width: 32px;
+  height: 32px;
   object-fit: cover;
+  display: block;
 }
 
 .author-avatar.small {
   width: 24px;
   height: 24px;
   min-width: 24px;
+  max-width: 24px;
   min-height: 24px;
+  max-height: 24px;
   font-size: 11px;
   border-radius: 4px;
+  line-height: 24px;
+}
+
+.author-avatar.small img {
+  width: 24px;
+  height: 24px;
 }
 
 .author-name {

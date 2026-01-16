@@ -586,16 +586,29 @@ async function handleDelete() {
 .author-avatar {
   width: 48px;
   height: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  min-height: 48px;
+  max-height: 48px;
   border-radius: 50%;
   background: linear-gradient(135deg, #B87333, #804030);
   border: 2px solid #fff;
   box-shadow: 0 2px 8px rgba(128, 64, 48, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  text-align: center;
+  line-height: 44px;
   font-size: 18px;
   font-weight: 700;
   color: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.author-avatar img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  display: block;
 }
 
 .author-info {

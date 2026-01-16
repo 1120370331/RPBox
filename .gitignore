@@ -253,6 +253,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.env.production
 config.local.yaml
 server/config.yaml
 nul

@@ -241,6 +241,7 @@ type Item struct {
 	DetailContent string    `gorm:"type:text" json:"detail_content"`  // 富文本详情
 	ImportCode    string    `gorm:"type:text;not null" json:"import_code"` // TRP3导入代码
 	RawData       string    `gorm:"type:text" json:"raw_data"`             // 原始Lua数据
+	RequiresPermission bool   `gorm:"default:false" json:"requires_permission"` // 是否需要TRP3权限授权
 	Downloads     int       `gorm:"default:0" json:"downloads"`
 	Rating        float64   `gorm:"default:0" json:"rating"`         // 平均评分
 	RatingCount   int       `gorm:"default:0" json:"rating_count"`   // 评分人数
@@ -336,6 +337,7 @@ type Post struct {
 	Title         string     `gorm:"size:256;not null" json:"title"`
 	Content       string     `gorm:"type:text;not null" json:"content"`
 	ContentType   string     `gorm:"size:20;default:markdown" json:"content_type"` // markdown|html
+	CoverImage    string     `gorm:"type:text" json:"cover_image"`                 // 封面图（URL或base64）
 	Category      string     `gorm:"size:20;default:other;index" json:"category"`  // 分区: profile|guild|report|novel|item|event|other
 	GuildID       *uint      `gorm:"index" json:"guild_id"`                        // 关联公会（可选）
 	StoryID       *uint      `gorm:"index" json:"story_id"`                        // 关联剧情（可选）

@@ -23,10 +23,16 @@ const form = ref<CreatePostRequest>({
   category: 'other',
   tag_ids: [],
   status: 'published',
+  cover_image: '',
   event_type: undefined,
   event_start_time: undefined,
   event_end_time: undefined,
 })
+
+// 封面图相关
+const coverImagePreview = ref('')
+const coverImageLoading = ref(false)
+const coverImageInput = ref<HTMLInputElement | null>(null)
 
 // 是否为活动分区
 const isEventCategory = computed(() => form.value.category === 'event')
@@ -215,6 +221,84 @@ function handlePreview() {
   sessionStorage.setItem('post_preview', JSON.stringify(previewData))
   router.push({ name: 'post-preview' })
 }
+
+// 压缩图片到指定大小以内
+async function compressImage(file: File, maxSizeKB: number = 1024): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let { width, height } = img
+
+        // 限制最大尺寸
+        const maxDimension = 1920
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = (height / width) * maxDimension
+            width = maxDimension
+          } else {
+            width = (width / height) * maxDimension
+            height = maxDimension
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, width, height)
+
+        // 逐步降低质量直到满足大小要求
+        let quality = 0.9
+        let result = canvas.toDataURL('image/jpeg', quality)
+
+        while (result.length > maxSizeKB * 1024 * 1.37 && quality > 0.1) {
+          quality -= 0.1
+          result = canvas.toDataURL('image/jpeg', quality)
+        }
+
+        resolve(result)
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+// 处理封面图上传
+async function handleCoverImageUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    toast.error('请选择图片文件')
+    return
+  }
+
+  coverImageLoading.value = true
+  try {
+    const compressed = await compressImage(file, 1024)
+    coverImagePreview.value = compressed
+    form.value.cover_image = compressed
+    toast.success('封面图上传成功')
+  } catch (error) {
+    console.error('图片压缩失败:', error)
+    toast.error('图片处理失败')
+  } finally {
+    coverImageLoading.value = false
+    input.value = ''
+  }
+}
+
+// 移除封面图
+function removeCoverImage() {
+  coverImagePreview.value = ''
+  form.value.cover_image = ''
+}
 </script>
 
 <template>
@@ -234,6 +318,31 @@ function handlePreview() {
           placeholder="输入一个吸引人的标题..."
           class="title-input"
         />
+      </div>
+
+      <!-- 封面图上传 -->
+      <div class="cover-image-group">
+        <label class="cover-label">封面图（可选）</label>
+        <div class="cover-upload-area">
+          <div v-if="coverImagePreview" class="cover-preview">
+            <img :src="coverImagePreview" alt="封面预览" />
+            <button class="remove-cover-btn" @click="removeCoverImage">
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
+          <div v-else class="cover-placeholder" @click="coverImageInput?.click()">
+            <i class="ri-image-add-line"></i>
+            <span>{{ coverImageLoading ? '处理中...' : '点击上传封面图' }}</span>
+            <span class="cover-hint">建议尺寸 16:9，自动压缩到 1MB 以内</span>
+          </div>
+          <input
+            ref="coverImageInput"
+            type="file"
+            accept="image/*"
+            style="display: none"
+            @change="handleCoverImageUpload"
+          />
+        </div>
       </div>
 
       <!-- 内容编辑器 -->
@@ -360,6 +469,100 @@ function handlePreview() {
   margin-bottom: 24px;
   padding-bottom: 24px;
   border-bottom: 1px solid #F5EFE7;
+}
+
+/* ========== Cover Image ========== */
+.cover-image-group {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #F5EFE7;
+}
+
+.cover-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #5D4037;
+  margin-bottom: 12px;
+}
+
+.cover-upload-area {
+  width: 100%;
+}
+
+.cover-preview {
+  position: relative;
+  width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.cover-preview img {
+  width: 100%;
+  height: auto;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
+}
+
+.remove-cover-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: background 0.2s;
+}
+
+.remove-cover-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.cover-placeholder {
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 16 / 9;
+  border: 2px dashed #E5D4C1;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #FDFBF9;
+}
+
+.cover-placeholder:hover {
+  border-color: #B87333;
+  background: #FFF8F0;
+}
+
+.cover-placeholder i {
+  font-size: 32px;
+  color: #B87333;
+}
+
+.cover-placeholder span {
+  font-size: 14px;
+  color: #8D7B68;
+}
+
+.cover-hint {
+  font-size: 12px !important;
+  color: #A99B8D !important;
 }
 
 .title-input {
