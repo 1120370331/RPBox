@@ -375,3 +375,96 @@ func generateShareCode() string {
 	}
 	return string(code)
 }
+
+// UpdateStoryEntryRequest 更新剧情条目请求
+type UpdateStoryEntryRequest struct {
+	Content     string `json:"content"`
+	Speaker     string `json:"speaker"`
+	Channel     string `json:"channel"`
+	Type        string `json:"type"`
+	CharacterID *uint  `json:"character_id"`
+}
+
+// updateStoryEntry 更新剧情条目
+func (s *Server) updateStoryEntry(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	entryID, _ := strconv.ParseUint(c.Param("entryId"), 10, 32)
+
+	// 验证剧情所有权
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", storyID, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	// 查找条目
+	var entry model.StoryEntry
+	if err := database.DB.Where("id = ? AND story_id = ?", entryID, storyID).
+		First(&entry).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "条目不存在"})
+		return
+	}
+
+	var req UpdateStoryEntryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 更新字段
+	if req.Content != "" {
+		entry.Content = req.Content
+	}
+	if req.Speaker != "" {
+		entry.Speaker = req.Speaker
+	}
+	if req.Channel != "" {
+		entry.Channel = req.Channel
+	}
+	if req.Type != "" {
+		entry.Type = req.Type
+	}
+	if req.CharacterID != nil {
+		entry.CharacterID = req.CharacterID
+	}
+
+	if err := database.DB.Save(&entry).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+
+	// 更新剧情的更新时间
+	database.DB.Model(&story).Update("updated_at", time.Now())
+
+	c.JSON(http.StatusOK, entry)
+}
+
+// deleteStoryEntry 删除剧情条目
+func (s *Server) deleteStoryEntry(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	entryID, _ := strconv.ParseUint(c.Param("entryId"), 10, 32)
+
+	// 验证剧情所有权
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", storyID, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	// 删除条目
+	result := database.DB.Where("id = ? AND story_id = ?", entryID, storyID).
+		Delete(&model.StoryEntry{})
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "条目不存在"})
+		return
+	}
+
+	// 更新剧情的更新时间
+	database.DB.Model(&story).Update("updated_at", time.Now())
+
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}

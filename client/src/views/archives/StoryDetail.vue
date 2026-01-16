@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getStory, updateStory, addStoryEntries, publishStory, type Story, type StoryEntry } from '@/api/story'
+import { invoke } from '@tauri-apps/api/core'
+import { save } from '@tauri-apps/plugin-dialog'
+import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry, deleteStoryEntry, type Story, type StoryEntry } from '@/api/story'
 import { getCharacter, updateCharacter, listCharacters, type Character } from '@/api/character'
 import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
 import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
@@ -62,7 +64,49 @@ const storyGuilds = ref<Guild[]>([])
 const myGuilds = ref<Guild[]>([])
 const showGuildModal = ref(false)
 
+// 导入导出
+const showImportModal = ref(false)
+const importFile = ref<File | null>(null)
+const importing = ref(false)
+
+// 条目编辑
+const showEditEntryModal = ref(false)
+const editingEntry = ref<StoryEntry | null>(null)
+const editEntryContent = ref('')
+const editEntrySpeaker = ref('')
+const editEntryChannel = ref('SAY')
+const editEntryType = ref('dialogue')
+const editEntryCharacterId = ref<number | null>(null)
+const savingEntry = ref(false)
+
 const storyId = computed(() => Number(route.params.id))
+
+// WoW 主题颜色预设
+const wowColorPresets = [
+  // 职业颜色
+  'C41E3A', // 死亡骑士
+  'FF7C0A', // 德鲁伊
+  'AAD372', // 猎人
+  '3FC7EB', // 法师
+  '00FF98', // 武僧
+  'F48CBA', // 圣骑士
+  'FFFFFF', // 牧师
+  'FFF468', // 盗贼
+  '0070DD', // 萨满
+  '8788EE', // 术士
+  'C69B6D', // 战士
+  'A330C9', // 恶魔猎手
+  // 阵营颜色
+  'FF3333', // 部落红
+  '0066FF', // 联盟蓝
+  // 常用颜色
+  'FFD700', // 金色
+  'B87333', // 铜色
+  '9B59B6', // 紫色
+  '2ECC71', // 绿色
+  'E74C3C', // 红色
+  '95A5A6', // 灰色
+]
 
 async function loadStory() {
   loading.value = true
@@ -172,7 +216,8 @@ async function loadTags() {
       listTags('story'),
       getStoryTags(storyId.value)
     ])
-    allTags.value = tagsRes.tags || []
+    // 前端也过滤一下，确保只显示 story 类型的标签
+    allTags.value = (tagsRes.tags || []).filter(t => !t.category || t.category === 'story')
     storyTags.value = storyTagsRes.tags || []
   } catch (e) {
     console.error('加载标签失败:', e)
@@ -368,6 +413,15 @@ async function saveCharacterEdit() {
       custom_name: editingCharacter.value.custom_name,
       custom_color: editingCharacter.value.custom_color,
       custom_avatar: editingCharacter.value.custom_avatar,
+      title: editingCharacter.value.title,
+      full_title: editingCharacter.value.full_title,
+      race: editingCharacter.value.race,
+      class: editingCharacter.value.class,
+      age: editingCharacter.value.age,
+      height: editingCharacter.value.height,
+      eye_color: editingCharacter.value.eye_color,
+      residence: editingCharacter.value.residence,
+      birthplace: editingCharacter.value.birthplace,
     })
     // 更新缓存
     charactersMap.value.set(updated.id, updated)
@@ -410,6 +464,203 @@ function getChannelTextColor(channel: string): string {
   return colorMap[channel] || ''
 }
 
+// ========== 导出/导入功能 ==========
+interface StoryExportData {
+  version: string
+  exported_at: string
+  story: {
+    title: string
+    description: string
+    status: string
+    tags: string[]
+  }
+  entries: Array<{
+    type: string
+    speaker: string
+    content: string
+    channel: string
+    timestamp: string
+    sort_order: number
+  }>
+  characters: Record<number, {
+    first_name: string
+    last_name: string
+    title: string
+    race: string
+    class: string
+    icon: string
+    color: string
+    custom_name: string
+    custom_color: string
+    custom_avatar: string
+  }>
+}
+
+async function exportStory() {
+  if (!story.value) return
+
+  const exportData: StoryExportData = {
+    version: '1.0',
+    exported_at: new Date().toISOString(),
+    story: {
+      title: story.value.title,
+      description: story.value.description,
+      status: story.value.status,
+      tags: storyTags.value.map(t => t.name),
+    },
+    entries: entries.value.map(e => ({
+      type: e.type,
+      speaker: e.speaker,
+      content: e.content,
+      channel: e.channel,
+      timestamp: e.timestamp,
+      sort_order: e.sort_order,
+    })),
+    characters: {},
+  }
+
+  // 导出角色信息
+  charactersMap.value.forEach((char, id) => {
+    exportData.characters[id] = {
+      first_name: char.first_name,
+      last_name: char.last_name,
+      title: char.title,
+      race: char.race,
+      class: char.class,
+      icon: char.icon,
+      color: char.color,
+      custom_name: char.custom_name,
+      custom_color: char.custom_color,
+      custom_avatar: char.custom_avatar,
+    }
+  })
+
+  // 使用 Tauri 保存对话框
+  const defaultName = `${story.value.title}_${new Date().toISOString().split('T')[0]}.json`
+  const filePath = await save({
+    defaultPath: defaultName,
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+
+  if (filePath) {
+    try {
+      await invoke('save_text_file', {
+        path: filePath,
+        content: JSON.stringify(exportData, null, 2)
+      })
+    } catch (e) {
+      console.error('导出失败:', e)
+      alert('导出失败: ' + e)
+    }
+  }
+}
+
+function handleImportFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input.files && input.files.length > 0) {
+    importFile.value = input.files[0]
+  }
+}
+
+async function importStoryFromFile() {
+  if (!importFile.value) return
+
+  importing.value = true
+  try {
+    const text = await importFile.value.text()
+    const data = JSON.parse(text) as StoryExportData
+
+    if (!data.version || !data.entries) {
+      throw new Error('无效的剧情文件格式')
+    }
+
+    // 导入条目到当前剧情
+    const entriesToAdd = data.entries.map(e => ({
+      content: e.content,
+      speaker: e.speaker,
+      type: e.type,
+      channel: e.channel,
+      timestamp: e.timestamp,
+    }))
+
+    await addStoryEntries(storyId.value, entriesToAdd)
+
+    showImportModal.value = false
+    importFile.value = null
+    await loadStory()
+  } catch (e: any) {
+    console.error('导入失败:', e)
+    alert('导入失败: ' + (e.message || '未知错误'))
+  } finally {
+    importing.value = false
+  }
+}
+
+// ========== 条目编辑 ==========
+function startEditEntry(entry: StoryEntry) {
+  editingEntry.value = entry
+  editEntryContent.value = entry.content
+  editEntrySpeaker.value = entry.speaker || ''
+  editEntryChannel.value = entry.channel || 'SAY'
+  editEntryType.value = entry.type || 'dialogue'
+  editEntryCharacterId.value = entry.character_id || null
+  showEditEntryModal.value = true
+}
+
+async function saveEntryEdit() {
+  if (!editingEntry.value) return
+  savingEntry.value = true
+  try {
+    await updateStoryEntry(storyId.value, editingEntry.value.id, {
+      content: editEntryContent.value,
+      speaker: editEntrySpeaker.value,
+      channel: editEntryChannel.value,
+      type: editEntryType.value,
+      character_id: editEntryCharacterId.value,
+    })
+
+    // 如果关联了新角色，确保角色信息在 charactersMap 中
+    if (editEntryCharacterId.value) {
+      const char = availableCharacters.value.find(c => c.id === editEntryCharacterId.value)
+      if (char && !charactersMap.value.has(editEntryCharacterId.value)) {
+        charactersMap.value.set(editEntryCharacterId.value, char)
+      }
+    }
+
+    showEditEntryModal.value = false
+    await loadStory()
+  } catch (e) {
+    console.error('保存失败:', e)
+  } finally {
+    savingEntry.value = false
+  }
+}
+
+// 编辑时选择人物卡
+function handleEditCharacterSelect(characterId: number | null) {
+  editEntryCharacterId.value = characterId
+  if (characterId) {
+    const character = availableCharacters.value.find(c => c.id === characterId)
+    if (character) {
+      const name = character.custom_name ||
+        (character.first_name ?
+          (character.last_name ? `${character.first_name} ${character.last_name}` : character.first_name)
+          : character.game_id?.split('-')[0] || '')
+      editEntrySpeaker.value = name
+    }
+  }
+}
+
+async function handleDeleteEntry(entry: StoryEntry) {
+  if (!confirm('确定要删除这条记录吗？')) return
+  try {
+    await deleteStoryEntry(storyId.value, entry.id)
+    await loadStory()
+  } catch (e) {
+    console.error('删除失败:', e)
+  }
+}
+
 onMounted(() => {
   loadStory()
   loadTags()
@@ -444,9 +695,6 @@ onMounted(() => {
               <div class="meta">
                 <span class="meta-item">
                   <i class="ri-time-line"></i> {{ formatDate(story.created_at) }}
-                </span>
-                <span class="meta-item status" :class="story.status">
-                  {{ story.status === 'published' ? '已发布' : '草稿' }}
                 </span>
               </div>
               <!-- 标签显示 -->
@@ -487,6 +735,12 @@ onMounted(() => {
               <RButton @click="showAddModal = true">添加条目</RButton>
               <RButton @click="showGuildModal = true">
                 <i class="ri-folder-add-line"></i> 归档到公会
+              </RButton>
+              <RButton @click="exportStory">
+                <i class="ri-download-line"></i> 导出
+              </RButton>
+              <RButton @click="showImportModal = true">
+                <i class="ri-upload-line"></i> 导入
               </RButton>
               <RButton
                 :type="story.is_public ? 'default' : 'primary'"
@@ -545,6 +799,14 @@ onMounted(() => {
               </div>
               <div class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
             </div>
+            <div class="entry-actions">
+              <button class="action-btn" @click="startEditEntry(entry)" title="编辑">
+                <i class="ri-edit-line"></i>
+              </button>
+              <button class="action-btn delete" @click="handleDeleteEntry(entry)" title="删除">
+                <i class="ri-delete-bin-line"></i>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -578,9 +840,10 @@ onMounted(() => {
           <input
             type="datetime-local"
             v-model="newEntryTimestamp"
+            step="1"
             class="datetime-input"
           />
-          <span class="field-hint">留空则使用当前时间</span>
+          <span class="field-hint">留空则使用当前时间，精确到秒</span>
         </div>
         <div class="form-field">
           <label>选择人物卡</label>
@@ -603,7 +866,7 @@ onMounted(() => {
         </div>
         <div class="form-field">
           <label>内容</label>
-          <RichEditor v-model="newEntryContent" placeholder="输入内容..." min-height="120px" />
+          <RichEditor v-model="newEntryContent" placeholder="输入内容..." min-height="120px" simple />
         </div>
       </div>
       <template #footer>
@@ -639,7 +902,7 @@ onMounted(() => {
     />
 
     <!-- 编辑角色对话框 -->
-    <RModal v-model="showEditModal" title="编辑角色信息（本剧情）" width="480px">
+    <RModal v-model="showEditModal" title="编辑角色信息" width="560px">
       <div v-if="editingCharacter" class="edit-character-form">
         <div class="form-field">
           <label>自定义头像</label>
@@ -651,13 +914,65 @@ onMounted(() => {
 
         <div class="form-row">
           <div class="form-field">
-            <label>自定义显示名</label>
+            <label>显示名称</label>
             <RInput v-model="editingCharacter.custom_name" :placeholder="editingCharacter.first_name || ''" />
           </div>
           <div class="form-field">
-            <label>自定义颜色</label>
-            <RColorPicker v-model="editingCharacter.custom_color" />
+            <label>名字颜色</label>
+            <RColorPicker
+              v-model="editingCharacter.custom_color"
+              :presets="wowColorPresets"
+            />
           </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label>头衔</label>
+            <RInput v-model="editingCharacter.title" placeholder="角色头衔" />
+          </div>
+          <div class="form-field">
+            <label>全名头衔</label>
+            <RInput v-model="editingCharacter.full_title" placeholder="完整头衔" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label>种族</label>
+            <RInput v-model="editingCharacter.race" placeholder="种族" />
+          </div>
+          <div class="form-field">
+            <label>职业</label>
+            <RInput v-model="editingCharacter.class" placeholder="职业" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label>年龄</label>
+            <RInput v-model="editingCharacter.age" placeholder="年龄" />
+          </div>
+          <div class="form-field">
+            <label>身高</label>
+            <RInput v-model="editingCharacter.height" placeholder="身高" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label>眼睛颜色</label>
+            <RInput v-model="editingCharacter.eye_color" placeholder="眼睛颜色" />
+          </div>
+          <div class="form-field">
+            <label>居住地</label>
+            <RInput v-model="editingCharacter.residence" placeholder="居住地" />
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label>出生地</label>
+          <RInput v-model="editingCharacter.birthplace" placeholder="出生地" />
         </div>
 
         <div class="original-info">
@@ -667,17 +982,13 @@ onMounted(() => {
               <span class="label">名字:</span>
               <span>{{ editingCharacter.first_name }} {{ editingCharacter.last_name }}</span>
             </div>
-            <div v-if="editingCharacter.title" class="info-row">
-              <span class="label">头衔:</span>
-              <span>{{ editingCharacter.title }}</span>
+            <div v-if="editingCharacter.game_id" class="info-row">
+              <span class="label">游戏ID:</span>
+              <span>{{ editingCharacter.game_id }}</span>
             </div>
-            <div v-if="editingCharacter.race" class="info-row">
-              <span class="label">种族:</span>
-              <span>{{ editingCharacter.race }}</span>
-            </div>
-            <div v-if="editingCharacter.class" class="info-row">
-              <span class="label">职业:</span>
-              <span>{{ editingCharacter.class }}</span>
+            <div v-if="editingCharacter.ref_id" class="info-row">
+              <span class="label">TRP3 ID:</span>
+              <span class="ref-id">{{ editingCharacter.ref_id }}</span>
             </div>
           </div>
         </div>
@@ -727,6 +1038,92 @@ onMounted(() => {
       </div>
       <template #footer>
         <RButton @click="showGuildModal = false">取消</RButton>
+      </template>
+    </RModal>
+
+    <!-- 导入对话框 -->
+    <RModal v-model="showImportModal" title="导入剧情数据" width="480px">
+      <div class="import-content">
+        <p class="import-tip">
+          选择一个 JSON 文件导入剧情条目。导入的条目将追加到当前剧情中。
+        </p>
+        <div class="file-input-wrapper">
+          <input
+            type="file"
+            accept=".json"
+            @change="handleImportFileChange"
+            class="file-input"
+          />
+          <div class="file-input-display">
+            <i class="ri-file-upload-line"></i>
+            <span v-if="importFile">{{ importFile.name }}</span>
+            <span v-else>点击选择文件或拖拽文件到此处</span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showImportModal = false; importFile = null">取消</RButton>
+        <RButton
+          type="primary"
+          :loading="importing"
+          :disabled="!importFile"
+          @click="importStoryFromFile"
+        >
+          导入
+        </RButton>
+      </template>
+    </RModal>
+
+    <!-- 编辑条目对话框 -->
+    <RModal v-model="showEditEntryModal" title="编辑条目" width="500px">
+      <div class="add-form">
+        <div class="form-row">
+          <div class="form-field">
+            <label>类型</label>
+            <select v-model="editEntryType">
+              <option value="dialogue">对话</option>
+              <option value="narration">旁白</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>频道</label>
+            <select v-model="editEntryChannel">
+              <option value="SAY">说</option>
+              <option value="YELL">喊</option>
+              <option value="WHISPER">密语</option>
+              <option value="EMOTE">表情</option>
+              <option value="PARTY">小队</option>
+              <option value="RAID">团队</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-field">
+          <label>选择人物卡</label>
+          <select
+            :value="editEntryCharacterId"
+            @change="handleEditCharacterSelect(($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+            class="character-select"
+          >
+            <option :value="null">-- 不关联人物卡 --</option>
+            <option v-for="char in availableCharacters" :key="char.id" :value="char.id">
+              {{ getCharacterDisplayName(char) }}
+              <template v-if="char.is_npc"> (NPC)</template>
+            </option>
+          </select>
+          <span class="field-hint">选择后自动填充说话者名称</span>
+        </div>
+        <div class="form-field">
+          <label>说话者</label>
+          <RInput v-model="editEntrySpeaker" placeholder="角色名称" />
+        </div>
+        <div class="form-field">
+          <label>内容</label>
+          <RichEditor v-model="editEntryContent" placeholder="输入内容..." min-height="120px" simple />
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showEditEntryModal = false">取消</RButton>
+        <RButton type="primary" :loading="savingEntry" @click="saveEntryEdit">保存</RButton>
       </template>
     </RModal>
   </div>
@@ -1192,7 +1589,14 @@ onMounted(() => {
 
 .info-row .label {
   color: var(--color-secondary);
-  min-width: 48px;
+  min-width: 60px;
+}
+
+.info-row .ref-id {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--color-secondary);
+  word-break: break-all;
 }
 
 /* 标签区域 */
@@ -1345,5 +1749,103 @@ onMounted(() => {
 .guild-item i {
   color: var(--color-secondary);
   font-size: 18px;
+}
+
+/* 导入对话框 */
+.import-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.import-tip {
+  font-size: 14px;
+  color: var(--color-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.file-input-wrapper {
+  position: relative;
+}
+
+.file-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-input-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  border: 2px dashed var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-secondary);
+  transition: all 0.2s;
+}
+
+.file-input-wrapper:hover .file-input-display {
+  border-color: var(--color-accent);
+  background: rgba(184, 115, 51, 0.05);
+}
+
+.file-input-display i {
+  font-size: 32px;
+  color: var(--color-accent);
+}
+
+.file-input-display span {
+  font-size: 14px;
+  color: var(--color-secondary);
+}
+
+/* 条目操作按钮 */
+.entry-item {
+  position: relative;
+}
+
+.entry-actions {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.entry-item:hover .entry-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.action-btn.delete:hover {
+  background: #e74c3c;
 }
 </style>

@@ -68,12 +68,32 @@ func Init(cfg *config.DatabaseConfig) error {
 		}
 	}
 
+	// 修复旧预设标签的 category 字段
+	fixPresetTagCategories(db)
+
 	DB = db
 
 	// 初始化预设标签
 	initPresetTags()
 
 	return nil
+}
+
+// fixPresetTagCategories 修复旧预设标签的 category 字段
+func fixPresetTagCategories(db *gorm.DB) {
+	// 道具标签名称列表
+	itemTagNames := []string{"普通道具", "可使用道具", "消耗品", "书籍", "多道具", "画作"}
+
+	// 将道具标签的 category 设置为 item
+	db.Model(&model.Tag{}).
+		Where("name IN ? AND type = ? AND (category = '' OR category IS NULL OR category = 'story')", itemTagNames, "preset").
+		Update("category", "item")
+
+	// 将剧情标签的 category 设置为 story（如果为空）
+	storyTagNames := []string{"主线剧情", "日常互动", "战斗场景", "社交活动"}
+	db.Model(&model.Tag{}).
+		Where("name IN ? AND type = ? AND (category = '' OR category IS NULL)", storyTagNames, "preset").
+		Update("category", "story")
 }
 
 // initPresetTags 初始化预设标签
