@@ -256,3 +256,7 @@ Thumbs.db
 config.local.yaml
 server/config.yaml
 nul
+
+# CI/CD
+coverage.out
+*.coverprofile

@@ -19,6 +19,7 @@ RPBox 不在沙盒内寻找漏洞，而是在沙盒之外构建基础设施—�
 - **社区分享平台** - 按公会/人物/剧情线归档，便捷检索
 - **道具市场** - TRP3 Extended 道具分享和一键导入
 - **AI 辅助** - 剧情生成、内容总结等智能功能
+- **自动更新** - 客户端支持检测和安装新版本
 
 ## 项目结构
 
@@ -79,3 +80,13 @@ go run cmd/server/main.go
 ## License
 
 MIT
+
+## 自动更新注意事项
+
+Tauri updater 在 release 模式下**强制要求 HTTPS**。本地开发测试时需在 `tauri.conf.json` 中添加：
+
+```json
+"dangerousInsecureTransportProtocol": true
+```
+
+否则使用 HTTP 端点的应用将无法启动。详见 `CLAUDE.md` 中的完整说明。
