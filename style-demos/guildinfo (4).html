@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox Guild Homepage - Variant 4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: '#4B3621',
+                        main: '#EED9C4',
+                        panel: '#FFFFFF',
+                        primary: '#804030',
+                        'primary-light': '#9A5542',
+                        text: '#2C1810',
+                        'text-light': '#FBF5EF',
+                        'text-secondary': '#8C7B70',
+                        accent: '#D4A373',
+                        border: '#E8DCCF',
+                    },
+                    boxShadow: {
+                        'soft': '8px 8px 16px #d1beac, -8px -8px 16px #ffffff',
+                        'soft-inset': 'inset 4px 4px 8px #d1beac, inset -4px -4px 8px #ffffff',
+                        'float': '0 10px 40px -10px rgba(75, 54, 33, 0.25)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* RPBox Variables Integration */
+        :root {
+            --color-sidebar-bg: #4B3621;
+            --color-main-bg: #EED9C4;
+            --color-panel-bg: #FFFFFF;
+            --color-primary: #804030;
+            --color-text-main: #2C1810;
+        }
+
+        body {
+            background-color: var(--color-main-bg);
+            color: var(--color-text-main);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        /* 
+         * STYLE DIRECTION: Neomorphism + Bento Box + Sharp Corners
+         * Key concept: "Tech-Magic Tablet"
+         */
+        
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-template-rows: repeat(12, minmax(60px, auto)); /* Fixed row height for precision */
+            gap: 24px;
+            height: calc(100vh - 80px); /* Fill viewport */
+            padding: 40px;
+        }
+
+        /* The Neomorphic Base */
+        .neo-panel {
+            background: linear-gradient(145deg, #fff3e3, #d6c3b0);
+            box-shadow: 8px 8px 20px #cabaa8, -8px -8px 20px #ffffff;
+            border-radius: 4px; /* Sharp corners per requirement */
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+
+        .neo-panel:hover {
+            transform: translateY(-4px);
+            box-shadow: 12px 12px 30px #cabaa8, -12px -12px 30px #ffffff;
+            z-index: 10;
+        }
+
+        /* Active/Pressed State */
+        .neo-btn {
+            background: linear-gradient(145deg, #e6e6e6, #ffffff); /* Fallback */
+            background: #EED9C4;
+            box-shadow: 5px 5px 10px #cabaa8, -5px -5px 10px #ffffff;
+            border-radius: 2px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .neo-btn:active {
+            box-shadow: inset 3px 3px 6px #cabaa8, inset -3px -3px 6px #ffffff;
+            transform: scale(0.98);
+        }
+
+        /* Hero Image Masking */
+        .hero-mask {
+            mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        }
+
+        /* Typography Override */
+        h1, h2, h3 {
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .tech-lines {
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(128, 64, 48, 0.03) 10px, rgba(128, 64, 48, 0.03) 12px);
+        }
+
+        /* Custom Scrollbar for inner content */
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: var(--color-primary);
+            border-radius: 0;
+        }
+
+        /* Status Dot Pulse */
+        .status-dot {
+            box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+            animation: pulse-green 2s infinite;
+        }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden selection:bg-primary selection:text-white">
+
+    <!-- Sidebar Navigation (Collapsed Style) -->
+    <nav class="w-20 bg-sidebar flex flex-col items-center py-8 z-50 shadow-2xl shrink-0">
+        <div class="w-12 h-12 bg-accent rounded-sm flex items-center justify-center mb-10 shadow-lg text-sidebar font-bold text-xl">
+            RP
+        </div>
+        
+        <div class="flex flex-col gap-8 w-full">
+            <a href="#" class="h-12 w-full flex items-center justify-center text-accent border-r-4 border-accent bg-white/5">
+                <i class="fa-solid fa-shield-halved text-xl"></i>
+            </a>
+            <a href="#" class="h-12 w-full flex items-center justify-center text-text-secondary hover:text-text-light transition-colors relative group">
+                <i class="fa-solid fa-users text-xl"></i>
+                <span class="absolute left-16 bg-sidebar text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">成员列表</span>
+            </a>
+            <a href="#" class="h-12 w-full flex items-center justify-center text-text-secondary hover:text-text-light transition-colors relative group">
+                <i class="fa-solid fa-scroll text-xl"></i>
+            </a>
+            <a href="#" class="h-12 w-full flex items-center justify-center text-text-secondary hover:text-text-light transition-colors relative group">
+                <i class="fa-solid fa-shop text-xl"></i>
+            </a>
+        </div>
+
+        <div class="mt-auto flex flex-col gap-6">
+            <div class="w-10 h-10 rounded-sm overflow-hidden border-2 border-accent">
+                <img src="https://i.pravatar.cc/150?img=11" class="w-full h-full object-cover">
+            </div>
+            <button class="text-text-secondary hover:text-accent">
+                <i class="fa-solid fa-gear text-xl"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Area: Bento Grid Layout -->
+    <main class="flex-1 overflow-hidden relative tech-lines">
+        
+        <!-- Header / Breadcrumbs -->
+        <header class="absolute top-0 left-0 w-full h-20 px-10 flex items-center justify-between z-20 pointer-events-none">
+            <div class="flex items-center gap-2 pointer-events-auto">
+                <span class="text-text-secondary text-sm font-mono">SERVER: EU-WEST</span>
+                <span class="text-primary text-sm font-mono">/</span>
+                <span class="text-text-main text-sm font-mono font-bold">SILVERHAND</span>
+            </div>
+            <div class="flex items-center gap-4 pointer-events-auto">
+                <button class="neo-btn w-10 h-10 rounded-sm text-primary">
+                    <i class="fa-regular fa-bell"></i>
+                </button>
+                <button class="px-6 h-10 bg-primary hover:bg-primary-light text-white font-bold text-sm tracking-wide transition-colors shadow-lg rounded-sm flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-xs"></i> 招募
+                </button>
+            </div>
+        </header>
+
+        <div class="bento-grid pt-24 pb-10 overflow-y-auto custom-scroll">
+            
+            <!-- 1. Guild Identity (Large Hero) -->
+            <div class="neo-panel col-span-12 md:col-span-8 row-span-4 relative group flex flex-col justify-end p-8">
+                <div class="absolute inset-0 z-0">
+                    <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=2670&auto=format&fit=crop" class="w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-105">
+                    <div class="absolute inset-0 bg-gradient-to-t from-sidebar/90 via-sidebar/40 to-transparent mix-blend-multiply"></div>
+                </div>
+                
+                <div class="relative z-10 flex justify-between items-end">
+                    <div>
+                        <div class="flex items-center gap-3 mb-2">
+                            <span class="bg-accent text-sidebar text-xs font-black px-2 py-0.5 rounded-sm uppercase tracking-wider">Top 10</span>
+                            <span class="text-white/80 text-xs font-mono tracking-widest uppercase">Founded 2021</span>
+                        </div>
+                        <h1 class="text-5xl text-white mb-2" style="text-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                            Iron Forge
+                        </h1>
+                        <p class="text-white/80 max-w-lg text-sm leading-relaxed">
+                            专注于高难度团本攻坚与RP剧情演绎。我们是钢铁的意志，也是不灭的火焰。欢迎加入我们的传奇旅程。
+                        </p>
+                    </div>
+                    <div class="hidden md:flex flex-col items-end gap-2">
+                        <div class="text-white/90 font-mono text-xs">GUILD LEVEL</div>
+                        <div class="text-5xl font-black text-accent">58</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Status / Announcement (Compact Info) -->
+            <div class="neo-panel col-span-12 md:col-span-4 row-span-2 flex flex-col p-6 justify-between bg-white">
+                <div class="flex justify-between items-start">
+                    <h3 class="text-primary uppercase tracking-widest text-xs font-bold">Status</h3>
+                    <div class="w-3 h-3 bg-green-500 rounded-full status-dot"></div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-text-main mt-2">正在招募</div>
+                    <div class="text-sm text-text-secondary mt-1">寻找：主坦克 / 治疗牧师</div>
+                </div>
+                <div class="w-full h-1 bg-gray-200 mt-4 overflow-hidden rounded-full">
+                    <div class="h-full bg-primary w-3/4"></div>
+                </div>
+                <div class="flex justify-between text-xs font-mono text-text-secondary mt-1">
+                    <span>CAPACITY</span>
+                    <span>42/60</span>
+                </div>
+            </div>
+
+            <!-- 3. Next Event (Interactive) -->
+            <div class="neo-panel col-span-12 md:col-span-4 row-span-2 p-0 flex overflow-hidden">
+                <div class="w-24 bg-primary flex flex-col items-center justify-center text-white shrink-0">
+                    <span class="text-xs font-bold uppercase opacity-60">DEC</span>
+                    <span class="text-3xl font-black">24</span>
+                    <span class="text-xs font-bold uppercase opacity-60">20:00</span>
+                </div>
+                <div class="flex-1 p-5 flex flex-col justify-center bg-[#FDFBF9]">
+                    <h3 class="font-bold text-text-main text-lg leading-tight">黑翼之巢 - 最终决战</h3>
+                    <p class="text-text-secondary text-xs mt-2 line-clamp-2">全员必须携带火抗药剂，迟到者替补。本次活动将记录DKP。</p>
+                    <button class="mt-3 text-primary text-xs font-bold uppercase tracking-wide hover:underline text-left">
+                        Check Details &rarr;
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. Top Contributors (List View) -->
+            <div class="neo-panel col-span-12 md:col-span-4 row-span-4 p-6 bg-[#F8F4F0]">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="font-bold text-text-main">贡献榜单</h3>
+                    <button class="text-primary text-xs"><i class="fa-solid fa-ellipsis"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <!-- Item 1 -->
+                    <div class="flex items-center gap-3">
+                        <span class="text-accent font-black text-lg w-4">1</span>
+                        <img src="https://i.pravatar.cc/150?img=33" class="w-10 h-10 rounded-sm object-cover border border-white shadow-sm">
+                        <div class="flex-1">
+                            <div class="text-sm font-bold text-text-main">DragonSlayer</div>
+                            <div class="text-xs text-text-secondary">Warrior • 9850 pts</div>
+                        </div>
+                        <i class="fa-solid fa-crown text-yellow-500 text-xs"></i>
+                    </div>
+                    <!-- Item 2 -->
+                    <div class="flex items-center gap-3">
+                        <span class="text-text-secondary font-bold text-lg w-4">2</span>
+                        <img src="https://i.pravatar.cc/150?img=47" class="w-10 h-10 rounded-sm object-cover border border-white shadow-sm">
+                        <div class="flex-1">
+                            <div class="text-sm font-bold text-text-main">NightWhisper</div>
+                            <div class="text-xs text-text-secondary">Rogue • 8420 pts</div>
+                        </div>
+                    </div>
+                    <!-- Item 3 -->
+                    <div class="flex items-center gap-3">
+                        <span class="text-text-secondary font-bold text-lg w-4">3</span>
+                        <img src="https://i.pravatar.cc/150?img=12" class="w-10 h-10 rounded-sm object-cover border border-white shadow-sm">
+                        <div class="flex-1">
+                            <div class="text-sm font-bold text-text-main">HolyLight</div>
+                            <div class="text-xs text-text-secondary">Priest • 8100 pts</div>
+                        </div>
+                    </div>
+                    <!-- Item 4 -->
+                    <div class="flex items-center gap-3 opacity-60">
+                         <span class="text-text-secondary font-bold text-lg w-4">4</span>
+                        <div class="w-10 h-10 rounded-sm bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">YOU</div>
+                        <div class="flex-1">
+                            <div class="text-sm font-bold text-text-main">RookieOne</div>
+                            <div class="text-xs text-text-secondary">Mage • 4200 pts</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. Resources / Bank (Grid of Icons) -->
+            <div class="neo-panel col-span-6 md:col-span-4 row-span-2 p-6 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-text-secondary text-xs font-bold uppercase tracking-widest mb-4">Guild Bank</h3>
+                    <div class="grid grid-cols-4 gap-2">
+                        <div class="aspect-square bg-sidebar/5 rounded-sm flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer border border-transparent hover:border-sidebar/20">
+                            <i class="fa-solid fa-coins"></i>
+                        </div>
+                        <div class="aspect-square bg-sidebar/5 rounded-sm flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer border border-transparent hover:border-sidebar/20">
+                            <i class="fa-solid fa-flask"></i>
+                        </div>
+                        <div class="aspect-square bg-sidebar/5 rounded-sm flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer border border-transparent hover:border-sidebar/20">
+                            <i class="fa-solid fa-scroll"></i>
+                        </div>
+                        <div class="aspect-square bg-sidebar/5 rounded-sm flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer border border-transparent hover:border-sidebar/20">
+                            <i class="fa-solid fa-gem"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-between items-end mt-2">
+                    <div>
+                        <div class="text-2xl font-black text-text-main">24,500</div>
+                        <div class="text-xs text-text-secondary font-mono">GOLD RESERVES</div>
+                    </div>
+                    <div class="text-green-600 text-xs font-bold flex items-center">
+                        <i class="fa-solid fa-arrow-trend-up mr-1"></i> +12%
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. Recent Activity (Feed) -->
+            <div class="neo-panel col-span-6 md:col-span-4 row-span-4 p-6 overflow-hidden relative">
+                <div class="absolute top-0 right-0 p-6 opacity-10 text-primary text-6xl">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <h3 class="font-bold text-text-main mb-4 relative z-10">动态日志</h3>
+                <div class="space-y-4 relative z-10">
+                    <div class="flex gap-3 items-start border-l-2 border-accent pl-3">
+                        <div class="text-xs text-text-secondary font-mono pt-0.5">10m ago</div>
+                        <div>
+                            <p class="text-sm text-text-main font-medium leading-snug">
+                                <span class="text-primary font-bold">Admin</span> 更新了公会公告
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 items-start border-l-2 border-gray-300 pl-3">
+                        <div class="text-xs text-text-secondary font-mono pt-0.5">2h ago</div>
+                        <div>
+                            <p class="text-sm text-text-main font-medium leading-snug">
+                                <span class="text-primary font-bold">StarKiller</span> 获得成就 <span class="text-accent">"灭团之星"</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 items-start border-l-2 border-gray-300 pl-3">
+                        <div class="text-xs text-text-secondary font-mono pt-0.5">5h ago</div>
+                        <div>
+                            <p class="text-sm text-text-main font-medium leading-snug">
+                                新成员 <span class="text-primary font-bold">Healer01</span> 加入公会
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 items-start border-l-2 border-gray-300 pl-3">
+                        <div class="text-xs text-text-secondary font-mono pt-0.5">1d ago</div>
+                        <div>
+                            <p class="text-sm text-text-main font-medium leading-snug">
+                                公会等级提升至 <span class="font-bold">LV.58</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. Quick Actions (Buttons) -->
+            <div class="neo-panel col-span-12 md:col-span-4 row-span-2 p-6 flex flex-col justify-center gap-3">
+                <div class="flex items-center justify-between gap-4">
+                    <button class="flex-1 h-12 bg-sidebar text-white rounded-sm shadow-lg flex items-center justify-center gap-2 hover:bg-primary transition-colors font-bold text-sm">
+                        <i class="fa-brands fa-discord"></i> Discord
+                    </button>
+                    <button class="flex-1 h-12 neo-btn text-text-main font-bold text-sm gap-2">
+                        <i class="fa-solid fa-pen-nib"></i> Log
+                    </button>
+                </div>
+                 <button class="w-full h-12 border-2 border-dashed border-primary/30 text-primary font-bold text-sm rounded-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-calendar-check"></i> 签到领取奖励
+                </button>
+            </div>
+
+        </div>
+    </main>
+</body>
+</html>

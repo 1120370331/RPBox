@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox Guild Homepage - Variant 2: Editorial Zen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'sidebar-bg': '#4B3621',
+                        'main-bg': '#EED9C4', // Keeping the base warmth but making it lighter for contrast
+                        'panel-bg': '#FFFFFF',
+                        'primary': '#804030',
+                        'text-main': '#2C1810',
+                        'text-light': '#FBF5EF',
+                        'text-secondary': '#8C7B70',
+                        'accent': '#D4A373',
+                        'border-color': '#E8DCCF',
+                        'paper': '#F7F1EB', // New editorial paper color
+                        'ink': '#1A110D', // Darker text for high contrast
+                    },
+                    fontFamily: {
+                        'serif': ['"Playfair Display"', 'Georgia', 'serif'],
+                        'sans': ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'sharp': '4px 4px 0px 0px rgba(75, 54, 33, 0.1)',
+                        'sharp-hover': '6px 6px 0px 0px rgba(128, 64, 48, 0.2)',
+                        'float': '0 20px 40px -10px rgba(75, 54, 33, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        /* RPBox Variables Integration & Custom Overrides */
+        :root {
+            --color-sidebar-bg: #4B3621;
+            --color-primary: #804030;
+        }
+
+        body {
+            background-color: #F2EBE5; /* Slightly lighter than RPBox main-bg for editorial feel */
+            color: #1A110D;
+        }
+
+        /* Editorial Layout Grids */
+        .editorial-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 24px;
+        }
+
+        /* Japanese Vertical Text Utility */
+        .writing-vertical {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #804030;
+        }
+
+        /* Image Masking for Ink Wash Effect */
+        .ink-mask {
+            mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+        }
+
+        /* Sharp transitions */
+        .transition-sharp {
+            transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        
+        /* Thin lines */
+        .hairline {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #8C7B70, transparent);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex overflow-hidden selection:bg-primary selection:text-white">
+
+    <!-- Left Sidebar (Collapsed/Minimal representation for context) -->
+    <aside class="w-20 bg-sidebar-bg flex flex-col items-center py-8 z-20 shadow-2xl flex-shrink-0">
+        <div class="w-10 h-10 bg-accent rounded-sm mb-10 flex items-center justify-center text-sidebar-bg font-bold text-xl font-serif">R</div>
+        
+        <nav class="flex-1 space-y-8">
+            <div class="w-10 h-10 rounded-sm bg-primary/20 flex items-center justify-center text-text-light hover:bg-primary cursor-pointer transition-colors duration-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+            </div>
+            <div class="w-10 h-10 rounded-sm hover:bg-white/10 flex items-center justify-center text-text-light/60 hover:text-text-light cursor-pointer transition-colors duration-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            </div>
+            <div class="w-10 h-10 rounded-sm hover:bg-white/10 flex items-center justify-center text-text-light/60 hover:text-text-light cursor-pointer transition-colors duration-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>
+            </div>
+        </nav>
+
+        <div class="w-8 h-8 rounded-full bg-cover border border-white/20" style="background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80');"></div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto relative bg-[#F2EBE5]">
+        <!-- Decorative Background Element -->
+        <div class="absolute top-0 right-0 w-1/3 h-full bg-[#E8DCCF] opacity-30 pointer-events-none z-0"></div>
+        <div class="absolute top-20 right-20 text-[200px] font-serif text-primary opacity-5 leading-none pointer-events-none select-none z-0">絆</div>
+
+        <div class="relative z-10 max-w-7xl mx-auto px-8 py-12">
+            
+            <!-- Header Section: Magazine Editorial Style -->
+            <header class="mb-16 grid grid-cols-12 gap-8 items-end">
+                <div class="col-span-8">
+                    <div class="flex items-center gap-4 mb-4">
+                        <span class="px-3 py-1 border border-primary text-primary text-xs tracking-widest uppercase font-semibold">Guild Rank #01</span>
+                        <span class="h-px w-12 bg-primary/30"></span>
+                        <span class="text-text-secondary text-sm italic font-serif">Est. 2021</span>
+                    </div>
+                    <h1 class="text-7xl font-serif text-text-main tracking-tight leading-[0.9]">
+                        Silver <br> <span class="text-primary italic">Hand</span>
+                    </h1>
+                </div>
+                <div class="col-span-4 flex flex-col items-end justify-bottom pb-2">
+                     <p class="text-right text-text-secondary text-sm max-w-[200px] leading-relaxed font-sans mb-6 border-r border-primary/30 pr-4">
+                        We seek balance in chaos, forging bonds stronger than steel through shared adventures.
+                    </p>
+                    <button class="group relative px-8 py-3 bg-text-main text-white overflow-hidden transition-sharp hover:shadow-sharp hover:-translate-y-1">
+                        <span class="relative z-10 font-medium tracking-wide text-sm uppercase">Join Request</span>
+                        <div class="absolute inset-0 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300 ease-out"></div>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Hero Section: High Contrast & Grid -->
+            <section class="grid grid-cols-12 gap-0 mb-20 border-t border-b border-text-main/10">
+                <!-- Large Image Area -->
+                <div class="col-span-8 relative h-[500px] group overflow-hidden bg-black">
+                    <img src="https://images.unsplash.com/photo-1542256844-3158d17208bb?ixlib=rb-1.2.1&auto=format&fit=crop&w=1600&q=80" 
+                         class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700 ease-out filter grayscale hover:grayscale-0">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                    
+                    <div class="absolute bottom-8 left-8 text-white">
+                        <div class="text-xs font-bold tracking-[0.2em] mb-2 text-accent uppercase">Current Campaign</div>
+                        <h2 class="text-4xl font-serif italic">The Whispering Woods</h2>
+                    </div>
+                </div>
+
+                <!-- Stats / Info Panel - Zen Minimalist -->
+                <div class="col-span-4 bg-white p-8 flex flex-col justify-between border-l border-text-main/10 relative">
+                     <!-- Vertical Text Decoration -->
+                     <div class="absolute top-8 right-6 text-text-secondary/20 text-4xl font-serif writing-vertical select-none">
+                        名誉と栄光
+                     </div>
+
+                    <div class="space-y-10 mt-4">
+                        <div>
+                            <span class="block text-xs uppercase tracking-widest text-text-secondary mb-1">Members</span>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-5xl font-serif text-text-main">128</span>
+                                <span class="text-primary font-medium">/ 150</span>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <span class="block text-xs uppercase tracking-widest text-text-secondary mb-1">Treasury</span>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-5xl font-serif text-text-main">4.2</span>
+                                <span class="text-xl text-text-main font-serif">M</span>
+                                <span class="text-accent text-sm uppercase font-bold">Gold</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <span class="block text-xs uppercase tracking-widest text-text-secondary mb-3">Master</span>
+                            <div class="flex items-center gap-3">
+                                <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=64&h=64&q=80" class="w-10 h-10 rounded-none grayscale">
+                                <div>
+                                    <div class="text-sm font-bold text-text-main">Elara Vance</div>
+                                    <div class="text-xs text-text-secondary">Paladin Lvl. 80</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-8 border-t border-dashed border-text-main/20">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-text-secondary">Next Raid</span>
+                            <span class="font-bold text-text-main">20:00 GMT+8</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Content Grid: Asymmetric Layout -->
+            <div class="grid grid-cols-12 gap-8">
+                
+                <!-- Left Column: Announcements (Text Heavy) -->
+                <div class="col-span-4 space-y-8">
+                    <h3 class="text-xl font-serif italic border-b-2 border-primary pb-2 inline-block pr-8 mb-4">Notice Board</h3>
+                    
+                    <!-- Notice Item 1 -->
+                    <article class="group cursor-pointer">
+                        <div class="flex items-center gap-2 text-xs text-text-secondary mb-1">
+                            <span class="w-2 h-2 bg-primary"></span>
+                            <span>Today</span>
+                        </div>
+                        <h4 class="text-lg font-bold text-text-main group-hover:text-primary transition-colors leading-snug mb-2">
+                            New Alliance Pact Signed
+                        </h4>
+                        <p class="text-sm text-text-secondary line-clamp-3 leading-relaxed">
+                            We have officially entered a non-aggression pact with the Crimson Dawn guild. Trade routes in the northern sector are now open.
+                        </p>
+                    </article>
+
+                    <div class="hairline"></div>
+
+                    <!-- Notice Item 2 -->
+                    <article class="group cursor-pointer">
+                        <div class="flex items-center gap-2 text-xs text-text-secondary mb-1">
+                            <span class="w-2 h-2 bg-gray-300"></span>
+                            <span>Yesterday</span>
+                        </div>
+                        <h4 class="text-lg font-bold text-text-main group-hover:text-primary transition-colors leading-snug mb-2">
+                            Weekly Contribution Due
+                        </h4>
+                        <p class="text-sm text-text-secondary line-clamp-3 leading-relaxed">
+                            Reminder for all members to deposit weekly materials before Sunday reset.
+                        </p>
+                    </article>
+                    
+                    <a href="#" class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary hover:text-text-main mt-4 transition-colors">
+                        View Archive <span class="text-lg">→</span>
+                    </a>
+                </div>
+
+                <!-- Right Column: Activities (Visual) -->
+                <div class="col-span-8">
+                     <div class="flex justify-between items-end mb-6 border-b border-text-main/10 pb-2">
+                        <h3 class="text-3xl font-serif text-text-main">Activities</h3>
+                        <div class="flex gap-2">
+                            <button class="w-8 h-8 border border-text-main/20 hover:bg-primary hover:border-primary hover:text-white flex items-center justify-center transition-colors">←</button>
+                            <button class="w-8 h-8 border border-text-main/20 hover:bg-primary hover:border-primary hover:text-white flex items-center justify-center transition-colors">→</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <!-- Activity Card 1 -->
+                        <div class="bg-white p-6 shadow-sharp hover:shadow-sharp-hover transition-all duration-300 group border border-transparent hover:border-primary/20 cursor-pointer">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="px-2 py-1 bg-text-main text-white text-[10px] uppercase tracking-wider font-bold">Raid</div>
+                                <span class="text-primary">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                </span>
+                            </div>
+                            <h4 class="text-xl font-serif font-bold mb-2 group-hover:text-primary transition-colors">Molten Core Run</h4>
+                            <p class="text-sm text-text-secondary mb-6">Requirements: ILvl 450+, Fire Res Potions.</p>
+                            
+                            <div class="flex -space-x-2 overflow-hidden mb-4">
+                                <img class="inline-block h-8 w-8 rounded-full ring-2 ring-white grayscale group-hover:grayscale-0 transition-all" src="https://images.unsplash.com/photo-1550525811-e5869dd03032?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt=""/>
+                                <img class="inline-block h-8 w-8 rounded-full ring-2 ring-white grayscale group-hover:grayscale-0 transition-all" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt=""/>
+                                <img class="inline-block h-8 w-8 rounded-full ring-2 ring-white grayscale group-hover:grayscale-0 transition-all" src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt=""/>
+                                <div class="h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-bold text-text-secondary">+5</div>
+                            </div>
+                            
+                            <div class="w-full bg-gray-100 h-1 mt-2">
+                                <div class="bg-primary h-1 w-3/4"></div>
+                            </div>
+                            <div class="flex justify-between mt-1 text-[10px] text-text-secondary font-mono uppercase">
+                                <span>12/16 Slots</span>
+                                <span>In 2 Hours</span>
+                            </div>
+                        </div>
+
+                         <!-- Activity Card 2 -->
+                        <div class="bg-white p-6 shadow-sm hover:shadow-sharp-hover transition-all duration-300 group border border-transparent hover:border-primary/20 cursor-pointer">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="px-2 py-1 bg-accent/20 text-accent-dark text-[10px] uppercase tracking-wider font-bold text-black">Social</div>
+                                <span class="text-text-secondary">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                </span>
+                            </div>
+                            <h4 class="text-xl font-serif font-bold mb-2 group-hover:text-primary transition-colors">Tavern Night</h4>
+                            <p class="text-sm text-text-secondary mb-6">Weekly meetup at the Lion's Pride Inn.</p>
+                            
+                            <div class="flex -space-x-2 overflow-hidden mb-4">
+                                <img class="inline-block h-8 w-8 rounded-full ring-2 ring-white grayscale group-hover:grayscale-0 transition-all" src="https://images.unsplash.com/photo-1517365830460-955ce3ccd263?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80" alt=""/>
+                                <div class="h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-bold text-text-secondary">+20</div>
+                            </div>
+
+                            <div class="w-full bg-gray-100 h-1 mt-2">
+                                <div class="bg-accent h-1 w-1/2"></div>
+                            </div>
+                             <div class="flex justify-between mt-1 text-[10px] text-text-secondary font-mono uppercase">
+                                <span>Open Entry</span>
+                                <span>Tomorrow</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer: Minimalist -->
+            <footer class="mt-20 border-t border-text-main/10 pt-8 flex justify-between items-center text-text-secondary text-sm">
+                <div class="font-serif italic">Silver Hand Guild © 2023</div>
+                <div class="flex gap-6">
+                    <a href="#" class="hover:text-primary transition-colors">Manifesto</a>
+                    <a href="#" class="hover:text-primary transition-colors">Roster</a>
+                    <a href="#" class="hover:text-primary transition-colors">Diplomacy</a>
+                </div>
+            </footer>
+        </div>
+    </main>
+</body>
+</html>
