@@ -239,6 +239,50 @@ updater:
 
 更新包放置于 `server/releases/{version}/` 目录。
 
+## CI/CD 流程
+
+### 自动化流程
+
+| 流程 | 触发条件 | 配置文件 |
+|------|----------|----------|
+| CI 构建测试 | push 到 main/master | `.github/workflows/ci.yml` |
+| 客户端发布 | 推送 `v*` tag | `.github/workflows/release-client.yml` |
+| 插件发布 | 推送 `addon-v*` tag | `.github/workflows/release-addon.yml` |
+
+### 发布命令
+
+```bash
+# 发布客户端 v0.2.0
+git tag v0.2.0 && git push --tags
+
+# 发布插件 v1.1.0
+git tag addon-v1.1.0 && git push --tags
+```
+
+### 手动发布脚本
+
+```powershell
+# 客户端发布
+.\scripts\release.ps1 -Version "0.2.0" -Notes "更新说明"
+
+# 插件发布
+.\scripts\release-addon.ps1 -Version "1.1.0" -Changelog "更新说明"
+```
+
+### GitHub Secrets 配置
+
+在仓库 **Settings → Secrets and variables → Actions** 中配置：
+
+| Secret | 用途 |
+|--------|------|
+| `TAURI_SIGNING_PRIVATE_KEY` | Tauri 签名私钥 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 签名密钥密码 |
+| `SSH_PRIVATE_KEY` | 部署用 SSH 私钥 |
+| `SERVER_HOST` | 服务器地址 |
+| `SERVER_USER` | SSH 用户名 |
+| `RELEASE_PATH` | 客户端发布目录 |
+| `ADDON_PATH` | 插件发布目录 |
+
 ## PRD 文档
 
 - PRD1: 项目介绍
