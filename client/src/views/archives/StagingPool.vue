@@ -231,10 +231,24 @@ function toggleHourSelection(date: string, hour: string) {
   }
 }
 
+// 清理WoW特殊格式字符
+function cleanWowText(text: string): string {
+  return text
+    .replace(/\|c[0-9a-fA-F]{8}/g, '') // 移除颜色开始标记 |cFFFFFFFF
+    .replace(/\|r/g, '') // 移除颜色结束标记 |r
+    .replace(/\|T[^|]+\|t/g, '') // 移除纹理标记 |Txxx|t
+    .replace(/\|H[^|]+\|h/g, '') // 移除超链接标记
+    .replace(/\|h/g, '')
+    .replace(/[\uE000-\uF8FF]/g, '') // 移除私用区Unicode字符
+    .replace(/\uFFFD/g, '') // 移除替换字符 �
+    .replace(/[\u0000-\u001F]/g, '') // 移除控制字符
+    .trim()
+}
+
 function getSenderName(record: ChatRecord): string {
-  // NPC消息显示NPC名字
+  // NPC消息显示NPC名字（清理特殊字符）
   if (record.mark === 'N' && record.npc) {
-    return record.npc
+    return cleanWowText(record.npc)
   }
   // 玩家消息优先显示TRP3名字
   const trp3 = record.sender.trp3
@@ -265,6 +279,20 @@ function getNpcTalkLabel(nt?: string): string {
     'whisper': '密语',
   }
   return nt ? map[nt] || nt : ''
+}
+
+// 获取NPC说话类型对应的CSS类
+function getNpcTalkClass(nt?: string): string {
+  if (nt === 'yell') return 'npc-yell'
+  if (nt === 'whisper') return 'npc-whisper'
+  return 'npc-say'
+}
+
+// 获取NPC说话类型对应的文字颜色
+function getNpcTalkTextColor(nt?: string): string {
+  if (nt === 'yell') return '#FF3333'
+  if (nt === 'whisper') return '#B39DDB'
+  return ''
 }
 
 function formatTime(timestamp: number): string {
@@ -408,13 +436,18 @@ defineExpose({
               >
                 <RCheckbox :model-value="selectedRecords.has(record.timestamp)" />
                 <span class="record-time">{{ formatTime(record.timestamp) }}</span>
-                <span v-if="record.mark === 'N' && record.nt" class="record-channel npc-talk">[NPC{{ getNpcTalkLabel(record.nt) }}]</span>
+                <span v-if="record.mark === 'N' && record.nt" class="record-channel" :class="getNpcTalkClass(record.nt)">[NPC{{ getNpcTalkLabel(record.nt) }}]</span>
                 <span v-else class="record-channel" :class="getChannelClass(record.channel)">[{{ getChannelLabel(record.channel) }}]</span>
                 <template v-if="record.mark !== 'B'">
                   <WowIcon v-if="getSenderIcon(record)" :icon="getSenderIcon(record)" :size="18" class="record-avatar" />
                   <span class="record-sender" :style="getSenderColor(record) ? { color: '#' + getSenderColor(record) } : {}">{{ getSenderName(record) }}:</span>
                 </template>
-                <span class="record-content" :style="getChannelTextColor(record.channel) ? { color: getChannelTextColor(record.channel) } : {}">{{ record.content }}</span>
+                <span
+                  class="record-content"
+                  :style="(record.mark === 'N' && record.nt)
+                    ? (getNpcTalkTextColor(record.nt) ? { color: getNpcTalkTextColor(record.nt) } : {})
+                    : (getChannelTextColor(record.channel) ? { color: getChannelTextColor(record.channel) } : {})"
+                >{{ record.content }}</span>
               </div>
             </div>
           </div>
@@ -548,8 +581,16 @@ defineExpose({
   flex-shrink: 0;
 }
 
-.record-channel.npc-talk {
-  color: #9b59b6;  /* 紫色表示NPC */
+.record-channel.npc-say {
+  color: #9b59b6;  /* 紫色表示NPC说 */
+}
+
+.record-channel.npc-yell {
+  color: #FF3333;  /* 红色表示NPC喊 */
+}
+
+.record-channel.npc-whisper {
+  color: #B39DDB;  /* 淡紫色表示NPC密语 */
 }
 
 .record-channel.channel-yell {

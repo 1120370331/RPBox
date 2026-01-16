@@ -282,6 +282,9 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		database.DB.Create(&entry)
 	}
 
+	// 更新剧情的更新时间
+	database.DB.Model(&story).Update("updated_at", time.Now())
+
 	c.JSON(http.StatusCreated, gin.H{"message": "添加成功", "count": len(entries)})
 }
 

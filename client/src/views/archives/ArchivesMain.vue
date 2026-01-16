@@ -10,7 +10,7 @@ import RInput from '@/components/RInput.vue'
 import AddonInstaller from '@/components/AddonInstaller.vue'
 import StagingPool from './StagingPool.vue'
 import StoryList from './StoryList.vue'
-import { createStory, addStoryEntries, type CreateStoryEntryRequest } from '@/api/story'
+import { createStory, addStoryEntries, listStories, type CreateStoryEntryRequest, type Story } from '@/api/story'
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
 
 // ChatRecord 类型定义
@@ -54,6 +54,12 @@ const stagingPoolRef = ref<InstanceType<typeof StagingPool> | null>(null)
 const allTags = ref<Tag[]>([])
 const selectedTagIds = ref<number[]>([])
 
+// 归档模式：create（创建新剧情）或 append（追加到已有剧情）
+const archiveMode = ref<'create' | 'append'>('create')
+const userStories = ref<Story[]>([])
+const selectedStoryId = ref<number | null>(null)
+const loadingStories = ref(false)
+
 // 待归档的记录
 const pendingRecords = ref<ChatRecord[]>([])
 
@@ -76,6 +82,13 @@ async function checkAddonStatus() {
 }
 
 onMounted(() => {
+  // 检查是否已设置魔兽路径，未设置则跳转到设置向导
+  const savedPath = localStorage.getItem('wow_path')
+  if (!savedPath) {
+    router.push('/sync/setup')
+    return
+  }
+  wowPath.value = savedPath
   setTimeout(() => mounted.value = true, 50)
   checkAddonStatus()
   loadTags()
@@ -87,6 +100,18 @@ async function loadTags() {
     allTags.value = res.tags || []
   } catch (e) {
     console.error('加载标签失败:', e)
+  }
+}
+
+async function loadUserStories() {
+  loadingStories.value = true
+  try {
+    const res = await listStories({ sort: 'updated_at', order: 'desc' })
+    userStories.value = res.stories || []
+  } catch (e) {
+    console.error('加载剧情列表失败:', e)
+  } finally {
+    loadingStories.value = false
   }
 }
 
@@ -107,92 +132,108 @@ function cleanTRP3Content(content: string): string {
 
 async function handleArchive(records: ChatRecord[]) {
   pendingRecords.value = records
+  archiveMode.value = 'create'
+  selectedStoryId.value = null
   showCreateModal.value = true
+  // 加载用户剧情列表供追加选择
+  loadUserStories()
+}
+
+// 将待归档记录转换为条目请求
+function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest[] {
+  return records.map(record => {
+    const trp3 = record.sender.trp3
+    let speaker: string
+    let type: string = 'dialogue'
+    let channel: string = record.channel
+    let isNpc: boolean = false
+
+    if (record.mark === 'N' && record.npc) {
+      speaker = record.npc
+      isNpc = true
+      if (record.nt) {
+        channel = record.nt.toUpperCase()
+      }
+    } else if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
+      speaker = ''
+      type = 'narration'
+    } else {
+      speaker = trp3?.FN
+        ? (trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
+        : record.sender.gameID.split('-')[0]
+    }
+
+    return {
+      source_id: `chat_${record.timestamp}`,
+      type: type,
+      speaker: speaker,
+      content: cleanTRP3Content(record.content),
+      channel: channel,
+      timestamp: new Date(record.timestamp * 1000).toISOString(),
+      ref_id: record.ref_id,
+      game_id: record.sender.gameID,
+      trp3_data: record.raw_profile,
+      is_npc: isNpc,
+    }
+  })
 }
 
 async function handleCreateStory() {
-  if (!newStoryTitle.value.trim()) return
+  // 创建模式需要标题，追加模式需要选择剧情
+  if (archiveMode.value === 'create' && !newStoryTitle.value.trim()) return
+  if (archiveMode.value === 'append' && !selectedStoryId.value) return
+
   creating.value = true
   try {
-    const story = await createStory({
-      title: newStoryTitle.value,
-      description: newStoryDesc.value,
-    })
-    // 如果有待归档记录，添加到剧情
-    if (pendingRecords.value.length > 0 && story.id) {
-      console.log('[Archive] pendingRecords:', pendingRecords.value)
-      const entries: CreateStoryEntryRequest[] = pendingRecords.value.map(record => {
-        const trp3 = record.sender.trp3
-        console.log('[Archive] record.sender:', record.sender)
-        console.log('[Archive] trp3:', trp3)
-        console.log('[Archive] ref_id:', record.ref_id)
-        console.log('[Archive] raw_profile:', record.raw_profile)
+    let storyId: number
 
-        // 根据mark类型确定speaker和type
-        let speaker: string
-        let type: string = 'dialogue'
-        let channel: string = record.channel
-        let isNpc: boolean = false
-
-        console.log('[Archive] mark:', record.mark, 'channel:', record.channel, 'nt:', record.nt, 'npc:', record.npc)
-
-        if (record.mark === 'N' && record.npc) {
-          // NPC消息
-          speaker = record.npc
-          isNpc = true
-          if (record.nt) {
-            channel = record.nt.toUpperCase()
-          }
-        } else if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
-          // 旁白/背景
-          speaker = ''
-          type = 'narration'
-        } else {
-          // 玩家消息
-          speaker = trp3?.FN
-            ? (trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
-            : record.sender.gameID.split('-')[0]
-        }
-
-        return {
-          source_id: `chat_${record.timestamp}`,
-          type: type,
-          speaker: speaker,
-          content: cleanTRP3Content(record.content),
-          channel: channel,
-          timestamp: new Date(record.timestamp * 1000).toISOString(),
-          // 传递角色信息用于创建/关联Character
-          ref_id: record.ref_id,
-          game_id: record.sender.gameID,
-          trp3_data: record.raw_profile,
-          is_npc: isNpc,
-        }
+    if (archiveMode.value === 'create') {
+      // 创建新剧情
+      const story = await createStory({
+        title: newStoryTitle.value,
+        description: newStoryDesc.value,
       })
-      await addStoryEntries(story.id, entries)
+      storyId = story.id
+
+      // 添加选中的标签
+      if (selectedTagIds.value.length > 0) {
+        for (const tagId of selectedTagIds.value) {
+          try {
+            await addStoryTag(storyId, tagId)
+          } catch (e) {
+            console.error('添加标签失败:', e)
+          }
+        }
+      }
+    } else {
+      // 追加到已有剧情
+      storyId = selectedStoryId.value!
+    }
+
+    // 添加待归档记录到剧情
+    if (pendingRecords.value.length > 0) {
+      const entries = buildEntriesFromRecords(pendingRecords.value)
+      await addStoryEntries(storyId, entries)
+
       // 从待归档池移除已归档的记录
       const archivedTimestamps = pendingRecords.value.map(r => r.timestamp)
       stagingPoolRef.value?.removeArchivedRecords?.(archivedTimestamps)
       pendingRecords.value = []
     }
-    // 添加选中的标签
-    if (selectedTagIds.value.length > 0 && story.id) {
-      for (const tagId of selectedTagIds.value) {
-        try {
-          await addStoryTag(story.id, tagId)
-        } catch (e) {
-          console.error('添加标签失败:', e)
-        }
-      }
-    }
+
+    // 重置表单
     showCreateModal.value = false
     newStoryTitle.value = ''
     newStoryDesc.value = ''
     selectedTagIds.value = []
+    selectedStoryId.value = null
+    archiveMode.value = 'create'
     activeTab.value = 'stories'
+
     // 刷新剧情列表
     storyListRef.value?.loadStories?.()
   } catch (e) {
-    console.error('创建失败:', e)
+    console.error('归档失败:', e)
   } finally {
     creating.value = false
   }
@@ -235,39 +276,95 @@ function handleViewStory(id: number) {
       </RTabPane>
     </RTabs>
 
-    <!-- 创建剧情对话框 -->
-    <RModal v-model="showCreateModal" title="新建剧情" width="480px">
+    <!-- 创建/追加剧情对话框 -->
+    <RModal v-model="showCreateModal" :title="pendingRecords.length > 0 ? '归档对话记录' : '新建剧情'" width="480px">
       <div class="create-form">
-        <div class="form-field">
-          <label>剧情标题</label>
-          <RInput v-model="newStoryTitle" placeholder="输入剧情标题" />
+        <!-- 模式切换（仅在有待归档记录时显示） -->
+        <div v-if="pendingRecords.length > 0" class="mode-switcher">
+          <button
+            class="mode-btn"
+            :class="{ active: archiveMode === 'create' }"
+            @click="archiveMode = 'create'"
+          >
+            <i class="ri-add-line"></i> 创建新剧情
+          </button>
+          <button
+            class="mode-btn"
+            :class="{ active: archiveMode === 'append' }"
+            @click="archiveMode = 'append'"
+          >
+            <i class="ri-file-add-line"></i> 追加到已有剧情
+          </button>
         </div>
-        <div class="form-field">
-          <label>剧情描述</label>
-          <textarea v-model="newStoryDesc" placeholder="简要描述这个剧情..." rows="3"></textarea>
-        </div>
-        <div class="form-field">
-          <label>添加标签</label>
-          <div class="tag-selector">
-            <span
-              v-for="tag in allTags"
-              :key="tag.id"
-              class="tag-option"
-              :class="{ selected: selectedTagIds.includes(tag.id) }"
-              :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: '#fff' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
-              @click="selectedTagIds.includes(tag.id) ? selectedTagIds = selectedTagIds.filter(id => id !== tag.id) : selectedTagIds.push(tag.id)"
-            >
-              {{ tag.name }}
-            </span>
+
+        <!-- 创建模式：显示标题、描述、标签 -->
+        <template v-if="archiveMode === 'create'">
+          <div class="form-field">
+            <label>剧情标题</label>
+            <RInput v-model="newStoryTitle" placeholder="输入剧情标题" />
           </div>
-        </div>
+          <div class="form-field">
+            <label>剧情描述</label>
+            <textarea v-model="newStoryDesc" placeholder="简要描述这个剧情..." rows="3"></textarea>
+          </div>
+          <div class="form-field">
+            <label>添加标签</label>
+            <div class="tag-selector">
+              <span
+                v-for="tag in allTags"
+                :key="tag.id"
+                class="tag-option"
+                :class="{ selected: selectedTagIds.includes(tag.id) }"
+                :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: '#fff' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+                @click="selectedTagIds.includes(tag.id) ? selectedTagIds = selectedTagIds.filter(id => id !== tag.id) : selectedTagIds.push(tag.id)"
+              >
+                {{ tag.name }}
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <!-- 追加模式：显示剧情选择器 -->
+        <template v-else>
+          <div class="form-field">
+            <label>选择剧情</label>
+            <div v-if="loadingStories" class="loading-stories">
+              <i class="ri-loader-4-line spinning"></i> 加载中...
+            </div>
+            <div v-else-if="userStories.length === 0" class="no-stories">
+              暂无剧情，请先创建一个剧情
+            </div>
+            <div v-else class="story-selector">
+              <div
+                v-for="story in userStories"
+                :key="story.id"
+                class="story-option"
+                :class="{ selected: selectedStoryId === story.id }"
+                @click="selectedStoryId = story.id"
+              >
+                <div class="story-option-title">{{ story.title }}</div>
+                <div class="story-option-meta">
+                  更新于 {{ new Date(story.updated_at).toLocaleDateString() }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <p v-if="pendingRecords.length > 0" class="pending-info">
           将归档 {{ pendingRecords.length }} 条对话记录
         </p>
       </div>
       <template #footer>
         <RButton @click="showCreateModal = false">取消</RButton>
-        <RButton type="primary" :loading="creating" @click="handleCreateStory">创建</RButton>
+        <RButton
+          type="primary"
+          :loading="creating"
+          :disabled="archiveMode === 'append' && !selectedStoryId"
+          @click="handleCreateStory"
+        >
+          {{ archiveMode === 'create' ? '创建' : '追加' }}
+        </RButton>
       </template>
     </RModal>
 
@@ -548,5 +645,97 @@ function handleViewStory(id: number) {
 
 .tag-option.selected {
   font-weight: 600;
+}
+
+/* 模式切换器 */
+.mode-switcher {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1.5px solid #d1bfa8;
+  border-radius: 8px;
+  background: #fff;
+  color: #665242;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.mode-btn.active {
+  background: #804030;
+  border-color: #804030;
+  color: #fff;
+}
+
+/* 剧情选择器 */
+.story-selector {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #d1bfa8;
+  border-radius: 8px;
+}
+
+.story-option {
+  padding: 12px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0e6dc;
+  transition: background 0.2s;
+}
+
+.story-option:last-child {
+  border-bottom: none;
+}
+
+.story-option:hover {
+  background: rgba(184, 115, 51, 0.05);
+}
+
+.story-option.selected {
+  background: rgba(184, 115, 51, 0.1);
+  border-left: 3px solid #B87333;
+}
+
+.story-option-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4B3621;
+  margin-bottom: 4px;
+}
+
+.story-option-meta {
+  font-size: 12px;
+  color: #856a52;
+}
+
+.loading-stories,
+.no-stories {
+  padding: 24px;
+  text-align: center;
+  color: #856a52;
+  font-size: 14px;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
