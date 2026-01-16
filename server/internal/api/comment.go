@@ -39,19 +39,25 @@ func (s *Server) listComments(c *gin.Context) {
 	if len(authorIDs) > 0 {
 		database.DB.Where("id IN ?", authorIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	// 组装响应
 	type CommentWithAuthor struct {
 		model.Comment
-		AuthorName string `json:"author_name"`
+		AuthorName   string `json:"author_name"`
+		AuthorAvatar string `json:"author_avatar"`
 	}
 	result := make([]CommentWithAuthor, len(comments))
 	for i, comment := range comments {
-		result[i] = CommentWithAuthor{Comment: comment, AuthorName: userMap[comment.AuthorID]}
+		author := userMap[comment.AuthorID]
+		result[i] = CommentWithAuthor{
+			Comment:      comment,
+			AuthorName:   author.Username,
+			AuthorAvatar: author.Avatar,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"comments": result})

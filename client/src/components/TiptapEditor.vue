@@ -262,12 +262,16 @@ function insertImageByUrl() {
 
 .editor-content {
   min-height: 300px;
-  padding: 16px;
+  padding: 24px 32px;
 }
 
 .editor-content :deep(.tiptap) {
   outline: none;
   min-height: 280px;
+  font-family: 'Merriweather', serif;
+  font-size: 16px;
+  line-height: 1.9;
+  color: #4B3621;
 }
 
 .editor-content :deep(.tiptap p.is-editor-empty:first-child::before) {
@@ -288,21 +292,19 @@ function insertImageByUrl() {
 .editor-content :deep(h2) {
   font-size: 24px;
   font-weight: 700;
-  margin: 14px 0 8px;
   color: #2C1810;
+  margin: 1.5em 0 0.8em;
 }
 
 .editor-content :deep(h3) {
   font-size: 20px;
   font-weight: 600;
-  margin: 12px 0 8px;
   color: #2C1810;
+  margin: 1.2em 0 0.6em;
 }
 
 .editor-content :deep(p) {
-  margin: 8px 0;
-  line-height: 1.7;
-  color: #4B3621;
+  margin-bottom: 1.5em;
 }
 
 .editor-content :deep(ul),
@@ -316,10 +318,10 @@ function insertImageByUrl() {
 }
 
 .editor-content :deep(blockquote) {
-  border-left: 4px solid #804030;
-  padding-left: 16px;
-  margin: 12px 0;
-  color: #8D7B68;
+  border-left: 4px solid #B87333;
+  padding-left: 20px;
+  margin: 1.5em 0;
+  color: #6B5344;
   font-style: italic;
 }
 
@@ -340,8 +342,8 @@ function insertImageByUrl() {
 .editor-content :deep(img) {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
-  margin: 12px 0;
+  border-radius: 4px;
+  margin: 1.5em 0;
   cursor: pointer;
   transition: transform 0.2s;
 }
@@ -353,5 +355,9 @@ function insertImageByUrl() {
 .editor-content :deep(img.ProseMirror-selectednode) {
   outline: 3px solid #804030;
   outline-offset: 2px;
+}
+
+.editor-content :deep(strong) {
+  color: #804030;
 }
 </style>

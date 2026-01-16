@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post Detail & Create - Zen Design</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            DEFAULT: '#804030',
+                            hover: '#6B3528',
+                        },
+                        copper: '#B87333',
+                        text: {
+                            heading: '#2C1810',
+                            body: '#4B3621',
+                            muted: '#8D7B68',
+                            disabled: '#999999'
+                        },
+                        surface: {
+                            page: '#F5EFE7',
+                            card: '#FFFFFF',
+                            border: '#E5D4C1',
+                        },
+                        state: {
+                            amber: '#E6A23C',
+                            gray: '#909399',
+                            red: '#C44536',
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['"Noto Serif JP"', 'serif'],
+                        sans: ['"Inter"', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(75, 54, 33, 0.05)',
+                        'hover': '0 10px 25px -5px rgba(75, 54, 33, 0.1)',
+                        'inner-light': 'inset 0 2px 4px 0 rgba(75, 54, 33, 0.02)'
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Serif+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, h4, .serif-font { font-family: 'Noto Serif JP', serif; }
+        
+        /* Custom Scrollbar for Zen feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #E5D4C1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #B87333;
+        }
+
+        /* Tiptap Placeholder simulation */
+        .ProseMirror p.is-editor-empty:first-child::before {
+            content: attr(data-placeholder);
+            float: left;
+            color: #8D7B68;
+            pointer-events: none;
+            height: 0;
+        }
+        
+        .zen-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #E5D4C1, transparent);
+        }
+    </style>
+</head>
+<body class="bg-surface-page text-text-body antialiased min-h-screen p-4 md:p-8 flex flex-col gap-12 max-w-[1600px] mx-auto">
+
+    <!-- PAGE 1: POST DETAIL (VIEW MODE) -->
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full animate-fade-in-up">
+        
+        <!-- Left Column: Navigation & Meta (Sticky) -->
+        <aside class="lg:col-span-3 lg:sticky lg:top-8 h-fit space-y-8">
+            <button class="group flex items-center gap-3 text-text-muted hover:text-primary transition-colors duration-300">
+                <div class="w-10 h-10 border border-surface-border rounded-full flex items-center justify-center bg-white shadow-sm group-hover:border-primary group-hover:bg-primary/5 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </div>
+                <span class="font-medium tracking-wide text-sm uppercase">Back to Forum</span>
+            </button>
+
+            <!-- Author Card -->
+            <div class="bg-surface-card border-l-4 border-primary p-6 shadow-soft relative overflow-hidden group">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-surface-page rounded-bl-[100px] -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+                
+                <div class="relative z-10 flex flex-col items-center text-center">
+                    <div class="w-20 h-20 rounded-full border-2 border-white shadow-md mb-4 overflow-hidden ring-1 ring-surface-border">
+                        <img src="https://i.pravatar.cc/150?img=33" alt="Author" class="w-full h-full object-cover">
+                    </div>
+                    <h3 class="serif-font text-lg font-bold text-text-heading">Elandra Sunwalker</h3>
+                    <p class="text-xs text-text-muted mt-1 uppercase tracking-widest">Level 60 Paladin</p>
+                    <p class="text-xs text-copper mt-2 font-medium">Silver Hand Guild</p>
+                    
+                    <div class="flex gap-4 mt-6 w-full justify-center">
+                        <button class="text-xs font-medium text-text-muted hover:text-primary transition-colors border border-surface-border px-3 py-1 rounded-full hover:border-primary">Follow</button>
+                        <button class="text-xs font-medium text-text-muted hover:text-primary transition-colors border border-surface-border px-3 py-1 rounded-full hover:border-primary">Message</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Vertical -->
+            <div class="hidden lg:flex flex-col gap-6 px-4">
+                <div class="flex items-center gap-4 group cursor-default">
+                    <span class="text-2xl font-serif text-copper group-hover:text-primary transition-colors">2.4k</span>
+                    <span class="text-xs uppercase tracking-widest text-text-muted">Views</span>
+                </div>
+                <div class="w-full h-px bg-surface-border/50"></div>
+                <div class="flex items-center gap-4 group cursor-pointer">
+                    <span class="text-2xl font-serif text-copper group-hover:text-primary transition-colors">142</span>
+                    <span class="text-xs uppercase tracking-widest text-text-muted">Likes</span>
+                </div>
+                <div class="w-full h-px bg-surface-border/50"></div>
+                <div class="flex items-center gap-4 group cursor-pointer">
+                    <span class="text-2xl font-serif text-copper group-hover:text-primary transition-colors">8</span>
+                    <span class="text-xs uppercase tracking-widest text-text-muted">Saves</span>
+                </div>
+            </div>
+            
+             <!-- Owner Actions -->
+             <div class="flex gap-2 justify-center pt-4 opacity-60 hover:opacity-100 transition-opacity">
+                <button class="text-sm text-text-muted hover:text-primary px-3 py-1">Edit</button>
+                <span class="text-surface-border">|</span>
+                <button class="text-sm text-state-red hover:underline px-3 py-1">Delete</button>
+            </div>
+        </aside>
+
+        <!-- Center Column: Content -->
+        <article class="lg:col-span-6 bg-surface-card shadow-soft min-h-[800px] relative">
+            <!-- Decorative Top Border -->
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-30"></div>
+
+            <div class="p-8 md:p-12">
+                <!-- Header -->
+                <div class="mb-8 text-center">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 bg-surface-page rounded-sm mb-4">
+                        <span class="w-2 h-2 rounded-full bg-copper"></span>
+                        <span class="text-xs font-medium text-text-heading uppercase tracking-wide">Raid Strategy</span>
+                    </div>
+                    <h1 class="text-3xl md:text-4xl font-serif font-bold text-text-heading leading-tight mb-4">
+                        Optimizing Healer Rotations for Naxxramas: A Comprehensive Guide
+                    </h1>
+                    <div class="text-sm text-text-muted flex items-center justify-center gap-2 font-serif italic">
+                        <time>October 24, 2023</time>
+                        <span>&middot;</span>
+                        <span>15 min read</span>
+                    </div>
+                </div>
+
+                <div class="zen-divider my-8"></div>
+
+                <!-- Rich Text Content -->
+                <div class="prose prose-stone prose-lg max-w-none text-text-body font-serif leading-loose">
+                    <p class="first-letter:text-5xl first-letter:font-serif first-letter:float-left first-letter:mr-3 first-letter:mt-[-6px] first-letter:text-primary">
+                        Healing in Naxxramas is not just about raw output; it is a dance of mana conservation and precise timing. Many paladins struggle with the transition from BWL simply because the damage patterns shift drastically.
+                    </p>
+                    <p>
+                        In this guide, we will explore the "Flash of Light" spam meta versus the "Holy Light" down-ranking strategy, specifically tailored for the Four Horsemen encounter.
+                    </p>
+                    
+                    <h3 class="text-text-heading font-bold mt-8 mb-4 border-l-2 border-copper pl-4">The Mana Efficiency Equation</h3>
+                    <p>
+                        Understanding your <strong class="text-primary">MP5 (Mana Per 5 Seconds)</strong> while casting is crucial. Here is the breakdown of the gear you should be aiming for before stepping into the dread citadel.
+                    </p>
+                    
+                    <figure class="my-8">
+                        <div class="bg-surface-page p-6 border border-surface-border rounded-sm">
+                            <blockquote class="italic text-text-heading text-lg text-center font-serif">
+                                "A dead healer does zero healing. Position is paramount."
+                            </blockquote>
+                        </div>
+                    </figure>
+
+                    <p>
+                        When facing Sapphiron, frost resistance becomes non-negotiable. Do not sacrifice too much +Healing for resistance, or your spells will hit like wet noodles. Balance is the key to zen healing.
+                    </p>
+                </div>
+
+                <!-- Tags -->
+                <div class="mt-12 flex flex-wrap gap-2">
+                    <span class="px-3 py-1 bg-surface-page text-text-muted text-xs uppercase tracking-wide hover:bg-surface-border/30 transition cursor-pointer">#Paladin</span>
+                    <span class="px-3 py-1 bg-surface-page text-text-muted text-xs uppercase tracking-wide hover:bg-surface-border/30 transition cursor-pointer">#Naxxramas</span>
+                    <span class="px-3 py-1 bg-surface-page text-text-muted text-xs uppercase tracking-wide hover:bg-surface-border/30 transition cursor-pointer">#Healing</span>
+                </div>
+            </div>
+            
+            <!-- Mobile Actions Bar (Visible only on small screens) -->
+            <div class="lg:hidden sticky bottom-4 mx-4 bg-white/90 backdrop-blur border border-surface-border p-4 rounded-lg shadow-lg flex justify-between items-center z-20">
+                <div class="flex items-center gap-2">
+                    <button class="p-2 hover:bg-surface-page rounded-full text-primary"><svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>
+                    <span class="text-sm font-medium">142</span>
+                </div>
+                <button class="bg-primary text-white px-4 py-2 rounded text-sm font-medium shadow-sm">Comment</button>
+            </div>
+        </article>
+
+        <!-- Right Column: Comments -->
+        <aside class="lg:col-span-3 space-y-6">
+            <h3 class="serif-font text-xl text-text-heading font-medium flex items-center gap-2">
+                Discussion <span class="text-sm font-sans text-text-muted bg-surface-page px-2 py-0.5 rounded-full">24</span>
+            </h3>
+
+            <!-- Comment Input -->
+            <div class="bg-white p-4 border border-surface-border shadow-sm focus-within:ring-1 focus-within:ring-primary/50 transition-shadow">
+                <textarea placeholder="Share your thoughts..." class="w-full bg-transparent border-none outline-none resize-none text-sm text-text-body placeholder-text-muted/70 min-h-[80px]"></textarea>
+                <div class="flex justify-between items-center mt-2 pt-2 border-t border-surface-page">
+                    <button class="text-text-muted hover:text-primary transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19c-4.418 0-8-1.791-8-4 0-2.209 3.582-4 8-4s8 1.791 8 4c0 2.209-3.582 4-8 4z"/><path d="M12 15v-4"/><path d="M8 15v-2"/><path d="M16 15v-2"/></svg>
+                    </button>
+                    <button class="bg-text-heading text-white px-4 py-1.5 text-xs uppercase tracking-wider hover:bg-primary transition-colors">Post</button>
+                </div>
+            </div>
+
+            <!-- Comment List -->
+            <div class="space-y-6">
+                <!-- Comment 1 -->
+                <div class="flex gap-3 group">
+                    <img src="https://i.pravatar.cc/150?img=12" class="w-8 h-8 rounded-full border border-surface-border flex-shrink-0 grayscale group-hover:grayscale-0 transition-all duration-500" alt="User">
+                    <div>
+                        <div class="flex items-baseline gap-2 mb-1">
+                            <span class="text-sm font-medium text-text-heading">Ironhide</span>
+                            <span class="text-xs text-text-muted">2h ago</span>
+                        </div>
+                        <p class="text-sm text-text-body leading-relaxed">
+                            Excellent guide. I completely agree about the MP5 gear prioritization. People often overlook the tier 2 set bonuses.
+                        </p>
+                        <button class="text-xs text-text-muted mt-2 hover:text-primary transition-colors">Reply</button>
+                    </div>
+                </div>
+
+                <!-- Comment 2 -->
+                <div class="flex gap-3 group">
+                    <img src="https://i.pravatar.cc/150?img=59" class="w-8 h-8 rounded-full border border-surface-border flex-shrink-0 grayscale group-hover:grayscale-0 transition-all duration-500" alt="User">
+                    <div>
+                        <div class="flex items-baseline gap-2 mb-1">
+                            <span class="text-sm font-medium text-text-heading">MageMaster</span>
+                            <span class="text-xs text-text-muted">5h ago</span>
+                        </div>
+                        <p class="text-sm text-text-body leading-relaxed">
+                            Could you add a section about consumable rotations? Dark Runes vs Mana Potions timing would be helpful.
+                        </p>
+                        <button class="text-xs text-text-muted mt-2 hover:text-primary transition-colors">Reply</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- SPACER FOR DEMO PURPOSE -->
+    <div class="h-24 flex items-center justify-center">
+        <div class="h-px bg-surface-border w-1/3"></div>
+        <span class="px-4 text-text-muted uppercase tracking-widest text-xs">Create View Below</span>
+        <div class="h-px bg-surface-border w-1/3"></div>
+    </div>
+
+    <!-- PAGE 2: CREATE / EDIT POST -->
+    <main class="max-w-5xl mx-auto w-full bg-white shadow-soft min-h-screen grid grid-cols-1 lg:grid-cols-[1fr_320px]">
+        
+        <!-- Main Form Area -->
+        <div class="p-8 md:p-12 border-r border-surface-page">
+            <!-- Header Actions -->
+            <div class="flex justify-between items-center mb-10">
+                <h2 class="serif-font text-2xl font-bold text-text-heading">Create New Scroll</h2>
+                <div class="flex items-center gap-3">
+                    <span class="flex items-center gap-2 px-3 py-1 bg-surface-page rounded-full text-xs text-state-gray">
+                        <span class="w-2 h-2 rounded-full bg-state-gray"></span>
+                        Draft Saved
+                    </span>
+                    <button class="text-text-muted hover:text-text-heading px-4 py-2 text-sm transition-colors">Cancel</button>
+                    <button class="bg-primary hover:bg-primary-hover text-white px-6 py-2 text-sm font-medium shadow-md hover:shadow-lg transition-all rounded-sm">Publish</button>
+                </div>
+            </div>
+
+            <!-- Title Input -->
+            <div class="mb-8 group">
+                <label class="block text-xs uppercase tracking-widest text-text-muted mb-2 group-focus-within:text-primary transition-colors">Title</label>
+                <input type="text" placeholder="Enter a descriptive title..." class="w-full text-3xl font-serif font-bold text-text-heading placeholder-surface-border border-b-2 border-surface-border focus:border-primary focus:outline-none bg-transparent py-2 transition-colors">
+            </div>
+
+            <!-- Editor Toolbar (Simulated) -->
+            <div class="sticky top-0 bg-white/95 backdrop-blur z-10 border-b border-surface-border py-3 mb-6 flex gap-1 items-center overflow-x-auto no-scrollbar">
+                <button class="p-2 text-text-body hover:bg-surface-page rounded-sm transition-colors" title="Bold"><strong class="font-serif font-bold">B</strong></button>
+                <button class="p-2 text-text-body hover:bg-surface-page rounded-sm transition-colors" title="Italic"><em class="font-serif italic">I</em></button>
+                <div class="w-px h-4 bg-surface-border mx-2"></div>
+                <button class="p-2 text-text-body hover:bg-surface-page rounded-sm transition-colors text-sm font-serif">H2</button>
+                <button class="p-2 text-text-body hover:bg-surface-page rounded-sm transition-colors text-sm font-serif">H3</button>
+                <div class="w-px h-4 bg-surface-border mx-2"></div>
+                <button class="p-2 text-text-body hover:bg-surface-page rounded-sm transition-colors">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                </button>
+                <button class="p-2 text-text-body hover:bg-surface-page rounded-sm transition-colors">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </button>
+            </div>
+
+            <!-- Tiptap Editor Area -->
+            <div class="min-h-[400px] outline-none prose prose-stone prose-lg max-w-none font-serif text-text-body">
+                <p>Start writing your legend here...</p>
+                <p class="text-text-muted/50 italic">Type '/' for commands</p>
+            </div>
+
+        </div>
+
+        <!-- Sidebar Settings -->
+        <div class="bg-surface-page/30 p-8 border-l border-surface-page flex flex-col gap-8">
+            
+            <!-- Category Selection -->
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-text-muted mb-3">Category</label>
+                <div class="relative">
+                    <select class="w-full appearance-none bg-white border border-surface-border px-4 py-3 pr-8 rounded-sm text-sm text-text-body focus:border-primary focus:ring-1 focus:ring-primary outline-none cursor-pointer hover:border-copper transition-colors shadow-sm">
+                        <option>General Discussion</option>
+                        <option>Class Guides</option>
+                        <option>Raid Strategies</option>
+                        <option selected>Server Event</option> <!-- Selected to show event fields -->
+                        <option>Guild Recruitment</option>
+                    </select>
+                    <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Special Fields (Conditionally Rendered style) -->
+            <div class="bg-white p-5 rounded-sm border border-copper/30 shadow-inner-light animate-fade-in">
+                <div class="flex items-center gap-2 mb-4 text-copper font-medium text-sm">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Event Settings
+                </div>
+
+                <!-- Event Type Toggle -->
+                <div class="flex bg-surface-page p-1 rounded-sm mb-4">
+                    <button class="flex-1 text-xs font-medium py-1.5 bg-white shadow-sm text-primary rounded-sm transition-all">Server</button>
+                    <button class="flex-1 text-xs font-medium py-1.5 text-text-muted hover:text-text-body transition-all">Guild</button>
+                </div>
+
+                <!-- Date Picker Simulation -->
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-[10px] uppercase text-text-muted block mb-1">Start Time</label>
+                        <input type="datetime-local" class="w-full bg-white border border-surface-border px-3 py-2 text-sm text-text-body rounded-sm focus:border-primary outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tags -->
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-text-muted mb-3">Tags</label>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <span class="px-2 py-1 bg-primary/10 text-primary border border-primary/20 text-xs rounded-sm flex items-center gap-1">
+                        #PVP 
+                        <button class="hover:text-primary-hover"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                    </span>
+                    <span class="px-2 py-1 bg-primary/10 text-primary border border-primary/20 text-xs rounded-sm flex items-center gap-1">
+                        #Event
+                        <button class="hover:text-primary-hover"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                    </span>
+                </div>
+                <input type="text" placeholder="+ Add tag" class="w-full bg-transparent border-b border-surface-border py-1 text-sm focus:border-primary outline-none transition-colors placeholder-text-muted/50">
+            </div>
+
+            <!-- Guild Association -->
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-text-muted mb-3">Post As</label>
+                <div class="flex items-center gap-3 p-3 border border-surface-border bg-white rounded-sm cursor-pointer hover:border-primary transition-colors">
+                    <div class="w-8 h-8 bg-copper rounded-full flex items-center justify-center text-white font-serif font-bold text-xs">S</div>
+                    <div class="flex flex-col">
+                        <span class="text-sm font-medium text-text-heading">Silver Hand</span>
+                        <span class="text-[10px] text-text-muted uppercase">Guild Admin</span>
+                    </div>
+                    <div class="ml-auto text-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // Simple script to demonstrate interaction concept (not functional logic)
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // Add ripple effect or specific behavior here
+            });
+        });
+    </script>
+</body>
+</html>

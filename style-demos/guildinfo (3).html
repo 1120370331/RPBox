@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox Guild Home - Spatial Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: '#4B3621',
+                        main: '#EED9C4',
+                        panel: '#FFFFFF',
+                        primary: '#804030',
+                        accent: '#D4A373',
+                        text: {
+                            main: '#2C1810',
+                            light: '#FBF5EF',
+                            secondary: '#8C7B70',
+                        },
+                        border: '#E8DCCF',
+                        // Arc-inspired high contrast additions
+                        'ink': '#1a1614',
+                        'paper': '#f8f1eb',
+                    },
+                    boxShadow: {
+                        'spatial': '0 20px 40px -10px rgba(44, 24, 16, 0.25)',
+                        'float': '0 8px 16px -4px rgba(44, 24, 16, 0.1)',
+                        'inner-glow': 'inset 0 2px 4px 0 rgba(255, 255, 255, 0.6)',
+                        'glass': '0 8px 32px 0 rgba(75, 54, 33, 0.15)',
+                    },
+                    backgroundImage: {
+                        'grain': "url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22 opacity=%220.05%22/%3E%3C/svg%3E')",
+                    },
+                    fontFamily: {
+                        display: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        serif: ['Georgia', 'Cambria', "Times New Roman", 'Times', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for the Spatial Feel */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .glass-panel {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            background: rgba(255, 255, 255, 0.85);
+        }
+
+        /* Arc-style hover animation */
+        .nav-item {
+            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+        }
+        .nav-item:hover {
+            background-color: rgba(44, 24, 16, 0.05);
+            transform: scale(1.02);
+        }
+        
+        .member-avatar {
+            transition: transform 0.3s ease;
+        }
+        .member-avatar:hover {
+            transform: translateY(-4px) scale(1.1);
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-ink h-screen w-full overflow-hidden flex p-2 md:p-4 text-text-main font-display selection:bg-accent selection:text-white">
+
+    <!-- 1. The Sidebar (Arc-style: Vertical, collapsible feel) -->
+    <aside class="w-16 md:w-64 flex flex-col justify-between rounded-[24px] mr-2 md:mr-4 bg-sidebar/95 backdrop-blur-md text-text-light relative overflow-hidden group transition-all duration-300 shadow-spatial z-20 border border-white/10">
+        <!-- Background Grain Texture -->
+        <div class="absolute inset-0 bg-grain opacity-20 pointer-events-none mix-blend-overlay"></div>
+
+        <!-- Top Section -->
+        <div class="p-4 md:p-6 relative z-10">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center shrink-0 shadow-lg border-2 border-white/20">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <h1 class="hidden md:block font-bold text-xl tracking-tight text-white/90">RPBox</h1>
+            </div>
+
+            <nav class="space-y-2">
+                <div class="hidden md:block text-xs font-bold text-white/40 uppercase tracking-wider mb-2 px-2">Discovery</div>
+                <a href="#" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl bg-white/10 text-white shadow-inner-glow border border-white/5">
+                    <svg class="w-5 h-5 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    <span class="hidden md:block font-medium">公会大厅</span>
+                </a>
+                <a href="#" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-white/70 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                    <span class="hidden md:block font-medium">我的成员</span>
+                </a>
+                <a href="#" class="nav-item flex items-center gap-3 px-3 py-3 rounded-xl text-white/70 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                    <span class="hidden md:block font-medium">任务中心</span>
+                </a>
+            </nav>
+        </div>
+
+        <!-- User Profile Pill -->
+        <div class="p-4 relative z-10 border-t border-white/10">
+            <div class="flex items-center gap-3">
+                <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="User" class="w-10 h-10 rounded-full border-2 border-accent">
+                <div class="hidden md:block">
+                    <div class="text-sm font-bold text-white">Adventurer</div>
+                    <div class="text-xs text-white/50">Level 42</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 2. Main Content Area (Spatial Canvas) -->
+    <main class="flex-1 relative bg-paper rounded-[24px] overflow-hidden shadow-spatial flex flex-col">
+        <!-- Background Elements for Depth -->
+        <div class="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-bl from-[#EED9C4] to-transparent rounded-full blur-[100px] opacity-60 -z-0"></div>
+        <div class="absolute bottom-0 left-0 w-[400px] h-[400px] bg-accent/10 rounded-full blur-[80px] -z-0"></div>
+        <div class="absolute inset-0 bg-grain opacity-30 pointer-events-none z-0"></div>
+
+        <!-- Top Bar (Floating Header) -->
+        <header class="relative z-10 px-8 py-6 flex items-center justify-between">
+            <div class="flex items-center gap-2 text-sm text-text-secondary/80 font-medium bg-white/40 backdrop-blur-sm px-4 py-2 rounded-full border border-white/50 shadow-sm">
+                <span>RPBox</span>
+                <span class="text-text-secondary/40">/</span>
+                <span class="text-text-main">银翼骑士团</span>
+            </div>
+
+            <div class="flex gap-3">
+                <button class="w-10 h-10 rounded-full bg-white border border-border flex items-center justify-center text-text-main hover:scale-110 transition-transform shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </button>
+                <button class="w-10 h-10 rounded-full bg-black text-white flex items-center justify-center hover:scale-110 transition-transform shadow-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Scrollable Content Canvas -->
+        <div class="flex-1 overflow-y-auto overflow-x-hidden hide-scrollbar relative z-10 px-8 pb-8">
+            
+            <!-- Hero Section: Spatial Layers -->
+            <div class="grid grid-cols-12 gap-6 mb-8">
+                
+                <!-- Main Guild Card (Large Overlapping) -->
+                <div class="col-span-12 lg:col-span-8 relative group">
+                    <!-- Layer 1: Image -->
+                    <div class="absolute top-0 left-0 w-full h-full rounded-[32px] overflow-hidden shadow-float transform transition-transform group-hover:scale-[1.01] z-0">
+                        <img src="https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80" class="w-full h-full object-cover filter brightness-[0.8] saturate-[1.1]" alt="Castle">
+                        <div class="absolute inset-0 bg-gradient-to-t from-sidebar/90 via-sidebar/20 to-transparent"></div>
+                    </div>
+                    
+                    <!-- Layer 2: Content Overlay -->
+                    <div class="relative z-10 p-8 h-[420px] flex flex-col justify-end text-white">
+                        <div class="bg-black/20 backdrop-blur-md border border-white/10 p-6 rounded-[24px] max-w-2xl transform transition-transform group-hover:-translate-y-2 duration-500">
+                            <div class="flex items-center gap-3 mb-3">
+                                <span class="px-3 py-1 rounded-full bg-accent text-sidebar text-xs font-bold uppercase tracking-wider">Lv. 5 公会</span>
+                                <span class="flex items-center gap-1 text-xs font-medium text-white/80">
+                                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                                    42 人在线
+                                </span>
+                            </div>
+                            <h1 class="text-4xl md:text-5xl font-serif font-bold mb-3 tracking-wide text-white drop-shadow-lg">银翼骑士团</h1>
+                            <p class="text-white/80 line-clamp-2 text-lg font-light leading-relaxed mb-6">我们是为了守护边境最后的防线而存在的骑士。在这片混乱的大陆上，寻找属于你的荣耀与归宿。</p>
+                            
+                            <div class="flex gap-4">
+                                <button class="px-6 py-3 rounded-full bg-white text-sidebar font-bold hover:bg-main hover:scale-105 transition-all shadow-lg flex items-center gap-2">
+                                    申请加入
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                                </button>
+                                <button class="px-6 py-3 rounded-full bg-black/40 backdrop-blur-md text-white font-medium border border-white/20 hover:bg-black/60 transition-all">
+                                    查看详情
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Side Info Panel (Vertical Pill) -->
+                <div class="col-span-12 lg:col-span-4 flex flex-col gap-4">
+                    <!-- Announcement Card -->
+                    <div class="bg-white rounded-[32px] p-6 shadow-float border border-border h-full flex flex-col justify-between relative overflow-hidden group">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-accent/20 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-accent/30"></div>
+                        
+                        <div>
+                            <div class="flex justify-between items-start mb-4">
+                                <h3 class="font-bold text-xl text-text-main">最新公告</h3>
+                                <span class="text-xs font-mono text-text-secondary bg-paper px-2 py-1 rounded-md">TODAY</span>
+                            </div>
+                            <ul class="space-y-4">
+                                <li class="pb-4 border-b border-dashed border-border last:border-0">
+                                    <div class="text-xs text-primary font-bold mb-1">活动</div>
+                                    <p class="text-sm text-text-main font-medium leading-relaxed">周五晚 20:00 举行全员围猎活动，请准备好药剂。</p>
+                                </li>
+                                <li class="pb-4 border-b border-dashed border-border last:border-0">
+                                    <div class="text-xs text-text-secondary font-bold mb-1">系统</div>
+                                    <p class="text-sm text-text-main font-medium leading-relaxed">公会仓库已扩容至 Lv.3，大家可以存放更多材料了。</p>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <button class="w-full mt-4 py-3 rounded-2xl bg-paper text-text-main text-sm font-bold hover:bg-border transition-colors flex justify-between px-4 items-center group-hover:translate-x-1 duration-300">
+                            查看全部
+                            <svg class="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bento Grid Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Stat Card: Resources -->
+                <div class="bg-primary text-white rounded-[28px] p-6 shadow-float flex flex-col justify-between h-48 relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300">
+                    <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-accent rounded-full opacity-20 blur-xl group-hover:scale-150 transition-transform duration-500"></div>
+                    <div class="flex justify-between items-start">
+                        <div class="p-2 bg-white/10 rounded-xl backdrop-blur-sm">
+                            <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                        </div>
+                        <span class="text-accent font-mono text-sm">+12%</span>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold mb-1">8,942</div>
+                        <div class="text-white/60 text-sm font-medium">公会资金</div>
+                    </div>
+                </div>
+
+                <!-- Stat Card: Members (Interactive) -->
+                <div class="bg-white rounded-[28px] p-6 shadow-float flex flex-col justify-between h-48 border border-border group hover:border-accent/50 transition-colors">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-text-main">核心成员</h3>
+                        <button class="w-8 h-8 rounded-full bg-paper flex items-center justify-center hover:bg-border transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                        </button>
+                    </div>
+                    <div class="flex -space-x-3 overflow-hidden py-2 pl-1">
+                        <img class="member-avatar w-10 h-10 rounded-full border-2 border-white object-cover" src="https://i.pravatar.cc/150?u=1" alt="">
+                        <img class="member-avatar w-10 h-10 rounded-full border-2 border-white object-cover" src="https://i.pravatar.cc/150?u=2" alt="">
+                        <img class="member-avatar w-10 h-10 rounded-full border-2 border-white object-cover" src="https://i.pravatar.cc/150?u=3" alt="">
+                        <div class="member-avatar w-10 h-10 rounded-full border-2 border-white bg-paper text-text-secondary text-xs font-bold flex items-center justify-center cursor-pointer">
+                            +12
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature: Quest Board (Wide) -->
+                <div class="col-span-1 md:col-span-2 bg-[#F5F5F7] rounded-[28px] p-6 shadow-float border border-white flex flex-col relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-6 z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-8 bg-primary rounded-full"></div>
+                            <h3 class="font-bold text-xl text-text-main">正在进行的悬赏</h3>
+                        </div>
+                        <span class="text-sm font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">3 Active</span>
+                    </div>
+                    
+                    <div class="space-y-3 z-10">
+                        <div class="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm border border-black/5 hover:border-accent transition-colors cursor-pointer group">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-sidebar flex items-center justify-center text-accent">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                </div>
+                                <div>
+                                    <div class="font-bold text-text-main text-sm group-hover:text-primary transition-colors">讨伐红龙</div>
+                                    <div class="text-xs text-text-secondary">剩余时间: 2h 45m</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div class="h-full bg-accent w-[70%] rounded-full"></div>
+                                </div>
+                                <span class="text-xs font-bold text-text-secondary">70%</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm border border-black/5 hover:border-accent transition-colors cursor-pointer group">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-paper flex items-center justify-center text-text-secondary">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                                </div>
+                                <div>
+                                    <div class="font-bold text-text-main text-sm group-hover:text-primary transition-colors">收集草药</div>
+                                    <div class="text-xs text-text-secondary">剩余时间: 12h</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div class="h-full bg-green-500 w-[30%] rounded-full"></div>
+                                </div>
+                                <span class="text-xs font-bold text-text-secondary">30%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Decorative Graphic -->
+                    <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-gradient-to-br from-white to-transparent rounded-full opacity-50 blur-2xl pointer-events-none"></div>
+                </div>
+
+            </div>
+            
+            <!-- Bottom Action Bar (Floating Pill) -->
+            <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50">
+                 <div class="glass-panel px-2 py-2 rounded-full shadow-2xl border border-white/40 flex items-center gap-1 scale-90 md:scale-100">
+                    <button class="w-10 h-10 rounded-full hover:bg-black/5 flex items-center justify-center text-text-secondary transition-colors" title="Settings">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                    <div class="w-px h-6 bg-black/10 mx-1"></div>
+                    <button class="px-5 py-2 rounded-full bg-sidebar text-white text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                        发布委托
+                    </button>
+                     <div class="w-px h-6 bg-black/10 mx-1"></div>
+                    <button class="w-10 h-10 rounded-full hover:bg-black/5 flex items-center justify-center text-text-secondary transition-colors" title="Chat">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                    </button>
+                 </div>
+            </div>
+
+        </div>
+    </main>
+
+</body>
+</html>

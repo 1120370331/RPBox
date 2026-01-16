@@ -5,6 +5,7 @@ import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
+import RCard from '@/components/RCard.vue'
 import StoryFilter from '@/components/StoryFilter.vue'
 
 const emit = defineEmits<{

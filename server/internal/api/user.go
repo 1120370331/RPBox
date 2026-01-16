@@ -21,6 +21,16 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		return
 	}
 
+	// 动态计算统计数据
+	var postCount int64
+	database.DB.Model(&model.Post{}).Where("author_id = ? AND status = ? AND review_status = ?", userID, "published", "approved").Count(&postCount)
+
+	var storyCount int64
+	database.DB.Model(&model.Story{}).Where("user_id = ?", userID).Count(&storyCount)
+
+	var profileCount int64
+	database.DB.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&profileCount)
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":            user.ID,
 		"username":      user.Username,
@@ -30,9 +40,9 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		"bio":           user.Bio,
 		"location":      user.Location,
 		"website":       user.Website,
-		"post_count":    user.PostCount,
-		"story_count":   user.StoryCount,
-		"profile_count": user.ProfileCount,
+		"post_count":    postCount,
+		"story_count":   storyCount,
+		"profile_count": profileCount,
 		"created_at":    user.CreatedAt,
 	})
 }
@@ -48,9 +58,9 @@ func (s *Server) updateAvatar(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// 检查文件大小 (最大 2MB)
-	if header.Size > 2*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "头像文件不能超过2MB"})
+	// 检查文件大小 (最大 20MB)
+	if header.Size > 20*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "头像文件不能超过20MB"})
 		return
 	}
 
@@ -140,6 +150,16 @@ func (s *Server) getUserProfile(c *gin.Context) {
 		return
 	}
 
+	// 动态计算统计数据
+	var postCount int64
+	database.DB.Model(&model.Post{}).Where("author_id = ? AND status = ? AND review_status = ?", userID, "published", "approved").Count(&postCount)
+
+	var storyCount int64
+	database.DB.Model(&model.Story{}).Where("user_id = ?", userID).Count(&storyCount)
+
+	var profileCount int64
+	database.DB.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&profileCount)
+
 	// 返回公开信息（不包括email等敏感信息）
 	c.JSON(http.StatusOK, gin.H{
 		"id":            user.ID,
@@ -149,9 +169,9 @@ func (s *Server) getUserProfile(c *gin.Context) {
 		"bio":           user.Bio,
 		"location":      user.Location,
 		"website":       user.Website,
-		"post_count":    user.PostCount,
-		"story_count":   user.StoryCount,
-		"profile_count": user.ProfileCount,
+		"post_count":    postCount,
+		"story_count":   storyCount,
+		"profile_count": profileCount,
 		"created_at":    user.CreatedAt,
 	})
 }
@@ -201,9 +221,9 @@ func (s *Server) uploadImage(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// 检查文件大小 (最大 5MB)
-	if header.Size > 5*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "图片文件不能超过5MB"})
+	// 检查文件大小 (最大 20MB)
+	if header.Size > 20*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "图片文件不能超过20MB"})
 		return
 	}
 

@@ -477,15 +477,17 @@ func (s *Server) getItemComments(c *gin.Context) {
 	type CommentWithUser struct {
 		model.ItemComment
 		Username string `json:"username"`
+		Avatar   string `json:"avatar"`
 	}
 
 	var result []CommentWithUser
 	for _, comment := range comments {
 		var user model.User
-		database.DB.Select("username").First(&user, comment.UserID)
+		database.DB.Select("username, avatar").First(&user, comment.UserID)
 		result = append(result, CommentWithUser{
 			ItemComment: comment,
 			Username:    user.Username,
+			Avatar:      user.Avatar,
 		})
 	}
 

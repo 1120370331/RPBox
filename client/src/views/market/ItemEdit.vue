@@ -38,12 +38,16 @@ async function loadItem() {
   try {
     const id = Number(route.params.id)
     const res: any = await getItem(id)
-    item.value = res.item
-    form.value.name = res.item.name
-    form.value.description = res.item.description
-    form.value.icon = res.item.icon
-    form.value.status = res.item.status
-    hasPendingEdit.value = !!res.pending_edit
+    if (res.code === 0 && res.data?.item) {
+      item.value = res.data.item
+      form.value.name = res.data.item.name
+      form.value.description = res.data.item.description
+      form.value.icon = res.data.item.icon
+      form.value.status = res.data.item.status
+      hasPendingEdit.value = !!res.data.pending_edit
+    } else {
+      throw new Error('道具不存在')
+    }
   } catch (error) {
     console.error('加载道具失败:', error)
     toast.error('道具不存在')
@@ -68,8 +72,10 @@ async function loadItemTags() {
   try {
     const id = Number(route.params.id)
     const res: any = await getItemTags(id)
-    originalTags.value = (res.tags || []).map((t: any) => t.id)
-    selectedTags.value = [...originalTags.value]
+    if (res.code === 0) {
+      originalTags.value = (res.data || []).map((t: any) => t.id)
+      selectedTags.value = [...originalTags.value]
+    }
   } catch (error) {
     console.error('加载道具标签失败:', error)
   }
@@ -125,6 +131,24 @@ function handleCancel() {
   router.back()
 }
 
+// 预览
+function handlePreview() {
+  if (!item.value) return
+
+  // 构建预览数据
+  const previewData = {
+    ...item.value,
+    name: form.value.name || item.value.name,
+    description: form.value.description || item.value.description,
+    icon: form.value.icon || item.value.icon,
+  }
+
+  sessionStorage.setItem('item_preview_data', JSON.stringify(previewData))
+  sessionStorage.setItem('item_preview_from', route.fullPath)
+
+  router.push('/market/preview')
+}
+
 function getTypeText(type: string) {
   return type === 'item' ? '道具' : '剧本'
 }
@@ -136,6 +160,10 @@ function getTypeText(type: string) {
       <h1 class="page-title">编辑道具</h1>
       <div class="actions">
         <button class="cancel-btn" @click="handleCancel">取消</button>
+        <button class="preview-btn" @click="handlePreview" :disabled="loading">
+          <i class="ri-eye-line"></i>
+          预览
+        </button>
         <button class="draft-btn" @click="handleSubmit('draft')" :disabled="loading">
           保存草稿
         </button>
@@ -238,6 +266,7 @@ function getTypeText(type: string) {
 }
 
 .cancel-btn,
+.preview-btn,
 .draft-btn,
 .publish-btn {
   padding: 12px 24px;
@@ -252,6 +281,20 @@ function getTypeText(type: string) {
 .cancel-btn {
   background: #E5D4C1;
   color: #4B3621;
+}
+
+.preview-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  color: #5D4037;
+  border: 2px solid #E5D4C1;
+}
+
+.preview-btn:hover {
+  border-color: #B87333;
+  color: #B87333;
 }
 
 .draft-btn {

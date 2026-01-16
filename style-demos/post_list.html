@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community Hub - RPG Style</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        rpg: {
+                            primary: '#804030', // 深棕红
+                            primaryHover: '#6B3528',
+                            copper: '#B87333',
+                            dark: '#2C1810', // 深棕黑
+                            text: '#4B3621', // 棕色
+                            muted: '#8D7B68', // 灰棕
+                            bg: '#F5EFE7', // 米白
+                            border: '#E5D4C1', // 浅棕
+                            amber: '#E6A23C',
+                            red: '#C44536',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Merriweather', 'serif'],
+                        display: ['Cinzel', 'serif'],
+                    },
+                    boxShadow: {
+                        'card': '0 4px 20px -2px rgba(75, 54, 33, 0.08)',
+                        'card-hover': '0 10px 25px -5px rgba(75, 54, 33, 0.15)',
+                        'glow': '0 0 15px rgba(184, 115, 51, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #F5EFE7; color: #4B3621; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Custom "Stripe-like" Angled Background */
+        .hero-bg {
+            background-image: radial-gradient(circle at 100% 0%, rgba(184, 115, 51, 0.1) 0%, transparent 25%), 
+                              radial-gradient(circle at 0% 100%, rgba(128, 64, 48, 0.05) 0%, transparent 25%);
+        }
+
+        /* Rich Text Editor Simulation */
+        .editor-content { min-height: 200px; outline: none; }
+        .editor-content p { margin-bottom: 1em; line-height: 1.6; }
+        
+        .active-nav {
+            background-color: #F5EFE7;
+            color: #804030;
+            border-left: 3px solid #804030;
+        }
+        .nav-item {
+            border-left: 3px solid transparent;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased h-screen flex overflow-hidden selection:bg-rpg-copper selection:text-white">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-20 lg:w-64 bg-rpg-dark text-white flex flex-col justify-between flex-shrink-0 transition-all duration-300 z-50">
+        <div>
+            <div class="h-20 flex items-center justify-center lg:justify-start lg:px-8 border-b border-white/10">
+                <div class="w-8 h-8 rounded bg-gradient-to-br from-rpg-copper to-rpg-primary flex items-center justify-center shadow-glow">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                </div>
+                <span class="ml-3 font-display font-bold text-xl hidden lg:block tracking-wider text-rpg-bg">GUILDHALL</span>
+            </div>
+
+            <nav class="mt-8 space-y-1">
+                <button onclick="switchView('main')" id="nav-main" class="nav-item w-full flex items-center px-4 lg:px-8 py-4 text-gray-300 hover:bg-white/5 hover:text-white transition-colors active-nav">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    <span class="ml-3 hidden lg:block font-medium">社区广场</span>
+                </button>
+                <button onclick="switchView('create')" id="nav-create" class="nav-item w-full flex items-center px-4 lg:px-8 py-4 text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    <span class="ml-3 hidden lg:block font-medium">发布创作</span>
+                </button>
+                <button onclick="switchView('mine')" id="nav-mine" class="nav-item w-full flex items-center px-4 lg:px-8 py-4 text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    <span class="ml-3 hidden lg:block font-medium">我的卷轴</span>
+                </button>
+            </nav>
+        </div>
+        
+        <div class="p-4 border-t border-white/10">
+            <div class="flex items-center justify-center lg:justify-start">
+                <img src="https://i.pravatar.cc/150?img=33" class="w-8 h-8 rounded border border-rpg-copper" alt="User">
+                <div class="ml-3 hidden lg:block">
+                    <p class="text-xs text-gray-400">大领主</p>
+                    <p class="text-sm font-semibold text-white">Azertoth</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto relative bg-rpg-bg hero-bg">
+        
+        <!-- ================= VIEW 1: COMMUNITY MAIN (Bento Grid) ================= -->
+        <div id="view-main" class="p-6 lg:p-10 max-w-7xl mx-auto fade-in">
+            <!-- Header -->
+            <header class="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
+                <div>
+                    <h1 class="font-display text-3xl text-rpg-dark font-bold">酒馆布告栏</h1>
+                    <p class="text-rpg-muted mt-1 font-serif text-sm italic">"这里汇聚了来自艾泽拉斯各地的故事与委托..."</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="relative group">
+                        <input type="text" placeholder="搜索帖子..." class="pl-10 pr-4 py-2 bg-white border border-rpg-border rounded shadow-sm focus:border-rpg-copper focus:ring-1 focus:ring-rpg-copper outline-none w-64 text-sm transition-all">
+                        <svg class="w-4 h-4 text-rpg-muted absolute left-3 top-3 group-focus-within:text-rpg-copper" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <button onclick="switchView('create')" class="bg-rpg-primary hover:bg-rpg-primaryHover text-white px-5 py-2 rounded shadow-lg shadow-rpg-primary/20 text-sm font-medium transition-all flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        发布
+                    </button>
+                </div>
+            </header>
+
+            <!-- Filters & Sort -->
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+                <div class="flex items-center space-x-2 overflow-x-auto pb-2 hide-scroll">
+                    <button class="px-4 py-1.5 bg-rpg-dark text-white rounded text-sm font-medium shadow-sm whitespace-nowrap">全部</button>
+                    <button class="px-4 py-1.5 bg-white border border-rpg-border text-rpg-text hover:border-rpg-copper rounded text-sm transition-colors whitespace-nowrap">人设分享</button>
+                    <button class="px-4 py-1.5 bg-white border border-rpg-border text-rpg-text hover:border-rpg-copper rounded text-sm transition-colors whitespace-nowrap">公会招募</button>
+                    <button class="px-4 py-1.5 bg-white border border-rpg-border text-rpg-text hover:border-rpg-copper rounded text-sm transition-colors whitespace-nowrap">剧情报告</button>
+                    <button class="px-4 py-1.5 bg-white border border-rpg-border text-rpg-text hover:border-rpg-copper rounded text-sm transition-colors whitespace-nowrap">活动</button>
+                </div>
+                <div class="flex items-center text-sm text-rpg-muted">
+                    <span class="mr-2">排序:</span>
+                    <select class="bg-transparent border-none font-medium text-rpg-dark focus:ring-0 cursor-pointer">
+                        <option>最新发布</option>
+                        <option>热门讨论</option>
+                        <option>最多点赞</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Bento Grid Layout -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                
+                <!-- Card 1: Large Featured (Spans 2 cols, 2 rows) -->
+                <div onclick="switchView('detail')" class="group col-span-1 md:col-span-2 row-span-2 bg-white rounded border border-rpg-border p-6 shadow-card hover:shadow-card-hover transition-all cursor-pointer relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-rpg-copper group-hover:bg-rpg-primary transition-colors"></div>
+                    <div class="flex items-start justify-between mb-4">
+                        <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-rpg-bg text-rpg-copper border border-rpg-border uppercase tracking-wide">剧情报告</span>
+                        <span class="text-xs text-rpg-muted">2小时前</span>
+                    </div>
+                    <h2 class="font-serif text-2xl font-bold text-rpg-dark mb-3 group-hover:text-rpg-primary transition-colors">黑石山的阴影：第三次远征战报汇总</h2>
+                    <p class="text-rpg-text text-sm leading-relaxed mb-6 line-clamp-3">
+                        在这场漫长的战役中，我们损失惨重。但是为了联盟的荣耀，没有任何人退缩。本次战报详细记录了先锋队的突袭路线以及黑铁矮人的防御部署...
+                    </p>
+                    <div class="mt-auto flex items-center justify-between border-t border-rpg-bg pt-4">
+                        <div class="flex items-center">
+                            <img src="https://i.pravatar.cc/150?img=11" class="w-8 h-8 rounded border border-gray-200" alt="">
+                            <span class="ml-2 text-sm font-medium text-rpg-dark">指挥官雷诺</span>
+                        </div>
+                        <div class="flex items-center space-x-4 text-rpg-muted text-xs">
+                            <span class="flex items-center"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> 2.4k</span>
+                            <span class="flex items-center"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg> 45</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Event (Compact) -->
+                <div class="bg-white rounded border border-rpg-border p-5 shadow-card hover:shadow-card-hover transition-all relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-rpg-amber/10 to-transparent -mr-8 -mt-8 rounded-full"></div>
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs font-bold text-rpg-amber uppercase tracking-wider">服务器活动</span>
+                    </div>
+                    <h3 class="font-serif font-bold text-rpg-dark mb-2 hover:text-rpg-primary cursor-pointer">荆棘谷钓鱼大赛</h3>
+                    <div class="flex items-center text-xs text-rpg-muted mb-3">
+                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        本周日 14:00
+                    </div>
+                    <button class="w-full mt-2 py-1.5 text-xs font-medium text-rpg-primary border border-rpg-primary/30 rounded hover:bg-rpg-primary hover:text-white transition-colors">查看详情</button>
+                </div>
+
+                <!-- Card 3: Standard -->
+                <div class="bg-white rounded border border-rpg-border p-5 shadow-card hover:shadow-card-hover transition-all">
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100 mb-2">公会招募</span>
+                    <h3 class="font-serif font-bold text-rpg-dark mb-2 hover:text-rpg-primary cursor-pointer line-clamp-1">《银色黎明》RP团招新</h3>
+                    <p class="text-xs text-rpg-text mb-4 line-clamp-2">寻找志同道合的圣骑士与牧师，共同守护这片土地...</p>
+                    <div class="flex items-center justify-between border-t border-rpg-bg pt-3">
+                        <div class="flex items-center">
+                            <img src="https://i.pravatar.cc/150?img=5" class="w-6 h-6 rounded border border-gray-200" alt="">
+                            <span class="ml-2 text-xs font-medium text-rpg-muted">Uther</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Image Focus -->
+                <div class="bg-rpg-dark rounded border border-rpg-dark p-0 shadow-card hover:shadow-card-hover transition-all overflow-hidden relative group">
+                    <img src="https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" class="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" alt="">
+                    <div class="absolute bottom-0 left-0 p-5 w-full bg-gradient-to-t from-black/90 to-transparent">
+                        <span class="text-[10px] text-rpg-copper font-bold uppercase">道具分享</span>
+                        <h3 class="font-serif font-bold text-white mt-1">附魔瑟银匕首图纸</h3>
+                    </div>
+                </div>
+
+                <!-- Card 5: Standard -->
+                <div class="bg-white rounded border border-rpg-border p-5 shadow-card hover:shadow-card-hover transition-all">
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200 mb-2">其他</span>
+                    <h3 class="font-serif font-bold text-rpg-dark mb-2 hover:text-rpg-primary cursor-pointer">关于宏命令的求助</h3>
+                    <p class="text-xs text-rpg-text mb-4 line-clamp-2">有没有大神知道如何绑定饰品和爆发技能...</p>
+                    <div class="flex items-center justify-between border-t border-rpg-bg pt-3">
+                        <div class="flex items-center">
+                            <img src="https://i.pravatar.cc/150?img=8" class="w-6 h-6 rounded border border-gray-200" alt="">
+                            <span class="ml-2 text-xs font-medium text-rpg-muted">Mage007</span>
+                        </div>
+                        <span class="text-xs text-rpg-muted">34 评论</span>
+                    </div>
+                </div>
+
+            </div>
+            
+            <!-- Pagination -->
+            <div class="mt-10 flex justify-center">
+                <div class="flex space-x-2">
+                    <button class="px-4 py-2 bg-white border border-rpg-border text-rpg-muted rounded hover:border-rpg-copper transition-colors">上一页</button>
+                    <button class="px-4 py-2 bg-rpg-dark text-white rounded shadow-md">1</button>
+                    <button class="px-4 py-2 bg-white border border-rpg-border text-rpg-text rounded hover:border-rpg-copper transition-colors">2</button>
+                    <button class="px-4 py-2 bg-white border border-rpg-border text-rpg-text rounded hover:border-rpg-copper transition-colors">3</button>
+                    <button class="px-4 py-2 bg-white border border-rpg-border text-r

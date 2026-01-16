@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPBox Guild Home</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* RPBox Design System Variables */
+        :root {
+            --color-sidebar-bg: #4B3621;
+            --color-main-bg: #EED9C4;
+            --color-panel-bg: #FFFFFF;
+            --color-primary: #804030;
+            --color-text-main: #2C1810;
+            --color-text-light: #FBF5EF;
+            --color-text-secondary: #8C7B70;
+            --color-accent: #D4A373;
+            --color-border: #E8DCCF;
+            --radius-md: 12px;
+            --shadow-md: 0 4px 20px rgba(75, 54, 33, 0.08);
+        }
+
+        /* Custom Font Setup */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-main-bg);
+            color: var(--color-text-main);
+            background-image: 
+                radial-gradient(at 10% 10%, rgba(212, 163, 115, 0.15) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(128, 64, 48, 0.1) 0px, transparent 50%);
+        }
+
+        .font-serif {
+            font-family: 'Playfair Display', serif;
+        }
+
+        /* Organic Shapes & Layout Utilities */
+        .notion-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1.5rem;
+        }
+
+        .organic-border {
+            border: 1px solid rgba(75, 54, 33, 0.08);
+            box-shadow: 
+                0 1px 2px rgba(75, 54, 33, 0.05),
+                0 4px 12px rgba(75, 54, 33, 0.03);
+            transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .organic-border:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 4px 8px rgba(75, 54, 33, 0.08),
+                0 12px 24px rgba(75, 54, 33, 0.06);
+            border-color: var(--color-accent);
+        }
+
+        /* Information Density Utilities */
+        .dense-list-item {
+            position: relative;
+            padding-left: 1rem;
+        }
+        .dense-list-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.6rem;
+            width: 4px;
+            height: 4px;
+            background-color: var(--color-primary);
+            border-radius: 50%;
+        }
+
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #D4A373;
+            border-radius: 4px;
+        }
+
+        /* Decorative Blobs */
+        .blob-bg {
+            position: absolute;
+            z-index: 0;
+            filter: blur(60px);
+            opacity: 0.6;
+        }
+
+        /* Notion-like Callout */
+        .callout {
+            background: rgba(212, 163, 115, 0.15);
+            border-left: 4px solid var(--color-primary);
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            background: #F3EAE2;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            background: var(--color-primary);
+            height: 100%;
+            border-radius: 4px;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: '#4B3621',
+                        main: '#EED9C4',
+                        panel: '#FFFFFF',
+                        primary: '#804030',
+                        accent: '#D4A373',
+                        textMain: '#2C1810',
+                        textSec: '#8C7B70',
+                        border: '#E8DCCF'
+                    },
+                    borderRadius: {
+                        'organic': '2px 12px 4px 12px'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="min-h-screen p-4 md:p-8 relative overflow-x-hidden">
+
+    <!-- Decorative Blobs -->
+    <div class="blob-bg w-64 h-64 bg-accent rounded-full top-0 right-0 mix-blend-multiply"></div>
+    <div class="blob-bg w-96 h-96 bg-primary rounded-full -bottom-20 -left-20 opacity-20 mix-blend-multiply"></div>
+
+    <div class="max-w-[1400px] mx-auto relative z-10">
+        
+        <!-- Header Section -->
+        <header class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-[#DCC8B8] pb-6">
+            <div class="flex items-center gap-6">
+                <div class="w-24 h-24 bg-sidebar rounded-[20px] shadow-lg flex items-center justify-center relative overflow-hidden group cursor-pointer border-2 border-white ring-1 ring-border">
+                    <span class="text-4xl text-white font-serif z-10 relative">S</span>
+                    <div class="absolute inset-0 bg-primary opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                    <div class="absolute -bottom-2 -right-2 w-10 h-10 bg-accent rounded-full blur-md"></div>
+                </div>
+                <div>
+                    <div class="flex items-center gap-3 mb-1">
+                        <span class="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold text-white bg-primary rounded-sm">LV. 12</span>
+                        <span class="text-xs text-textSec font-medium flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            凛冬城 · 第七区
+                        </span>
+                    </div>
+                    <h1 class="text-4xl font-serif font-bold text-textMain tracking-tight">星野探险家公会</h1>
+                    <p class="text-textSec mt-1 text-sm max-w-lg leading-relaxed">致力于探索未知的边境，记录遗落的历史。我们是星野之下最后的守望者。</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-3 mt-4 md:mt-0">
+                <button class="px-4 py-2 bg-panel border border-border text-textMain text-sm font-medium hover:bg-[#FAF6F2] transition-colors shadow-sm rounded-sm">
+                    公会仓库
+                </button>
+                <button class="px-4 py-2 bg-primary text-white text-sm font-medium hover:bg-[#6B3626] transition-colors shadow-md rounded-sm flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    发布委托
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid -->
+        <div class="notion-grid">
+            
+            <!-- Left Column: Primary Stats & Announcements (Width 8) -->
+            <div class="col-span-12 lg:col-span-8 flex flex-col gap-6">
+                
+                <!-- Stats Row -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-panel p-5 organic-border rounded-[4px] relative overflow-hidden">
+                        <div class="text-textSec text-xs font-semibold uppercase tracking-wider mb-2">活跃成员</div>
+                        <div class="text-3xl font-serif text-textMain">142<span class="text-lg text-textSec font-sans ml-1">/ 200</span></div>
+                        <div class="mt-3 flex items-center text-xs text-green-700 bg-green-50 w-max px-2 py-0.5 rounded-sm">
+                            <span class="mr-1">▲</span> +12 本周
+                        </div>
+                        <div class="absolute right-0 top-0 w-16 h-16 bg-[#EED9C4] rounded-bl-full opacity-30"></div>
+                    </div>
+                    
+                    <div class="bg-panel p-5 organic-border rounded-[4px] relative overflow-hidden">
+                        <div class="text-textSec text-xs font-semibold uppercase tracking-wider mb-2">公会资金</div>
+                        <div class="text-3xl font-serif text-textMain">24,590<span class="text-sm text-accent ml-1">G</span></div>
+                        <div class="mt-3 w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-accent w-[70%]"></div>
+                        </div>
+                        <div class="mt-1 text-[10px] text-textSec text-right">目标: 35,000G</div>
+                    </div>
+
+                    <div class="bg-panel p-5 organic-border rounded-[4px] relative overflow-hidden">
+                        <div class="text-textSec text-xs font-semibold uppercase tracking-wider mb-2">声望等级</div>
+                        <div class="text-3xl font-serif text-primary">Platinum</div>
+                        <div class="mt-3 flex -space-x-2">
+                            <div class="w-6 h-6 rounded-full bg-sidebar border-2 border-white"></div>
+                            <div class="w-6 h-6 rounded-full bg-primary border-2 border-white"></div>
+                            <div class="w-6 h-6 rounded-full bg-accent border-2 border-white"></div>
+                            <div class="w-6 h-6 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center text-[8px] text-gray-500 font-bold">+5</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Content: Bulletin Board -->
+                <div class="bg-panel p-6 organic-border rounded-[4px] min-h-[400px]">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-lg font-serif font-bold flex items-center gap-2">
+                            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>
+                            公告板
+                        </h2>
+                        <span class="text-xs text-textSec hover:text-primary cursor-pointer transition-colors border-b border-dashed border-textSec pb-0.5">查看历史记录</span>
+                    </div>
+
+                    <!-- Pinned Post -->
+                    <div class="callout p-4 mb-6 rounded-r-[4px] text-sm text-textMain">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-bold text-primary flex items-center gap-2">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"></path></svg>
+                                置顶：关于本周六攻城战的部署
+                            </span>
+                            <span class="text-xs text-textSec">2小时前</span>
+                        </div>
+                        <p class="leading-relaxed opacity-90">各位探险家，本周六晚20:00将进行"黑铁要塞"攻略战。请各小队队长务必在周五前提交人员名单。炼金组请提前准备好抗火药剂。</p>
+                    </div>
+
+                    <!-- List Items -->
+                    <div class="space-y-4">
+                        <div class="group flex items-start gap-4 p-3 hover:bg-[#F9F4EF] rounded-[4px] transition-colors cursor-pointer border border-transparent hover:border-[#E8DCCF]">
+                            <div class="flex-shrink-0 w-10 h-10 bg-[#EED9C4] text-sidebar rounded-full flex items-center justify-center font-serif font-bold text-sm">
+                                01
+                            </div>
+                            <div class="flex-grow">
+                                <h3 class="text-sm font-semibold text-textMain group-hover:text-primary transition-colors">新成员入会指南 v2.0 更新</h3>
+                                <p class="text-xs text-textSec mt-1 line-clamp-1">包含最新的资源分配规则和每日任务清单，请新人务必阅读。</p>
+                            </div>
+                            <div class="flex-shrink-0 flex items-center gap-2">
+                                <span class="px-2 py-1 bg-white border border-gray-200 text-[10px] text-textSec rounded-sm uppercase">Doc</span>
+                            </div>
+                        </div>
+
+                        <div class="group flex items-start gap-4 p-3 hover:bg-[#F9F4EF] rounded-[4px] transition-colors cursor-pointer border border-transparent hover:border-[#E8DCCF]">
+                            <div class="flex-shrink-0 w-10 h-10 bg-[#EED9C4] text-sidebar rounded-full flex items-center justify-center font-serif font-bold text-sm">
+                                02
+                            </div>
+                            <div class="flex-grow">
+                                <h3 class="text-sm font-semibold text-textMain group-hover:text-primary transition-colors">炼金工坊资源短缺预警</h3>
+                                <p class="text-xs text-textSec mt-1 line-clamp-1">急需：星光草 x200, 秘银矿石 x50。高价收购中。</p>
+                            </div>
+                            <div class="flex-shrink-0 flex items-center gap-2">
+                                <span class="px-2 py-1 bg-red-50 border border-red-100 text-[10px] text-red-700 rounded-sm uppercase">Urgent</span>
+                            </div>
+                        </div>
+
+                        <div class="group flex items-start gap-4 p-3 hover:bg-[#F9F4EF] rounded-[4px] transition-colors cursor-pointer border border-transparent hover:border-[#E8DCCF]">
+                            <div class="flex-shrink-0 w-10 h-10 bg-[#EED9C4] text-sidebar rounded-full flex items-center justify-center font-serif font-bold text-sm">
+                                03
+                            </div>
+                            <div class="flex-grow">
+                                <h3 class="text-sm font-semibold text-textMain group-hover:text-primary transition-colors">本月公会聚会照片集锦</h3>
+                                <p class="text-xs text-textSec mt-1 line-clamp-1">感谢大家的参与，照片已上传至图库。</p>
+                            </div>
+                            <div class="flex-shrink-0 flex items-center gap-2">
+                                <span class="px-2 py-1 bg-white border border-gray-200 text-[10px] text-textSec rounded-sm uppercase">Gallery</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Tasks & Events (Width 4) -->
+            <div class="col-span-12 lg:col-span-4 flex flex-col gap-6">
+                
+                <!-- Active Tasks -->
+                <div class="bg-panel p-5 organic-border rounded-[4px] flex flex-col h-full">
+                    <h2 class="text-sm font-bold text-textSec uppercase tracking-wider mb-4 border-b border-border pb-2">进行中的任务</h2>
+                    
+                    <div class="space-y-4 flex-grow">
+                        <div class="p-3 bg-white border border-border rounded-[4px] hover:shadow-sm transition-shadow">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-xs font-bold text-primary bg-[#F3EAE2] px-1.5 py-0.5 rounded-[2px]">S级委托</span>
+                                <span class="text-[10px] text-textSec">剩余 2天</span>
+                            </div>
+                            <h4 class="text-sm font-medium text-textMain mb-2">深渊巨兽讨伐</h4>
+                            <div class="w-full h-1.5 bg-gray-100 rounded-full mb-2">
+                                <div class="h-full bg-primary w-[45%] rounded-full"></div>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-textSec">
+                                <span>进度: 45%</span>
+                                <span>参与: 12人</span>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-white border border-border rounded-[4px] hover:shadow-sm transition-shadow">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-xs font-bold text-textSec bg-gray-100 px-1.5 py-0.5 rounded-[2px]">日常</span>
+                                <span class="text-[10px] text-textSec">今日 23:59</span>
+                            </div>
+                            <h4 class="text-sm font-medium text-textMain mb-2">物资捐赠</h4>
+                            <div class="w-full h-1.5 bg-gray-100 rounded-full mb-2">
+                                <div class="h-full bg-accent w-[80%] rounded-full"></div>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-textSec">
+                                <span>进度: 80%</span>
+                                <span>目标: 1000木材</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="w-full mt-4 py-2 text-xs font-medium text-textSec border border-dashed border-border rounded-[4px] hover:border-primary hover:text-primary transition-colors">
+                        + 领取新任务
+                    </button>
+                </div>
+
+                <!-- Calendar Widget (Notion Style) -->
+                <div class="bg-panel p-5 organic-border rounded-[4px]">
+                    <h2 class="text-sm font-bold text-textSec uppercase tracking-wider mb-4 border-b border-border pb-2">日程安排</h2>
+                    
+                    <div class="space-y-3">
+                        <div class="flex gap-3">
+                            <div class="flex flex-col items-center min-w-[3rem]">
+                                <span class="text-[10px] text-red-500 font-bold uppercase">Today</span>
+                                <span class="text-xl font-serif font-bold text-textMain">12</span>
+                            </div>
+                            <div class="flex-grow border-l-2 border-[#EED9C4] pl-3 py-0.5">
+                                <div class="text-sm font-medium text-textMain">全员大会</div>
+                                <div class="text-xs text-textSec mt-0.5">20:00 @ 公会大厅</div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-3 opacity-60">
+                            <div class="flex flex-col items-center min-w-[3rem]">
+                                <span class="text-[10px] text-textSec font-bold uppercase">Fri</span>
+                                <span class="text-xl font-serif font-bold text-textMain">14</span>
+                            </div>
+                            <div class="flex-grow border-l-2 border-transparent pl-3 py-0.5">
+                                <div class="text-sm font-medium text-textMain">副本重置</div>
+                                <div class="text-xs text-textSec mt-0.5">04:00 AM</div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-3 opacity-60">
+                            <div class="flex flex-col items-center min-w-[3rem]">
+                                <span class="text-[10px] text-textSec font-bold uppercase">Sat</span>
+                                <span class="text-xl font-serif font-bold text-textMain">15</span>
+                            </div>
+                            <div class="flex-grow border-l-2 border-transparent pl-3 py-0.5">
+                                <div class="text-sm font-medium text-textMain">攻城战</div>
+                                <div class="text-xs text-textSec mt-0.5">20:00 - 22:00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leaderboard Mini -->
+                <div class="bg-sidebar text-white p-5 rounded-[4px] shadow-lg relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-4 opacity-10">
+                        <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                    </div>
+                    <h2 class="text-sm font-bold text-[#EED9C4] uppercase tracking-wider mb-4">本周贡献榜</h2>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex justify-between items-center border-b border-white/10 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[#D4A373] font-bold">1</span>
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" class="w-6 h-6 rounded-full bg-white/20">
+                                <span class="text-white/90">夜之锋刃</span>
+                            </div>
+                            <span class="font-mono text-[#EED9C4]">2,400</span>
+                        </li>
+                        <li class="flex justify-between items-center border-b border-white/10 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-white/60 font-bold">2</span>
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Annie" class="w-6 h-6 rounded-full bg-white/20">
+                                <span class="text-white/90">白桃乌龙</span>
+                            </div>
+                            <span class="font-mono text-white/60">1,950</span>
+                        </li>
+                        <li class="flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="text-white/60 font-bold">3</span>
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jack" class="w-6 h-6 rounded-full bg-white/20">
+                                <span class="text-white/90">TankMan</span>
+                            </div>
+                            <span class="font-mono text-white/60">1,820</span>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+            
+            <!-- Bottom Section: Quick Links Grid (Full Width) -->
+            <div class="col-span-12 mt-4">
+                <h3 class="text-xs font-bold text-textSec uppercase tracking-wider mb-4 ml-1">资源导航</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <a href="#" class="group p-4 bg-panel border border-dashed border-border hover:border-accent hover:bg-white rounded-[4px] transition-all flex flex-col items-center justify-center text-center gap-2 h-32">
+                        <div class="w-10 h-10 bg-[#F9F4EF] rounded-full flex items-center justify-center text-textMain group-hover:scale-110 transition-transform">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                        </div>
+                        <span class="text-sm font-medium text-textMain">攻略百科</span>
+                    </a>
+                    
+                    <a href="#" class="group p-4 bg-panel border border-dashed border-border hover:border-accent hover:bg-white rounded-[4px] transition-all flex flex-col items-center justify-center text-center gap-2 h-32">
+                        <div class="w-10 h-10 bg-[#F9F4EF] rounded-full flex items-center justify-center text-textMain group-hover:scale-110 transition-transform">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        </div>
+                        <span class="text-sm font-medium text-textMain">成员名册</span>
+                    </a>
+
+                    <a href="#" class="group p-4 bg-panel border border-dashed border-border hover:border-accent hover:bg-white rounded-[4px] transition-all flex flex-col items-center justify-center text-center gap-2 h-32">
+                        <div class="w-10 h-10 bg-[#F9F4EF] rounded-full flex items-center justify-center text-textMain group-hover:scale-110 transition-transform">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                        </div>
+                        <span class="text-sm font-medium text-textMain">财务报表</span>
+                    </a>
+
+                    <a href="#" class="group p-4 bg-panel border border-dashed border-border hover:border-accent hover:bg-white rounded-[4px] transition-all flex flex-col items-center justify-center text-center gap-2 h-32">
+                        <div class="w-10 h-10 bg-[#F9F4EF]
