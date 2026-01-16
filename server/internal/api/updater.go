@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,6 +39,9 @@ func (s *Server) checkUpdate(c *gin.Context) {
 		latestVersion = "0.1.0"
 	}
 
+	// 调试日志
+	fmt.Printf("checkUpdate: current=%s latest=%s\n", currentVersion, latestVersion)
+
 	// 如果当前版本已是最新，返回 204 No Content
 	if currentVersion == latestVersion {
 		c.Status(http.StatusNoContent)
@@ -54,27 +58,28 @@ func (s *Server) checkUpdate(c *gin.Context) {
 	}
 
 	// 根据平台返回对应的更新包
-	var url, signature string
+	var url, sigFile string
 	switch platformKey {
 	case "windows-x86_64":
-		url = baseURL + "/" + latestVersion + "/RPBox_" + latestVersion + "_x64-setup.nsis.zip"
-		signature = getSignature(latestVersion, "windows-x86_64")
+		url = baseURL + "/" + latestVersion + "/RPBox_" + latestVersion + "_x64-setup.exe"
+		sigFile = "RPBox_" + latestVersion + "_x64-setup.exe.sig"
 	case "windows-aarch64":
-		url = baseURL + "/" + latestVersion + "/RPBox_" + latestVersion + "_arm64-setup.nsis.zip"
-		signature = getSignature(latestVersion, "windows-aarch64")
+		url = baseURL + "/" + latestVersion + "/RPBox_" + latestVersion + "_arm64-setup.exe"
+		sigFile = "RPBox_" + latestVersion + "_arm64-setup.exe.sig"
 	case "darwin-x86_64":
 		url = baseURL + "/" + latestVersion + "/RPBox_" + latestVersion + "_x64.app.tar.gz"
-		signature = getSignature(latestVersion, "darwin-x86_64")
+		sigFile = "RPBox_" + latestVersion + "_x64.app.tar.gz.sig"
 	case "darwin-aarch64":
 		url = baseURL + "/" + latestVersion + "/RPBox_" + latestVersion + "_aarch64.app.tar.gz"
-		signature = getSignature(latestVersion, "darwin-aarch64")
+		sigFile = "RPBox_" + latestVersion + "_aarch64.app.tar.gz.sig"
 	case "linux-x86_64":
 		url = baseURL + "/" + latestVersion + "/RPBox_" + latestVersion + "_amd64.AppImage.tar.gz"
-		signature = getSignature(latestVersion, "linux-x86_64")
+		sigFile = "RPBox_" + latestVersion + "_amd64.AppImage.tar.gz.sig"
 	default:
 		c.Status(http.StatusNoContent)
 		return
 	}
+	signature := getSignature(latestVersion, sigFile)
 
 	response := UpdateResponse{
 		Version:   latestVersion,
@@ -88,15 +93,12 @@ func (s *Server) checkUpdate(c *gin.Context) {
 }
 
 // getSignature 获取签名文件内容
-func getSignature(version, platform string) string {
-	sigDir := config.Get().Updater.SignatureDir
-	if sigDir == "" {
-		return ""
-	}
-
-	sigFile := filepath.Join(sigDir, version, platform+".sig")
+func getSignature(version, sigFileName string) string {
+	// 默认从 releases 目录读取签名
+	sigFile := filepath.Join("releases", version, sigFileName)
 	data, err := os.ReadFile(sigFile)
 	if err != nil {
+		fmt.Printf("getSignature: failed to read %s: %v\n", sigFile, err)
 		return ""
 	}
 	return string(data)

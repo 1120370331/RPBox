@@ -20,7 +20,9 @@ export function useUpdater() {
     checking.value = true
 
     try {
+      console.log('开始检查更新...')
       const update = await check()
+      console.log('检查结果:', update)
       if (update) {
         updateAvailable.value = true
         updateInfo.value = {

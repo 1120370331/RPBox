@@ -5,6 +5,9 @@ import "github.com/rpbox/server/internal/middleware"
 func (s *Server) setupRoutes() {
 	s.router.GET("/health", s.healthCheck)
 
+	// 静态文件服务 - 更新包下载
+	s.router.Static("/releases", "./releases")
+
 	v1 := s.router.Group("/api/v1")
 	{
 		// 公开接口
