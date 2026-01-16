@@ -73,7 +73,8 @@ func (s *Server) listItems(c *gin.Context) {
 	var total int64
 	query.Count(&total)
 
-	if err := query.Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	// 列表查询排除大字段（import_code, raw_data, detail_content）以提高性能
+	if err := query.Select("id, author_id, name, type, icon, preview_image, description, downloads, rating, rating_count, like_count, status, review_status, created_at, updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -107,6 +108,12 @@ func (s *Server) createItem(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 验证 ImportCode 大小（最大 10MB）
+	if len(req.ImportCode) > 10<<20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Import code too large, max 10MB"})
 		return
 	}
 
@@ -239,6 +246,12 @@ func (s *Server) updateItem(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 验证 ImportCode 大小（最大 10MB）
+	if len(req.ImportCode) > 10<<20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Import code too large, max 10MB"})
 		return
 	}
 
