@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getStory, updateStory, addStoryEntries, publishStory, type Story, type StoryEntry } from '@/api/story'
-import { getCharacter, updateCharacter, type Character } from '@/api/character'
+import { getCharacter, updateCharacter, listCharacters, type Character } from '@/api/character'
 import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
 import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
 import RButton from '@/components/RButton.vue'
@@ -32,7 +32,13 @@ const showAddModal = ref(false)
 const newEntryContent = ref('')
 const newEntrySpeaker = ref('')
 const newEntryType = ref('dialogue')
+const newEntryChannel = ref('SAY')
+const newEntryTimestamp = ref('')
+const newEntryCharacterId = ref<number | null>(null)
 const adding = ref(false)
+
+// 可选人物卡列表
+const availableCharacters = ref<Character[]>([])
 
 // 发布分享
 const publishing = ref(false)
@@ -122,14 +128,25 @@ async function handleAddEntry() {
   if (!newEntryContent.value.trim()) return
   adding.value = true
   try {
+    // 转换时间格式为 ISO 8601
+    let timestamp: string | undefined
+    if (newEntryTimestamp.value) {
+      timestamp = new Date(newEntryTimestamp.value).toISOString()
+    }
+
     await addStoryEntries(storyId.value, [{
       content: newEntryContent.value,
       speaker: newEntrySpeaker.value,
       type: newEntryType.value,
+      channel: newEntryChannel.value,
+      timestamp: timestamp,
     }])
     showAddModal.value = false
     newEntryContent.value = ''
     newEntrySpeaker.value = ''
+    newEntryType.value = 'dialogue'
+    newEntryChannel.value = 'SAY'
+    newEntryTimestamp.value = ''
     await loadStory()
   } catch (e) {
     console.error('添加失败:', e)
@@ -190,6 +207,16 @@ async function loadGuilds() {
     storyGuilds.value = storyGuildsRes.guilds || []
   } catch (e) {
     console.error('加载公会失败:', e)
+  }
+}
+
+// 加载可选人物卡列表
+async function loadAvailableCharacters() {
+  try {
+    const res = await listCharacters()
+    availableCharacters.value = res.characters || []
+  } catch (e) {
+    console.error('加载人物卡失败:', e)
   }
 }
 
@@ -498,12 +525,34 @@ onMounted(() => {
     <!-- 添加条目对话框 -->
     <RModal v-model="showAddModal" title="添加条目" width="500px">
       <div class="add-form">
+        <div class="form-row">
+          <div class="form-field">
+            <label>类型</label>
+            <select v-model="newEntryType">
+              <option value="dialogue">对话</option>
+              <option value="narration">旁白</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>频道</label>
+            <select v-model="newEntryChannel">
+              <option value="SAY">说</option>
+              <option value="YELL">喊</option>
+              <option value="WHISPER">密语</option>
+              <option value="EMOTE">表情</option>
+              <option value="PARTY">小队</option>
+              <option value="RAID">团队</option>
+            </select>
+          </div>
+        </div>
         <div class="form-field">
-          <label>类型</label>
-          <select v-model="newEntryType">
-            <option value="dialogue">对话</option>
-            <option value="narration">旁白</option>
-          </select>
+          <label>时间</label>
+          <input
+            type="datetime-local"
+            v-model="newEntryTimestamp"
+            class="datetime-input"
+          />
+          <span class="field-hint">留空则使用当前时间</span>
         </div>
         <div class="form-field">
           <label>说话者</label>
@@ -774,6 +823,28 @@ onMounted(() => {
 .form-field select:focus {
   outline: none;
   border-color: var(--color-accent);
+}
+
+.datetime-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--color-primary);
+}
+
+.datetime-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--color-secondary);
+  margin-top: 4px;
 }
 
 .edit-actions {
