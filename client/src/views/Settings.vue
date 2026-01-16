@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { uploadAvatar } from '@/api/user'
+import { useUpdater } from '@/composables/useUpdater'
 
 interface WowInstallation {
   path: string
@@ -15,6 +16,7 @@ interface WowInstallation {
 const router = useRouter()
 const userStore = useUserStore()
 const toast = useToastStore()
+const { checking, updateAvailable, updateInfo, checkForUpdate, downloadAndInstall, downloading, downloadProgress } = useUpdater()
 
 const mounted = ref(false)
 const wowPath = ref('')
@@ -64,6 +66,20 @@ function resetSetup() {
   router.push('/sync/setup')
 }
 
+async function handleCheckUpdate() {
+  try {
+    const update = await checkForUpdate()
+    if (update) {
+      toast.success(`发现新版本 ${update.version}`)
+    } else {
+      toast.info('当前已是最新版本')
+    }
+  } catch (e) {
+    console.error('检查更新失败:', e)
+    toast.error('检查更新失败')
+  }
+}
+
 function triggerAvatarUpload() {
   avatarInputRef.value?.click()
 }
@@ -73,8 +89,8 @@ async function handleAvatarChange(event: Event) {
   const file = input.files?.[0]
   if (!file) return
 
-  if (file.size > 2 * 1024 * 1024) {
-    toast.warning('头像文件不能超过2MB')
+  if (file.size > 20 * 1024 * 1024) {
+    toast.warning('头像文件不能超过20MB')
     return
   }
 
@@ -133,7 +149,7 @@ async function handleAvatarChange(event: Event) {
             </div>
             <div class="avatar-info">
               <h4>{{ userStore.user?.username || '未登录' }}</h4>
-              <p>点击头像更换，支持 JPG、PNG 格式，最大 2MB</p>
+              <p>点击头像更换，支持 JPG、PNG 格式，最大 20MB</p>
             </div>
             <input
               ref="avatarInputRef"
@@ -256,6 +272,30 @@ async function handleAvatarChange(event: Event) {
             <h3>RPBox</h3>
             <p class="version">v0.1.0</p>
             <p class="desc">魔兽世界 RP 玩家的工具箱</p>
+          </div>
+          <div class="about-actions">
+            <button
+              v-if="!updateAvailable"
+              class="btn btn-about"
+              @click="handleCheckUpdate"
+              :disabled="checking"
+            >
+              <i :class="checking ? 'ri-loader-4-line spin' : 'ri-refresh-line'"></i>
+              {{ checking ? '检查中...' : '检查更新' }}
+            </button>
+            <template v-else>
+              <div class="update-info">
+                <span class="new-version">新版本 {{ updateInfo?.version }}</span>
+              </div>
+              <button
+                class="btn btn-update"
+                @click="downloadAndInstall"
+                :disabled="downloading"
+              >
+                <i :class="downloading ? 'ri-loader-4-line spin' : 'ri-download-line'"></i>
+                {{ downloading ? `下载中 ${Math.round(downloadProgress)}%` : '立即更新' }}
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -661,6 +701,44 @@ async function handleAvatarChange(event: Event) {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+.about-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-about {
+  background: rgba(255, 255, 255, 0.15);
+  color: #FBF5EF;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-about:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.btn-update {
+  background: #D4A373;
+  color: #2C1810;
+}
+
+.btn-update:hover:not(:disabled) {
+  background: #E5B584;
+}
+
+.update-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.new-version {
+  font-size: 13px;
+  color: #D4A373;
+  font-weight: 600;
 }
 
 .about-logo {

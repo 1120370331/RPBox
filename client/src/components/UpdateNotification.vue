@@ -13,8 +13,8 @@ const {
 } = useUpdater()
 
 onMounted(() => {
-  // 启动时检查更新
-  checkForUpdate()
+  // 暂时禁用启动时自动检查，改为手动检查
+  // checkForUpdate()
 })
 </script>
 
