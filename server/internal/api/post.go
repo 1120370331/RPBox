@@ -108,7 +108,8 @@ func (s *Server) listPosts(c *gin.Context) {
 	query = query.Order(sortBy + " " + order).Offset(offset).Limit(pageSize)
 
 	var posts []model.Post
-	if err := query.Find(&posts).Error; err != nil {
+	// 列表查询排除大字段（content）以提高性能
+	if err := query.Select("id, author_id, title, content_type, category, guild_id, story_id, status, is_public, view_count, like_count, comment_count, favorite_count, review_status, created_at, updated_at").Find(&posts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
