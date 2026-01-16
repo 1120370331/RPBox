@@ -11,6 +11,7 @@ export interface Item {
   detail_content: string   // 富文本详情
   import_code: string
   raw_data: string
+  requires_permission: boolean  // 是否需要TRP3权限授权
   downloads: number
   rating: number
   rating_count: number
@@ -43,6 +44,7 @@ export interface CreateItemRequest {
   detail_content?: string
   import_code: string
   raw_data?: string
+  requires_permission?: boolean
   tag_ids?: number[]
   status?: 'draft' | 'published'
 }
@@ -50,7 +52,13 @@ export interface CreateItemRequest {
 export interface UpdateItemRequest {
   name?: string
   description?: string
+  detail_content?: string
   icon?: string
+  preview_image?: string
+  import_code?: string
+  raw_data?: string
+  requires_permission?: boolean
+  tag_ids?: number[]
   status?: 'draft' | 'published'
 }
 

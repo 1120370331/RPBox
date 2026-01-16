@@ -67,6 +67,7 @@ export interface CreatePostRequest {
   story_id?: number
   tag_ids?: number[]
   status?: 'draft' | 'published'
+  cover_image?: string
   event_type?: 'server' | 'guild'
   event_start_time?: string
   event_end_time?: string
@@ -80,6 +81,7 @@ export interface UpdatePostRequest {
   guild_id?: number
   story_id?: number
   status?: 'draft' | 'published'
+  cover_image?: string
   event_type?: 'server' | 'guild'
   event_start_time?: string
   event_end_time?: string

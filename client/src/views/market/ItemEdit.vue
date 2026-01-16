@@ -16,6 +16,8 @@ const form = ref<UpdateItemRequest>({
   name: '',
   description: '',
   icon: '',
+  import_code: '',
+  requires_permission: false,
   status: 'published'
 })
 
@@ -43,6 +45,8 @@ async function loadItem() {
       form.value.name = res.data.item.name
       form.value.description = res.data.item.description
       form.value.icon = res.data.item.icon
+      form.value.import_code = res.data.item.import_code || ''
+      form.value.requires_permission = res.data.item.requires_permission || false
       form.value.status = res.data.item.status
       hasPendingEdit.value = !!res.data.pending_edit
     } else {
@@ -227,13 +231,35 @@ function getTypeText(type: string) {
         </div>
       </div>
 
-      <!-- 导入代码（只读显示） -->
+      <!-- 权限设置 -->
+      <div class="form-group">
+        <label>TRP3 权限设置</label>
+        <div class="permission-toggle">
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="form.requires_permission" />
+            <span class="toggle-slider"></span>
+          </label>
+          <div class="permission-info">
+            <span class="permission-label">{{ form.requires_permission ? '需要权限授权' : '无需权限' }}</span>
+            <p class="permission-hint">
+              {{ form.requires_permission
+                ? '用户需要在游戏内 Shift+右键点击道具来授权后才能正常使用'
+                : '用户可以直接使用此道具，无需额外授权' }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 导入代码（可编辑） -->
       <div class="form-group">
         <label>TRP3 导入代码</label>
-        <div class="import-code-preview">
-          <code>{{ item.import_code?.substring(0, 200) }}{{ item.import_code?.length > 200 ? '...' : '' }}</code>
-        </div>
-        <p class="hint">导入代码不可修改，如需更改请重新上传</p>
+        <textarea
+          v-model="form.import_code"
+          placeholder="粘贴 TRP3 导入代码..."
+          rows="6"
+          class="code-textarea"
+        ></textarea>
+        <p class="hint">更新导入代码用于版本迭代，留空则保持原有代码不变</p>
       </div>
     </div>
   </div>
@@ -415,6 +441,26 @@ function getTypeText(type: string) {
   border-color: #B87333;
 }
 
+.code-textarea {
+  width: 100%;
+  padding: 16px;
+  font-size: 13px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  line-height: 1.5;
+  border: 2px solid #E5D4C1;
+  border-radius: 12px;
+  color: #2C1810;
+  background: #FAFAFA;
+  resize: vertical;
+  transition: all 0.3s;
+}
+
+.code-textarea:focus {
+  outline: none;
+  border-color: #B87333;
+  background: #fff;
+}
+
 .tag-list {
   display: flex;
   flex-wrap: wrap;
@@ -441,6 +487,76 @@ function getTypeText(type: string) {
   background: #B87333;
   border-color: #B87333;
   color: #fff;
+}
+
+.permission-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #E5D4C1;
+  transition: 0.3s;
+  border-radius: 28px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: #E65100;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+.permission-info {
+  flex: 1;
+}
+
+.permission-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2C1810;
+}
+
+.permission-hint {
+  font-size: 13px;
+  color: #8D7B68;
+  margin: 4px 0 0 0;
+  line-height: 1.5;
 }
 
 .import-code-preview {

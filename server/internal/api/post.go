@@ -15,6 +15,7 @@ type CreatePostRequest struct {
 	Title          string  `json:"title" binding:"required"`
 	Content        string  `json:"content" binding:"required"`
 	ContentType    string  `json:"content_type"`
+	CoverImage     string  `json:"cover_image"`
 	Category       string  `json:"category"` // profile|guild|report|novel|item|event|other
 	GuildID        *uint   `json:"guild_id"`
 	StoryID        *uint   `json:"story_id"`
@@ -30,6 +31,7 @@ type UpdatePostRequest struct {
 	Title          string  `json:"title"`
 	Content        string  `json:"content"`
 	ContentType    string  `json:"content_type"`
+	CoverImage     string  `json:"cover_image"`
 	Category       string  `json:"category"`
 	GuildID        *uint   `json:"guild_id"`
 	StoryID        *uint   `json:"story_id"`
@@ -109,7 +111,7 @@ func (s *Server) listPosts(c *gin.Context) {
 
 	var posts []model.Post
 	// 列表查询排除大字段（content）以提高性能
-	if err := query.Select("id, author_id, title, content_type, category, guild_id, story_id, status, is_public, view_count, like_count, comment_count, favorite_count, review_status, created_at, updated_at").Find(&posts).Error; err != nil {
+	if err := query.Select("id, author_id, title, content_type, cover_image, category, guild_id, story_id, status, is_public, is_pinned, is_featured, view_count, like_count, comment_count, favorite_count, review_status, created_at, updated_at").Find(&posts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
@@ -193,6 +195,7 @@ func (s *Server) createPost(c *gin.Context) {
 		Title:       req.Title,
 		Content:     req.Content,
 		ContentType: req.ContentType,
+		CoverImage:  req.CoverImage,
 		Category:    req.Category,
 		GuildID:     req.GuildID,
 		StoryID:     req.StoryID,
@@ -383,6 +386,9 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 	if req.ContentType != "" {
 		post.ContentType = req.ContentType
+	}
+	if req.CoverImage != "" {
+		post.CoverImage = req.CoverImage
 	}
 	if req.Category != "" {
 		post.Category = req.Category

@@ -74,7 +74,7 @@ func (s *Server) listItems(c *gin.Context) {
 	query.Count(&total)
 
 	// 列表查询排除大字段（import_code, raw_data, detail_content）以提高性能
-	if err := query.Select("id, author_id, name, type, icon, preview_image, description, downloads, rating, rating_count, like_count, status, review_status, created_at, updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	if err := query.Select("id, author_id, name, type, icon, preview_image, description, downloads, rating, rating_count, like_count, favorite_count, requires_permission, status, review_status, created_at, updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -94,16 +94,17 @@ func (s *Server) createItem(c *gin.Context) {
 	userID := c.GetUint("user_id")
 
 	var req struct {
-		Name          string   `json:"name" binding:"required"`
-		Type          string   `json:"type" binding:"required"`
-		Icon          string   `json:"icon"`
-		PreviewImage  string   `json:"preview_image"`
-		Description   string   `json:"description"`
-		DetailContent string   `json:"detail_content"`
-		ImportCode    string   `json:"import_code" binding:"required"`
-		RawData       string   `json:"raw_data"`
-		TagIDs        []uint   `json:"tag_ids"`
-		Status        string   `json:"status"`
+		Name               string   `json:"name" binding:"required"`
+		Type               string   `json:"type" binding:"required"`
+		Icon               string   `json:"icon"`
+		PreviewImage       string   `json:"preview_image"`
+		Description        string   `json:"description"`
+		DetailContent      string   `json:"detail_content"`
+		ImportCode         string   `json:"import_code" binding:"required"`
+		RawData            string   `json:"raw_data"`
+		RequiresPermission bool     `json:"requires_permission"`
+		TagIDs             []uint   `json:"tag_ids"`
+		Status             string   `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -129,16 +130,17 @@ func (s *Server) createItem(c *gin.Context) {
 	}
 
 	item := model.Item{
-		AuthorID:      userID,
-		Name:          req.Name,
-		Type:          req.Type,
-		Icon:          req.Icon,
-		PreviewImage:  req.PreviewImage,
-		Description:   req.Description,
-		DetailContent: req.DetailContent,
-		ImportCode:    req.ImportCode,
-		RawData:       req.RawData,
-		Status:        req.Status,
+		AuthorID:           userID,
+		Name:               req.Name,
+		Type:               req.Type,
+		Icon:               req.Icon,
+		PreviewImage:       req.PreviewImage,
+		Description:        req.Description,
+		DetailContent:      req.DetailContent,
+		ImportCode:         req.ImportCode,
+		RawData:            req.RawData,
+		RequiresPermission: req.RequiresPermission,
+		Status:             req.Status,
 	}
 
 	// 设置审核状态：版主/管理员自动通过，普通用户需要审核
@@ -237,11 +239,16 @@ func (s *Server) updateItem(c *gin.Context) {
 	}
 
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Icon        string `json:"icon"`
-		ImportCode  string `json:"import_code"`
-		Status      string `json:"status"`
+		Name               string `json:"name"`
+		Description        string `json:"description"`
+		DetailContent      string `json:"detail_content"`
+		Icon               string `json:"icon"`
+		PreviewImage       string `json:"preview_image"`
+		ImportCode         string `json:"import_code"`
+		RawData            string `json:"raw_data"`
+		RequiresPermission *bool  `json:"requires_permission"`
+		TagIDs             []uint `json:"tag_ids"`
+		Status             string `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -316,11 +323,38 @@ func (s *Server) updateItem(c *gin.Context) {
 	if req.Description != "" {
 		item.Description = req.Description
 	}
+	if req.DetailContent != "" {
+		item.DetailContent = req.DetailContent
+	}
 	if req.Icon != "" {
 		item.Icon = req.Icon
 	}
+	if req.PreviewImage != "" {
+		item.PreviewImage = req.PreviewImage
+	}
 	if req.ImportCode != "" {
 		item.ImportCode = req.ImportCode
+	}
+	if req.RawData != "" {
+		item.RawData = req.RawData
+	}
+	if req.RequiresPermission != nil {
+		item.RequiresPermission = *req.RequiresPermission
+	}
+
+	// 处理标签更新
+	if req.TagIDs != nil {
+		// 删除旧标签
+		database.DB.Where("item_id = ?", item.ID).Delete(&model.ItemTag{})
+		// 添加新标签
+		for _, tagID := range req.TagIDs {
+			itemTag := model.ItemTag{
+				ItemID:  item.ID,
+				TagID:   tagID,
+				AddedBy: userID,
+			}
+			database.DB.Create(&itemTag)
+		}
 	}
 
 	// 处理状态变更
