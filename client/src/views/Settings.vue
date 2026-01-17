@@ -125,6 +125,7 @@ async function handleAvatarChange(event: Event) {
 }
 
 async function checkAddonInstalled() {
+  console.log('[Settings] checkAddonInstalled 被调用')
   if (!wowPath.value) {
     addonVersion.value = null
     return
@@ -138,7 +139,9 @@ async function checkAddonInstalled() {
       wowPath: wowPath.value,
       flavor: flavor,
     })
+    console.log('[Settings] 检查插件结果:', info)
     addonVersion.value = info.installed ? (info.version || '未知') : null
+    console.log('[Settings] 更新后的版本号:', addonVersion.value)
   } catch (e) {
     console.error('检查插件失败:', e)
     addonVersion.value = null
@@ -166,8 +169,9 @@ async function handleCheckAddonUpdate() {
       console.log('[Settings] 发现新版本:', latestVersion)
       const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
       const changelog = latestVersionInfo?.changelog || '暂无更新说明'
+      const flavor = localStorage.getItem('selected_flavor') || '_retail_'
       console.log('[Settings] 显示更新对话框')
-      addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog)
+      addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog, wowPath.value, flavor)
     }
   } catch (e) {
     console.error('检查插件更新失败:', e)
@@ -417,7 +421,7 @@ async function handleCheckAddonUpdate() {
     </div>
 
     <!-- 插件更新对话框 -->
-    <AddonUpdateDialog ref="addonUpdateDialogRef" />
+    <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonInstalled" />
   </div>
 </template>
 
