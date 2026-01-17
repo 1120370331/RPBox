@@ -23,6 +23,7 @@
     "@tiptap/starter-kit": "^3.15.3",
     "@tiptap/vue-3": "^3.15.3",
     "echarts": "^6.0.0",
+    "emoji-picker-element": "^1.28.1",
     "pinia": "^2.1.7",
     "remixicon": "^4.8.0",
     "vue": "^3.4.0",

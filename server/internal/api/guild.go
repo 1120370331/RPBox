@@ -531,19 +531,16 @@ func (s *Server) listGuildStories(c *gin.Context) {
 
 // getStoryGuilds 获取剧情归档的公会列表
 func (s *Server) getStoryGuilds(c *gin.Context) {
-	userID := c.GetUint("userID")
 	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
-	// 检查剧情所有权
+	// 检查剧情是否存在
 	var story model.Story
 	if err := database.DB.First(&story, storyID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
 		return
 	}
-	if story.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权查看"})
-		return
-	}
+
+	// 公会剧情的关联信息公开可见，无需权限检查
 
 	var storyGuilds []model.StoryGuild
 	database.DB.Where("story_id = ?", storyID).Find(&storyGuilds)

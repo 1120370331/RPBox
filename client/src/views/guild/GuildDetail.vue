@@ -192,8 +192,8 @@ function goToEvents() {
 }
 
 function goToStories() {
-  // 跳转到剧情归档，筛选当前公会的剧情
-  router.push({ name: 'archives', query: { guild_id: guildId } })
+  // 跳转到公会剧情列表
+  router.push({ name: 'guild-stories', params: { id: guildId } })
 }
 
 onMounted(loadGuild)

@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
@@ -74,6 +75,31 @@ func (s *Server) login(c *gin.Context) {
 	if !auth.CheckPassword(req.Password, user.PassHash) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
+	}
+
+	// 检查封禁状态
+	if user.IsBanned {
+		// 检查封禁是否已过期
+		if user.BannedUntil != nil && user.BannedUntil.Before(time.Now()) {
+			// 封禁已过期，自动解除
+			user.IsBanned = false
+			user.BannedUntil = nil
+			user.BanReason = ""
+			database.DB.Save(&user)
+		} else {
+			// 仍在封禁中
+			msg := "账号已被封禁"
+			if user.BanReason != "" {
+				msg += "，原因：" + user.BanReason
+			}
+			if user.BannedUntil != nil {
+				msg += "，解封时间：" + user.BannedUntil.Format("2006-01-02 15:04")
+			} else {
+				msg += "（永久）"
+			}
+			c.JSON(http.StatusForbidden, gin.H{"error": msg})
+			return
+		}
 	}
 
 	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)

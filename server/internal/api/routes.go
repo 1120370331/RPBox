@@ -215,6 +215,13 @@ func (s *Server) setupRoutes() {
 				mod.DELETE("/users/:id/ban", s.unbanUser)
 				mod.POST("/users/:id/posts/disable", s.disableUserPosts)
 				mod.DELETE("/users/:id/posts", s.deleteUserPosts)
+
+				// 操作日志
+				mod.GET("/action-logs", s.listActionLogs)
+
+				// 数据统计
+				mod.GET("/metrics/history", s.getMetricsHistory)
+				mod.GET("/metrics/summary", s.getMetricsSummary)
 			}
 
 			// 管理员中心（需要管理员权限）
