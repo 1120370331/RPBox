@@ -305,6 +305,28 @@ ls /home/devbox/RPBox/releases/0.1.6/
 2. 确认 `RELEASE_PATH` = `/home/devbox/RPBox/server/releases`（注意是 `server/releases`）
 3. 如果配置错误，修改后重新推送 tag 触发构建
 
+#### 问题4：更新后客户端无法连接后端，看不到数据
+
+**症状**：通过自动更新安装新版本后，客户端无法登录或看不到社区帖子等数据。
+
+**原因**：GitHub Actions 构建时缺少 `VITE_API_BASE` 环境变量，导致客户端使用默认的 `localhost` 地址。
+
+**检查方法**：
+- 安装新版本后，尝试登录或访问社区功能
+- 如果提示连接失败或看不到数据，说明API地址配置错误
+
+**修复步骤**：
+1. 编辑 `.github/workflows/release-client.yml`
+2. 在 "Build Tauri app" 步骤的 `env` 中添加：
+   ```yaml
+   env:
+     TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+     TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+     VITE_API_BASE: https://your-domain.com/api/v1  # 添加这一行
+   ```
+3. 提交并推送修改
+4. 重新发布新版本
+
 #### 调试方法
 
 **在开发模式下测试更新功能**：
