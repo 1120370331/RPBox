@@ -9,6 +9,7 @@ local CHAT_EVENTS = {
     "CHAT_MSG_SAY",
     "CHAT_MSG_YELL",
     "CHAT_MSG_EMOTE",
+    "CHAT_MSG_TEXT_EMOTE",
     "CHAT_MSG_PARTY",
     "CHAT_MSG_PARTY_LEADER",
     "CHAT_MSG_RAID",
@@ -23,6 +24,7 @@ local CHANNEL_SHORT = {
     CHAT_MSG_SAY = "SAY",
     CHAT_MSG_YELL = "YELL",
     CHAT_MSG_EMOTE = "EMOTE",
+    CHAT_MSG_TEXT_EMOTE = "TEXT_EMOTE",
     CHAT_MSG_PARTY = "PARTY",
     CHAT_MSG_PARTY_LEADER = "PARTY",
     CHAT_MSG_RAID = "RAID",
@@ -31,6 +33,32 @@ local CHANNEL_SHORT = {
     CHAT_MSG_WHISPER_INFORM = "WHISPER_OUT",
     CHAT_MSG_GUILD = "GUILD",
 }
+
+-- 去重缓存（基于秒级时间戳）
+local messageCache = {}
+
+-- 检查消息是否重复
+local function IsDuplicateMessage(sender, msg, timestamp)
+    local secondTimestamp = math.floor(timestamp)
+    local signature = sender .. "|" .. msg .. "|" .. secondTimestamp
+
+    -- 清理超过5秒的旧缓存
+    local currentTime = time()
+    for sig, cachedTime in pairs(messageCache) do
+        if (currentTime - cachedTime) > 5 then
+            messageCache[sig] = nil
+        end
+    end
+
+    -- 检查是否存在
+    if messageCache[signature] then
+        return true
+    end
+
+    -- 添加到缓存
+    messageCache[signature] = secondTimestamp
+    return false
+end
 
 -- 获取 TRP3 角色信息并缓存
 local function GetTRP3InfoAndCache(unitID)
@@ -42,12 +70,12 @@ local function GetTRP3InfoAndCache(unitID)
 
     local profileID = character.profileID
     local profile = TRP3_API.register.getProfile(profileID)
-    if not profile or not profile.player then return nil, nil end
+    if not profile or not (profile.characteristics or profile.about or profile.misc) then return nil, nil end
 
     -- 缓存完整角色卡数据
-    ns.CacheProfile(profileID, profile.player)
+    ns.CacheProfile(profileID, profile)
 
-    return profileID, profile.player
+    return profileID, profile
 end
 
 -- 获取自己的 TRP3 信息并缓存
@@ -231,6 +259,22 @@ local function OnChatMessage(self, event, msg, sender, ...)
         ref = profileID,
     }
 
+    -- 添加收听者信息（当前登录的角色）
+    local listenerGameID = ns.GetPlayerID()
+    local listenerProfileID = nil
+    if TRP3_API and TRP3_API.profile then
+        listenerProfileID = TRP3_API.profile.getPlayerCurrentProfileID()
+    end
+
+    if listenerGameID then
+        record.listeners = {
+            {
+                gameID = listenerGameID,
+                profileID = listenerProfileID
+            }
+        }
+    end
+
     -- 保存职业信息
     if senderClass then
         record.cls = senderClass
@@ -243,6 +287,11 @@ local function OnChatMessage(self, event, msg, sender, ...)
             if cleanName ~= "" then record.npc = cleanName end
         end
         if npcType then record.nt = npcType end
+    end
+
+    -- 去重检查：基于秒级时间戳
+    if IsDuplicateMessage(senderID, msg, record.t) then
+        return false
     end
 
     SaveChatLog(record)

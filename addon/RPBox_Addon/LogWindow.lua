@@ -44,7 +44,7 @@ local function GetDisplayName(record)
         if cached then
             local name = cached.FN or ""
             if cached.LN and cached.LN ~= "" then
-                name = name .. " " .. cached.LN
+                name = name .. "·" .. cached.LN
             end
             if name ~= "" then return name end
         end
@@ -55,7 +55,7 @@ local function GetDisplayName(record)
         local trp3 = record.sender.trp3
         local name = trp3.FN or ""
         if trp3.LN then
-            name = name .. " " .. trp3.LN
+            name = name .. "·" .. trp3.LN
         end
         if name ~= "" then return name end
     end
@@ -101,11 +101,11 @@ local function GetFilteredRecords()
         end
     end
 
-    -- 按时间排序（兼容新旧字段）
+    -- 按时间排序（从旧到新，最新的在下方）
     table.sort(records, function(a, b)
         local ta = a.t or a.timestamp or 0
         local tb = b.t or b.timestamp or 0
-        return ta > tb
+        return ta < tb
     end)
     return records
 end
@@ -202,6 +202,13 @@ local function RefreshContent()
 
     content:SetHeight(math.max(yOffset, 1))
     LogFrame.statusText:SetText(format("共 %d 条记录", #records))
+
+    -- 滚动到底部（显示最新记录）
+    C_Timer.After(0.1, function()
+        if LogFrame and LogFrame.scrollFrame then
+            LogFrame.scrollFrame:SetVerticalScroll(LogFrame.scrollFrame:GetVerticalScrollRange())
+        end
+    end)
 end
 
 -- 打开回放窗口
