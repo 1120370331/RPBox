@@ -41,7 +41,12 @@ func (s *Server) listStories(c *gin.Context) {
 	userID := c.GetUint("userID")
 
 	// 构建查询
-	query := database.DB.Where("user_id = ?", userID)
+	// 如果指定了guild_id，则查询公会剧情（公开访问）
+	// 否则只查询当前用户的剧情（私有访问）
+	query := database.DB.Model(&model.Story{})
+	if c.Query("guild_id") == "" {
+		query = query.Where("user_id = ?", userID)
+	}
 
 	// 标签筛选
 	if tagIDs := c.Query("tag_ids"); tagIDs != "" {
@@ -158,8 +163,19 @@ func (s *Server) getStory(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
 	var story model.Story
-	if err := database.DB.Where("id = ? AND user_id = ?", id, userID).
-		First(&story).Error; err != nil {
+	if err := database.DB.Where("id = ?", id).First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	// 权限检查：公会剧情公开访问，个人剧情只有作者可见
+	var guildCount int64
+	database.DB.Model(&model.StoryGuild{}).Where("story_id = ?", id).Count(&guildCount)
+
+	isGuildStory := guildCount > 0
+	isOwner := story.UserID == userID
+
+	if !isGuildStory && !isOwner {
 		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
 		return
 	}

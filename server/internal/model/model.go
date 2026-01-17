@@ -438,3 +438,35 @@ type CommentLike struct {
 	UserID    uint      `gorm:"uniqueIndex:idx_comment_user;not null" json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+// ========== 管理系统 ==========
+
+// AdminActionLog 管理操作日志
+type AdminActionLog struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	OperatorID   uint      `gorm:"index;not null" json:"operator_id"`   // 操作者ID
+	OperatorName string    `gorm:"size:50" json:"operator_name"`        // 操作者用户名（快照）
+	OperatorRole string    `gorm:"size:20" json:"operator_role"`        // 操作者角色（快照）
+	ActionType   string    `gorm:"size:50;index;not null" json:"action_type"` // 操作类型
+	TargetType   string    `gorm:"size:20;index" json:"target_type"`    // 目标类型: post|item|guild|user
+	TargetID     uint      `gorm:"index" json:"target_id"`              // 目标ID
+	TargetName   string    `gorm:"size:256" json:"target_name"`         // 目标名称（快照）
+	Details      string    `gorm:"type:text" json:"details"`            // 详情（JSON）
+	IPAddress    string    `gorm:"size:45" json:"ip_address"`           // IP地址
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// DailyMetrics 每日统计快照（用于历史趋势）
+type DailyMetrics struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	Date        time.Time `gorm:"uniqueIndex;not null" json:"date"` // 日期（无时间）
+	TotalUsers  int64     `json:"total_users"`                      // 累计用户数
+	TotalPosts  int64     `json:"total_posts"`                      // 累计帖子数
+	TotalItems  int64     `json:"total_items"`                      // 累计道具数
+	TotalGuilds int64     `json:"total_guilds"`                     // 累计公会数
+	NewUsers    int64     `json:"new_users"`                        // 当日新增用户
+	NewPosts    int64     `json:"new_posts"`                        // 当日新增帖子
+	NewItems    int64     `json:"new_items"`                        // 当日新增道具
+	NewGuilds   int64     `json:"new_guilds"`                       // 当日新增公会
+	CreatedAt   time.Time `json:"created_at"`
+}

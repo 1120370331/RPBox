@@ -2,7 +2,8 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
-import { listComments, createComment, type CommentWithAuthor } from '@/api/post'
+import { listComments, createComment, deleteComment, type CommentWithAuthor } from '@/api/post'
+import EmojiPicker from '@/components/EmojiPicker.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -18,6 +19,7 @@ const liked = ref(false)
 const favorited = ref(false)
 const commentContent = ref('')
 const currentUserId = ref<number>(0)
+const currentUserRole = ref<string>('')
 
 // 评论分页
 const commentPage = ref(1)
@@ -29,15 +31,20 @@ const replyingTo = ref<CommentWithAuthor | null>(null)
 const replyContent = ref('')
 const submittingReply = ref(false)
 
+// Emoji选择器
+const showEmojiPicker = ref(false)
+const showReplyEmojiPicker = ref(false)
+
 const errorMessage = ref('')
 const commentError = ref('')
 
-// 获取当前用户ID
+// 获取当前用户ID和角色
 const userStr = localStorage.getItem('user')
 if (userStr) {
   try {
     const user = JSON.parse(userStr)
     currentUserId.value = user.id
+    currentUserRole.value = user.role || 'user'
   } catch (e) {
     console.error('解析用户信息失败:', e)
   }
@@ -46,6 +53,14 @@ if (userStr) {
 const isAuthor = computed(() => {
   return post.value && currentUserId.value === post.value.author_id
 })
+
+// 检查是否可以删除评论
+function canDeleteComment(comment: CommentWithAuthor): boolean {
+  const isCommentAuthor = comment.author_id === currentUserId.value
+  const isPostAuthor = post.value && post.value.author_id === currentUserId.value
+  const isModerator = currentUserRole.value === 'moderator' || currentUserRole.value === 'admin'
+  return isCommentAuthor || isPostAuthor || isModerator
+}
 
 // 将评论组织成树形结构
 interface CommentWithReplies extends CommentWithAuthor {
@@ -223,6 +238,33 @@ async function submitReply() {
   }
 }
 
+// Emoji选择处理
+function handleEmojiSelect(emoji: string) {
+  commentContent.value += emoji
+  showEmojiPicker.value = false
+}
+
+function handleReplyEmojiSelect(emoji: string) {
+  replyContent.value += emoji
+  showReplyEmojiPicker.value = false
+}
+
+// 删除评论
+async function handleDeleteComment(comment: CommentWithAuthor) {
+  if (!confirm('确定要删除这条评论吗？')) return
+
+  try {
+    await deleteComment(post.value.id, comment.id)
+    await loadComments()
+    if (post.value.comment_count > 0) {
+      post.value.comment_count--
+    }
+  } catch (error: any) {
+    console.error('删除评论失败:', error)
+    alert('删除失败：' + (error.response?.data?.error || error.message))
+  }
+}
+
 // 分页
 const totalPages = computed(() => Math.ceil(commentTotal.value / commentPageSize))
 
@@ -372,9 +414,14 @@ async function handleDelete() {
                   <span class="comment-time">{{ formatCommentTime(comment.created_at) }}</span>
                 </div>
                 <p class="comment-text">{{ comment.content }}</p>
-                <button class="reply-btn" @click="startReply(comment)">
-                  <i class="ri-reply-line"></i> 回复
-                </button>
+                <div class="comment-actions">
+                  <button class="reply-btn" @click="startReply(comment)">
+                    <i class="ri-reply-line"></i> 回复
+                  </button>
+                  <button v-if="canDeleteComment(comment)" class="delete-btn" @click="handleDeleteComment(comment)">
+                    <i class="ri-delete-bin-line"></i> 删除
+                  </button>
+                </div>
 
                 <!-- 回复输入框 -->
                 <div v-if="replyingTo?.id === comment.id" class="reply-input-box">
@@ -384,8 +431,13 @@ async function handleDelete() {
                     :disabled="submittingReply"
                   ></textarea>
                   <div class="reply-actions">
-                    <button class="cancel-btn" @click="cancelReply">取消</button>
-                    <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                    <button class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
+                      <i class="ri-emotion-line"></i>
+                    </button>
+                    <div class="reply-actions-right">
+                      <button class="cancel-btn" @click="cancelReply">取消</button>
+                      <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                    </div>
                   </div>
                 </div>
 
@@ -404,9 +456,14 @@ async function handleDelete() {
                         <span class="reply-time">{{ formatCommentTime(reply.created_at) }}</span>
                       </div>
                       <p class="reply-text">{{ reply.content }}</p>
-                      <button class="reply-btn" @click="startReply(reply)">
-                        <i class="ri-reply-line"></i> 回复
-                      </button>
+                      <div class="comment-actions">
+                        <button class="reply-btn" @click="startReply(reply)">
+                          <i class="ri-reply-line"></i> 回复
+                        </button>
+                        <button v-if="canDeleteComment(reply)" class="delete-btn" @click="handleDeleteComment(reply)">
+                          <i class="ri-delete-bin-line"></i> 删除
+                        </button>
+                      </div>
 
                       <!-- 回复的回复输入框 -->
                       <div v-if="replyingTo?.id === reply.id" class="reply-input-box">
@@ -416,8 +473,13 @@ async function handleDelete() {
                           :disabled="submittingReply"
                         ></textarea>
                         <div class="reply-actions">
-                          <button class="cancel-btn" @click="cancelReply">取消</button>
-                          <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                          <button class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
+                            <i class="ri-emotion-line"></i>
+                          </button>
+                          <div class="reply-actions-right">
+                            <button class="cancel-btn" @click="cancelReply">取消</button>
+                            <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -454,7 +516,9 @@ async function handleDelete() {
               :disabled="submittingComment"
             ></textarea>
             <div class="input-footer">
-              <div></div>
+              <button class="emoji-btn" @click="showEmojiPicker = true" type="button">
+                <i class="ri-emotion-line"></i>
+              </button>
               <button class="post-btn" :disabled="submittingComment" @click="handleComment">
                 发表评论
               </button>
@@ -463,6 +527,10 @@ async function handleDelete() {
         </section>
       </main>
     </div>
+
+    <!-- Emoji选择器 -->
+    <EmojiPicker :show="showEmojiPicker" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
+    <EmojiPicker :show="showReplyEmojiPicker" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
   </div>
 </template>
 
@@ -912,6 +980,31 @@ async function handleDelete() {
   cursor: not-allowed;
 }
 
+/* Emoji按钮 */
+.emoji-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  color: #8D7B68;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.emoji-btn:hover {
+  background: #F5EFE7;
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.emoji-btn i {
+  font-size: 18px;
+}
+
 /* 评论列表 */
 .comments-list {
   display: flex;
@@ -1009,6 +1102,31 @@ async function handleDelete() {
   color: #804030;
 }
 
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: #C44536;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  color: #DC2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+
 .reply-input-box {
   margin-top: 12px;
   padding: 12px;
@@ -1033,9 +1151,39 @@ async function handleDelete() {
 
 .reply-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 8px;
   margin-top: 8px;
+}
+
+.reply-actions-right {
+  display: flex;
+  gap: 8px;
+}
+
+.emoji-btn-small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  color: #8D7B68;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.emoji-btn-small:hover {
+  background: #F5EFE7;
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.emoji-btn-small i {
+  font-size: 14px;
 }
 
 .cancel-btn {

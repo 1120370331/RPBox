@@ -15,10 +15,10 @@ func NewServer(cfg *config.Config) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	router := gin.Default()
 	router.Use(middleware.CORS())
-	router.Use(middleware.BodyLimit(10 << 20)) // 限制请求体 10MB
+	router.Use(middleware.BodyLimit(50 << 20)) // 限制请求体 50MB（支持大量人物卡和道具数据）
 
-	// 设置 multipart 内存限制为 10MB
-	router.MaxMultipartMemory = 10 << 20 // 10 MB
+	// 设置 multipart 内存限制为 50MB
+	router.MaxMultipartMemory = 50 << 20 // 50 MB
 
 	s := &Server{
 		cfg:    cfg,
