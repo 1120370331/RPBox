@@ -7,6 +7,8 @@ import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { uploadAvatar } from '@/api/user'
 import { useUpdater } from '@/composables/useUpdater'
+import { getAddonManifest } from '@/api/addon'
+import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 
 interface WowInstallation {
   path: string
@@ -28,6 +30,9 @@ const syncOnStartup = ref(true)
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const appVersion = ref('0.0.0')
+const addonVersion = ref<string | null>(null)
+const addonChecking = ref(false)
+const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
 
 onMounted(async () => {
   wowPath.value = localStorage.getItem('wow_path') || ''
@@ -41,6 +46,9 @@ onMounted(async () => {
   } catch (e) {
     console.error('获取版本失败:', e)
   }
+
+  // 检查插件版本
+  await checkAddonInstalled()
 })
 
 async function detectPaths() {
@@ -113,6 +121,53 @@ async function handleAvatarChange(event: Event) {
   } finally {
     avatarUploading.value = false
     input.value = ''
+  }
+}
+
+async function checkAddonInstalled() {
+  if (!wowPath.value) {
+    addonVersion.value = null
+    return
+  }
+
+  try {
+    // 从 localStorage 读取 flavor，默认使用 _retail_
+    const flavor = localStorage.getItem('selected_flavor') || '_retail_'
+
+    const info = await invoke<{ installed: boolean; version?: string }>('check_addon_installed', {
+      wowPath: wowPath.value,
+      flavor: flavor,
+    })
+    addonVersion.value = info.installed ? (info.version || '未知') : null
+  } catch (e) {
+    console.error('检查插件失败:', e)
+    addonVersion.value = null
+  }
+}
+
+async function handleCheckAddonUpdate() {
+  if (!addonVersion.value) {
+    toast.warning('请先安装 RPBox Addon 插件')
+    return
+  }
+
+  addonChecking.value = true
+  try {
+    const manifest = await getAddonManifest()
+    const latestVersion = manifest.latest
+
+    if (addonVersion.value === latestVersion) {
+      toast.success('当前已是最新版本')
+    } else {
+      const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
+      const changelog = latestVersionInfo?.changelog || '暂无更新说明'
+      addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog)
+    }
+  } catch (e) {
+    console.error('检查插件更新失败:', e)
+    toast.error('检查更新失败')
+  } finally {
+    addonChecking.value = false
   }
 }
 </script>
@@ -271,6 +326,51 @@ async function handleAvatarChange(event: Event) {
         </div>
       </div>
 
+      <!-- 插件管理 -->
+      <div class="setting-card anim-item" style="--delay: 4.5">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-puzzle-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>插件管理</h3>
+            <p>管理 RPBox Addon 插件版本</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div v-if="addonVersion" class="addon-info">
+            <div class="addon-status">
+              <i class="ri-checkbox-circle-fill status-icon installed"></i>
+              <div class="status-text">
+                <span class="status-label">已安装</span>
+                <span class="status-version">v{{ addonVersion }}</span>
+              </div>
+            </div>
+            <button
+              class="btn btn-primary"
+              @click="handleCheckAddonUpdate"
+              :disabled="addonChecking"
+            >
+              <i :class="addonChecking ? 'ri-loader-4-line spin' : 'ri-refresh-line'"></i>
+              {{ addonChecking ? '检查中...' : '检测更新' }}
+            </button>
+          </div>
+          <div v-else class="addon-info">
+            <div class="addon-status">
+              <i class="ri-error-warning-fill status-icon not-installed"></i>
+              <div class="status-text">
+                <span class="status-label">未安装</span>
+                <span class="status-desc">请前往剧情归档页面安装插件</span>
+              </div>
+            </div>
+            <button class="btn btn-outline" @click="router.push('/archives')">
+              <i class="ri-download-line"></i>
+              前往安装
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 关于 -->
       <div class="setting-card about-card anim-item" style="--delay: 5">
         <div class="about-content">
@@ -309,6 +409,9 @@ async function handleAvatarChange(event: Event) {
         </div>
       </div>
     </div>
+
+    <!-- 插件更新对话框 -->
+    <AddonUpdateDialog ref="addonUpdateDialogRef" />
   </div>
 </template>
 
@@ -810,5 +913,57 @@ async function handleAvatarChange(event: Event) {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* 插件管理样式 */
+.addon-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: #FDFBF9;
+  border-radius: 10px;
+}
+
+.addon-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.status-icon.installed {
+  color: #4CAF50;
+}
+
+.status-icon.not-installed {
+  color: #FF9800;
+}
+
+.status-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.status-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2C1810;
+}
+
+.status-version {
+  font-size: 13px;
+  color: #804030;
+  font-weight: 500;
+}
+
+.status-desc {
+  font-size: 12px;
+  color: #8C7B70;
 }
 </style>
