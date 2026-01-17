@@ -383,7 +383,7 @@ local function RefreshLogContent()
     MainFrame.logPlainText = {}
 
     for i, record in ipairs(records) do
-        if i > 200 then break end
+        if i > (RPBox_Config.maxRecords or 10000) then break end
 
         local row = content.rows[i]
         if not row then
