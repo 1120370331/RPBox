@@ -84,13 +84,7 @@ pub fn install_addon(wow_path: &str, _flavor: &str, zip_data: &[u8]) -> Result<S
 
     let addon_path = addons_dir.join("RPBox_Addon");
 
-    // 如果已存在，先删除
-    if addon_path.exists() {
-        fs::remove_dir_all(&addon_path)
-            .map_err(|e| format!("删除旧插件失败: {}", e))?;
-    }
-
-    // 解压 zip
+    // 直接解压覆盖（不删除旧文件，避免文件锁定问题）
     extract_zip(zip_data, &addons_dir)?;
 
     Ok(addon_path.to_string_lossy().to_string())

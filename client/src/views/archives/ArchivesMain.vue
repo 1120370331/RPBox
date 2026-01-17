@@ -80,14 +80,17 @@ const selectedFlavor = ref('_retail_')
 const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
 
 async function checkAddonStatus() {
+  console.log('[ArchivesMain] checkAddonStatus 被调用')
   if (!wowPath.value) return
   try {
     const info = await invoke<{ installed: boolean; version?: string }>('check_addon_installed', {
       wowPath: wowPath.value,
       flavor: selectedFlavor.value,
     })
+    console.log('[ArchivesMain] 检查插件结果:', info)
     addonInstalled.value = info.installed
     addonVersion.value = info.installed ? (info.version || '未知') : null
+    console.log('[ArchivesMain] 更新后的版本号:', addonVersion.value)
   } catch (e) {
     console.error('检测插件失败:', e)
   }
@@ -111,7 +114,7 @@ async function checkAddonUpdate() {
       const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
       const changelog = latestVersionInfo?.changelog || '暂无更新说明'
 
-      addonUpdateDialogRef.value?.show(currentVersion, latestVersion, changelog)
+      addonUpdateDialogRef.value?.show(currentVersion, latestVersion, changelog, wowPath.value, selectedFlavor.value)
 
       // 记录本次检查的版本
       localStorage.setItem('addon_last_checked_version', latestVersion)
@@ -138,7 +141,7 @@ async function handleCheckAddonUpdate() {
     } else {
       const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
       const changelog = latestVersionInfo?.changelog || '暂无更新说明'
-      addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog)
+      addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog, wowPath.value, selectedFlavor.value)
     }
   } catch (e) {
     console.error('检查插件更新失败:', e)
@@ -468,7 +471,7 @@ function handleViewStory(id: number) {
     />
 
     <!-- 插件更新提示 -->
-    <AddonUpdateDialog ref="addonUpdateDialogRef" />
+    <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonStatus" />
   </div>
 </template>
 
