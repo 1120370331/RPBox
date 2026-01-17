@@ -41,6 +41,9 @@
   },
   "plugins": {
     "dialog": null,
+    "shell": {
+      "open": true
+    },
     "updater": {
       "endpoints": [
         "https://ksxvodevhonx.sealosbja.site/api/v1/updater/{{target}}/{{arch}}/{{current_version}}"
