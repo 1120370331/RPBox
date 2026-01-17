@@ -30,6 +30,7 @@ type Platform struct {
 // checkUpdate 检查客户端更新
 func (s *Server) checkUpdate(c *gin.Context) {
 	target := c.Param("target")
+	arch := c.Param("arch")
 	currentVersion := c.Param("current_version")
 
 	// 读取最新版本信息
@@ -48,8 +49,7 @@ func (s *Server) checkUpdate(c *gin.Context) {
 	}
 
 	// 构建平台标识
-	// Tauri 的 {{target}} 已经包含了完整的平台信息（如 "windows-x86_64"）
-	platformKey := target
+	platformKey := target + "-" + arch
 
 	// 获取更新包信息
 	baseURL := config.Get().Updater.BaseURL
