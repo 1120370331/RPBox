@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { getAddonDownloadUrl } from '@/api/addon'
+import { open } from '@tauri-apps/plugin-shell'
 
 const visible = ref(false)
 const currentVersion = ref('')
@@ -20,16 +21,14 @@ function close() {
   visible.value = false
 }
 
-function handleDownload() {
-  // 创建隐藏的 a 标签触发下载
-  const link = document.createElement('a')
-  link.href = downloadUrl.value
-  link.download = `RPBox_Addon_${latestVersion.value}.zip`
-  link.style.display = 'none'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  close()
+async function handleDownload() {
+  try {
+    // 使用 Tauri 的 shell API 在浏览器中打开下载链接
+    await open(downloadUrl.value)
+    close()
+  } catch (e) {
+    console.error('打开下载链接失败:', e)
+  }
 }
 
 defineExpose({
