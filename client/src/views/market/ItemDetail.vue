@@ -189,8 +189,23 @@ async function handleFavorite() {
 }
 
 // 复制导入代码
-function copyImportCode() {
-  if (item.value?.import_code) {
+async function copyImportCode() {
+  if (!item.value?.import_code) return
+
+  try {
+    // 调用下载API记录下载（每用户每道具最多贡献1次）
+    const id = Number(route.params.id)
+    await downloadItem(id)
+
+    // 复制到剪贴板
+    navigator.clipboard.writeText(item.value.import_code)
+    toast.success('导入代码已复制到剪贴板')
+
+    // 更新本地下载数（如果是首次下载，后端会+1）
+    loadItemDetail()
+  } catch (error) {
+    console.error('复制失败:', error)
+    // 即使API调用失败，仍然复制到剪贴板
     navigator.clipboard.writeText(item.value.import_code)
     toast.success('导入代码已复制到剪贴板')
   }
