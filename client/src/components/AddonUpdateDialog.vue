@@ -2,7 +2,9 @@
 import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
+import { useToastStore } from '@/stores/toast'
 
+const toast = useToastStore()
 const visible = ref(false)
 const currentVersion = ref('')
 const latestVersion = ref('')
@@ -61,6 +63,9 @@ async function handleDownload() {
       zipData,
     })
     console.log('[AddonUpdateDialog] 安装成功')
+
+    // 显示成功提示
+    toast.success('插件安装成功')
 
     // 安装成功，触发事件通知父组件
     console.log('[AddonUpdateDialog] 触发 installed 事件')
