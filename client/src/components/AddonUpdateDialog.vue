@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
-import { open } from '@tauri-apps/plugin-shell'
 
 const visible = ref(false)
 const currentVersion = ref('')
 const latestVersion = ref('')
-const downloadUrl = ref('')
 const changelog = ref('')
+const wowPath = ref('')
+const flavor = ref('_retail_')
+const loading = ref(false)
+const error = ref('')
 
-function show(current: string, latest: string, changelogText: string = '') {
+function show(current: string, latest: string, changelogText: string = '', path: string = '', flavorValue: string = '_retail_') {
   currentVersion.value = current
   latestVersion.value = latest
-  downloadUrl.value = getAddonDownloadUrl(latest)
   changelog.value = changelogText
+  wowPath.value = path || localStorage.getItem('wow_path') || ''
+  flavor.value = flavorValue
+  error.value = ''
   visible.value = true
 }
 
@@ -22,12 +27,33 @@ function close() {
 }
 
 async function handleDownload() {
+  if (!wowPath.value) {
+    error.value = '未找到魔兽世界路径，请先设置'
+    return
+  }
+
+  loading.value = true
+  error.value = ''
   try {
-    // 使用 Tauri 的 shell API 在浏览器中打开下载链接
-    await open(downloadUrl.value)
+    const url = getAddonDownloadUrl(latestVersion.value)
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('下载失败')
+
+    const arrayBuffer = await response.arrayBuffer()
+    const zipData = Array.from(new Uint8Array(arrayBuffer))
+
+    await invoke('install_addon', {
+      wowPath: wowPath.value,
+      flavor: flavor.value,
+      zipData,
+    })
+
+    // 安装成功，关闭对话框
     close()
-  } catch (e) {
-    console.error('打开下载链接失败:', e)
+  } catch (e: any) {
+    error.value = e.message || '安装失败'
+  } finally {
+    loading.value = false
   }
 }
 
@@ -71,17 +97,24 @@ defineExpose({
 
           <div class="update-message">
             <i class="ri-information-line"></i>
-            <p>检测到 RPBox Addon 插件有新版本可用，建议更新以获得最佳体验。</p>
+            <p>检测到 RPBox Addon 插件有新版本可用，点击"立即安装"将自动下载并安装到插件目录。</p>
+          </div>
+
+          <!-- 错误提示 -->
+          <div v-if="error" class="error-message">
+            <i class="ri-error-warning-line"></i>
+            <p>{{ error }}</p>
           </div>
         </div>
 
         <div class="dialog-footer">
-          <button class="btn-secondary" @click="close">
+          <button class="btn-secondary" @click="close" :disabled="loading">
             稍后更新
           </button>
-          <button class="btn-primary" @click="handleDownload">
-            <i class="ri-download-line"></i>
-            立即下载
+          <button class="btn-primary" @click="handleDownload" :disabled="loading">
+            <i v-if="!loading" class="ri-download-line"></i>
+            <i v-else class="ri-loader-4-line spinning"></i>
+            {{ loading ? '安装中...' : '立即安装' }}
           </button>
         </div>
       </div>
@@ -272,6 +305,43 @@ defineExpose({
   color: #1565C0;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.error-message {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #FFEBEE;
+  border-radius: 8px;
+  border-left: 4px solid #F44336;
+  margin-top: 16px;
+}
+
+.error-message i {
+  font-size: 20px;
+  color: #F44336;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.error-message p {
+  margin: 0;
+  color: #C62828;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .dialog-footer {
