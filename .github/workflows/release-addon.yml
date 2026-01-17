@@ -43,8 +43,8 @@ jobs:
           REMOTE_PATH="${{ secrets.ADDON_PATH }}"
 
           # 上传版本目录
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH/$VERSION"
-          scp releases/addon/$VERSION/*.zip ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/$VERSION/
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH/$VERSION"
+          scp -P 2233 releases/addon/$VERSION/*.zip ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/$VERSION/
 
           # 更新 latest
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cp $REMOTE_PATH/$VERSION/*.zip $REMOTE_PATH/latest.zip"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cp $REMOTE_PATH/$VERSION/*.zip $REMOTE_PATH/latest.zip"
