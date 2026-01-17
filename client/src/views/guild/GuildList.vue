@@ -64,10 +64,9 @@ async function loadMyApplications() {
 }
 
 // 检查公会的申请状态
-function getApplicationStatus(guildId: number): 'none' | 'pending' | 'approved' | 'rejected' {
-  const app = myApplications.value.find(a => a.guild_id === guildId)
-  if (!app) return 'none'
-  return app.status as 'pending' | 'approved' | 'rejected'
+function getApplicationStatus(guildId: number): 'none' | 'pending' {
+  const app = myApplications.value.find(a => a.guild_id === guildId && a.status === 'pending')
+  return app ? 'pending' : 'none'
 }
 
 // 检查是否已加入公会
