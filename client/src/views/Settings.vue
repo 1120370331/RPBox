@@ -146,6 +146,8 @@ async function checkAddonInstalled() {
 }
 
 async function handleCheckAddonUpdate() {
+  console.log('[Settings] 开始检查插件更新, 当前版本:', addonVersion.value)
+
   if (!addonVersion.value) {
     toast.warning('请先安装 RPBox Addon 插件')
     return
@@ -153,14 +155,18 @@ async function handleCheckAddonUpdate() {
 
   addonChecking.value = true
   try {
+    console.log('[Settings] 调用 getAddonManifest API...')
     const manifest = await getAddonManifest()
+    console.log('[Settings] 获取到 manifest:', manifest)
     const latestVersion = manifest.latest
 
     if (addonVersion.value === latestVersion) {
       toast.success('当前已是最新版本')
     } else {
+      console.log('[Settings] 发现新版本:', latestVersion)
       const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
       const changelog = latestVersionInfo?.changelog || '暂无更新说明'
+      console.log('[Settings] 显示更新对话框')
       addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog)
     }
   } catch (e) {
