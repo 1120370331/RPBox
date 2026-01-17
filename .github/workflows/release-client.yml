@@ -83,8 +83,13 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           REMOTE_DIR="${{ secrets.RELEASE_PATH }}/$VERSION"
 
+          # 收集所有文件到临时目录
+          mkdir -p upload_files
+          find artifacts -type f -exec cp {} upload_files/ \;
+
+          # 创建远程目录并上传
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
-          scp -P 2233 artifacts/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          scp -P 2233 upload_files/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
 
       - name: Update server config
         run: |
