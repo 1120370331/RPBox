@@ -171,6 +171,158 @@ function ns.GetCachedProfile(profileID)
     return profileID and RPBox_ProfileCache[profileID]
 end
 
+-- 更新指定玩家的角色卡缓存（响应TRP3事件）
+function ns.UpdateProfileCache(unitID)
+    -- print("|cFF00FF00[RPBox]|r UpdateProfileCache 开始: unitID=" .. tostring(unitID))
+
+    if not unitID then
+        -- print("|cFFFF0000[RPBox]|r UpdateProfileCache 失败: unitID为空")
+        return
+    end
+
+    if not TRP3_API or not TRP3_API.register then
+        -- print("|cFFFF0000[RPBox]|r UpdateProfileCache 失败: TRP3 API不可用")
+        return
+    end
+
+    -- 检查是否已知该玩家
+    if not TRP3_API.register.isUnitIDKnown(unitID) then
+        -- print("|cFFFFFF00[RPBox]|r UpdateProfileCache 跳过: TRP3尚未知晓玩家 " .. unitID)
+        return
+    end
+
+    local character = TRP3_API.register.getUnitIDCharacter(unitID)
+    if not character or not character.profileID then
+        -- print("|cFFFF0000[RPBox]|r UpdateProfileCache 失败: 无法获取角色信息")
+        return
+    end
+
+    local profileID = character.profileID
+    -- print("|cFF00FF00[RPBox]|r 获取到profileID: " .. tostring(profileID))
+
+    local profile = TRP3_API.register.getProfile(profileID)
+    if not profile or not (profile.characteristics or profile.about or profile.misc) then
+        -- print("|cFFFF0000[RPBox]|r UpdateProfileCache 失败: 无法获取profile数据")
+        return
+    end
+
+    -- 更新缓存
+    ns.CacheProfile(profileID, profile)
+
+    -- 提取角色名用于显示
+    local charName = "未知"
+    if profile.characteristics then
+        local fn = profile.characteristics.FN or ""
+        local ln = profile.characteristics.LN or ""
+        if fn ~= "" then
+            charName = ln ~= "" and (fn .. " " .. ln) or fn
+        end
+    end
+
+    -- print("|cFF00FF00[RPBox]|r ✓ 成功缓存人物卡: " .. charName .. " (profileID: " .. profileID .. ")")
+end
+
+-- 批量导入 TRP3 所有人物卡
+function ns.ImportAllTRP3Profiles()
+    print("|cFF00FF00[RPBox]|r 开始导入 TRP3 人物卡数据...")
+
+    if not TRP3_API or not TRP3_API.register or not TRP3_API.register.getProfileList then
+        print("|cFFFF0000[RPBox]|r 错误: TRP3 API 不可用")
+        return
+    end
+
+    local profiles = TRP3_API.register.getProfileList()
+    if not profiles then
+        print("|cFFFF0000[RPBox]|r 错误: 无法获取 TRP3 人物卡列表")
+        return
+    end
+
+    local count = 0
+    local skipped = 0
+
+    for profileID, profileData in pairs(profiles) do
+        -- TRP3_Register.profiles 中的 profile 结构是直接包含 characteristics, about, misc 等字段
+        -- 而不是 profile.player.characteristics
+        if profileData and (profileData.characteristics or profileData.about or profileData.misc) then
+            ns.CacheProfile(profileID, profileData)
+            count = count + 1
+        else
+            skipped = skipped + 1
+        end
+    end
+
+    print("|cFF00FF00[RPBox]|r ========== 导入完成 ==========")
+    print("|cFF00FF00[RPBox]|r 成功导入: " .. count .. " 个人物卡")
+    if skipped > 0 then
+        print("|cFFFFFF00[RPBox]|r 跳过: " .. skipped .. " 个无效数据")
+    end
+end
+
+-- 显示缓存统计信息
+function ns.ShowCacheStats()
+    local count = 0
+    for _ in pairs(RPBox_ProfileCache) do
+        count = count + 1
+    end
+
+    print("|cFF00FF00[RPBox]|r ========== 人物卡缓存统计 ==========")
+    print("|cFF00FF00[RPBox]|r 已缓存人物卡数量: " .. count)
+    print("|cFF00FF00[RPBox]|r 使用 /rpbox cache list 查看详细列表")
+end
+
+-- 列出所有已缓存的人物卡
+function ns.ListCachedProfiles()
+    local profiles = {}
+
+    -- 收集所有人物卡信息
+    for profileID, data in pairs(RPBox_ProfileCache) do
+        local charName = "未知"
+        local fn = data.FN or ""
+        local ln = data.LN or ""
+
+        if fn ~= "" then
+            charName = ln ~= "" and (fn .. " " .. ln) or fn
+        end
+
+        table.insert(profiles, {
+            id = profileID,
+            name = charName,
+            title = data.TI or "",
+            race = data.RA or "",
+            class = data.CL or "",
+        })
+    end
+
+    -- 按名字排序
+    table.sort(profiles, function(a, b) return a.name < b.name end)
+
+    print("|cFF00FF00[RPBox]|r ========== 已缓存的人物卡 (" .. #profiles .. ") ==========")
+
+    if #profiles == 0 then
+        print("|cFFFFFF00[RPBox]|r 暂无缓存的人物卡")
+        print("|cFFFFFF00[RPBox]|r 提示: 当您与其他RP玩家互动时，系统会自动缓存他们的人物卡")
+        return
+    end
+
+    for i, profile in ipairs(profiles) do
+        local info = profile.name
+        if profile.title ~= "" then
+            info = info .. " <" .. profile.title .. ">"
+        end
+        if profile.race ~= "" or profile.class ~= "" then
+            local extra = {}
+            if profile.race ~= "" then table.insert(extra, profile.race) end
+            if profile.class ~= "" then table.insert(extra, profile.class) end
+            info = info .. " (" .. table.concat(extra, ", ") .. ")"
+        end
+
+        print(string.format("|cFF00FF00[RPBox]|r %d. %s", i, info))
+        print(string.format("    ProfileID: |cFFAAAAAA%s|r", profile.id))
+    end
+
+    print("|cFF00FF00[RPBox]|r =====================================")
+end
+
 -- 显示帮助信息
 local function ShowHelp()
     print(L["HELP_TITLE"] or "|cFF00FF00[RPBox]|r 命令帮助:")
@@ -180,6 +332,9 @@ local function ShowHelp()
     print("  /rpbox clear [all] - 清理记录")
     print("  /rpbox log [today] - 打开回放窗口")
     print("  /rpbox item mark/list - 道具标记")
+    print("  /rpbox cache list - 列出已缓存的人物卡")
+    print("  /rpbox cache stats - 显示缓存统计")
+    print("  /rpbox cache import - 导入TRP3所有人物卡")
 end
 
 -- 斜杠命令处理
@@ -244,6 +399,16 @@ local function HandleSlashCommand(msg)
             ns.ListMarkedItems()
         else
             print("|cFF00FF00[RPBox]|r 用法: /rpbox item mark/list")
+        end
+    elseif cmd == "cache" or cmd == "profiles" then
+        if subcmd == "list" or subcmd == "" then
+            ns.ListCachedProfiles()
+        elseif subcmd == "stats" then
+            ns.ShowCacheStats()
+        elseif subcmd == "import" then
+            ns.ImportAllTRP3Profiles()
+        else
+            print("|cFF00FF00[RPBox]|r 用法: /rpbox cache list/stats/import")
         end
     else
         print("|cFFFF0000[RPBox]|r 未知命令，输入 /rpbox help 查看帮助")
@@ -392,6 +557,26 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         InitSavedVariables()
         CleanupFromClientState()
         print(L["ADDON_LOADED"] or "|cFF00FF00[RPBox]|r 插件已加载")
+
+        -- 注册TRP3事件监听
+        if TRP3_Addon and TRP3_Addon.RegisterCallback then
+            -- print("|cFF00FF00[RPBox]|r 正在注册TRP3事件监听...")
+            TRP3_Addon.RegisterCallback(ns, "REGISTER_DATA_UPDATED", function(_, unitID, hasProfile)
+                -- 当TRP3收到新的人物卡数据时，自动更新缓存
+                -- print("|cFF00FF00[RPBox]|r TRP3事件触发: unitID=" .. tostring(unitID) .. ", hasProfile=" .. tostring(hasProfile))
+                if hasProfile and unitID then
+                    ns.UpdateProfileCache(unitID)
+                end
+            end)
+            -- print("|cFF00FF00[RPBox]|r TRP3事件监听注册成功！")
+
+            -- 批量导入 TRP3 已有的人物卡数据
+            C_Timer.After(1, function()
+                ns.ImportAllTRP3Profiles()
+            end)
+        else
+            print("|cFFFFFF00[RPBox]|r 警告: TRP3未加载或不支持事件监听")
+        end
     elseif event == "PLAYER_TARGET_CHANGED" then
         OnTargetChanged()
     end

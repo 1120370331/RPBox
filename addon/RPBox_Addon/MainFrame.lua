@@ -171,7 +171,7 @@ local function GetDisplayName(record)
         if cached then
             local name = cached.FN or ""
             if cached.LN and cached.LN ~= "" then
-                name = name .. " " .. cached.LN
+                name = name .. "·" .. cached.LN
             end
             if name ~= "" then
                 displayName = name
@@ -190,7 +190,7 @@ local function GetDisplayName(record)
         else
             local name = trp3.FN or ""
             if trp3.LN and trp3.LN ~= "" then
-                name = name .. " " .. trp3.LN
+                name = name .. "·" .. trp3.LN
             end
             if name ~= "" then
                 displayName = name
@@ -350,7 +350,7 @@ local function GetFilteredRecords()
     table.sort(records, function(a, b)
         local ta = a.t or a.timestamp or 0
         local tb = b.t or b.timestamp or 0
-        return ta > tb
+        return ta > tb  -- 降序：最新的在前
     end)
     return records
 end
@@ -504,6 +504,10 @@ local function RefreshLogContent()
             lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
                 timeStr, nameColor, displayName, icon, channelColor, msgContent)
             plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
+        elseif channel == "TEXT_EMOTE" or channel == "CHAT_MSG_TEXT_EMOTE" then
+            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
+                timeStr, nameColor, displayName, icon, channelColor, msgContent)
+            plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
         elseif channel == "CHAT_MSG_YELL" or channel == "YELL" then
             lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 大喊：|cFF%s%s|r",
                 timeStr, nameColor, displayName, icon, channelColor, msgContent)
@@ -537,6 +541,13 @@ local function RefreshLogContent()
 
     content:SetHeight(math.max(yOffset, 1))
     MainFrame.statusText:SetText(format("共 %d 条记录", #records))
+
+    -- 强制刷新 ScrollFrame 显示
+    if MainFrame.logScrollFrame then
+        MainFrame.logScrollFrame:UpdateScrollChildRect()
+        -- 重置滚动位置到顶部
+        MainFrame.logScrollFrame:SetVerticalScroll(0)
+    end
 end
 
 -- 刷新名单内容
@@ -895,6 +906,26 @@ local function CreateMainFrame()
     MainFrame:SetScript("OnDragStop", MainFrame.StopMovingOrSizing)
     MainFrame:Hide()
 
+    -- 启用调整大小
+    MainFrame:SetResizable(true)
+    MainFrame:SetResizeBounds(400, 300, 1200, 900)
+    MainFrame:SetClampedToScreen(true)
+
+    -- 创建调整大小按钮
+    local resizeButton = CreateFrame("Button", nil, MainFrame)
+    resizeButton:SetSize(16, 16)
+    resizeButton:SetPoint("BOTTOMRIGHT", -5, 5)
+    resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeButton:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeButton:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeButton:SetScript("OnMouseDown", function(self, button)
+        MainFrame:StartSizing("BOTTOMRIGHT")
+    end)
+    resizeButton:SetScript("OnMouseUp", function(self, button)
+        MainFrame:StopMovingOrSizing()
+    end)
+    MainFrame.resizeButton = resizeButton
+
     MainFrame.TitleText:SetText("RPBox")
 
     -- 标签按钮
@@ -1045,43 +1076,92 @@ local function CreateMainFrame()
     copyBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
     copyBtn:SetText("复制")
     copyBtn:SetScript("OnClick", function()
-        if MainFrame.logPlainText and #MainFrame.logPlainText > 0 then
-            if not MainFrame.copyDialog then
-                local dialog = CreateFrame("Frame", "RPBoxCopyDialog", UIParent, "BasicFrameTemplateWithInset")
-                dialog:SetSize(450, 350)
-                dialog:SetPoint("CENTER")
-                dialog:SetMovable(true)
-                dialog:EnableMouse(true)
-                dialog:RegisterForDrag("LeftButton")
-                dialog:SetScript("OnDragStart", dialog.StartMoving)
-                dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
-                dialog:SetFrameStrata("DIALOG")
-                dialog.TitleText:SetText("复制日志 (Ctrl+A 全选, Ctrl+C 复制)")
+        print("[RPBox Debug] 复制按钮被点击")
+        print("[RPBox Debug] logPlainText存在:", MainFrame.logPlainText ~= nil)
+        print("[RPBox Debug] logPlainText长度:", MainFrame.logPlainText and #MainFrame.logPlainText or 0)
 
-                local scroll = CreateFrame("ScrollFrame", nil, dialog, "UIPanelScrollFrameTemplate")
-                scroll:SetPoint("TOPLEFT", 10, -30)
-                scroll:SetPoint("BOTTOMRIGHT", -30, 10)
+        if not MainFrame.logPlainText or #MainFrame.logPlainText == 0 then
+            print("|cFFFF0000[RPBox]|r 没有可复制的记录，请先筛选或刷新日志")
+            return
+        end
 
-                local editBox = CreateFrame("EditBox", nil, scroll)
-                editBox:SetMultiLine(true)
-                editBox:SetFontObject(GameFontHighlightSmall)
-                editBox:SetWidth(390)
-                editBox:SetAutoFocus(false)
-                editBox:EnableMouse(true)
-                editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-                scroll:SetScrollChild(editBox)
+        print("[RPBox Debug] 开始创建/显示对话框")
 
-                dialog.editBox = editBox
-                MainFrame.copyDialog = dialog
-            end
+        -- 创建对话框（如果不存在）
+        if not MainFrame.copyDialog then
+            print("[RPBox Debug] 创建新对话框")
+            local dialog = CreateFrame("Frame", "RPBoxCopyDialog", UIParent, "BasicFrameTemplateWithInset")
+            dialog:SetSize(450, 350)
+            dialog:SetPoint("CENTER")
+            dialog:SetMovable(true)
+            dialog:EnableMouse(true)
+            dialog:RegisterForDrag("LeftButton")
+            dialog:SetScript("OnDragStart", dialog.StartMoving)
+            dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
+            dialog:SetFrameStrata("DIALOG")
+            dialog.TitleText:SetText("复制日志 (Ctrl+A 全选, Ctrl+C 复制)")
 
+            -- 设置关闭按钮
+            dialog.CloseButton:SetScript("OnClick", function()
+                dialog.editBox:ClearFocus()
+                dialog:Hide()
+            end)
+
+            local scroll = CreateFrame("ScrollFrame", nil, dialog, "UIPanelScrollFrameTemplate")
+            scroll:SetPoint("TOPLEFT", 10, -30)
+            scroll:SetPoint("BOTTOMRIGHT", -30, 10)
+
+            local editBox = CreateFrame("EditBox", nil, scroll)
+            editBox:SetMultiLine(true)
+            editBox:SetFontObject(GameFontHighlightSmall)
+            editBox:SetWidth(390)
+            editBox:SetAutoFocus(false)
+            editBox:EnableMouse(true)
+            editBox:SetScript("OnEscapePressed", function(self)
+                self:ClearFocus()
+                dialog:Hide()
+            end)
+            scroll:SetScrollChild(editBox)
+
+            dialog.editBox = editBox
+            MainFrame.copyDialog = dialog
+
+            -- 确保初始状态是隐藏的
+            dialog:Hide()
+            print("[RPBox Debug] 对话框已创建并隐藏")
+        end
+
+        -- 切换显示/隐藏
+        local isShown = MainFrame.copyDialog:IsShown()
+        print("[RPBox Debug] 对话框当前状态 IsShown:", isShown)
+
+        if isShown then
+            print("[RPBox Debug] 执行隐藏逻辑")
+            MainFrame.copyDialog.editBox:ClearFocus()
+            MainFrame.copyDialog:Hide()
+        else
+            print("[RPBox Debug] 执行显示逻辑")
+            -- 更新内容
+            print("[RPBox Debug] 步骤1: 合并文本")
             local text = table.concat(MainFrame.logPlainText, "\n")
+            print("[RPBox Debug] 步骤2: 设置文本，长度:", #text)
             MainFrame.copyDialog.editBox:SetText(text)
-            -- 设置高度以显示所有内容
-            MainFrame.copyDialog.editBox:SetHeight(MainFrame.copyDialog.editBox:GetStringHeight() + 20)
+            print("[RPBox Debug] 步骤3: 获取文本高度")
+            local textHeight = MainFrame.copyDialog.editBox:GetStringHeight()
+            print("[RPBox Debug] 步骤3.1: textHeight =", textHeight)
+            if not textHeight or textHeight == 0 then
+                textHeight = 100  -- 使用默认高度
+                print("[RPBox Debug] 步骤3.2: 使用默认高度")
+            end
+            print("[RPBox Debug] 步骤4: 设置高度:", textHeight + 20)
+            MainFrame.copyDialog.editBox:SetHeight(textHeight + 20)
+            -- 显示对话框
+            print("[RPBox Debug] 步骤5: 调用 Show()")
             MainFrame.copyDialog:Show()
+            print("[RPBox Debug] 步骤6: Show() 完成，IsShown:", MainFrame.copyDialog:IsShown())
             MainFrame.copyDialog.editBox:HighlightText()
             MainFrame.copyDialog.editBox:SetFocus()
+            print("[RPBox Debug] 显示逻辑执行完成")
         end
     end)
     MainFrame.copyBtn = copyBtn

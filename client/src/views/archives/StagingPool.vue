@@ -14,6 +14,11 @@ interface TRP3Info {
   CH?: string  // 名字颜色
 }
 
+interface Listener {
+  gameID: string
+  profileID?: string
+}
+
 interface ChatRecord {
   timestamp: number
   channel: string
@@ -27,6 +32,7 @@ interface ChatRecord {
   nt?: string    // NPC说话类型: say/yell/whisper（仅NPC消息）
   ref_id?: string  // TRP3 profile ref ID
   raw_profile?: string  // 完整的TRP3 profile JSON
+  listeners?: Listener[]  // 收听者列表（新增字段，向前兼容）
 }
 
 interface AccountChatLogs {
@@ -74,6 +80,12 @@ const selectedRecords = ref<Set<number>>(new Set())
 const expandedDates = ref<Set<string>>(new Set())
 const expandedHours = ref<Set<string>>(new Set())
 
+// 筛选条件
+const filterStartDate = ref('')
+const filterEndDate = ref('')
+const filterChannels = ref<Set<string>>(new Set())
+const filterListeners = ref<Set<string>>(new Set())  // 收听者筛选（存储 gameID）
+
 // 已归档的 timestamp 集合（持久化到 localStorage）
 const archivedTimestamps = ref<Set<number>>(new Set(
   JSON.parse(localStorage.getItem('archived_timestamps') || '[]')
@@ -83,7 +95,29 @@ function saveArchivedTimestamps() {
   localStorage.setItem('archived_timestamps', JSON.stringify([...archivedTimestamps.value]))
 }
 
-// 按日期和小时分组的记录（过滤已归档）
+// 获取所有可用的收听者列表
+const availableListeners = computed(() => {
+  const listenersMap = new Map<string, { gameID: string, name: string }>()
+
+  for (const account of accounts.value) {
+    for (const record of account.records) {
+      // 向前兼容：如果没有 listeners 字段，跳过
+      if (!record.listeners || record.listeners.length === 0) continue
+
+      for (const listener of record.listeners) {
+        if (!listenersMap.has(listener.gameID)) {
+          // 提取角色名（去掉服务器后缀）
+          const name = listener.gameID.split('-')[0]
+          listenersMap.set(listener.gameID, { gameID: listener.gameID, name })
+        }
+      }
+    }
+  }
+
+  return Array.from(listenersMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+})
+
+// 按日期和小时分组的记录（过滤已归档 + 应用筛选条件）
 const groupedRecords = computed(() => {
   const groups: Record<string, Record<string, ChatRecord[]>> = {}
 
@@ -94,11 +128,34 @@ const groupedRecords = computed(() => {
 
       const date = new Date(record.timestamp * 1000)
       const dateStr = date.toISOString().split('T')[0]
+
+      // 应用日期筛选
+      if (filterStartDate.value && dateStr < filterStartDate.value) continue
+      if (filterEndDate.value && dateStr > filterEndDate.value) continue
+
+      // 应用频道筛选（标准化频道名称后比较）
+      if (filterChannels.value.size > 0 && !filterChannels.value.has(normalizeChannel(record.channel))) continue
+
+      // 应用收听者筛选（向前兼容：没有 listeners 字段的旧记录不过滤）
+      if (filterListeners.value.size > 0 && record.listeners) {
+        const hasMatchingListener = record.listeners.some(listener =>
+          filterListeners.value.has(listener.gameID)
+        )
+        if (!hasMatchingListener) continue
+      }
+
       const hourStr = date.getHours().toString().padStart(2, '0')
 
       if (!groups[dateStr]) groups[dateStr] = {}
       if (!groups[dateStr][hourStr]) groups[dateStr][hourStr] = []
       groups[dateStr][hourStr].push(record)
+    }
+  }
+
+  // 对每个小时内的记录按时间戳排序（从新到旧）
+  for (const dateKey in groups) {
+    for (const hourKey in groups[dateKey]) {
+      groups[dateKey][hourKey].sort((a, b) => b.timestamp - a.timestamp)
     }
   }
 
@@ -118,6 +175,48 @@ const totalRecords = computed(() => {
 
 const selectedCount = computed(() => selectedRecords.value.size)
 
+// 滚动容器引用
+const contentRef = ref<HTMLElement | null>(null)
+
+// 滚动到底部
+function scrollToBottom() {
+  if (contentRef.value) {
+    setTimeout(() => {
+      contentRef.value!.scrollTop = contentRef.value!.scrollHeight
+    }, 100)
+  }
+}
+
+// 切换频道筛选
+function toggleChannel(channel: string) {
+  if (filterChannels.value.has(channel)) {
+    filterChannels.value.delete(channel)
+  } else {
+    filterChannels.value.add(channel)
+  }
+  // 触发响应式更新
+  filterChannels.value = new Set(filterChannels.value)
+}
+
+// 切换收听者筛选
+function toggleListener(gameID: string) {
+  if (filterListeners.value.has(gameID)) {
+    filterListeners.value.delete(gameID)
+  } else {
+    filterListeners.value.add(gameID)
+  }
+  // 触发响应式更新
+  filterListeners.value = new Set(filterListeners.value)
+}
+
+// 清除筛选
+function clearFilters() {
+  filterStartDate.value = ''
+  filterEndDate.value = ''
+  filterChannels.value.clear()
+  filterListeners.value.clear()
+}
+
 async function syncFromPlugin() {
   const wowPath = localStorage.getItem('wow_path') || ''
   console.log('[StagingPool] wowPath:', wowPath)
@@ -132,11 +231,19 @@ async function syncFromPlugin() {
       wowPath,
     })
     console.log('[StagingPool] 结果:', accounts.value)
-    // 默认展开第一个日期
-    const dates = Object.keys(groupedRecords.value).sort().reverse()
+    // 默认展开最后一个日期（最新的）
+    const dates = Object.keys(groupedRecords.value).sort()
     if (dates.length > 0) {
-      expandedDates.value.add(dates[0])
+      expandedDates.value.add(dates[dates.length - 1])
+      // 展开该日期下的最后一个小时
+      const lastDate = dates[dates.length - 1]
+      const hours = Object.keys(groupedRecords.value[lastDate]).sort()
+      if (hours.length > 0) {
+        expandedHours.value.add(`${lastDate}-${hours[hours.length - 1]}`)
+      }
     }
+    // 滚动到底部
+    scrollToBottom()
   } catch (e) {
     console.error('同步失败:', e)
   } finally {
@@ -253,7 +360,7 @@ function getSenderName(record: ChatRecord): string {
   // 玩家消息优先显示TRP3名字
   const trp3 = record.sender.trp3
   if (trp3?.FN) {
-    return trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN
+    return trp3.LN ? `${trp3.FN}·${trp3.LN}` : trp3.FN
   }
   return record.sender.gameID.split('-')[0]
 }
@@ -302,12 +409,26 @@ function formatTime(timestamp: number): string {
   })
 }
 
+// 标准化频道名称（统一转换为短格式）
+function normalizeChannel(channel: string): string {
+  // 处理 CHAT_MSG_ 前缀
+  if (channel.startsWith('CHAT_MSG_')) {
+    channel = channel.replace('CHAT_MSG_', '')
+  }
+  // 将 TEXT_EMOTE 统一为 EMOTE
+  if (channel === 'TEXT_EMOTE') {
+    return 'EMOTE'
+  }
+  return channel
+}
+
 function getChannelLabel(channel: string): string {
   const map: Record<string, string> = {
     // 新格式（简写）
     'SAY': '说',
     'YELL': '喊',
     'EMOTE': '表情',
+    'TEXT_EMOTE': '表情',
     'PARTY': '小队',
     'RAID': '团队',
     'WHISPER': '密语',
@@ -315,6 +436,7 @@ function getChannelLabel(channel: string): string {
     'CHAT_MSG_SAY': '说',
     'CHAT_MSG_YELL': '喊',
     'CHAT_MSG_EMOTE': '表情',
+    'CHAT_MSG_TEXT_EMOTE': '表情',
     'CHAT_MSG_PARTY': '小队',
     'CHAT_MSG_RAID': '团队',
     'CHAT_MSG_WHISPER': '密语',
@@ -329,12 +451,14 @@ function getChannelTextColor(channel: string): string {
     'YELL': '#FF3333',
     'WHISPER': '#B39DDB',
     'EMOTE': '#FF8C00',
+    'TEXT_EMOTE': '#FF8C00',
     'PARTY': '#AAAAFF',
     'RAID': '#FF7F00',
     'CHAT_MSG_SAY': '',
     'CHAT_MSG_YELL': '#FF3333',
     'CHAT_MSG_WHISPER': '#B39DDB',
     'CHAT_MSG_EMOTE': '#FF8C00',
+    'CHAT_MSG_TEXT_EMOTE': '#FF8C00',
     'CHAT_MSG_PARTY': '#AAAAFF',
     'CHAT_MSG_RAID': '#FF7F00',
   }
@@ -375,13 +499,61 @@ defineExpose({
       </div>
     </div>
 
+    <!-- 筛选面板 -->
+    <div class="filter-panel">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label>开始日期</label>
+          <input type="date" v-model="filterStartDate" class="date-input" />
+        </div>
+        <div class="filter-group">
+          <label>结束日期</label>
+          <input type="date" v-model="filterEndDate" class="date-input" />
+        </div>
+        <RButton size="small" @click="clearFilters">
+          <i class="ri-close-line"></i> 清除筛选
+        </RButton>
+      </div>
+      <div class="filter-row">
+        <label>聊天类型：</label>
+        <div class="channel-filters">
+          <button
+            v-for="channel in ['SAY', 'YELL', 'EMOTE', 'PARTY', 'RAID', 'WHISPER']"
+            :key="channel"
+            class="channel-filter-btn"
+            :class="{ active: filterChannels.has(channel) }"
+            @click="toggleChannel(channel)"
+          >
+            {{ getChannelLabel(channel) }}
+          </button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <label>收听者人物：</label>
+        <div class="channel-filters">
+          <button
+            v-for="listener in availableListeners"
+            :key="listener.gameID"
+            class="channel-filter-btn"
+            :class="{ active: filterListeners.has(listener.gameID) }"
+            @click="toggleListener(listener.gameID)"
+          >
+            {{ listener.name }}
+          </button>
+          <span v-if="availableListeners.length === 0" class="filter-empty-hint">
+            暂无数据（需要新的聊天记录）
+          </span>
+        </div>
+      </div>
+    </div>
+
     <REmpty v-if="!loading && totalRecords === 0" description="需要安装 RPBox Addon 插件才能采集聊天记录">
       <router-link class="tutorial-link" :to="{ name: 'guide' }">
         <i class="ri-book-open-line"></i> 查看使用教程
       </router-link>
     </REmpty>
 
-    <div v-else class="staging-content">
+    <div v-else class="staging-content" ref="contentRef">
       <div
         v-for="date in Object.keys(groupedRecords).sort().reverse()"
         :key="date"
@@ -405,7 +577,7 @@ defineExpose({
 
         <div v-if="expandedDates.has(date)" class="hour-groups">
           <div
-            v-for="hour in Object.keys(groupedRecords[date]).sort()"
+            v-for="hour in Object.keys(groupedRecords[date]).sort().reverse()"
             :key="`${date}-${hour}`"
             class="hour-group"
           >
@@ -653,5 +825,85 @@ defineExpose({
 
 .tutorial-link:hover {
   background: rgba(184, 115, 51, 0.1);
+}
+
+/* 筛选面板 */
+.filter-panel {
+  padding: 16px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-group label {
+  font-size: 12px;
+  color: var(--color-secondary);
+  font-weight: 500;
+}
+
+.date-input {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: #fff;
+  color: var(--color-primary);
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.channel-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.channel-filter-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.channel-filter-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.channel-filter-btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+  font-weight: 500;
+}
+
+.filter-empty-hint {
+  color: var(--color-secondary);
+  font-size: 13px;
+  font-style: italic;
+  padding: 6px 12px;
 }
 </style>
