@@ -83,13 +83,13 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           REMOTE_DIR="${{ secrets.RELEASE_PATH }}/$VERSION"
 
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
-          scp artifacts/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
+          scp -P 2233 artifacts/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
 
       - name: Update server config
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
             # 更新配置文件中的版本号
             sed -i "s/latest_version:.*/latest_version: \"$VERSION\"/" /home/devbox/RPBox/server/config.yaml
             # 重启服务（如果需要）
