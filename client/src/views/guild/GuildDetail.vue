@@ -44,8 +44,12 @@ async function loadGuild() {
     const res = await getGuild(guildId)
     guild.value = res.guild
     myRole.value = res.my_role
-    const membersRes = await listGuildMembers(guildId)
-    members.value = membersRes.members || []
+
+    // 只有成员才能查看成员列表
+    if (myRole.value) {
+      const membersRes = await listGuildMembers(guildId)
+      members.value = membersRes.members || []
+    }
 
     // 如果是管理员，加载待处理申请数量
     if (myRole.value === 'owner' || myRole.value === 'admin') {
