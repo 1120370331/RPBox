@@ -666,14 +666,31 @@ func (s *Server) applyGuild(c *gin.Context) {
 		return
 	}
 
-	// 检查是否已有待处理申请
+	// 检查是否已有申请记录（任何状态）
 	var existingApp model.GuildApplication
-	if err := database.DB.Where("guild_id = ? AND user_id = ? AND status = ?", guildID, userID, "pending").First(&existingApp).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "已有待处理的申请"})
+	err := database.DB.Where("guild_id = ? AND user_id = ?", guildID, userID).First(&existingApp).Error
+
+	if err == nil {
+		// 已有申请记录
+		if existingApp.Status == "pending" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "已有待处理的申请"})
+			return
+		}
+		// 如果是已拒绝或已批准的申请，更新为新的待处理申请
+		existingApp.Message = req.Message
+		existingApp.Status = "pending"
+		existingApp.ReviewerID = nil
+		existingApp.ReviewComment = ""
+		existingApp.ReviewedAt = nil
+		if err := database.DB.Save(&existingApp).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "申请失败"})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"message": "申请已提交", "application": existingApp})
 		return
 	}
 
-	// 创建申请记录
+	// 没有申请记录，创建新的
 	application := model.GuildApplication{
 		GuildID: uint(guildID),
 		UserID:  userID,
