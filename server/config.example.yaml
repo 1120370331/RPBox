@@ -12,3 +12,11 @@ database:
 jwt:
   secret: "your-secret-key-change-in-production"
   expire: 72
+
+# 客户端自动更新配置
+updater:
+  latest_version: "0.1.5"
+  base_url: "http://localhost:8080/releases"
+  release_notes: "v0.1.5 更新内容：\n- 新增：设置页面显示插件版本和手动更新检测\n- 新增：剧情归档页面显示插件版本和手动更新检测\n- 修复：插件更新对话框下载功能，使用 Tauri shell API\n- 修复：添加 shell 插件配置以支持打开外部链接"
+  pub_date: "2026-01-17T12:00:00Z"
+  signature_dir: ""
