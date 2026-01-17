@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, watch, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import RTabs from '@/components/RTabs.vue'
 import RTabPane from '@/components/RTabPane.vue'
@@ -11,9 +11,10 @@ import AddonInstaller from '@/components/AddonInstaller.vue'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import StagingPool from './StagingPool.vue'
 import StoryList from './StoryList.vue'
-import { createStory, addStoryEntries, listStories, type CreateStoryEntryRequest, type Story } from '@/api/story'
+import { createStory, addStoryEntries, listStories, type CreateStoryEntryRequest, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
 import { getAddonManifest } from '@/api/addon'
+import { getGuild, type Guild } from '@/api/guild'
 
 // ChatRecord 类型定义
 interface TRP3Info {
@@ -47,8 +48,16 @@ interface ChatRecord {
 
 const mounted = ref(false)
 const router = useRouter()
+const route = useRoute()
 const activeTab = ref('staging')
 const wowPath = ref(localStorage.getItem('wow_path') || '')
+
+// 公会筛选相关
+const filterGuildId = ref<number | null>(null)
+const currentGuild = ref<Guild | null>(null)
+const storyFilter = computed<StoryFilterParams | undefined>(() => {
+  return filterGuildId.value ? { guild_id: String(filterGuildId.value) } : undefined
+})
 
 // 创建剧情对话框
 const showCreateModal = ref(false)
@@ -151,6 +160,14 @@ async function handleCheckAddonUpdate() {
 }
 
 onMounted(() => {
+  // 从 URL query 读取公会筛选
+  if (route.query.guild_id) {
+    filterGuildId.value = Number(route.query.guild_id)
+    loadGuildInfo()
+    // 切换到"我的剧情"标签页
+    activeTab.value = 'stories'
+  }
+
   // 检查是否已设置魔兽路径，未设置则跳转到设置向导
   const savedPath = localStorage.getItem('wow_path')
   if (!savedPath) {
@@ -163,6 +180,33 @@ onMounted(() => {
   checkAddonUpdate()  // 检查插件更新
   loadTags()
 })
+
+// 监听路由变化
+watch(() => route.query.guild_id, async (newGuildId) => {
+  if (newGuildId) {
+    filterGuildId.value = Number(newGuildId)
+    await loadGuildInfo()
+    // 切换到"我的剧情"标签页
+    activeTab.value = 'stories'
+  } else {
+    filterGuildId.value = null
+    currentGuild.value = null
+    // 清除筛选后，如果当前在"我的剧情"，切换回"待归档池"
+    if (activeTab.value === 'stories') {
+      activeTab.value = 'staging'
+    }
+  }
+})
+
+async function loadGuildInfo() {
+  if (!filterGuildId.value) return
+  try {
+    const res = await getGuild(filterGuildId.value)
+    currentGuild.value = res.guild
+  } catch (error) {
+    console.error('加载公会信息失败:', error)
+  }
+}
 
 // 监听标签页切换，每次打开时检查插件更新
 watch(activeTab, (newTab) => {
@@ -361,13 +405,25 @@ function handleViewStory(id: number) {
       </template>
     </div>
 
+    <!-- 公会筛选提示 -->
+    <div v-if="currentGuild" class="guild-filter-banner anim-item" style="--delay: 0.7">
+      <div class="banner-content">
+        <i class="ri-shield-line"></i>
+        <span>正在查看「<strong>{{ currentGuild.name }}</strong>」的相关剧情</span>
+      </div>
+      <button class="clear-filter-btn" @click="router.push({ name: 'archives' })">
+        <i class="ri-close-line"></i>
+        清除筛选
+      </button>
+    </div>
+
     <!-- Tab切换 -->
     <RTabs v-model="activeTab" class="anim-item" style="--delay: 1">
-      <RTabPane name="staging" label="待归档池">
+      <RTabPane v-if="!filterGuildId" name="staging" label="待归档池">
         <StagingPool ref="stagingPoolRef" @archive="handleArchive" />
       </RTabPane>
       <RTabPane name="stories" label="我的剧情">
-        <StoryList ref="storyListRef" @create="showCreateModal = true" @view="handleViewStory" />
+        <StoryList ref="storyListRef" :initialFilter="storyFilter" @create="showCreateModal = true" @view="handleViewStory" />
       </RTabPane>
     </RTabs>
 
@@ -732,6 +788,61 @@ function handleViewStory(id: number) {
   font-size: 13px;
   font-weight: 600;
   color: #804030;
+}
+
+/* 公会筛选横幅 */
+.guild-filter-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #FFF5E6, #FFF9F0);
+  border: 1px solid #E5D4C1;
+  border-left: 4px solid #B87333;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(184, 115, 51, 0.08);
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: #4B3621;
+}
+
+.banner-content i {
+  font-size: 20px;
+  color: #B87333;
+}
+
+.banner-content strong {
+  color: #804030;
+  font-weight: 600;
+}
+
+.clear-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  color: #8D7B68;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-filter-btn:hover {
+  background: #FFF5E6;
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.clear-filter-btn i {
+  font-size: 14px;
 }
 
 .tag-selector {

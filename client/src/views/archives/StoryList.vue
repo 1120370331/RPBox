@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { listStories, deleteStory, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
@@ -7,6 +7,10 @@ import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import RCard from '@/components/RCard.vue'
 import StoryFilter from '@/components/StoryFilter.vue'
+
+const props = defineProps<{
+  initialFilter?: StoryFilterParams
+}>()
 
 const emit = defineEmits<{
   create: []
@@ -20,7 +24,7 @@ const stories = ref<Story[]>([])
 const tags = ref<Tag[]>([])
 const guilds = ref<Guild[]>([])
 const showFilter = ref(false)
-const filterParams = ref<StoryFilterParams>({})
+const filterParams = ref<StoryFilterParams>(props.initialFilter || {})
 
 async function loadStories() {
   loading.value = true
@@ -125,6 +129,14 @@ onMounted(() => {
   loadTags()
   loadGuilds()
 })
+
+// 监听外部传入的筛选参数变化
+watch(() => props.initialFilter, (newFilter) => {
+  if (newFilter) {
+    filterParams.value = { ...newFilter }
+    loadStories()
+  }
+}, { deep: true })
 
 // 暴露方法供父组件调用
 defineExpose({

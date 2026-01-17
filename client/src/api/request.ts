@@ -2,6 +2,32 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 
+// 错误信息翻译映射表
+const ERROR_MESSAGES: Record<string, string> = {
+  'invalid credentials': '用户名或密码错误',
+  'invalid username or password': '用户名或密码错误',
+  'user not found': '用户不存在',
+  'username already exists': '用户名已存在',
+  'email already exists': '邮箱已被注册',
+  'unauthorized': '未授权，请先登录',
+  'forbidden': '没有权限执行此操作',
+  'not found': '请求的资源不存在',
+  'internal server error': '服务器内部错误',
+  'bad request': '请求参数错误',
+  'request failed': '请求失败',
+}
+
+// 翻译错误信息
+function translateError(message: string): string {
+  const lowerMessage = message.toLowerCase()
+  for (const [key, value] of Object.entries(ERROR_MESSAGES)) {
+    if (lowerMessage.includes(key.toLowerCase())) {
+      return value
+    }
+  }
+  return message
+}
+
 async function baseRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token')
 
@@ -34,7 +60,8 @@ async function baseRequest<T>(path: string, options: RequestInit = {}): Promise<
 
   if (!res.ok) {
     const message = data?.error || data?.message || res.statusText || 'Request failed'
-    throw new Error(message)
+    const translatedMessage = translateError(message)
+    throw new Error(translatedMessage)
   }
 
   return data as T
