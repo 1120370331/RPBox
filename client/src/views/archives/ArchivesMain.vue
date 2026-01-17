@@ -74,23 +74,26 @@ const pendingRecords = ref<ChatRecord[]>([])
 // 插件状态
 const showAddonInstaller = ref(false)
 const addonInstalled = ref(false)
+const addonVersion = ref<string | null>(null)
+const addonChecking = ref(false)
 const selectedFlavor = ref('_retail_')
 const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
 
 async function checkAddonStatus() {
   if (!wowPath.value) return
   try {
-    const info = await invoke<{ installed: boolean }>('check_addon_installed', {
+    const info = await invoke<{ installed: boolean; version?: string }>('check_addon_installed', {
       wowPath: wowPath.value,
       flavor: selectedFlavor.value,
     })
     addonInstalled.value = info.installed
+    addonVersion.value = info.installed ? (info.version || '未知') : null
   } catch (e) {
     console.error('检测插件失败:', e)
   }
 }
 
-// 检查插件更新
+// 检查插件更新（自动）
 async function checkAddonUpdate() {
   try {
     const manifest = await getAddonManifest()
@@ -115,6 +118,32 @@ async function checkAddonUpdate() {
     }
   } catch (e) {
     console.error('检查插件更新失败:', e)
+  }
+}
+
+// 手动检测更新
+async function handleCheckAddonUpdate() {
+  if (!addonVersion.value) {
+    return
+  }
+
+  addonChecking.value = true
+  try {
+    const manifest = await getAddonManifest()
+    const latestVersion = manifest.latest
+
+    if (addonVersion.value === latestVersion) {
+      // 使用 toast 提示（需要导入 toast）
+      console.log('当前已是最新版本')
+    } else {
+      const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
+      const changelog = latestVersionInfo?.changelog || '暂无更新说明'
+      addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog)
+    }
+  } catch (e) {
+    console.error('检查插件更新失败:', e)
+  } finally {
+    addonChecking.value = false
   }
 }
 
@@ -303,12 +332,30 @@ function handleViewStory(id: number) {
     </div>
 
     <!-- 插件状态提示 -->
-    <div v-if="wowPath && !addonInstalled" class="addon-notice anim-item" style="--delay: 0.5">
-      <i class="ri-plug-line"></i>
-      <span>需要安装 RPBox 插件才能采集聊天记录</span>
-      <RButton size="small" type="primary" @click="showAddonInstaller = true">
-        安装插件
-      </RButton>
+    <div v-if="wowPath" class="addon-notice anim-item" style="--delay: 0.5">
+      <!-- 未安装状态 -->
+      <template v-if="!addonInstalled">
+        <i class="ri-plug-line"></i>
+        <span>需要安装 RPBox 插件才能采集聊天记录</span>
+        <RButton size="small" type="primary" @click="showAddonInstaller = true">
+          安装插件
+        </RButton>
+      </template>
+
+      <!-- 已安装状态 -->
+      <template v-else>
+        <i class="ri-checkbox-circle-fill addon-installed-icon"></i>
+        <span>RPBox Addon 已安装</span>
+        <span class="addon-version">v{{ addonVersion }}</span>
+        <RButton
+          size="small"
+          @click="handleCheckAddonUpdate"
+          :loading="addonChecking"
+        >
+          <i class="ri-refresh-line"></i>
+          {{ addonChecking ? '检查中...' : '检测更新' }}
+        </RButton>
+      </template>
     </div>
 
     <!-- Tab切换 -->
@@ -668,6 +715,20 @@ function handleViewStory(id: number) {
 
 .addon-notice span {
   flex: 1;
+}
+
+.addon-installed-icon {
+  color: #4CAF50 !important;
+}
+
+.addon-version {
+  flex: none !important;
+  padding: 4px 10px;
+  background: rgba(128, 64, 48, 0.1);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #804030;
 }
 
 .tag-selector {
