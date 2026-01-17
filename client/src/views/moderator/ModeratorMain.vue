@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { dialog } from '@/composables/useDialog'
 import { getPost } from '@/api/post'
 import { getItem } from '@/api/item'
 import { getGuild } from '@/api/guild'
+import * as echarts from 'echarts'
 import {
   getModeratorStats,
   getPendingPosts,
@@ -34,9 +35,15 @@ import {
   unbanUser,
   disableUserPosts,
   deleteUserPosts,
+  getActionLogs,
+  getMetricsHistory,
+  getMetricsSummary,
   type ModeratorStats,
   type ReviewRequest,
-  type SafeUser
+  type SafeUser,
+  type AdminActionLog,
+  type DailyMetrics,
+  type MetricsSummary
 } from '@/api/moderator'
 
 const router = useRouter()
@@ -48,7 +55,7 @@ const hasAccess = computed(() => userStore.isModerator)
 const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
-const activeTab = ref<'review' | 'manage' | 'admin'>('review')
+const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('review')
 const activeSubTab = ref<'posts' | 'items' | 'guilds' | 'users'>('posts')
 const adminSubTab = ref<'moderators' | 'guilds'>('guilds')
 
@@ -92,7 +99,7 @@ const reviewComment = ref('')
 // 更换会长弹窗
 const showChangeOwnerModal = ref(false)
 const changeOwnerTarget = ref<{ id: number; name: string; currentOwnerId: number } | null>(null)
-const newOwnerId = ref('')
+const newOwnerIdentifier = ref('')  // 用户名或邮箱
 
 // 设置角色弹窗
 const showRoleModal = ref(false)
@@ -105,6 +112,21 @@ const userActionTarget = ref<SafeUser | null>(null)
 const userActionDuration = ref(24) // 默认24小时
 const userActionReason = ref('')
 const userActionPermanent = ref(false)
+
+// 操作日志
+const actionLogs = ref<AdminActionLog[]>([])
+const logsTotal = ref(0)
+const logsPage = ref(1)
+const logsPageSize = ref(20)
+const logsActionType = ref('')
+const logsTargetType = ref('')
+
+// 数据统计
+const metricsHistory = ref<DailyMetrics[]>([])
+const metricsSummary = ref<MetricsSummary | null>(null)
+const metricsDays = ref(30)
+const metricsChartRef = ref<HTMLDivElement | null>(null)
+let metricsChart: echarts.ECharts | null = null
 
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
@@ -237,7 +259,7 @@ async function loadUsers() {
   }
 }
 
-function switchTab(tab: 'review' | 'manage' | 'admin') {
+function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
   activeTab.value = tab
   page.value = 1
   if (tab === 'review') {
@@ -251,6 +273,10 @@ function switchTab(tab: 'review' | 'manage' | 'admin') {
   } else if (tab === 'admin') {
     if (adminSubTab.value === 'moderators') loadUsers()
     else loadAllGuilds()
+  } else if (tab === 'logs') {
+    loadActionLogs()
+  } else if (tab === 'metrics') {
+    loadMetrics()
   }
 }
 
@@ -274,6 +300,168 @@ function switchAdminSubTab(subTab: 'moderators' | 'guilds') {
   page.value = 1
   if (subTab === 'moderators') loadUsers()
   else loadAllGuilds()
+}
+
+// ========== 操作日志 ==========
+async function loadActionLogs() {
+  try {
+    const res = await getActionLogs({
+      page: logsPage.value,
+      page_size: logsPageSize.value,
+      action_type: logsActionType.value || undefined,
+      target_type: logsTargetType.value || undefined
+    })
+    actionLogs.value = res.logs
+    logsTotal.value = res.total
+  } catch (error) {
+    console.error('加载操作日志失败:', error)
+  }
+}
+
+function formatActionType(type: string): string {
+  const map: Record<string, string> = {
+    'review_post': '审核帖子',
+    'delete_post': '删除帖子',
+    'hide_post': '屏蔽帖子',
+    'pin_post': '置顶帖子',
+    'feature_post': '精华帖子',
+    'review_item': '审核道具',
+    'delete_item': '删除道具',
+    'hide_item': '屏蔽道具',
+    'review_guild': '审核公会',
+    'delete_guild': '删除公会',
+    'change_guild_owner': '更换会长',
+    'mute_user': '禁言用户',
+    'unmute_user': '解除禁言',
+    'ban_user': '封禁用户',
+    'unban_user': '解除封禁',
+    'set_role': '设置角色',
+    'disable_posts': '禁用帖子',
+    'delete_posts': '删除用户帖子'
+  }
+  return map[type] || type
+}
+
+function formatLogDetails(log: AdminActionLog): string {
+  if (!log.details) return '-'
+  try {
+    const d = JSON.parse(log.details)
+    const parts: string[] = []
+
+    // 审核操作
+    if (d.action) {
+      parts.push(d.action === 'approve' ? '通过' : '拒绝')
+    }
+
+    // 封禁/禁言时长
+    if (d.duration) {
+      parts.push(d.duration)
+    }
+
+    // 原因
+    if (d.reason) {
+      parts.push(`原因: ${d.reason}`)
+    }
+
+    // 审核意见
+    if (d.comment) {
+      parts.push(`意见: ${d.comment}`)
+    }
+
+    // 置顶/精华状态
+    if (d.is_pinned !== undefined) {
+      parts.push(d.is_pinned ? '置顶' : '取消置顶')
+    }
+    if (d.is_featured !== undefined) {
+      parts.push(d.is_featured ? '加精' : '取消加精')
+    }
+
+    // 更换会长
+    if (d.new_owner_name) {
+      parts.push(`新会长: ${d.new_owner_name}`)
+    }
+
+    // 设置角色
+    if (d.new_role) {
+      parts.push(`新角色: ${d.new_role === 'moderator' ? '版主' : '普通用户'}`)
+    }
+
+    // 影响数量
+    if (d.affected_count !== undefined) {
+      parts.push(`${d.affected_count} 条`)
+    }
+
+    return parts.length > 0 ? parts.join(' | ') : '-'
+  } catch {
+    return '-'
+  }
+}
+
+// ========== 数据统计 ==========
+async function loadMetrics() {
+  try {
+    const [historyRes, summaryRes] = await Promise.all([
+      getMetricsHistory(metricsDays.value),
+      getMetricsSummary()
+    ])
+    metricsHistory.value = historyRes.metrics
+    metricsSummary.value = summaryRes
+    // 下一帧渲染图表
+    setTimeout(() => initMetricsChart(), 100)
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+  }
+}
+
+function initMetricsChart() {
+  if (!metricsChartRef.value) return
+
+  if (!metricsChart) {
+    metricsChart = echarts.init(metricsChartRef.value)
+  }
+
+  const dates = metricsHistory.value.map((m: DailyMetrics) => m.date.slice(5)) // 只显示月-日
+  const newUsers = metricsHistory.value.map((m: DailyMetrics) => m.new_users)
+  const newPosts = metricsHistory.value.map((m: DailyMetrics) => m.new_posts)
+  const newItems = metricsHistory.value.map((m: DailyMetrics) => m.new_items)
+  const newGuilds = metricsHistory.value.map((m: DailyMetrics) => m.new_guilds)
+
+  const option: echarts.EChartsOption = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' }
+    },
+    legend: {
+      data: ['新增用户', '新增帖子', '新增道具', '新增公会'],
+      textStyle: { color: '#8D7B68' }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLine: { lineStyle: { color: '#E5D4C1' } },
+      axisLabel: { color: '#8D7B68' }
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { lineStyle: { color: '#E5D4C1' } },
+      axisLabel: { color: '#8D7B68' },
+      splitLine: { lineStyle: { color: '#F5EBE0' } }
+    },
+    series: [
+      { name: '新增用户', type: 'line', data: newUsers, smooth: true, itemStyle: { color: '#804030' } },
+      { name: '新增帖子', type: 'line', data: newPosts, smooth: true, itemStyle: { color: '#4682B4' } },
+      { name: '新增道具', type: 'line', data: newItems, smooth: true, itemStyle: { color: '#9370DB' } },
+      { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: '#6B9B6B' } }
+    ]
+  }
+
+  metricsChart.setOption(option)
 }
 
 // 打开预览弹窗
@@ -520,15 +708,16 @@ async function handleDeleteGuild(id: number) {
 
 function openChangeOwnerModal(id: number, name: string, currentOwnerId: number) {
   changeOwnerTarget.value = { id, name, currentOwnerId }
-  newOwnerId.value = ''
+  newOwnerIdentifier.value = ''
   showChangeOwnerModal.value = true
 }
 
 async function submitChangeOwner() {
-  if (!changeOwnerTarget.value || !newOwnerId.value) return
+  if (!changeOwnerTarget.value || !newOwnerIdentifier.value) return
   try {
-    await changeGuildOwner(changeOwnerTarget.value.id, parseInt(newOwnerId.value))
+    const result = await changeGuildOwner(changeOwnerTarget.value.id, { new_owner_name: newOwnerIdentifier.value })
     showChangeOwnerModal.value = false
+    alert(`会长已更换为 ${result.new_owner.username}`)
     await loadAllGuilds()
   } catch (error) {
     console.error('更换会长失败:', error)
@@ -756,6 +945,13 @@ function formatBanTime(dateStr: string | null) {
             <div class="stat-label">总公会数</div>
           </div>
         </div>
+        <div class="stat-card">
+          <div class="stat-icon"><i class="ri-user-line"></i></div>
+          <div class="stat-info">
+            <div class="stat-value">{{ stats?.total_users || 0 }}</div>
+            <div class="stat-label">总用户数</div>
+          </div>
+        </div>
       </div>
 
       <!-- 主标签页 -->
@@ -788,16 +984,35 @@ function formatBanTime(dateStr: string | null) {
           <i class="ri-admin-line"></i>
           <span>管理</span>
         </div>
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'logs' }"
+          @click="switchTab('logs')"
+        >
+          <i class="ri-file-list-3-line"></i>
+          <span>操作日志</span>
+        </div>
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'metrics' }"
+          @click="switchTab('metrics')"
+        >
+          <i class="ri-line-chart-line"></i>
+          <span>数据统计</span>
+        </div>
       </div>
 
       <!-- 子标签页 - 审核/管理中心 -->
-      <div v-if="activeTab !== 'admin'" class="sub-tab-container anim-item" style="--delay: 3">
+      <div v-if="activeTab === 'review' || activeTab === 'manage'" class="sub-tab-container anim-item" style="--delay: 3">
         <button
           :class="{ active: activeSubTab === 'posts' }"
           @click="switchSubTab('posts')"
         >
           <i class="ri-article-line"></i>
           帖子
+          <span v-if="activeTab === 'review' && (stats?.pending_posts || 0) > 0" class="review-badge">
+            {{ stats?.pending_posts }}
+          </span>
         </button>
         <button
           :class="{ active: activeSubTab === 'items' }"
@@ -805,6 +1020,9 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-gift-line"></i>
           道具
+          <span v-if="activeTab === 'review' && (stats?.pending_items || 0) > 0" class="review-badge">
+            {{ stats?.pending_items }}
+          </span>
         </button>
         <button
           :class="{ active: activeSubTab === 'guilds' }"
@@ -812,6 +1030,9 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-team-line"></i>
           公会
+          <span v-if="activeTab === 'review' && (stats?.pending_guilds || 0) > 0" class="review-badge">
+            {{ stats?.pending_guilds }}
+          </span>
         </button>
         <button
           v-if="activeTab === 'manage'"
@@ -1261,6 +1482,200 @@ function formatBanTime(dateStr: string | null) {
         </div>
       </div>
 
+      <!-- 操作日志 -->
+      <div v-if="activeTab === 'logs'" class="content-list anim-item" style="--delay: 3">
+        <div class="filter-bar">
+          <select v-model="logsActionType" @change="loadActionLogs">
+            <option value="">全部操作</option>
+            <option value="review_post">审核帖子</option>
+            <option value="review_item">审核道具</option>
+            <option value="review_guild">审核公会</option>
+            <option value="delete_post">删除帖子</option>
+            <option value="delete_item">删除道具</option>
+            <option value="delete_guild">删除公会</option>
+            <option value="hide_post">屏蔽帖子</option>
+            <option value="hide_item">屏蔽道具</option>
+            <option value="pin_post">置顶帖子</option>
+            <option value="feature_post">设为精华</option>
+            <option value="change_guild_owner">更换会长</option>
+            <option value="mute_user">禁言用户</option>
+            <option value="unmute_user">解除禁言</option>
+            <option value="ban_user">封禁用户</option>
+            <option value="unban_user">解除封禁</option>
+            <option value="set_role">设置角色</option>
+          </select>
+          <select v-model="logsTargetType" @change="loadActionLogs">
+            <option value="">全部类型</option>
+            <option value="post">帖子</option>
+            <option value="item">道具</option>
+            <option value="guild">公会</option>
+            <option value="user">用户</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="actionLogs.length === 0" class="empty-state">
+          <i class="ri-file-list-3-line"></i>
+          <p>暂无操作日志</p>
+        </div>
+        <div v-else class="logs-table-wrapper">
+          <table class="logs-table">
+            <thead>
+              <tr>
+                <th>操作者</th>
+                <th>操作类型</th>
+                <th>目标</th>
+                <th>详情</th>
+                <th>IP地址</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="log in actionLogs" :key="log.id">
+                <td>
+                  <span class="operator">{{ log.operator_name }}</span>
+                  <span class="role-tag" :class="log.operator_role">{{ log.operator_role === 'admin' ? '管理员' : '版主' }}</span>
+                </td>
+                <td><span class="action-type">{{ formatActionType(log.action_type) }}</span></td>
+                <td>
+                  <span class="target-type">{{ log.target_type }}</span>
+                  <span class="target-name">{{ log.target_name || `#${log.target_id}` }}</span>
+                </td>
+                <td class="details-cell">{{ formatLogDetails(log) }}</td>
+                <td class="ip-cell">{{ log.ip_address }}</td>
+                <td class="time-cell">{{ formatDate(log.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="logsTotal > logsPageSize" class="pagination">
+          <button :disabled="logsPage <= 1" @click="logsPage--; loadActionLogs()">
+            <i class="ri-arrow-left-line"></i>
+          </button>
+          <span>{{ logsPage }} / {{ Math.ceil(logsTotal / logsPageSize) }}</span>
+          <button :disabled="logsPage >= Math.ceil(logsTotal / logsPageSize)" @click="logsPage++; loadActionLogs()">
+            <i class="ri-arrow-right-line"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 数据统计 -->
+      <div v-if="activeTab === 'metrics'" class="content-list anim-item" style="--delay: 3">
+        <div class="filter-bar">
+          <select v-model="metricsDays" @change="loadMetrics">
+            <option :value="7">最近 7 天</option>
+            <option :value="14">最近 14 天</option>
+            <option :value="30">最近 30 天</option>
+            <option :value="60">最近 60 天</option>
+            <option :value="90">最近 90 天</option>
+          </select>
+        </div>
+
+        <!-- 摘要卡片 -->
+        <div v-if="metricsSummary" class="metrics-summary">
+          <div class="summary-card">
+            <div class="summary-header">
+              <span class="period">今日</span>
+            </div>
+            <div class="summary-body">
+              <div class="summary-item">
+                <span class="label">新用户</span>
+                <span class="value">{{ metricsSummary.today.users }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新帖子</span>
+                <span class="value">{{ metricsSummary.today.posts }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新道具</span>
+                <span class="value">{{ metricsSummary.today.items }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新公会</span>
+                <span class="value">{{ metricsSummary.today.guilds }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-header">
+              <span class="period">昨日</span>
+            </div>
+            <div class="summary-body">
+              <div class="summary-item">
+                <span class="label">新用户</span>
+                <span class="value">{{ metricsSummary.yesterday.users }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新帖子</span>
+                <span class="value">{{ metricsSummary.yesterday.posts }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新道具</span>
+                <span class="value">{{ metricsSummary.yesterday.items }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新公会</span>
+                <span class="value">{{ metricsSummary.yesterday.guilds }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-header">
+              <span class="period">本周</span>
+            </div>
+            <div class="summary-body">
+              <div class="summary-item">
+                <span class="label">新用户</span>
+                <span class="value">{{ metricsSummary.week.users }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新帖子</span>
+                <span class="value">{{ metricsSummary.week.posts }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新道具</span>
+                <span class="value">{{ metricsSummary.week.items }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新公会</span>
+                <span class="value">{{ metricsSummary.week.guilds }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-header">
+              <span class="period">本月</span>
+            </div>
+            <div class="summary-body">
+              <div class="summary-item">
+                <span class="label">新用户</span>
+                <span class="value">{{ metricsSummary.month.users }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新帖子</span>
+                <span class="value">{{ metricsSummary.month.posts }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新道具</span>
+                <span class="value">{{ metricsSummary.month.items }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="label">新公会</span>
+                <span class="value">{{ metricsSummary.month.guilds }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 趋势图表 -->
+        <div class="metrics-chart-container">
+          <h4><i class="ri-line-chart-line"></i> 增长趋势</h4>
+          <div ref="metricsChartRef" class="metrics-chart"></div>
+        </div>
+      </div>
+
       <!-- 审核弹窗 -->
       <div v-if="showReviewModal" class="modal-overlay" @click.self="showReviewModal = false">
         <div class="modal">
@@ -1307,22 +1722,22 @@ function formatBanTime(dateStr: string | null) {
           <div class="modal-body">
             <p class="review-title">公会: {{ changeOwnerTarget?.name }}</p>
             <div class="form-group">
-              <label>新会长用户ID</label>
+              <label>新会长（用户名或邮箱）</label>
               <input
-                v-model="newOwnerId"
-                type="number"
-                placeholder="请输入新会长的用户ID"
+                v-model="newOwnerIdentifier"
+                type="text"
+                placeholder="请输入新会长的用户名或邮箱"
                 class="form-input"
               />
             </div>
             <p class="hint-text">
               <i class="ri-information-line"></i>
-              当前会长ID: {{ changeOwnerTarget?.currentOwnerId }}
+              支持通过用户名或注册邮箱查找用户
             </p>
           </div>
           <div class="modal-footer">
             <button class="btn-cancel" @click="showChangeOwnerModal = false">取消</button>
-            <button class="btn-submit" @click="submitChangeOwner" :disabled="!newOwnerId">确认</button>
+            <button class="btn-submit" @click="submitChangeOwner" :disabled="!newOwnerIdentifier">确认</button>
           </div>
         </div>
       </div>
@@ -1679,6 +2094,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .sub-tab-container button {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1697,6 +2113,24 @@ function formatBanTime(dateStr: string | null) {
   background: #804030;
   border-color: #804030;
   color: #fff;
+}
+
+.review-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #FF6B6B;
+  color: #fff;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .content-list {
@@ -2566,5 +3000,214 @@ function formatBanTime(dateStr: string | null) {
   font-size: 13px;
   color: #5D4037;
   line-height: 1.5;
+}
+
+/* 操作日志表格样式 */
+.logs-table-wrapper {
+  overflow-x: auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
+}
+
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.logs-table th,
+.logs-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #E5D4C1;
+}
+
+.logs-table th {
+  background: #FAF7F2;
+  font-weight: 600;
+  color: #2C1810;
+  white-space: nowrap;
+}
+
+.logs-table tr:hover {
+  background: #FAF7F2;
+}
+
+.logs-table .operator {
+  font-weight: 500;
+  color: #2C1810;
+  margin-right: 8px;
+}
+
+.logs-table .role-tag {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.logs-table .role-tag.admin {
+  background: #FFE4E1;
+  color: #C0392B;
+}
+
+.logs-table .role-tag.moderator {
+  background: #E3F2FD;
+  color: #1976D2;
+}
+
+.logs-table .action-type {
+  color: #5D4037;
+  font-weight: 500;
+}
+
+.logs-table .target-type {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #E5D4C1;
+  border-radius: 4px;
+  margin-right: 8px;
+  color: #5D4037;
+}
+
+.logs-table .target-name {
+  color: #2C1810;
+}
+
+.logs-table .details-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #7B6B5A;
+}
+
+.logs-table .ip-cell {
+  font-family: monospace;
+  font-size: 12px;
+  color: #7B6B5A;
+}
+
+.logs-table .time-cell {
+  white-space: nowrap;
+  color: #7B6B5A;
+  font-size: 13px;
+}
+
+/* 数据统计样式 */
+.metrics-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
+}
+
+.summary-header {
+  margin-bottom: 12px;
+}
+
+.summary-header .period {
+  font-size: 14px;
+  font-weight: 600;
+  color: #5D4037;
+  padding: 4px 10px;
+  background: #FAF7F2;
+  border-radius: 6px;
+}
+
+.summary-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-item .label {
+  font-size: 12px;
+  color: #7B6B5A;
+  margin-bottom: 4px;
+}
+
+.summary-item .value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #2C1810;
+}
+
+.metrics-chart-container {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
+}
+
+.metrics-chart-container h4 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2C1810;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metrics-chart-container h4 i {
+  color: #8B4513;
+}
+
+.metrics-chart {
+  width: 100%;
+  height: 400px;
+}
+
+/* 分页样式 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.pagination button {
+  width: 36px;
+  height: 36px;
+  border: 2px solid #E5D4C1;
+  border-radius: 8px;
+  background: #fff;
+  color: #5D4037;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.pagination button:hover:not(:disabled) {
+  background: #FAF7F2;
+  border-color: #8B4513;
+  color: #8B4513;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination span {
+  font-size: 14px;
+  color: #5D4037;
 }
 </style>

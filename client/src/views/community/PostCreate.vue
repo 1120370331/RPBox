@@ -104,6 +104,13 @@ function clearDraft() {
 }
 
 onMounted(async () => {
+  // 检查登录状态
+  if (!userStore.user || !userStore.token) {
+    toast.warning('请先登录后再发帖')
+    router.push('/login')
+    return
+  }
+
   setTimeout(() => mounted.value = true, 50)
   loadDraft()
   await loadTags()

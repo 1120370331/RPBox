@@ -4,10 +4,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { getItem, updateItem, getItemTags, addItemTag, removeItemTag, type Item, type UpdateItemRequest } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
+const userStore = useUserStore()
 const mounted = ref(false)
 const loading = ref(false)
 const item = ref<Item | null>(null)
@@ -29,6 +31,13 @@ const originalTags = ref<number[]>([])
 const hasPendingEdit = ref(false)
 
 onMounted(async () => {
+  // 检查登录状态
+  if (!userStore.user || !userStore.token) {
+    toast.warning('请先登录后再编辑道具')
+    router.push('/login')
+    return
+  }
+
   setTimeout(() => mounted.value = true, 50)
   await loadItem()
   await loadTags()

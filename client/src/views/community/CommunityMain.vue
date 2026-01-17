@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
+import { getGuild, type Guild } from '@/api/guild'
 
 const router = useRouter()
+const route = useRoute()
 const mounted = ref(false)
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
@@ -17,6 +19,8 @@ const eventsLoading = ref(false)
 const sortBy = ref<'created_at' | 'view_count' | 'like_count'>('created_at')
 const filterCategory = ref<PostCategory | ''>('')
 const searchKeyword = ref('')
+const filterGuildId = ref<number | null>(null)
+const currentGuild = ref<Guild | null>(null)
 
 // 置顶帖子
 const pinnedPosts = computed(() => posts.value.filter(p => p.is_pinned))
@@ -28,9 +32,37 @@ const featuredPosts = computed(() => posts.value.filter(p => p.is_featured && !p
 const normalPosts = computed(() => posts.value.filter(p => !p.is_pinned && !p.is_featured))
 
 onMounted(async () => {
+  // 从 URL query 读取公会筛选
+  if (route.query.guild_id) {
+    filterGuildId.value = Number(route.query.guild_id)
+    await loadGuildInfo()
+  }
+
   setTimeout(() => mounted.value = true, 50)
   await Promise.all([loadPosts(), loadEvents()])
 })
+
+// 监听路由变化
+watch(() => route.query.guild_id, async (newGuildId) => {
+  if (newGuildId) {
+    filterGuildId.value = Number(newGuildId)
+    await loadGuildInfo()
+  } else {
+    filterGuildId.value = null
+    currentGuild.value = null
+  }
+  await loadPosts()
+})
+
+async function loadGuildInfo() {
+  if (!filterGuildId.value) return
+  try {
+    const res = await getGuild(filterGuildId.value)
+    currentGuild.value = res.guild
+  } catch (error) {
+    console.error('加载公会信息失败:', error)
+  }
+}
 
 async function loadEvents() {
   eventsLoading.value = true
@@ -56,6 +88,9 @@ async function loadPosts() {
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
+    }
+    if (filterGuildId.value) {
+      params.guild_id = filterGuildId.value
     }
     const res = await listPosts(params)
     posts.value = res.posts || []
@@ -95,6 +130,10 @@ function formatDate(dateStr: string) {
 async function changeCategoryFilter(category: PostCategory | '') {
   filterCategory.value = category
   await loadPosts()
+}
+
+function clearGuildFilter() {
+  router.push({ name: 'community' })
 }
 
 function getCategoryLabel(category: string) {
@@ -308,6 +347,18 @@ function getEventStyle(event: EventItem) {
         </button>
       </div>
     </header>
+
+    <!-- 公会筛选提示 -->
+    <div v-if="currentGuild" class="guild-filter-banner anim-item" style="--delay: 1">
+      <div class="banner-content">
+        <i class="ri-shield-line"></i>
+        <span>正在查看「<strong>{{ currentGuild.name }}</strong>」的相关内容</span>
+      </div>
+      <button class="clear-filter-btn" @click="clearGuildFilter">
+        <i class="ri-close-line"></i>
+        清除筛选
+      </button>
+    </div>
 
     <!-- Filters & Sort -->
     <div class="filter-section anim-item" style="--delay: 1">
@@ -592,6 +643,62 @@ function getEventStyle(event: EventItem) {
   font-size: 14px;
   color: #8D7B68;
   margin: 0;
+}
+
+/* ========== 公会筛选横幅 ========== */
+.guild-filter-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, #FFF5E6, #FFF9F0);
+  border: 1px solid #E5D4C1;
+  border-left: 4px solid #B87333;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(184, 115, 51, 0.08);
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: #4B3621;
+}
+
+.banner-content i {
+  font-size: 20px;
+  color: #B87333;
+}
+
+.banner-content strong {
+  color: #804030;
+  font-weight: 600;
+}
+
+.clear-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  color: #8D7B68;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-filter-btn:hover {
+  background: #FFF5E6;
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.clear-filter-btn i {
+  font-size: 14px;
 }
 
 .header-actions {
