@@ -21,6 +21,7 @@ const filterCategory = ref<PostCategory | ''>('')
 const searchKeyword = ref('')
 const filterGuildId = ref<number | null>(null)
 const currentGuild = ref<Guild | null>(null)
+const currentPage = ref(1)
 
 // 置顶帖子
 const pinnedPosts = computed(() => posts.value.filter(p => p.is_pinned))
@@ -80,7 +81,7 @@ async function loadPosts() {
   loading.value = true
   try {
     const params: ListPostsParams = {
-      page: 1,
+      page: currentPage.value,
       page_size: 12,
       sort: sortBy.value,
       order: 'desc',
@@ -129,7 +130,13 @@ function formatDate(dateStr: string) {
 
 async function changeCategoryFilter(category: PostCategory | '') {
   filterCategory.value = category
+  currentPage.value = 1
   await loadPosts()
+}
+
+function changePage(page: number) {
+  currentPage.value = page
+  loadPosts()
 }
 
 function clearGuildFilter() {
@@ -604,11 +611,23 @@ function getEventStyle(event: EventItem) {
 
     <!-- Pagination -->
     <div v-if="posts.length > 0" class="pagination anim-item" style="--delay: 4">
-      <button class="page-btn" disabled>上一页</button>
-      <button class="page-btn active">1</button>
-      <button class="page-btn">2</button>
-      <button class="page-btn">3</button>
-      <button class="page-btn">下一页</button>
+      <button
+        class="page-btn"
+        :disabled="currentPage === 1"
+        @click="changePage(currentPage - 1)"
+      >
+        上一页
+      </button>
+      <span class="page-info">
+        第 {{ currentPage }} / {{ Math.ceil(total / 12) }} 页
+      </span>
+      <button
+        class="page-btn"
+        :disabled="currentPage >= Math.ceil(total / 12)"
+        @click="changePage(currentPage + 1)"
+      >
+        下一页
+      </button>
     </div>
   </div>
 </template>

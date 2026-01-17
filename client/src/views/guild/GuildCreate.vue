@@ -110,7 +110,7 @@ async function handleCreate() {
 
       <div class="field">
         <label>主题色</label>
-        <input v-model="color" type="color" :value="'#' + color" @input="color = ($event.target as HTMLInputElement).value.replace('#', '')" />
+        <input type="color" :value="'#' + color" @input="color = ($event.target as HTMLInputElement).value.replace('#', '')" />
       </div>
 
       <div class="actions">

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,6 +10,34 @@ import (
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 )
+
+// logAdminAction 记录管理员操作日志
+func logAdminAction(c *gin.Context, actionType, targetType string, targetID uint, targetName string, details map[string]interface{}) {
+	userID := c.GetUint("userID")
+
+	var user model.User
+	database.DB.Select("username, role").First(&user, userID)
+
+	detailsJSON := ""
+	if details != nil {
+		if jsonBytes, err := json.Marshal(details); err == nil {
+			detailsJSON = string(jsonBytes)
+		}
+	}
+
+	log := model.AdminActionLog{
+		OperatorID:   userID,
+		OperatorName: user.Username,
+		OperatorRole: user.Role,
+		ActionType:   actionType,
+		TargetType:   targetType,
+		TargetID:     targetID,
+		TargetName:   targetName,
+		Details:      detailsJSON,
+		IPAddress:    c.ClientIP(),
+	}
+	database.DB.Create(&log)
+}
 
 // ReviewRequest 审核请求
 type ReviewRequest struct {
@@ -99,6 +128,13 @@ func (s *Server) reviewPost(c *gin.Context) {
 	}
 
 	database.DB.Save(&post)
+
+	// 记录日志
+	logAdminAction(c, "review_post", "post", uint(id), post.Title, map[string]interface{}{
+		"action":  req.Action,
+		"comment": req.Comment,
+	})
+
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "post": post})
 }
 
@@ -271,6 +307,13 @@ func (s *Server) reviewItem(c *gin.Context) {
 	}
 
 	database.DB.Save(&item)
+
+	// 记录日志
+	logAdminAction(c, "review_item", "item", uint(id), item.Name, map[string]interface{}{
+		"action":  req.Action,
+		"comment": req.Comment,
+	})
+
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "item": item})
 }
 
@@ -431,12 +474,17 @@ func (s *Server) deletePostByMod(c *gin.Context) {
 		return
 	}
 
+	postTitle := post.Title // 保存标题用于日志
+
 	// 删除关联数据
 	database.DB.Where("post_id = ?", id).Delete(&model.PostTag{})
 	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
 	database.DB.Delete(&post)
+
+	// 记录日志
+	logAdminAction(c, "delete_post", "post", uint(id), postTitle, nil)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
@@ -455,6 +503,9 @@ func (s *Server) hidePostByMod(c *gin.Context) {
 	post.Status = "pending"
 	database.DB.Save(&post)
 
+	// 记录日志
+	logAdminAction(c, "hide_post", "post", uint(id), post.Title, nil)
+
 	c.JSON(http.StatusOK, gin.H{"message": "已屏蔽，帖子已打回待审核"})
 }
 
@@ -470,6 +521,11 @@ func (s *Server) pinPost(c *gin.Context) {
 
 	post.IsPinned = !post.IsPinned
 	database.DB.Save(&post)
+
+	// 记录日志
+	logAdminAction(c, "pin_post", "post", uint(id), post.Title, map[string]interface{}{
+		"is_pinned": post.IsPinned,
+	})
 
 	msg := "已置顶"
 	if !post.IsPinned {
@@ -490,6 +546,11 @@ func (s *Server) featurePost(c *gin.Context) {
 
 	post.IsFeatured = !post.IsFeatured
 	database.DB.Save(&post)
+
+	// 记录日志
+	logAdminAction(c, "feature_post", "post", uint(id), post.Title, map[string]interface{}{
+		"is_featured": post.IsFeatured,
+	})
 
 	msg := "已设为精华"
 	if !post.IsFeatured {
@@ -566,6 +627,8 @@ func (s *Server) deleteItemByMod(c *gin.Context) {
 		return
 	}
 
+	itemName := item.Name // 保存名称用于日志
+
 	// 删除关联数据
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemTag{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemComment{})
@@ -573,6 +636,9 @@ func (s *Server) deleteItemByMod(c *gin.Context) {
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemFavorite{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemRating{})
 	database.DB.Delete(&item)
+
+	// 记录日志
+	logAdminAction(c, "delete_item", "item", uint(id), itemName, nil)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
@@ -591,6 +657,9 @@ func (s *Server) hideItemByMod(c *gin.Context) {
 	item.Status = "pending"
 	database.DB.Save(&item)
 
+	// 记录日志
+	logAdminAction(c, "hide_item", "item", uint(id), item.Name, nil)
+
 	c.JSON(http.StatusOK, gin.H{"message": "已屏蔽，道具已打回待审核"})
 }
 
@@ -600,6 +669,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	var totalPosts, totalItems int64
 	var todayPosts, todayItems int64
 	var pendingGuilds, totalGuilds int64
+	var totalUsers, todayUsers int64
 
 	// 待审核数量
 	database.DB.Model(&model.Post{}).Where("review_status = ?", "pending").Count(&pendingPosts)
@@ -610,11 +680,13 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Post{}).Count(&totalPosts)
 	database.DB.Model(&model.Item{}).Count(&totalItems)
 	database.DB.Model(&model.Guild{}).Where("status = ?", "approved").Count(&totalGuilds)
+	database.DB.Model(&model.User{}).Count(&totalUsers)
 
 	// 今日新增
 	today := time.Now().Format("2006-01-02")
 	database.DB.Model(&model.Post{}).Where("DATE(created_at) = ?", today).Count(&todayPosts)
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", today).Count(&todayItems)
+	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", today).Count(&todayUsers)
 
 	c.JSON(http.StatusOK, gin.H{
 		"pending_posts":  pendingPosts,
@@ -623,8 +695,10 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 		"total_posts":    totalPosts,
 		"total_items":    totalItems,
 		"total_guilds":   totalGuilds,
+		"total_users":    totalUsers,
 		"today_posts":    todayPosts,
 		"today_items":    todayItems,
+		"today_users":    todayUsers,
 	})
 }
 
@@ -703,6 +777,13 @@ func (s *Server) reviewGuild(c *gin.Context) {
 	}
 
 	database.DB.Save(&guild)
+
+	// 记录日志
+	logAdminAction(c, "review_guild", "guild", uint(id), guild.Name, map[string]interface{}{
+		"action":  req.Action,
+		"comment": req.Comment,
+	})
+
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "guild": guild})
 }
 
@@ -758,7 +839,8 @@ func (s *Server) listAllGuilds(c *gin.Context) {
 
 // ChangeGuildOwnerRequest 更改公会会长请求
 type ChangeGuildOwnerRequest struct {
-	NewOwnerID uint `json:"new_owner_id" binding:"required"`
+	NewOwnerID   *uint  `json:"new_owner_id"`   // 可选：用户ID
+	NewOwnerName string `json:"new_owner_name"` // 可选：用户名或邮箱
 }
 
 // changeGuildOwner 更改公会会长
@@ -777,15 +859,27 @@ func (s *Server) changeGuildOwner(c *gin.Context) {
 		return
 	}
 
-	// 检查新会长是否存在
+	// 查找新会长
 	var newOwner model.User
-	if err := database.DB.First(&newOwner, req.NewOwnerID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+	if req.NewOwnerID != nil && *req.NewOwnerID > 0 {
+		// 通过ID查找
+		if err := database.DB.First(&newOwner, *req.NewOwnerID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+			return
+		}
+	} else if req.NewOwnerName != "" {
+		// 通过用户名或邮箱查找
+		if err := database.DB.Where("username = ? OR email = ?", req.NewOwnerName, req.NewOwnerName).First(&newOwner).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "未找到该用户，请检查用户名或邮箱"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供新会长的ID或用户名/邮箱"})
 		return
 	}
 
 	oldOwnerID := guild.OwnerID
-	guild.OwnerID = req.NewOwnerID
+	guild.OwnerID = newOwner.ID
 	database.DB.Save(&guild)
 
 	// 更新成员角色
@@ -795,11 +889,11 @@ func (s *Server) changeGuildOwner(c *gin.Context) {
 
 	// 检查新会长是否已是成员
 	var member model.GuildMember
-	err := database.DB.Where("guild_id = ? AND user_id = ?", id, req.NewOwnerID).First(&member).Error
+	err := database.DB.Where("guild_id = ? AND user_id = ?", id, newOwner.ID).First(&member).Error
 	if err != nil {
 		database.DB.Create(&model.GuildMember{
 			GuildID:  uint(id),
-			UserID:   req.NewOwnerID,
+			UserID:   newOwner.ID,
 			Role:     "owner",
 			JoinedAt: time.Now(),
 		})
@@ -808,7 +902,21 @@ func (s *Server) changeGuildOwner(c *gin.Context) {
 		database.DB.Model(&member).Update("role", "owner")
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "会长已更换", "guild": guild})
+	// 记录日志
+	logAdminAction(c, "change_guild_owner", "guild", uint(id), guild.Name, map[string]interface{}{
+		"old_owner_id":   oldOwnerID,
+		"new_owner_id":   newOwner.ID,
+		"new_owner_name": newOwner.Username,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "会长已更换",
+		"guild":   guild,
+		"new_owner": gin.H{
+			"id":       newOwner.ID,
+			"username": newOwner.Username,
+		},
+	})
 }
 
 // deleteGuildByMod 版主删除公会
@@ -821,11 +929,161 @@ func (s *Server) deleteGuildByMod(c *gin.Context) {
 		return
 	}
 
+	guildName := guild.Name // 保存名称用于日志
+
 	// 删除关联数据
 	database.DB.Where("guild_id = ?", id).Delete(&model.GuildMember{})
 	database.DB.Where("guild_id = ?", id).Delete(&model.StoryGuild{})
 	database.DB.Where("guild_id = ?", id).Delete(&model.Tag{})
 	database.DB.Delete(&guild)
 
+	// 记录日志
+	logAdminAction(c, "delete_guild", "guild", uint(id), guildName, nil)
+
 	c.JSON(http.StatusOK, gin.H{"message": "公会已删除"})
+}
+
+// ========== 管理日志 ==========
+
+// listActionLogs 获取管理操作日志
+func (s *Server) listActionLogs(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	operatorID := c.Query("operator_id")
+	actionType := c.Query("action_type")
+	targetType := c.Query("target_type")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+
+	query := database.DB.Model(&model.AdminActionLog{})
+
+	if operatorID != "" {
+		if id, err := strconv.ParseUint(operatorID, 10, 32); err == nil {
+			query = query.Where("operator_id = ?", id)
+		}
+	}
+	if actionType != "" {
+		query = query.Where("action_type = ?", actionType)
+	}
+	if targetType != "" {
+		query = query.Where("target_type = ?", targetType)
+	}
+	if startDate != "" {
+		query = query.Where("DATE(created_at) >= ?", startDate)
+	}
+	if endDate != "" {
+		query = query.Where("DATE(created_at) <= ?", endDate)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	var logs []model.AdminActionLog
+	query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&logs)
+
+	c.JSON(http.StatusOK, gin.H{"logs": logs, "total": total})
+}
+
+// ========== Metrics 统计 ==========
+
+// getMetricsHistory 获取历史统计数据
+func (s *Server) getMetricsHistory(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))
+	if days > 365 {
+		days = 365
+	}
+	if days < 1 {
+		days = 30
+	}
+
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -days+1)
+
+	type DailyData struct {
+		Date       string `json:"date"`
+		TotalUsers int64  `json:"total_users"`
+		TotalPosts int64  `json:"total_posts"`
+		TotalItems int64  `json:"total_items"`
+		TotalGuilds int64 `json:"total_guilds"`
+		NewUsers   int64  `json:"new_users"`
+		NewPosts   int64  `json:"new_posts"`
+		NewItems   int64  `json:"new_items"`
+		NewGuilds  int64  `json:"new_guilds"`
+	}
+
+	var result []DailyData
+
+	// 遍历每一天计算数据
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		dateEnd := d.Add(24 * time.Hour)
+
+		var data DailyData
+		data.Date = dateStr
+
+		// 计算截止到当天的累计数量
+		database.DB.Model(&model.User{}).Where("created_at < ?", dateEnd).Count(&data.TotalUsers)
+		database.DB.Model(&model.Post{}).Where("created_at < ?", dateEnd).Count(&data.TotalPosts)
+		database.DB.Model(&model.Item{}).Where("created_at < ?", dateEnd).Count(&data.TotalItems)
+		database.DB.Model(&model.Guild{}).Where("status = ? AND created_at < ?", "approved", dateEnd).Count(&data.TotalGuilds)
+
+		// 计算当天新增数量
+		database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", dateStr).Count(&data.NewUsers)
+		database.DB.Model(&model.Post{}).Where("DATE(created_at) = ?", dateStr).Count(&data.NewPosts)
+		database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", dateStr).Count(&data.NewItems)
+		database.DB.Model(&model.Guild{}).Where("DATE(created_at) = ? AND status = ?", dateStr, "approved").Count(&data.NewGuilds)
+
+		result = append(result, data)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"metrics": result, "days": days})
+}
+
+// getMetricsSummary 获取统计摘要（今日/周/月对比）
+func (s *Server) getMetricsSummary(c *gin.Context) {
+	today := time.Now().Format("2006-01-02")
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	weekAgo := time.Now().AddDate(0, 0, -7).Format("2006-01-02")
+	monthAgo := time.Now().AddDate(0, -1, 0).Format("2006-01-02")
+
+	type PeriodStats struct {
+		Users  int64 `json:"users"`
+		Posts  int64 `json:"posts"`
+		Items  int64 `json:"items"`
+		Guilds int64 `json:"guilds"`
+	}
+
+	var todayStats, yesterdayStats, weekStats, monthStats PeriodStats
+
+	// 今日新增
+	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", today).Count(&todayStats.Users)
+	database.DB.Model(&model.Post{}).Where("DATE(created_at) = ?", today).Count(&todayStats.Posts)
+	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", today).Count(&todayStats.Items)
+	database.DB.Model(&model.Guild{}).Where("DATE(created_at) = ? AND status = ?", today, "approved").Count(&todayStats.Guilds)
+
+	// 昨日新增
+	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", yesterday).Count(&yesterdayStats.Users)
+	database.DB.Model(&model.Post{}).Where("DATE(created_at) = ?", yesterday).Count(&yesterdayStats.Posts)
+	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", yesterday).Count(&yesterdayStats.Items)
+	database.DB.Model(&model.Guild{}).Where("DATE(created_at) = ? AND status = ?", yesterday, "approved").Count(&yesterdayStats.Guilds)
+
+	// 本周新增（过去7天）
+	database.DB.Model(&model.User{}).Where("DATE(created_at) >= ?", weekAgo).Count(&weekStats.Users)
+	database.DB.Model(&model.Post{}).Where("DATE(created_at) >= ?", weekAgo).Count(&weekStats.Posts)
+	database.DB.Model(&model.Item{}).Where("DATE(created_at) >= ?", weekAgo).Count(&weekStats.Items)
+	database.DB.Model(&model.Guild{}).Where("DATE(created_at) >= ? AND status = ?", weekAgo, "approved").Count(&weekStats.Guilds)
+
+	// 本月新增（过去30天）
+	database.DB.Model(&model.User{}).Where("DATE(created_at) >= ?", monthAgo).Count(&monthStats.Users)
+	database.DB.Model(&model.Post{}).Where("DATE(created_at) >= ?", monthAgo).Count(&monthStats.Posts)
+	database.DB.Model(&model.Item{}).Where("DATE(created_at) >= ?", monthAgo).Count(&monthStats.Items)
+	database.DB.Model(&model.Guild{}).Where("DATE(created_at) >= ? AND status = ?", monthAgo, "approved").Count(&monthStats.Guilds)
+
+	c.JSON(http.StatusOK, gin.H{
+		"today":     todayStats,
+		"yesterday": yesterdayStats,
+		"week":      weekStats,
+		"month":     monthStats,
+	})
 }

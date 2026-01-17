@@ -572,11 +572,13 @@ func (s *Server) addItemComment(c *gin.Context) {
 		return
 	}
 
-	// 检查用户是否已评论过
-	var existingComment model.ItemComment
-	if err := database.DB.Where("item_id = ? AND user_id = ?", id, userID).First(&existingComment).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "您已经评论过此道具"})
-		return
+	// 检查用户是否已发表过评分评论（只在提交评分时检查）
+	if req.Rating > 0 {
+		var existingRatingComment model.ItemComment
+		if err := database.DB.Where("item_id = ? AND user_id = ? AND rating > 0", id, userID).First(&existingRatingComment).Error; err == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "您已经对此道具发表过评分评价，每个用户只能发表一次评分"})
+			return
+		}
 	}
 
 	itemID, _ := strconv.ParseUint(id, 10, 32)
@@ -592,11 +594,11 @@ func (s *Server) addItemComment(c *gin.Context) {
 		return
 	}
 
-	// 重新计算平均评分（基于评论中的评分）
+	// 重新计算平均评分（只计算带评分的评论，rating > 0）
 	var avgRating float64
 	var count int64
-	database.DB.Model(&model.ItemComment{}).Where("item_id = ?", id).Count(&count)
-	database.DB.Model(&model.ItemComment{}).Where("item_id = ?", id).Select("AVG(rating)").Scan(&avgRating)
+	database.DB.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Count(&count)
+	database.DB.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Select("AVG(rating)").Scan(&avgRating)
 
 	database.DB.Model(&item).Updates(map[string]interface{}{
 		"rating":       avgRating,

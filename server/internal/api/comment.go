@@ -130,8 +130,18 @@ func (s *Server) deleteComment(c *gin.Context) {
 		return
 	}
 
-	// 只有作者可以删除
-	if comment.AuthorID != userID {
+	// 权限检查：评论作者、帖子作者、版主/管理员可以删除
+	var post model.Post
+	if err := database.DB.First(&post, postID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
+	}
+
+	isModerator := checkModerator(userID)
+	isCommentAuthor := comment.AuthorID == userID
+	isPostAuthor := post.AuthorID == userID
+
+	if !isCommentAuthor && !isPostAuthor && !isModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
 		return
 	}

@@ -83,6 +83,12 @@ function goToMyItems() {
   router.push('/market/my-items')
 }
 
+// 翻页
+function changePage(page: number) {
+  currentPage.value = page
+  loadItems()
+}
+
 watch([sortBy], () => {
   currentPage.value = 1
   loadItems()
@@ -155,6 +161,29 @@ watch([sortBy], () => {
           </button>
         </div>
       </div>
+    </div>
+
+    <!-- 分页 -->
+    <div v-if="items.length > 0" class="pagination anim-item" style="--delay: 3">
+      <button
+        class="page-btn"
+        :disabled="currentPage === 1"
+        @click="changePage(currentPage - 1)"
+      >
+        <i class="ri-arrow-left-s-line"></i>
+        上一页
+      </button>
+      <span class="page-info">
+        第 {{ currentPage }} / {{ Math.ceil(total / 12) }} 页
+      </span>
+      <button
+        class="page-btn"
+        :disabled="currentPage >= Math.ceil(total / 12)"
+        @click="changePage(currentPage + 1)"
+      >
+        下一页
+        <i class="ri-arrow-right-s-line"></i>
+      </button>
     </div>
   </div>
 </template>
@@ -401,5 +430,46 @@ watch([sortBy], () => {
 .header-top button {
   pointer-events: auto !important;
   opacity: 1;
+}
+
+/* 分页 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+}
+
+.page-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  color: #5D4037;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: #FFF8F0;
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 14px;
+  color: #5D4037;
+  font-weight: 500;
 }
 </style>

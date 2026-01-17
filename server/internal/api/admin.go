@@ -104,6 +104,11 @@ func (s *Server) setUserRole(c *gin.Context) {
 	user.Role = req.Role
 	database.DB.Save(&user)
 
+	// 记录日志
+	logAdminAction(c, "set_role", "user", uint(id), user.Username, map[string]interface{}{
+		"new_role": req.Role,
+	})
+
 	c.JSON(http.StatusOK, gin.H{"message": "角色已更新", "user": gin.H{
 		"id":       user.ID,
 		"username": user.Username,
@@ -157,6 +162,16 @@ func (s *Server) muteUser(c *gin.Context) {
 
 	database.DB.Save(&user)
 
+	// 记录日志
+	durationStr := "永久"
+	if req.Duration > 0 {
+		durationStr = strconv.Itoa(req.Duration) + "小时"
+	}
+	logAdminAction(c, "mute_user", "user", uint(id), user.Username, map[string]interface{}{
+		"duration": durationStr,
+		"reason":   req.Reason,
+	})
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "用户已禁言",
 		"user": gin.H{
@@ -184,6 +199,9 @@ func (s *Server) unmuteUser(c *gin.Context) {
 	user.MuteReason = ""
 
 	database.DB.Save(&user)
+
+	// 记录日志
+	logAdminAction(c, "unmute_user", "user", uint(id), user.Username, nil)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "已解除禁言",
@@ -239,6 +257,16 @@ func (s *Server) banUser(c *gin.Context) {
 
 	database.DB.Save(&user)
 
+	// 记录日志
+	durationStr := "永久"
+	if req.Duration > 0 {
+		durationStr = strconv.Itoa(req.Duration) + "小时"
+	}
+	logAdminAction(c, "ban_user", "user", uint(id), user.Username, map[string]interface{}{
+		"duration": durationStr,
+		"reason":   req.Reason,
+	})
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "用户已被禁止登录",
 		"user": gin.H{
@@ -266,6 +294,9 @@ func (s *Server) unbanUser(c *gin.Context) {
 	user.BanReason = ""
 
 	database.DB.Save(&user)
+
+	// 记录日志
+	logAdminAction(c, "unban_user", "user", uint(id), user.Username, nil)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "已解除登录禁止",
@@ -302,6 +333,11 @@ func (s *Server) disableUserPosts(c *gin.Context) {
 			"status":        "removed",
 			"review_status": "rejected",
 		})
+
+	// 记录日志
+	logAdminAction(c, "disable_posts", "user", uint(id), user.Username, map[string]interface{}{
+		"affected_count": result.RowsAffected,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "已禁用该用户所有帖子",
@@ -348,6 +384,11 @@ func (s *Server) deleteUserPosts(c *gin.Context) {
 
 	// 更新用户帖子计数
 	database.DB.Model(&user).Update("post_count", 0)
+
+	// 记录日志
+	logAdminAction(c, "delete_posts", "user", uint(id), user.Username, map[string]interface{}{
+		"affected_count": result.RowsAffected,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "已删除该用户所有帖子",
