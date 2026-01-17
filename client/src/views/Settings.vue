@@ -19,7 +19,7 @@ interface WowInstallation {
 const router = useRouter()
 const userStore = useUserStore()
 const toast = useToastStore()
-const { checking, updateAvailable, updateInfo, checkForUpdate, downloadAndInstall, downloading, downloadProgress } = useUpdater()
+const { checking, updateAvailable, updateInfo, checkForUpdate, downloadAndInstall, downloading, downloadProgress, lastError } = useUpdater()
 
 const mounted = ref(false)
 const wowPath = ref('')
@@ -91,9 +91,22 @@ async function handleCheckUpdate() {
     } else {
       toast.info('当前已是最新版本')
     }
-  } catch (e) {
-    console.error('检查更新失败:', e)
-    toast.error('检查更新失败')
+  } catch (e: any) {
+    console.error('[Settings] 检查更新失败:', e)
+    const errorMsg = lastError.value || e?.message || '未知错误'
+    toast.error(`检查更新失败: ${errorMsg}`)
+  }
+}
+
+async function handleDownloadAndInstall() {
+  try {
+    toast.info('开始下载更新...')
+    await downloadAndInstall()
+    toast.success('更新下载完成，即将重启应用')
+  } catch (e: any) {
+    console.error('[Settings] 下载更新失败:', e)
+    const errorMsg = lastError.value || e?.message || '未知错误'
+    toast.error(`下载更新失败: ${errorMsg}`)
   }
 }
 
@@ -408,7 +421,7 @@ async function handleCheckAddonUpdate() {
               </div>
               <button
                 class="btn btn-update"
-                @click="downloadAndInstall"
+                @click="handleDownloadAndInstall"
                 :disabled="downloading"
               >
                 <i :class="downloading ? 'ri-loader-4-line spin' : 'ri-download-line'"></i>

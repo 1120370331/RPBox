@@ -239,10 +239,16 @@ function goBack() {
         <div class="guilds-card">
           <div class="card-header">
             <h2 class="card-title">加入的公会</h2>
-            <router-link v-if="isOwnProfile" to="/guild/create" class="create-btn">
-              <i class="ri-add-line"></i>
-              创建
-            </router-link>
+            <div v-if="isOwnProfile" class="header-actions">
+              <router-link to="/guild" class="join-btn">
+                <i class="ri-shield-line"></i>
+                加入公会
+              </router-link>
+              <router-link to="/guild/create" class="create-btn">
+                <i class="ri-add-line"></i>
+                创建
+              </router-link>
+            </div>
           </div>
 
           <div class="guilds-list">
@@ -808,6 +814,29 @@ function goBack() {
 }
 
 .create-btn:hover {
+  color: #4B3621;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.join-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #B87333;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.join-btn:hover {
   color: #4B3621;
 }
 

@@ -37,6 +37,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.StoryTag{},
 		&model.Guild{},
 		&model.GuildMember{},
+		&model.GuildApplication{},
 		&model.StoryGuild{},
 		&model.Item{},
 		&model.ItemTag{},

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, type Guild, type GuildMember } from '@/api/guild'
+import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, listGuildApplications, type Guild, type GuildMember } from '@/api/guild'
 import { useDialog } from '@/composables/useDialog'
 import RModal from '@/components/RModal.vue'
 import RButton from '@/components/RButton.vue'
@@ -16,6 +16,7 @@ const loading = ref(true)
 const guild = ref<Guild | null>(null)
 const myRole = ref('')
 const members = ref<GuildMember[]>([])
+const pendingApplicationCount = ref(0)
 
 // 设置相关
 const showSettingsModal = ref(false)
@@ -45,6 +46,12 @@ async function loadGuild() {
     myRole.value = res.my_role
     const membersRes = await listGuildMembers(guildId)
     members.value = membersRes.members || []
+
+    // 如果是管理员，加载待处理申请数量
+    if (myRole.value === 'owner' || myRole.value === 'admin') {
+      const appsRes = await listGuildApplications(guildId, 'pending')
+      pendingApplicationCount.value = appsRes.applications?.length || 0
+    }
   } catch (e) {
     console.error('加载失败:', e)
   } finally {
@@ -194,6 +201,10 @@ onMounted(loadGuild)
           </div>
           <div class="top-actions">
             <button class="icon-btn" @click="loadGuild"><i class="ri-refresh-line"></i></button>
+            <button v-if="isAdmin" class="primary-btn manage-btn" @click="router.push(`/guild/${guildId}/manage`)">
+              <i class="ri-team-line"></i> 管理公会
+              <span v-if="pendingApplicationCount > 0" class="pending-badge">{{ pendingApplicationCount }}</span>
+            </button>
             <button v-if="isAdmin" class="primary-btn" @click="openSettings">
               <i class="ri-settings-3-line"></i> 设置
             </button>
@@ -249,7 +260,7 @@ onMounted(loadGuild)
                 <span class="tag">INFO</span>
               </div>
               <ul class="info-list">
-                <li>
+                <li v-if="myRole">
                   <span class="label">邀请码</span>
                   <span class="value code">{{ guild.invite_code }}</span>
                 </li>
@@ -257,7 +268,7 @@ onMounted(loadGuild)
                   <span class="label">剧情数</span>
                   <span class="value">{{ guild.story_count }}</span>
                 </li>
-                <li>
+                <li v-if="myRole">
                   <span class="label">我的身份</span>
                   <span class="value role">{{ getRoleLabel(myRole) }}</span>
                 </li>
@@ -283,7 +294,7 @@ onMounted(loadGuild)
             </div>
 
             <!-- 成员列表 -->
-            <div class="bento-card members-card">
+            <div v-if="myRole" class="bento-card members-card">
               <div class="card-header">
                 <h3>成员列表</h3>
                 <span class="count">{{ members.length }}人</span>
@@ -491,6 +502,25 @@ onMounted(loadGuild)
 
 .primary-btn:hover {
   background: #6B3626;
+}
+
+.manage-btn {
+  position: relative;
+}
+
+.pending-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #FF9800;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Scroll Content */

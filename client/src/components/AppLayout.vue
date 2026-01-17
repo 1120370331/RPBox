@@ -25,6 +25,7 @@ const menuItems = [
   { id: 'archives', icon: 'ri-book-open-line', label: '剧情故事', route: '/archives' },
   { id: 'market', icon: 'ri-sword-line', label: '道具物品', route: '/market' },
   { id: 'community', icon: 'ri-chat-smile-2-line', label: '社区广场', route: '/community' },
+  { id: 'guild', icon: 'ri-shield-line', label: '公会', route: '/guild' },
   { id: 'settings', icon: 'ri-settings-3-line', label: '系统设置', route: '/settings' },
 ]
 
@@ -42,6 +43,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/archives')) return 'archives'
   if (path.startsWith('/market')) return 'market'
   if (path.startsWith('/community')) return 'community'
+  if (path.startsWith('/guild')) return 'guild'
   if (path.startsWith('/settings')) return 'settings'
   if (path.startsWith('/moderator')) return 'moderator'
   return 'home'

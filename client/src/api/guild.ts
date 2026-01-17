@@ -123,3 +123,44 @@ export async function uploadGuildBanner(guildId: number, file: File): Promise<{ 
   formData.append('banner', file)
   return request.post(`/guilds/${guildId}/banner`, formData)
 }
+
+// ========== 公会申请系统 ==========
+
+export interface GuildApplication {
+  id: number
+  guild_id: number
+  user_id: number
+  message: string
+  status: 'pending' | 'approved' | 'rejected'
+  reviewer_id?: number
+  review_comment?: string
+  reviewed_at?: string
+  created_at: string
+  updated_at: string
+  // 扩展字段
+  username?: string
+  avatar?: string
+  guild_name?: string
+  guild_icon?: string
+}
+
+export async function applyGuild(guildId: number, message?: string): Promise<{ application: GuildApplication }> {
+  return request.post(`/guilds/${guildId}/apply`, { message })
+}
+
+export async function listGuildApplications(guildId: number, status?: string): Promise<{ applications: GuildApplication[] }> {
+  const params = status ? `?status=${status}` : ''
+  return request.get(`/guilds/${guildId}/applications${params}`)
+}
+
+export async function reviewGuildApplication(guildId: number, appId: number, action: 'approve' | 'reject', comment?: string): Promise<{ application: GuildApplication }> {
+  return request.post(`/guilds/${guildId}/applications/${appId}/review`, { action, comment })
+}
+
+export async function listMyApplications(): Promise<{ applications: GuildApplication[] }> {
+  return request.get('/user/guild-applications')
+}
+
+export async function cancelApplication(guildId: number, appId: number): Promise<void> {
+  return request.delete(`/guilds/${guildId}/applications/${appId}`)
+}

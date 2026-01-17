@@ -21,6 +21,7 @@ export interface Post {
   event_type?: 'server' | 'guild'
   event_start_time?: string
   event_end_time?: string
+  event_color?: string        // 活动标记颜色（十六进制）
   created_at: string
   updated_at: string
 }
@@ -71,6 +72,7 @@ export interface CreatePostRequest {
   event_type?: 'server' | 'guild'
   event_start_time?: string
   event_end_time?: string
+  event_color?: string
 }
 
 export interface UpdatePostRequest {
@@ -85,6 +87,7 @@ export interface UpdatePostRequest {
   event_type?: 'server' | 'guild'
   event_start_time?: string
   event_end_time?: string
+  event_color?: string
 }
 
 export interface ListPostsParams {

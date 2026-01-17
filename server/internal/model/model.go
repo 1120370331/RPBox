@@ -220,6 +220,20 @@ type GuildMember struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// GuildApplication 公会申请
+type GuildApplication struct {
+	ID            uint       `gorm:"primarykey" json:"id"`
+	GuildID       uint       `gorm:"uniqueIndex:idx_guild_applicant;not null" json:"guild_id"`
+	UserID        uint       `gorm:"uniqueIndex:idx_guild_applicant;not null" json:"user_id"`
+	Message       string     `gorm:"size:512" json:"message"`
+	Status        string     `gorm:"size:20;default:pending" json:"status"` // pending|approved|rejected
+	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`
+	ReviewComment string     `gorm:"size:512" json:"review_comment"`
+	ReviewedAt    *time.Time `json:"reviewed_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 // StoryGuild 剧情-公会归档
 type StoryGuild struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
@@ -354,6 +368,7 @@ type Post struct {
 	EventType      string     `gorm:"size:20" json:"event_type"`       // server|guild (服务器活动/公会活动)
 	EventStartTime *time.Time `json:"event_start_time"`                // 活动开始时间
 	EventEndTime   *time.Time `json:"event_end_time"`                  // 活动结束时间
+	EventColor     string     `gorm:"size:7" json:"event_color"`       // 活动标记颜色（十六进制，如 #FF5733）
 	// 审核相关字段
 	ReviewStatus  string     `gorm:"size:20;default:pending;index" json:"review_status"` // pending|approved|rejected
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                           // 审核人ID
