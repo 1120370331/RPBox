@@ -32,6 +32,7 @@ const router = createRouter({
         { path: 'guild', name: 'guild', component: () => import('./views/guild/GuildList.vue') },
         { path: 'guild/create', name: 'guild-create', component: () => import('./views/guild/GuildCreate.vue') },
         { path: 'guild/:id', name: 'guild-detail', component: () => import('./views/guild/GuildDetail.vue') },
+        { path: 'guild/:id/manage', name: 'guild-manage', component: () => import('./views/guild/GuildManage.vue') },
         // 版主中心
         { path: 'moderator', name: 'moderator', component: () => import('./views/moderator/ModeratorMain.vue') },
         // 用户主页

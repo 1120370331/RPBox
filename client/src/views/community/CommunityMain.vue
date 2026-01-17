@@ -162,6 +162,123 @@ function getPostImages(post: PostWithAuthor): string[] {
   const contentImages = extractAllImages(post.content)
   return [...images, ...contentImages]
 }
+
+// ========== 日历视图相关 ==========
+const currentMonth = ref(new Date())
+const calendarView = ref(true) // true: 日历视图, false: 列表视图
+
+// 切换视图模式
+function toggleCalendarView() {
+  calendarView.value = !calendarView.value
+}
+
+// 获取当月的所有日期
+const calendarDays = computed(() => {
+  const year = currentMonth.value.getFullYear()
+  const month = currentMonth.value.getMonth()
+
+  // 获取当月第一天和最后一天
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+
+  // 获取第一天是星期几（0=周日，1=周一...）
+  const firstDayOfWeek = firstDay.getDay()
+
+  // 生成日历数组
+  const days: Array<{
+    date: Date
+    isCurrentMonth: boolean
+    events: EventItem[]
+  }> = []
+
+  // 填充上个月的日期
+  const prevMonthLastDay = new Date(year, month, 0).getDate()
+  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+    days.push({
+      date: new Date(year, month - 1, prevMonthLastDay - i),
+      isCurrentMonth: false,
+      events: []
+    })
+  }
+
+  // 填充当月日期
+  for (let i = 1; i <= lastDay.getDate(); i++) {
+    const date = new Date(year, month, i)
+    const dayEvents = events.value.filter(event => {
+      const eventStart = new Date(event.event_start_time)
+      const eventEnd = event.event_end_time ? new Date(event.event_end_time) : null
+
+      // 将日期设置为当天的开始时间（00:00:00）进行比较
+      const currentDay = new Date(year, month, i)
+      const startDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate())
+
+      if (eventEnd) {
+        // 如果有结束时间，检查当前日期是否在活动期间内
+        const endDay = new Date(eventEnd.getFullYear(), eventEnd.getMonth(), eventEnd.getDate())
+        return currentDay >= startDay && currentDay <= endDay
+      } else {
+        // 如果没有结束时间，只在开始日期显示
+        return currentDay.getTime() === startDay.getTime()
+      }
+    })
+    days.push({
+      date,
+      isCurrentMonth: true,
+      events: dayEvents
+    })
+  }
+
+  // 填充下个月的日期，补齐到42个格子（6周）
+  const remainingDays = 42 - days.length
+  for (let i = 1; i <= remainingDays; i++) {
+    days.push({
+      date: new Date(year, month + 1, i),
+      isCurrentMonth: false,
+      events: []
+    })
+  }
+
+  return days
+})
+
+// 切换到上个月
+function prevMonth() {
+  currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() - 1)
+}
+
+// 切换到下个月
+function nextMonth() {
+  currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + 1)
+}
+
+// 回到当前月
+function goToToday() {
+  currentMonth.value = new Date()
+}
+
+// 格式化月份标题
+const monthTitle = computed(() => {
+  return currentMonth.value.toLocaleString('zh-CN', { year: 'numeric', month: 'long' })
+})
+
+// 获取活动样式（使用自定义颜色）
+function getEventStyle(event: EventItem) {
+  const color = event.event_color || '#D97706'
+
+  // 将十六进制颜色转换为 RGB
+  const hex = color.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+
+  // 生成浅色背景（添加透明度）
+  const backgroundColor = `rgba(${r}, ${g}, ${b}, 0.15)`
+
+  return {
+    backgroundColor,
+    color,
+  }
+}
 </script>
 
 <template>
@@ -181,7 +298,7 @@ function getPostImages(post: PostWithAuthor): string[] {
         </div>
         <button class="my-posts-btn" @click="goToMyPosts">
           <i class="ri-file-list-3-line"></i>
-          我的卷轴
+          我的帖子
         </button>
         <button class="create-btn" @click="goToCreatePost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -248,11 +365,74 @@ function getPostImages(post: PostWithAuthor): string[] {
             <span>近期活动</span>
             <span class="events-count">{{ events.length }}</span>
           </div>
-          <i :class="eventsExpanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'" class="expand-icon"></i>
+          <div class="header-actions">
+            <button class="view-toggle-btn" @click.stop="toggleCalendarView" :title="calendarView ? '切换到列表视图' : '切换到日历视图'">
+              <i :class="calendarView ? 'ri-list-check' : 'ri-calendar-line'"></i>
+            </button>
+            <i :class="eventsExpanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'" class="expand-icon"></i>
+          </div>
         </div>
         <div v-show="eventsExpanded" class="events-body">
           <div v-if="eventsLoading" class="events-loading">加载中...</div>
           <div v-else-if="events.length === 0" class="events-empty">暂无近期活动</div>
+
+          <!-- 日历视图 -->
+          <div v-else-if="calendarView" class="calendar-view">
+            <div class="calendar-controls">
+              <button class="calendar-nav-btn" @click="prevMonth">
+                <i class="ri-arrow-left-s-line"></i>
+              </button>
+              <div class="calendar-month-title">{{ monthTitle }}</div>
+              <button class="calendar-nav-btn" @click="nextMonth">
+                <i class="ri-arrow-right-s-line"></i>
+              </button>
+              <button class="today-btn" @click="goToToday">今天</button>
+            </div>
+
+            <div class="calendar-grid">
+              <div class="calendar-weekdays">
+                <div class="weekday">日</div>
+                <div class="weekday">一</div>
+                <div class="weekday">二</div>
+                <div class="weekday">三</div>
+                <div class="weekday">四</div>
+                <div class="weekday">五</div>
+                <div class="weekday">六</div>
+              </div>
+
+              <div class="calendar-days">
+                <div
+                  v-for="(day, index) in calendarDays"
+                  :key="index"
+                  class="calendar-day"
+                  :class="{
+                    'other-month': !day.isCurrentMonth,
+                    'has-events': day.events.length > 0,
+                    'today': day.date.toDateString() === new Date().toDateString()
+                  }"
+                >
+                  <div class="day-number">{{ day.date.getDate() }}</div>
+                  <div v-if="day.events.length > 0" class="day-events">
+                    <div
+                      v-for="event in day.events.slice(0, 2)"
+                      :key="event.id"
+                      class="day-event-item"
+                      :style="getEventStyle(event)"
+                      @click="goToPost(event.id)"
+                    >
+                      <span class="event-dot" :style="{ backgroundColor: event.event_color || '#D97706' }"></span>
+                      <span class="event-title-short">{{ event.title }}</span>
+                    </div>
+                    <div v-if="day.events.length > 2" class="more-events">
+                      +{{ day.events.length - 2 }} 更多
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 列表视图 -->
           <div v-else class="events-list">
             <div
               v-for="event in events"
@@ -260,14 +440,14 @@ function getPostImages(post: PostWithAuthor): string[] {
               class="event-item"
               @click="goToPost(event.id)"
             >
-              <div class="event-date">
+              <div class="event-date" :style="{ backgroundColor: event.event_color || '#D97706' }">
                 <span class="event-month">{{ formatEventMonth(event.event_start_time) }}</span>
                 <span class="event-day">{{ formatEventDay(event.event_start_time) }}</span>
               </div>
               <div class="event-info">
                 <h4 class="event-title">{{ event.title }}</h4>
                 <div class="event-meta">
-                  <span class="event-type" :class="event.event_type">
+                  <span class="event-type" :style="getEventStyle(event)">
                     {{ event.event_type === 'server' ? '服务器活动' : '公会活动' }}
                   </span>
                   <span class="event-time">{{ formatEventTime(event.event_start_time) }}</span>
@@ -627,6 +807,35 @@ function getPostImages(post: PostWithAuthor): string[] {
   background: #F5EFE7;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.view-toggle-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #E5D4C1;
+  border-radius: 4px;
+  color: #8D7B68;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-toggle-btn:hover {
+  background: #F5EFE7;
+  border-color: #D97706;
+  color: #D97706;
+}
+
+.view-toggle-btn i {
+  font-size: 16px;
+}
+
 .events-title {
   display: flex;
   align-items: center;
@@ -739,18 +948,190 @@ function getPostImages(post: PostWithAuthor): string[] {
   font-weight: 500;
 }
 
-.event-type.server {
-  background: #EBF5FF;
-  color: #1D4ED8;
-}
-
-.event-type.guild {
-  background: #F0FDF4;
-  color: #16A34A;
-}
-
 .event-time {
   color: #8D7B68;
+}
+
+/* ========== Calendar View ========== */
+.calendar-view {
+  padding: 16px 0;
+}
+
+.calendar-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 0 16px;
+}
+
+.calendar-nav-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  background: #fff;
+  color: #8D7B68;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.calendar-nav-btn:hover {
+  background: #F5EFE7;
+  border-color: #D97706;
+  color: #D97706;
+}
+
+.calendar-nav-btn i {
+  font-size: 18px;
+}
+
+.calendar-month-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2C1810;
+  min-width: 120px;
+  text-align: center;
+}
+
+.today-btn {
+  padding: 6px 12px;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  background: #fff;
+  color: #8D7B68;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.today-btn:hover {
+  background: #D97706;
+  border-color: #D97706;
+  color: #fff;
+}
+
+.calendar-grid {
+  padding: 0 16px;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.weekday {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8D7B68;
+  padding: 8px 0;
+}
+
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.calendar-day {
+  min-height: 80px;
+  padding: 8px;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  background: #fff;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-day.other-month {
+  background: #FAFAF9;
+  opacity: 0.5;
+}
+
+.calendar-day.today {
+  border-color: #D97706;
+  background: #FFFBF5;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.1);
+}
+
+.calendar-day.has-events {
+  background: #FEF3C7;
+  border-color: #FDE68A;
+}
+
+.calendar-day.has-events:hover {
+  background: #FDE68A;
+  border-color: #D97706;
+}
+
+.day-number {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2C1810;
+  margin-bottom: 4px;
+}
+
+.calendar-day.other-month .day-number {
+  color: #A99B8D;
+}
+
+.calendar-day.today .day-number {
+  color: #D97706;
+}
+
+.day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.day-event-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  overflow: hidden;
+}
+
+.day-event-item:hover {
+  filter: brightness(0.95);
+}
+
+.event-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.event-title-short {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.more-events {
+  font-size: 10px;
+  color: #8D7B68;
+  text-align: center;
+  padding: 2px;
+  font-weight: 500;
 }
 
 .pinned-title {

@@ -24,6 +24,7 @@ type CreatePostRequest struct {
 	EventType      string  `json:"event_type"`       // server|guild
 	EventStartTime *string `json:"event_start_time"` // ISO8601格式
 	EventEndTime   *string `json:"event_end_time"`
+	EventColor     string  `json:"event_color"`      // 活动标记颜色（十六进制）
 }
 
 // UpdatePostRequest 更新帖子请求
@@ -39,6 +40,7 @@ type UpdatePostRequest struct {
 	EventType      string  `json:"event_type"`
 	EventStartTime *string `json:"event_start_time"`
 	EventEndTime   *string `json:"event_end_time"`
+	EventColor     string  `json:"event_color"`
 }
 
 // listPosts 获取帖子列表
@@ -202,6 +204,7 @@ func (s *Server) createPost(c *gin.Context) {
 		Status:      req.Status,
 		IsPublic:    true,
 		EventType:   req.EventType,
+		EventColor:  req.EventColor,
 	}
 
 	// 设置审核状态：版主/管理员自动通过，普通用户需要审核
@@ -395,6 +398,9 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 	if req.Status != "" {
 		post.Status = req.Status
+	}
+	if req.EventColor != "" {
+		post.EventColor = req.EventColor
 	}
 	post.GuildID = req.GuildID
 	post.StoryID = req.StoryID
@@ -708,6 +714,8 @@ func (s *Server) listEvents(c *gin.Context) {
 
 	query := database.DB.Model(&model.Post{}).
 		Where("category = ? AND status = ?", "event", "published").
+		Where("review_status = ?", "approved").
+		Where("is_public = ?", true).
 		Where("event_start_time IS NOT NULL")
 
 	// 时间范围过滤

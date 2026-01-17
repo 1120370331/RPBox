@@ -51,6 +51,17 @@ type UpdateMemberRoleRequest struct {
 	Role string `json:"role" binding:"required"`
 }
 
+// ApplyGuildRequest 申请加入公会请求
+type ApplyGuildRequest struct {
+	Message string `json:"message"`
+}
+
+// ReviewApplicationRequest 审批申请请求
+type ReviewApplicationRequest struct {
+	Action  string `json:"action" binding:"required"` // approve|reject
+	Comment string `json:"comment"`
+}
+
 // generateInviteCode 生成邀请码
 func generateInviteCode() string {
 	bytes := make([]byte, 8)
@@ -149,14 +160,14 @@ func (s *Server) getGuild(c *gin.Context) {
 		return
 	}
 
-	// 检查是否是成员
+	// 查询用户角色（如果是成员）
 	var member model.GuildMember
-	if err := database.DB.Where("guild_id = ? AND user_id = ?", id, userID).First(&member).Error; err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "非公会成员"})
-		return
+	myRole := ""
+	if err := database.DB.Where("guild_id = ? AND user_id = ?", id, userID).First(&member).Error; err == nil {
+		myRole = member.Role
 	}
 
-	c.JSON(http.StatusOK, gin.H{"guild": guild, "my_role": member.Role})
+	c.JSON(http.StatusOK, gin.H{"guild": guild, "my_role": myRole})
 }
 
 // updateGuild 更新公会信息
@@ -626,4 +637,253 @@ func (s *Server) uploadGuildBanner(c *gin.Context) {
 		"message": "头图更新成功",
 		"banner":  bannerURL,
 	})
+}
+
+// ========== 公会申请系统 ==========
+
+// applyGuild 申请加入公会
+func (s *Server) applyGuild(c *gin.Context) {
+	userID := c.GetUint("userID")
+	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var req ApplyGuildRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 检查公会是否存在
+	var guild model.Guild
+	if err := database.DB.First(&guild, guildID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
+		return
+	}
+
+	// 检查是否已是成员
+	var existingMember model.GuildMember
+	if err := database.DB.Where("guild_id = ? AND user_id = ?", guildID, userID).First(&existingMember).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "已是公会成员"})
+		return
+	}
+
+	// 检查是否已有待处理申请
+	var existingApp model.GuildApplication
+	if err := database.DB.Where("guild_id = ? AND user_id = ? AND status = ?", guildID, userID, "pending").First(&existingApp).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "已有待处理的申请"})
+		return
+	}
+
+	// 创建申请记录
+	application := model.GuildApplication{
+		GuildID: uint(guildID),
+		UserID:  userID,
+		Message: req.Message,
+		Status:  "pending",
+	}
+
+	if err := database.DB.Create(&application).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "申请失败"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "申请已提交", "application": application})
+}
+
+// listGuildApplications 获取公会申请列表（管理员）
+func (s *Server) listGuildApplications(c *gin.Context) {
+	userID := c.GetUint("userID")
+	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	// 检查管理员权限
+	if !checkGuildAdmin(uint(guildID), userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	// 支持状态筛选
+	status := c.Query("status") // pending|approved|rejected|all
+	query := database.DB.Where("guild_id = ?", guildID)
+	if status != "" && status != "all" {
+		query = query.Where("status = ?", status)
+	}
+
+	var applications []model.GuildApplication
+	query.Order("created_at DESC").Find(&applications)
+
+	// 获取申请人信息
+	userIDs := make([]uint, len(applications))
+	for i, app := range applications {
+		userIDs[i] = app.UserID
+	}
+
+	var users []model.User
+	if len(userIDs) > 0 {
+		database.DB.Where("id IN ?", userIDs).Find(&users)
+	}
+	userMap := make(map[uint]model.User)
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	// 组装结果
+	type ApplicationInfo struct {
+		model.GuildApplication
+		Username string `json:"username"`
+		Avatar   string `json:"avatar"`
+	}
+	result := make([]ApplicationInfo, len(applications))
+	for i, app := range applications {
+		user := userMap[app.UserID]
+		result[i] = ApplicationInfo{
+			GuildApplication: app,
+			Username:         user.Username,
+			Avatar:           user.Avatar,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"applications": result})
+}
+
+// reviewGuildApplication 审批公会申请（管理员）
+func (s *Server) reviewGuildApplication(c *gin.Context) {
+	userID := c.GetUint("userID")
+	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	appID, _ := strconv.ParseUint(c.Param("appId"), 10, 32)
+
+	// 检查管理员权限
+	if !checkGuildAdmin(uint(guildID), userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	var req ReviewApplicationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效操作"})
+		return
+	}
+
+	// 获取申请记录
+	var application model.GuildApplication
+	if err := database.DB.First(&application, appID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "申请不存在"})
+		return
+	}
+
+	if application.GuildID != uint(guildID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "申请不属于此公会"})
+		return
+	}
+
+	if application.Status != "pending" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "申请已处理"})
+		return
+	}
+
+	// 更新申请状态
+	now := time.Now()
+	application.ReviewerID = &userID
+	application.ReviewComment = req.Comment
+	application.ReviewedAt = &now
+
+	if req.Action == "approve" {
+		application.Status = "approved"
+
+		// 创建成员记录
+		member := model.GuildMember{
+			GuildID:  uint(guildID),
+			UserID:   application.UserID,
+			Role:     "member",
+			JoinedAt: time.Now(),
+		}
+		if err := database.DB.Create(&member).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建成员记录失败"})
+			return
+		}
+
+		// 更新公会成员数
+		database.DB.Model(&model.Guild{}).Where("id = ?", guildID).Update("member_count", database.DB.Raw("member_count + 1"))
+	} else {
+		application.Status = "rejected"
+	}
+
+	database.DB.Save(&application)
+
+	c.JSON(http.StatusOK, gin.H{"message": "审批完成", "application": application})
+}
+
+// listMyApplications 获取我的申请记录
+func (s *Server) listMyApplications(c *gin.Context) {
+	userID := c.GetUint("userID")
+
+	var applications []model.GuildApplication
+	database.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&applications)
+
+	// 获取公会信息
+	guildIDs := make([]uint, len(applications))
+	for i, app := range applications {
+		guildIDs[i] = app.GuildID
+	}
+
+	var guilds []model.Guild
+	if len(guildIDs) > 0 {
+		database.DB.Where("id IN ?", guildIDs).Find(&guilds)
+	}
+	guildMap := make(map[uint]model.Guild)
+	for _, g := range guilds {
+		guildMap[g.ID] = g
+	}
+
+	// 组装结果
+	type ApplicationWithGuild struct {
+		model.GuildApplication
+		GuildName string `json:"guild_name"`
+		GuildIcon string `json:"guild_icon"`
+	}
+	result := make([]ApplicationWithGuild, len(applications))
+	for i, app := range applications {
+		guild := guildMap[app.GuildID]
+		result[i] = ApplicationWithGuild{
+			GuildApplication: app,
+			GuildName:        guild.Name,
+			GuildIcon:        guild.Icon,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"applications": result})
+}
+
+// cancelApplication 撤销申请
+func (s *Server) cancelApplication(c *gin.Context) {
+	userID := c.GetUint("userID")
+	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	appID, _ := strconv.ParseUint(c.Param("appId"), 10, 32)
+
+	var application model.GuildApplication
+	if err := database.DB.First(&application, appID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "申请不存在"})
+		return
+	}
+
+	if application.GuildID != uint(guildID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "申请不属于此公会"})
+		return
+	}
+
+	if application.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "只能撤销自己的申请"})
+		return
+	}
+
+	if application.Status != "pending" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能撤销待处理的申请"})
+		return
+	}
+
+	database.DB.Delete(&application)
+	c.JSON(http.StatusOK, gin.H{"message": "申请已撤销"})
 }

@@ -115,6 +115,13 @@ func (s *Server) setupRoutes() {
 			auth.DELETE("/guilds/:id/members/:uid", s.removeMember)
 			auth.POST("/guilds/:id/banner", s.uploadGuildBanner)
 
+			// 公会申请系统
+			auth.POST("/guilds/:id/apply", s.applyGuild)
+			auth.GET("/guilds/:id/applications", s.listGuildApplications)
+			auth.POST("/guilds/:id/applications/:appId/review", s.reviewGuildApplication)
+			auth.DELETE("/guilds/:id/applications/:appId", s.cancelApplication)
+			auth.GET("/user/guild-applications", s.listMyApplications)
+
 			// 公会标签
 			auth.GET("/guilds/:id/tags", s.listGuildTags)
 			auth.POST("/guilds/:id/tags", s.createGuildTag)
