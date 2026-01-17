@@ -1,7 +1,14 @@
 {
   "name": "RPBox_Addon",
-  "latest": "1.0.0",
+  "latest": "1.0.1",
   "versions": [
+    {
+      "version": "1.0.1",
+      "releaseDate": "2026-01-17",
+      "minClientVersion": "1.0.0",
+      "changelog": "修复复制按钮问题，现在可以正常切换打开/关闭；新增主界面调整大小功能，支持拖拽调整窗口尺寸",
+      "downloadUrl": "/api/v1/addon/download/1.0.1"
+    },
     {
       "version": "1.0.0",
       "releaseDate": "2024-01-15",
