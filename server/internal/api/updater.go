@@ -30,7 +30,6 @@ type Platform struct {
 // checkUpdate 检查客户端更新
 func (s *Server) checkUpdate(c *gin.Context) {
 	target := c.Param("target")
-	arch := c.Param("arch")
 	currentVersion := c.Param("current_version")
 
 	// 读取最新版本信息
