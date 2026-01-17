@@ -239,6 +239,121 @@ updater:
 
 更新包放置于 `server/releases/{version}/` 目录。
 
+### 故障排查指南
+
+#### 问题1：客户端检测不到更新
+
+**症状**：点击"检查更新"后显示"当前已是最新版本"，但实际上服务器有新版本。
+
+**可能原因和解决方案**：
+
+1. **版本号相同**
+   - 检查：客户端版本号 = 服务器 `latest_version`
+   - 解决：确保客户端版本号小于服务器配置的版本号
+   - 开发模式：`tauri.conf.json` 中的版本号会被使用
+
+2. **base_url 配置错误或缺失**
+   - 检查：`server/config.yaml` 中是否配置了 `base_url`
+   - 问题：如果未配置，会使用默认值 `https://api.rpbox.app/releases`（可能无法解析）
+   - 解决：在 `config.yaml` 中添加：
+   ```yaml
+   updater:
+     base_url: "https://your-domain.com/releases"
+   ```
+   - 验证：`curl https://your-domain.com/releases/0.1.6/RPBox_0.1.6_x64-setup.exe` 应该能访问
+
+#### 问题2：检查更新失败，提示日期格式错误
+
+**症状**：点击"检查更新"后显示错误：`invalid value for 'pub_date': the 'separator' component could not be parsed`
+
+**原因**：`pub_date` 格式不正确。Tauri updater 要求完整的 ISO 8601 格式（包含时间和时区）。
+
+**错误配置**：
+```yaml
+updater:
+  pub_date: "2026-01-17"  # ❌ 只有日期，缺少时间
+```
+
+**正确配置**：
+```yaml
+updater:
+  pub_date: "2026-01-17T12:00:00Z"  # ✅ 完整的 ISO 8601 格式
+```
+
+**修复步骤**：
+1. 编辑 `server/config.yaml`，将 `pub_date` 改为完整格式
+2. 重启服务：`sudo supervisorctl restart rpbox`
+3. 验证：`curl http://localhost:8081/api/v1/updater/windows/x86_64/0.1.0` 查看返回的 `pub_date` 格式
+
+#### 问题3：GitHub Actions 部署文件到错误位置
+
+**症状**：GitHub Actions 构建成功，但服务器上找不到更新包文件。
+
+**原因**：`RELEASE_PATH` Secret 配置错误，文件上传到了错误的目录。
+
+**检查方法**：
+```bash
+# 正确位置（应该在这里）
+ls /home/devbox/RPBox/server/releases/0.1.6/
+
+# 错误位置（如果在这里就是配置错了）
+ls /home/devbox/RPBox/releases/0.1.6/
+```
+
+**修复步骤**：
+1. 在 GitHub 仓库中检查 Secrets 配置：`Settings → Secrets and variables → Actions`
+2. 确认 `RELEASE_PATH` = `/home/devbox/RPBox/server/releases`（注意是 `server/releases`）
+3. 如果配置错误，修改后重新推送 tag 触发构建
+
+#### 调试方法
+
+**在开发模式下测试更新功能**：
+
+1. **修改版本号进行测试**：
+   ```bash
+   # 将 tauri.conf.json 中的版本号改为低于服务器的版本
+   # 例如：服务器是 0.1.6，改为 0.1.5
+   cd client
+   npm run tauri dev
+   ```
+
+2. **查看详细日志**：
+   - 打开浏览器开发者工具（F12）
+   - 查看 Console 标签页
+   - 所有更新相关的日志都有 `[Updater]` 前缀
+   - 关键日志：
+     - `[Updater] 开始检查更新...`
+     - `[Updater] 当前配置的 endpoint: ...`
+     - `[Updater] 检查结果: ...`
+     - `[Updater] 发现新版本: ...` 或 `[Updater] 当前已是最新版本`
+
+3. **手动测试 API**：
+   ```bash
+   # 测试更新检测 API
+   curl https://your-domain.com/api/v1/updater/windows/x86_64/0.1.0
+
+   # 测试更新包是否可访问
+   curl -I https://your-domain.com/releases/0.1.6/RPBox_0.1.6_x64-setup.exe
+   ```
+
+**最佳实践**：
+
+1. **发布新版本前的检查清单**：
+   - ✅ 更新三个文件的版本号：`tauri.conf.json`, `Cargo.toml`, `package.json`
+   - ✅ 确认 `server/config.yaml` 中的 `base_url` 配置正确
+   - ✅ 确认 `pub_date` 使用完整的 ISO 8601 格式
+   - ✅ 确认 GitHub Secrets 中的 `RELEASE_PATH` 正确
+   - ✅ 在开发模式下测试更新检测功能
+
+2. **服务器配置模板**：
+   ```yaml
+   updater:
+     latest_version: "0.1.6"
+     base_url: "https://your-domain.com/releases"
+     release_notes: "版本更新说明"
+     pub_date: "2026-01-17T12:00:00Z"
+   ```
+
 ## 插件自动更新
 
 ### 更新流程
