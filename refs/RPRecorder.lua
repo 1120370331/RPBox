@@ -927,7 +927,7 @@ Octopus = {
     },
     Listener = {
         types = {
-            "OnMessage_say","OnMessage_yell","OnMessage_emote"
+            "OnMessage_say","OnMessage_yell","OnMessage_emote","OnMessage_text_emote"
             ,"OnMessage_raid","OnMessage_party","OnMessage_raidwarning",
             "OnMessage_guild","OnMessage_whisper","OnPlayerStartMove","Always"
         },
@@ -939,6 +939,7 @@ Octopus = {
                     OnMessage_say = {},
                     OnMessage_yell = {},
                     OnMessage_emote = {},
+                    OnMessage_text_emote = {},
                     OnMessage_raid = {},
                     OnMessage_party = {},
                     OnMessage_raidwarning = {},
@@ -946,7 +947,7 @@ Octopus = {
                     OnMessage_whisper = {},
                     OnPlayerStartMove = {},
                     Always = {}
-                
+
                 }
                 Octopus.Data.save("RegisteredListener",nil,R_Listner)
             end
@@ -1382,11 +1383,12 @@ RPRecorder = {
                 }
         end,
         new_data = function (case,speaker,text)
-    
+            local timestamp = math.floor(time())
             return {
                 ["case"] = case,
                 ["speaker"] = speaker,
-                ["text"] = text
+                ["text"] = text,
+                ["timestamp"] = tostring(timestamp)
             }
         end,
         ---@return string
@@ -1467,9 +1469,36 @@ RPRecorder = {
         end,
         chunk_data_get = function (name,index)
             local ri = RPRecorder.Records.Library.get(name)
-            
+
+        end,
+        -- 生成消息签名用于去重
+        generate_message_signature = function (speaker, text, timestamp)
+            return speaker .. "|" .. text .. "|" .. timestamp
+        end,
+        -- 检查消息是否为重复
+        is_duplicate_message = function (speaker, text, timestamp)
+            local cache = Octopus.Data.get_folder("MessageDedupeCache") or {}
+            local signature = RPRecorder.Records.generate_message_signature(speaker, text, timestamp)
+
+            -- 清理超过5秒的旧缓存
+            local current_time = math.floor(time())
+            for sig, cached_time in pairs(cache) do
+                if tonumber(cached_time) and (current_time - tonumber(cached_time)) > 5 then
+                    cache[sig] = nil
+                end
+            end
+
+            -- 检查是否存在
+            if cache[signature] then
+                return true
+            end
+
+            -- 添加到缓存
+            cache[signature] = tostring(timestamp)
+            Octopus.Data.save("MessageDedupeCache", nil, cache)
+            return false
         end
-         
+
     },
     SpeechPlayer = {
         --用内置播放器播放一个记录
@@ -1566,6 +1595,7 @@ RPRecorder = {
             ["LISTEN_SAY"] = "TRUE",
             ["LISTEN_YELL"] = "TRUE",
             ["LISTEN_EMOTE"] = "TRUE",
+            ["LISTEN_TEXT_EMOTE"] = "TRUE",
             ["LISTEN_RAIDWARNING"] = "TRUE",
             ["LISTEN_GUILD"] = "FALSE",
             ["LISTEN_PARTY"] = "FALSE",
@@ -1576,6 +1606,7 @@ RPRecorder = {
             ["LISTEN_SAY"] = "接收来自说话的信息",
             ["LISTEN_YELL"] = "接收来自叫喊的信息",
             ["LISTEN_EMOTE"] = "接收来自表情的信息",
+            ["LISTEN_TEXT_EMOTE"] = "接收来自斜杠表情的信息",
             ["LISTEN_RAIDWARNING"] = "接收来自团队警告的信息",
             ["LISTEN_GUILD"] = "接收来自公会的信息",
             ["LISTEN_PARTY"] = "接收来自小队的信息",
@@ -1604,6 +1635,8 @@ SCRIPTS = {
             case = "yell"
         elseif sa == "OnMessage_emote" then
             case = "emote"
+        elseif sa == "OnMessage_text_emote" then
+            case = "text_emote"
         elseif sa == "OnMessage_raid" then
             case = "raid"
         elseif sa == "OnMessage_party" then
@@ -1621,14 +1654,19 @@ SCRIPTS = {
         
         if getVar(args,"c","Recording") == "TRUE" then
             if RPRecorder.Config.configs[key] == "TRUE" then
-                
+
                 local speechname = getVar(args,"c","Listener_2")
                 local text = getVar(args,"c","Listener_1")
-                
+
                 local data = RPRecorder.Records.new_data(case,speechname,text)
-                text = RPRecorder.Records.data_decode_text(data)
-                data["text"] = RPRecorder.Records.data_decode_text(data)
-                RPRecorder.Records.chunk_data_auto_append(getVar(args,"c","RecordingRecorder"),data)
+
+                -- 去重检查：基于秒级时间戳
+                local timestamp = tonumber(data["timestamp"])
+                if not RPRecorder.Records.is_duplicate_message(speechname, text, timestamp) then
+                    text = RPRecorder.Records.data_decode_text(data)
+                    data["text"] = RPRecorder.Records.data_decode_text(data)
+                    RPRecorder.Records.chunk_data_auto_append(getVar(args,"c","RecordingRecorder"),data)
+                end
             
                 
                 

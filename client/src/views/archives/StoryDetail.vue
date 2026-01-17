@@ -435,19 +435,29 @@ async function saveCharacterEdit() {
 
 function getChannelLabel(channel: string): string {
   const map: Record<string, string> = {
+    // 新格式（简写）
     'SAY': '说',
     'YELL': '喊',
     'EMOTE': '表情',
+    'TEXT_EMOTE': '表情',
     'PARTY': '小队',
     'RAID': '团队',
     'WHISPER': '密语',
+    // 旧格式（完整事件名）
+    'CHAT_MSG_SAY': '说',
+    'CHAT_MSG_YELL': '喊',
+    'CHAT_MSG_EMOTE': '表情',
+    'CHAT_MSG_TEXT_EMOTE': '表情',
+    'CHAT_MSG_PARTY': '小队',
+    'CHAT_MSG_RAID': '团队',
+    'CHAT_MSG_WHISPER': '密语',
   }
   return map[channel] || channel
 }
 
 function getChannelClass(channel: string): string {
-  if (channel === 'YELL') return 'channel-yell'
-  if (channel === 'WHISPER') return 'channel-whisper'
+  if (channel === 'YELL' || channel === 'CHAT_MSG_YELL') return 'channel-yell'
+  if (channel === 'WHISPER' || channel === 'CHAT_MSG_WHISPER') return 'channel-whisper'
   return ''
 }
 
@@ -458,8 +468,16 @@ function getChannelTextColor(channel: string): string {
     'YELL': '#FF3333',  // 红色
     'WHISPER': '#B39DDB',  // 紫色
     'EMOTE': '#FF8C00',  // 橙色
+    'TEXT_EMOTE': '#FF8C00',  // 橙色
     'PARTY': '#AAAAFF',  // 蓝色
     'RAID': '#FF7F00',  // 橙色
+    'CHAT_MSG_SAY': '',
+    'CHAT_MSG_YELL': '#FF3333',
+    'CHAT_MSG_WHISPER': '#B39DDB',
+    'CHAT_MSG_EMOTE': '#FF8C00',
+    'CHAT_MSG_TEXT_EMOTE': '#FF8C00',
+    'CHAT_MSG_PARTY': '#AAAAFF',
+    'CHAT_MSG_RAID': '#FF7F00',
   }
   return colorMap[channel] || ''
 }
