@@ -97,6 +97,6 @@ jobs:
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
             # 更新配置文件中的版本号
             sed -i "s/latest_version:.*/latest_version: \"$VERSION\"/" /home/devbox/RPBox/server/config.yaml
-            # 重启服务（如果需要）
-            # cd /home/devbox/RPBox && ./restart.sh
+            # 重启服务
+            sudo supervisorctl restart rpbox
           EOF

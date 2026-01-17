@@ -7,9 +7,11 @@ param(
 
     [string]$Notes = "",
 
-    [string]$SSHHost = "your-server.com",
-    [string]$SSHUser = "root",
-    [string]$RemotePath = "/var/www/rpbox/releases"
+    [string]$SSHHost = "",
+    [string]$SSHUser = "devbox",
+    [int]$SSHPort = 2233,
+    [string]$RemotePath = "/home/devbox/RPBox/server/releases",
+    [string]$ConfigPath = "/home/devbox/RPBox/server/config.yaml"
 )
 
 $ErrorActionPreference = "Stop"
@@ -111,48 +113,35 @@ Write-Host "  update.json 已生成" -ForegroundColor Green
 
 # 5. 上传到服务器
 Write-Host "`n[5/6] 上传到服务器..." -ForegroundColor Yellow
-$RemoteVersionDir = "$RemotePath/$Version"
 
-# 创建远程目录
-ssh "${SSHUser}@${SSHHost}" "mkdir -p $RemoteVersionDir"
+if (-not $SSHHost) {
+    Write-Host "  跳过上传（未配置 SSHHost）" -ForegroundColor Yellow
+    Write-Host "  本地产物: $OutputDir" -ForegroundColor Cyan
+} else {
+    $RemoteVersionDir = "$RemotePath/$Version"
 
-# 上传文件
-$FilesToUpload = Get-ChildItem -Path $OutputDir
-foreach ($file in $FilesToUpload) {
-    Write-Host "  上传 $($file.Name)..." -ForegroundColor Gray
-    scp $file.FullName "${SSHUser}@${SSHHost}:${RemoteVersionDir}/"
+    # 创建远程目录
+    ssh -p $SSHPort "${SSHUser}@${SSHHost}" "mkdir -p $RemoteVersionDir"
+
+    # 上传文件
+    $FilesToUpload = Get-ChildItem -Path $OutputDir
+    foreach ($file in $FilesToUpload) {
+        Write-Host "  上传 $($file.Name)..." -ForegroundColor Gray
+        scp -P $SSHPort $file.FullName "${SSHUser}@${SSHHost}:${RemoteVersionDir}/"
+    }
+    Write-Host "  文件上传完成" -ForegroundColor Green
 }
-Write-Host "  文件上传完成" -ForegroundColor Green
 
 # 6. 更新服务器配置
 Write-Host "`n[6/6] 更新服务器配置..." -ForegroundColor Yellow
 
-# 读取签名文件内容
-$SigFile = Get-ChildItem -Path $OutputDir -Filter "*.sig" | Select-Object -First 1
-$Signature = ""
-if ($SigFile) {
-    $Signature = Get-Content $SigFile.FullName -Raw
-}
-
-# 生成服务器配置更新命令
-$ConfigUpdate = @"
-# 在服务器 config.yaml 中添加/更新以下配置:
-updater:
-  latest_version: "$Version"
-  base_url: "https://api.rpbox.app/releases"
-  release_notes: "$Notes"
-  pub_date: "$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')"
-  signature_dir: "/var/www/rpbox/signatures"
-"@
-
-Write-Host $ConfigUpdate -ForegroundColor Cyan
-
-# 创建签名目录并保存签名
-if ($Signature) {
-    ssh "${SSHUser}@${SSHHost}" "mkdir -p /var/www/rpbox/signatures/$Version"
-    $SigContent = $Signature -replace '"', '\"'
-    ssh "${SSHUser}@${SSHHost}" "echo '$SigContent' > /var/www/rpbox/signatures/$Version/windows-x86_64.sig"
-    Write-Host "  签名文件已上传" -ForegroundColor Green
+if (-not $SSHHost) {
+    Write-Host "  跳过配置更新（未配置 SSHHost）" -ForegroundColor Yellow
+} else {
+    # 更新 config.yaml 中的版本号
+    $UpdateCmd = "sed -i 's/latest_version:.*/latest_version: \`"$Version\`"/' $ConfigPath"
+    ssh -p $SSHPort "${SSHUser}@${SSHHost}" $UpdateCmd
+    Write-Host "  config.yaml 已更新版本号为 $Version" -ForegroundColor Green
 }
 
 # 完成
@@ -160,10 +149,9 @@ Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  发布完成!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
+Write-Host "版本: $Version" -ForegroundColor White
 Write-Host "本地产物: $OutputDir" -ForegroundColor White
-Write-Host "远程路径: ${SSHUser}@${SSHHost}:${RemoteVersionDir}" -ForegroundColor White
+if ($SSHHost) {
+    Write-Host "远程路径: ${SSHUser}@${SSHHost}:${RemotePath}/${Version}" -ForegroundColor White
+}
 Write-Host ""
-Write-Host "下一步:" -ForegroundColor Yellow
-Write-Host "  1. SSH 登录服务器更新 config.yaml 中的 updater 配置" -ForegroundColor White
-Write-Host "  2. 重启后端服务: systemctl restart rpbox" -ForegroundColor White
-Write-Host "  3. 测试更新: 打开旧版客户端检查是否提示更新" -ForegroundColor White
