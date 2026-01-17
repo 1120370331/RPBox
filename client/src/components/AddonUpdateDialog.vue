@@ -12,6 +12,8 @@ const flavor = ref('_retail_')
 const loading = ref(false)
 const error = ref('')
 
+const emit = defineEmits(['installed'])
+
 function show(current: string, latest: string, changelogText: string = '', path: string = '', flavorValue: string = '_retail_') {
   currentVersion.value = current
   latestVersion.value = latest
@@ -27,8 +29,14 @@ function close() {
 }
 
 async function handleDownload() {
+  console.log('[AddonUpdateDialog] handleDownload 开始')
+  console.log('[AddonUpdateDialog] wowPath:', wowPath.value)
+  console.log('[AddonUpdateDialog] flavor:', flavor.value)
+  console.log('[AddonUpdateDialog] latestVersion:', latestVersion.value)
+
   if (!wowPath.value) {
     error.value = '未找到魔兽世界路径，请先设置'
+    console.log('[AddonUpdateDialog] 错误: 未找到魔兽世界路径')
     return
   }
 
@@ -36,21 +44,31 @@ async function handleDownload() {
   error.value = ''
   try {
     const url = getAddonDownloadUrl(latestVersion.value)
+    console.log('[AddonUpdateDialog] 下载 URL:', url)
+
     const response = await fetch(url)
+    console.log('[AddonUpdateDialog] fetch 响应状态:', response.status)
+
     if (!response.ok) throw new Error('下载失败')
 
     const arrayBuffer = await response.arrayBuffer()
     const zipData = Array.from(new Uint8Array(arrayBuffer))
+    console.log('[AddonUpdateDialog] 下载完成，大小:', zipData.length)
 
     await invoke('install_addon', {
       wowPath: wowPath.value,
       flavor: flavor.value,
       zipData,
     })
+    console.log('[AddonUpdateDialog] 安装成功')
 
-    // 安装成功，关闭对话框
+    // 安装成功，触发事件通知父组件
+    console.log('[AddonUpdateDialog] 触发 installed 事件')
+    emit('installed')
+    console.log('[AddonUpdateDialog] 关闭对话框')
     close()
   } catch (e: any) {
+    console.error('[AddonUpdateDialog] 错误:', e)
     error.value = e.message || '安装失败'
   } finally {
     loading.value = false
