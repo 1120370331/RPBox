@@ -7,9 +7,11 @@ import { listGuilds, type Guild } from '@/api/guild'
 import { addPostTag, removePostTag } from '@/api/post'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import { useToast } from '@/composables/useToast'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const toast = useToast()
+const userStore = useUserStore()
 const route = useRoute()
 const mounted = ref(false)
 const loading = ref(false)
@@ -96,6 +98,13 @@ function clearDraft() {
 }
 
 onMounted(async () => {
+  // 检查登录状态
+  if (!userStore.user || !userStore.token) {
+    toast.warning('请先登录后再编辑帖子')
+    router.push('/login')
+    return
+  }
+
   setTimeout(() => mounted.value = true, 50)
 
   // 先尝试恢复草稿

@@ -8,8 +8,10 @@ export interface ModeratorStats {
   total_posts: number
   total_items: number
   total_guilds: number
+  total_users: number
   today_posts: number
   today_items: number
+  today_users: number
 }
 
 export interface ReviewRequest {
@@ -117,8 +119,8 @@ export function getAllGuilds(params?: GuildQueryParams) {
   return request.get<{ guilds: any[]; total: number }>('/moderator/manage/guilds', { params })
 }
 
-export function changeGuildOwner(id: number, newOwnerId: number) {
-  return request.put<{ message: string; guild: any }>(`/moderator/manage/guilds/${id}/owner`, { new_owner_id: newOwnerId })
+export function changeGuildOwner(id: number, params: { new_owner_id?: number; new_owner_name?: string }) {
+  return request.put<{ message: string; guild: any; new_owner: { id: number; username: string } }>(`/moderator/manage/guilds/${id}/owner`, params)
 }
 
 export function deleteGuildByMod(id: number) {
@@ -202,4 +204,70 @@ export function disableUserPosts(id: number) {
 // 删除用户所有帖子
 export function deleteUserPosts(id: number) {
   return request.delete<{ message: string; affected_count: number }>(`/moderator/users/${id}/posts`)
+}
+
+// ========== 操作日志 ==========
+
+export interface AdminActionLog {
+  id: number
+  operator_id: number
+  operator_name: string
+  operator_role: string
+  action_type: string
+  target_type: string
+  target_id: number
+  target_name: string
+  details: string
+  ip_address: string
+  created_at: string
+}
+
+export interface ActionLogQueryParams {
+  page?: number
+  page_size?: number
+  operator_id?: number
+  action_type?: string
+  target_type?: string
+  start_date?: string
+  end_date?: string
+}
+
+export function getActionLogs(params?: ActionLogQueryParams) {
+  return request.get<{ logs: AdminActionLog[]; total: number }>('/moderator/action-logs', { params })
+}
+
+// ========== 数据统计 ==========
+
+export interface DailyMetrics {
+  date: string
+  total_users: number
+  total_posts: number
+  total_items: number
+  total_guilds: number
+  new_users: number
+  new_posts: number
+  new_items: number
+  new_guilds: number
+}
+
+export interface PeriodStats {
+  users: number
+  posts: number
+  items: number
+  guilds: number
+}
+
+export interface MetricsSummary {
+  today: PeriodStats
+  yesterday: PeriodStats
+  week: PeriodStats
+  month: PeriodStats
+}
+
+export function getMetricsHistory(days: number = 30) {
+  return request.get<{ metrics: DailyMetrics[]; days: number }>('/moderator/metrics/history', { params: { days } })
+}
+
+export function getMetricsSummary() {
+  return request.get<MetricsSummary>('/moderator/metrics/summary')
 }

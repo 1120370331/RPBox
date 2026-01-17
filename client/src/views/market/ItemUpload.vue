@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router'
 import { createItem, uploadImage } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
+import { useUserStore } from '@/stores/user'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 
 const router = useRouter()
 const toast = useToast()
+const userStore = useUserStore()
 const loading = ref(false)
 const uploadingImage = ref(false)
 const itemTags = ref<Tag[]>([])
@@ -31,6 +33,13 @@ const form = ref({
 
 // 挂载时恢复草稿
 onMounted(() => {
+  // 检查登录状态
+  if (!userStore.user || !userStore.token) {
+    toast.warning('请先登录后再上传道具')
+    router.push('/login')
+    return
+  }
+
   loadTags()
   restoreDraft()
 })

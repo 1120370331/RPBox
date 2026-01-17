@@ -186,6 +186,16 @@ function getFactionLabel(f: string): string {
   return map[f] || ''
 }
 
+function goToEvents() {
+  // 跳转到社区，筛选当前公会的活动帖子
+  router.push({ name: 'community', query: { guild_id: guildId, category: 'event' } })
+}
+
+function goToStories() {
+  // 跳转到剧情归档，筛选当前公会的剧情
+  router.push({ name: 'archives', query: { guild_id: guildId } })
+}
+
 onMounted(loadGuild)
 </script>
 
@@ -321,11 +331,11 @@ onMounted(loadGuild)
             <div class="bento-card actions-card">
               <h3>快捷操作</h3>
               <div class="quick-actions">
-                <button class="action-btn">
+                <button class="action-btn" @click="goToEvents">
                   <i class="ri-calendar-event-line"></i>
                   <span>活动日历</span>
                 </button>
-                <button class="action-btn">
+                <button class="action-btn" @click="goToStories">
                   <i class="ri-book-2-line"></i>
                   <span>剧情归档</span>
                 </button>

@@ -23,6 +23,7 @@ const avatarInputRef = ref<HTMLInputElement | null>(null)
 
 // 表单数据
 const formData = ref({
+  username: '',
   bio: '',
   location: '',
   website: ''
@@ -39,6 +40,7 @@ async function loadUserProfile() {
     const res = await request.get(`/users/${userId.value}`)
     userProfile.value = res
     formData.value = {
+      username: res.username || '',
       bio: res.bio || '',
       location: res.location || '',
       website: res.website || ''
@@ -74,6 +76,7 @@ async function saveProfile() {
 function cancelEdit() {
   editMode.value = false
   formData.value = {
+    username: userProfile.value?.username || '',
     bio: userProfile.value?.bio || '',
     location: userProfile.value?.location || '',
     website: userProfile.value?.website || ''
@@ -213,6 +216,10 @@ function goBack() {
           <template v-else>
             <h2 class="card-title">编辑资料</h2>
             <div class="edit-form">
+              <div class="form-group">
+                <label>用户名</label>
+                <input v-model="formData.username" type="text" placeholder="你的用户名" maxlength="50">
+              </div>
               <div class="form-group">
                 <label>个人简介</label>
                 <textarea v-model="formData.bio" placeholder="介绍一下自己..." maxlength="500" rows="4"></textarea>
