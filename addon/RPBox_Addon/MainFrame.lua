@@ -1076,20 +1076,13 @@ local function CreateMainFrame()
     copyBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
     copyBtn:SetText("复制")
     copyBtn:SetScript("OnClick", function()
-        print("[RPBox Debug] 复制按钮被点击")
-        print("[RPBox Debug] logPlainText存在:", MainFrame.logPlainText ~= nil)
-        print("[RPBox Debug] logPlainText长度:", MainFrame.logPlainText and #MainFrame.logPlainText or 0)
-
         if not MainFrame.logPlainText or #MainFrame.logPlainText == 0 then
             print("|cFFFF0000[RPBox]|r 没有可复制的记录，请先筛选或刷新日志")
             return
         end
 
-        print("[RPBox Debug] 开始创建/显示对话框")
-
         -- 创建对话框（如果不存在）
         if not MainFrame.copyDialog then
-            print("[RPBox Debug] 创建新对话框")
             local dialog = CreateFrame("Frame", "RPBoxCopyDialog", UIParent, "BasicFrameTemplateWithInset")
             dialog:SetSize(450, 350)
             dialog:SetPoint("CENTER")
@@ -1128,40 +1121,20 @@ local function CreateMainFrame()
 
             -- 确保初始状态是隐藏的
             dialog:Hide()
-            print("[RPBox Debug] 对话框已创建并隐藏")
         end
 
         -- 切换显示/隐藏
-        local isShown = MainFrame.copyDialog:IsShown()
-        print("[RPBox Debug] 对话框当前状态 IsShown:", isShown)
-
-        if isShown then
-            print("[RPBox Debug] 执行隐藏逻辑")
+        if MainFrame.copyDialog:IsShown() then
             MainFrame.copyDialog.editBox:ClearFocus()
             MainFrame.copyDialog:Hide()
         else
-            print("[RPBox Debug] 执行显示逻辑")
-            -- 更新内容
-            print("[RPBox Debug] 步骤1: 合并文本")
+            -- 更新内容并显示
             local text = table.concat(MainFrame.logPlainText, "\n")
-            print("[RPBox Debug] 步骤2: 设置文本，长度:", #text)
             MainFrame.copyDialog.editBox:SetText(text)
-            print("[RPBox Debug] 步骤3: 获取文本高度")
-            local textHeight = MainFrame.copyDialog.editBox:GetStringHeight()
-            print("[RPBox Debug] 步骤3.1: textHeight =", textHeight)
-            if not textHeight or textHeight == 0 then
-                textHeight = 100  -- 使用默认高度
-                print("[RPBox Debug] 步骤3.2: 使用默认高度")
-            end
-            print("[RPBox Debug] 步骤4: 设置高度:", textHeight + 20)
-            MainFrame.copyDialog.editBox:SetHeight(textHeight + 20)
-            -- 显示对话框
-            print("[RPBox Debug] 步骤5: 调用 Show()")
+            MainFrame.copyDialog.editBox:SetHeight(300)
             MainFrame.copyDialog:Show()
-            print("[RPBox Debug] 步骤6: Show() 完成，IsShown:", MainFrame.copyDialog:IsShown())
             MainFrame.copyDialog.editBox:HighlightText()
             MainFrame.copyDialog.editBox:SetFocus()
-            print("[RPBox Debug] 显示逻辑执行完成")
         end
     end)
     MainFrame.copyBtn = copyBtn
