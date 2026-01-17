@@ -27,6 +27,7 @@ const form = ref<CreatePostRequest>({
   event_type: undefined,
   event_start_time: undefined,
   event_end_time: undefined,
+  event_color: '#D97706',
 })
 
 // 封面图相关
@@ -184,6 +185,15 @@ async function handleSubmit(status: 'draft' | 'published') {
   try {
     form.value.status = status
     form.value.tag_ids = selectedTags.value
+
+    // 转换时间格式为 ISO8601/RFC3339
+    if (form.value.event_start_time) {
+      form.value.event_start_time = new Date(form.value.event_start_time).toISOString()
+    }
+    if (form.value.event_end_time) {
+      form.value.event_end_time = new Date(form.value.event_end_time).toISOString()
+    }
+
     await createPost(form.value)
     clearDraft() // 发布成功后清除草稿
     toast.success(status === 'published' ? '发布成功，等待审核' : '保存草稿成功')
@@ -416,9 +426,43 @@ function removeCoverImage() {
         </select>
       </div>
 
-      <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical">
-        <label class="setting-label">开始时间</label>
-        <input type="datetime-local" v-model="form.event_start_time" class="time-input" />
+      <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical event-time-group">
+        <label class="setting-label">活动时间</label>
+        <div class="time-inputs-row">
+          <div class="time-input-wrapper">
+            <label class="time-sub-label">开始时间</label>
+            <input type="datetime-local" v-model="form.event_start_time" class="time-input" />
+          </div>
+          <div class="time-separator">
+            <i class="ri-arrow-right-line"></i>
+          </div>
+          <div class="time-input-wrapper">
+            <label class="time-sub-label">结束时间</label>
+            <input type="datetime-local" v-model="form.event_end_time" class="time-input" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 活动颜色选择 -->
+      <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical event-color-group">
+        <label class="setting-label">活动标记颜色</label>
+        <div class="color-picker-wrapper">
+          <div class="preset-colors">
+            <button
+              v-for="color in ['#D97706', '#2196F3', '#16A34A', '#DC2626', '#9333EA', '#EA580C']"
+              :key="color"
+              class="color-preset"
+              :class="{ active: form.event_color === color }"
+              :style="{ backgroundColor: color }"
+              @click="form.event_color = color"
+              type="button"
+            ></button>
+          </div>
+          <div class="custom-color-input">
+            <input type="color" v-model="form.event_color" class="color-input" />
+            <span class="color-value">{{ form.event_color }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- 操作按钮 -->
@@ -814,6 +858,141 @@ function removeCoverImage() {
 
 .guild-select:focus {
   border-color: #804030;
+}
+
+/* Event Time Inputs */
+.event-time-group {
+  width: 100%;
+}
+
+.time-inputs-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  width: 100%;
+}
+
+.time-input-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.time-sub-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #8D7B68;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.time-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #B87333;
+  font-size: 18px;
+  padding-bottom: 8px;
+}
+
+.time-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #4B3621;
+  outline: none;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.time-input:hover {
+  border-color: #B87333;
+}
+
+.time-input:focus {
+  border-color: #804030;
+  box-shadow: 0 0 0 2px rgba(128, 64, 48, 0.1);
+}
+
+.time-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: opacity(0.6);
+  transition: filter 0.2s;
+}
+
+.time-input::-webkit-calendar-picker-indicator:hover {
+  filter: opacity(1);
+}
+
+/* ========== Event Color Picker ========== */
+.event-color-group {
+  width: 100%;
+}
+
+.color-picker-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preset-colors {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.color-preset {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.color-preset:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.color-preset.active {
+  border-color: #2C1810;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2C1810;
+}
+
+.custom-color-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #F5EFE7;
+  border-radius: 8px;
+}
+
+.color-input {
+  width: 60px;
+  height: 40px;
+  border: 2px solid #E5D4C1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.color-input:hover {
+  border-color: #B87333;
+}
+
+.color-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4B3621;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
 }
 
 /* ========== Animation ========== */
