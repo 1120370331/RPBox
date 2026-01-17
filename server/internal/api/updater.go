@@ -49,7 +49,8 @@ func (s *Server) checkUpdate(c *gin.Context) {
 	}
 
 	// 构建平台标识
-	platformKey := target + "-" + arch
+	// Tauri 的 {{target}} 已经包含了完整的平台信息（如 "windows-x86_64"）
+	platformKey := target
 
 	// 获取更新包信息
 	baseURL := config.Get().Updater.BaseURL
