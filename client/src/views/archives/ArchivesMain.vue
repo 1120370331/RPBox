@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import RTabs from '@/components/RTabs.vue'
@@ -8,10 +8,12 @@ import RModal from '@/components/RModal.vue'
 import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
 import AddonInstaller from '@/components/AddonInstaller.vue'
+import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import StagingPool from './StagingPool.vue'
 import StoryList from './StoryList.vue'
 import { createStory, addStoryEntries, listStories, type CreateStoryEntryRequest, type Story } from '@/api/story'
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
+import { getAddonManifest } from '@/api/addon'
 
 // ChatRecord 类型定义
 interface TRP3Info {
@@ -20,6 +22,11 @@ interface TRP3Info {
   TI?: string
   IC?: string
   CH?: string  // 名字颜色
+}
+
+interface Listener {
+  gameID: string
+  profileID?: string
 }
 
 interface ChatRecord {
@@ -35,6 +42,7 @@ interface ChatRecord {
   nt?: string    // NPC说话类型
   ref_id?: string  // TRP3 profile ref ID
   raw_profile?: string  // 完整的TRP3 profile JSON
+  listeners?: Listener[]  // 收听者列表（新增字段，向前兼容）
 }
 
 const mounted = ref(false)
@@ -67,6 +75,7 @@ const pendingRecords = ref<ChatRecord[]>([])
 const showAddonInstaller = ref(false)
 const addonInstalled = ref(false)
 const selectedFlavor = ref('_retail_')
+const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
 
 async function checkAddonStatus() {
   if (!wowPath.value) return
@@ -81,6 +90,34 @@ async function checkAddonStatus() {
   }
 }
 
+// 检查插件更新
+async function checkAddonUpdate() {
+  try {
+    const manifest = await getAddonManifest()
+    const latestVersion = manifest.latest
+
+    // 从 localStorage 读取上次检查的版本
+    const lastCheckedVersion = localStorage.getItem('addon_last_checked_version')
+
+    // 如果有新版本，显示更新提示
+    if (!lastCheckedVersion || lastCheckedVersion !== latestVersion) {
+      // 使用上次检查的版本作为"当前版本"，如果没有则使用 "未知"
+      const currentVersion = lastCheckedVersion || '未知'
+
+      // 查找最新版本的详细信息（包括 changelog）
+      const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
+      const changelog = latestVersionInfo?.changelog || '暂无更新说明'
+
+      addonUpdateDialogRef.value?.show(currentVersion, latestVersion, changelog)
+
+      // 记录本次检查的版本
+      localStorage.setItem('addon_last_checked_version', latestVersion)
+    }
+  } catch (e) {
+    console.error('检查插件更新失败:', e)
+  }
+}
+
 onMounted(() => {
   // 检查是否已设置魔兽路径，未设置则跳转到设置向导
   const savedPath = localStorage.getItem('wow_path')
@@ -91,7 +128,15 @@ onMounted(() => {
   wowPath.value = savedPath
   setTimeout(() => mounted.value = true, 50)
   checkAddonStatus()
+  checkAddonUpdate()  // 检查插件更新
   loadTags()
+})
+
+// 监听标签页切换，每次打开时检查插件更新
+watch(activeTab, (newTab) => {
+  if (newTab === 'staging' || newTab === 'stories') {
+    checkAddonUpdate()
+  }
 })
 
 async function loadTags() {
@@ -159,7 +204,7 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
       type = 'narration'
     } else {
       speaker = trp3?.FN
-        ? (trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
+        ? (trp3.LN ? `${trp3.FN}·${trp3.LN}` : trp3.FN)
         : record.sender.gameID.split('-')[0]
     }
 
@@ -374,6 +419,9 @@ function handleViewStory(id: number) {
       :wow-path="wowPath"
       @installed="checkAddonStatus"
     />
+
+    <!-- 插件更新提示 -->
+    <AddonUpdateDialog ref="addonUpdateDialogRef" />
   </div>
 </template>
 
