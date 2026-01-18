@@ -481,13 +481,15 @@ func (s *Server) likePost(c *gin.Context) {
 
 	// 创建通知（不给自己发通知）
 	if post.AuthorID != userID {
+		content := "点赞了你的帖子《" + post.Title + "》"
+
 		notification := model.Notification{
 			UserID:     post.AuthorID,
 			Type:       "post_like",
 			ActorID:    &userID,
 			TargetType: "post",
 			TargetID:   uint(id),
-			Content:    "点赞了你的帖子",
+			Content:    content,
 		}
 		service.CreateNotification(&notification)
 	}
