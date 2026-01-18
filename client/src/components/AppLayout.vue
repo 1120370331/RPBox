@@ -15,17 +15,21 @@ const mounted = ref(false)
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   if (userStore.token) {
+    // 连接 WebSocket 实时通知
+    notificationStore.connectWebSocket()
+    // 加载初始未读数量
     notificationStore.loadUnreadCount()
-    // 每30秒刷新一次未读数量
+    // 每60秒刷新一次未读数量（作为 WebSocket 的备份）
     setInterval(() => {
       if (userStore.token) {
         notificationStore.loadUnreadCount()
       }
-    }, 30000)
+    }, 60000)
   }
 })
 
 function handleLogout() {
+  notificationStore.disconnectWebSocket()
   userStore.logout()
   router.push('/login')
 }
