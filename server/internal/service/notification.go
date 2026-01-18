@@ -3,11 +3,41 @@ package service
 import (
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	ws "github.com/rpbox/server/internal/websocket"
 )
+
+// 全局 WebSocket Hub 引用
+var notificationHub *ws.Hub
+
+// SetNotificationHub 设置通知推送的 WebSocket Hub
+func SetNotificationHub(hub *ws.Hub) {
+	notificationHub = hub
+}
 
 // CreateNotification 创建新通知
 func CreateNotification(notification *model.Notification) error {
-	return database.DB.Create(notification).Error
+	// 保存到数据库
+	if err := database.DB.Create(notification).Error; err != nil {
+		return err
+	}
+
+	// 如果 Hub 已设置，推送 WebSocket 消息
+	if notificationHub != nil {
+		// 推送新通知事件
+		notificationHub.SendToUser(notification.UserID, ws.MessageTypeNewNotification, map[string]interface{}{
+			"id":      notification.ID,
+			"type":    notification.Type,
+			"content": notification.Content,
+		})
+
+		// 推送未读数量更新
+		count, _ := GetUnreadCount(notification.UserID)
+		notificationHub.SendToUser(notification.UserID, ws.MessageTypeUnreadCountUpdate, map[string]interface{}{
+			"count": count,
+		})
+	}
+
+	return nil
 }
 
 // GetNotifications 获取用户通知列表（支持分页和类型过滤）
