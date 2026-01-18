@@ -56,6 +56,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.CommentLike{},
 		&model.AdminActionLog{},
 		&model.DailyMetrics{},
+		&model.Notification{},
 	); err != nil {
 		return err
 	}
