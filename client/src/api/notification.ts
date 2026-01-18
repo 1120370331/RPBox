@@ -53,3 +53,17 @@ export function getUnreadCount() {
     method: 'GET',
   })
 }
+
+// 删除单个通知
+export function deleteNotification(id: number) {
+  return request(`/notifications/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+// 删除所有通知
+export function deleteAllNotifications() {
+  return request('/notifications/all', {
+    method: 'DELETE',
+  })
+}

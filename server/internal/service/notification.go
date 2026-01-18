@@ -72,3 +72,17 @@ func GetUnreadCount(userID uint) (int64, error) {
 		Count(&count).Error
 	return count, err
 }
+
+// DeleteNotification 删除单个通知
+func DeleteNotification(notificationID, userID uint) error {
+	return database.DB.
+		Where("id = ? AND user_id = ?", notificationID, userID).
+		Delete(&model.Notification{}).Error
+}
+
+// DeleteAllNotifications 删除所有通知
+func DeleteAllNotifications(userID uint) error {
+	return database.DB.
+		Where("user_id = ?", userID).
+		Delete(&model.Notification{}).Error
+}
