@@ -378,14 +378,14 @@ function getTypeBadge(type: string): string {
 .notification-item {
   position: relative;
   background: #fff;
-  border: 1px solid transparent;
+  border: 1px solid rgba(44, 24, 16, 0.2);
   padding: 20px;
   margin-bottom: 12px;
   transition: all 0.2s;
 }
 
 .notification-item:hover {
-  border-color: rgba(128, 64, 48, 0.1);
+  border-color: #804030;
 }
 
 .notification-item.unread {
@@ -394,7 +394,7 @@ function getTypeBadge(type: string): string {
 }
 
 .notification-item.unread:hover {
-  border-color: #D4A373;
+  border-color: #804030;
 }
 
 /* 未读标记三角形 */
@@ -420,10 +420,10 @@ function getTypeBadge(type: string): string {
 }
 
 .notification-avatar {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border: 1px solid #2C1810;
   background: linear-gradient(135deg, #B87333, #804030);
   display: flex;
   align-items: center;
@@ -438,6 +438,7 @@ function getTypeBadge(type: string): string {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: grayscale(100%) contrast(1.25);
 }
 
 .notification-type-badge {
