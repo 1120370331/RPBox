@@ -206,7 +206,15 @@ function formatDate(dateStr: string): string {
 }
 
 function goBack() {
-  router.push({ name: 'archives' })
+  // 检查是否从公会剧情页面进入
+  const from = route.query.from as string
+  const guildId = route.query.guildId as string
+
+  if (from === 'guild' && guildId) {
+    router.push({ name: 'guild-stories', params: { id: guildId } })
+  } else {
+    router.push({ name: 'archives' })
+  }
 }
 
 // ========== 标签管理 ==========
@@ -619,7 +627,8 @@ function startEditEntry(entry: StoryEntry) {
   editingEntry.value = entry
   editEntryContent.value = entry.content
   editEntrySpeaker.value = entry.speaker || ''
-  editEntryChannel.value = entry.channel || 'SAY'
+  // 将 TEXT_EMOTE 统一转换为 EMOTE，因为编辑表单中只有 EMOTE 选项
+  editEntryChannel.value = entry.channel === 'TEXT_EMOTE' ? 'EMOTE' : (entry.channel || 'SAY')
   editEntryType.value = entry.type || 'dialogue'
   editEntryCharacterId.value = entry.character_id || null
   showEditEntryModal.value = true
@@ -749,27 +758,40 @@ onMounted(() => {
               </div>
             </div>
             <div class="header-actions">
-              <RButton @click="startEdit">编辑</RButton>
-              <RButton @click="showAddModal = true">添加条目</RButton>
-              <RButton @click="showGuildModal = true">
-                <i class="ri-folder-add-line"></i> 归档到公会
-              </RButton>
-              <RButton @click="exportStory">
-                <i class="ri-download-line"></i> 导出
-              </RButton>
-              <RButton @click="showImportModal = true">
-                <i class="ri-upload-line"></i> 导入
-              </RButton>
+              <!-- Main action button -->
               <RButton
-                :type="story.is_public ? 'default' : 'primary'"
+                :type="story.is_public ? 'secondary' : 'primary'"
                 :loading="publishing"
                 @click="togglePublish"
+                block
               >
+                <i class="ri-share-line"></i>
                 {{ story.is_public ? '取消公开' : '公开分享' }}
               </RButton>
-              <RButton v-if="story.is_public" @click="showShareModal = true">
-                <i class="ri-share-line"></i> 分享
+
+              <!-- Secondary action button -->
+              <RButton type="secondary" @click="startEdit" block>
+                <i class="ri-edit-line"></i> 编辑信息
               </RButton>
+
+              <!-- Action button group -->
+              <div class="action-button-group">
+                <RButton type="outline" size="sm" @click="showAddModal = true">
+                  <i class="ri-chat-new-line"></i> 添加条目
+                </RButton>
+                <RButton type="outline" size="sm" @click="showGuildModal = true">
+                  <i class="ri-archive-line"></i> 归档
+                </RButton>
+                <RButton type="outline" size="sm" @click="exportStory">
+                  <i class="ri-download-line"></i> 导出
+                </RButton>
+                <RButton type="outline" size="sm" @click="showImportModal = true">
+                  <i class="ri-upload-line"></i> 导入
+                </RButton>
+                <RButton v-if="story.is_public" type="outline" size="sm" @click="showShareModal = true">
+                  <i class="ri-share-forward-line"></i> 分享
+                </RButton>
+              </div>
             </div>
           </div>
         </template>
@@ -1191,6 +1213,35 @@ onMounted(() => {
 
 .story-header {
   padding: 24px;
+  position: relative;
+  /* Swiss 风格：切角效果 */
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  box-shadow: 4px 4px 0px 0px rgba(44, 24, 16, 0.1); /* 方形阴影 */
+  border-left: 2px solid rgba(44, 24, 16, 0.2);
+  border-bottom: 2px solid rgba(44, 24, 16, 0.2);
+}
+
+/* 几何装饰 */
+.story-header::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 4px;
+  height: 4px;
+  border-top: 2px solid #2C1810;
+  border-right: 2px solid #2C1810;
+}
+
+.story-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: -1px;
+  width: 4px;
+  height: 4px;
+  border-bottom: 2px solid #2C1810;
+  border-left: 2px solid #2C1810;
 }
 
 .header-content {
@@ -1243,8 +1294,39 @@ onMounted(() => {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  flex-direction: row; /* 小屏幕水平排列 */
+  justify-content: flex-start;
+  gap: 12px;
   flex-shrink: 0;
+  border-top: 1px solid rgba(229, 212, 193, 0.5);
+  padding-top: 24px;
+}
+
+/* 大屏幕垂直排列 */
+@media (min-width: 1024px) {
+  .header-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    border-top: none;
+    border-left: 1px solid rgba(229, 212, 193, 0.5);
+    padding-top: 0;
+    padding-left: 32px;
+    min-width: 200px;
+  }
+}
+
+/* Action button group */
+.action-button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .action-button-group {
+    width: auto;
+  }
 }
 
 .edit-form, .add-form {
@@ -1331,9 +1413,34 @@ onMounted(() => {
 
 .entries-section {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 0; /* Swiss 风格：直角 */
   padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
+  border: 2px solid rgba(44, 24, 16, 0.1); /* 边框 */
+  position: relative;
+}
+
+/* 几何装饰 */
+.entries-section::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 4px;
+  height: 4px;
+  border-top: 2px solid #2C1810;
+  border-right: 2px solid #2C1810;
+}
+
+.entries-section::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: -1px;
+  width: 4px;
+  height: 4px;
+  border-bottom: 2px solid #2C1810;
+  border-left: 2px solid #2C1810;
 }
 
 .entries-section h2 {
@@ -1357,15 +1464,22 @@ onMounted(() => {
 .entry-item {
   display: flex;
   gap: 12px;
-  padding: 16px;
-  background: var(--color-bg-secondary);
-  border-radius: 8px;
+  padding: 20px;
+  background: #FFF9F0; /* Swiss 风格：浅米色背景 */
+  border-radius: 0; /* 直角 */
+  border: 1px solid rgba(44, 24, 16, 0.2);
+  position: relative;
+  transition: border-color 0.2s;
+}
+
+.entry-item:hover {
+  border-color: #804030; /* 悬停时边框变为棕红色 */
 }
 
 .entry-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: 0; /* Swiss 风格：直角 */
   background: var(--color-accent);
   color: #fff;
   display: flex;
@@ -1374,6 +1488,7 @@ onMounted(() => {
   font-weight: 600;
   flex-shrink: 0;
   overflow: hidden;
+  /* 移除边框和黑白滤镜 */
 }
 
 .entry-avatar :deep(.wow-icon) {
