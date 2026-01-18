@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount, deleteNotification, deleteAllNotifications, type Notification } from '../api/notification'
+import { useNotificationStore } from '../stores/notification'
+import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, type Notification } from '../api/notification'
 
 const router = useRouter()
+const notificationStore = useNotificationStore()
 const mounted = ref(false)
 const activeTab = ref('all')
 const notifications = ref<Notification[]>([])
@@ -11,7 +13,6 @@ const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
-const unreadCount = ref(0)
 
 const tabs = [
   { id: 'all', label: '全部', icon: 'ri-notification-3-line' },
@@ -26,7 +27,7 @@ const hasMore = computed(() => notifications.value.length < total.value)
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   loadNotifications()
-  loadUnreadCount()
+  notificationStore.loadUnreadCount()
 })
 
 async function loadNotifications(append = false) {
@@ -46,15 +47,6 @@ async function loadNotifications(append = false) {
   }
 }
 
-async function loadUnreadCount() {
-  try {
-    const res = await getUnreadCount()
-    unreadCount.value = res.count
-  } catch (error) {
-    console.error('获取未读数量失败:', error)
-  }
-}
-
 function handleTabChange(tabId: string) {
   activeTab.value = tabId
   page.value = 1
@@ -67,7 +59,7 @@ async function handleMarkAsRead(notification: Notification) {
   try {
     await markNotificationAsRead(notification.id)
     notification.is_read = true
-    loadUnreadCount()
+    notificationStore.decrementUnreadCount()
   } catch (error) {
     console.error('标记已读失败:', error)
   }
@@ -77,7 +69,7 @@ async function handleMarkAllAsRead() {
   try {
     await markAllNotificationsAsRead()
     notifications.value.forEach(n => n.is_read = true)
-    loadUnreadCount()
+    notificationStore.resetUnreadCount()
   } catch (error) {
     console.error('标记全部已读失败:', error)
   }
@@ -89,7 +81,7 @@ async function handleDeleteNotification(notification: Notification) {
     notifications.value = notifications.value.filter(n => n.id !== notification.id)
     total.value--
     if (!notification.is_read) {
-      loadUnreadCount()
+      notificationStore.decrementUnreadCount()
     }
   } catch (error) {
     console.error('删除通知失败:', error)
@@ -101,7 +93,7 @@ async function handleDeleteAll() {
     await deleteAllNotifications()
     notifications.value = []
     total.value = 0
-    unreadCount.value = 0
+    notificationStore.resetUnreadCount()
   } catch (error) {
     console.error('清空通知失败:', error)
   }
@@ -158,7 +150,7 @@ function getTypeBadge(type: string): string {
         <p class="subtitle">查看您的点赞、评论、公会通知等消息</p>
       </div>
       <div class="header-actions">
-        <button v-if="unreadCount > 0" class="mark-all-btn" @click="handleMarkAllAsRead">
+        <button v-if="notificationStore.unreadCount > 0" class="mark-all-btn" @click="handleMarkAllAsRead">
           <i class="ri-check-double-line"></i>
           <span>全部标记已读</span>
         </button>
