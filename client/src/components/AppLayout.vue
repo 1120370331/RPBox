@@ -4,15 +4,30 @@ import { useUserStore } from '../stores/user'
 import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
+import { getUnreadCount } from '../api/notification'
 
 const userStore = useUserStore()
 const router = useRouter()
 const route = useRoute()
 const mounted = ref(false)
+const unreadCount = ref(0)
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
+  loadUnreadCount()
+  // 每30秒刷新一次未读数量
+  setInterval(loadUnreadCount, 30000)
 })
+
+async function loadUnreadCount() {
+  if (!userStore.token) return
+  try {
+    const res = await getUnreadCount()
+    unreadCount.value = res.count
+  } catch (error) {
+    console.error('获取未读数量失败:', error)
+  }
+}
 
 function handleLogout() {
   userStore.logout()
@@ -99,6 +114,7 @@ const activeMenu = computed(() => {
           </div>
           <router-link to="/notifications" class="notification-btn" title="消息中心">
             <i class="ri-notification-3-line"></i>
+            <span v-if="unreadCount > 0" class="notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
           </router-link>
         </template>
         <router-link v-else to="/login" class="login-btn">
@@ -235,6 +251,7 @@ const activeMenu = computed(() => {
 }
 
 .notification-btn {
+  position: relative;
   width: 40px;
   height: 40px;
   min-width: 40px;
@@ -256,6 +273,25 @@ const activeMenu = computed(() => {
   background: rgba(238, 217, 196, 0.3);
   border-color: rgba(238, 217, 196, 0.5);
   color: #FBF5EF;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #DC143C;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #4B3621;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .username-link {
