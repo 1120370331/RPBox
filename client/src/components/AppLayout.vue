@@ -239,22 +239,23 @@ const activeMenu = computed(() => {
   height: 40px;
   min-width: 40px;
   min-height: 40px;
-  background: linear-gradient(135deg, #D4A373, #8C7B70);
-  border-radius: 50%;
+  background: rgba(238, 217, 196, 0.2);
+  border-radius: 8px;
+  border: 1px solid rgba(238, 217, 196, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: rgba(251, 245, 239, 0.8);
   text-decoration: none;
   font-size: 20px;
   transition: all 0.3s;
-  border: 2px solid rgba(255,255,255,0.2);
   flex-shrink: 0;
 }
 
 .notification-btn:hover {
-  background: linear-gradient(135deg, #B87333, #804030);
-  transform: scale(1.05);
+  background: rgba(238, 217, 196, 0.3);
+  border-color: rgba(238, 217, 196, 0.5);
+  color: #FBF5EF;
 }
 
 .username-link {
