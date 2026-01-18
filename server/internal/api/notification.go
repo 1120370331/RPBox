@@ -128,3 +128,41 @@ func (s *Server) getUnreadCount(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"count": count})
 }
+
+// deleteNotification 删除单个通知
+func (s *Server) deleteNotification(c *gin.Context) {
+	userID := c.GetUint("userID")
+	notificationID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	// 检查通知是否存在且属于当前用户
+	var notification model.Notification
+	if err := database.DB.First(&notification, notificationID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "通知不存在"})
+		return
+	}
+
+	if notification.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
+		return
+	}
+
+	// 删除通知
+	if err := service.DeleteNotification(uint(notificationID), userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+// deleteAllNotifications 删除所有通知
+func (s *Server) deleteAllNotifications(c *gin.Context) {
+	userID := c.GetUint("userID")
+
+	if err := service.DeleteAllNotifications(userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "已清空所有通知"})
+}

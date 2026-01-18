@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount, type Notification } from '../api/notification'
+import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount, deleteNotification, deleteAllNotifications, type Notification } from '../api/notification'
 
 const router = useRouter()
 const mounted = ref(false)
@@ -83,6 +83,30 @@ async function handleMarkAllAsRead() {
   }
 }
 
+async function handleDeleteNotification(notification: Notification) {
+  try {
+    await deleteNotification(notification.id)
+    notifications.value = notifications.value.filter(n => n.id !== notification.id)
+    total.value--
+    if (!notification.is_read) {
+      loadUnreadCount()
+    }
+  } catch (error) {
+    console.error('删除通知失败:', error)
+  }
+}
+
+async function handleDeleteAll() {
+  try {
+    await deleteAllNotifications()
+    notifications.value = []
+    total.value = 0
+    unreadCount.value = 0
+  } catch (error) {
+    console.error('清空通知失败:', error)
+  }
+}
+
 function handleLoadMore() {
   page.value++
   loadNotifications(true)
@@ -133,10 +157,16 @@ function getTypeBadge(type: string): string {
         <h1>消息中心</h1>
         <p class="subtitle">查看您的点赞、评论、公会通知等消息</p>
       </div>
-      <button v-if="unreadCount > 0" class="mark-all-btn" @click="handleMarkAllAsRead">
-        <i class="ri-check-double-line"></i>
-        <span>全部标记已读</span>
-      </button>
+      <div class="header-actions">
+        <button v-if="unreadCount > 0" class="mark-all-btn" @click="handleMarkAllAsRead">
+          <i class="ri-check-double-line"></i>
+          <span>全部标记已读</span>
+        </button>
+        <button v-if="total > 0" class="clear-all-btn" @click="handleDeleteAll">
+          <i class="ri-delete-bin-line"></i>
+          <span>清空所有</span>
+        </button>
+      </div>
     </div>
 
     <!-- 标签页 -->
@@ -202,6 +232,9 @@ function getTypeBadge(type: string): string {
                 </button>
                 <button v-if="!notification.is_read" class="action-btn secondary" @click.stop="handleMarkAsRead(notification)">
                   标为已读
+                </button>
+                <button class="action-btn secondary" @click.stop="handleDeleteNotification(notification)">
+                  删除
                 </button>
               </div>
             </div>
