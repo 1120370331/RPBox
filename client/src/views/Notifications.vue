@@ -112,6 +112,18 @@ function handleNotificationClick(notification: Notification) {
     router.push(`/guild/${notification.target_id}`)
   }
 }
+
+function getTypeBadge(type: string): string {
+  const badges: Record<string, string> = {
+    'post_like': 'LIKE',
+    'item_like': 'LIKE',
+    'post_comment': 'REPLY',
+    'item_comment': 'REPLY',
+    'guild_application': 'GUILD',
+    'system': 'SYS'
+  }
+  return badges[type] || 'INFO'
+}
 </script>
 
 <template>
@@ -159,26 +171,49 @@ function handleNotificationClick(notification: Notification) {
           :key="notification.id"
           class="notification-item"
           :class="{ unread: !notification.is_read }"
-          @click="handleNotificationClick(notification)"
         >
-          <div class="notification-avatar">
-            <img v-if="notification.actor_avatar" :src="notification.actor_avatar" alt="" />
-            <span v-else>{{ notification.actor_name?.charAt(0)?.toUpperCase() || '?' }}</span>
+          <!-- 未读标记三角形 -->
+          <div v-if="!notification.is_read" class="unread-corner"></div>
+
+          <div class="notification-inner" @click="handleNotificationClick(notification)">
+            <!-- 头像区域 -->
+            <div class="notification-avatar-wrapper">
+              <div class="notification-avatar">
+                <img v-if="notification.actor_avatar" :src="notification.actor_avatar" alt="" />
+                <span v-else>{{ notification.actor_name?.charAt(0)?.toUpperCase() || '?' }}</span>
+              </div>
+              <div class="notification-type-badge">{{ getTypeBadge(notification.type) }}</div>
+            </div>
+
+            <!-- 内容区域 -->
+            <div class="notification-content">
+              <div class="notification-header">
+                <h3 class="notification-title">
+                  <span class="username">{{ notification.actor_name || '系统' }}</span>
+                  {{ notification.content }}
+                </h3>
+                <time class="notification-time">{{ formatTime(notification.created_at) }}</time>
+              </div>
+
+              <!-- 悬停操作按钮 -->
+              <div class="notification-actions">
+                <button class="action-btn primary" @click.stop="handleNotificationClick(notification)">
+                  查看详情
+                </button>
+                <button v-if="!notification.is_read" class="action-btn secondary" @click.stop="handleMarkAsRead(notification)">
+                  标为已读
+                </button>
+              </div>
+            </div>
           </div>
-          <div class="notification-content">
-            <p class="notification-text">
-              <span class="username">{{ notification.actor_name || '系统' }}</span>
-              {{ notification.content }}
-            </p>
-            <span class="notification-time">{{ formatTime(notification.created_at) }}</span>
-          </div>
-          <div v-if="!notification.is_read" class="unread-badge"></div>
         </div>
 
         <!-- 加载更多 -->
         <div v-if="hasMore && !loading" class="load-more">
           <button @click="handleLoadMore" class="load-more-btn">
-            <span>加载更多</span>
+            <span class="line"></span>
+            <span class="text">加载更多</span>
+            <span class="line"></span>
           </button>
         </div>
       </div>
@@ -337,43 +372,51 @@ function handleNotificationClick(notification: Notification) {
 
 /* 消息项 */
 .notification-items {
-  padding: 16px;
+  padding: 12px;
 }
 
 .notification-item {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 8px;
-  transition: background 0.2s;
-  cursor: pointer;
   position: relative;
+  background: #fff;
+  border: 1px solid transparent;
+  padding: 20px;
+  margin-bottom: 12px;
+  transition: all 0.2s;
 }
 
 .notification-item:hover {
-  background: #F5EFE7;
-}
-
-.notification-item:not(:last-child) {
-  border-bottom: 1px solid #F5EFE7;
+  border-color: rgba(128, 64, 48, 0.1);
 }
 
 .notification-item.unread {
   background: #FFF9F0;
+  border-color: rgba(44, 24, 16, 0.2);
 }
 
 .notification-item.unread:hover {
-  background: #FFF3E0;
+  border-color: #D4A373;
 }
 
-.unread-badge {
+/* 未读标记三角形 */
+.unread-corner {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 8px;
-  height: 8px;
-  background: #B87333;
-  border-radius: 50%;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 20px solid #B87333;
+  border-left: 20px solid transparent;
+}
+
+.notification-inner {
+  display: flex;
+  gap: 20px;
+  cursor: pointer;
+}
+
+.notification-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .notification-avatar {
@@ -397,16 +440,38 @@ function handleNotificationClick(notification: Notification) {
   object-fit: cover;
 }
 
+.notification-type-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: #2C1810;
+  color: #F5E6D3;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid #F5E6D3;
+  letter-spacing: 0.5px;
+}
+
 .notification-content {
   flex: 1;
   min-width: 0;
 }
 
-.notification-text {
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.notification-title {
   font-size: 14px;
-  color: #4B3621;
-  margin: 0 0 4px 0;
+  color: #2C1810;
   line-height: 1.5;
+  margin: 0;
 }
 
 .username {
@@ -417,6 +482,50 @@ function handleNotificationClick(notification: Notification) {
 .notification-time {
   font-size: 12px;
   color: #8D7B68;
+  white-space: nowrap;
+}
+
+/* 悬停操作按钮 */
+.notification-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.notification-item:hover .notification-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn.primary {
+  background: #804030;
+  color: #fff;
+}
+
+.action-btn.primary:hover {
+  background: #6B3426;
+}
+
+.action-btn.secondary {
+  background: transparent;
+  color: #804030;
+  border: 1px solid #E5D4C1;
+}
+
+.action-btn.secondary:hover {
+  background: rgba(128, 64, 48, 0.05);
+  border-color: #804030;
 }
 
 /* 加载更多 */
@@ -426,10 +535,12 @@ function handleNotificationClick(notification: Notification) {
 }
 
 .load-more-btn {
-  padding: 10px 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
   background: transparent;
-  border: 2px solid #E5D4C1;
-  border-radius: 8px;
+  border: none;
   color: #804030;
   font-size: 14px;
   font-weight: 500;
@@ -438,9 +549,23 @@ function handleNotificationClick(notification: Notification) {
 }
 
 .load-more-btn:hover {
+  color: #6B3426;
+}
+
+.load-more-btn .line {
+  width: 60px;
+  height: 1px;
+  background: #E5D4C1;
+  transition: all 0.3s;
+}
+
+.load-more-btn:hover .line {
   background: #804030;
-  color: #fff;
-  border-color: #804030;
+  width: 80px;
+}
+
+.load-more-btn .text {
+  white-space: nowrap;
 }
 
 /* 动画 */
