@@ -162,6 +162,12 @@ func (s *Server) setupRoutes() {
 			auth.GET("/users/:id", s.getUserProfile)
 			auth.GET("/users/:id/guilds", s.getUserGuilds)
 
+			// 通知中心
+			auth.GET("/notifications", s.listNotifications)
+			auth.PUT("/notifications/:id/read", s.markNotificationAsRead)
+			auth.PUT("/notifications/read-all", s.markAllNotificationsAsRead)
+			auth.GET("/notifications/unread-count", s.getUnreadCount)
+
 			// 通用图片上传
 			auth.POST("/upload/image", s.uploadImage)
 

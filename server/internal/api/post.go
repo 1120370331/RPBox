@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 )
 
 // CreatePostRequest 创建帖子请求
@@ -477,6 +478,19 @@ func (s *Server) likePost(c *gin.Context) {
 
 	// 更新点赞数
 	database.DB.Model(&post).Update("like_count", post.LikeCount+1)
+
+	// 创建通知（不给自己发通知）
+	if post.AuthorID != userID {
+		notification := model.Notification{
+			UserID:     post.AuthorID,
+			Type:       "post_like",
+			ActorID:    &userID,
+			TargetType: "post",
+			TargetID:   uint(id),
+			Content:    "点赞了你的帖子",
+		}
+		service.CreateNotification(&notification)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "点赞成功"})
 }

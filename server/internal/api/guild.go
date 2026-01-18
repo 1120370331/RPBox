@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 )
 
 // CreateGuildRequest 创建公会请求
@@ -826,6 +827,23 @@ func (s *Server) reviewGuildApplication(c *gin.Context) {
 	}
 
 	database.DB.Save(&application)
+
+	// 创建通知
+	var notifContent string
+	if req.Action == "approve" {
+		notifContent = "你的公会申请已通过"
+	} else {
+		notifContent = "你的公会申请已被拒绝"
+	}
+	notification := model.Notification{
+		UserID:     application.UserID,
+		Type:       "guild_application",
+		ActorID:    &userID,
+		TargetType: "guild",
+		TargetID:   uint(guildID),
+		Content:    notifContent,
+	}
+	service.CreateNotification(&notification)
 
 	c.JSON(http.StatusOK, gin.H{"message": "审批完成", "application": application})
 }
