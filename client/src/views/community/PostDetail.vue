@@ -2,8 +2,9 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
-import { listComments, createComment, deleteComment, type CommentWithAuthor } from '@/api/post'
+import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
 import EmojiPicker from '@/components/EmojiPicker.vue'
+import RDialog from '@/components/RDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -39,6 +40,13 @@ const replyEmojiButtonRef = ref<HTMLElement | null>(null)
 
 const errorMessage = ref('')
 const commentError = ref('')
+
+// 评论点赞状态
+const commentLikes = ref<Map<number, boolean>>(new Map())
+
+// 删除确认弹窗
+const showDeleteDialog = ref(false)
+const commentToDelete = ref<CommentWithAuthor | null>(null)
 
 // 获取当前用户ID和角色
 const userStr = localStorage.getItem('user')
@@ -252,18 +260,44 @@ function handleReplyEmojiSelect(emoji: string) {
 }
 
 // 删除评论
-async function handleDeleteComment(comment: CommentWithAuthor) {
-  if (!confirm('确定要删除这条评论吗？')) return
+function handleDeleteComment(comment: CommentWithAuthor) {
+  commentToDelete.value = comment
+  showDeleteDialog.value = true
+}
+
+async function confirmDeleteComment() {
+  if (!commentToDelete.value) return
 
   try {
-    await deleteComment(post.value.id, comment.id)
+    await deleteComment(post.value.id, commentToDelete.value.id)
     await loadComments()
     if (post.value.comment_count > 0) {
       post.value.comment_count--
     }
+    showDeleteDialog.value = false
+    commentToDelete.value = null
   } catch (error: any) {
     console.error('删除评论失败:', error)
     alert('删除失败：' + (error.response?.data?.error || error.message))
+  }
+}
+
+// 评论点赞
+async function handleCommentLike(comment: CommentWithAuthor) {
+  const isLiked = commentLikes.value.get(comment.id) || false
+
+  try {
+    if (isLiked) {
+      await unlikeComment(post.value.id, comment.id)
+      commentLikes.value.set(comment.id, false)
+      comment.like_count = (comment.like_count || 0) - 1
+    } else {
+      await likeComment(post.value.id, comment.id)
+      commentLikes.value.set(comment.id, true)
+      comment.like_count = (comment.like_count || 0) + 1
+    }
+  } catch (error: any) {
+    console.error('点赞失败:', error)
   }
 }
 
@@ -417,6 +451,10 @@ async function handleDelete() {
                 </div>
                 <p class="comment-text">{{ comment.content }}</p>
                 <div class="comment-actions">
+                  <button class="like-btn" :class="{ active: commentLikes.get(comment.id) }" @click="handleCommentLike(comment)">
+                    <i :class="commentLikes.get(comment.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
+                    <span v-if="comment.like_count">{{ comment.like_count }}</span>
+                  </button>
                   <button class="reply-btn" @click="startReply(comment)">
                     <i class="ri-reply-line"></i> 回复
                   </button>
@@ -459,6 +497,10 @@ async function handleDelete() {
                       </div>
                       <p class="reply-text">{{ reply.content }}</p>
                       <div class="comment-actions">
+                        <button class="like-btn" :class="{ active: commentLikes.get(reply.id) }" @click="handleCommentLike(reply)">
+                          <i :class="commentLikes.get(reply.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
+                          <span v-if="reply.like_count">{{ reply.like_count }}</span>
+                        </button>
                         <button class="reply-btn" @click="startReply(reply)">
                           <i class="ri-reply-line"></i> 回复
                         </button>
@@ -533,6 +575,16 @@ async function handleDelete() {
     <!-- Emoji选择器 -->
     <EmojiPicker :show="showEmojiPicker" :trigger-element="emojiButtonRef" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
     <EmojiPicker :show="showReplyEmojiPicker" :trigger-element="replyEmojiButtonRef" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
+
+    <!-- 删除确认弹窗 -->
+    <RDialog
+      v-model="showDeleteDialog"
+      title="删除评论"
+      type="warning"
+      @confirm="confirmDeleteComment"
+    >
+      <p>确定要删除这条评论吗？</p>
+    </RDialog>
   </div>
 </template>
 
@@ -1108,6 +1160,31 @@ async function handleDelete() {
   align-items: center;
   gap: 12px;
   margin-top: 8px;
+}
+
+.like-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: #8D7B68;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.like-btn:hover {
+  color: #804030;
+}
+
+.like-btn.active {
+  color: #DC2626;
+}
+
+.like-btn.active i {
+  color: #DC2626;
 }
 
 .delete-btn {
