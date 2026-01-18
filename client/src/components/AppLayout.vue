@@ -95,13 +95,11 @@ const activeMenu = computed(() => {
             <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
               <h4>{{ userStore.user?.username }}</h4>
             </router-link>
-            <div class="user-actions">
-              <router-link to="/notifications" class="notification-btn" title="消息中心">
-                <i class="ri-notification-3-line"></i>
-              </router-link>
-              <p class="logout-link" @click="handleLogout">退出登录</p>
-            </div>
+            <p class="logout-link" @click="handleLogout">退出登录</p>
           </div>
+          <router-link to="/notifications" class="notification-btn" title="消息中心">
+            <i class="ri-notification-3-line"></i>
+          </router-link>
         </template>
         <router-link v-else to="/login" class="login-btn">
           <i class="ri-login-box-line"></i>
@@ -236,28 +234,27 @@ const activeMenu = computed(() => {
   flex: 1;
 }
 
-.user-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .notification-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  color: rgba(251, 245, 239, 0.7);
+  color: #fff;
   text-decoration: none;
-  font-size: 16px;
+  font-size: 20px;
   transition: all 0.3s;
-  border-radius: 6px;
+  border: 2px solid rgba(255,255,255,0.2);
+  flex-shrink: 0;
 }
 
 .notification-btn:hover {
-  color: var(--color-accent, #D4A373);
-  background: rgba(238, 217, 196, 0.1);
+  background: linear-gradient(135deg, #B87333, #804030);
+  transform: scale(1.05);
 }
 
 .username-link {
