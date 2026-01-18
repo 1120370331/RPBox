@@ -1090,7 +1090,6 @@ async function handleDelete() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-top: 8px;
   padding: 4px 8px;
   background: none;
   border: none;

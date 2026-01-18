@@ -21,12 +21,41 @@ watch(() => props.show, async (newShow) => {
     await nextTick()
     const rect = props.triggerElement.getBoundingClientRect()
 
-    // 计算选择器位置（按钮右下方）
+    // 表情选择器的大小（vue3-emoji-picker 默认大小）
+    const pickerWidth = 352
+    const pickerHeight = 435
+
+    // 视口大小
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+
+    // 默认位置：按钮右下方
+    let top = rect.bottom + 8
+    let left = rect.left
+
+    // 检测是否超出右侧边界
+    if (left + pickerWidth > viewportWidth) {
+      // 改为显示在按钮右侧对齐
+      left = viewportWidth - pickerWidth - 16
+    }
+
+    // 检测是否超出底部边界
+    if (top + pickerHeight > viewportHeight) {
+      // 改为显示在按钮上方
+      top = rect.top - pickerHeight - 8
+
+      // 如果上方也放不下，则显示在视口顶部
+      if (top < 16) {
+        top = 16
+      }
+    }
+
     pickerStyle.value = {
       position: 'fixed',
-      top: `${rect.bottom + 8}px`,
-      left: `${rect.left}px`,
-      zIndex: 1000
+      top: `${top}px`,
+      left: `${left}px`,
+      zIndex: 1000,
+      maxHeight: `${viewportHeight - top - 16}px`
     }
   }
 })
@@ -67,6 +96,6 @@ function handleClose() {
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  overflow: hidden;
+  overflow: auto;
 }
 </style>
