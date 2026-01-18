@@ -1,33 +1,29 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useUserStore } from '../stores/user'
+import { useNotificationStore } from '../stores/notification'
 import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
-import { getUnreadCount } from '../api/notification'
 
 const userStore = useUserStore()
+const notificationStore = useNotificationStore()
 const router = useRouter()
 const route = useRoute()
 const mounted = ref(false)
-const unreadCount = ref(0)
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
-  loadUnreadCount()
-  // 每30秒刷新一次未读数量
-  setInterval(loadUnreadCount, 30000)
-})
-
-async function loadUnreadCount() {
-  if (!userStore.token) return
-  try {
-    const res = await getUnreadCount()
-    unreadCount.value = res.count
-  } catch (error) {
-    console.error('获取未读数量失败:', error)
+  if (userStore.token) {
+    notificationStore.loadUnreadCount()
+    // 每30秒刷新一次未读数量
+    setInterval(() => {
+      if (userStore.token) {
+        notificationStore.loadUnreadCount()
+      }
+    }, 30000)
   }
-}
+})
 
 function handleLogout() {
   userStore.logout()
@@ -114,7 +110,7 @@ const activeMenu = computed(() => {
           </div>
           <router-link to="/notifications" class="notification-btn" title="消息中心">
             <i class="ri-notification-3-line"></i>
-            <span v-if="unreadCount > 0" class="notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+            <span v-if="notificationStore.unreadCount > 0" class="notification-badge">{{ notificationStore.unreadCount > 99 ? '99+' : notificationStore.unreadCount }}</span>
           </router-link>
         </template>
         <router-link v-else to="/login" class="login-btn">

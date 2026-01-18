@@ -3,7 +3,7 @@
 ## Notes: RPBox 配套插件 - 聊天记录采集与人物卡导出
 ## Notes-zhCN: RPBox 配套插件 - 聊天记录采集与人物卡导出
 ## Author: RPBox Team
-## Version: 1.0.2
+## Version: 1.0.3
 ## Dependencies: totalRP3
 ## OptionalDeps: totalRP3_Extended
 ## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_ProfileExport, RPBox_Config, RPBox_Sync
