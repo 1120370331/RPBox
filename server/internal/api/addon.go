@@ -34,11 +34,16 @@ func (s *Server) getAddonStoragePath() string {
 
 // loadManifest 加载版本清单
 func (s *Server) loadManifest() (*AddonManifest, error) {
-	manifestPath := filepath.Join(s.getAddonStoragePath(), "manifest.json")
+	storagePath := s.getAddonStoragePath()
+	manifestPath := filepath.Join(storagePath, "manifest.json")
+
+	fmt.Printf("[Addon] Storage path: %s\n", storagePath)
+	fmt.Printf("[Addon] Manifest path: %s\n", manifestPath)
 
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			fmt.Printf("[Addon] Manifest file not found, returning default\n")
 			// 返回默认清单
 			return &AddonManifest{
 				Name:     "RPBox_Addon",
@@ -46,13 +51,19 @@ func (s *Server) loadManifest() (*AddonManifest, error) {
 				Versions: []AddonVersionInfo{},
 			}, nil
 		}
-		return nil, err
+		fmt.Printf("[Addon] Failed to read manifest: %v\n", err)
+		return nil, fmt.Errorf("failed to read manifest: %w", err)
 	}
+
+	fmt.Printf("[Addon] Read %d bytes from manifest\n", len(data))
 
 	var manifest AddonManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, err
+		fmt.Printf("[Addon] Failed to unmarshal manifest: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
+
+	fmt.Printf("[Addon] Successfully loaded manifest: %s v%s\n", manifest.Name, manifest.Latest)
 	return &manifest, nil
 }
 
@@ -60,7 +71,8 @@ func (s *Server) loadManifest() (*AddonManifest, error) {
 func (s *Server) getAddonManifest(c *gin.Context) {
 	manifest, err := s.loadManifest()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load manifest"})
+		fmt.Printf("[Addon] API error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to load manifest: %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, manifest)
