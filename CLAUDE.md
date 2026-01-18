@@ -109,6 +109,56 @@ const count = ref(0)
 - **消息提示**: 使用内置 `RToast` 组件
 - **确认操作**: 危险操作（删除、解散等）必须使用确认弹窗
 
+## 文件编辑规范
+
+### JSON 文件编辑
+
+**⚠️ 关键注意事项**：编辑 JSON 文件时必须使用标准 ASCII 引号，避免使用 Unicode 曲引号。
+
+**常见问题**：
+
+使用中文输入法编辑 JSON 文件时，输入法可能自动将引号转换为 Unicode 曲引号（""），导致 JSON 解析失败。
+
+**错误示例**：
+```json
+{
+  "changelog": "新增功能：自动替换"你"等代词"
+}
+```
+上面的 `"你"` 使用了中文曲引号（U+201C 和 U+201D），会导致 JSON 解析错误。
+
+**正确示例**：
+```json
+{
+  "changelog": "新增功能：自动替换你等代词"
+}
+```
+或者使用转义：
+```json
+{
+  "changelog": "新增功能：自动替换\"你\"等代词"
+}
+```
+
+**最佳实践**：
+
+1. **编辑前检查输入法**：编辑 JSON 文件前切换到英文输入法
+2. **使用专业编辑器**：使用支持 JSON 语法检查的编辑器（VS Code、Sublime Text 等）
+3. **编辑后验证**：使用 `jq` 或在线工具验证 JSON 格式
+   ```bash
+   # 验证 JSON 文件格式
+   jq . manifest.json
+   ```
+4. **修改后测试**：修改配置文件后立即测试相关 API 是否正常工作
+
+**影响范围**：
+
+以下文件编辑时需要特别注意：
+- `server/storage/addons/RPBox_Addon/manifest.json` - 插件更新配置
+- `client/src-tauri/tauri.conf.json` - Tauri 配置
+- `package.json` - NPM 配置
+- 所有 `.json` 配置文件
+
 ## API 规范
 
 ```
