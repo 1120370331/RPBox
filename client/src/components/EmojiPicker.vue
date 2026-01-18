@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
-import 'emoji-picker-element'
+import EmojiPicker from 'vue3-emoji-picker'
+import 'vue3-emoji-picker/css'
 
-const props = defineProps<{
+defineProps<{
   show: boolean
 }>()
 
@@ -11,26 +11,9 @@ const emit = defineEmits<{
   'close': []
 }>()
 
-const pickerRef = ref<HTMLElement | null>(null)
-
-// 监听 show 变化，在显示时绑定事件
-watch(() => props.show, async (newShow) => {
-  if (newShow) {
-    await nextTick()
-    if (pickerRef.value) {
-      const picker = pickerRef.value.querySelector('emoji-picker') as any
-      if (picker) {
-        // 移除旧的事件监听器（如果存在）
-        picker.removeEventListener('emoji-click', handleEmojiClick)
-        // 添加新的事件监听器
-        picker.addEventListener('emoji-click', handleEmojiClick)
-      }
-    }
-  }
-})
-
-function handleEmojiClick(event: any) {
-  emit('select', event.detail.unicode)
+function handleSelect(emoji: any) {
+  emit('select', emoji.i)
+  emit('close')
 }
 
 function handleClose() {
@@ -40,8 +23,11 @@ function handleClose() {
 
 <template>
   <div v-if="show" class="emoji-picker-overlay" @click.self="handleClose">
-    <div class="emoji-picker-container" ref="pickerRef">
-      <emoji-picker></emoji-picker>
+    <div class="emoji-picker-container">
+      <EmojiPicker
+        :native="true"
+        @select="handleSelect"
+      />
     </div>
   </div>
 </template>
@@ -65,11 +51,5 @@ function handleClose() {
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   overflow: hidden;
-}
-
-emoji-picker {
-  --border-radius: 12px;
-  --background: #fff;
-  --border-color: #E5D4C1;
 }
 </style>
