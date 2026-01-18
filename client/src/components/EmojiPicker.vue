@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
-import EmojiPicker from 'vue3-emoji-picker'
-import 'vue3-emoji-picker/css'
+import { ref, watch, nextTick, defineAsyncComponent } from 'vue'
+
+// 懒加载 emoji-picker 组件和样式
+const EmojiPicker = defineAsyncComponent({
+  loader: async () => {
+    // 动态导入样式
+    await import('vue3-emoji-picker/css')
+    // 动态导入组件
+    return import('vue3-emoji-picker')
+  }
+})
 
 const props = defineProps<{
   show: boolean
@@ -14,10 +22,12 @@ const emit = defineEmits<{
 }>()
 
 const pickerStyle = ref<any>({})
+const isLoading = ref(false)
 
 // 监听 show 变化，计算位置
 watch(() => props.show, async (newShow) => {
   if (newShow && props.triggerElement) {
+    isLoading.value = true
     await nextTick()
     const rect = props.triggerElement.getBoundingClientRect()
 
@@ -57,6 +67,11 @@ watch(() => props.show, async (newShow) => {
       zIndex: 1000,
       maxHeight: `${viewportHeight - top - 16}px`
     }
+
+    // 延迟一帧后隐藏加载状态
+    setTimeout(() => {
+      isLoading.value = false
+    }, 100)
   }
 })
 
@@ -73,7 +88,12 @@ function handleClose() {
 <template>
   <div v-if="show" class="emoji-picker-overlay" @click.self="handleClose">
     <div class="emoji-picker-container" :style="pickerStyle">
+      <div v-if="isLoading" class="loading-placeholder">
+        <i class="ri-loader-4-line loading-icon"></i>
+        <span>加载中...</span>
+      </div>
       <EmojiPicker
+        v-else
         :native="true"
         locale="zh"
         @select="handleSelect"
@@ -97,5 +117,30 @@ function handleClose() {
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   overflow: auto;
+}
+
+.loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 40px;
+  color: #8D7B68;
+  font-size: 14px;
+}
+
+.loading-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
