@@ -41,6 +41,12 @@ func (s *Server) listItems(c *gin.Context) {
 		}
 	}
 
+	// 按作者名称筛选
+	if authorName := c.Query("author_name"); authorName != "" {
+		query = query.Joins("JOIN users ON users.id = items.author_id").
+			Where("users.username LIKE ?", "%"+authorName+"%")
+	}
+
 	// 搜索
 	if search := c.Query("search"); search != "" {
 		query = query.Where("name LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
@@ -608,13 +614,20 @@ func (s *Server) addItemComment(c *gin.Context) {
 
 	// 创建通知（不给自己发通知）
 	if item.AuthorID != userID {
+		// 构建通知内容：包含道具名称和评论片段
+		commentPreview := req.Content
+		if len([]rune(commentPreview)) > 50 {
+			commentPreview = string([]rune(commentPreview)[:50]) + "..."
+		}
+		content := "评论了你的道具《" + item.Name + "》：" + commentPreview
+
 		notification := model.Notification{
 			UserID:     item.AuthorID,
 			Type:       "item_comment",
 			ActorID:    &userID,
 			TargetType: "item",
 			TargetID:   uint(itemID),
-			Content:    "评论了你的道具",
+			Content:    content,
 		}
 		service.CreateNotification(&notification)
 	}
@@ -740,13 +753,15 @@ func (s *Server) likeItem(c *gin.Context) {
 
 	// 创建通知（不给自己发通知）
 	if item.AuthorID != userID {
+		content := "点赞了你的道具《" + item.Name + "》"
+
 		notification := model.Notification{
 			UserID:     item.AuthorID,
 			Type:       "item_like",
 			ActorID:    &userID,
 			TargetType: "item",
 			TargetID:   uint(itemID),
-			Content:    "点赞了你的道具",
+			Content:    content,
 		}
 		service.CreateNotification(&notification)
 	}
