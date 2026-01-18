@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 )
 
 // listItems 获取道具列表
@@ -605,6 +606,19 @@ func (s *Server) addItemComment(c *gin.Context) {
 		"rating_count": count,
 	})
 
+	// 创建通知（不给自己发通知）
+	if item.AuthorID != userID {
+		notification := model.Notification{
+			UserID:     item.AuthorID,
+			Type:       "item_comment",
+			ActorID:    &userID,
+			TargetType: "item",
+			TargetID:   uint(itemID),
+			Content:    "评论了你的道具",
+		}
+		service.CreateNotification(&notification)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"code": 0,
 		"data": comment,
@@ -723,6 +737,19 @@ func (s *Server) likeItem(c *gin.Context) {
 
 	// 更新点赞数
 	database.DB.Model(&item).Update("like_count", item.LikeCount+1)
+
+	// 创建通知（不给自己发通知）
+	if item.AuthorID != userID {
+		notification := model.Notification{
+			UserID:     item.AuthorID,
+			Type:       "item_like",
+			ActorID:    &userID,
+			TargetType: "item",
+			TargetID:   uint(itemID),
+			Content:    "点赞了你的道具",
+		}
+		service.CreateNotification(&notification)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,

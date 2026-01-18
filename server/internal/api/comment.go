@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 )
 
 // CreateCommentRequest 创建评论请求
@@ -109,6 +110,37 @@ func (s *Server) createComment(c *gin.Context) {
 	// 更新帖子评论数
 	database.DB.Model(&post).Update("comment_count", post.CommentCount+1)
 
+	// 创建通知
+	if req.ParentID != nil {
+		// 回复评论：通知被回复的评论作者
+		var parent model.Comment
+		database.DB.First(&parent, *req.ParentID)
+		if parent.AuthorID != userID {
+			notification := model.Notification{
+				UserID:     parent.AuthorID,
+				Type:       "post_comment",
+				ActorID:    &userID,
+				TargetType: "comment",
+				TargetID:   comment.ID,
+				Content:    "回复了你的评论",
+			}
+			service.CreateNotification(&notification)
+		}
+	} else {
+		// 直接评论帖子：通知帖子作者
+		if post.AuthorID != userID {
+			notification := model.Notification{
+				UserID:     post.AuthorID,
+				Type:       "post_comment",
+				ActorID:    &userID,
+				TargetType: "post",
+				TargetID:   uint(postID),
+				Content:    "评论了你的帖子",
+			}
+			service.CreateNotification(&notification)
+		}
+	}
+
 	c.JSON(http.StatusCreated, comment)
 }
 
@@ -184,6 +216,19 @@ func (s *Server) likeComment(c *gin.Context) {
 
 	// 更新点赞数
 	database.DB.Model(&comment).Update("like_count", comment.LikeCount+1)
+
+	// 创建通知（不给自己发通知）
+	if comment.AuthorID != userID {
+		notification := model.Notification{
+			UserID:     comment.AuthorID,
+			Type:       "post_comment",
+			ActorID:    &userID,
+			TargetType: "comment",
+			TargetID:   uint(commentID),
+			Content:    "点赞了你的评论",
+		}
+		service.CreateNotification(&notification)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "点赞成功"})
 }
