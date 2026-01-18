@@ -167,6 +167,8 @@ func (s *Server) setupRoutes() {
 			auth.PUT("/notifications/:id/read", s.markNotificationAsRead)
 			auth.PUT("/notifications/read-all", s.markAllNotificationsAsRead)
 			auth.GET("/notifications/unread-count", s.getUnreadCount)
+			auth.DELETE("/notifications/:id", s.deleteNotification)
+			auth.DELETE("/notifications/all", s.deleteAllNotifications)
 
 			// 通用图片上传
 			auth.POST("/upload/image", s.uploadImage)
