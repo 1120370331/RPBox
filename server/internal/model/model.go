@@ -470,3 +470,18 @@ type DailyMetrics struct {
 	NewGuilds   int64     `json:"new_guilds"`                       // 当日新增公会
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+// ========== 通知系统 ==========
+
+// Notification 通知
+type Notification struct {
+	ID         uint      `gorm:"primarykey" json:"id"`
+	UserID     uint      `gorm:"index;not null" json:"user_id"`           // 接收通知的用户ID
+	Type       string    `gorm:"size:20;index;not null" json:"type"`      // 通知类型: post_like|post_comment|item_like|item_comment|guild_application|guild_invite|system
+	ActorID    *uint     `gorm:"index" json:"actor_id"`                   // 触发通知的用户ID（可空，系统通知无actor）
+	TargetType string    `gorm:"size:20;index" json:"target_type"`        // 目标类型: post|item|comment|guild
+	TargetID   uint      `gorm:"index" json:"target_id"`                  // 目标ID
+	Content    string    `gorm:"size:512" json:"content"`                 // 通知内容
+	IsRead     bool      `gorm:"default:false;index" json:"is_read"`      // 是否已读
+	CreatedAt  time.Time `json:"created_at"`
+}
