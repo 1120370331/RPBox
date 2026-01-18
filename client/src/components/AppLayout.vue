@@ -95,7 +95,12 @@ const activeMenu = computed(() => {
             <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
               <h4>{{ userStore.user?.username }}</h4>
             </router-link>
-            <p class="logout-link" @click="handleLogout">退出登录</p>
+            <div class="user-actions">
+              <router-link to="/notifications" class="notification-btn" title="消息中心">
+                <i class="ri-notification-3-line"></i>
+              </router-link>
+              <p class="logout-link" @click="handleLogout">退出登录</p>
+            </div>
           </div>
         </template>
         <router-link v-else to="/login" class="login-btn">
@@ -228,6 +233,31 @@ const activeMenu = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+}
+
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notification-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: rgba(251, 245, 239, 0.7);
+  text-decoration: none;
+  font-size: 16px;
+  transition: all 0.3s;
+  border-radius: 6px;
+}
+
+.notification-btn:hover {
+  color: var(--color-accent, #D4A373);
+  background: rgba(238, 217, 196, 0.1);
 }
 
 .username-link {
