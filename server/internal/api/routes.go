@@ -170,6 +170,9 @@ func (s *Server) setupRoutes() {
 			auth.DELETE("/notifications/:id", s.deleteNotification)
 			auth.DELETE("/notifications/all", s.deleteAllNotifications)
 
+			// WebSocket 实时通知
+			auth.GET("/ws/notifications", s.handleWebSocket)
+
 			// 通用图片上传
 			auth.POST("/upload/image", s.uploadImage)
 
