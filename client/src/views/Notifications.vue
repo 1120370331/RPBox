@@ -470,6 +470,7 @@ function getTypeBadge(type: string): string {
   height: 48px;
   min-width: 48px;
   border: 1px solid #2C1810;
+  border-radius: 50%;
   background: linear-gradient(135deg, #B87333, #804030);
   display: flex;
   align-items: center;
