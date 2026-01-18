@@ -6,7 +6,7 @@
       "version": "1.0.3",
       "releaseDate": "2026-01-18",
       "minClientVersion": "1.0.0",
-      "changelog": "新增表情消息角色名替换功能：自动将斜杠表情中的角色名和"你"等代词替换为 TRP3 人物卡名称，让剧情记录更加沉浸",
+      "changelog": "新增表情消息角色名替换功能：自动将斜杠表情中的角色名和你等代词替换为 TRP3 人物卡名称，让剧情记录更加沉浸",
       "downloadUrl": "/api/v1/addon/download/1.0.3"
     },
     {
