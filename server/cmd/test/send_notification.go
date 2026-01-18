@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	apiURL = "http://localhost:8081/api/v1/test/send-notification"
+	apiURL = "http://localhost:8080/api/v1/test/send-notification"
 	userID = 2 // test 用户的 ID
 )
 
