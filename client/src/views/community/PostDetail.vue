@@ -447,14 +447,14 @@ async function handleDelete() {
               <div class="comment-body">
                 <div class="comment-meta">
                   <span class="comment-author">{{ comment.author_name }}</span>
+                  <button class="like-btn-inline" :class="{ active: commentLikes.get(comment.id) }" @click="handleCommentLike(comment)">
+                    <i :class="commentLikes.get(comment.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
+                    <span v-if="comment.like_count">{{ comment.like_count }}</span>
+                  </button>
                   <span class="comment-time">{{ formatCommentTime(comment.created_at) }}</span>
                 </div>
                 <p class="comment-text">{{ comment.content }}</p>
                 <div class="comment-actions">
-                  <button class="like-btn" :class="{ active: commentLikes.get(comment.id) }" @click="handleCommentLike(comment)">
-                    <i :class="commentLikes.get(comment.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
-                    <span v-if="comment.like_count">{{ comment.like_count }}</span>
-                  </button>
                   <button class="reply-btn" @click="startReply(comment)">
                     <i class="ri-reply-line"></i> 回复
                   </button>
@@ -494,13 +494,13 @@ async function handleDelete() {
                           回复 <span class="reply-to-name">@{{ reply.replyToName }}</span>
                         </span>
                         <span class="reply-time">{{ formatCommentTime(reply.created_at) }}</span>
-                      </div>
-                      <p class="reply-text">{{ reply.content }}</p>
-                      <div class="comment-actions">
-                        <button class="like-btn" :class="{ active: commentLikes.get(reply.id) }" @click="handleCommentLike(reply)">
+                        <button class="like-btn-inline" :class="{ active: commentLikes.get(reply.id) }" @click="handleCommentLike(reply)">
                           <i :class="commentLikes.get(reply.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
                           <span v-if="reply.like_count">{{ reply.like_count }}</span>
                         </button>
+                      </div>
+                      <p class="reply-text">{{ reply.content }}</p>
+                      <div class="comment-actions">
                         <button class="reply-btn" @click="startReply(reply)">
                           <i class="ri-reply-line"></i> 回复
                         </button>
@@ -1185,6 +1185,36 @@ async function handleDelete() {
 
 .like-btn.active i {
   color: #DC2626;
+}
+
+.like-btn-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background: none;
+  border: none;
+  color: #8D7B68;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.2s;
+  margin-left: 8px;
+}
+
+.like-btn-inline:hover {
+  color: #804030;
+}
+
+.like-btn-inline.active {
+  color: #DC2626;
+}
+
+.like-btn-inline.active i {
+  color: #DC2626;
+}
+
+.like-btn-inline i {
+  font-size: 13px;
 }
 
 .delete-btn {
