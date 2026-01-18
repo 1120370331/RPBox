@@ -92,6 +92,69 @@ local function GetSelfTRP3InfoAndCache()
     return profileID, player
 end
 
+-- 获取角色的 TRP3 显示名称（纯文本，不含格式代码）
+local function GetTRP3DisplayName(unitID, isSelf)
+    local profileID, profile
+
+    if isSelf then
+        profileID, profile = GetSelfTRP3InfoAndCache()
+    else
+        profileID, profile = GetTRP3InfoAndCache(unitID)
+    end
+
+    if not profile or not profile.characteristics then
+        return nil
+    end
+
+    -- 只返回纯文本名字
+    local name = profile.characteristics.FN or unitID:match("^([^-]+)")
+    return name
+end
+
+-- 转义 Lua 模式中的特殊字符
+local function EscapePattern(str)
+    return str:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+end
+
+-- 替换表情消息中的角色名为 TRP3 人物卡名称
+local function ReplaceEmoteNames(msg, senderID, listenerID)
+    if not msg or msg == "" then return msg end
+
+    -- 获取游戏角色名（不带服务器）
+    local senderName = senderID:match("^([^-]+)")
+    local listenerName = listenerID:match("^([^-]+)")
+
+    -- 判断是否是自己发送的消息
+    local isFromSelf = (senderID == listenerID)
+
+    -- 获取 TRP3 显示名称
+    local senderTRP3Name = GetTRP3DisplayName(senderID, isFromSelf)
+    local listenerTRP3Name = GetTRP3DisplayName(listenerID, true)
+
+    -- 如果是自己发送的消息，替换开头的"你"
+    if isFromSelf and senderTRP3Name then
+        msg = msg:gsub("^你", senderTRP3Name)
+    end
+
+    -- 替换发送者名字（通常在消息开头）
+    if senderTRP3Name and senderName and not isFromSelf then
+        local escapedSenderName = EscapePattern(senderName)
+        msg = msg:gsub("^" .. escapedSenderName, senderTRP3Name)
+    end
+
+    -- 替换"对你"、"向你"等包含"你"的常见表情短语（仅当不是自己发送时）
+    if listenerTRP3Name and not isFromSelf then
+        msg = msg:gsub("对你", "对" .. listenerTRP3Name)
+        msg = msg:gsub("向你", "向" .. listenerTRP3Name)
+        msg = msg:gsub("给你", "给" .. listenerTRP3Name)
+        msg = msg:gsub("朝你", "朝" .. listenerTRP3Name)
+        msg = msg:gsub("跟你", "跟" .. listenerTRP3Name)
+        msg = msg:gsub("和你", "和" .. listenerTRP3Name)
+    end
+
+    return msg
+end
+
 -- 检查频道是否启用
 local function IsChannelEnabled(channelShort)
     local channels = RPBox_Config and RPBox_Config.channels
@@ -247,6 +310,15 @@ local function OnChatMessage(self, event, msg, sender, ...)
     local mk, npcName, parsedMsg, npcType = ParseNPCMessage(msg)
     if not mk then
         mk = "P"  -- 普通玩家消息
+    end
+
+    -- 如果是表情消息，替换角色名为 TRP3 人物卡名称
+    if event == "CHAT_MSG_EMOTE" or event == "CHAT_MSG_TEXT_EMOTE" then
+        local originalMsg = parsedMsg or msg
+        local replacedMsg = ReplaceEmoteNames(originalMsg, senderID, playerID)
+        if replacedMsg then
+            parsedMsg = replacedMsg
+        end
     end
 
     -- 构建记录
