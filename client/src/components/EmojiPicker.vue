@@ -24,6 +24,36 @@ const emit = defineEmits<{
 const pickerStyle = ref<any>({})
 const isLoading = ref(false)
 
+// 中文翻译配置
+const i18n = {
+  search: '搜索',
+  search_no_results_1: '哎呀！',
+  search_no_results_2: '没有找到表情',
+  pick: '选择表情...',
+  add_custom: '添加自定义表情',
+  categories: {
+    activity: '活动',
+    custom: '自定义',
+    flags: '旗帜',
+    foods: '食物和饮料',
+    frequent: '常用',
+    nature: '动物和自然',
+    objects: '物品',
+    people: '笑脸和人物',
+    places: '旅行和地点',
+    symbols: '符号'
+  },
+  skins: {
+    choose: '选择默认肤色',
+    1: '默认',
+    2: '浅',
+    3: '中浅',
+    4: '中',
+    5: '中深',
+    6: '深'
+  }
+}
+
 // 监听 show 变化，计算位置
 watch(() => props.show, async (newShow) => {
   if (newShow && props.triggerElement) {
@@ -95,7 +125,7 @@ function handleClose() {
       <EmojiPicker
         v-else
         :native="true"
-        locale="zh"
+        :i18n="i18n"
         @select="handleSelect"
       />
     </div>
