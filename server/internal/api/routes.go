@@ -34,6 +34,9 @@ func (s *Server) setupRoutes() {
 		// 公开公会列表（社区广场）
 		v1.GET("/public/guilds", s.listPublicGuilds)
 
+		// 测试端点（仅用于开发）
+		v1.POST("/test/send-notification", s.testSendNotification)
+
 		// 需要认证的接口
 		auth := v1.Group("")
 		auth.Use(middleware.JWTAuth())
