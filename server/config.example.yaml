@@ -13,6 +13,9 @@ jwt:
   secret: "your-secret-key-change-in-production"
   expire: 72
 
+storage:
+  path: "storage"
+
 # 客户端自动更新配置
 updater:
   latest_version: "0.1.5"
