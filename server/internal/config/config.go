@@ -55,10 +55,10 @@ func Load() (*Config, error) {
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
 
-	// 默认值
+	// 默认值 - 使用相对于当前工作目录的路径
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
-	viper.SetDefault("storage.path", "./storage")
+	viper.SetDefault("storage.path", "storage")  // 改为相对路径，不带 ./
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
