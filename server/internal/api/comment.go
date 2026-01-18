@@ -116,26 +116,40 @@ func (s *Server) createComment(c *gin.Context) {
 		var parent model.Comment
 		database.DB.First(&parent, *req.ParentID)
 		if parent.AuthorID != userID {
+			// 构建通知内容：包含帖子标题和回复片段
+			replyPreview := req.Content
+			if len([]rune(replyPreview)) > 50 {
+				replyPreview = string([]rune(replyPreview)[:50]) + "..."
+			}
+			content := "在《" + post.Title + "》中回复了你的评论：" + replyPreview
+
 			notification := model.Notification{
 				UserID:     parent.AuthorID,
 				Type:       "post_comment",
 				ActorID:    &userID,
 				TargetType: "comment",
 				TargetID:   comment.ID,
-				Content:    "回复了你的评论",
+				Content:    content,
 			}
 			service.CreateNotification(&notification)
 		}
 	} else {
 		// 直接评论帖子：通知帖子作者
 		if post.AuthorID != userID {
+			// 构建通知内容：包含帖子标题和评论片段
+			commentPreview := req.Content
+			if len([]rune(commentPreview)) > 50 {
+				commentPreview = string([]rune(commentPreview)[:50]) + "..."
+			}
+			content := "评论了你的帖子《" + post.Title + "》：" + commentPreview
+
 			notification := model.Notification{
 				UserID:     post.AuthorID,
 				Type:       "post_comment",
 				ActorID:    &userID,
 				TargetType: "post",
 				TargetID:   uint(postID),
-				Content:    "评论了你的帖子",
+				Content:    content,
 			}
 			service.CreateNotification(&notification)
 		}
