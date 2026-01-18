@@ -34,6 +34,8 @@ const submittingReply = ref(false)
 // Emoji选择器
 const showEmojiPicker = ref(false)
 const showReplyEmojiPicker = ref(false)
+const emojiButtonRef = ref<HTMLElement | null>(null)
+const replyEmojiButtonRef = ref<HTMLElement | null>(null)
 
 const errorMessage = ref('')
 const commentError = ref('')
@@ -431,7 +433,7 @@ async function handleDelete() {
                     :disabled="submittingReply"
                   ></textarea>
                   <div class="reply-actions">
-                    <button class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
+                    <button ref="replyEmojiButtonRef" class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
                       <i class="ri-emotion-line"></i>
                     </button>
                     <div class="reply-actions-right">
@@ -473,7 +475,7 @@ async function handleDelete() {
                           :disabled="submittingReply"
                         ></textarea>
                         <div class="reply-actions">
-                          <button class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
+                          <button ref="replyEmojiButtonRef" class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
                             <i class="ri-emotion-line"></i>
                           </button>
                           <div class="reply-actions-right">
@@ -516,7 +518,7 @@ async function handleDelete() {
               :disabled="submittingComment"
             ></textarea>
             <div class="input-footer">
-              <button class="emoji-btn" @click="showEmojiPicker = true" type="button">
+              <button ref="emojiButtonRef" class="emoji-btn" @click="showEmojiPicker = true" type="button">
                 <i class="ri-emotion-line"></i>
               </button>
               <button class="post-btn" :disabled="submittingComment" @click="handleComment">
@@ -529,8 +531,8 @@ async function handleDelete() {
     </div>
 
     <!-- Emoji选择器 -->
-    <EmojiPicker :show="showEmojiPicker" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
-    <EmojiPicker :show="showReplyEmojiPicker" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
+    <EmojiPicker :show="showEmojiPicker" :trigger-element="emojiButtonRef" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
+    <EmojiPicker :show="showReplyEmojiPicker" :trigger-element="replyEmojiButtonRef" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
   </div>
 </template>
 
