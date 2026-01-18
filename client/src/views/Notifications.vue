@@ -274,78 +274,99 @@ function getTypeBadge(type: string): string {
 }
 
 .page-header h1 {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: #2C1810;
   margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .subtitle {
-  font-size: 14px;
+  font-size: 12px;
   color: #8D7B68;
   margin: 0;
+  font-family: 'Courier New', monospace;
+  opacity: 0.8;
 }
 
-.mark-all-btn {
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.mark-all-btn,
+.clear-all-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 20px;
-  background: #804030;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 12px 16px;
+  background: #fff;
+  color: #2C1810;
+  border: 2px solid #2C1810;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  box-shadow: 4px 4px 0px 0px rgba(44, 24, 16, 0.1);
 }
 
-.mark-all-btn:hover {
-  background: #6B3426;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(128, 64, 48, 0.3);
+.mark-all-btn:hover,
+.clear-all-btn:hover {
+  box-shadow: 2px 2px 0px 0px rgba(44, 24, 16, 0.2);
 }
 
-.mark-all-btn i {
-  font-size: 18px;
+.mark-all-btn:active,
+.clear-all-btn:active {
+  box-shadow: 0px 0px 0px 0px rgba(44, 24, 16, 0.2);
+  transform: translate(2px, 2px);
+}
+
+.mark-all-btn i,
+.clear-all-btn i {
+  font-size: 16px;
 }
 
 /* 标签页 */
 .tabs {
   display: flex;
-  gap: 12px;
+  gap: 4px;
   margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #E5D4C1;
   overflow-x: auto;
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
+  gap: 8px;
+  padding: 12px 20px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  color: #8D7B68;
+  border-left: 4px solid transparent;
+  color: #2C1810;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
   white-space: nowrap;
 }
 
 .tab-btn:hover {
-  background: rgba(128, 64, 48, 0.05);
-  color: #804030;
+  background: #fff;
+  border-left-color: #D4A373;
+  transform: translateX(4px);
 }
 
 .tab-btn.active {
   background: #804030;
   color: #fff;
+  border-left-color: #2C1810;
+  box-shadow: 4px 4px 0px 0px rgba(44, 24, 16, 0.1);
 }
 
 .tab-btn i {
