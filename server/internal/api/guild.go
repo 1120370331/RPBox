@@ -685,8 +685,8 @@ func (s *Server) getStoryGuilds(c *gin.Context) {
 // listPublicGuilds 获取公开公会列表（社区广场）
 func (s *Server) listPublicGuilds(c *gin.Context) {
 	var guilds []model.Guild
-	// 临时移除严格的查询条件，用于调试
-	query := database.DB.Where("1 = 1")
+	// 只显示已审核通过的公开公会
+	query := database.DB.Where("status = ? AND is_public = ?", "approved", true)
 
 	// 支持搜索
 	if keyword := c.Query("keyword"); keyword != "" {
