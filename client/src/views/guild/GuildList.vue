@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { listGuilds, joinGuild, listPublicGuilds, applyGuild, listMyApplications, cancelApplication, type Guild, type GuildApplication } from '@/api/guild'
+import { getImageUrl } from '@/api/item'
 import { useToastStore } from '@/stores/toast'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
@@ -204,7 +205,7 @@ onMounted(loadData)
     <div v-else class="guild-grid">
       <div v-for="guild in displayGuilds" :key="guild.id" class="guild-card" @click="router.push(`/guild/${guild.id}`)">
         <!-- 头图 -->
-        <div class="card-banner" :style="{ background: guild.banner_url ? `url(${guild.banner_url}) center/cover` : `linear-gradient(135deg, #${guild.color || 'B87333'}, #4B3621)` }">
+        <div class="card-banner" :style="{ background: guild.banner_url ? `url(${getImageUrl('guild-banner', guild.id, { w: 600, q: 80 })}) center/cover` : `linear-gradient(135deg, #${guild.color || 'B87333'}, #4B3621)` }">
           <div v-if="guild.faction" class="faction-badge" :class="getFactionClass(guild.faction)">
             {{ getFactionLabel(guild.faction) }}
           </div>
