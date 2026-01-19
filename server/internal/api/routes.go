@@ -86,6 +86,9 @@ func (s *Server) setupRoutes() {
 			auth.GET("/items/:id/tags", s.getItemTags)
 			auth.POST("/items/:id/tags", s.addItemTag)
 			auth.DELETE("/items/:id/tags/:tagId", s.removeItemTag)
+			auth.GET("/items/favorites", s.listMyItemFavorites)
+			auth.GET("/items/likes", s.listMyItemLikes)
+			auth.GET("/items/views", s.listMyItemViews)
 			auth.POST("/items/:id/like", s.likeItem)
 			auth.DELETE("/items/:id/like", s.unlikeItem)
 			auth.POST("/items/:id/favorite", s.favoriteItem)
@@ -151,6 +154,8 @@ func (s *Server) setupRoutes() {
 			auth.GET("/posts", s.listPosts)
 			auth.POST("/posts", s.createPost)
 			auth.GET("/posts/favorites", s.listMyFavorites)
+			auth.GET("/posts/likes", s.listMyPostLikes)
+			auth.GET("/posts/views", s.listMyPostViews)
 			auth.GET("/posts/events", s.listEvents) // 活动日历
 			auth.GET("/posts/:id", s.getPost)
 			auth.PUT("/posts/:id", s.updatePost)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useNotificationStore } from '../stores/notification'
 import { useRouter, useRoute } from 'vue-router'
@@ -50,8 +50,9 @@ const moderatorMenuItem = computed(() => {
   return null
 })
 
-const activeMenu = computed(() => {
-  const path = route.path
+const lastMainMenu = ref<string>('home')
+
+function resolveMenu(path: string): string | null {
   if (path.startsWith('/sync')) return 'sync'
   if (path.startsWith('/archives')) return 'archives'
   if (path.startsWith('/market')) return 'market'
@@ -59,6 +60,21 @@ const activeMenu = computed(() => {
   if (path.startsWith('/guild')) return 'guild'
   if (path.startsWith('/settings')) return 'settings'
   if (path.startsWith('/moderator')) return 'moderator'
+  if (path === '/' || path === '') return 'home'
+  return null
+}
+
+const currentMenu = computed(() => resolveMenu(route.path))
+
+watch(currentMenu, (menu) => {
+  if (menu) {
+    lastMainMenu.value = menu
+  }
+}, { immediate: true })
+
+const activeMenu = computed(() => {
+  if (currentMenu.value) return currentMenu.value
+  if (route.path.startsWith('/library')) return lastMainMenu.value
   return 'home'
 })
 </script>
