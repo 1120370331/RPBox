@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { listItems, type Item } from '@/api/item'
+import { listItems, type Item, getImageUrl } from '@/api/item'
+import { getPresetTags, type Tag } from '@/api/tag'
+import LazyBgImage from '@/components/LazyBgImage.vue'
 
 const router = useRouter()
 const mounted = ref(false)
@@ -9,22 +11,39 @@ const loading = ref(false)
 const items = ref<Item[]>([])
 const total = ref(0)
 const searchText = ref('')
-const activeType = ref<'item' | 'script' | ''>('')
-const sortBy = ref<'created_at' | 'downloads' | 'rating'>('created_at')
+const activeType = ref<'item' | 'campaign' | 'artwork' | ''>('')
+const sortBy = ref<'created_at' | 'downloads' | 'rating'>('downloads')
 const currentPage = ref(1)
+const authorName = ref('')
+const itemTags = ref<Tag[]>([])
+const activeTagId = ref<number | null>(null)
 
 const typeMap = {
   '': '全部',
   'item': '道具',
-  'script': '剧本'
+  'campaign': '剧本',
+  'artwork': '画作'
 }
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
+  loadTags()
   loadItems()
 })
 
-// 加载道具列表
+// 加载作品标签
+async function loadTags() {
+  try {
+    const res: any = await getPresetTags('item')
+    if (res.tags) {
+      itemTags.value = res.tags
+    }
+  } catch (error) {
+    console.error('加载标签失败:', error)
+  }
+}
+
+// 加载作品列表
 async function loadItems() {
   loading.value = true
   try {
@@ -43,27 +62,46 @@ async function loadItems() {
       params.search = searchText.value
     }
 
+    if (authorName.value) {
+      params.author_name = authorName.value
+    }
+
+    if (activeTagId.value) {
+      params.tag_id = activeTagId.value
+    }
+
     const res: any = await listItems(params)
     if (res.code === 0) {
       items.value = res.data.items || []
       total.value = res.data.total || 0
     }
   } catch (error) {
-    console.error('加载道具列表失败:', error)
+    console.error('加载作品列表失败:', error)
   } finally {
     loading.value = false
   }
 }
 
 // 切换类型
-function changeType(type: '' | 'item' | 'script') {
+function changeType(type: '' | 'item' | 'campaign' | 'artwork') {
   activeType.value = type
   currentPage.value = 1
+  // 切换类型时清除标签筛选（因为标签只对道具和剧本有效）
+  if (type === 'artwork') {
+    activeTagId.value = null
+  }
   loadItems()
 }
 
 // 搜索
 function handleSearch() {
+  currentPage.value = 1
+  loadItems()
+}
+
+// 切换标签
+function changeTag(tagId: number | null) {
+  activeTagId.value = tagId
   currentPage.value = 1
   loadItems()
 }
@@ -100,13 +138,13 @@ watch([sortBy], () => {
     <!-- 头部 -->
     <div class="header anim-item" style="--delay: 0">
       <div class="header-top">
-        <h1>道具市场</h1>
+        <h1>创意市场</h1>
         <div class="header-actions">
           <button class="my-items-btn" @click="goToMyItems">
-            <i class="ri-folder-user-line"></i> 我的道具
+            <i class="ri-folder-user-line"></i> 我的作品
           </button>
           <button class="upload-btn" @click="goToUpload">
-            <i class="ri-upload-line"></i> 上传道具
+            <i class="ri-upload-line"></i> 上传作品
           </button>
         </div>
       </div>
@@ -114,7 +152,7 @@ watch([sortBy], () => {
         <input
           v-model="searchText"
           type="text"
-          placeholder="搜索道具名称、类型或标签..."
+          placeholder="搜索作品名称、类型或标签..."
           @keyup.enter="handleSearch"
         />
         <i class="ri-search-line" @click="handleSearch"></i>
@@ -123,34 +161,78 @@ watch([sortBy], () => {
 
     <!-- 筛选 -->
     <div class="filter-bar anim-item" style="--delay: 1">
-      <span
-        v-for="(label, type) in typeMap"
-        :key="type"
-        class="tag"
-        :class="{ active: activeType === type }"
-        @click="changeType(type as any)"
-      >{{ label }}</span>
+      <div class="filter-types">
+        <span
+          v-for="(label, type) in typeMap"
+          :key="type"
+          class="tag"
+          :class="{ active: activeType === type }"
+          @click="changeType(type as any)"
+        >{{ label }}</span>
+      </div>
 
-      <select v-model="sortBy" class="sort-select">
-        <option value="created_at">最新</option>
-        <option value="downloads">最热</option>
-        <option value="rating">评分</option>
-      </select>
+      <!-- 道具分类标签筛选（仅对道具和剧本类型显示） -->
+      <div class="filter-tags" v-if="itemTags.length > 0 && activeType !== 'artwork'">
+        <span class="filter-label">分类：</span>
+        <span
+          class="tag-item"
+          :class="{ active: activeTagId === null }"
+          @click="changeTag(null)"
+        >全部</span>
+        <span
+          v-for="tag in itemTags"
+          :key="tag.id"
+          class="tag-item"
+          :class="{ active: activeTagId === tag.id }"
+          :style="{ '--tag-color': '#' + tag.color }"
+          @click="changeTag(tag.id)"
+        >{{ tag.name }}</span>
+      </div>
+
+      <div class="filter-controls">
+        <input
+          v-model="authorName"
+          type="text"
+          placeholder="按发布者筛选..."
+          class="author-input"
+          @keyup.enter="handleSearch"
+        />
+        <select v-model="sortBy" class="sort-select">
+          <option value="created_at">最新</option>
+          <option value="downloads">最热</option>
+          <option value="rating">评分</option>
+        </select>
+      </div>
     </div>
 
     <!-- 卡片网格 -->
     <div class="card-grid anim-item" style="--delay: 2">
       <div v-if="loading" class="loading-state">加载中...</div>
-      <div v-else-if="items.length === 0" class="empty-state">暂无道具</div>
+      <div v-else-if="items.length === 0" class="empty-state">暂无作品</div>
       <div v-else v-for="item in items" :key="item.id" class="card" @click="viewDetail(item.id)">
-        <div class="card-image" :style="item.preview_image ? { backgroundImage: `url(${item.preview_image})` } : {}">
-          <div v-if="!item.preview_image" class="placeholder-icon">
+        <LazyBgImage
+          class="card-image"
+          :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80 }) : undefined"
+          fallback-gradient="linear-gradient(135deg, #D4A373 0%, #8C7B70 100%)"
+        >
+          <div v-if="!item.preview_image_url" class="placeholder-icon">
             <i class="ri-box-3-line"></i>
           </div>
-        </div>
+        </LazyBgImage>
         <div class="card-content">
           <h3>{{ item.name }}</h3>
-          <p class="creator">{{ item.type === 'item' ? '道具' : '剧本' }}</p>
+          <div class="card-meta">
+            <span class="type-badge">{{ typeMap[item.type as keyof typeof typeMap] || item.type }}</span>
+            <div class="card-author">
+              <span v-if="item.author_avatar" class="author-avatar">
+                <img :src="item.author_avatar" alt="" loading="lazy" />
+              </span>
+              <span v-else class="author-avatar placeholder">
+                {{ (item.author_username || 'U').charAt(0) }}
+              </span>
+              <span class="author-name">{{ item.author_username || '匿名' }}</span>
+            </div>
+          </div>
           <p class="desc">{{ item.description || '暂无描述' }}</p>
           <div class="card-footer">
             <span class="stat"><i class="ri-download-line"></i> {{ item.downloads }}</span>
@@ -289,9 +371,85 @@ watch([sortBy], () => {
 
 .filter-bar {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  background: rgba(255,255,255,0.8);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(184,115,51,0.1);
+}
+
+.filter-types {
+  display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.filter-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.filter-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+  padding-top: 12px;
+  border-top: 1px solid rgba(229, 212, 193, 0.5);
+}
+
+.filter-label {
+  font-size: 14px;
+  color: #5D4037;
+  font-weight: 500;
+}
+
+.tag-item {
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.6);
+  cursor: pointer;
+  font-size: 13px;
+  color: #5D4037;
+  border: 1px solid transparent;
+  transition: all 0.3s;
+}
+
+.tag-item:hover {
+  background: rgba(255,255,255,0.9);
+  border-color: var(--tag-color, #B87333);
+}
+
+.tag-item.active {
+  background: var(--tag-color, #B87333);
+  color: #fff;
+  border-color: var(--tag-color, #B87333);
+}
+
+.author-input {
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid #E5D4C1;
+  font-size: 14px;
+  color: #5D4037;
+  min-width: 180px;
+  transition: all 0.3s;
+}
+
+.author-input:focus {
+  outline: none;
+  border-color: #B87333;
+  box-shadow: 0 0 0 3px rgba(184,115,51,0.1);
+}
+
+.author-input::placeholder {
+  color: #999;
 }
 
 .tag {
@@ -354,11 +512,60 @@ watch([sortBy], () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 
 .placeholder-icon {
   font-size: 48px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* 卡片元信息（类型+作者） */
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+/* 卡片作者信息 */
+.card-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.author-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.author-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.author-avatar.placeholder {
+  background: linear-gradient(135deg, #B87333, #4B3621);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.author-name {
+  font-size: 12px;
+  color: #795548;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-content {
@@ -371,10 +578,13 @@ watch([sortBy], () => {
   margin-bottom: 4px;
 }
 
-.creator {
-  font-size: 13px;
-  color: #999;
-  margin-bottom: 8px;
+.type-badge {
+  display: inline-block;
+  font-size: 12px;
+  color: #795548;
+  background: #F5EFE7;
+  padding: 3px 8px;
+  border-radius: 4px;
 }
 
 .desc {

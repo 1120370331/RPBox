@@ -325,9 +325,9 @@ function formatActionType(type: string): string {
     'hide_post': '屏蔽帖子',
     'pin_post': '置顶帖子',
     'feature_post': '精华帖子',
-    'review_item': '审核道具',
-    'delete_item': '删除道具',
-    'hide_item': '屏蔽道具',
+    'review_item': '审核作品',
+    'delete_item': '删除作品',
+    'hide_item': '屏蔽作品',
     'review_guild': '审核公会',
     'delete_guild': '删除公会',
     'change_guild_owner': '更换会长',
@@ -432,7 +432,7 @@ function initMetricsChart() {
       axisPointer: { type: 'cross' }
     },
     legend: {
-      data: ['新增用户', '新增帖子', '新增道具', '新增公会'],
+      data: ['新增用户', '新增帖子', '新增作品', '新增公会'],
       textStyle: { color: '#8D7B68' }
     },
     grid: {
@@ -456,7 +456,7 @@ function initMetricsChart() {
     series: [
       { name: '新增用户', type: 'line', data: newUsers, smooth: true, itemStyle: { color: '#804030' } },
       { name: '新增帖子', type: 'line', data: newPosts, smooth: true, itemStyle: { color: '#4682B4' } },
-      { name: '新增道具', type: 'line', data: newItems, smooth: true, itemStyle: { color: '#9370DB' } },
+      { name: '新增作品', type: 'line', data: newItems, smooth: true, itemStyle: { color: '#9370DB' } },
       { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: '#6B9B6B' } }
     ]
   }
@@ -478,16 +478,52 @@ async function openPreview(type: 'post' | 'item' | 'guild', id: number) {
       const res = await getPost(id)
       previewData.value = res.post
     } else if (type === 'item') {
-      const res = await getItem(id)
-      previewData.value = res.item
+      const res: any = await getItem(id)
+      // 处理不同的 API 返回格式
+      let item, author, tags
+      if (res.code === 0 && res.data) {
+        // 格式: { code: 0, data: { item, author, tags } }
+        item = res.data.item
+        author = res.data.author
+        tags = res.data.tags
+      } else if (res.item) {
+        // 格式: { item, author, tags }
+        item = res.item
+        author = res.author
+        tags = res.tags
+      } else {
+        // 直接是 item 对象
+        item = res
+      }
+      previewData.value = {
+        ...item,
+        author_name: author?.username || item?.author_name,
+        tags: tags || []
+      }
     } else {
       const res = await getGuild(id)
       previewData.value = res.guild
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载详情失败:', error)
-    alert('加载详情失败')
-    showPreviewModal.value = false
+    // 如果是 404 错误，说明内容已被删除，刷新列表
+    if (error.message?.includes('不存在')) {
+      showPreviewModal.value = false
+      // 刷新对应的列表
+      if (type === 'item') {
+        loadPendingItems()
+        loadAllItems()
+      } else if (type === 'post') {
+        loadPendingPosts()
+        loadAllPosts()
+      } else {
+        loadPendingGuilds()
+        loadAllGuilds()
+      }
+    } else {
+      alert('加载详情失败: ' + error.message)
+      showPreviewModal.value = false
+    }
   } finally {
     previewLoading.value = false
   }
@@ -525,7 +561,7 @@ async function submitPreviewReview() {
 // 快速审核（直接通过/拒绝）
 async function quickReview(type: 'post' | 'item' | 'guild', id: number, action: 'approve' | 'reject') {
   const actionText = action === 'approve' ? '通过' : '拒绝'
-  const typeText = type === 'post' ? '帖子' : type === 'item' ? '道具' : '公会'
+  const typeText = type === 'post' ? '帖子' : type === 'item' ? '作品' : '公会'
 
   const confirmed = await dialog.confirm({
     title: `${actionText}${typeText}`,
@@ -651,8 +687,8 @@ async function handleFeaturePost(id: number, isFeatured: boolean) {
 
 async function handleDeleteItem(id: number) {
   const confirmed = await dialog.confirm({
-    title: '删除道具',
-    message: '确定要删除这个道具吗？此操作不可恢复。',
+    title: '删除作品',
+    message: '确定要删除这个作品吗？此操作不可恢复。',
     type: 'error',
     confirmText: '删除',
     cancelText: '取消'
@@ -670,8 +706,8 @@ async function handleDeleteItem(id: number) {
 
 async function handleHideItem(id: number) {
   const confirmed = await dialog.confirm({
-    title: '屏蔽道具',
-    message: '确定要屏蔽这个道具吗？道具将被打回待审核状态。',
+    title: '屏蔽作品',
+    message: '确定要屏蔽这个作品吗？作品将被打回待审核状态。',
     type: 'warning',
     confirmText: '屏蔽',
     cancelText: '取消'
@@ -781,6 +817,16 @@ function getRoleLabel(role: string) {
     admin: '管理员'
   }
   return map[role] || role
+}
+
+function getItemTypeLabel(type: string) {
+  const map: Record<string, string> = {
+    item: '道具',
+    document: '文档',
+    campaign: '剧本',
+    artwork: '画作'
+  }
+  return map[type] || type
 }
 
 // ========== 用户管理功能 ==========
@@ -914,7 +960,7 @@ function formatBanTime(dateStr: string | null) {
           <div class="stat-icon"><i class="ri-gift-line"></i></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats?.pending_items || 0 }}</div>
-            <div class="stat-label">待审核道具</div>
+            <div class="stat-label">待审核作品</div>
           </div>
         </div>
         <div class="stat-card pending">
@@ -935,7 +981,7 @@ function formatBanTime(dateStr: string | null) {
           <div class="stat-icon"><i class="ri-box-3-line"></i></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats?.total_items || 0 }}</div>
-            <div class="stat-label">总道具数</div>
+            <div class="stat-label">总作品数</div>
           </div>
         </div>
         <div class="stat-card">
@@ -1019,7 +1065,7 @@ function formatBanTime(dateStr: string | null) {
           @click="switchSubTab('items')"
         >
           <i class="ri-gift-line"></i>
-          道具
+          作品
           <span v-if="activeTab === 'review' && (stats?.pending_items || 0) > 0" class="review-badge">
             {{ stats?.pending_items }}
           </span>
@@ -1106,7 +1152,7 @@ function formatBanTime(dateStr: string | null) {
         </div>
         <div v-else-if="pendingItems.length === 0" class="empty-state">
           <i class="ri-checkbox-circle-line"></i>
-          <p>暂无待审核道具</p>
+          <p>暂无待审核作品</p>
         </div>
         <div v-else class="item-list">
           <div v-for="item in pendingItems" :key="item.id" class="item-card" :class="{ 'has-permission': item.requires_permission }">
@@ -1488,13 +1534,13 @@ function formatBanTime(dateStr: string | null) {
           <select v-model="logsActionType" @change="loadActionLogs">
             <option value="">全部操作</option>
             <option value="review_post">审核帖子</option>
-            <option value="review_item">审核道具</option>
+            <option value="review_item">审核作品</option>
             <option value="review_guild">审核公会</option>
             <option value="delete_post">删除帖子</option>
-            <option value="delete_item">删除道具</option>
+            <option value="delete_item">删除作品</option>
             <option value="delete_guild">删除公会</option>
             <option value="hide_post">屏蔽帖子</option>
-            <option value="hide_item">屏蔽道具</option>
+            <option value="hide_item">屏蔽作品</option>
             <option value="pin_post">置顶帖子</option>
             <option value="feature_post">设为精华</option>
             <option value="change_guild_owner">更换会长</option>
@@ -1507,7 +1553,7 @@ function formatBanTime(dateStr: string | null) {
           <select v-model="logsTargetType" @change="loadActionLogs">
             <option value="">全部类型</option>
             <option value="post">帖子</option>
-            <option value="item">道具</option>
+            <option value="item">作品</option>
             <option value="guild">公会</option>
             <option value="user">用户</option>
           </select>
@@ -1589,7 +1635,7 @@ function formatBanTime(dateStr: string | null) {
                 <span class="value">{{ metricsSummary.today.posts }}</span>
               </div>
               <div class="summary-item">
-                <span class="label">新道具</span>
+                <span class="label">新作品</span>
                 <span class="value">{{ metricsSummary.today.items }}</span>
               </div>
               <div class="summary-item">
@@ -1612,7 +1658,7 @@ function formatBanTime(dateStr: string | null) {
                 <span class="value">{{ metricsSummary.yesterday.posts }}</span>
               </div>
               <div class="summary-item">
-                <span class="label">新道具</span>
+                <span class="label">新作品</span>
                 <span class="value">{{ metricsSummary.yesterday.items }}</span>
               </div>
               <div class="summary-item">
@@ -1635,7 +1681,7 @@ function formatBanTime(dateStr: string | null) {
                 <span class="value">{{ metricsSummary.week.posts }}</span>
               </div>
               <div class="summary-item">
-                <span class="label">新道具</span>
+                <span class="label">新作品</span>
                 <span class="value">{{ metricsSummary.week.items }}</span>
               </div>
               <div class="summary-item">
@@ -1658,7 +1704,7 @@ function formatBanTime(dateStr: string | null) {
                 <span class="value">{{ metricsSummary.month.posts }}</span>
               </div>
               <div class="summary-item">
-                <span class="label">新道具</span>
+                <span class="label">新作品</span>
                 <span class="value">{{ metricsSummary.month.items }}</span>
               </div>
               <div class="summary-item">
@@ -1680,7 +1726,7 @@ function formatBanTime(dateStr: string | null) {
       <div v-if="showReviewModal" class="modal-overlay" @click.self="showReviewModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h3>审核{{ reviewTarget?.type === 'post' ? '帖子' : reviewTarget?.type === 'item' ? '道具' : '公会' }}</h3>
+            <h3>审核{{ reviewTarget?.type === 'post' ? '帖子' : reviewTarget?.type === 'item' ? '作品' : '公会' }}</h3>
             <button class="close-btn" @click="showReviewModal = false">
               <i class="ri-close-line"></i>
             </button>
@@ -1765,7 +1811,7 @@ function formatBanTime(dateStr: string | null) {
             </div>
             <p class="confirm-text">
               {{ roleTarget?.newRole === 'moderator'
-                ? '确定要将该用户设为版主吗？版主可以审核帖子、道具和公会。'
+                ? '确定要将该用户设为版主吗？版主可以审核帖子、作品和公会。'
                 : '确定要取消该用户的版主权限吗？' }}
             </p>
           </div>
@@ -1857,7 +1903,7 @@ function formatBanTime(dateStr: string | null) {
           <div class="modal-header">
             <h3>
               <i :class="previewType === 'post' ? 'ri-article-line' : previewType === 'item' ? 'ri-gift-line' : 'ri-team-line'"></i>
-              {{ previewType === 'post' ? '帖子审核' : previewType === 'item' ? '道具审核' : '公会审核' }}
+              {{ previewType === 'post' ? '帖子审核' : previewType === 'item' ? '作品审核' : '公会审核' }}
             </h3>
             <button class="close-btn" @click="showPreviewModal = false">
               <i class="ri-close-line"></i>
@@ -1882,26 +1928,55 @@ function formatBanTime(dateStr: string | null) {
                 <div class="preview-content" v-html="previewData.content"></div>
               </template>
 
-              <!-- 道具预览 -->
+              <!-- 作品预览 -->
               <template v-else-if="previewType === 'item'">
                 <!-- 权限警告横幅 -->
                 <div v-if="previewData.requires_permission" class="permission-warning-banner">
                   <i class="ri-shield-keyhole-line"></i>
                   <div class="warning-content">
-                    <strong>此道具需要 TRP3 权限授权</strong>
-                    <p>用户需要在游戏内对道具 Shift+右键点击 来调整安全性设置后才能正常使用。请确认道具功能是否需要此权限。</p>
+                    <strong>此作品需要 TRP3 权限授权</strong>
+                    <p>用户需要在游戏内对道具 Shift+右键点击 来调整安全性设置后才能正常使用。请确认作品功能是否需要此权限。</p>
                   </div>
                 </div>
+
+                <!-- 预览图 -->
+                <div v-if="previewData.preview_image" class="item-preview-image">
+                  <img :src="previewData.preview_image" alt="预览图" />
+                </div>
+
                 <div class="preview-header">
-                  <h2 class="preview-title">{{ previewData.name }}</h2>
+                  <div class="item-title-row">
+                    <img v-if="previewData.icon" :src="previewData.icon" class="item-icon" />
+                    <h2 class="preview-title">{{ previewData.name }}</h2>
+                  </div>
                   <div class="preview-meta">
                     <span><i class="ri-user-line"></i> {{ previewData.author_name }}</span>
                     <span><i class="ri-time-line"></i> {{ formatDate(previewData.created_at) }}</span>
-                    <span class="type-tag">{{ previewData.type }}</span>
+                    <span class="type-tag">{{ getItemTypeLabel(previewData.type) }}</span>
                   </div>
                 </div>
-                <div class="preview-content">
+
+                <!-- 简介 -->
+                <div v-if="previewData.description" class="preview-description">
+                  <h4>简介</h4>
                   <p>{{ previewData.description }}</p>
+                </div>
+
+                <!-- 详细介绍 -->
+                <div v-if="previewData.detail_content" class="preview-detail-content">
+                  <h4>详细介绍</h4>
+                  <div class="rich-content" v-html="previewData.detail_content"></div>
+                </div>
+
+                <!-- 标签 -->
+                <div v-if="previewData.tags && previewData.tags.length > 0" class="preview-tags">
+                  <span v-for="tag in previewData.tags" :key="tag.id" class="preview-tag">{{ tag.name }}</span>
+                </div>
+
+                <!-- 无内容提示 -->
+                <div v-if="!previewData.description && !previewData.detail_content && !previewData.preview_image" class="empty-preview">
+                  <i class="ri-file-text-line"></i>
+                  <p>暂无详细内容</p>
                 </div>
               </template>
 
@@ -3209,5 +3284,106 @@ function formatBanTime(dateStr: string | null) {
 .pagination span {
   font-size: 14px;
   color: #5D4037;
+}
+
+/* 作品预览样式 */
+.item-preview-image {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.item-preview-image img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.item-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid #E5D4C1;
+}
+
+.preview-description {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #E5D4C1;
+}
+
+.preview-description h4,
+.preview-detail-content h4 {
+  font-size: 14px;
+  color: #8D7B68;
+  margin: 0 0 12px 0;
+  font-weight: 600;
+}
+
+.preview-description p {
+  color: #4B3621;
+  line-height: 1.7;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.preview-detail-content {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #E5D4C1;
+}
+
+.preview-detail-content .rich-content {
+  color: #4B3621;
+  line-height: 1.8;
+}
+
+.preview-detail-content .rich-content img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.preview-tag {
+  padding: 4px 12px;
+  background: #F5EBE0;
+  color: #8D7B68;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.empty-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #8D7B68;
+}
+
+.empty-preview i {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+
+.empty-preview p {
+  margin: 0;
+  font-size: 14px;
 }
 </style>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { listStories, type Story } from '@/api/story'
+import { listStories, type Story, type StoryFilterParams } from '@/api/story'
 import { getGuild, type Guild } from '@/api/guild'
+import { listGuildTags, type Tag } from '@/api/tag'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 
@@ -14,6 +15,15 @@ const loading = ref(true)
 const guild = ref<Guild | null>(null)
 const stories = ref<Story[]>([])
 const searchKeyword = ref('')
+
+// 筛选相关
+const tags = ref<Tag[]>([])
+const selectedTagIds = ref<number[]>([])
+const startDate = ref('')
+const endDate = ref('')
+const sortBy = ref<'created_at' | 'updated_at' | 'start_time'>('created_at')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const showFilter = ref(false)
 
 // 筛选后的剧情列表
 const filteredStories = computed(() => {
@@ -37,7 +47,15 @@ async function loadGuild() {
 async function loadStories() {
   loading.value = true
   try {
-    const res = await listStories({ guild_id: String(guildId) })
+    const params: StoryFilterParams = {
+      guild_id: String(guildId),
+      tag_ids: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined,
+      start_date: startDate.value || undefined,
+      end_date: endDate.value || undefined,
+      sort: sortBy.value,
+      order: sortOrder.value
+    }
+    const res = await listStories(params)
     stories.value = res.stories || []
   } catch (error) {
     console.error('加载剧情失败:', error)
@@ -47,11 +65,50 @@ async function loadStories() {
 }
 
 function viewStory(id: number) {
-  router.push({ name: 'story-detail', params: { id } })
+  router.push({
+    name: 'story-detail',
+    params: { id },
+    query: { from: 'guild', guildId: String(guildId) }
+  })
 }
 
 function goBack() {
-  router.back()
+  router.push({ name: 'guild-detail', params: { id: guildId } })
+}
+
+function goToPosts() {
+  router.push({ name: 'guild-posts', params: { id: guildId } })
+}
+
+async function loadTags() {
+  try {
+    const res = await listGuildTags(guildId)
+    tags.value = res.tags || []
+  } catch (error) {
+    console.error('加载标签失败:', error)
+  }
+}
+
+function toggleTag(tagId: number) {
+  const index = selectedTagIds.value.indexOf(tagId)
+  if (index > -1) {
+    selectedTagIds.value.splice(index, 1)
+  } else {
+    selectedTagIds.value.push(tagId)
+  }
+}
+
+function applyFilter() {
+  loadStories()
+}
+
+function resetFilter() {
+  selectedTagIds.value = []
+  startDate.value = ''
+  endDate.value = ''
+  sortBy.value = 'created_at'
+  sortOrder.value = 'desc'
+  loadStories()
 }
 
 function formatDate(dateStr: string) {
@@ -63,8 +120,35 @@ function formatDate(dateStr: string) {
   })
 }
 
+function calculateDuration(startTime: string, endTime: string): string {
+  if (!startTime || !endTime) return '未知'
+
+  const start = new Date(startTime)
+  const end = new Date(endTime)
+  const diffMs = end.getTime() - start.getTime()
+
+  if (diffMs < 0) return '未知'
+
+  const diffMinutes = Math.floor(diffMs / (1000 * 60))
+  const diffHours = Math.floor(diffMinutes / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffDays > 0) {
+    const hours = diffHours % 24
+    return hours > 0 ? `${diffDays}天${hours}小时` : `${diffDays}天`
+  } else if (diffHours > 0) {
+    const minutes = diffMinutes % 60
+    return minutes > 0 ? `${diffHours}小时${minutes}分钟` : `${diffHours}小时`
+  } else if (diffMinutes > 0) {
+    return `${diffMinutes}分钟`
+  } else {
+    return '不到1分钟'
+  }
+}
+
 onMounted(async () => {
   await loadGuild()
+  await loadTags()
   await loadStories()
 })
 </script>
@@ -83,6 +167,18 @@ onMounted(async () => {
       </div>
     </div>
 
+    <!-- 快速跳转导航 -->
+    <div class="quick-nav">
+      <button class="nav-btn" @click="goToPosts">
+        <i class="ri-article-line"></i>
+        公会帖子
+      </button>
+      <button class="nav-btn active">
+        <i class="ri-book-2-line"></i>
+        公会剧情
+      </button>
+    </div>
+
     <!-- 搜索栏 -->
     <div class="search-bar">
       <div class="search-input">
@@ -93,8 +189,73 @@ onMounted(async () => {
           placeholder="搜索剧情标题或描述..."
         />
       </div>
+      <button class="filter-toggle-btn" @click="showFilter = !showFilter">
+        <i class="ri-filter-3-line"></i>
+        筛选
+      </button>
       <div class="story-count">
         共 {{ filteredStories.length }} 个剧情
+      </div>
+    </div>
+
+    <!-- 筛选面板 -->
+    <div v-if="showFilter" class="filter-panel">
+      <!-- 标签筛选 -->
+      <div class="filter-section">
+        <label class="filter-label">标签筛选</label>
+        <div class="tag-filters">
+          <span
+            v-for="tag in tags"
+            :key="tag.id"
+            class="filter-tag"
+            :class="{ active: selectedTagIds.includes(tag.id) }"
+            :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: '#fff' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+            @click="toggleTag(tag.id)"
+          >
+            {{ tag.name }}
+          </span>
+          <span v-if="tags.length === 0" class="empty-hint">暂无标签</span>
+        </div>
+      </div>
+
+      <!-- 日期范围 -->
+      <div class="filter-section">
+        <label class="filter-label">日期范围</label>
+        <div class="date-range">
+          <input v-model="startDate" type="date" class="date-input" />
+          <span class="date-separator">至</span>
+          <input v-model="endDate" type="date" class="date-input" />
+        </div>
+      </div>
+
+      <!-- 排序 -->
+      <div class="filter-section">
+        <label class="filter-label">排序</label>
+        <div class="sort-controls">
+          <select v-model="sortBy" class="filter-select">
+            <option value="created_at">创建时间</option>
+            <option value="updated_at">更新时间</option>
+            <option value="start_time">剧情时间</option>
+          </select>
+          <button
+            class="sort-order-btn"
+            @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+          >
+            <i :class="sortOrder === 'desc' ? 'ri-sort-desc' : 'ri-sort-asc'"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="filter-actions">
+        <button class="filter-btn reset-btn" @click="resetFilter">
+          <i class="ri-refresh-line"></i>
+          重置
+        </button>
+        <button class="filter-btn apply-btn" @click="applyFilter">
+          <i class="ri-check-line"></i>
+          应用筛选
+        </button>
       </div>
     </div>
 
@@ -129,7 +290,7 @@ onMounted(async () => {
           </span>
           <span class="meta-item">
             <i class="ri-time-line"></i>
-            {{ story.duration || '未知' }}
+            {{ calculateDuration(story.start_time, story.end_time) }}
           </span>
         </div>
       </div>
@@ -144,53 +305,131 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* 日式极简 + 混合圆角设计系统 */
 .guild-stories-page {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 48px 24px;
+  background: #EED9C4;
+  min-height: 100vh;
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* 渐入动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 头部 */
 .page-header {
-  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 40px;
 }
 
 .back-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: none;
-  border: 1px solid #E5D4C1;
-  border-radius: 8px;
+  background: transparent;
+  border: none;
   color: #8D7B68;
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
-  margin-bottom: 16px;
+  transition: color 0.3s ease;
+  padding: 0;
+}
+
+.back-btn i {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #E5D4C1;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
 }
 
 .back-btn:hover {
+  color: #804030;
+}
+
+.back-btn:hover i {
   border-color: #B87333;
-  color: #B87333;
-  background: rgba(184, 115, 51, 0.05);
+  background: #F5EFE7;
 }
 
 .header-content {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .page-title {
-  font-size: 28px;
-  font-weight: 600;
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   color: #2C1810;
-  margin: 0 0 8px 0;
+  margin: 0;
+  line-height: 1.2;
 }
 
 .page-desc {
   font-size: 14px;
+  font-weight: 300;
   color: #8D7B68;
   margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid #D4A373;
+}
+
+/* 快速跳转导航 */
+.quick-nav {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: white;
+  border: 1px solid #E5D4C1;
+  border-radius: 2px;
+  color: #8D7B68;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.nav-btn:hover {
+  border-color: #B87333;
+  color: #804030;
+  background: #F5EFE7;
+}
+
+.nav-btn.active {
+  background: #804030;
+  color: white;
+  border-color: #804030;
+}
+
+.nav-btn i {
+  font-size: 16px;
 }
 
 /* 搜索栏 */
@@ -198,45 +437,277 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 24px;
-  padding: 16px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 40px;
 }
 
 .search-input {
+  position: relative;
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #F5EFE7;
-  border-radius: 8px;
-}
-
-.search-input i {
-  font-size: 18px;
-  color: #8D7B68;
+  max-width: 256px;
 }
 
 .search-input input {
-  flex: 1;
-  background: none;
+  width: 100%;
+  background: transparent;
   border: none;
-  outline: none;
-  font-size: 14px;
+  border-bottom: 2px solid #E5D4C1;
   color: #2C1810;
+  padding: 8px 0;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.3s ease;
 }
 
 .search-input input::placeholder {
-  color: #8D7B68;
+  color: rgba(212, 163, 115, 0.7);
+}
+
+.search-input input:focus {
+  border-bottom-color: #804030;
+}
+
+.search-input i {
+  position: absolute;
+  right: 0;
+  top: 8px;
+  font-size: 20px;
+  color: #D4A373;
+  transition: color 0.3s ease;
+}
+
+.search-input:hover i {
+  color: #804030;
 }
 
 .story-count {
-  font-size: 14px;
-  color: #8D7B68;
+  font-size: 11px;
+  color: #B87333;
   white-space: nowrap;
+  font-weight: 600;
+  font-family: monospace;
+  background: #F5EFE7;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+/* 筛选按钮 */
+.filter-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  color: #8D7B68;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-toggle-btn:hover {
+  border-color: #B87333;
+  color: #804030;
+  background: #F5EFE7;
+}
+
+.filter-toggle-btn i {
+  font-size: 16px;
+}
+
+/* 筛选面板 */
+.filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px -2px rgba(44, 24, 16, 0.08);
+  margin-bottom: 32px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #804030;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* 标签筛选 */
+.tag-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-tag {
+  padding: 6px 14px;
+  border: 2px solid;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.filter-tag:hover {
+  opacity: 0.8;
+  transform: translateY(-1px);
+}
+
+.filter-tag.active {
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: #8D7B68;
+  font-style: italic;
+}
+
+/* 日期范围 */
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.date-input {
+  flex: 1;
+  padding: 10px 14px;
+  background: #F5EFE7;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  color: #2C1810;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.date-input:focus {
+  border-color: #B87333;
+  background: white;
+}
+
+.date-separator {
+  font-size: 13px;
+  color: #8D7B68;
+  font-weight: 500;
+}
+
+/* 排序控制 */
+.sort-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-select {
+  flex: 1;
+  padding: 10px 14px;
+  background: #F5EFE7;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  color: #2C1810;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-select:focus {
+  border-color: #B87333;
+  background: white;
+}
+
+.sort-order-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F5EFE7;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  color: #804030;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sort-order-btn:hover {
+  border-color: #B87333;
+  background: white;
+}
+
+/* 筛选操作按钮 */
+.filter-actions {
+  display: flex;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #F5EFE7;
+}
+
+.filter-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reset-btn {
+  background: #F5EFE7;
+  color: #8D7B68;
+}
+
+.reset-btn:hover {
+  background: #E5D4C1;
+  color: #804030;
+}
+
+.apply-btn {
+  background: #804030;
+  color: white;
+}
+
+.apply-btn:hover {
+  background: #6B3626;
+}
+
+.filter-btn i {
+  font-size: 16px;
 }
 
 /* 加载状态 */
@@ -261,23 +732,48 @@ onMounted(async () => {
 
 /* 剧情列表 */
 .stories-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
 .story-card {
-  padding: 20px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
-  border-radius: 12px;
+  position: relative;
+  padding: 24px 32px;
+  background: white;
+  border-left: 4px solid #804030;
+  border-radius: 0 48px 48px 0;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px -2px rgba(44, 24, 16, 0.08);
+  overflow: hidden;
+  animation: slideInLeft 0.6s ease-out backwards;
+}
+
+/* 交错动画延迟 */
+.story-card:nth-child(1) { animation-delay: 0.1s; }
+.story-card:nth-child(2) { animation-delay: 0.2s; }
+.story-card:nth-child(3) { animation-delay: 0.3s; }
+.story-card:nth-child(4) { animation-delay: 0.4s; }
+.story-card:nth-child(5) { animation-delay: 0.5s; }
+.story-card:nth-child(6) { animation-delay: 0.6s; }
+.story-card:nth-child(7) { animation-delay: 0.7s; }
+.story-card:nth-child(8) { animation-delay: 0.8s; }
+.story-card:nth-child(n+9) { animation-delay: 0.9s; }
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .story-card:hover {
-  border-color: #B87333;
-  box-shadow: 0 4px 12px rgba(184, 115, 51, 0.1);
-  transform: translateY(-2px);
+  box-shadow: 0 20px 40px -4px rgba(44, 24, 16, 0.12);
 }
 
 .story-header {
@@ -285,28 +781,30 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .story-title {
   flex: 1;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   color: #2C1810;
   margin: 0;
+  line-height: 1.4;
 }
 
 .story-date {
-  font-size: 13px;
-  color: #8D7B68;
+  font-size: 12px;
+  color: #B87333;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .story-desc {
   font-size: 14px;
-  color: #4B3621;
+  color: #8D7B68;
   line-height: 1.6;
-  margin: 0 0 12px 0;
+  margin: 0 0 16px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -316,7 +814,7 @@ onMounted(async () => {
 .story-meta {
   display: flex;
   gap: 16px;
-  padding-top: 12px;
+  padding-top: 16px;
   border-top: 1px solid #F5EFE7;
 }
 
@@ -324,8 +822,9 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  color: #8D7B68;
+  font-size: 12px;
+  color: #D4A373;
+  font-family: monospace;
 }
 
 .meta-item i {

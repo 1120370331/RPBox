@@ -25,7 +25,7 @@ if (userStr) {
   }
 }
 
-// 判断道具的显示状态
+// 判断作品的显示状态
 function getItemDisplayStatus(item: Item): 'draft' | 'pending' | 'published' | 'rejected' {
   if (item.review_status === 'rejected') {
     return 'rejected'
@@ -39,7 +39,7 @@ function getItemDisplayStatus(item: Item): 'draft' | 'pending' | 'published' | '
   return 'draft'
 }
 
-// 过滤后的道具列表
+// 过滤后的作品列表
 const filteredItems = computed(() => {
   if (filterStatus.value === 'all') {
     return items.value
@@ -68,7 +68,7 @@ async function loadMyItems() {
     const res: any = await listItems({ author_id: currentUserId.value, status: 'all' })
     items.value = res.data?.items || []
   } catch (error) {
-    console.error('加载我的道具失败:', error)
+    console.error('加载我的作品失败:', error)
   } finally {
     loading.value = false
   }
@@ -85,7 +85,7 @@ function goToEdit(id: number) {
 async function handleDelete(item: Item) {
   const confirmed = await dialog.confirm({
     title: '确认删除',
-    message: `确定要删除道具"${item.name}"吗？此操作不可恢复。`,
+    message: `确定要删除作品"${item.name}"吗？此操作不可恢复。`,
     confirmText: '删除',
     cancelText: '取消',
     type: 'danger'
@@ -134,7 +134,12 @@ function getStatusInfo(item: Item) {
 
 // 获取类型显示
 function getTypeText(type: string) {
-  return type === 'item' ? '道具' : '剧本'
+  const typeMap: Record<string, string> = {
+    'item': '道具',
+    'campaign': '剧本',
+    'artwork': '画作'
+  }
+  return typeMap[type] || type
 }
 </script>
 
@@ -146,11 +151,11 @@ function getTypeText(type: string) {
           <i class="ri-arrow-left-line"></i>
           返回
         </button>
-        <h1 class="page-title">我的道具</h1>
+        <h1 class="page-title">我的作品</h1>
       </div>
       <button class="create-btn" @click="goToUpload">
         <i class="ri-add-line"></i>
-        上传道具
+        上传作品
       </button>
     </div>
 
@@ -208,10 +213,10 @@ function getTypeText(type: string) {
 
     <div v-else-if="filteredItems.length === 0" class="empty anim-item" style="--delay: 3">
       <i class="ri-box-3-line"></i>
-      <p>{{ filterStatus === 'all' ? '还没有上传任何道具' : `没有${filterStatus === 'draft' ? '草稿' : filterStatus === 'pending' ? '待审核' : '已发布'}的道具` }}</p>
+      <p>{{ filterStatus === 'all' ? '还没有上传任何作品' : `没有${filterStatus === 'draft' ? '草稿' : filterStatus === 'pending' ? '待审核' : '已发布'}的作品` }}</p>
       <button class="create-btn-large" @click="goToUpload">
         <i class="ri-add-line"></i>
-        上传第一个道具
+        上传第一个作品
       </button>
     </div>
 

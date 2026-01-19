@@ -18,6 +18,9 @@ export interface Guild {
   invite_code: string
   status?: 'pending' | 'approved' | 'rejected'
   my_role?: 'owner' | 'admin' | 'member'
+  show_to_visitors: boolean  // 是否向访客展示公会内容
+  show_to_members: boolean   // 是否向普通成员展示公会内容
+  auto_approve: boolean      // 自动审核（无需审核直接加入）
   created_at: string
   updated_at: string
 }
@@ -41,6 +44,9 @@ export interface CreateGuildRequest {
   lore?: string
   faction?: string
   layout?: 1 | 2 | 3 | 4
+  show_to_visitors?: boolean
+  show_to_members?: boolean
+  auto_approve?: boolean
 }
 
 export async function listGuilds(): Promise<{ guilds: Guild[] }> {

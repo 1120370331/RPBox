@@ -47,6 +47,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.ItemFavorite{},
 		&model.ItemDownload{},
 		&model.ItemPendingEdit{},
+		&model.ItemImage{},
 		&model.Post{},
 		&model.PostEditRequest{},
 		&model.PostTag{},
@@ -69,6 +70,24 @@ func Init(cfg *config.DatabaseConfig) error {
 	for _, sql := range migrations {
 		if err := db.Exec(sql).Error; err != nil {
 			log.Printf("[DB Migration] %s - %v", sql, err)
+		}
+	}
+
+	// 添加性能优化索引
+	indexMigrations := []string{
+		// guild_members 表添加 user_id 单独索引，优化按用户查询公会成员
+		"CREATE INDEX IF NOT EXISTS idx_guild_members_user_id ON guild_members(user_id)",
+		// posts 表添加复合索引，优化活动列表查询
+		"CREATE INDEX IF NOT EXISTS idx_posts_event_list ON posts(category, status, review_status, is_public) WHERE category = 'event'",
+		// posts 表添加 status 索引
+		"CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status)",
+		// posts 表添加 is_public 索引
+		"CREATE INDEX IF NOT EXISTS idx_posts_is_public ON posts(is_public)",
+	}
+	for _, sql := range indexMigrations {
+		if err := db.Exec(sql).Error; err != nil {
+			// 索引可能已存在，忽略错误
+			log.Printf("[DB Index] %s - %v", sql, err)
 		}
 	}
 

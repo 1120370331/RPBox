@@ -41,7 +41,7 @@ func (s *Server) listStories(c *gin.Context) {
 	userID := c.GetUint("userID")
 
 	// 构建查询
-	// 如果指定了guild_id，则查询公会剧情（公开访问）
+	// 如果指定了guild_id，则查询公会剧情（需要检查访问权限）
 	// 否则只查询当前用户的剧情（私有访问）
 	query := database.DB.Model(&model.Story{})
 	if c.Query("guild_id") == "" {
@@ -67,6 +67,15 @@ func (s *Server) listStories(c *gin.Context) {
 
 	// 公会筛选
 	if guildID := c.Query("guild_id"); guildID != "" {
+		guildIDNum, _ := strconv.ParseUint(guildID, 10, 32)
+
+		// 检查公会内容访问权限
+		canAccess, _ := checkGuildContentAccess(uint(guildIDNum), userID)
+		if !canAccess {
+			c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
+			return
+		}
+
 		var storyIDs []uint
 		database.DB.Model(&model.StoryGuild{}).
 			Where("guild_id = ?", guildID).
@@ -394,11 +403,12 @@ func generateShareCode() string {
 
 // UpdateStoryEntryRequest 更新剧情条目请求
 type UpdateStoryEntryRequest struct {
-	Content     string `json:"content"`
-	Speaker     string `json:"speaker"`
-	Channel     string `json:"channel"`
-	Type        string `json:"type"`
-	CharacterID *uint  `json:"character_id"`
+	Content     string     `json:"content"`
+	Speaker     string     `json:"speaker"`
+	Channel     string     `json:"channel"`
+	Type        string     `json:"type"`
+	CharacterID *uint      `json:"character_id"`
+	Timestamp   *time.Time `json:"timestamp"`
 }
 
 // updateStoryEntry 更新剧情条目
@@ -444,6 +454,9 @@ func (s *Server) updateStoryEntry(c *gin.Context) {
 	}
 	if req.CharacterID != nil {
 		entry.CharacterID = req.CharacterID
+	}
+	if req.Timestamp != nil {
+		entry.Timestamp = *req.Timestamp
 	}
 
 	if err := database.DB.Save(&entry).Error; err != nil {

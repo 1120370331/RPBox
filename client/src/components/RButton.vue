@@ -52,9 +52,9 @@ function handleClick(e: MouseEvent) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+  border: 1px solid;
+  border-radius: 8px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
@@ -67,35 +67,55 @@ function handleClick(e: MouseEvent) {
 
 /* 类型 */
 .r-button--primary {
-  background: var(--color-accent);
-  color: var(--color-primary);
+  background: #2C1810;
+  border-color: #2C1810;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
-.r-button--primary:hover { filter: brightness(1.1); }
+.r-button--primary:hover {
+  background: #1a0e09;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
 
 .r-button--secondary {
-  background: var(--color-primary);
-  color: var(--text-light);
+  background: #F5EFE7;
+  border-color: #E5D4C1;
+  color: #2C1810;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
-.r-button--secondary:hover { filter: brightness(1.2); }
+.r-button--secondary:hover {
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
 
 .r-button--outline {
   background: transparent;
-  border: 2px solid var(--color-accent);
-  color: var(--color-accent);
+  border-color: #E5D4C1;
+  color: #2C1810;
 }
-.r-button--outline:hover { background: rgba(184, 115, 51, 0.1); }
+.r-button--outline:hover {
+  background: #F5EFE7;
+}
 
 .r-button--ghost {
   background: transparent;
-  color: var(--color-primary);
+  border-color: transparent;
+  color: #2C1810;
 }
-.r-button--ghost:hover { background: rgba(75, 54, 33, 0.1); }
+.r-button--ghost:hover {
+  background: rgba(44, 24, 16, 0.05);
+}
 
 .r-button--danger {
   background: #c41e3a;
+  border-color: #c41e3a;
   color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
-.r-button--danger:hover { filter: brightness(1.1); }
+.r-button--danger:hover {
+  background: #a01828;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
 
 /* 状态 */
 .r-button--disabled {

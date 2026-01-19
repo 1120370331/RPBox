@@ -88,6 +88,14 @@ const addonChecking = ref(false)
 const selectedFlavor = ref('_retail_')
 const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
 
+// 使用提示（可永久关闭）
+const showUsageTips = ref(!localStorage.getItem('rpbox_usage_tips_dismissed'))
+
+function dismissUsageTips() {
+  showUsageTips.value = false
+  localStorage.setItem('rpbox_usage_tips_dismissed', '1')
+}
+
 async function checkAddonStatus() {
   console.log('[ArchivesMain] checkAddonStatus 被调用')
   if (!wowPath.value) return
@@ -403,6 +411,25 @@ function handleViewStory(id: number) {
           {{ addonChecking ? '检查中...' : '检测更新' }}
         </RButton>
       </template>
+    </div>
+
+    <!-- 使用提示（可永久关闭） -->
+    <div v-if="showUsageTips" class="usage-tips-banner anim-item" style="--delay: 0.6">
+      <div class="tips-icon">
+        <i class="ri-lightbulb-flash-line"></i>
+      </div>
+      <div class="tips-content">
+        <div class="tips-title">插件使用提示</div>
+        <ul class="tips-list">
+          <li><code>/rpbox</code> 打开主面板</li>
+          <li><code>/rpbox help</code> 查看所有命令</li>
+          <li>默认只监听具有 TRP 人物卡信息的玩家</li>
+          <li>如需监听非TRP玩家，选中目标 2 秒后自动加入白名单后即可监听</li>
+        </ul>
+      </div>
+      <button class="tips-close-btn" @click="dismissUsageTips" title="不再显示">
+        <i class="ri-close-line"></i>
+      </button>
     </div>
 
     <!-- 公会筛选提示 -->
@@ -788,6 +815,84 @@ function handleViewStory(id: number) {
   font-size: 13px;
   font-weight: 600;
   color: #804030;
+}
+
+/* 使用提示横幅 */
+.usage-tips-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%);
+  border: 1px solid #FFE0B2;
+  border-left: 4px solid #FFB300;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(255, 179, 0, 0.1);
+}
+
+.tips-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #FFB300, #FF9800);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tips-icon i {
+  font-size: 20px;
+  color: #fff;
+}
+
+.tips-content {
+  flex: 1;
+}
+
+.tips-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #E65100;
+  margin-bottom: 8px;
+}
+
+.tips-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #5D4037;
+  line-height: 1.8;
+}
+
+.tips-list code {
+  padding: 2px 6px;
+  background: rgba(184, 115, 51, 0.15);
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #B87333;
+}
+
+.tips-close-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #BF8040;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.tips-close-btn:hover {
+  background: rgba(191, 128, 64, 0.15);
+  color: #E65100;
 }
 
 /* 公会筛选横幅 */

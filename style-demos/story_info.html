@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>剧情详情 - 龙眠神殿档案馆</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        serif: ['Cinzel', 'serif'],
+                        sans: ['Lato', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#2C1810',    // 深棕色
+                        accent: '#804030',     // 棕红色
+                        gold: '#B87333',       // 金棕色
+                        'gold-light': '#D4A373', // 浅金棕
+                        secondary: '#8D7B68',  // 中灰棕
+                        'text-body': '#4B3621', // 深灰棕
+                        bg: '#EED9C4',         // 页面背景
+                        paper: '#F5EFE7',      // 浅色背景
+                        border: '#E5D4C1',     // 主边框
+                        
+                        // WoW Colors
+                        'wow-druid': '#FF7C0A',
+                        'wow-mage': '#3FC7EB',
+                        'wow-paladin': '#F48CBA',
+                        'wow-rogue': '#FFF468',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for that parchment feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #EED9C4; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #8D7B68; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2C1810; 
+        }
+        
+        /* Glass/Parchment Effect */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(229, 212, 193, 0.6);
+            box-shadow: 0 4px 20px rgba(44, 24, 16, 0.08);
+        }
+
+        .narrator-entry {
+            background: linear-gradient(to right, rgba(184, 115, 51, 0.08), rgba(184, 115, 51, 0.02));
+        }
+    </style>
+</head>
+<body class="bg-bg min-h-screen text-text-body font-sans selection:bg-gold selection:text-white pb-20">
+
+    <!-- Background Pattern Decoration -->
+    <div class="fixed inset-0 pointer-events-none opacity-[0.03] z-0" style="background-image: url('https://www.transparenttextures.com/patterns/paper.png');"></div>
+
+    <div class="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        
+        <!-- Header: Back Button -->
+        <header class="mb-6">
+            <a href="#" class="inline-flex items-center text-secondary hover:text-primary transition-colors duration-200 group font-medium">
+                <i class="ri-arrow-left-line mr-1 transform group-hover:-translate-x-1 transition-transform"></i>
+                返回剧情列表
+            </a>
+        </header>
+
+        <!-- Main Info Card -->
+        <section class="glass-panel rounded-2xl p-6 lg:p-8 mb-8 relative overflow-hidden group">
+            <!-- Decorative corner accent -->
+            <div class="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-bl-[100px] -mr-8 -mt-8 pointer-events-none"></div>
+
+            <div class="flex flex-col lg:flex-row gap-8">
+                <!-- Left: Info -->
+                <div class="flex-1">
+                    <div class="flex items-start justify-between mb-3">
+                        <h1 class="font-serif text-3xl font-bold text-primary leading-tight">荆棘谷的迷雾：血帆海盗的谈判</h1>
+                    </div>
+                    
+                    <p class="text-secondary leading-relaxed mb-6 max-w-2xl">
+                        记录了关于藏宝海湾与血帆海盗在薄雾海角的秘密会谈。涉及到地精贸易路线的重新分配以及对纳迦威胁的共同防御协议。谈判一度破裂，但最终由冒险者从中调停。
+                    </p>
+
+                    <div class="flex flex-wrap items-center gap-6 mb-6">
+                        <div class="flex items-center text-sm text-secondary">
+                            <i class="ri-time-line mr-2 text-gold"></i>
+                            <span>2024年01月14日 20:30</span>
+                        </div>
+                        <div class="flex items-center text-sm text-secondary">
+                            <i class="ri-map-pin-line mr-2 text-gold"></i>
+                            <span>荆棘谷，藏宝海湾</span>
+                        </div>
+                    </div>
+
+                    <!-- Tags & Guilds -->
+                    <div class="space-y-4">
+                        <!-- Tags -->
+                        <div class="flex flex-wrap gap-2">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-900/10 text-red-900 border border-red-900/10 group/tag cursor-default">
+                                海盗
+                                <button class="ml-1.5 opacity-0 group-hover/tag:opacity-100 text-red-700 hover:text-red-900 transition-opacity">
+                                    <i class="ri-close-line"></i>
+                                </button>
+                            </span>
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-900/10 text-green-900 border border-green-900/10 group/tag cursor-default">
+                                贸易
+                                <button class="ml-1.5 opacity-0 group-hover/tag:opacity-100 text-green-700 hover:text-green-900 transition-opacity">
+                                    <i class="ri-close-line"></i>
+                                </button>
+                            </span>
+                            <button class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-secondary border border-dashed border-secondary/40 hover:border-gold hover:text-gold transition-colors">
+                                <i class="ri-add-line mr-1"></i> 添加标签
+                            </button>
+                        </div>
+
+                        <!-- Guild Archive -->
+                        <div class="flex items-center gap-3 pt-2 border-t border-border/50">
+                            <span class="text-xs text-secondary font-medium">已归档到:</span>
+                            <div class="flex items-center gap-2">
+                                <div class="inline-flex items-center px-3 py-1.5 rounded-xl bg-gold/5 border-[1.5px] border-[#804030] text-[#804030] text-xs font-bold relative group/guild">
+                                    <i class="ri-shield-user-line mr-1.5"></i>
+                                    血色十字军
+                                    <button class="ml-2 text-[#804030]/60 hover:text-[#804030] opacity-0 group-hover/guild:opacity-100 transition-opacity">
+                                        <i class="ri-close-circle-fill"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Actions -->
+                <div class="flex flex-row lg:flex-col justify-start lg:items-end gap-3 shrink-0 border-t lg:border-t-0 lg:border-l border-border/50 pt-6 lg:pt-0 lg:pl-8">
+                    <button class="flex items-center justify-center w-full lg:w-auto px-4 py-2 bg-primary hover:bg-[#1a0e09] text-white text-sm font-medium rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95">
+                        <i class="ri-share-line mr-2"></i> 公开分享
+                    </button>
+                    <button class="flex items-center justify-center w-full lg:w-auto px-4 py-2 bg-paper hover:bg-white text-primary border border-border text-sm font-medium rounded-lg shadow-sm hover:shadow transition-all">
+                        <i class="ri-edit-line mr-2"></i> 编辑信息
+                    </button>
+                    <div class="flex gap-2 w-full lg:w-auto">
+                        <button class="flex-1 flex items-center justify-center px-3 py-2 bg-paper hover:bg-white text-secondary hover:text-gold border border-border rounded-lg transition-colors" title="添加条目">
+                            <i class="ri-chat-new-line"></i>
+                        </button>
+                        <button class="flex-1 flex items-center justify-center px-3 py-2 bg-paper hover:bg-white text-secondary hover:text-gold border border-border rounded-lg transition-colors" title="归档到公会">
+                            <i class="ri-archive-line"></i>
+                        </button>
+                        <button class="flex-1 flex items-center justify-center px-3 py-2 bg-paper hover:bg-white text-secondary hover:text-gold border border-border rounded-lg transition-colors" title="导出 JSON">
+                            <i class="ri-download-line"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Story Content List -->
+        <section class="glass-panel rounded-2xl p-6 lg:p-8 min-h-[400px]">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="font-serif text-xl font-bold text-primary">剧情内容 (4 条)</h2>
+                
+                <!-- Filter/Sort placeholder -->
+                <div class="flex items-center gap-2">
+                    <button class="text-xs font-medium text-secondary hover:text-primary transition-colors flex items-center">
+                        <i class="ri-filter-3-line mr-1"></i> 筛选
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+
+                <!-- Narrator Entry -->
+                <article class="narrator-entry group flex gap-4 p-4 rounded-lg border-l-[3px] border-gold relative hover:shadow-sm transition-all duration-200">
+                    <!-- Avatar -->
+                    <div class="flex-shrink-0">
+                        <div class="w-10 h-10 rounded-lg bg-primary/90 flex items-center justify-center text-gold shadow-sm ring-1 ring-primary/20">
+                            <span class="text-[10px] font-bold tracking-wider">旁白</span>
+                        </div>
+                    </div>
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-baseline justify-between mb-1.5">
+                            <span class="text-sm font-bold text-primary font-serif">地下城主</span>
+                            <span class="text-xs text-secondary font-mono">20:30:15</span>
+                        </div>
+                        <div class="text-sm text-text-body leading-relaxed italic">
+                            海风带着咸腥味吹过甲板。远处，藏宝海湾的地精卫兵正在不安地擦拭着火枪，而血帆海盗的旗舰“红惧号”正缓缓驶入港湾，气氛剑拔弩张。
+                        </div>
+                    </div>
+                    <!-- Actions -->
+                    <div class="absolute right-3 bottom-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-gold text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-pencil-line text-sm"></i>
+                        </button>
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-red-600 text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-delete-bin-line text-sm"></i>
+                        </button>
+                    </div>
+                </article>
+
+                <!-- Player Entry (Say) -->
+                <article class="bg-paper group flex gap-4 p-4 rounded-lg border border-transparent hover:border-gold/30 hover:shadow-md transition-all duration-200">
+                    <!-- Avatar -->
+                    <div class="flex-shrink-0 cursor-pointer transform hover:scale-110 transition-transform duration-200">
+                        <img src="https://ui-avatars.com/api/?name=Val&background=3FC7EB&color=fff&size=80" alt="Val" class="w-10 h-10 rounded-lg shadow-sm border border-black/10">
+                    </div>
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-baseline justify-between mb-1.5">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold text-wow-mage cursor-pointer hover:underline">瓦伦丁·霜语</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium">说</span>
+                            </div>
+                            <span class="text-xs text-secondary font-mono">20:31:05</span>
+                        </div>
+                        <div class="text-sm text-text-body leading-relaxed whitespace-pre-wrap">我们不是来打架的。大财主里维加兹承诺过，这次会面受到热砂集团的保护。让你们的火炮转个向，好吗？</div>
+                    </div>
+                    <!-- Actions -->
+                    <div class="absolute right-3 bottom-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-gold text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-pencil-line text-sm"></i>
+                        </button>
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-red-600 text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-delete-bin-line text-sm"></i>
+                        </button>
+                    </div>
+                </article>
+
+                <!-- NPC Entry (Yell) -->
+                <article class="bg-paper group flex gap-4 p-4 rounded-lg border border-transparent hover:border-gold/30 hover:shadow-md transition-all duration-200">
+                    <!-- Avatar -->
+                    <div class="flex-shrink-0 cursor-pointer transform hover:scale-110 transition-transform duration-200">
+                        <div class="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-white/90 shadow-sm border border-black/10">
+                            <span class="text-xs font-bold">NPC</span>
+                        </div>
+                    </div>
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-baseline justify-between mb-1.5">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold text-[#FF3333] cursor-pointer hover:underline">血帆指挥官</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#FF3333]/10 text-[#FF3333] font-medium border border-[#FF3333]/20">喊</span>
+                            </div>
+                            <span class="text-xs text-secondary font-mono">20:31:42</span>
+                        </div>
+                        <div class="text-sm text-[#FF3333] font-medium leading-relaxed whitespace-pre-wrap">保护？！可笑！那个绿皮矮子欠我们三船的丝绸！除非看到金币，否则今天谁也别想活着离开码头！</div>
+                    </div>
+                    <!-- Actions -->
+                    <div class="absolute right-3 bottom-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-gold text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-pencil-line text-sm"></i>
+                        </button>
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-red-600 text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-delete-bin-line text-sm"></i>
+                        </button>
+                    </div>
+                </article>
+
+                <!-- Player Entry (Whisper/Emote) -->
+                <article class="bg-paper group flex gap-4 p-4 rounded-lg border border-transparent hover:border-gold/30 hover:shadow-md transition-all duration-200">
+                    <!-- Avatar -->
+                    <div class="flex-shrink-0 cursor-pointer transform hover:scale-110 transition-transform duration-200">
+                         <img src="https://ui-avatars.com/api/?name=Thorne&background=FFF468&color=000&size=80" alt="Thorne" class="w-10 h-10 rounded-lg shadow-sm border border-black/10">
+                    </div>
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-baseline justify-between mb-1.5">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold text-wow-rogue cursor-pointer hover:underline">索恩·暗影步</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">密语</span>
+                            </div>
+                            <span class="text-xs text-secondary font-mono">20:32:10</span>
+                        </div>
+                        <div class="text-sm text-[#B39DDB] leading-relaxed whitespace-pre-wrap">（对 瓦伦丁·霜语）：我绕到后面去了。如果那个指挥官敢动手，他的脑袋就归我了。拖住他。</div>
+                    </div>
+                    <!-- Actions -->
+                    <div class="absolute right-3 bottom-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-gold text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-pencil-line text-sm"></i>
+                        </button>
+                        <button class="w-7 h-7 flex items-center justify-center rounded bg-black/60 hover:bg-red-600 text-white transition-colors backdrop-blur-sm">
+                            <i class="ri-delete-bin-line text-sm"></i>
+                        </button>
+                    </div>
+                </article>
+
+            </div>
+            
+            <!-- Empty State / Add More Hint -->
+            <div class="mt-8 text-center border-t border-dashed border-border/60 pt-8">
+                <button class="group inline-flex items-center justify-center px-6 py-3 rounded-xl border-2 border-dashed border-secondary/30 text-secondary hover:border-gold hover:text-gold hover:bg-gold/5 transition-all duration-200">
+                    <i class="ri-add-circle-line mr-2 text-xl group-hover:rotate-90 transition-transform"></i>
+                    <span class="font-medium">添加新条目</span>
+                </button>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Floating Action Button (Mobile) -->
+    <button class="lg:hidden fixed bottom-6 right-6 w-14 h-14 bg-accent hover:bg-primary text-white rounded-full shadow-lg flex items-center justify-center z-50 transition-transform active:scale-90">
+        <i class="ri-add-line text-2xl"></i>
+    </button>
+
+    <!-- Character Info Card (Hidden by default, structure for implementation) -->
+    <div class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-white rounded-xl shadow-2xl p-6 border border-border z-50 animate-fade-in">
+        <div class="flex gap-4 mb-4">
+            <img src="https://ui-avatars.com/api/?name=Val&background=3FC7EB&color=fff&size=80" alt="Avatar" class="w-16 h-16 rounded-lg shadow-sm">
+            <div>
+                <h3 class="text-lg font-bold text-wow-mage">瓦伦丁·霜语</h3>
+                <p class="text-xs text-gold italic font-serif">肯瑞托大法师</p>
+                <p class="text-xs text-secondary mt-1">人类 / 法师</p>
+            </div>
+        </div>
+        <div class="space-y-2 text-xs text-secondary mb-4">
+            <div class="flex justify-between"><span class="opacity-70">年龄</span> <span>34</span></div>
+            <div class="flex justify-between"><span class="opacity-70">籍贯</span> <span>达拉然</span></div>
+            <div class="flex justify-between"><span class="opacity-70">眼睛</span> <span>蓝色 (奥术光辉)</span></div>
+        </div>
+        <button class="w-full py-2 border border-border rounded-lg text-sm text-secondary hover:bg-paper hover:text-primary transition-colors">
+            查看完整档案
+        </button>
+    </div>
+
+</body>
+</html>

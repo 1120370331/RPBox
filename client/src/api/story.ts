@@ -105,6 +105,7 @@ export interface UpdateStoryEntryRequest {
   channel?: string
   type?: string
   character_id?: number | null
+  timestamp?: string
 }
 
 export async function updateStoryEntry(storyId: number, entryId: number, data: UpdateStoryEntryRequest): Promise<StoryEntry> {

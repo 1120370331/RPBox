@@ -42,6 +42,9 @@ export const POST_CATEGORIES: { value: PostCategory; label: string; icon: string
 
 export interface PostWithAuthor extends Post {
   author_name: string
+  author_avatar?: string
+  author_role?: string
+  cover_image_url?: string  // 封面图缩略图 URL（列表页使用）
 }
 
 export interface Comment {
@@ -69,6 +72,7 @@ export interface CreatePostRequest {
   tag_ids?: number[]
   status?: 'draft' | 'published'
   cover_image?: string
+  is_public?: boolean  // 公会外成员可见（关联公会时有效）
   event_type?: 'server' | 'guild'
   event_start_time?: string
   event_end_time?: string
@@ -84,6 +88,7 @@ export interface UpdatePostRequest {
   story_id?: number
   status?: 'draft' | 'published'
   cover_image?: string
+  is_public?: boolean  // 公会外成员可见（关联公会时有效）
   event_type?: 'server' | 'guild'
   event_start_time?: string
   event_end_time?: string

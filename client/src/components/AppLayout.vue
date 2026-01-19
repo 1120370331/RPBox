@@ -15,21 +15,19 @@ const mounted = ref(false)
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   if (userStore.token) {
-    // 连接 WebSocket 实时通知
-    notificationStore.connectWebSocket()
     // 加载初始未读数量
     notificationStore.loadUnreadCount()
-    // 每60秒刷新一次未读数量（作为 WebSocket 的备份）
-    setInterval(() => {
-      if (userStore.token) {
-        notificationStore.loadUnreadCount()
-      }
-    }, 60000)
   }
 })
 
+// 侧边栏菜单点击时刷新未读消息数量
+function handleMenuClick() {
+  if (userStore.token) {
+    notificationStore.loadUnreadCount()
+  }
+}
+
 function handleLogout() {
-  notificationStore.disconnectWebSocket()
   userStore.logout()
   router.push('/login')
 }
@@ -38,7 +36,7 @@ const menuItems = [
   { id: 'home', icon: 'ri-home-4-line', label: '首页', route: '/' },
   { id: 'sync', icon: 'ri-user-star-line', label: '人物卡', route: '/sync' },
   { id: 'archives', icon: 'ri-book-open-line', label: '剧情故事', route: '/archives' },
-  { id: 'market', icon: 'ri-sword-line', label: '道具物品', route: '/market' },
+  { id: 'market', icon: 'ri-sword-line', label: '创意市场', route: '/market' },
   { id: 'community', icon: 'ri-chat-smile-2-line', label: '社区广场', route: '/community' },
   { id: 'guild', icon: 'ri-shield-line', label: '公会', route: '/guild' },
   { id: 'settings', icon: 'ri-settings-3-line', label: '系统设置', route: '/settings' },
@@ -81,6 +79,7 @@ const activeMenu = computed(() => {
           class="menu-item"
           :class="{ active: activeMenu === item.id }"
           :to="item.route"
+          @click="handleMenuClick"
         >
           <i :class="item.icon"></i>
           <span>{{ item.label }}</span>
@@ -92,6 +91,7 @@ const activeMenu = computed(() => {
           class="menu-item moderator-item"
           :class="{ active: activeMenu === 'moderator' }"
           :to="moderatorMenuItem.route"
+          @click="handleMenuClick"
         >
           <i :class="moderatorMenuItem.icon"></i>
           <span>{{ moderatorMenuItem.label }}</span>

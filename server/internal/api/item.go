@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -80,16 +81,78 @@ func (s *Server) listItems(c *gin.Context) {
 	var total int64
 	query.Count(&total)
 
-	// 列表查询排除大字段（import_code, raw_data, detail_content）以提高性能
-	if err := query.Select("id, author_id, name, type, icon, preview_image, description, downloads, rating, rating_count, like_count, favorite_count, requires_permission, status, review_status, created_at, updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	// 列表查询排除大字段（import_code, raw_data, detail_content, preview_image）以提高性能
+	// preview_image 通过独立的图片 API 访问
+	if err := query.Select("id, author_id, name, type, icon, description, downloads, rating, rating_count, like_count, favorite_count, requires_permission, status, review_status, created_at, updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// 获取有预览图的 item ID 列表
+	var itemIDs []uint
+	for _, item := range items {
+		itemIDs = append(itemIDs, item.ID)
+	}
+	var itemsWithPreview []uint
+	if len(itemIDs) > 0 {
+		database.DB.Model(&model.Item{}).
+			Select("id").
+			Where("id IN ? AND preview_image IS NOT NULL AND preview_image != ''", itemIDs).
+			Pluck("id", &itemsWithPreview)
+	}
+	hasPreviewMap := make(map[uint]bool)
+	for _, id := range itemsWithPreview {
+		hasPreviewMap[id] = true
+	}
+
+	// 批量获取作者信息
+	var authorIDs []uint
+	for _, item := range items {
+		authorIDs = append(authorIDs, item.AuthorID)
+	}
+
+	var authors []model.User
+	if len(authorIDs) > 0 {
+		database.DB.Select("id", "username", "avatar", "role").Where("id IN ?", authorIDs).Find(&authors)
+	}
+
+	// 创建作者ID到用户信息的映射
+	authorMap := make(map[uint]model.User)
+	for _, author := range authors {
+		authorMap[author.ID] = author
+	}
+
+	// 构建包含作者信息的响应
+	type ItemWithAuthor struct {
+		model.Item
+		AuthorUsername  string `json:"author_username"`
+		AuthorAvatar    string `json:"author_avatar"`
+		AuthorRole      string `json:"author_role"`
+		PreviewImageURL string `json:"preview_image_url"`
+	}
+
+	var result []ItemWithAuthor
+	for _, item := range items {
+		author := authorMap[item.AuthorID]
+		// 构造缩略图 URL：宽度 400，质量 80
+		// 只有确认有预览图或是画作类型才返回 URL
+		previewURL := ""
+		if hasPreviewMap[item.ID] || item.Type == "artwork" {
+			previewURL = fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80", item.ID)
+		}
+		result = append(result, ItemWithAuthor{
+			Item:            item,
+			AuthorUsername:  author.Username,
+			AuthorAvatar:    author.Avatar,
+			AuthorRole:      author.Role,
+			PreviewImageURL: previewURL,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
-			"items": items,
+			"items": result,
 			"total": total,
 			"page":  page,
 		},
@@ -107,9 +170,10 @@ func (s *Server) createItem(c *gin.Context) {
 		PreviewImage       string   `json:"preview_image"`
 		Description        string   `json:"description"`
 		DetailContent      string   `json:"detail_content"`
-		ImportCode         string   `json:"import_code" binding:"required"`
+		ImportCode         string   `json:"import_code"`
 		RawData            string   `json:"raw_data"`
 		RequiresPermission bool     `json:"requires_permission"`
+		EnableWatermark    bool     `json:"enable_watermark"`
 		TagIDs             []uint   `json:"tag_ids"`
 		Status             string   `json:"status"`
 	}
@@ -125,9 +189,16 @@ func (s *Server) createItem(c *gin.Context) {
 		return
 	}
 
-	// 验证类型：item（道具）、script（剧本）
-	if req.Type != "item" && req.Type != "script" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item type, must be 'item' or 'script'"})
+	// 验证类型：item（道具）、document（文档）、campaign（剧本）、artwork（画作）
+	validTypes := map[string]bool{"item": true, "document": true, "campaign": true, "artwork": true}
+	if !validTypes[req.Type] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item type"})
+		return
+	}
+
+	// 对于非画作类型，import_code是必填的
+	if req.Type != "artwork" && req.ImportCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "导入代码是必填项"})
 		return
 	}
 
@@ -147,6 +218,7 @@ func (s *Server) createItem(c *gin.Context) {
 		ImportCode:         req.ImportCode,
 		RawData:            req.RawData,
 		RequiresPermission: req.RequiresPermission,
+		EnableWatermark:    req.EnableWatermark,
 		Status:             req.Status,
 	}
 
@@ -212,6 +284,28 @@ func (s *Server) getItem(c *gin.Context) {
 		"item":   item,
 		"author": author,
 		"tags":   tags,
+	}
+
+	// 如果是画作类型，获取图片列表
+	if item.Type == "artwork" {
+		var images []model.ItemImage
+		database.DB.Where("item_id = ?", item.ID).Order("sort_order asc").Find(&images)
+
+		type ImageResponse struct {
+			ID        uint   `json:"id"`
+			ImageURL  string `json:"image_url"`
+			SortOrder int    `json:"sort_order"`
+		}
+
+		var imageList []ImageResponse
+		for _, img := range images {
+			imageList = append(imageList, ImageResponse{
+				ID:        img.ID,
+				ImageURL:  "/api/v1/items/" + id + "/images/" + strconv.Itoa(int(img.ID)),
+				SortOrder: img.SortOrder,
+			})
+		}
+		response["images"] = imageList
 	}
 
 	// 如果是作者，返回待审核编辑信息

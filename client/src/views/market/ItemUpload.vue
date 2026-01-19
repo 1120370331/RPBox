@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { createItem, uploadImage } from '@/api/item'
+import { createItem, uploadImage, uploadItemImages } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
@@ -12,30 +12,39 @@ const toast = useToast()
 const userStore = useUserStore()
 const loading = ref(false)
 const uploadingImage = ref(false)
+const uploadingArtwork = ref(false)
 const itemTags = ref<Tag[]>([])
 const previewImageInput = ref<HTMLInputElement | null>(null)
+const artworkImagesInput = ref<HTMLInputElement | null>(null)
 
 const DRAFT_KEY = 'item_upload_draft'
 
 // 表单数据
 const form = ref({
   name: '',
-  type: 'item' as 'item' | 'script',
+  type: 'item' as 'item' | 'campaign' | 'artwork',
   icon: '',
   preview_image: '',
   description: '',
   detail_content: '',
   import_code: '',
   raw_data: '',
+  enable_watermark: true,  // 画作水印开关，默认开启
   tag_ids: [] as number[],
   status: 'draft' as 'draft' | 'published'
 })
+
+// 画作图片（待上传）
+const artworkImages = ref<{ file: File; preview: string }[]>([])
+
+// 是否为画作类型
+const isArtwork = computed(() => form.value.type === 'artwork')
 
 // 挂载时恢复草稿
 onMounted(() => {
   // 检查登录状态
   if (!userStore.user || !userStore.token) {
-    toast.warning('请先登录后再上传道具')
+    toast.info('请先登录后再上传作品')
     router.push('/login')
     return
   }
@@ -72,7 +81,7 @@ function clearDraft() {
   sessionStorage.removeItem(DRAFT_KEY)
 }
 
-// 加载道具标签
+// 加载作品标签
 async function loadTags() {
   try {
     const res: any = await getPresetTags('item')
@@ -86,9 +95,22 @@ async function loadTags() {
 
 // 提交表单
 async function handleSubmit(status: 'draft' | 'published') {
-  if (!form.value.name || !form.value.import_code) {
-    toast.warning('请填写道具名称和导入代码')
-    return
+  // 画作类型需要至少一张图片
+  if (isArtwork.value) {
+    if (!form.value.name) {
+      toast.info('请填写作品名称')
+      return
+    }
+    if (artworkImages.value.length === 0) {
+      toast.info('请至少上传一张图片')
+      return
+    }
+  } else {
+    // 非画作类型需要导入代码
+    if (!form.value.name || !form.value.import_code) {
+      toast.info('请填写作品名称和导入代码')
+      return
+    }
   }
 
   form.value.status = status
@@ -96,6 +118,19 @@ async function handleSubmit(status: 'draft' | 'published') {
   try {
     const res: any = await createItem(form.value)
     if (res.code === 0 || res.data) {
+      const itemId = res.data.id
+
+      // 如果是画作类型，上传图片
+      if (isArtwork.value && artworkImages.value.length > 0) {
+        try {
+          const files = artworkImages.value.map(img => img.file)
+          await uploadItemImages(itemId, files)
+        } catch (uploadError: any) {
+          console.error('图片上传失败:', uploadError)
+          toast.info('作品已创建，但部分图片上传失败')
+        }
+      }
+
       clearDraft()
       const msg = status === 'draft' ? '草稿已保存！' : '发布成功，等待审核！'
       toast.success(msg)
@@ -119,7 +154,7 @@ function goBack() {
 // 预览
 function handlePreview() {
   if (!form.value.name) {
-    toast.warning('请先填写道具名称')
+    toast.info('请先填写作品名称')
     return
   }
 
@@ -155,7 +190,7 @@ async function handlePreviewImageUpload(event: Event) {
 
   const file = input.files[0]
   if (file.size > 5 * 1024 * 1024) {
-    toast.warning('图片大小不能超过5MB')
+    toast.info('图片大小不能超过5MB')
     return
   }
 
@@ -178,6 +213,52 @@ function removePreviewImage() {
   form.value.preview_image = ''
 }
 
+// 选择画作图片
+function handleArtworkImagesSelect(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+
+  const maxImages = 20
+  const remainingSlots = maxImages - artworkImages.value.length
+
+  if (remainingSlots <= 0) {
+    toast.info('最多只能上传20张图片')
+    return
+  }
+
+  const filesToAdd = Array.from(input.files).slice(0, remainingSlots)
+
+  for (const file of filesToAdd) {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.info(`图片 ${file.name} 超过10MB，已跳过`)
+      continue
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast.info(`文件 ${file.name} 不是图片，已跳过`)
+      continue
+    }
+
+    // 创建预览
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      artworkImages.value.push({
+        file,
+        preview: e.target?.result as string
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 清空 input 以允许重复选择相同文件
+  input.value = ''
+}
+
+// 移除画作图片
+function removeArtworkImage(index: number) {
+  artworkImages.value.splice(index, 1)
+}
+
 loadTags()
 </script>
 
@@ -191,29 +272,30 @@ loadTags()
 
       <!-- 表单标题 -->
       <div class="form-header">
-        <h1>上传道具</h1>
-        <p>分享你的 TRP3 Extended 道具给其他玩家</p>
+        <h1>上传作品</h1>
+        <p>分享你的 TRP3 Extended 创意作品给其他玩家</p>
       </div>
 
       <!-- 上传表单 -->
       <form class="upload-form" @submit.prevent="handleSubmit">
-        <!-- 道具名称 -->
+        <!-- 作品名称 -->
         <div class="form-group">
-          <label>道具名称 <span class="required">*</span></label>
+          <label>作品名称 <span class="required">*</span></label>
           <input
             v-model="form.name"
             type="text"
-            placeholder="请输入道具名称"
+            placeholder="请输入作品名称"
             required
           />
         </div>
 
-        <!-- 道具类型 -->
+        <!-- 作品类型 -->
         <div class="form-group">
-          <label>道具类型 <span class="required">*</span></label>
+          <label>作品类型 <span class="required">*</span></label>
           <select v-model="form.type" required>
             <option value="item">道具</option>
-            <option value="script">剧本</option>
+            <option value="campaign">剧本</option>
+            <option value="artwork">画作</option>
           </select>
         </div>
 
@@ -247,7 +329,7 @@ loadTags()
           <label>简短描述</label>
           <textarea
             v-model="form.description"
-            placeholder="请简短描述这个道具的功能和特点..."
+            placeholder="请简短描述这个作品的功能和特点..."
             rows="3"
           ></textarea>
         </div>
@@ -257,13 +339,70 @@ loadTags()
           <label>详细介绍</label>
           <TiptapEditor
             v-model="form.detail_content"
-            placeholder="可以添加图片、详细说明道具的使用方法..."
+            placeholder="可以添加图片、详细说明作品的使用方法..."
           />
-          <p class="hint">支持插入图片，可以展示道具的详细效果</p>
+          <p class="hint">支持插入图片，可以展示作品的详细效果</p>
         </div>
 
-        <!-- 导入代码 -->
-        <div class="form-group">
+        <!-- 画作图片上传（仅画作类型） -->
+        <div class="form-group" v-if="isArtwork">
+          <label>画作图片 <span class="required">*</span></label>
+          <div class="artwork-images">
+            <!-- 已选择的图片列表 -->
+            <div class="image-grid" v-if="artworkImages.length > 0">
+              <div
+                v-for="(img, index) in artworkImages"
+                :key="index"
+                class="image-item"
+              >
+                <img :src="img.preview" alt="画作图片" />
+                <button type="button" class="remove-btn" @click="removeArtworkImage(index)">
+                  <i class="ri-close-line"></i>
+                </button>
+                <span class="image-index">{{ index + 1 }}</span>
+              </div>
+              <!-- 添加更多按钮 -->
+              <div
+                v-if="artworkImages.length < 20"
+                class="add-more-btn"
+                @click="artworkImagesInput?.click()"
+              >
+                <i class="ri-add-line"></i>
+                <span>添加更多</span>
+              </div>
+            </div>
+            <!-- 空状态 -->
+            <div v-else class="upload-area" @click="artworkImagesInput?.click()">
+              <i class="ri-image-add-line"></i>
+              <span>点击选择图片（最多20张）</span>
+            </div>
+            <input
+              ref="artworkImagesInput"
+              type="file"
+              accept="image/*"
+              multiple
+              style="display: none"
+              @change="handleArtworkImagesSelect"
+            />
+          </div>
+          <p class="hint">支持 JPG、PNG 格式，单张最大 10MB，最多上传 20 张</p>
+        </div>
+
+        <!-- 水印设置（仅画作类型） -->
+        <div class="form-group" v-if="isArtwork">
+          <label>水印设置</label>
+          <div class="watermark-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="form.enable_watermark" />
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label">下载时添加水印（用户名）</span>
+          </div>
+          <p class="hint">开启后，其他用户下载图片时会自动在右下角添加你的用户名作为水印</p>
+        </div>
+
+        <!-- 导入代码（非画作类型） -->
+        <div class="form-group" v-if="!isArtwork">
           <label>TRP3 导入代码 <span class="required">*</span></label>
           <textarea
             v-model="form.import_code"
@@ -271,12 +410,12 @@ loadTags()
             rows="6"
             required
           ></textarea>
-          <p class="hint">从 TRP3 Extended 中导出道具，然后将代码粘贴到这里</p>
+          <p class="hint">从 TRP3 Extended 中导出作品，然后将代码粘贴到这里</p>
         </div>
 
         <!-- 标签选择 -->
         <div class="form-group" v-if="itemTags.length > 0">
-          <label>道具分类标签</label>
+          <label>作品分类标签</label>
           <div class="tag-selector">
             <label
               v-for="tag in itemTags"
@@ -581,5 +720,158 @@ loadTags()
 .preview-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* 画作图片上传样式 */
+.artwork-images {
+  width: 100%;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.image-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #F5F0EB;
+}
+
+.image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-item .remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.image-item:hover .remove-btn {
+  opacity: 1;
+}
+
+.image-item .remove-btn:hover {
+  background: rgba(220,20,60,0.8);
+}
+
+.image-index {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-more-btn {
+  aspect-ratio: 1;
+  border: 2px dashed #E0E0E0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #999;
+}
+
+.add-more-btn:hover {
+  border-color: #B87333;
+  color: #B87333;
+  background: #FFF8F0;
+}
+
+.add-more-btn i {
+  font-size: 32px;
+}
+
+.add-more-btn span {
+  font-size: 12px;
+}
+
+/* 水印开关样式 */
+.watermark-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-switch .slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #E0E0E0;
+  border-radius: 26px;
+  transition: 0.3s;
+}
+
+.toggle-switch .slider:before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.3s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.toggle-switch input:checked + .slider {
+  background: #B87333;
+}
+
+.toggle-switch input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+.toggle-label {
+  font-size: 14px;
+  color: #5D4037;
 }
 </style>

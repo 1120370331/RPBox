@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息中心 - RPBox</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        rp: {
+                            bg: '#EED9C4',       // 米黄色
+                            card: '#FFFFFF',     // 白色
+                            hover: '#F5EFE7',    // 浅米色
+                            primary: '#2C1810',  // 深棕色
+                            text: '#4B3621',     // 棕色
+                            muted: '#8D7B68',    // 灰棕色
+                            accent: '#804030',   // 棕红色
+                            gold: '#D4A373',     // 金棕色
+                            copper: '#B87333',   // 铜色
+                            border: '#E5D4C1',   // 浅色边框
+                            unread: '#FFF9F0',   // 未读背景
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+                    },
+                    boxShadow: {
+                        'swiss': '4px 4px 0px 0px rgba(44, 24, 16, 0.1)',
+                        'swiss-hover': '2px 2px 0px 0px rgba(44, 24, 16, 0.2)',
+                        'swiss-active': '0px 0px 0px 0px rgba(44, 24, 16, 0.2)',
+                    },
+                    borderWidth: {
+                        '3': '3px',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Swiss/International Style Tweaks */
+        body {
+            background-image: 
+                linear-gradient(rgba(229, 212, 193, 0.4) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(229, 212, 193, 0.4) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        .chamfered-corner {
+            clip-path: polygon(
+                10px 0%, 100% 0%, 
+                100% calc(100% - 10px), calc(100% - 10px) 100%, 
+                0% 100%, 0% 10px
+            );
+        }
+
+        .chamfered-top-right {
+            clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #EED9C4; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #8D7B68; 
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2C1810; 
+        }
+    </style>
+</head>
+<body class="bg-rp-bg text-rp-text min-h-screen font-sans selection:bg-rp-accent selection:text-white">
+
+    <!-- Layout Container -->
+    <div class="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8 h-screen overflow-hidden">
+        
+        <!-- Sidebar / Navigation (Col 3) -->
+        <aside class="hidden md:flex md:col-span-3 flex-col gap-6 h-full">
+            <!-- Brand -->
+            <div class="bg-rp-primary text-rp-bg p-6 chamfered-top-right shadow-swiss border-l-2 border-b-2 border-rp-primary/20">
+                <h1 class="text-2xl font-bold tracking-tighter uppercase">RPBox<span class="text-rp-gold">.</span></h1>
+                <p class="text-xs text-rp-muted mt-1 font-mono opacity-80">SYSTEM_VER_3.0</p>
+            </div>
+
+            <!-- Categories -->
+            <nav class="flex-1 overflow-y-auto space-y-1">
+                <button class="w-full text-left px-5 py-3 bg-rp-accent text-white font-medium border-l-4 border-rp-primary shadow-swiss flex justify-between items-center group transition-all duration-200 hover:translate-x-1">
+                    <span class="tracking-tight">全部消息</span>
+                    <span class="bg-white text-rp-accent text-xs font-bold px-2 py-0.5 font-mono">12</span>
+                </button>
+                
+                <button class="w-full text-left px-5 py-3 hover:bg-white text-rp-primary font-medium border-l-4 border-transparent hover:border-rp-gold transition-all duration-200 group flex justify-between items-center">
+                    <span class="group-hover:translate-x-1 transition-transform">点赞通知</span>
+                    <span class="bg-rp-bg text-rp-muted text-[10px] px-1.5 py-0.5 font-mono group-hover:bg-rp-gold group-hover:text-white transition-colors">4</span>
+                </button>
+
+                <button class="w-full text-left px-5 py-3 hover:bg-white text-rp-primary font-medium border-l-4 border-transparent hover:border-rp-gold transition-all duration-200 group flex justify-between items-center">
+                    <span class="group-hover:translate-x-1 transition-transform">评论回复</span>
+                    <span class="bg-rp-bg text-rp-muted text-[10px] px-1.5 py-0.5 font-mono group-hover:bg-rp-gold group-hover:text-white transition-colors">2</span>
+                </button>
+
+                <button class="w-full text-left px-5 py-3 hover:bg-white text-rp-primary font-medium border-l-4 border-transparent hover:border-rp-gold transition-all duration-200 group flex justify-between items-center">
+                    <span class="group-hover:translate-x-1 transition-transform">公会事务</span>
+                    <span class="bg-rp-bg text-rp-muted text-[10px] px-1.5 py-0.5 font-mono group-hover:bg-rp-gold group-hover:text-white transition-colors">5</span>
+                </button>
+
+                <button class="w-full text-left px-5 py-3 hover:bg-white text-rp-primary font-medium border-l-4 border-transparent hover:border-rp-gold transition-all duration-200 group flex justify-between items-center">
+                    <span class="group-hover:translate-x-1 transition-transform">系统公告</span>
+                    <span class="bg-rp-bg text-rp-muted text-[10px] px-1.5 py-0.5 font-mono group-hover:bg-rp-gold group-hover:text-white transition-colors">1</span>
+                </button>
+            </nav>
+
+            <!-- Quick Action -->
+            <button class="bg-white border-2 border-rp-primary text-rp-primary font-bold py-3 px-4 shadow-swiss hover:shadow-swiss-hover active:shadow-swiss-active active:translate-x-[2px] active:translate-y-[2px] transition-all uppercase text-sm tracking-wider flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                全部标记已读
+            </button>
+        </aside>
+
+        <!-- Main Content (Col 9) -->
+        <main class="col-span-1 md:col-span-9 flex flex-col h-full bg-rp-bg/50 backdrop-blur-sm border-2 border-rp-primary/10 relative">
+            
+            <!-- Geometric Decoration -->
+            <div class="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-rp-primary"></div>
+            <div class="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-rp-primary"></div>
+
+            <!-- Header -->
+            <header class="flex items-center justify-between px-6 py-5 border-b border-rp-primary/10 bg-white/80 sticky top-0 z-10 backdrop-blur-md">
+                <div class="flex items-baseline gap-3">
+                    <h2 class="text-xl font-bold text-rp-primary uppercase tracking-wide">Inbox</h2>
+                    <span class="text-rp-accent font-mono text-xs border border-rp-accent px-1.5 py-0.5">12 UNREAD</span>
+                </div>
+                
+                <!-- Mobile Only Menu Trigger (Simulated) -->
+                <div class="md:hidden">
+                   <button class="p-2 text-rp-primary border border-rp-primary bg-white">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                   </button>
+                </div>
+
+                <div class="hidden md:flex items-center gap-4 text-xs font-mono text-rp-muted">
+                    <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-rp-copper rounded-none rotate-45"></span> 未读
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 border border-rp-muted rounded-none rotate-45"></span> 已读
+                    </span>
+                </div>
+            </header>
+
+            <!-- Notification List -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-3">
+
+                <!-- Item 1: Unread, Guild, High Importance -->
+                <div class="group relative bg-rp-unread border border-rp-primary/20 p-5 hover:border-rp-accent transition-colors duration-200">
+                    <div class="absolute top-0 right-0">
+                        <div class="w-0 h-0 border-t-[20px] border-l-[20px] border-t-rp-copper border-l-transparent"></div>
+                    </div>
+                    
+                    <div class="flex gap-5 items-start">
+                        <!-- Avatar as distinct geometric shape -->
+                        <div class="relative shrink-0">
+                            <img src="https://i.pravatar.cc/150?u=a042581f4e29026024d" alt="User" class="w-12 h-12 object-cover grayscale contrast-125 border border-rp-primary">
+                            <div class="absolute -bottom-1 -right-1 bg-rp-primary text-white text-[10px] font-bold px-1 py-0.5 font-mono">GUILD</div>
+                        </div>
+
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-start mb-1">
+                                <h3 class="font-bold text-rp-primary text-sm leading-tight group-hover:text-rp-accent transition-colors">
+                                    <span class="underline decoration-1 underline-offset-2">守夜人公会</span> 审核通过了你的入会申请
+                                </h3>
+                                <time class="text-[10px] font-mono text-rp-muted uppercase tracking-wider shrink-0 ml-2">JUST NOW</time>
+                            </div>
+                            <p class="text-sm text-rp-text leading-relaxed line-clamp-2 mb-3">
+                                欢迎加入守夜人！请仔细阅读公会章程，并尽快前往大厅报到领取你的徽章。
+                            </p>
+                            
+                            <!-- Action Area -->
+                            <div class="flex gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 transform translate-y-1 group-hover:translate-y-0">
+                                <button class="text-xs font-bold text-rp-accent uppercase hover:bg-rp-accent hover:text-white px-2 py-1 border border-rp-accent transition-colors">
+                                    查看详情
+                                </button>
+                                <button class="text-xs font-mono text-rp-muted hover:text-rp-primary px-2 py-1">
+                                    标为已读
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Item 2: Unread, Like -->
+                <div class="group relative bg-rp-unread border border-rp-primary/20 p-5 hover:border-rp-gold transition-colors duration-200">
+                     <div class="absolute top-0 right-0">
+                        <div class="w-0 h-0 border-t-[20px] border-l-[20px] border-t-rp-copper border-l-transparent"></div>
+                    </div>
+                    <div class="flex gap-5 items-start">
+                        <div class="relative shrink-0">
+                            <img src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="User" class="w-12 h-12 object-cover grayscale contrast-125 border border-rp-primary">
+                            <div class="absolute -bottom-1 -right-1 bg-rp-gold text-white text-[10px] font-bold px-1 py-0.5 font-mono">LIKE</div>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex justify-between items-start">
+                                <span class="text-sm text-rp-primary">
+                                    <strong class="font-bold">Artorias</strong> 赞赏了你的道具设计 <span class="font-serif italic text-rp-accent">"深渊巨剑"</span>
+                                </span>
+                                <time class="text-[10px] font-mono text-rp-muted uppercase tracking-wider shrink-0 ml-2">2H AGO</time>
+                            </div>
+                             <!-- Action Area (Hover Reveal) -->
+                             <div class="flex gap-3 mt-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                <button class="text-xs font-bold text-rp-primary uppercase hover:bg-rp-primary hover:text-white px-2 py-1 border border-rp-primary transition-colors">
+                                    查看道具
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Item 3: Unread, Comment -->
+                <div class="group relative bg-rp-unread border border-rp-primary/20 p-5 hover:border-rp-accent transition-colors duration-200">
+                     <div class="absolute top-0 right-0">
+                        <div class="w-0 h-0 border-t-[20px] border-l-[20px] border-t-rp-copper border-l-transparent"></div>
+                    </div>
+                    <div class="flex gap-5 items-start">
+                        <div class="relative shrink-0">
+                            <img src="https://i.pravatar.cc/150?u=2" alt="User" class="w-12 h-12 object-cover grayscale contrast-125 border border-rp-primary">
+                             <div class="absolute -bottom-1 -right-1 bg-rp-accent text-white text-[10px] font-bold px-1 py-0.5 font-mono">REPLY</div>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-sm text-rp-primary">
+                                    <strong class="font-bold">Solaire</strong> 评论了你的帖子
+                                </span>
+                                <time class="text-[10px] font-mono text-rp-muted uppercase tracking-wider shrink-0 ml-2">5H AGO</time>
+                            </div>
+                            <div class="bg-white/50 p-3 border-l-2 border-rp-muted/30 text-sm text-rp-text italic font-serif">
+                                "赞美太阳！这个配色的运用非常有创意..."
+                            </div>
+                             <div class="flex gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                <button class="text-xs font-bold text-rp-primary uppercase hover:bg-rp-primary hover:text-white px-2 py-1 border border-rp-primary transition-colors">
+                                    回复
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Divider with Date -->
+                <div class="flex items-center gap-4 py-2">
+                    <div class="h-px bg-rp-primary/20 flex-1"></div>
+                    <span class="text-xs font-mono text-rp-muted bg-rp-bg/80 px-2 border border-rp-primary/20">YESTERDAY</span>
+                    <div class="h-px bg-rp-primary/20 flex-1"></div>
+                </div>
+
+                <!-- Item 4: Read, System -->
+                <div class="group relative bg-white border border-transparent p-5 hover:border-rp-primary/10 transition-colors duration-200 opacity-70 hover:opacity-100">
+                    <div class="flex gap-5 items-start">
+                        <div class="relative shrink-0 flex items-center justify-center w-12 h-12 bg-rp-primary text-white border border-rp-primary">
+                           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex justify-between items-start mb-1">
+                                <h3 class="font-bold text-rp-primary text-sm">系统维护公告</h3>
+                                <time class="text-[10px] font-mono text-rp-muted uppercase tracking-wider shrink-0 ml-2">1 DAY AGO</time>
+                            </div>
+                            <p class="text-sm text-rp-muted line-clamp-1">
+                                服务器将于本周五凌晨 2:00 进行例行维护，预计耗时...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Item 5: Read, Like -->
+                <div class="group relative bg-white border border-transparent p-5 hover:border-rp-primary/10 transition-colors duration-200 opacity-70 hover:opacity-100">
+                    <div class="flex gap-5 items-center">
+                        <div class="relative shrink-0">
+                            <img src="https://i.pravatar.cc/150?u=8" alt="User" class="w-12 h-12 object-cover grayscale contrast-125 border border-rp-primary/20">
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-rp-text">
+                                    <strong class="font-bold text-rp-primary">Oscar</strong> 赞了你的评论
+                                </span>
+                                <time class="text-[10px] font-mono text-rp-muted uppercase tracking-wider shrink-0 ml-2">1 DAY AGO</time>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                 <!-- Item 6: Read, Like -->
+                 <div class="group relative bg-white border border-transparent p-5 hover:border-rp-primary/10 transition-colors duration-200 opacity-70 hover:opacity-100">
+                    <div class="flex gap-5 items-center">
+                        <div class="relative shrink-0">
+                            <img src="https://i.pravatar.cc/150?u=12" alt="User" class="w-12 h-12 object-cover grayscale contrast-125 border border-rp-primary/20">
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-rp-text">
+                                    <strong class="font-bold text-rp-primary">Siegmeyer</strong> 赞了你的评论
+                                </span>
+                                <time class="text-[10px] font-mono text-rp-muted uppercase tracking-wider shrink-0 ml-2">1 DAY AGO</time>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State (Hidden by default, structure ready) -->
+            <div class="hidden absolute inset-0 flex flex-col items-center justify-center p-8 bg-rp-bg/90 z-20">
+                <div class="w-24 h-24 border-2 border-rp-muted flex items-center justify-center mb-6 rotate-45">
+                    <div class="w-16 h-16 border border-rp-muted flex items-center justify-center -rotate-45">
+                        <svg class="w-8 h-8 text-rp-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                    </div>
+                </div>
+                <h3 class="text-rp-primary font-bold text-lg uppercase tracking-widest mb-2">No Messages</h3>
+                <p class="text-rp-muted font-mono text-xs">ALL SYSTEMS CLEAR</p>
+            </div>
+
+            <!-- Footer / Pagination -->
+            <div class="p-4 border-t border-rp-primary/10 bg-white/50 backdrop-blur flex justify-center">
+                <button class="group flex items-center gap-2 text-xs font-bold text-rp-primary uppercase tracking-widest hover:text-rp-accent transition-colors">
+                    <span class="w-4 h-px bg-rp-primary group-hover:bg-rp-accent transition-colors"></span>
+                    Load More Data
+                    <span class="w-4 h-px bg-rp-primary group-hover:bg-rp-accent transition-colors"></span>
+                </button>
+            </div>
+
+        </main>
+    </div>
+
+</body>
+</html>

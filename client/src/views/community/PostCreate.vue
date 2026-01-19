@@ -24,6 +24,7 @@ const form = ref<CreatePostRequest>({
   tag_ids: [],
   status: 'published',
   cover_image: '',
+  is_public: true,  // 公会外成员可见（默认开启）
   event_type: undefined,
   event_start_time: undefined,
   event_end_time: undefined,
@@ -406,6 +407,18 @@ function removeCoverImage() {
           <option :value="undefined">不关联</option>
           <option v-for="g in guilds" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
+      </div>
+
+      <!-- 公会外可见开关（当关联公会时显示） -->
+      <div v-if="!isEventCategory && form.guild_id" class="setting-item setting-vertical visibility-setting">
+        <label class="setting-label">公会外可见</label>
+        <div class="visibility-toggle">
+          <label class="switch">
+            <input type="checkbox" v-model="form.is_public" />
+            <span class="slider"></span>
+          </label>
+          <span class="visibility-hint">{{ form.is_public ? '帖子将同时显示在社区广场' : '仅公会成员可见' }}</span>
+        </div>
       </div>
 
       <!-- 活动设置 -->
@@ -1064,5 +1077,69 @@ function removeCoverImage() {
 .actions-group .action-btn.publish:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ========== Visibility Toggle ========== */
+.visibility-setting {
+  margin-top: 12px;
+}
+
+.visibility-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.visibility-hint {
+  font-size: 13px;
+  color: #8D7B68;
+}
+
+/* Switch Toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #E5D4C1;
+  transition: 0.3s;
+  border-radius: 26px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+input:checked + .slider {
+  background-color: #804030;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
 }
 </style>

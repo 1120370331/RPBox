@@ -31,15 +31,18 @@ type CreateGuildRequest struct {
 
 // UpdateGuildRequest 更新公会请求
 type UpdateGuildRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
-	Color       string `json:"color"`
-	Banner      string `json:"banner"`
-	Slogan      string `json:"slogan"`
-	Lore        string `json:"lore"`
-	Faction     string `json:"faction"`
-	Layout      int    `json:"layout"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Icon           string `json:"icon"`
+	Color          string `json:"color"`
+	Banner         string `json:"banner"`
+	Slogan         string `json:"slogan"`
+	Lore           string `json:"lore"`
+	Faction        string `json:"faction"`
+	Layout         int    `json:"layout"`
+	ShowToVisitors *bool  `json:"show_to_visitors"` // 是否向访客展示公会内容
+	ShowToMembers  *bool  `json:"show_to_members"`  // 是否向普通成员展示公会内容
+	AutoApprove    *bool  `json:"auto_approve"`     // 自动审核（无需审核直接加入）
 }
 
 // JoinGuildRequest 加入公会请求
@@ -221,6 +224,15 @@ func (s *Server) updateGuild(c *gin.Context) {
 	if req.Layout >= 1 && req.Layout <= 4 {
 		guild.Layout = req.Layout
 	}
+	if req.ShowToVisitors != nil {
+		guild.ShowToVisitors = *req.ShowToVisitors
+	}
+	if req.ShowToMembers != nil {
+		guild.ShowToMembers = *req.ShowToMembers
+	}
+	if req.AutoApprove != nil {
+		guild.AutoApprove = *req.AutoApprove
+	}
 
 	database.DB.Save(&guild)
 	c.JSON(http.StatusOK, guild)
@@ -262,6 +274,36 @@ func checkGuildAdmin(guildID, userID uint) bool {
 		return false
 	}
 	return member.Role == "owner" || member.Role == "admin"
+}
+
+// checkGuildContentAccess 检查用户是否有权限查看公会内容（剧情/帖子）
+// 返回: canAccess（是否可访问）, memberRole（成员角色，非成员为空字符串）
+func checkGuildContentAccess(guildID, userID uint) (bool, string) {
+	// 1. 获取公会设置
+	var guild model.Guild
+	if err := database.DB.First(&guild, guildID).Error; err != nil {
+		return false, ""
+	}
+
+	// 2. 检查用户是否为成员
+	var member model.GuildMember
+	err := database.DB.Where("guild_id = ? AND user_id = ?", guildID, userID).First(&member).Error
+
+	if err != nil {
+		// 非成员 - 检查访客权限
+		return guild.ShowToVisitors, ""
+	}
+
+	// 是成员
+	role := member.Role
+
+	// owner 和 admin 始终可访问
+	if role == "owner" || role == "admin" {
+		return true, role
+	}
+
+	// 普通成员 - 检查成员权限设置
+	return guild.ShowToMembers, role
 }
 
 // joinGuild 加入公会
@@ -506,10 +548,10 @@ func (s *Server) listGuildStories(c *gin.Context) {
 	userID := c.GetUint("userID")
 	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
-	// 检查是否是公会成员
-	var member model.GuildMember
-	if err := database.DB.Where("guild_id = ? AND user_id = ?", guildID, userID).First(&member).Error; err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "非公会成员"})
+	// 检查内容访问权限
+	canAccess, _ := checkGuildContentAccess(uint(guildID), userID)
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
 		return
 	}
 
@@ -661,6 +703,24 @@ func (s *Server) applyGuild(c *gin.Context) {
 	var existingMember model.GuildMember
 	if err := database.DB.Where("guild_id = ? AND user_id = ?", guildID, userID).First(&existingMember).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "已是公会成员"})
+		return
+	}
+
+	// 如果开启自动审核，直接加入公会
+	if guild.AutoApprove {
+		member := model.GuildMember{
+			GuildID:  uint(guildID),
+			UserID:   userID,
+			Role:     "member",
+			JoinedAt: time.Now(),
+		}
+		if err := database.DB.Create(&member).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加入失败"})
+			return
+		}
+		// 更新公会成员数
+		database.DB.Model(&model.Guild{}).Where("id = ?", guildID).Update("member_count", database.DB.Raw("member_count + 1"))
+		c.JSON(http.StatusCreated, gin.H{"message": "已加入公会", "auto_approved": true})
 		return
 	}
 

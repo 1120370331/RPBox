@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公会空间 - 帖子与剧情</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Zen+Kaku+Gothic+New:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brown: {
+                            900: '#2C1810', // 深棕色 - 主标题
+                            800: '#4B3621', // 深灰棕 - 正文
+                            700: '#804030', // 棕红色 - 强调/按钮
+                            600: '#8D7B68', // 中灰棕 - 次要
+                            500: '#B87333', // 金棕色 - 高亮
+                            400: '#D4A373', // 浅金棕 - 徽章
+                            300: '#E5D4C1', // 主边框
+                            200: '#F5EFE7', // 浅色背景/标签
+                            100: '#EED9C4', // 页面背景
+                            50:  '#FFF5E6', // 悬停
+                        },
+                        status: {
+                            success: '#16A34A',
+                            warning: '#D97706',
+                            error: '#DC2626',
+                            info: '#3B82F6'
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['"Cormorant Garamond"', 'serif'], // 奇幻/典雅感
+                        sans: ['"Zen Kaku Gothic New"', 'sans-serif'], // 日式极简/现代感
+                    },
+                    boxShadow: {
+                        'zen': '0 4px 20px -2px rgba(44, 24, 16, 0.08)',
+                        'zen-hover': '0 20px 40px -4px rgba(44, 24, 16, 0.12)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 自定义滚动条，保持极简 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #EED9C4; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #B87333; 
+            border-radius: 3px;
+        }
+        
+        /* 混合圆角设计系统 (Mixed Corners System) */
+        .leaf-shape {
+            border-radius: 2px 24px 2px 24px;
+        }
+        .leaf-shape-reverse {
+            border-radius: 24px 2px 24px 2px;
+        }
+        .sharp-edge {
+            border-radius: 0;
+        }
+        .soft-edge {
+            border-radius: 12px;
+        }
+        
+        /* 极简主义动效 */
+        .hover-lift {
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
+        }
+        .hover-lift:hover {
+            transform: translateY(-4px);
+        }
+    </style>
+</head>
+<body class="bg-brown-100 text-brown-800 font-sans antialiased min-h-screen selection:bg-brown-700 selection:text-white pb-20">
+
+    <!-- 顶部导航占位 -->
+    <nav class="w-full h-16 bg-brown-900 sticky top-0 z-50 flex items-center px-6 shadow-md border-b border-brown-700">
+        <div class="text-brown-400 font-serif text-xl tracking-widest">GUILD HALL</div>
+    </nav>
+
+    <!-- 核心容器 -->
+    <main class="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 mt-12 space-y-24">
+
+        <!-- ========================================== -->
+        <!-- 1️⃣ 公会帖子页面 (GuildPosts.vue) -->
+        <!-- ========================================== -->
+        <section id="guild-posts" class="relative">
+            <!-- 头部区域：极简布局 -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-6">
+                <div class="space-y-2">
+                    <button class="group flex items-center gap-2 text-brown-600 hover:text-brown-700 transition-colors duration-300">
+                        <span class="w-8 h-8 rounded-full border border-brown-300 flex items-center justify-center bg-white group-hover:border-brown-500 group-hover:bg-brown-50">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        </span>
+                        <span class="text-sm font-medium tracking-wide">返回详情</span>
+                    </button>
+                    <h1 class="text-4xl md:text-5xl font-serif font-bold text-brown-900 leading-tight">
+                        银色黎明 <span class="text-brown-500">.</span> 帖子
+                    </h1>
+                    <p class="text-brown-600 font-light pl-1 border-l-2 border-brown-400">
+                        浏览公会成员的思想火花与冒险记录
+                    </p>
+                </div>
+
+                <!-- 搜索框：混合圆角设计 -->
+                <div class="relative w-full md:w-72">
+                    <input type="text" placeholder="搜索帖子内容..." 
+                        class="w-full bg-white/60 border border-brown-300 text-brown-900 px-4 py-3 leaf-shape focus:outline-none focus:border-brown-500 focus:bg-white transition-all placeholder-brown-400 shadow-sm">
+                    <svg class="absolute right-4 top-3.5 w-5 h-5 text-brown-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+            </div>
+
+            <!-- 筛选工具栏：悬浮卡片风格 -->
+            <div class="bg-white p-4 leaf-shape-reverse shadow-zen mb-10 border border-white/50 backdrop-blur-sm flex flex-col lg:flex-row gap-6 items-center justify-between">
+                <!-- 分类Tab：药丸状与直角混合 -->
+                <div class="flex flex-wrap gap-2 justify-center lg:justify-start">
+                    <button class="px-5 py-2 bg-brown-900 text-white text-sm font-medium rounded-tl-xl rounded-br-xl shadow-md hover:bg-brown-800 transition-colors">全部</button>
+                    <button class="px-5 py-2 bg-brown-200 text-brown-700 text-sm font-medium hover:bg-brown-300 transition-colors rounded-sm">人物卡</button>
+                    <button class="px-5 py-2 bg-transparent border border-brown-300 text-brown-600 text-sm font-medium hover:border-brown-500 hover:text-brown-500 transition-colors rounded-sm">战报</button>
+                    <button class="px-5 py-2 bg-transparent border border-brown-300 text-brown-600 text-sm font-medium hover:border-brown-500 hover:text-brown-500 transition-colors rounded-sm">小说</button>
+                    <button class="px-5 py-2 bg-transparent border border-brown-300 text-brown-600 text-sm font-medium hover:border-brown-500 hover:text-brown-500 transition-colors rounded-sm">活动</button>
+                </div>
+                
+                <div class="flex items-center gap-4 border-t lg:border-t-0 border-brown-100 pt-4 lg:pt-0 w-full lg:w-auto justify-between lg:justify-end">
+                    <span class="text-xs text-brown-500 font-mono">共 128 个帖子</span>
+                    <select class="bg-brown-50 border-none text-brown-800 text-sm font-medium focus:ring-0 cursor-pointer rounded-lg py-2 pl-3 pr-8">
+                        <option>最新发布</option>
+                        <option>热门讨论</option>
+                        <option>最多浏览</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 帖子列表：网格布局 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                
+                <!-- 卡片 1：置顶 + 精华 -->
+                <article class="group bg-white leaf-shape border border-brown-300/50 p-6 relative hover-lift shadow-zen flex flex-col h-full overflow-hidden">
+                    <!-- 装饰背景 -->
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-brown-200 to-transparent opacity-30 rounded-bl-full pointer-events-none"></div>
+                    
+                    <div class="flex items-start justify-between mb-4">
+                        <span class="inline-block px-3 py-1 text-xs font-bold tracking-wider text-brown-700 bg-brown-200 rounded-sm">
+                            活动
+                        </span>
+                        <div class="flex gap-1">
+                            <span class="w-2 h-2 rounded-full bg-brown-700" title="置顶"></span>
+                            <span class="w-2 h-2 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600" title="精华"></span>
+                        </div>
+                    </div>
+
+                    <h3 class="text-xl font-serif font-bold text-brown-900 mb-3 leading-snug group-hover:text-brown-700 transition-colors">
+                        [公告] 第七次远征军集结令：黑石山的阴影
+                    </h3>
+                    <p class="text-brown-600 text-sm leading-relaxed mb-6 line-clamp-2">
+                        所有满级成员请注意，本周五晚8点将在暴风城要塞集合。请提前准备好药剂和合剂，本次行动将持续...
+                    </p>
+
+                    <div class="mt-auto pt-4 border-t border-brown-100 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=King" alt="avatar" class="w-8 h-8 rounded-full border border-brown-300">
+                            <div class="flex flex-col">
+                                <span class="text-xs font-bold text-brown-800">LionHeart</span>
+                                <span class="text-[10px] text-brown-500">2小时前</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 text-brown-400 text-xs font-mono">
+                            <span class="flex items-center gap-1"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg> 1.2k</span>
+                            <span class="flex items-center gap-1"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg> 84</span>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- 卡片 2：普通 -->
+                <article class="group bg-white leaf-shape border border-brown-300/50 p-6 relative hover-lift shadow-zen flex flex-col h-full">
+                    <div class="flex items-start justify-between mb-4">
+                        <span class="inline-block px-3 py-1 text-xs font-bold tracking-wider text-blue-700 bg-blue-50 border border-blue-100 rounded-sm">
+                            小说
+                        </span>
+                    </div>
+
+                    <h3 class="text-xl font-serif font-bold text-brown-900 mb-3 leading-snug group-hover:text-brown-500 transition-colors">
+                        <span class="text-brown-400 font-normal">Ch.4</span> 破碎的誓言与生锈的剑
+                    </h3>
+                    <p class="text-brown-600 text-sm leading-relaxed mb-6 line-clamp-2">
+                        他看着手中的断剑，那是父亲留给他的唯一遗物。雨水顺着剑身滑落，像是在哭泣。远处传来了半兽人的号角声...
+                    </p>
+
+                    <div class="mt-auto pt-4 border-t border-brown-100 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Felix" alt="avatar" class="w-8 h-8 rounded-lg border border-brown-300">
+                            <div class="flex flex-col">
+                                <span class="text-xs font-bold text-brown-800">Bard_J</span>
+                                <span class="text-[10px] text-brown-500">昨天</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 text-brown-400 text-xs font-mono">
+                            <span class="flex items-center gap-1">234</span>
+                            <span class="flex items-center gap-1">12</span>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- 卡片 3：图片占位 -->
+                <article class="group bg-white leaf-shape border border-brown-300/50 p-6 relative hover-lift shadow-zen flex flex-col h-full">
+                     <div class="flex items-start justify-between mb-4">
+                        <span class="inline-block px-3 py-1 text-xs font-bold tracking-wider text-brown-700 bg-brown-200 rounded-sm">
+                            人物卡
+                        </span>
+                    </div>
+
+                    <h3 class="text-xl font-serif font-bold text-brown-900 mb-3 leading-snug group-hover:text-brown-700 transition-colors">
+                        [OC] 艾琳娜·晨星 - 高等精灵游侠
+                    </h3>
+                    <div class="w-full h-24 bg-brown-100 mb-4 rounded-sm overflow-hidden relative">
+                         <img src="https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500">
+                    </div>
+                    <p class="text-brown-600 text-sm leading-relaxed mb-6 line-clamp-2">
+                        性格孤僻，擅长长弓。在第三次战争中失去了家园，现在为了复仇而流浪。
+                    </p>
+
+                    <div class="mt-auto pt-4 border-t border-brown-100 flex items-center justify-between">
+                         <div class="flex items-center gap-2">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Elena" alt="avatar" class="w-8 h-8 rounded-full border border-brown-300">
+                            <div class="flex flex-col">
+                                <span class="text-xs font-bold text-brown-800">Elena_Star</span>
+                                <span class="text-[10px] text-brown-500">3天前</span>
+                            </div>
+                        </div>
+                         <div class="flex items-center gap-3 text-brown-400 text-xs font-mono">
+                            <span class="flex items-center gap-1">56</span>
+                            <span class="flex items-center gap-1">4</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+            
+            <!-- 分页 -->
+            <div class="flex justify-center mt-12 gap-4 items-center">
+                <button class="w-10 h-10 flex items-center justify-center rounded-full border border-brown-300 text-brown-600 hover:bg-brown-900 hover:text-white transition-all disabled:opacity-50">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+                <span class="font-serif text-brown-900 text-lg">Page 1 / 12</span>
+                <button class="w-10 h-10 flex items-center justify-center rounded-full border border-brown-300 text-brown-600 hover:bg-brown-900 hover:text-white transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+        </section>
+
+
+        <!-- 分割线：日式极简 -->
+        <div class="w-full h-px bg-gradient-to-r from-transparent via-brown-300 to-transparent"></div>
+
+
+        <!-- ========================================== -->
+        <!-- 2️⃣ 公会剧情页面 (GuildStories.vue) -->
+        <!-- ========================================== -->
+        <section id="guild-stories" class="relative pb-20">
+             <!-- 头部 -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-6">
+                 <div class="space-y-2">
+                     <button class="group flex items-center gap-2 text-brown-600 hover:text-brown-700 transition-colors duration-300">
+                        <span class="w-8 h-8 rounded-full border border-brown-300 flex items-center justify-center bg-white group-hover:border-brown-500 group-hover:bg-brown-50">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        </span>
+                        <span class="text-sm font-medium tracking-wide">返回详情</span>
+                    </button>
+                    <h1 class="text-4xl md:text-5xl font-serif font-bold text-brown-900 leading-tight">
+                        历史 <span class="text-brown-500">&</span> 传说
+                    </h1>
+                    <p class="text-brown-600 font-light pl-1 border-l-2 border-brown-400">
+                        尘封的卷轴记录着公会走过的每一步
+                    </p>
+                </div>
+                
+                 <!-- 剧情搜索：极简下划线风格 -->
+                <div class="flex items-center gap-4 w-full md:w-auto">
+                    <div class="relative w-full md:w-64 group">
+                        <input type="text" placeholder="搜索历史档案..." 
+                            class="w-full bg-transparent border-b-2 border-brown-300 text-brown-900 px-0 py-2 focus:outline-none focus:border-brown-700 transition-all placeholder-brown-400/70">
+                        <svg class="absolute right-0 top-2 w-5 h-5 text-brown-400 group-hover:text-brown-700 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                     <span class="text-xs text-brown-500 font-mono whitespace-nowrap bg-brown-200 px-3 py-1 rounded-full">共 8 卷</span>
+                </div>
+            </div>
+
+            <!-- 剧情列表：极简时间轴列表风格 -->
+            <div class="space-y-4">
+
+                <!-- 剧情卡片 1 -->
+                <div class="group relative bg-white overflow-hidden transition-all duration-300 hover:shadow-zen-hover border-l-4 border-brown-700">
+                    <!-- 混合圆角：左侧直角，右侧大圆角 -->
+                    <div class="flex flex-col md:flex-row p-6 md:p-8 items-start md:items-center gap-6 rounded-r-[3rem] bg-white">
