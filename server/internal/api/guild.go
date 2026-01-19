@@ -91,17 +91,38 @@ func (s *Server) listGuilds(c *gin.Context) {
 
 	var guilds []model.Guild
 	if len(guildIDs) > 0 {
-		database.DB.Where("id IN ?", guildIDs).Find(&guilds)
+		// 列表查询排除大字段（banner）以提高性能
+		// banner 通过独立的图片 API 访问
+		database.DB.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, server, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
 	}
 
-	// 添加用户角色信息
+	// 获取有 banner 的公会 ID 列表
+	var guildsWithBanner []uint
+	if len(guildIDs) > 0 {
+		database.DB.Model(&model.Guild{}).
+			Select("id").
+			Where("id IN ? AND banner IS NOT NULL AND banner != ''", guildIDs).
+			Pluck("id", &guildsWithBanner)
+	}
+	hasBannerMap := make(map[uint]bool)
+	for _, id := range guildsWithBanner {
+		hasBannerMap[id] = true
+	}
+
+	// 添加用户角色信息和 banner URL
 	type GuildWithRole struct {
 		model.Guild
-		MyRole string `json:"my_role"`
+		MyRole    string `json:"my_role"`
+		BannerURL string `json:"banner_url"`
 	}
 	result := make([]GuildWithRole, len(guilds))
 	for i, g := range guilds {
-		result[i] = GuildWithRole{Guild: g, MyRole: roleMap[g.ID]}
+		// 构造 banner URL：宽度 600，质量 80
+		bannerURL := ""
+		if hasBannerMap[g.ID] {
+			bannerURL = fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80", g.ID)
+		}
+		result[i] = GuildWithRole{Guild: g, MyRole: roleMap[g.ID], BannerURL: bannerURL}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": result})
@@ -570,13 +591,21 @@ func (s *Server) listGuildStories(c *gin.Context) {
 		return
 	}
 
-	// 获取归档的剧情ID
+	// 获取归档的剧情ID（支持按上传者筛选）
+	query := database.DB.Where("guild_id = ?", guildID)
+	if addedBy := c.Query("added_by"); addedBy != "" {
+		addedByID, _ := strconv.ParseUint(addedBy, 10, 32)
+		query = query.Where("added_by = ?", addedByID)
+	}
+
 	var storyGuilds []model.StoryGuild
-	database.DB.Where("guild_id = ?", guildID).Order("created_at DESC").Find(&storyGuilds)
+	query.Order("created_at DESC").Find(&storyGuilds)
 
 	storyIDs := make([]uint, len(storyGuilds))
+	addedByMap := make(map[uint]uint) // storyID -> addedBy
 	for i, sg := range storyGuilds {
 		storyIDs[i] = sg.StoryID
+		addedByMap[sg.StoryID] = sg.AddedBy
 	}
 
 	var stories []model.Story
@@ -584,7 +613,43 @@ func (s *Server) listGuildStories(c *gin.Context) {
 		database.DB.Where("id IN ?", storyIDs).Find(&stories)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"stories": stories})
+	// 获取上传者信息
+	addedByIDs := make([]uint, 0, len(addedByMap))
+	for _, addedBy := range addedByMap {
+		addedByIDs = append(addedByIDs, addedBy)
+	}
+
+	var users []model.User
+	if len(addedByIDs) > 0 {
+		database.DB.Where("id IN ?", addedByIDs).Find(&users)
+	}
+
+	userMap := make(map[uint]model.User)
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	// 组装结果
+	type StoryWithUploader struct {
+		model.Story
+		AddedBy         uint   `json:"added_by"`
+		AddedByUsername string `json:"added_by_username"`
+		AddedByAvatar   string `json:"added_by_avatar"`
+	}
+
+	result := make([]StoryWithUploader, len(stories))
+	for i, story := range stories {
+		addedBy := addedByMap[story.ID]
+		uploader := userMap[addedBy]
+		result[i] = StoryWithUploader{
+			Story:           story,
+			AddedBy:         addedBy,
+			AddedByUsername: uploader.Username,
+			AddedByAvatar:   uploader.Avatar,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"stories": result})
 }
 
 // getStoryGuilds 获取剧情归档的公会列表
@@ -636,8 +701,44 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 		query = query.Where("server = ?", server)
 	}
 
-	query.Order("member_count DESC, created_at DESC").Find(&guilds)
-	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
+	// 列表查询排除大字段（banner）以提高性能
+	// banner 通过独立的图片 API 访问
+	query.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, server, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+
+	// 获取有 banner 的公会 ID 列表
+	guildIDs := make([]uint, len(guilds))
+	for i, g := range guilds {
+		guildIDs[i] = g.ID
+	}
+
+	var guildsWithBanner []uint
+	if len(guildIDs) > 0 {
+		database.DB.Model(&model.Guild{}).
+			Select("id").
+			Where("id IN ? AND banner IS NOT NULL AND banner != ''", guildIDs).
+			Pluck("id", &guildsWithBanner)
+	}
+	hasBannerMap := make(map[uint]bool)
+	for _, id := range guildsWithBanner {
+		hasBannerMap[id] = true
+	}
+
+	// 添加 banner URL
+	type GuildWithBanner struct {
+		model.Guild
+		BannerURL string `json:"banner_url"`
+	}
+	result := make([]GuildWithBanner, len(guilds))
+	for i, g := range guilds {
+		// 构造 banner URL：宽度 600，质量 80
+		bannerURL := ""
+		if hasBannerMap[g.ID] {
+			bannerURL = fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80", g.ID)
+		}
+		result[i] = GuildWithBanner{Guild: g, BannerURL: bannerURL}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"guilds": result})
 }
 
 // uploadGuildBanner 上传公会头图
