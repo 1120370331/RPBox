@@ -116,6 +116,14 @@ function goToMyPosts() {
   router.push({ name: 'my-posts' })
 }
 
+function goToFavorites() {
+  router.push('/library/favorites')
+}
+
+function goToHistory() {
+  router.push('/library/history')
+}
+
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
   const now = new Date()
@@ -350,6 +358,14 @@ function getEventStyle(event: EventItem) {
           </svg>
           <input v-model="searchKeyword" type="text" placeholder="搜索帖子..." />
         </div>
+        <button class="favorites-btn" @click="goToFavorites">
+          <i class="ri-bookmark-3-line"></i>
+          收藏夹
+        </button>
+        <button class="history-btn" @click="goToHistory">
+          <i class="ri-history-line"></i>
+          历史记录
+        </button>
         <button class="my-posts-btn" @click="goToMyPosts">
           <i class="ri-file-list-3-line"></i>
           我的帖子
@@ -731,6 +747,7 @@ function getEventStyle(event: EventItem) {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -766,7 +783,9 @@ function getEventStyle(event: EventItem) {
   box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.1);
 }
 
-.my-posts-btn {
+.my-posts-btn,
+.favorites-btn,
+.history-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -781,7 +800,9 @@ function getEventStyle(event: EventItem) {
   transition: all 0.2s;
 }
 
-.my-posts-btn:hover {
+.my-posts-btn:hover,
+.favorites-btn:hover,
+.history-btn:hover {
   border-color: #B87333;
 }
 
@@ -944,6 +965,7 @@ function getEventStyle(event: EventItem) {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 

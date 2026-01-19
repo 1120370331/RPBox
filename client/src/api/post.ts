@@ -191,8 +191,16 @@ export async function removePostTag(postId: number, tagId: number): Promise<void
 
 // ========== 我的收藏 ==========
 
-export async function listMyFavorites(): Promise<{ posts: PostWithAuthor[] }> {
+export async function listMyFavorites(): Promise<{ posts: PostWithAuthor[]; total?: number }> {
   return request.get('/posts/favorites')
+}
+
+export async function listMyPostLikes(): Promise<{ posts: PostWithAuthor[]; total?: number }> {
+  return request.get('/posts/likes')
+}
+
+export async function listMyPostViews(): Promise<{ posts: PostWithAuthor[]; total?: number }> {
+  return request.get('/posts/views')
 }
 
 // ========== 活动日历 ==========

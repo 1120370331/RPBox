@@ -95,8 +95,23 @@ export async function removeMember(guildId: number, userId: number): Promise<voi
 
 // ========== 剧情归档 ==========
 
-export async function listGuildStories(guildId: number): Promise<{ stories: any[] }> {
-  return request.get(`/guilds/${guildId}/stories`)
+export interface GuildStoryWithUploader {
+  id: number
+  title: string
+  description: string
+  start_time: string
+  end_time: string
+  status: string
+  created_at: string
+  updated_at: string
+  added_by: number
+  added_by_username: string
+  added_by_avatar: string
+}
+
+export async function listGuildStories(guildId: number, addedBy?: number): Promise<{ stories: GuildStoryWithUploader[] }> {
+  const params = addedBy ? { added_by: addedBy } : {}
+  return request.get(`/guilds/${guildId}/stories`, { params })
 }
 
 export async function archiveStoryToGuild(guildId: number, storyId: number): Promise<void> {

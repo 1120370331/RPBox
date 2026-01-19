@@ -10,6 +10,7 @@ import (
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
+	"gorm.io/gorm/clause"
 )
 
 // CreatePostRequest 创建帖子请求
@@ -26,7 +27,7 @@ type CreatePostRequest struct {
 	EventType      string  `json:"event_type"`       // server|guild
 	EventStartTime *string `json:"event_start_time"` // ISO8601格式
 	EventEndTime   *string `json:"event_end_time"`
-	EventColor     string  `json:"event_color"`      // 活动标记颜色（十六进制）
+	EventColor     string  `json:"event_color"` // 活动标记颜色（十六进制）
 }
 
 // UpdatePostRequest 更新帖子请求
@@ -255,8 +256,8 @@ func (s *Server) createPost(c *gin.Context) {
 			post.Status = "published"
 			post.ReviewStatus = "approved" // 版主/管理员自动通过
 		} else {
-			post.Status = "pending"        // 改为待发布状态
-			post.ReviewStatus = "pending"  // 待审核
+			post.Status = "pending"       // 改为待发布状态
+			post.ReviewStatus = "pending" // 待审核
 		}
 	} else {
 		// 草稿状态，不需要审核
@@ -318,6 +319,18 @@ func (s *Server) getPost(c *gin.Context) {
 
 	// 增加浏览次数
 	database.DB.Model(&post).Update("view_count", post.ViewCount+1)
+
+	// 记录浏览历史
+	if userID != 0 {
+		view := model.PostView{
+			PostID: post.ID,
+			UserID: userID,
+		}
+		database.DB.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "post_id"}, {Name: "user_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
+		}).Create(&view)
+	}
 
 	// 获取作者信息
 	var author model.User
@@ -707,25 +720,77 @@ func (s *Server) removePostTag(c *gin.Context) {
 
 // listMyFavorites 获取我的收藏列表
 func (s *Server) listMyFavorites(c *gin.Context) {
+	listUserPostsByRelation(c, "post_favorites", "created_at")
+}
+
+// listMyPostLikes 获取我点赞的帖子
+func (s *Server) listMyPostLikes(c *gin.Context) {
+	listUserPostsByRelation(c, "post_likes", "created_at")
+}
+
+// listMyPostViews 获取我浏览的帖子
+func (s *Server) listMyPostViews(c *gin.Context) {
+	listUserPostsByRelation(c, "post_views", "updated_at")
+}
+
+func canAccessPost(userID uint, post model.Post) bool {
+	if post.AuthorID == userID {
+		return true
+	}
+	if post.Status != "published" || post.ReviewStatus != "approved" {
+		return false
+	}
+	if post.IsPublic {
+		return true
+	}
+	if post.GuildID != nil {
+		canAccess, _ := checkGuildContentAccess(*post.GuildID, userID, "post")
+		return canAccess
+	}
+	return false
+}
+
+func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 	userID := c.GetUint("userID")
 
-	// 获取收藏的帖子ID
-	var favorites []model.PostFavorite
-	database.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&favorites)
+	var posts []model.Post
+	query := database.DB.Model(&model.Post{}).
+		Joins("JOIN "+joinTable+" ON "+joinTable+".post_id = posts.id").
+		Where(joinTable+".user_id = ?", userID).
+		Order(joinTable + "." + orderColumn + " DESC")
 
-	postIDs := make([]uint, len(favorites))
-	for i, fav := range favorites {
-		postIDs[i] = fav.PostID
+	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
 	}
 
-	var posts []model.Post
+	filtered := make([]model.Post, 0, len(posts))
+	for _, post := range posts {
+		if canAccessPost(userID, post) {
+			filtered = append(filtered, post)
+		}
+	}
+
+	// 获取有封面图的帖子 ID 列表
+	var postIDs []uint
+	for _, p := range filtered {
+		postIDs = append(postIDs, p.ID)
+	}
+	var postsWithCover []uint
 	if len(postIDs) > 0 {
-		database.DB.Where("id IN ?", postIDs).Find(&posts)
+		database.DB.Model(&model.Post{}).
+			Select("id").
+			Where("id IN ? AND cover_image IS NOT NULL AND cover_image != ''", postIDs).
+			Pluck("id", &postsWithCover)
+	}
+	hasCoverMap := make(map[uint]bool)
+	for _, id := range postsWithCover {
+		hasCoverMap[id] = true
 	}
 
 	// 获取作者信息
-	authorIDs := make([]uint, len(posts))
-	for i, p := range posts {
+	authorIDs := make([]uint, len(filtered))
+	for i, p := range filtered {
 		authorIDs[i] = p.AuthorID
 	}
 
@@ -733,22 +798,36 @@ func (s *Server) listMyFavorites(c *gin.Context) {
 	if len(authorIDs) > 0 {
 		database.DB.Where("id IN ?", authorIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
-	// 组装响应
 	type PostWithAuthor struct {
 		model.Post
-		AuthorName string `json:"author_name"`
-	}
-	result := make([]PostWithAuthor, len(posts))
-	for i, p := range posts {
-		result[i] = PostWithAuthor{Post: p, AuthorName: userMap[p.AuthorID]}
+		AuthorName    string `json:"author_name"`
+		AuthorAvatar  string `json:"author_avatar"`
+		AuthorRole    string `json:"author_role"`
+		CoverImageURL string `json:"cover_image_url"`
 	}
 
-	c.JSON(http.StatusOK, gin.H{"posts": result})
+	result := make([]PostWithAuthor, 0, len(filtered))
+	for _, p := range filtered {
+		author := userMap[p.AuthorID]
+		coverURL := ""
+		if hasCoverMap[p.ID] {
+			coverURL = fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80", p.ID)
+		}
+		result = append(result, PostWithAuthor{
+			Post:          p,
+			AuthorName:    author.Username,
+			AuthorAvatar:  author.Avatar,
+			AuthorRole:    author.Role,
+			CoverImageURL: coverURL,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"posts": result, "total": len(result)})
 }
 
 // checkModerator 检查用户是否为社区版主

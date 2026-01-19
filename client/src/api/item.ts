@@ -173,6 +173,21 @@ export function unfavoriteItem(id: number) {
   return request.delete(`/items/${id}/favorite`)
 }
 
+// 获取我收藏的道具
+export function listMyItemFavorites() {
+  return request.get('/items/favorites')
+}
+
+// 获取我点赞的道具
+export function listMyItemLikes() {
+  return request.get('/items/likes')
+}
+
+// 获取我浏览的道具
+export function listMyItemViews() {
+  return request.get('/items/views')
+}
+
 // 上传图片
 export function uploadImage(file: File) {
   const formData = new FormData()

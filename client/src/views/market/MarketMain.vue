@@ -116,6 +116,14 @@ function goToUpload() {
   router.push('/market/upload')
 }
 
+function goToFavorites() {
+  router.push('/library/favorites')
+}
+
+function goToHistory() {
+  router.push('/library/history')
+}
+
 // 跳转到我的道具
 function goToMyItems() {
   router.push('/market/my-items')
@@ -140,6 +148,12 @@ watch([sortBy], () => {
       <div class="header-top">
         <h1>创意市场</h1>
         <div class="header-actions">
+          <button class="favorites-btn" @click="goToFavorites">
+            <i class="ri-bookmark-3-line"></i> 收藏夹
+          </button>
+          <button class="history-btn" @click="goToHistory">
+            <i class="ri-history-line"></i> 历史记录
+          </button>
           <button class="my-items-btn" @click="goToMyItems">
             <i class="ri-folder-user-line"></i> 我的作品
           </button>
@@ -292,6 +306,7 @@ watch([sortBy], () => {
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -301,7 +316,9 @@ watch([sortBy], () => {
   margin: 0;
 }
 
-.my-items-btn {
+.my-items-btn,
+.favorites-btn,
+.history-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -318,7 +335,9 @@ watch([sortBy], () => {
   z-index: 10;
 }
 
-.my-items-btn:hover {
+.my-items-btn:hover,
+.favorites-btn:hover,
+.history-btn:hover {
   background: #FFF8F0;
 }
 

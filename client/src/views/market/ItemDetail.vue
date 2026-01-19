@@ -102,6 +102,8 @@ async function loadItemDetail() {
       item.value = res.data.item
       author.value = res.data.author
       tags.value = res.data.tags || []
+      isLiked.value = !!res.data.liked
+      isFavorited.value = !!res.data.favorited
       // 画作类型加载图片列表，并转换为完整 URL
       if (res.data.images) {
         images.value = res.data.images.map((img: any) => ({

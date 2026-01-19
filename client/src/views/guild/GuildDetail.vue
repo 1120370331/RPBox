@@ -30,8 +30,8 @@ const editForm = ref({
   lore: '',
   faction: '',
   color: '',
-  visitor_can_view_stories: true,
-  visitor_can_view_posts: true,
+  visitor_can_view_stories: false,
+  visitor_can_view_posts: false,
   member_can_view_stories: true,
   member_can_view_posts: true,
   auto_approve: false

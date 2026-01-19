@@ -9,6 +9,7 @@ import (
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
+	"gorm.io/gorm/clause"
 )
 
 // listItems 获取道具列表
@@ -64,13 +65,13 @@ func (s *Server) listItems(c *gin.Context) {
 	order := c.DefaultQuery("order", "desc")
 	switch sortBy {
 	case "downloads":
-		query = query.Order("downloads " + order)
+		query = query.Order("items.downloads " + order)
 	case "rating":
-		query = query.Order("rating " + order)
+		query = query.Order("items.rating " + order)
 	case "created_at":
-		query = query.Order("created_at " + order)
+		query = query.Order("items.created_at " + order)
 	default:
-		query = query.Order("created_at desc")
+		query = query.Order("items.created_at desc")
 	}
 
 	// 分页
@@ -83,7 +84,7 @@ func (s *Server) listItems(c *gin.Context) {
 
 	// 列表查询排除大字段（import_code, raw_data, detail_content, preview_image）以提高性能
 	// preview_image 通过独立的图片 API 访问
-	if err := query.Select("id, author_id, name, type, icon, description, downloads, rating, rating_count, like_count, favorite_count, requires_permission, status, review_status, created_at, updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	if err := query.Select("items.id, items.author_id, items.name, items.type, items.icon, items.description, items.downloads, items.rating, items.rating_count, items.like_count, items.favorite_count, items.requires_permission, items.status, items.review_status, items.created_at, items.updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -159,23 +160,126 @@ func (s *Server) listItems(c *gin.Context) {
 	})
 }
 
+func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
+	userID := c.GetUint("user_id")
+	var items []model.Item
+
+	query := database.DB.Model(&model.Item{}).
+		Joins("JOIN "+joinTable+" ON "+joinTable+".item_id = items.id").
+		Where(joinTable+".user_id = ?", userID).
+		Order(joinTable + "." + orderColumn + " DESC")
+
+	if err := query.Select("items.id, items.author_id, items.name, items.type, items.icon, items.description, items.downloads, items.rating, items.rating_count, items.like_count, items.favorite_count, items.requires_permission, items.status, items.review_status, items.created_at, items.updated_at").Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 权限过滤：作者可见所有状态，其他人只看已发布且审核通过
+	filtered := make([]model.Item, 0, len(items))
+	for _, item := range items {
+		if item.AuthorID == userID || (item.Status == "published" && item.ReviewStatus == "approved") {
+			filtered = append(filtered, item)
+		}
+	}
+
+	// 获取有预览图的 item ID 列表
+	var itemIDs []uint
+	for _, item := range filtered {
+		itemIDs = append(itemIDs, item.ID)
+	}
+	var itemsWithPreview []uint
+	if len(itemIDs) > 0 {
+		database.DB.Model(&model.Item{}).
+			Select("id").
+			Where("id IN ? AND preview_image IS NOT NULL AND preview_image != ''", itemIDs).
+			Pluck("id", &itemsWithPreview)
+	}
+	hasPreviewMap := make(map[uint]bool)
+	for _, id := range itemsWithPreview {
+		hasPreviewMap[id] = true
+	}
+
+	// 批量获取作者信息
+	var authorIDs []uint
+	for _, item := range filtered {
+		authorIDs = append(authorIDs, item.AuthorID)
+	}
+
+	var authors []model.User
+	if len(authorIDs) > 0 {
+		database.DB.Select("id", "username", "avatar", "role").Where("id IN ?", authorIDs).Find(&authors)
+	}
+
+	authorMap := make(map[uint]model.User)
+	for _, author := range authors {
+		authorMap[author.ID] = author
+	}
+
+	type ItemWithAuthor struct {
+		model.Item
+		AuthorUsername  string `json:"author_username"`
+		AuthorAvatar    string `json:"author_avatar"`
+		AuthorRole      string `json:"author_role"`
+		PreviewImageURL string `json:"preview_image_url"`
+	}
+
+	result := make([]ItemWithAuthor, 0, len(filtered))
+	for _, item := range filtered {
+		author := authorMap[item.AuthorID]
+		previewURL := ""
+		if hasPreviewMap[item.ID] || item.Type == "artwork" {
+			previewURL = fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80", item.ID)
+		}
+		result = append(result, ItemWithAuthor{
+			Item:            item,
+			AuthorUsername:  author.Username,
+			AuthorAvatar:    author.Avatar,
+			AuthorRole:      author.Role,
+			PreviewImageURL: previewURL,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"items": result,
+			"total": len(result),
+		},
+	})
+}
+
+// listMyItemFavorites 获取我收藏的道具
+func (s *Server) listMyItemFavorites(c *gin.Context) {
+	listUserItemsByRelation(c, "item_favorites", "created_at")
+}
+
+// listMyItemLikes 获取我点赞的道具
+func (s *Server) listMyItemLikes(c *gin.Context) {
+	listUserItemsByRelation(c, "item_likes", "created_at")
+}
+
+// listMyItemViews 获取我浏览的道具
+func (s *Server) listMyItemViews(c *gin.Context) {
+	listUserItemsByRelation(c, "item_views", "updated_at")
+}
+
 // createItem 创建道具
 func (s *Server) createItem(c *gin.Context) {
 	userID := c.GetUint("user_id")
 
 	var req struct {
-		Name               string   `json:"name" binding:"required"`
-		Type               string   `json:"type" binding:"required"`
-		Icon               string   `json:"icon"`
-		PreviewImage       string   `json:"preview_image"`
-		Description        string   `json:"description"`
-		DetailContent      string   `json:"detail_content"`
-		ImportCode         string   `json:"import_code"`
-		RawData            string   `json:"raw_data"`
-		RequiresPermission bool     `json:"requires_permission"`
-		EnableWatermark    bool     `json:"enable_watermark"`
-		TagIDs             []uint   `json:"tag_ids"`
-		Status             string   `json:"status"`
+		Name               string `json:"name" binding:"required"`
+		Type               string `json:"type" binding:"required"`
+		Icon               string `json:"icon"`
+		PreviewImage       string `json:"preview_image"`
+		Description        string `json:"description"`
+		DetailContent      string `json:"detail_content"`
+		ImportCode         string `json:"import_code"`
+		RawData            string `json:"raw_data"`
+		RequiresPermission bool   `json:"requires_permission"`
+		EnableWatermark    bool   `json:"enable_watermark"`
+		TagIDs             []uint `json:"tag_ids"`
+		Status             string `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -280,10 +384,35 @@ func (s *Server) getItem(c *gin.Context) {
 		Where("item_tags.item_id = ?", item.ID).
 		Find(&tags)
 
+	// 记录浏览历史
+	if userID != 0 {
+		view := model.ItemView{
+			ItemID: item.ID,
+			UserID: userID,
+		}
+		database.DB.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "item_id"}, {Name: "user_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
+		}).Create(&view)
+	}
+
+	// 检查当前用户是否点赞和收藏
+	var liked, favorited bool
+	var existingLike model.ItemLike
+	if err := database.DB.Where("item_id = ? AND user_id = ?", item.ID, userID).First(&existingLike).Error; err == nil {
+		liked = true
+	}
+	var existingFavorite model.ItemFavorite
+	if err := database.DB.Where("item_id = ? AND user_id = ?", item.ID, userID).First(&existingFavorite).Error; err == nil {
+		favorited = true
+	}
+
 	response := gin.H{
-		"item":   item,
-		"author": author,
-		"tags":   tags,
+		"item":      item,
+		"author":    author,
+		"tags":      tags,
+		"liked":     liked,
+		"favorited": favorited,
 	}
 
 	// 如果是画作类型，获取图片列表
@@ -807,7 +936,7 @@ func (s *Server) removeItemTag(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
+		"code":    0,
 		"message": "Tag removed",
 	})
 }

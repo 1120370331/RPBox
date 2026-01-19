@@ -76,10 +76,16 @@ func (s *Server) listStories(c *gin.Context) {
 			return
 		}
 
+		// 构建公会剧情查询
+		sgQuery := database.DB.Model(&model.StoryGuild{}).Where("guild_id = ?", guildID)
+
+		// 上传者筛选
+		if addedBy := c.Query("added_by"); addedBy != "" {
+			sgQuery = sgQuery.Where("added_by = ?", addedBy)
+		}
+
 		var storyIDs []uint
-		database.DB.Model(&model.StoryGuild{}).
-			Where("guild_id = ?", guildID).
-			Pluck("story_id", &storyIDs)
+		sgQuery.Pluck("story_id", &storyIDs)
 		if len(storyIDs) > 0 {
 			query = query.Where("id IN ?", storyIDs)
 		} else {
@@ -114,6 +120,60 @@ func (s *Server) listStories(c *gin.Context) {
 	var stories []model.Story
 	if err := query.Find(&stories).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	// 如果是公会剧情查询，添加上传者信息
+	if guildID := c.Query("guild_id"); guildID != "" {
+		// 获取剧情ID列表
+		storyIDs := make([]uint, len(stories))
+		for i, s := range stories {
+			storyIDs[i] = s.ID
+		}
+
+		// 查询上传者信息
+		var storyGuilds []model.StoryGuild
+		database.DB.Where("story_id IN ? AND guild_id = ?", storyIDs, guildID).Find(&storyGuilds)
+
+		// 构建 storyID -> addedBy 映射
+		addedByMap := make(map[uint]uint)
+		addedByIDs := make([]uint, 0)
+		for _, sg := range storyGuilds {
+			addedByMap[sg.StoryID] = sg.AddedBy
+			addedByIDs = append(addedByIDs, sg.AddedBy)
+		}
+
+		// 查询用户信息
+		var users []model.User
+		if len(addedByIDs) > 0 {
+			database.DB.Where("id IN ?", addedByIDs).Find(&users)
+		}
+		userMap := make(map[uint]model.User)
+		for _, u := range users {
+			userMap[u.ID] = u
+		}
+
+		// 组装结果
+		type StoryWithUploader struct {
+			model.Story
+			AddedBy         uint   `json:"added_by"`
+			AddedByUsername string `json:"added_by_username"`
+			AddedByAvatar   string `json:"added_by_avatar"`
+		}
+
+		result := make([]StoryWithUploader, len(stories))
+		for i, story := range stories {
+			addedBy := addedByMap[story.ID]
+			uploader := userMap[addedBy]
+			result[i] = StoryWithUploader{
+				Story:           story,
+				AddedBy:         addedBy,
+				AddedByUsername: uploader.Username,
+				AddedByAvatar:   uploader.Avatar,
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{"stories": result})
 		return
 	}
 

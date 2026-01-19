@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listStories, type Story, type StoryFilterParams } from '@/api/story'
-import { getGuild, type Guild } from '@/api/guild'
+import { getGuild, listGuildMembers, type Guild, type GuildStoryWithUploader } from '@/api/guild'
 import { listGuildTags, type Tag } from '@/api/tag'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
@@ -14,6 +14,7 @@ const guildId = Number(route.params.id)
 const loading = ref(true)
 const guild = ref<Guild | null>(null)
 const stories = ref<Story[]>([])
+const members = ref<GuildMember[]>([])
 const searchKeyword = ref('')
 const noPermission = ref(false)
 
@@ -24,13 +25,14 @@ const startDate = ref('')
 const endDate = ref('')
 const sortBy = ref<'created_at' | 'updated_at' | 'start_time'>('created_at')
 const sortOrder = ref<'asc' | 'desc'>('desc')
+const selectedUploaderId = ref<number | undefined>(undefined)
 const showFilter = ref(false)
 
 // 筛选后的剧情列表
 const filteredStories = computed(() => {
   if (!searchKeyword.value) return stories.value
   const keyword = searchKeyword.value.toLowerCase()
-  return stories.value.filter((story: Story) =>
+  return stories.value.filter((story: GuildStoryWithUploader) =>
     story.title.toLowerCase().includes(keyword) ||
     story.description?.toLowerCase().includes(keyword)
   )
@@ -45,6 +47,15 @@ async function loadGuild() {
   }
 }
 
+async function loadMembers() {
+  try {
+    const res = await listGuildMembers(guildId)
+    members.value = res.members || []
+  } catch (error) {
+    console.error('加载成员列表失败:', error)
+  }
+}
+
 async function loadStories() {
   loading.value = true
   noPermission.value = false
@@ -55,7 +66,8 @@ async function loadStories() {
       start_date: startDate.value || undefined,
       end_date: endDate.value || undefined,
       sort: sortBy.value,
-      order: sortOrder.value
+      order: sortOrder.value,
+      added_by: selectedUploaderId.value
     }
     const res = await listStories(params)
     stories.value = res.stories || []
@@ -113,6 +125,7 @@ function resetFilter() {
   endDate.value = ''
   sortBy.value = 'created_at'
   sortOrder.value = 'desc'
+  selectedUploaderId.value = undefined
   loadStories()
 }
 
@@ -154,6 +167,7 @@ function calculateDuration(startTime: string, endTime: string): string {
 onMounted(async () => {
   await loadGuild()
   await loadTags()
+  await loadMembers()
   await loadStories()
 })
 </script>
@@ -251,6 +265,17 @@ onMounted(async () => {
         </div>
       </div>
 
+      <!-- 上传者筛选 -->
+      <div class="filter-section">
+        <label class="filter-label">按上传者筛选</label>
+        <select v-model="selectedUploaderId" class="filter-select">
+          <option :value="undefined">全部成员</option>
+          <option v-for="member in members" :key="member.user_id" :value="member.user_id">
+            {{ member.username }}
+          </option>
+        </select>
+      </div>
+
       <!-- 操作按钮 -->
       <div class="filter-actions">
         <button class="filter-btn reset-btn" @click="resetFilter">
@@ -302,6 +327,13 @@ onMounted(async () => {
           <span class="meta-item">
             <i class="ri-time-line"></i>
             {{ calculateDuration(story.start_time, story.end_time) }}
+          </span>
+          <span class="meta-item uploader">
+            <div class="uploader-avatar">
+              <img v-if="story.added_by_avatar" :src="story.added_by_avatar" alt="" loading="lazy" />
+              <span v-else>{{ story.added_by_username?.charAt(0) || '?' }}</span>
+            </div>
+            <span class="uploader-name">{{ story.added_by_username }}</span>
           </span>
         </div>
       </div>
@@ -840,5 +872,36 @@ onMounted(async () => {
 
 .meta-item i {
   font-size: 16px;
+}
+
+/* 上传者信息 */
+.meta-item.uploader {
+  margin-left: auto;
+}
+
+.uploader-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #B87333, #4B3621);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.uploader-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.uploader-name {
+  font-size: 12px;
+  color: #8D7B68;
+  font-family: inherit;
 }
 </style>
