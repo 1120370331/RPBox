@@ -31,18 +31,20 @@ type CreateGuildRequest struct {
 
 // UpdateGuildRequest 更新公会请求
 type UpdateGuildRequest struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Icon           string `json:"icon"`
-	Color          string `json:"color"`
-	Banner         string `json:"banner"`
-	Slogan         string `json:"slogan"`
-	Lore           string `json:"lore"`
-	Faction        string `json:"faction"`
-	Layout         int    `json:"layout"`
-	ShowToVisitors *bool  `json:"show_to_visitors"` // 是否向访客展示公会内容
-	ShowToMembers  *bool  `json:"show_to_members"`  // 是否向普通成员展示公会内容
-	AutoApprove    *bool  `json:"auto_approve"`     // 自动审核（无需审核直接加入）
+	Name                 string `json:"name"`
+	Description          string `json:"description"`
+	Icon                 string `json:"icon"`
+	Color                string `json:"color"`
+	Banner               string `json:"banner"`
+	Slogan               string `json:"slogan"`
+	Lore                 string `json:"lore"`
+	Faction              string `json:"faction"`
+	Layout               int    `json:"layout"`
+	VisitorCanViewStories *bool `json:"visitor_can_view_stories"` // 访客可查看剧情
+	VisitorCanViewPosts   *bool `json:"visitor_can_view_posts"`   // 访客可查看帖子
+	MemberCanViewStories  *bool `json:"member_can_view_stories"`  // 成员可查看剧情
+	MemberCanViewPosts    *bool `json:"member_can_view_posts"`    // 成员可查看帖子
+	AutoApprove          *bool  `json:"auto_approve"`              // 自动审核（无需审核直接加入）
 }
 
 // JoinGuildRequest 加入公会请求
@@ -224,11 +226,17 @@ func (s *Server) updateGuild(c *gin.Context) {
 	if req.Layout >= 1 && req.Layout <= 4 {
 		guild.Layout = req.Layout
 	}
-	if req.ShowToVisitors != nil {
-		guild.ShowToVisitors = *req.ShowToVisitors
+	if req.VisitorCanViewStories != nil {
+		guild.VisitorCanViewStories = *req.VisitorCanViewStories
 	}
-	if req.ShowToMembers != nil {
-		guild.ShowToMembers = *req.ShowToMembers
+	if req.VisitorCanViewPosts != nil {
+		guild.VisitorCanViewPosts = *req.VisitorCanViewPosts
+	}
+	if req.MemberCanViewStories != nil {
+		guild.MemberCanViewStories = *req.MemberCanViewStories
+	}
+	if req.MemberCanViewPosts != nil {
+		guild.MemberCanViewPosts = *req.MemberCanViewPosts
 	}
 	if req.AutoApprove != nil {
 		guild.AutoApprove = *req.AutoApprove
@@ -276,9 +284,10 @@ func checkGuildAdmin(guildID, userID uint) bool {
 	return member.Role == "owner" || member.Role == "admin"
 }
 
-// checkGuildContentAccess 检查用户是否有权限查看公会内容（剧情/帖子）
+// checkGuildContentAccess 检查用户是否有权限查看公会内容
+// contentType: "story" 或 "post"
 // 返回: canAccess（是否可访问）, memberRole（成员角色，非成员为空字符串）
-func checkGuildContentAccess(guildID, userID uint) (bool, string) {
+func checkGuildContentAccess(guildID, userID uint, contentType string) (bool, string) {
 	// 1. 获取公会设置
 	var guild model.Guild
 	if err := database.DB.First(&guild, guildID).Error; err != nil {
@@ -291,7 +300,10 @@ func checkGuildContentAccess(guildID, userID uint) (bool, string) {
 
 	if err != nil {
 		// 非成员 - 检查访客权限
-		return guild.ShowToVisitors, ""
+		if contentType == "story" {
+			return guild.VisitorCanViewStories, ""
+		}
+		return guild.VisitorCanViewPosts, ""
 	}
 
 	// 是成员
@@ -303,7 +315,10 @@ func checkGuildContentAccess(guildID, userID uint) (bool, string) {
 	}
 
 	// 普通成员 - 检查成员权限设置
-	return guild.ShowToMembers, role
+	if contentType == "story" {
+		return guild.MemberCanViewStories, role
+	}
+	return guild.MemberCanViewPosts, role
 }
 
 // joinGuild 加入公会
@@ -549,7 +564,7 @@ func (s *Server) listGuildStories(c *gin.Context) {
 	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
 	// 检查内容访问权限
-	canAccess, _ := checkGuildContentAccess(uint(guildID), userID)
+	canAccess, _ := checkGuildContentAccess(uint(guildID), userID, "story")
 	if !canAccess {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
 		return

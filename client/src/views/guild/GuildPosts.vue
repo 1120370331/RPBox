@@ -16,6 +16,7 @@ const posts = ref<PostWithAuthor[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = 12
+const noPermission = ref(false)
 
 // 筛选条件
 const searchKeyword = ref('')
@@ -43,6 +44,7 @@ async function loadGuild() {
 
 async function loadPosts() {
   loading.value = true
+  noPermission.value = false
   try {
     const params: ListPostsParams = {
       page: currentPage.value,
@@ -58,8 +60,11 @@ async function loadPosts() {
     const res = await listPosts(params)
     posts.value = res.posts || []
     total.value = res.total
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载帖子失败:', error)
+    if (error.response?.status === 403 || error.message?.includes('403') || error.message?.includes('无权')) {
+      noPermission.value = true
+    }
   } finally {
     loading.value = false
   }
@@ -193,6 +198,12 @@ onMounted(async () => {
       <i class="ri-loader-4-line rotating"></i>
       加载中...
     </div>
+
+    <REmpty v-else-if="noPermission"
+      icon="ri-lock-line"
+      message="无权限查看"
+      description="您没有权限查看该公会的帖子"
+    />
 
     <REmpty v-else-if="posts.length === 0"
       icon="ri-article-line"

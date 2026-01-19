@@ -70,7 +70,7 @@ func (s *Server) listStories(c *gin.Context) {
 		guildIDNum, _ := strconv.ParseUint(guildID, 10, 32)
 
 		// 检查公会内容访问权限
-		canAccess, _ := checkGuildContentAccess(uint(guildIDNum), userID)
+		canAccess, _ := checkGuildContentAccess(uint(guildIDNum), userID, "story")
 		if !canAccess {
 			c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
 			return

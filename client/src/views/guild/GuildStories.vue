@@ -15,6 +15,7 @@ const loading = ref(true)
 const guild = ref<Guild | null>(null)
 const stories = ref<Story[]>([])
 const searchKeyword = ref('')
+const noPermission = ref(false)
 
 // 筛选相关
 const tags = ref<Tag[]>([])
@@ -29,7 +30,7 @@ const showFilter = ref(false)
 const filteredStories = computed(() => {
   if (!searchKeyword.value) return stories.value
   const keyword = searchKeyword.value.toLowerCase()
-  return stories.value.filter(story =>
+  return stories.value.filter((story: Story) =>
     story.title.toLowerCase().includes(keyword) ||
     story.description?.toLowerCase().includes(keyword)
   )
@@ -46,6 +47,7 @@ async function loadGuild() {
 
 async function loadStories() {
   loading.value = true
+  noPermission.value = false
   try {
     const params: StoryFilterParams = {
       guild_id: String(guildId),
@@ -57,8 +59,11 @@ async function loadStories() {
     }
     const res = await listStories(params)
     stories.value = res.stories || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载剧情失败:', error)
+    if (error.response?.status === 403 || error.message?.includes('403') || error.message?.includes('无权')) {
+      noPermission.value = true
+    }
   } finally {
     loading.value = false
   }
@@ -264,6 +269,12 @@ onMounted(async () => {
       <i class="ri-loader-4-line rotating"></i>
       加载中...
     </div>
+
+    <REmpty v-else-if="noPermission"
+      icon="ri-lock-line"
+      message="无权限查看"
+      description="您没有权限查看该公会的剧情归档"
+    />
 
     <REmpty v-else-if="stories.length === 0"
       icon="ri-book-2-line"

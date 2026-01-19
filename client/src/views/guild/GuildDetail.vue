@@ -30,8 +30,10 @@ const editForm = ref({
   lore: '',
   faction: '',
   color: '',
-  show_to_visitors: true,
-  show_to_members: true,
+  visitor_can_view_stories: true,
+  visitor_can_view_posts: true,
+  member_can_view_stories: true,
+  member_can_view_posts: true,
   auto_approve: false
 })
 const bannerFile = ref<File | null>(null)
@@ -129,8 +131,10 @@ function openSettings() {
     lore: guild.value.lore || '',
     faction: guild.value.faction || '',
     color: guild.value.color || 'B87333',
-    show_to_visitors: guild.value.show_to_visitors ?? true,
-    show_to_members: guild.value.show_to_members ?? true,
+    visitor_can_view_stories: guild.value.visitor_can_view_stories ?? true,
+    visitor_can_view_posts: guild.value.visitor_can_view_posts ?? true,
+    member_can_view_stories: guild.value.member_can_view_stories ?? true,
+    member_can_view_posts: guild.value.member_can_view_posts ?? true,
     auto_approve: guild.value.auto_approve ?? false
   }
   bannerPreview.value = guild.value.banner || ''
@@ -195,8 +199,10 @@ async function saveSettings() {
       lore: editForm.value.lore,
       faction: editForm.value.faction,
       color: editForm.value.color.replace('#', ''),
-      show_to_visitors: editForm.value.show_to_visitors,
-      show_to_members: editForm.value.show_to_members,
+      visitor_can_view_stories: editForm.value.visitor_can_view_stories,
+      visitor_can_view_posts: editForm.value.visitor_can_view_posts,
+      member_can_view_stories: editForm.value.member_can_view_stories,
+      member_can_view_posts: editForm.value.member_can_view_posts,
       auto_approve: editForm.value.auto_approve
     })
     // 刷新数据
@@ -457,27 +463,53 @@ onMounted(loadGuild)
         <div class="form-section privacy-section">
           <label>隐私设置</label>
           <div class="privacy-toggles">
-            <div class="toggle-item">
-              <div class="toggle-info">
-                <span class="toggle-label">向访客展示公会内容</span>
-                <span class="toggle-hint">非公会成员可以查看公会剧情和帖子</span>
+            <div class="toggle-group">
+              <div class="toggle-group-label">访客可见</div>
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <span class="toggle-label">剧情归档</span>
+                  <span class="toggle-hint">非公会成员可以查看公会归档的剧情</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="editForm.visitor_can_view_stories" />
+                  <span class="slider"></span>
+                </label>
               </div>
-              <label class="switch">
-                <input type="checkbox" v-model="editForm.show_to_visitors" />
-                <span class="slider"></span>
-              </label>
-            </div>
-            <div class="toggle-item">
-              <div class="toggle-info">
-                <span class="toggle-label">向普通成员展示公会内容</span>
-                <span class="toggle-hint">普通成员可以查看公会剧情和帖子（管理员始终可见）</span>
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <span class="toggle-label">公会帖子</span>
+                  <span class="toggle-hint">非公会成员可以查看公会帖子</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="editForm.visitor_can_view_posts" />
+                  <span class="slider"></span>
+                </label>
               </div>
-              <label class="switch">
-                <input type="checkbox" v-model="editForm.show_to_members" />
-                <span class="slider"></span>
-              </label>
             </div>
-            <div class="toggle-item">
+            <div class="toggle-group">
+              <div class="toggle-group-label">成员可见</div>
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <span class="toggle-label">剧情归档</span>
+                  <span class="toggle-hint">普通成员可以查看公会归档的剧情（管理员始终可见）</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="editForm.member_can_view_stories" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="toggle-item">
+                <div class="toggle-info">
+                  <span class="toggle-label">公会帖子</span>
+                  <span class="toggle-hint">普通成员可以查看公会帖子（管理员始终可见）</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="editForm.member_can_view_posts" />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="toggle-item standalone">
               <div class="toggle-info">
                 <span class="toggle-label">自动审核</span>
                 <span class="toggle-hint">开启后新成员无需审核即可直接加入公会</span>
@@ -1293,6 +1325,31 @@ onMounted(loadGuild)
 .toggle-hint {
   font-size: 12px;
   color: #8C7B70;
+}
+
+/* Toggle Group */
+.toggle-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #f9f6f3;
+  border-radius: 12px;
+}
+
+.toggle-group-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #804030;
+  margin-bottom: 4px;
+}
+
+.toggle-group .toggle-item {
+  background: #fff;
+}
+
+.toggle-item.standalone {
+  margin-top: 4px;
 }
 
 /* Switch Toggle */
