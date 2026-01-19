@@ -206,11 +206,13 @@ type Guild struct {
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                            // 审核人ID
 	ReviewComment string     `gorm:"size:512" json:"review_comment"`                      // 审核意见
 	ReviewedAt    *time.Time `json:"reviewed_at"`                                         // 审核时间
-	// 隐私设置
-	ShowToVisitors bool `gorm:"default:true" json:"show_to_visitors"` // 是否向访客展示公会内容（剧情/帖子）
-	ShowToMembers  bool `gorm:"default:true" json:"show_to_members"`  // 是否向普通成员展示公会内容（owner/admin始终可见）
-	AutoApprove    bool `gorm:"default:false" json:"auto_approve"`    // 自动审核（无需审核直接加入）
-	CreatedAt      time.Time `json:"created_at"`
+	// 隐私设置（分别控制剧情和帖子的可见性）
+	VisitorCanViewStories bool `gorm:"default:true" json:"visitor_can_view_stories"` // 访客可查看剧情
+	VisitorCanViewPosts   bool `gorm:"default:true" json:"visitor_can_view_posts"`   // 访客可查看帖子
+	MemberCanViewStories  bool `gorm:"default:true" json:"member_can_view_stories"`  // 成员可查看剧情（owner/admin始终可见）
+	MemberCanViewPosts    bool `gorm:"default:true" json:"member_can_view_posts"`    // 成员可查看帖子（owner/admin始终可见）
+	AutoApprove           bool `gorm:"default:false" json:"auto_approve"`            // 自动审核（无需审核直接加入）
+	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 

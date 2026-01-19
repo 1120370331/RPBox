@@ -18,9 +18,11 @@ export interface Guild {
   invite_code: string
   status?: 'pending' | 'approved' | 'rejected'
   my_role?: 'owner' | 'admin' | 'member'
-  show_to_visitors: boolean  // 是否向访客展示公会内容
-  show_to_members: boolean   // 是否向普通成员展示公会内容
-  auto_approve: boolean      // 自动审核（无需审核直接加入）
+  visitor_can_view_stories: boolean  // 访客可查看剧情
+  visitor_can_view_posts: boolean    // 访客可查看帖子
+  member_can_view_stories: boolean   // 成员可查看剧情
+  member_can_view_posts: boolean     // 成员可查看帖子
+  auto_approve: boolean              // 自动审核（无需审核直接加入）
   created_at: string
   updated_at: string
 }
@@ -44,8 +46,10 @@ export interface CreateGuildRequest {
   lore?: string
   faction?: string
   layout?: 1 | 2 | 3 | 4
-  show_to_visitors?: boolean
-  show_to_members?: boolean
+  visitor_can_view_stories?: boolean
+  visitor_can_view_posts?: boolean
+  member_can_view_stories?: boolean
+  member_can_view_posts?: boolean
   auto_approve?: boolean
 }
 

@@ -83,7 +83,7 @@ func (s *Server) listPosts(c *gin.Context) {
 	if guildID != "" {
 		// 检查公会内容访问权限
 		guildIDUint, _ := strconv.ParseUint(guildID, 10, 32)
-		canAccess, _ := checkGuildContentAccess(uint(guildIDUint), userID)
+		canAccess, _ := checkGuildContentAccess(uint(guildIDUint), userID, "post")
 		if !canAccess {
 			c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
 			return
