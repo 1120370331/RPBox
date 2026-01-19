@@ -268,3 +268,6 @@ coverage.out
 *.key
 id_rsa*
 id_ed25519*
+
+# Server storage cache
+server/storage/cache/
