@@ -1,17 +1,26 @@
 import request from './request'
 
+// API 基础地址（用于拼接图片等静态资源的完整 URL）
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
+// 获取不带 /api/v1 的基础地址
+const API_HOST = API_BASE.replace(/\/api\/v1\/?$/, '')
+
 export interface Item {
   id: number
   author_id: number
+  author_username?: string  // 作者用户名
+  author_avatar?: string    // 作者头像
   name: string
-  type: 'item' | 'script'  // item=道具, script=剧本
+  type: 'item' | 'campaign' | 'artwork'  // item=道具, campaign=剧本, artwork=画作
   icon: string
-  preview_image: string    // 预览图
+  preview_image: string    // 预览图（详情页使用）
+  preview_image_url?: string  // 预览图缩略图 URL（列表页使用）
   description: string
   detail_content: string   // 富文本详情
   import_code: string
   raw_data: string
   requires_permission: boolean  // 是否需要TRP3权限授权
+  enable_watermark: boolean     // 画作是否启用水印
   downloads: number
   rating: number
   rating_count: number
@@ -22,6 +31,13 @@ export interface Item {
   review_comment?: string
   created_at: string
   updated_at: string
+}
+
+// 画作图片
+export interface ItemImage {
+  id: number
+  image_url: string
+  sort_order: number
 }
 
 export interface ItemComment {
@@ -37,14 +53,15 @@ export interface ItemComment {
 
 export interface CreateItemRequest {
   name: string
-  type: 'item' | 'script'
+  type: 'item' | 'campaign' | 'artwork'
   icon?: string
   preview_image?: string
   description?: string
   detail_content?: string
-  import_code: string
+  import_code?: string  // 画作类型可选
   raw_data?: string
   requires_permission?: boolean
+  enable_watermark?: boolean  // 画作水印开关
   tag_ids?: number[]
   status?: 'draft' | 'published'
 }
@@ -58,23 +75,25 @@ export interface UpdateItemRequest {
   import_code?: string
   raw_data?: string
   requires_permission?: boolean
+  enable_watermark?: boolean  // 画作水印开关
   tag_ids?: number[]
   status?: 'draft' | 'published'
 }
 
 export interface ListItemsParams {
-  type?: 'item' | 'script'
+  type?: 'item' | 'campaign' | 'artwork'
   status?: string
   search?: string
   tag_id?: number
   author_id?: number
+  author_name?: string
   sort?: 'created_at' | 'downloads' | 'rating'
   order?: 'asc' | 'desc'
   page?: number
   page_size?: number
 }
 
-// 获取道具列表
+// 获取作品列表
 export function listItems(params?: ListItemsParams) {
   return request.get('/items', { params })
 }
@@ -161,4 +180,46 @@ export function uploadImage(file: File) {
   return request.post('/upload/image', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
+}
+
+// ========== 画作图片相关 API ==========
+
+// 上传画作图片（支持多张）
+export function uploadItemImages(itemId: number, files: File[]) {
+  const formData = new FormData()
+  files.forEach(file => {
+    formData.append('images', file)
+  })
+  return request.post(`/items/${itemId}/images`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// 获取画作图片列表
+export function getItemImages(itemId: number) {
+  return request.get<{ code: number; data: ItemImage[] }>(`/items/${itemId}/images`)
+}
+
+// 删除画作图片
+export function deleteItemImage(itemId: number, imageId: number) {
+  return request.delete(`/items/${itemId}/images/${imageId}`)
+}
+
+// 获取图片显示URL（完整路径）
+export function getItemImageUrl(itemId: number, imageId: number) {
+  return `${API_HOST}/api/v1/items/${itemId}/images/${imageId}`
+}
+
+// 获取图片下载URL（带水印选项，完整路径）
+export function getItemImageDownloadUrl(itemId: number, imageId: number, withWatermark = true) {
+  return `${API_HOST}/api/v1/items/${itemId}/images/${imageId}/download?watermark=${withWatermark}`
+}
+
+// 获取通用图片URL（支持缩略图，完整路径）
+export function getImageUrl(type: string, id: number, options?: { w?: number; q?: number }) {
+  const params = new URLSearchParams()
+  if (options?.w) params.set('w', String(options.w))
+  if (options?.q) params.set('q', String(options.q))
+  const queryString = params.toString()
+  return `${API_HOST}/api/v1/images/${type}/${id}${queryString ? '?' + queryString : ''}`
 }

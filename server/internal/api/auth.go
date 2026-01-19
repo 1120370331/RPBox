@@ -114,6 +114,7 @@ func (s *Server) login(c *gin.Context) {
 			"id":       user.ID,
 			"username": user.Username,
 			"email":    user.Email,
+			"avatar":   user.Avatar,
 			"role":     user.Role,
 		},
 	})

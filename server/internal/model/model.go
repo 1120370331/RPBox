@@ -206,8 +206,12 @@ type Guild struct {
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                            // 审核人ID
 	ReviewComment string     `gorm:"size:512" json:"review_comment"`                      // 审核意见
 	ReviewedAt    *time.Time `json:"reviewed_at"`                                         // 审核时间
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	// 隐私设置
+	ShowToVisitors bool `gorm:"default:true" json:"show_to_visitors"` // 是否向访客展示公会内容（剧情/帖子）
+	ShowToMembers  bool `gorm:"default:true" json:"show_to_members"`  // 是否向普通成员展示公会内容（owner/admin始终可见）
+	AutoApprove    bool `gorm:"default:false" json:"auto_approve"`    // 自动审核（无需审核直接加入）
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // GuildMember 公会成员
@@ -248,14 +252,15 @@ type Item struct {
 	ID            uint      `gorm:"primarykey" json:"id"`
 	AuthorID      uint      `gorm:"index;not null" json:"author_id"`
 	Name          string    `gorm:"size:256;not null" json:"name"`
-	Type          string    `gorm:"size:20;index" json:"type"` // item|document|campaign
+	Type          string    `gorm:"size:20;index" json:"type"` // item|document|campaign|artwork
 	Icon          string    `gorm:"size:128" json:"icon"`
 	PreviewImage  string    `gorm:"type:text" json:"preview_image"`   // 预览图（base64）
 	Description   string    `gorm:"type:text" json:"description"`
 	DetailContent string    `gorm:"type:text" json:"detail_content"`  // 富文本详情
-	ImportCode    string    `gorm:"type:text;not null" json:"import_code"` // TRP3导入代码
+	ImportCode    string    `gorm:"type:text" json:"import_code"` // TRP3导入代码（artwork类型可选）
 	RawData       string    `gorm:"type:text" json:"raw_data"`             // 原始Lua数据
 	RequiresPermission bool   `gorm:"default:false" json:"requires_permission"` // 是否需要TRP3权限授权
+	EnableWatermark    bool   `gorm:"default:true" json:"enable_watermark"`     // 画作是否启用水印
 	Downloads     int       `gorm:"default:0" json:"downloads"`
 	Rating        float64   `gorm:"default:0" json:"rating"`         // 平均评分
 	RatingCount   int       `gorm:"default:0" json:"rating_count"`   // 评分人数
@@ -340,6 +345,15 @@ type ItemPendingEdit struct {
 	ReviewedAt    *time.Time `json:"reviewed_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// ItemImage 画作图片（用于artwork类型的多图）
+type ItemImage struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"index;not null" json:"item_id"`
+	ImageData string    `gorm:"type:text;not null" json:"-"`    // base64数据（不直接返回）
+	SortOrder int       `gorm:"default:0" json:"sort_order"`    // 排序顺序
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ========== 社区系统 ==========

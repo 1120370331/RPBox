@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { getGuild, type Guild } from '@/api/guild'
+import { getImageUrl } from '@/api/item'
 
 const router = useRouter()
 const route = useRoute()
@@ -182,6 +183,13 @@ function getCategoryClass(category: string) {
     other: 'cat-other'
   }
   return classMap[category] || 'cat-other'
+}
+
+// 获取角色样式类
+function getRoleClass(role: string) {
+  if (role === 'admin') return 'role-admin'
+  if (role === 'moderator') return 'role-moderator'
+  return ''
 }
 
 // 从内容中提取第一张图片
@@ -539,16 +547,16 @@ function getEventStyle(event: EventItem) {
             <h2 class="post-title">{{ post.title }}</h2>
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
             <!-- 封面图 -->
-            <div v-if="post.cover_image" class="cover-image">
-              <img :src="post.cover_image" alt="" />
+            <div v-if="post.cover_image_url" class="cover-image">
+              <img :src="getImageUrl('post-cover', post.id, { w: 600, q: 80 })" alt="" loading="lazy" />
             </div>
             <div class="card-footer">
               <div class="author-info">
                 <div class="author-avatar">
-                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" />
+                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" loading="lazy" />
                   <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
                 </div>
-                <span class="author-name">{{ post.author_name }}</span>
+                <span class="author-name" :class="getRoleClass(post.author_role)">{{ post.author_name }}</span>
               </div>
               <div class="post-stats">
                 <span class="stat-item">
@@ -578,13 +586,13 @@ function getEventStyle(event: EventItem) {
             <h3 class="post-title">{{ post.title }}</h3>
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
             <!-- 封面图 -->
-            <div v-if="post.cover_image" class="cover-image small">
-              <img :src="post.cover_image" alt="" />
+            <div v-if="post.cover_image_url" class="cover-image small">
+              <img :src="getImageUrl('post-cover', post.id, { w: 400, q: 80 })" alt="" loading="lazy" />
             </div>
             <div class="card-footer">
               <div class="author-info">
                 <div class="author-avatar small">
-                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" />
+                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" loading="lazy" />
                   <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
                 </div>
                 <span class="author-name">{{ post.author_name }}</span>
@@ -1561,6 +1569,16 @@ function getEventStyle(event: EventItem) {
   font-size: 14px;
   font-weight: 500;
   color: #2C1810;
+}
+
+.author-name.role-admin {
+  color: #DC143C;
+  font-weight: 600;
+}
+
+.author-name.role-moderator {
+  color: #4682B4;
+  font-weight: 600;
 }
 
 .post-stats {

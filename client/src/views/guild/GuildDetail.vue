@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, listGuildApplications, type Guild, type GuildMember } from '@/api/guild'
+import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, listGuildApplications, applyGuild, type Guild, type GuildMember } from '@/api/guild'
 import { useDialog } from '@/composables/useDialog'
 import RModal from '@/components/RModal.vue'
 import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
+import LazyBgImage from '@/components/LazyBgImage.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,7 +29,10 @@ const editForm = ref({
   description: '',
   lore: '',
   faction: '',
-  color: ''
+  color: '',
+  show_to_visitors: true,
+  show_to_members: true,
+  auto_approve: false
 })
 const bannerFile = ref<File | null>(null)
 const bannerPreview = ref('')
@@ -78,6 +82,29 @@ async function handleLeave() {
   }
 }
 
+async function handleApply() {
+  try {
+    const res = await applyGuild(guildId)
+    // 检查是否为自动加入
+    if ((res as any).auto_approved) {
+      await alert({
+        title: '加入成功',
+        message: '您已成功加入公会！',
+        type: 'success'
+      })
+    } else {
+      await alert({
+        title: '申请已提交',
+        message: '您的入会申请已提交，请等待管理员审核',
+        type: 'success'
+      })
+    }
+    await loadGuild() // 重新加载公会信息
+  } catch (e: any) {
+    await alert({ title: '申请失败', message: e.message || '申请失败', type: 'error' })
+  }
+}
+
 async function handleDelete() {
   const confirmed = await confirm({
     title: '解散公会',
@@ -101,7 +128,10 @@ function openSettings() {
     description: guild.value.description || '',
     lore: guild.value.lore || '',
     faction: guild.value.faction || '',
-    color: guild.value.color || 'B87333'
+    color: guild.value.color || 'B87333',
+    show_to_visitors: guild.value.show_to_visitors ?? true,
+    show_to_members: guild.value.show_to_members ?? true,
+    auto_approve: guild.value.auto_approve ?? false
   }
   bannerPreview.value = guild.value.banner || ''
   bannerFile.value = null
@@ -164,7 +194,10 @@ async function saveSettings() {
       description: editForm.value.description,
       lore: editForm.value.lore,
       faction: editForm.value.faction,
-      color: editForm.value.color.replace('#', '')
+      color: editForm.value.color.replace('#', ''),
+      show_to_visitors: editForm.value.show_to_visitors,
+      show_to_members: editForm.value.show_to_members,
+      auto_approve: editForm.value.auto_approve
     })
     // 刷新数据
     await loadGuild()
@@ -187,12 +220,12 @@ function getFactionLabel(f: string): string {
 }
 
 function goToEvents() {
-  // 跳转到社区，筛选当前公会的活动帖子
-  router.push({ name: 'community', query: { guild_id: guildId, category: 'event' } })
+  // 跳转到公会帖子页面
+  router.push({ name: 'guild-posts', params: { id: guildId } })
 }
 
 function goToStories() {
-  // 跳转到公会剧情列表
+  // 跳转到公会剧情页面
   router.push({ name: 'guild-stories', params: { id: guildId } })
 }
 
@@ -231,14 +264,13 @@ onMounted(loadGuild)
           <div class="hero-section">
             <div class="hero-card">
               <!-- 背景图 -->
-              <div
+              <LazyBgImage
                 class="hero-bg"
-                :style="guild.banner
-                  ? { backgroundImage: `url(${guild.banner})` }
-                  : { background: `linear-gradient(135deg, #${guild.color || 'B87333'}, #4B3621)` }"
+                :src="guild.banner"
+                :fallback-gradient="`linear-gradient(135deg, #${guild.color || 'B87333'}, #4B3621)`"
               >
                 <div class="hero-overlay"></div>
-              </div>
+              </LazyBgImage>
 
               <!-- 内容 -->
               <div class="hero-content">
@@ -255,7 +287,15 @@ onMounted(loadGuild)
                   <p class="slogan">{{ guild.slogan || guild.description || '暂无描述' }}</p>
 
                   <div class="hero-actions">
-                    <button v-if="myRole !== 'owner'" class="btn-outline" @click="handleLeave">
+                    <div v-if="!myRole" class="apply-action">
+                      <button class="btn-outline" @click="handleApply">
+                        申请入会
+                      </button>
+                      <span v-if="guild.auto_approve" class="auto-approve-hint">
+                        <i class="ri-check-line"></i> 无需审核
+                      </span>
+                    </div>
+                    <button v-else-if="myRole !== 'owner'" class="btn-outline" @click="handleLeave">
                       退出公会
                     </button>
                     <button v-if="isAdmin" class="btn-outline" @click="triggerBannerUpload">
@@ -274,7 +314,7 @@ onMounted(loadGuild)
                 <span class="tag">INFO</span>
               </div>
               <ul class="info-list">
-                <li v-if="myRole">
+                <li v-if="isAdmin">
                   <span class="label">邀请码</span>
                   <span class="value code">{{ guild.invite_code }}</span>
                 </li>
@@ -316,7 +356,7 @@ onMounted(loadGuild)
               <div class="member-list">
                 <div v-for="m in members" :key="m.id" class="member-item">
                   <div class="avatar">
-                    <img v-if="m.avatar" :src="m.avatar" alt="" />
+                    <img v-if="m.avatar" :src="m.avatar" alt="" loading="lazy" />
                     <span v-else>{{ m.username?.charAt(0) || '?' }}</span>
                   </div>
                   <div class="info">
@@ -333,11 +373,11 @@ onMounted(loadGuild)
               <div class="quick-actions">
                 <button class="action-btn" @click="goToEvents">
                   <i class="ri-calendar-event-line"></i>
-                  <span>活动日历</span>
+                  <span>公会帖子</span>
                 </button>
                 <button class="action-btn" @click="goToStories">
                   <i class="ri-book-2-line"></i>
-                  <span>剧情归档</span>
+                  <span>过往剧情</span>
                 </button>
               </div>
             </div>
@@ -411,6 +451,43 @@ onMounted(loadGuild)
         <div class="form-section lore-section">
           <label>公会设定</label>
           <TiptapEditor v-model="editForm.lore" placeholder="编写公会的背景设定、历史故事..." />
+        </div>
+
+        <!-- 隐私设置 -->
+        <div class="form-section privacy-section">
+          <label>隐私设置</label>
+          <div class="privacy-toggles">
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <span class="toggle-label">向访客展示公会内容</span>
+                <span class="toggle-hint">非公会成员可以查看公会剧情和帖子</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="editForm.show_to_visitors" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <span class="toggle-label">向普通成员展示公会内容</span>
+                <span class="toggle-hint">普通成员可以查看公会剧情和帖子（管理员始终可见）</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="editForm.show_to_members" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <span class="toggle-label">自动审核</span>
+                <span class="toggle-hint">开启后新成员无需审核即可直接加入公会</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="editForm.auto_approve" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -639,6 +716,29 @@ onMounted(loadGuild)
 .hero-actions {
   display: flex;
   gap: 12px;
+  align-items: center;
+}
+
+.apply-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auto-approve-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+.auto-approve-hint i {
+  font-size: 14px;
 }
 
 .btn-outline {
@@ -1154,5 +1254,92 @@ onMounted(loadGuild)
   border: none;
   border-top: 1px solid #E8DCCF;
   margin: 24px 0;
+}
+
+/* Privacy Settings */
+.privacy-section {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #E8DCCF;
+}
+
+.privacy-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.toggle-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f5f0eb;
+  border-radius: 8px;
+}
+
+.toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toggle-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2C1810;
+}
+
+.toggle-hint {
+  font-size: 12px;
+  color: #8C7B70;
+}
+
+/* Switch Toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #E8DCCF;
+  transition: 0.3s;
+  border-radius: 26px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+input:checked + .slider {
+  background-color: #804030;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
 }
 </style>

@@ -7,6 +7,7 @@ import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry,
 import { getCharacter, updateCharacter, listCharacters, type Character } from '@/api/character'
 import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
 import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
+import { useUserStore } from '@/stores/user'
 import RButton from '@/components/RButton.vue'
 import RCard from '@/components/RCard.vue'
 import RInput from '@/components/RInput.vue'
@@ -20,6 +21,7 @@ import TagSelector from '@/components/TagSelector.vue'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(true)
 const story = ref<Story | null>(null)
@@ -77,9 +79,18 @@ const editEntrySpeaker = ref('')
 const editEntryChannel = ref('SAY')
 const editEntryType = ref('dialogue')
 const editEntryCharacterId = ref<number | null>(null)
+const editEntryTimestamp = ref('')
 const savingEntry = ref(false)
 
 const storyId = computed(() => Number(route.params.id))
+
+// 权限检查：只有剧情上传者、管理员、版主可以编辑
+const canEdit = computed(() => {
+  if (!userStore.user || !story.value) return false
+  return story.value.user_id === userStore.user.id ||
+         userStore.isAdmin ||
+         userStore.isModerator
+})
 
 // WoW 主题颜色预设
 const wowColorPresets = [
@@ -631,6 +642,15 @@ function startEditEntry(entry: StoryEntry) {
   editEntryChannel.value = entry.channel === 'TEXT_EMOTE' ? 'EMOTE' : (entry.channel || 'SAY')
   editEntryType.value = entry.type || 'dialogue'
   editEntryCharacterId.value = entry.character_id || null
+  // 初始化时间（格式化为 datetime-local）
+  const timestamp = new Date(entry.timestamp)
+  const year = timestamp.getFullYear()
+  const month = String(timestamp.getMonth() + 1).padStart(2, '0')
+  const day = String(timestamp.getDate()).padStart(2, '0')
+  const hours = String(timestamp.getHours()).padStart(2, '0')
+  const minutes = String(timestamp.getMinutes()).padStart(2, '0')
+  const seconds = String(timestamp.getSeconds()).padStart(2, '0')
+  editEntryTimestamp.value = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
   showEditEntryModal.value = true
 }
 
@@ -644,6 +664,7 @@ async function saveEntryEdit() {
       channel: editEntryChannel.value,
       type: editEntryType.value,
       character_id: editEntryCharacterId.value,
+      timestamp: new Date(editEntryTimestamp.value).toISOString(),
     })
 
     // 如果关联了新角色，确保角色信息在 charactersMap 中
@@ -686,6 +707,42 @@ async function handleDeleteEntry(entry: StoryEntry) {
   } catch (e) {
     console.error('删除失败:', e)
   }
+}
+
+// 在指定条目之前插入
+function insertEntryBefore(entry: StoryEntry) {
+  // 计算插入时间：当前条目时间减去1秒
+  const currentTime = new Date(entry.timestamp)
+  const insertTime = new Date(currentTime.getTime() - 1000) // 减去1秒
+
+  // 格式化为 datetime-local 格式
+  const year = insertTime.getFullYear()
+  const month = String(insertTime.getMonth() + 1).padStart(2, '0')
+  const day = String(insertTime.getDate()).padStart(2, '0')
+  const hours = String(insertTime.getHours()).padStart(2, '0')
+  const minutes = String(insertTime.getMinutes()).padStart(2, '0')
+  const seconds = String(insertTime.getSeconds()).padStart(2, '0')
+
+  newEntryTimestamp.value = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+  showAddModal.value = true
+}
+
+// 在指定条目之后插入
+function insertEntryAfter(entry: StoryEntry) {
+  // 计算插入时间：当前条目时间加上1秒
+  const currentTime = new Date(entry.timestamp)
+  const insertTime = new Date(currentTime.getTime() + 1000) // 加上1秒
+
+  // 格式化为 datetime-local 格式
+  const year = insertTime.getFullYear()
+  const month = String(insertTime.getMonth() + 1).padStart(2, '0')
+  const day = String(insertTime.getDate()).padStart(2, '0')
+  const hours = String(insertTime.getHours()).padStart(2, '0')
+  const minutes = String(insertTime.getMinutes()).padStart(2, '0')
+  const seconds = String(insertTime.getSeconds()).padStart(2, '0')
+
+  newEntryTimestamp.value = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+  showAddModal.value = true
 }
 
 onMounted(() => {
@@ -734,9 +791,9 @@ onMounted(() => {
                     :style="{ background: `#${tag.color}20`, color: `#${tag.color}` }"
                   >
                     {{ tag.name }}
-                    <i class="ri-close-line" @click.stop="handleRemoveTag(tag.id)"></i>
+                    <i v-if="canEdit" class="ri-close-line" @click.stop="handleRemoveTag(tag.id)"></i>
                   </span>
-                  <button class="add-tag-btn" @click="showTagModal = true">
+                  <button v-if="canEdit" class="add-tag-btn" @click="showTagModal = true">
                     <i class="ri-add-line"></i> 添加标签
                   </button>
                 </div>
@@ -752,45 +809,49 @@ onMounted(() => {
                     :style="{ borderColor: `#${guild.color || 'B87333'}` }"
                   >
                     {{ guild.name }}
-                    <i class="ri-close-line" @click.stop="handleRemoveFromGuild(guild.id)"></i>
+                    <i v-if="canEdit" class="ri-close-line" @click.stop="handleRemoveFromGuild(guild.id)"></i>
                   </span>
                 </div>
               </div>
             </div>
             <div class="header-actions">
-              <!-- Main action button -->
-              <RButton
-                :type="story.is_public ? 'secondary' : 'primary'"
-                :loading="publishing"
+              <!-- 分享功能暂时禁用（需要网页端支持）
+              <button
+                class="action-btn action-btn--primary"
+                :disabled="publishing"
                 @click="togglePublish"
-                block
               >
-                <i class="ri-share-line"></i>
+                <i class="ri-loader-4-line spinning" v-if="publishing"></i>
+                <i class="ri-share-line" v-else></i>
                 {{ story.is_public ? '取消公开' : '公开分享' }}
-              </RButton>
+              </button>
+              -->
 
-              <!-- Secondary action button -->
-              <RButton type="secondary" @click="startEdit" block>
+              <!-- Secondary action buttons -->
+              <button v-if="canEdit" class="action-btn action-btn--secondary" @click="startEdit">
                 <i class="ri-edit-line"></i> 编辑信息
-              </RButton>
+              </button>
 
-              <!-- Action button group -->
-              <div class="action-button-group">
-                <RButton type="outline" size="sm" @click="showAddModal = true">
-                  <i class="ri-chat-new-line"></i> 添加条目
-                </RButton>
-                <RButton type="outline" size="sm" @click="showGuildModal = true">
-                  <i class="ri-archive-line"></i> 归档
-                </RButton>
-                <RButton type="outline" size="sm" @click="exportStory">
-                  <i class="ri-download-line"></i> 导出
-                </RButton>
-                <RButton type="outline" size="sm" @click="showImportModal = true">
-                  <i class="ri-upload-line"></i> 导入
-                </RButton>
-                <RButton v-if="story.is_public" type="outline" size="sm" @click="showShareModal = true">
-                  <i class="ri-share-forward-line"></i> 分享
-                </RButton>
+              <button v-if="canEdit" class="action-btn action-btn--secondary" @click="showGuildModal = true">
+                <i class="ri-archive-line"></i> 归档到公会
+              </button>
+
+              <!-- Icon button group -->
+              <div class="icon-button-group">
+                <button v-if="canEdit" class="icon-btn" @click="showAddModal = true" title="添加条目">
+                  <i class="ri-chat-new-line"></i>
+                </button>
+                <button v-if="canEdit" class="icon-btn" @click="exportStory" title="导出">
+                  <i class="ri-download-line"></i>
+                </button>
+                <button v-if="canEdit" class="icon-btn" @click="showImportModal = true" title="导入">
+                  <i class="ri-upload-line"></i>
+                </button>
+                <!-- 分享链接按钮暂时禁用（需要网页端支持）
+                <button v-if="story.is_public" class="icon-btn" @click="showShareModal = true" title="分享链接">
+                  <i class="ri-share-forward-line"></i>
+                </button>
+                -->
               </div>
             </div>
           </div>
@@ -839,11 +900,17 @@ onMounted(() => {
               </div>
               <div class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
             </div>
-            <div class="entry-actions">
-              <button class="action-btn" @click="startEditEntry(entry)" title="编辑">
+            <div v-if="canEdit" class="entry-actions">
+              <button class="entry-action-btn" @click="insertEntryBefore(entry)" title="在此之前插入">
+                <i class="ri-arrow-up-line"></i>
+              </button>
+              <button class="entry-action-btn" @click="insertEntryAfter(entry)" title="在此之后插入">
+                <i class="ri-arrow-down-line"></i>
+              </button>
+              <button class="entry-action-btn" @click="startEditEntry(entry)" title="编辑">
                 <i class="ri-edit-line"></i>
               </button>
-              <button class="action-btn delete" @click="handleDeleteEntry(entry)" title="删除">
+              <button class="entry-action-btn delete" @click="handleDeleteEntry(entry)" title="删除">
                 <i class="ri-delete-bin-line"></i>
               </button>
             </div>
@@ -1157,6 +1224,11 @@ onMounted(() => {
           <RInput v-model="editEntrySpeaker" placeholder="角色名称" />
         </div>
         <div class="form-field">
+          <label>记录时间</label>
+          <input type="datetime-local" v-model="editEntryTimestamp" step="1" class="datetime-input" />
+          <span class="field-hint">修改时间会影响条目排序顺序</span>
+        </div>
+        <div class="form-field">
           <label>内容</label>
           <RichEditor v-model="editEntryContent" placeholder="输入内容..." min-height="120px" simple />
         </div>
@@ -1214,41 +1286,46 @@ onMounted(() => {
 .story-header {
   padding: 24px;
   position: relative;
-  /* Swiss 风格：切角效果 */
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
-  box-shadow: 4px 4px 0px 0px rgba(44, 24, 16, 0.1); /* 方形阴影 */
-  border-left: 2px solid rgba(44, 24, 16, 0.2);
-  border-bottom: 2px solid rgba(44, 24, 16, 0.2);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(229, 212, 193, 0.6);
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(44, 24, 16, 0.08);
 }
 
-/* 几何装饰 */
+@media (min-width: 1024px) {
+  .story-header {
+    padding: 32px;
+  }
+}
+
+/* 装饰性圆角元素 */
 .story-header::before {
   content: '';
   position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 4px;
-  height: 4px;
-  border-top: 2px solid #2C1810;
-  border-right: 2px solid #2C1810;
-}
-
-.story-header::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: -1px;
-  width: 4px;
-  height: 4px;
-  border-bottom: 2px solid #2C1810;
-  border-left: 2px solid #2C1810;
+  top: -32px;
+  right: -32px;
+  width: 128px;
+  height: 128px;
+  background: rgba(184, 115, 51, 0.05);
+  border-radius: 0 0 0 100px;
+  pointer-events: none;
 }
 
 .header-content {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
+  flex-direction: column;
+  gap: 32px;
+}
+
+@media (min-width: 1024px) {
+  .header-content {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
 }
 
 .header-info h1 {
@@ -1315,17 +1392,103 @@ onMounted(() => {
   }
 }
 
-/* Action button group */
-.action-button-group {
+/* Action buttons - 按照 story_info.html 设计 */
+.action-btn {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid;
+  gap: 8px;
+}
+
+@media (min-width: 1024px) {
+  .action-btn {
+    width: 100%;
+    min-width: 180px;
+  }
+}
+
+.action-btn--primary {
+  background: #2C1810;
+  border-color: #2C1810;
+  color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-btn--primary:hover {
+  background: #1a0e09;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: scale(0.98);
+}
+
+.action-btn--primary:active {
+  transform: scale(0.95);
+}
+
+.action-btn--primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-btn--secondary {
+  background: #F5EFE7;
+  border-color: #E5D4C1;
+  color: #2C1810;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.action-btn--secondary:hover {
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Icon button group */
+.icon-button-group {
+  display: flex;
   gap: 8px;
   width: 100%;
 }
 
 @media (min-width: 1024px) {
-  .action-button-group {
+  .icon-button-group {
     width: auto;
+  }
+}
+
+.icon-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  background: #F5EFE7;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  color: #8D7B68;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: #fff;
+  color: #B87333;
+}
+
+.icon-btn i {
+  font-size: 18px;
+}
+
+@media (min-width: 1024px) {
+  .icon-btn {
+    flex: initial;
+    min-width: 44px;
   }
 }
 
@@ -1412,35 +1575,20 @@ onMounted(() => {
 }
 
 .entries-section {
-  background: #fff;
-  border-radius: 0; /* Swiss 风格：直角 */
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(229, 212, 193, 0.6);
+  border-radius: 16px;
   padding: 24px;
-  box-shadow: none;
-  border: 2px solid rgba(44, 24, 16, 0.1); /* 边框 */
-  position: relative;
+  box-shadow: 0 4px 20px rgba(44, 24, 16, 0.08);
+  min-height: 400px;
 }
 
-/* 几何装饰 */
-.entries-section::before {
-  content: '';
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 4px;
-  height: 4px;
-  border-top: 2px solid #2C1810;
-  border-right: 2px solid #2C1810;
-}
-
-.entries-section::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: -1px;
-  width: 4px;
-  height: 4px;
-  border-bottom: 2px solid #2C1810;
-  border-left: 2px solid #2C1810;
+@media (min-width: 1024px) {
+  .entries-section {
+    padding: 32px;
+  }
 }
 
 .entries-section h2 {
@@ -1463,23 +1611,24 @@ onMounted(() => {
 
 .entry-item {
   display: flex;
-  gap: 12px;
-  padding: 20px;
-  background: #FFF9F0; /* Swiss 风格：浅米色背景 */
-  border-radius: 0; /* 直角 */
-  border: 1px solid rgba(44, 24, 16, 0.2);
+  gap: 16px;
+  padding: 16px;
+  background: #F5EFE7;
+  border-radius: 8px;
+  border: 1px solid transparent;
   position: relative;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
 }
 
 .entry-item:hover {
-  border-color: #804030; /* 悬停时边框变为棕红色 */
+  border-color: rgba(184, 115, 51, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .entry-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 0; /* Swiss 风格：直角 */
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   background: var(--color-accent);
   color: #fff;
   display: flex;
@@ -1488,7 +1637,7 @@ onMounted(() => {
   font-weight: 600;
   flex-shrink: 0;
   overflow: hidden;
-  /* 移除边框和黑白滤镜 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .entry-avatar :deep(.wow-icon) {
@@ -1534,8 +1683,9 @@ onMounted(() => {
 }
 
 .entry-item.narration {
-  background: rgba(184, 115, 51, 0.05);
-  border-left: 3px solid var(--color-accent);
+  background: linear-gradient(to right, rgba(184, 115, 51, 0.08), rgba(184, 115, 51, 0.02));
+  border: none;
+  border-left: 3px solid #B87333;
 }
 
 .entry-item.narration .entry-avatar {
@@ -1959,26 +2109,26 @@ onMounted(() => {
   opacity: 1;
 }
 
-.action-btn {
-  width: 28px;
-  height: 28px;
+.entry-action-btn {
+  width: 24px;
+  height: 24px;
   border: none;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--color-secondary);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  backdrop-filter: blur(4px);
 }
 
-.action-btn:hover {
-  background: var(--color-accent);
-  color: #fff;
+.entry-action-btn:hover {
+  background: #B87333;
 }
 
-.action-btn.delete:hover {
+.entry-action-btn.delete:hover {
   background: #e74c3c;
 }
 </style>

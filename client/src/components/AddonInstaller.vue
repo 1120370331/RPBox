@@ -113,6 +113,17 @@ onMounted(() => {
       <div class="addon-installer__status" :class="{ 'addon-installer__status--error': error }">
         {{ error || statusText }}
       </div>
+
+      <!-- 使用提示 -->
+      <div class="addon-installer__tips">
+        <h4><i class="ri-lightbulb-line"></i> 使用提示</h4>
+        <ul>
+          <li><code>/rpbox</code> 打开主面板</li>
+          <li><code>/rpbox help</code> 查看所有命令</li>
+          <li>默认只监听具有 TRP 人物卡信息的玩家</li>
+          <li>如需监听非TRP玩家，选中目标 2 秒后自动加入白名单后即可监听</li>
+        </ul>
+      </div>
     </div>
 
     <template #footer>
@@ -163,5 +174,43 @@ onMounted(() => {
 .addon-installer__status--error {
   background: rgba(220, 53, 69, 0.1);
   color: #dc3545;
+}
+
+.addon-installer__tips {
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%);
+  border: 1px solid #FFE0B2;
+  border-radius: var(--radius-md);
+}
+
+.addon-installer__tips h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #E65100;
+}
+
+.addon-installer__tips h4 i {
+  font-size: 16px;
+}
+
+.addon-installer__tips ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #5D4037;
+  line-height: 1.7;
+}
+
+.addon-installer__tips code {
+  padding: 2px 6px;
+  background: rgba(184, 115, 51, 0.15);
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #B87333;
 }
 </style>

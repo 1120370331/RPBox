@@ -37,6 +37,13 @@ func (s *Server) setupRoutes() {
 		// 测试端点（仅用于开发）
 		v1.POST("/test/send-notification", s.testSendNotification)
 
+		// 画作图片公开访问
+		v1.GET("/items/:id/images/:imageId", s.getItemImage)
+		v1.GET("/items/:id/images/:imageId/download", s.downloadItemImage)
+
+		// 通用图片服务（支持缩略图）
+		v1.GET("/images/:type/:id", s.getImage)
+
 		// 需要认证的接口
 		auth := v1.Group("")
 		auth.Use(middleware.JWTAuth())
@@ -83,6 +90,11 @@ func (s *Server) setupRoutes() {
 			auth.DELETE("/items/:id/like", s.unlikeItem)
 			auth.POST("/items/:id/favorite", s.favoriteItem)
 			auth.DELETE("/items/:id/favorite", s.unfavoriteItem)
+
+			// 画作图片管理
+			auth.POST("/items/:id/images", s.uploadItemImages)
+			auth.GET("/items/:id/images", s.listItemImages)
+			auth.DELETE("/items/:id/images/:imageId", s.deleteItemImage)
 
 			// 账号备份（以账号为单位）
 			auth.GET("/account-backups", s.listAccountBackups)

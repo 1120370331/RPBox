@@ -485,7 +485,6 @@ function getTypeBadge(type: string): string {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(100%) contrast(1.25);
 }
 
 .notification-type-badge {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -80,7 +81,17 @@ func (s *Server) listPosts(c *gin.Context) {
 	}
 
 	if guildID != "" {
+		// 检查公会内容访问权限
+		guildIDUint, _ := strconv.ParseUint(guildID, 10, 32)
+		canAccess, _ := checkGuildContentAccess(uint(guildIDUint), userID)
+		if !canAccess {
+			c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
+			return
+		}
 		query = query.Where("guild_id = ?", guildID)
+	} else {
+		// 社区广场：只显示无公会关联的帖子，或有公会关联但设置为公开的帖子
+		query = query.Where("guild_id IS NULL OR is_public = ?", true)
 	}
 
 	// 分区筛选
@@ -113,10 +124,28 @@ func (s *Server) listPosts(c *gin.Context) {
 	query = query.Order(sortBy + " " + order).Offset(offset).Limit(pageSize)
 
 	var posts []model.Post
-	// 列表查询排除大字段（content）以提高性能
-	if err := query.Select("id, author_id, title, content_type, cover_image, category, guild_id, story_id, status, is_public, is_pinned, is_featured, view_count, like_count, comment_count, favorite_count, review_status, created_at, updated_at").Find(&posts).Error; err != nil {
+	// 列表查询排除大字段（content, cover_image）以提高性能
+	// cover_image 通过独立的图片 API 访问
+	if err := query.Select("id, author_id, title, content_type, category, guild_id, story_id, status, is_public, is_pinned, is_featured, view_count, like_count, comment_count, favorite_count, review_status, event_type, event_start_time, event_end_time, event_color, created_at, updated_at").Find(&posts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
+	}
+
+	// 获取有封面图的帖子 ID 列表
+	var postIDs []uint
+	for _, p := range posts {
+		postIDs = append(postIDs, p.ID)
+	}
+	var postsWithCover []uint
+	if len(postIDs) > 0 {
+		database.DB.Model(&model.Post{}).
+			Select("id").
+			Where("id IN ? AND cover_image IS NOT NULL AND cover_image != ''", postIDs).
+			Pluck("id", &postsWithCover)
+	}
+	hasCoverMap := make(map[uint]bool)
+	for _, id := range postsWithCover {
+		hasCoverMap[id] = true
 	}
 
 	// 获取作者信息
@@ -135,16 +164,26 @@ func (s *Server) listPosts(c *gin.Context) {
 	// 组装响应
 	type PostWithAuthor struct {
 		model.Post
-		AuthorName   string `json:"author_name"`
-		AuthorAvatar string `json:"author_avatar"`
+		AuthorName    string `json:"author_name"`
+		AuthorAvatar  string `json:"author_avatar"`
+		AuthorRole    string `json:"author_role"`
+		CoverImageURL string `json:"cover_image_url"`
 	}
 	result := make([]PostWithAuthor, len(posts))
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
+		// 构造封面图 URL：宽度 600，质量 80
+		// 只有确认有封面图才返回 URL
+		coverURL := ""
+		if hasCoverMap[p.ID] {
+			coverURL = fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80", p.ID)
+		}
 		result[i] = PostWithAuthor{
-			Post:         p,
-			AuthorName:   author.Username,
-			AuthorAvatar: author.Avatar,
+			Post:          p,
+			AuthorName:    author.Username,
+			AuthorAvatar:  author.Avatar,
+			AuthorRole:    author.Role,
+			CoverImageURL: coverURL,
 		}
 	}
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, type Item, type ItemComment } from '@/api/item'
+import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 
 const route = useRoute()
@@ -11,6 +11,7 @@ const loading = ref(false)
 const item = ref<Item | null>(null)
 const author = ref<any>(null)
 const tags = ref<any[]>([])
+const images = ref<ItemImage[]>([])  // 画作图片列表
 const comments = ref<ItemComment[]>([])
 const newRating = ref(0)
 const hoverRating = ref(0)
@@ -20,16 +21,33 @@ const isLiked = ref(false)
 const isFavorited = ref(false)
 const submitting = ref(false)
 
+// 画作图片查看
+const selectedImageIndex = ref(0)
+const showImageViewer = ref(false)
+
 // 预览模式
 const isPreview = ref(false)
 const previewFrom = ref('')
 
+// 是否为画作类型
+const isArtwork = computed(() => item.value?.type === 'artwork')
+
+// 获取类型显示文本
+function getTypeText(type: string) {
+  const typeMap: Record<string, string> = {
+    'item': '道具',
+    'campaign': '剧本',
+    'artwork': '画作'
+  }
+  return typeMap[type] || type
+}
+
 // 计算评论字数
 const commentLength = computed(() => [...newComment.value].length)
-// 提交条件：有评分时需要30字，无评分时只需要有内容
+// 提交条件：有评分时需要10字，无评分时只需要有内容
 const canSubmit = computed(() => {
   if (newRating.value > 0) {
-    return commentLength.value >= 30
+    return commentLength.value >= 10
   }
   return commentLength.value > 0
 })
@@ -84,9 +102,16 @@ async function loadItemDetail() {
       item.value = res.data.item
       author.value = res.data.author
       tags.value = res.data.tags || []
+      // 画作类型加载图片列表，并转换为完整 URL
+      if (res.data.images) {
+        images.value = res.data.images.map((img: any) => ({
+          ...img,
+          image_url: getItemImageUrl(id, img.id)
+        }))
+      }
     }
   } catch (error) {
-    console.error('加载道具详情失败:', error)
+    console.error('加载作品详情失败:', error)
   } finally {
     loading.value = false
   }
@@ -121,8 +146,8 @@ async function handleDownload() {
 // 添加评论（可选评分）
 async function handleAddComment() {
   if (!canSubmit.value) {
-    if (newRating.value > 0 && commentLength.value < 30) {
-      toast.error('带评分的评价至少需要30个字符')
+    if (newRating.value > 0 && commentLength.value < 10) {
+      toast.error('带评分的评价至少需要10个字符')
     } else {
       toast.error('请输入评论内容')
     }
@@ -215,6 +240,54 @@ async function copyImportCode() {
 function goBack() {
   router.push('/market')
 }
+
+// 打开图片查看器
+function openImageViewer(index: number) {
+  selectedImageIndex.value = index
+  showImageViewer.value = true
+}
+
+// 关闭图片查看器
+function closeImageViewer() {
+  showImageViewer.value = false
+}
+
+// 上一张图片
+function prevImage() {
+  if (selectedImageIndex.value > 0) {
+    selectedImageIndex.value--
+  } else {
+    selectedImageIndex.value = images.value.length - 1
+  }
+}
+
+// 下一张图片
+function nextImage() {
+  if (selectedImageIndex.value < images.value.length - 1) {
+    selectedImageIndex.value++
+  } else {
+    selectedImageIndex.value = 0
+  }
+}
+
+// 下载当前图片
+function downloadCurrentImage() {
+  if (!item.value || images.value.length === 0) return
+  const img = images.value[selectedImageIndex.value]
+  const url = getItemImageDownloadUrl(item.value.id, img.id, true)
+  window.open(url, '_blank')
+  toast.success('开始下载图片')
+}
+
+// 下载所有图片
+function downloadAllImages() {
+  if (!item.value || images.value.length === 0) return
+  for (const img of images.value) {
+    const url = getItemImageDownloadUrl(item.value.id, img.id, true)
+    window.open(url, '_blank')
+  }
+  toast.success(`开始下载 ${images.value.length} 张图片`)
+}
 </script>
 
 <template>
@@ -239,17 +312,48 @@ function goBack() {
 
       <!-- 道具信息 -->
       <div class="item-info">
-        <!-- 预览图 -->
-        <div v-if="item.preview_image" class="item-preview">
+        <!-- 画作图片画廊（仅画作类型） -->
+        <div v-if="isArtwork && images.length > 0" class="artwork-gallery">
+          <div class="gallery-main">
+            <img
+              :src="images[selectedImageIndex]?.image_url"
+              alt="画作"
+              @click="openImageViewer(selectedImageIndex)"
+            />
+            <div class="gallery-nav" v-if="images.length > 1">
+              <button class="nav-btn prev" @click.stop="prevImage">
+                <i class="ri-arrow-left-s-line"></i>
+              </button>
+              <button class="nav-btn next" @click.stop="nextImage">
+                <i class="ri-arrow-right-s-line"></i>
+              </button>
+            </div>
+            <div class="gallery-counter">{{ selectedImageIndex + 1 }} / {{ images.length }}</div>
+          </div>
+          <div class="gallery-thumbs" v-if="images.length > 1">
+            <div
+              v-for="(img, index) in images"
+              :key="img.id"
+              class="thumb-item"
+              :class="{ active: index === selectedImageIndex }"
+              @click="selectedImageIndex = index"
+            >
+              <img :src="img.image_url" alt="" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 预览图（非画作类型） -->
+        <div v-else-if="item.preview_image" class="item-preview">
           <img :src="item.preview_image" alt="预览图" />
         </div>
 
         <div class="item-header">
           <h1>{{ item.name }}</h1>
           <div class="item-meta">
-            <span class="type-badge">{{ item.type === 'item' ? '道具' : '剧本' }}</span>
+            <span class="type-badge">{{ getTypeText(item.type) }}</span>
             <span class="author">作者: {{ author?.username || '未知' }}</span>
-            <span class="permission-badge" v-if="item.requires_permission">
+            <span class="permission-badge" v-if="item.requires_permission && !isArtwork">
               <i class="ri-shield-keyhole-line"></i> 需要权限
               <div class="permission-tooltip">
                 <p><strong>道具作者：</strong>{{ author?.username || '未知' }}</p>
@@ -294,9 +398,18 @@ function goBack() {
         </div>
 
         <div class="action-buttons">
-          <button class="copy-code-btn" @click="copyImportCode">
-            <i class="ri-file-copy-line"></i> 一键复制导入代码
-          </button>
+          <!-- 画作类型：下载图片按钮 -->
+          <template v-if="isArtwork">
+            <button class="download-images-btn" @click="downloadAllImages">
+              <i class="ri-download-line"></i> 下载全部图片 ({{ images.length }})
+            </button>
+          </template>
+          <!-- 非画作类型：复制导入代码按钮 -->
+          <template v-else>
+            <button class="copy-code-btn" @click="copyImportCode">
+              <i class="ri-file-copy-line"></i> 一键复制导入代码
+            </button>
+          </template>
           <button class="like-btn" :class="{ active: isLiked }" @click="handleLike">
             <i :class="isLiked ? 'ri-heart-fill' : 'ri-heart-line'"></i>
             {{ isLiked ? '已点赞' : '点赞' }}
@@ -307,14 +420,14 @@ function goBack() {
           </button>
         </div>
 
-        <div class="secondary-actions">
+        <div class="secondary-actions" v-if="!isArtwork">
           <button class="download-btn" @click="handleDownload">
             <i class="ri-eye-line"></i> 查看导入代码
           </button>
         </div>
 
-        <!-- 导入代码显示区域 -->
-        <div v-if="showImportCode" class="import-code-section">
+        <!-- 导入代码显示区域（非画作类型） -->
+        <div v-if="showImportCode && !isArtwork" class="import-code-section">
           <div class="import-code-header">
             <h3>导入代码</h3>
             <button class="copy-btn" @click="copyImportCode">
@@ -359,12 +472,12 @@ function goBack() {
           </div>
           <textarea
             v-model="newComment"
-            placeholder="写下你的评价...（带评分需至少30字）"
+            placeholder="写下你的评价...（带评分需至少10字）"
             rows="4"
           ></textarea>
           <div class="review-footer">
-            <span class="char-count" :class="{ warning: newRating > 0 && commentLength < 30 }">
-              {{ commentLength }}{{ newRating > 0 ? '/30' : '' }} 字
+            <span class="char-count" :class="{ warning: newRating > 0 && commentLength < 10 }">
+              {{ commentLength }}{{ newRating > 0 ? '/10' : '' }} 字
             </span>
             <button
               class="submit-review-btn"
@@ -400,6 +513,28 @@ function goBack() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 图片查看器（全屏模态框） -->
+    <div v-if="showImageViewer && isArtwork" class="image-viewer-modal" @click.self="closeImageViewer">
+      <button class="viewer-close" @click="closeImageViewer">
+        <i class="ri-close-line"></i>
+      </button>
+      <button class="viewer-nav prev" @click="prevImage" v-if="images.length > 1">
+        <i class="ri-arrow-left-s-line"></i>
+      </button>
+      <div class="viewer-content">
+        <img :src="images[selectedImageIndex]?.image_url" alt="画作" />
+      </div>
+      <button class="viewer-nav next" @click="nextImage" v-if="images.length > 1">
+        <i class="ri-arrow-right-s-line"></i>
+      </button>
+      <div class="viewer-footer">
+        <span class="viewer-counter">{{ selectedImageIndex + 1 }} / {{ images.length }}</span>
+        <button class="viewer-download" @click="downloadCurrentImage">
+          <i class="ri-download-line"></i> 下载此图
+        </button>
       </div>
     </div>
   </div>
@@ -1028,5 +1163,244 @@ function goBack() {
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
+}
+
+/* 画作图片画廊样式 */
+.artwork-gallery {
+  margin-bottom: 24px;
+}
+
+.gallery-main {
+  position: relative;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 16/10;
+  cursor: pointer;
+}
+
+.gallery-main img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.gallery-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 12px;
+  pointer-events: none;
+}
+
+.gallery-nav .nav-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  pointer-events: auto;
+  transition: all 0.2s;
+}
+
+.gallery-nav .nav-btn:hover {
+  background: rgba(0,0,0,0.7);
+}
+
+.gallery-counter {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  padding: 4px 12px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border-radius: 20px;
+  font-size: 13px;
+}
+
+.gallery-thumbs {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.thumb-item {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.thumb-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb-item:hover {
+  border-color: rgba(184,115,51,0.5);
+}
+
+.thumb-item.active {
+  border-color: #B87333;
+}
+
+/* 下载图片按钮 */
+.download-images-btn {
+  flex: 2;
+  height: 48px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s;
+}
+
+.download-images-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(184,115,51,0.4);
+}
+
+/* 图片查看器模态框 */
+.image-viewer-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.95);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.viewer-close:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.viewer-nav:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.viewer-nav.prev {
+  left: 20px;
+}
+
+.viewer-nav.next {
+  right: 20px;
+}
+
+.viewer-content {
+  max-width: 90%;
+  max-height: 80%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-content img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.viewer-footer {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.viewer-counter {
+  color: #fff;
+  font-size: 14px;
+  background: rgba(0,0,0,0.5);
+  padding: 6px 16px;
+  border-radius: 20px;
+}
+
+.viewer-download {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #B87333;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.viewer-download:hover {
+  background: #A66629;
 }
 </style>
