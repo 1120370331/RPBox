@@ -226,7 +226,7 @@ watch([sortBy], () => {
       <div v-else v-for="item in items" :key="item.id" class="card" @click="viewDetail(item.id)">
         <LazyBgImage
           class="card-image"
-          :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80 }) : undefined"
+          :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80, v: item.preview_image_updated_at || item.updated_at }) : undefined"
           fallback-gradient="linear-gradient(135deg, #D4A373 0%, #8C7B70 100%)"
         >
           <div v-if="!item.preview_image_url" class="placeholder-icon">

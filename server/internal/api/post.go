@@ -128,7 +128,7 @@ func (s *Server) listPosts(c *gin.Context) {
 	var posts []model.Post
 	// 列表查询排除大字段（content, cover_image）以提高性能
 	// cover_image 通过独立的图片 API 访问
-	if err := query.Select("id, author_id, title, content_type, category, guild_id, story_id, status, is_public, is_pinned, is_featured, view_count, like_count, comment_count, favorite_count, review_status, event_type, event_start_time, event_end_time, event_color, created_at, updated_at").Find(&posts).Error; err != nil {
+	if err := query.Select("id, author_id, title, content_type, category, guild_id, story_id, status, is_public, is_pinned, is_featured, view_count, like_count, comment_count, favorite_count, review_status, event_type, event_start_time, event_end_time, event_color, cover_image_updated_at, created_at, updated_at").Find(&posts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
@@ -179,6 +179,10 @@ func (s *Server) listPosts(c *gin.Context) {
 		coverURL := ""
 		if hasCoverMap[p.ID] {
 			coverURL = fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80", p.ID)
+		}
+		if p.CoverImageUpdatedAt == nil && hasCoverMap[p.ID] {
+			t := p.UpdatedAt
+			p.CoverImageUpdatedAt = &t
 		}
 		result[i] = PostWithAuthor{
 			Post:          p,
@@ -247,6 +251,10 @@ func (s *Server) createPost(c *gin.Context) {
 		IsPublic:    true,
 		EventType:   req.EventType,
 		EventColor:  req.EventColor,
+	}
+	if req.CoverImage != "" {
+		now := time.Now()
+		post.CoverImageUpdatedAt = &now
 	}
 
 	// 设置审核状态：版主/管理员自动通过，普通用户需要审核
@@ -446,6 +454,8 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 	if req.CoverImage != "" {
 		post.CoverImage = req.CoverImage
+		now := time.Now()
+		post.CoverImageUpdatedAt = &now
 	}
 	if req.Category != "" {
 		post.Category = req.Category
@@ -760,7 +770,7 @@ func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		Where(joinTable+".user_id = ?", userID).
 		Order(joinTable + "." + orderColumn + " DESC")
 
-	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
+	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
@@ -818,6 +828,10 @@ func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		coverURL := ""
 		if hasCoverMap[p.ID] {
 			coverURL = fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80", p.ID)
+		}
+		if p.CoverImageUpdatedAt == nil && hasCoverMap[p.ID] {
+			t := p.UpdatedAt
+			p.CoverImageUpdatedAt = &t
 		}
 		result = append(result, PostWithAuthor{
 			Post:          p,

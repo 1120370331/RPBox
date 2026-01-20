@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listStories, type Story, type StoryFilterParams } from '@/api/story'
 import { getGuild, listGuildMembers, removeStoryFromGuild, type Guild, type GuildStoryWithUploader } from '@/api/guild'
-import { listGuildTags, type Tag } from '@/api/tag'
+import { listGuildTags, listTags, type Tag } from '@/api/tag'
 import { useDialog } from '@/composables/useDialog'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
@@ -109,11 +109,58 @@ function goToPosts() {
 
 async function loadTags() {
   try {
-    const res = await listGuildTags(guildId)
-    tags.value = res.tags || []
+    const results = await Promise.allSettled([
+      listTags('story'),
+      listGuildTags(guildId)
+    ])
+
+    const merged = new Map<number, Tag>()
+    if (results[0].status === 'fulfilled') {
+      for (const tag of results[0].value.tags || []) {
+        merged.set(tag.id, tag)
+      }
+    } else {
+      console.error('加载预设标签失败:', results[0].reason)
+    }
+
+    if (results[1].status === 'fulfilled') {
+      for (const tag of results[1].value.tags || []) {
+        merged.set(tag.id, tag)
+      }
+    } else {
+      console.error('加载公会标签失败:', results[1].reason)
+    }
+
+    tags.value = Array.from(merged.values())
   } catch (error) {
     console.error('加载标签失败:', error)
   }
+}
+
+function getStoryTags(story: Story): string[] {
+  if (!story.tags) return []
+  return story.tags.split(',').map(t => t.trim()).filter(Boolean)
+}
+
+const tagMap = computed(() => {
+  const map = new Map<string, Tag>()
+  for (const tag of tags.value) {
+    map.set(tag.name, tag)
+  }
+  return map
+})
+
+function getTagChips(story: Story): { name: string; color?: string }[] {
+  if (story.tag_list && story.tag_list.length > 0) {
+    return story.tag_list.map(tag => ({
+      name: tag.name,
+      color: tag.color || undefined
+    }))
+  }
+  return getStoryTags(story).map((name) => {
+    const tag = tagMap.value.get(name)
+    return { name, color: tag?.color }
+  })
 }
 
 function toggleTag(tagId: number) {
@@ -354,6 +401,16 @@ onMounted(async () => {
           <span class="story-date">{{ formatDate(story.created_at) }}</span>
         </div>
         <p v-if="story.description" class="story-desc">{{ story.description }}</p>
+        <div v-if="getTagChips(story).length" class="story-tags">
+          <span
+            v-for="tag in getTagChips(story)"
+            :key="tag.name"
+            class="story-tag"
+            :style="tag.color ? { background: `#${tag.color}20`, color: `#${tag.color}` } : {}"
+          >
+            {{ tag.name }}
+          </span>
+        </div>
         <div class="story-meta">
           <span class="meta-item">
             <i class="ri-message-3-line"></i>
@@ -891,6 +948,23 @@ onMounted(async () => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.story-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.story-tag {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(184, 115, 51, 0.15);
+  color: #B87333;
+  letter-spacing: 0.02em;
 }
 
 .story-meta {

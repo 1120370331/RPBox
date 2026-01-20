@@ -95,7 +95,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 	if len(guildIDs) > 0 {
 		// 列表查询排除大字段（banner）以提高性能
 		// banner 通过独立的图片 API 访问
-		database.DB.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
+		database.DB.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
 	}
 
 	// 获取有 banner 的公会 ID 列表
@@ -123,6 +123,10 @@ func (s *Server) listGuilds(c *gin.Context) {
 		bannerURL := ""
 		if hasBannerMap[g.ID] {
 			bannerURL = fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80", g.ID)
+		}
+		if g.BannerUpdatedAt == nil && hasBannerMap[g.ID] {
+			t := g.UpdatedAt
+			g.BannerUpdatedAt = &t
 		}
 		result[i] = GuildWithRole{Guild: g, MyRole: roleMap[g.ID], BannerURL: bannerURL}
 	}
@@ -159,6 +163,10 @@ func (s *Server) createGuild(c *gin.Context) {
 		InviteCode:  generateInviteCode(),
 		MemberCount: 1,
 		Status:      "pending", // 需要版主审核
+	}
+	if req.Banner != "" {
+		now := time.Now()
+		guild.BannerUpdatedAt = &now
 	}
 
 	if err := database.DB.Create(&guild).Error; err != nil {
@@ -236,6 +244,8 @@ func (s *Server) updateGuild(c *gin.Context) {
 	}
 	if req.Banner != "" {
 		guild.Banner = req.Banner
+		now := time.Now()
+		guild.BannerUpdatedAt = &now
 	}
 	if req.Slogan != "" {
 		guild.Slogan = req.Slogan
@@ -701,7 +711,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 
 	// 列表查询排除大字段（banner）以提高性能
 	// banner 通过独立的图片 API 访问
-	query.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+	query.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
 
 	// 获取有 banner 的公会 ID 列表
 	guildIDs := make([]uint, len(guilds))
@@ -732,6 +742,10 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 		bannerURL := ""
 		if hasBannerMap[g.ID] {
 			bannerURL = fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80", g.ID)
+		}
+		if g.BannerUpdatedAt == nil && hasBannerMap[g.ID] {
+			t := g.UpdatedAt
+			g.BannerUpdatedAt = &t
 		}
 		result[i] = GuildWithBanner{Guild: g, BannerURL: bannerURL}
 	}
@@ -782,7 +796,10 @@ func (s *Server) uploadGuildBanner(c *gin.Context) {
 	bannerURL := "data:" + contentType + ";base64," + base64Data
 
 	// 更新数据库
-	if err := database.DB.Model(&model.Guild{}).Where("id = ?", guildID).Update("banner", bannerURL).Error; err != nil {
+	if err := database.DB.Model(&model.Guild{}).Where("id = ?", guildID).Updates(map[string]interface{}{
+		"banner":            bannerURL,
+		"banner_updated_at": time.Now(),
+	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新头图失败"})
 		return
 	}

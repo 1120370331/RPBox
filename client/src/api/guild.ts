@@ -7,6 +7,7 @@ export interface Guild {
   icon: string
   color: string
   banner: string
+  banner_updated_at?: string
   slogan: string
   lore: string
   faction: 'alliance' | 'horde' | 'neutral' | ''
@@ -102,6 +103,8 @@ export interface GuildStoryWithUploader {
   start_time: string
   end_time: string
   status: string
+  tags?: string
+  entry_count?: number
   created_at: string
   updated_at: string
   added_by: number

@@ -124,10 +124,43 @@ func (s *Server) listStories(c *gin.Context) {
 		return
 	}
 
-	if len(stories) > 0 {
-		storyIDs := make([]uint, len(stories))
-		for i, story := range stories {
-			storyIDs[i] = story.ID
+	storyIDs := make([]uint, len(stories))
+	for i, story := range stories {
+		storyIDs[i] = story.ID
+	}
+
+	if len(storyIDs) > 0 {
+		type storyEntryStats struct {
+			StoryID    uint       `gorm:"column:story_id"`
+			EntryCount int64      `gorm:"column:entry_count"`
+			MinTime    *time.Time `gorm:"column:min_time"`
+			MaxTime    *time.Time `gorm:"column:max_time"`
+		}
+
+		var entryStats []storyEntryStats
+		zeroTime := time.Time{}
+		database.DB.Model(&model.StoryEntry{}).
+			Select("story_id, COUNT(*) AS entry_count, MIN(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS min_time, MAX(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS max_time", zeroTime, zeroTime).
+			Where("story_id IN ?", storyIDs).
+			Group("story_id").
+			Scan(&entryStats)
+
+		entryStatsMap := make(map[uint]storyEntryStats, len(entryStats))
+		for _, stat := range entryStats {
+			entryStatsMap[stat.StoryID] = stat
+		}
+
+		for i := range stories {
+			stories[i].EntryCount = 0
+			if stat, ok := entryStatsMap[stories[i].ID]; ok {
+				stories[i].EntryCount = int(stat.EntryCount)
+				if stories[i].StartTime.IsZero() && stat.MinTime != nil {
+					stories[i].StartTime = *stat.MinTime
+				}
+				if stories[i].EndTime.IsZero() && stat.MaxTime != nil {
+					stories[i].EndTime = *stat.MaxTime
+				}
+			}
 		}
 
 		var storyTags []model.StoryTag
@@ -145,14 +178,23 @@ func (s *Server) listStories(c *gin.Context) {
 			var tags []model.Tag
 			database.DB.Where("id IN ?", tagIDs).Find(&tags)
 			tagNameMap := make(map[uint]string, len(tags))
+			tagInfoMap := make(map[uint]model.StoryTagInfo, len(tags))
 			for _, tag := range tags {
 				tagNameMap[tag.ID] = tag.Name
+				tagInfoMap[tag.ID] = model.StoryTagInfo{
+					Name:  tag.Name,
+					Color: tag.Color,
+				}
 			}
 
 			storyTagMap := make(map[uint][]string)
+			storyTagInfoMap := make(map[uint][]model.StoryTagInfo)
 			for _, st := range storyTags {
 				if name := tagNameMap[st.TagID]; name != "" {
 					storyTagMap[st.StoryID] = append(storyTagMap[st.StoryID], name)
+				}
+				if info, ok := tagInfoMap[st.TagID]; ok {
+					storyTagInfoMap[st.StoryID] = append(storyTagInfoMap[st.StoryID], info)
 				}
 			}
 
@@ -160,18 +202,15 @@ func (s *Server) listStories(c *gin.Context) {
 				if names, ok := storyTagMap[stories[i].ID]; ok {
 					stories[i].Tags = strings.Join(names, ",")
 				}
+				if infos, ok := storyTagInfoMap[stories[i].ID]; ok {
+					stories[i].TagList = infos
+				}
 			}
 		}
 	}
 
 	// 如果是公会剧情查询，添加上传者信息
 	if guildID := c.Query("guild_id"); guildID != "" {
-		// 获取剧情ID列表
-		storyIDs := make([]uint, len(stories))
-		for i, s := range stories {
-			storyIDs[i] = s.ID
-		}
-
 		// 查询上传者信息
 		var storyGuilds []model.StoryGuild
 		database.DB.Where("story_id IN ? AND guild_id = ?", storyIDs, guildID).Find(&storyGuilds)
@@ -379,6 +418,8 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		Select("COALESCE(MAX(sort_order), 0)").
 		Scan(&maxOrder)
 
+	var minTimestamp *time.Time
+	var maxTimestamp *time.Time
 	for i, req := range entries {
 		var characterID *uint
 
@@ -403,13 +444,49 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		if req.Timestamp != "" {
 			if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
 				entry.Timestamp = t
+				if minTimestamp == nil || t.Before(*minTimestamp) {
+					ts := t
+					minTimestamp = &ts
+				}
+				if maxTimestamp == nil || t.After(*maxTimestamp) {
+					ts := t
+					maxTimestamp = &ts
+				}
 			}
 		}
 		database.DB.Create(&entry)
 	}
 
-	// 更新剧情的更新时间
-	database.DB.Model(&story).Update("updated_at", time.Now())
+	updates := map[string]interface{}{
+		"updated_at": time.Now(),
+	}
+	if story.StartTime.IsZero() || story.EndTime.IsZero() {
+		type storyEntryStats struct {
+			MinTime *time.Time `gorm:"column:min_time"`
+			MaxTime *time.Time `gorm:"column:max_time"`
+		}
+		var stat storyEntryStats
+		zeroTime := time.Time{}
+		database.DB.Model(&model.StoryEntry{}).
+			Select("MIN(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS min_time, MAX(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS max_time", zeroTime, zeroTime).
+			Where("story_id = ?", id).
+			Scan(&stat)
+		if story.StartTime.IsZero() && stat.MinTime != nil {
+			updates["start_time"] = *stat.MinTime
+		}
+		if story.EndTime.IsZero() && stat.MaxTime != nil {
+			updates["end_time"] = *stat.MaxTime
+		}
+	} else {
+		if minTimestamp != nil && minTimestamp.Before(story.StartTime) {
+			updates["start_time"] = *minTimestamp
+		}
+		if maxTimestamp != nil && maxTimestamp.After(story.EndTime) {
+			updates["end_time"] = *maxTimestamp
+		}
+	}
+
+	database.DB.Model(&story).Updates(updates)
 
 	c.JSON(http.StatusCreated, gin.H{"message": "添加成功", "count": len(entries)})
 }

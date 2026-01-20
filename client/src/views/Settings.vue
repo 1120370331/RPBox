@@ -8,6 +8,7 @@ import { useToastStore } from '@/stores/toast'
 import { uploadAvatar } from '@/api/user'
 import { useUpdater } from '@/composables/useUpdater'
 import { getAddonManifest } from '@/api/addon'
+import { bumpImageCacheVersion } from '@/utils/imageCache'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 
 interface WowInstallation {
@@ -76,6 +77,13 @@ async function clearCache() {
     await invoke('clear_sync_cache')
     alert('缓存已清除')
   }
+}
+
+function clearImageCache() {
+  if (!confirm('确定要清除图片缓存吗？')) return
+  bumpImageCacheVersion()
+  sessionStorage.removeItem('tiptap_image_upload_cache')
+  toast.success('图片缓存已清除')
 }
 
 function resetSetup() {
@@ -337,6 +345,10 @@ async function handleCheckAddonUpdate() {
         </div>
         <div class="card-body">
           <div class="action-buttons">
+            <button class="btn btn-outline" @click="clearImageCache">
+              <i class="ri-brush-line"></i>
+              清除图片缓存
+            </button>
             <button class="btn btn-outline" @click="clearCache">
               <i class="ri-delete-bin-line"></i>
               清除本地缓存

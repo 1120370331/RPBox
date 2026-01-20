@@ -28,6 +28,7 @@ func (s *Server) getImage(c *gin.Context) {
 	id := c.Param("id")
 	widthStr := c.DefaultQuery("w", "0")
 	qualityStr := c.DefaultQuery("q", "85")
+	version := c.Query("v")
 
 	width, _ := strconv.Atoi(widthStr)
 	quality, _ := strconv.Atoi(qualityStr)
@@ -35,9 +36,21 @@ func (s *Server) getImage(c *gin.Context) {
 		quality = 85
 	}
 
+	cacheControl := "public, max-age=86400"
+	if width == 0 {
+		cacheControl = "public, max-age=3600"
+	}
+	if version != "" {
+		cacheControl = "public, max-age=31536000, immutable"
+	}
+
 	// 构造缓存路径
 	cacheDir := filepath.Join(s.cfg.Storage.Path, "cache", "images")
-	cacheKey := fmt.Sprintf("%s_%s_w%d_q%d.jpg", imageType, id, width, quality)
+	versionKey := ""
+	if version != "" {
+		versionKey = fmt.Sprintf("_v%x", md5.Sum([]byte(version)))
+	}
+	cacheKey := fmt.Sprintf("%s_%s_w%d_q%d%s.jpg", imageType, id, width, quality, versionKey)
 	cachePath := filepath.Join(cacheDir, cacheKey)
 
 	// 检查缓存
@@ -48,7 +61,7 @@ func (s *Server) getImage(c *gin.Context) {
 			return
 		}
 		c.Header("Content-Type", "image/jpeg")
-		c.Header("Cache-Control", "public, max-age=86400") // 1天
+		c.Header("Cache-Control", cacheControl)
 		c.Header("ETag", etag)
 		c.Data(http.StatusOK, "image/jpeg", data)
 		return
@@ -93,7 +106,7 @@ func (s *Server) getImage(c *gin.Context) {
 			return
 		}
 		c.Header("Content-Type", http.DetectContentType(imgData))
-		c.Header("Cache-Control", "public, max-age=3600") // 原图 1 小时
+		c.Header("Cache-Control", cacheControl)
 		c.Header("ETag", etag)
 		c.Data(http.StatusOK, http.DetectContentType(imgData), imgData)
 		return
@@ -118,7 +131,7 @@ func (s *Server) getImage(c *gin.Context) {
 			return
 		}
 		c.Header("Content-Type", http.DetectContentType(imgData))
-		c.Header("Cache-Control", "public, max-age=86400")
+		c.Header("Cache-Control", cacheControl)
 		c.Header("ETag", etag)
 		c.Data(http.StatusOK, http.DetectContentType(imgData), imgData)
 		return
@@ -148,7 +161,7 @@ func (s *Server) getImage(c *gin.Context) {
 		return
 	}
 	c.Header("Content-Type", "image/jpeg")
-	c.Header("Cache-Control", "public, max-age=86400") // 缩略图 1 天
+	c.Header("Cache-Control", cacheControl)
 	c.Header("ETag", etag)
 	c.Data(http.StatusOK, "image/jpeg", result)
 }

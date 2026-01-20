@@ -20,6 +20,63 @@ RPBox 是一个服务于魔兽世界 RP 玩家的工具箱，提供人物卡备�
 
 ## 快速开始
 
+### 前置要求
+
+#### Redis 缓存服务
+
+服务端需要 Redis 用于验证码存储和缓存。
+
+**Windows 安装**
+
+1. 下载 Redis for Windows
+   \`\`\`bash
+   # 从 GitHub 下载最新版本
+   https://github.com/tporadowski/redis/releases
+   \`\`\`
+
+2. 解压到目录（如 \`C:\redis\`）
+
+3. 启动 Redis 服务
+   \`\`\`bash
+   # 方法1：直接运行
+   cd C:\redis
+   redis-server.exe
+
+   # 方法2：安装为 Windows 服务
+   redis-server.exe --service-install redis.windows.conf
+   redis-server.exe --service-start
+   \`\`\`
+
+**Linux/macOS 安装**
+
+\`\`\`bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis
+sudo systemctl enable redis
+
+# macOS
+brew install redis
+brew services start redis
+
+# CentOS/RHEL
+sudo yum install redis
+sudo systemctl start redis
+sudo systemctl enable redis
+\`\`\`
+
+**验证安装**
+
+\`\`\`bash
+redis-cli ping
+# 应返回: PONG
+\`\`\`
+
+#### PostgreSQL 数据库
+
+参考 [CLAUDE.md](./CLAUDE.md) 中的数据库配置说明。
+
 ### 客户端开发
 
 \`\`\`bash
@@ -34,6 +91,23 @@ npm run tauri dev
 cd server
 cp config.example.yaml config.yaml  # 编辑配置文件
 go run cmd/server/main.go
+\`\`\`
+
+**配置说明** (\`config.yaml\`)
+
+\`\`\`yaml
+redis:
+  host: "localhost"
+  port: "6379"
+  password: ""        # 如果设置了密码，填写这里
+  db: 0               # 使用的数据库编号
+
+smtp:
+  host: "smtp.126.com"
+  port: 465
+  username: "your-email@126.com"
+  password: "your-smtp-auth-code"  # SMTP 授权码，不是邮箱密码
+  from: "your-email@126.com"
 \`\`\`
 
 详细文档请参考 [CLAUDE.md](./CLAUDE.md)
