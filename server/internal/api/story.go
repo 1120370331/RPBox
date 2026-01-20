@@ -123,6 +123,46 @@ func (s *Server) listStories(c *gin.Context) {
 		return
 	}
 
+	if len(stories) > 0 {
+		storyIDs := make([]uint, len(stories))
+		for i, story := range stories {
+			storyIDs[i] = story.ID
+		}
+
+		var storyTags []model.StoryTag
+		database.DB.Where("story_id IN ?", storyIDs).Order("created_at ASC").Find(&storyTags)
+		if len(storyTags) > 0 {
+			tagIDSet := make(map[uint]struct{})
+			tagIDs := make([]uint, 0, len(storyTags))
+			for _, st := range storyTags {
+				if _, ok := tagIDSet[st.TagID]; !ok {
+					tagIDSet[st.TagID] = struct{}{}
+					tagIDs = append(tagIDs, st.TagID)
+				}
+			}
+
+			var tags []model.Tag
+			database.DB.Where("id IN ?", tagIDs).Find(&tags)
+			tagNameMap := make(map[uint]string, len(tags))
+			for _, tag := range tags {
+				tagNameMap[tag.ID] = tag.Name
+			}
+
+			storyTagMap := make(map[uint][]string)
+			for _, st := range storyTags {
+				if name := tagNameMap[st.TagID]; name != "" {
+					storyTagMap[st.StoryID] = append(storyTagMap[st.StoryID], name)
+				}
+			}
+
+			for i := range stories {
+				if names, ok := storyTagMap[stories[i].ID]; ok {
+					stories[i].Tags = strings.Join(names, ",")
+				}
+			}
+		}
+	}
+
 	// 如果是公会剧情查询，添加上传者信息
 	if guildID := c.Query("guild_id"); guildID != "" {
 		// 获取剧情ID列表
@@ -251,7 +291,7 @@ func (s *Server) getStory(c *gin.Context) {
 
 	// 获取剧情条目
 	var entries []model.StoryEntry
-	database.DB.Where("story_id = ?", id).Order("sort_order, timestamp").Find(&entries)
+	database.DB.Where("story_id = ?", id).Order("timestamp, sort_order").Find(&entries)
 
 	c.JSON(http.StatusOK, gin.H{
 		"story":   story,
@@ -418,7 +458,7 @@ func (s *Server) getPublicStory(c *gin.Context) {
 
 	// 获取条目
 	var entries []model.StoryEntry
-	database.DB.Where("story_id = ?", story.ID).Order("sort_order, timestamp").Find(&entries)
+	database.DB.Where("story_id = ?", story.ID).Order("timestamp, sort_order").Find(&entries)
 
 	// 收集所有角色ID
 	characterIDs := make([]uint, 0)

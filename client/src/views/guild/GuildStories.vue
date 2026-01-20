@@ -2,10 +2,13 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listStories, type Story, type StoryFilterParams } from '@/api/story'
-import { getGuild, listGuildMembers, type Guild, type GuildStoryWithUploader } from '@/api/guild'
+import { getGuild, listGuildMembers, removeStoryFromGuild, type Guild, type GuildStoryWithUploader } from '@/api/guild'
 import { listGuildTags, type Tag } from '@/api/tag'
+import { useDialog } from '@/composables/useDialog'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
+
+const { confirm, alert } = useDialog()
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +20,7 @@ const stories = ref<Story[]>([])
 const members = ref<GuildMember[]>([])
 const searchKeyword = ref('')
 const noPermission = ref(false)
+const myRole = ref<string>('')
 
 // 筛选相关
 const tags = ref<Tag[]>([])
@@ -38,10 +42,16 @@ const filteredStories = computed(() => {
   )
 })
 
+// 检查是否是管理员或会长
+const isAdmin = computed(() => {
+  return myRole.value === 'owner' || myRole.value === 'admin'
+})
+
 async function loadGuild() {
   try {
     const res = await getGuild(guildId)
     guild.value = res.guild
+    myRole.value = res.my_role || ''
   } catch (error) {
     console.error('加载公会信息失败:', error)
   }
@@ -127,6 +137,31 @@ function resetFilter() {
   sortOrder.value = 'desc'
   selectedUploaderId.value = undefined
   loadStories()
+}
+
+async function handleRemoveArchive(storyId: number) {
+  const confirmed = await confirm({
+    title: '取消归档',
+    message: '确定要将此剧情从公会归档中移除吗？',
+    type: 'warning'
+  })
+  if (!confirmed) return
+
+  try {
+    await removeStoryFromGuild(guildId, storyId)
+    stories.value = stories.value.filter(s => s.id !== storyId)
+    await alert({
+      title: '成功',
+      message: '已取消归档',
+      type: 'success'
+    })
+  } catch (e: any) {
+    await alert({
+      title: '操作失败',
+      message: e.message || '取消归档失败',
+      type: 'error'
+    })
+  }
 }
 
 function formatDate(dateStr: string) {
@@ -335,6 +370,10 @@ onMounted(async () => {
             </div>
             <span class="uploader-name">{{ story.added_by_username }}</span>
           </span>
+          <button v-if="isAdmin" class="remove-archive-btn" @click.stop="handleRemoveArchive(story.id)">
+            <i class="ri-close-circle-line"></i>
+            取消归档
+          </button>
         </div>
       </div>
 
@@ -903,5 +942,34 @@ onMounted(async () => {
   font-size: 12px;
   color: #8D7B68;
   font-family: inherit;
+}
+
+/* 取消归档按钮 */
+.remove-archive-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #fff3e0;
+  border: 1px solid #ffb74d;
+  border-radius: 6px;
+  color: #f57c00;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remove-archive-btn:hover {
+  background: #ffe0b2;
+  border-color: #ff9800;
+  color: #e65100;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
+}
+
+.remove-archive-btn i {
+  font-size: 14px;
 }
 </style>

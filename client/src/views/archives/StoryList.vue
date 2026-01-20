@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { listStories, deleteStory, type Story, type StoryFilterParams } from '@/api/story'
+import { listStories, deleteStory, updateStory, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
+import { useDialog } from '@/composables/useDialog'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import RCard from '@/components/RCard.vue'
+import RModal from '@/components/RModal.vue'
+import RInput from '@/components/RInput.vue'
 import StoryFilter from '@/components/StoryFilter.vue'
+
+const { confirm, alert } = useDialog()
 
 const props = defineProps<{
   initialFilter?: StoryFilterParams
@@ -25,6 +30,11 @@ const tags = ref<Tag[]>([])
 const guilds = ref<Guild[]>([])
 const showFilter = ref(false)
 const filterParams = ref<StoryFilterParams>(props.initialFilter || {})
+
+// 改名相关
+const showRenameModal = ref(false)
+const renamingStory = ref<Story | null>(null)
+const newStoryTitle = ref('')
 
 async function loadStories() {
   loading.value = true
@@ -75,12 +85,47 @@ function handleResetFilter() {
 }
 
 async function handleDelete(id: number) {
-  if (!confirm('确定要删除这个剧情吗？')) return
+  const confirmed = await confirm({
+    title: '删除剧情',
+    message: '确定要删除这个剧情吗？此操作不可恢复！',
+    type: 'error'
+  })
+  if (!confirmed) return
+
   try {
     await deleteStory(id)
     stories.value = stories.value.filter(s => s.id !== id)
-  } catch (e) {
-    console.error('删除失败:', e)
+  } catch (e: any) {
+    await alert({
+      title: '删除失败',
+      message: e.message || '删除失败',
+      type: 'error'
+    })
+  }
+}
+
+function openRenameModal(story: Story) {
+  renamingStory.value = story
+  newStoryTitle.value = story.title
+  showRenameModal.value = true
+}
+
+async function handleRename() {
+  if (!renamingStory.value || !newStoryTitle.value.trim()) return
+
+  try {
+    await updateStory(renamingStory.value.id, { title: newStoryTitle.value })
+    const index = stories.value.findIndex(s => s.id === renamingStory.value!.id)
+    if (index !== -1) {
+      stories.value[index].title = newStoryTitle.value
+    }
+    showRenameModal.value = false
+  } catch (e: any) {
+    await alert({
+      title: '改名失败',
+      message: e.message || '改名失败',
+      type: 'error'
+    })
   }
 }
 
@@ -101,6 +146,21 @@ function getParticipants(story: Story): string[] {
 function getTags(story: Story): string[] {
   if (!story.tags) return []
   return story.tags.split(',').map(t => t.trim()).filter(Boolean)
+}
+
+const tagMap = computed(() => {
+  const map = new Map<string, Tag>()
+  for (const tag of tags.value) {
+    map.set(tag.name, tag)
+  }
+  return map
+})
+
+function getTagChips(story: Story): { name: string; color?: string }[] {
+  return getTags(story).map((name) => {
+    const tag = tagMap.value.get(name)
+    return { name, color: tag?.color }
+  })
 }
 
 // 按月份分组剧情用于时间线视图
@@ -200,8 +260,15 @@ defineExpose({
             <div class="card-date">{{ formatDate(story.created_at) }}</div>
             <h3 class="card-title">{{ story.title }}</h3>
             <p class="card-desc">{{ story.description || '暂无描述' }}</p>
-            <div v-if="getTags(story).length" class="card-tags">
-              <span v-for="tag in getTags(story)" :key="tag" class="tag">{{ tag }}</span>
+            <div v-if="getTagChips(story).length" class="card-tags">
+              <span
+                v-for="tag in getTagChips(story)"
+                :key="tag.name"
+                class="tag"
+                :style="tag.color ? { background: `#${tag.color}20`, color: `#${tag.color}` } : {}"
+              >
+                {{ tag.name }}
+              </span>
             </div>
             <div class="card-footer">
               <div class="participants">
@@ -210,6 +277,12 @@ defineExpose({
                 </span>
               </div>
               <div class="card-actions">
+                <button class="action-btn" @click.stop="openRenameModal(story)">
+                  <i class="ri-edit-line"></i>
+                </button>
+                <button class="action-btn danger" @click.stop="handleDelete(story.id)">
+                  <i class="ri-delete-bin-line"></i>
+                </button>
                 <span class="view-link">查看详情 <i class="ri-arrow-right-s-line"></i></span>
               </div>
             </div>
@@ -229,8 +302,15 @@ defineExpose({
         </div>
         <h3 class="story-title">{{ story.title }}</h3>
         <p class="story-desc">{{ story.description || '暂无描述' }}</p>
-        <div v-if="getTags(story).length" class="story-tags">
-          <span v-for="tag in getTags(story)" :key="tag" class="tag">{{ tag }}</span>
+        <div v-if="getTagChips(story).length" class="story-tags">
+          <span
+            v-for="tag in getTagChips(story)"
+            :key="tag.name"
+            class="tag"
+            :style="tag.color ? { background: `#${tag.color}20`, color: `#${tag.color}` } : {}"
+          >
+            {{ tag.name }}
+          </span>
         </div>
         <div class="story-footer">
           <div class="participants">
@@ -243,11 +323,21 @@ defineExpose({
           </div>
           <div class="actions">
             <RButton size="small" @click="$emit('view', story.id)">查看</RButton>
+            <RButton size="small" @click="openRenameModal(story)">改名</RButton>
             <RButton size="small" type="danger" @click="handleDelete(story.id)">删除</RButton>
           </div>
         </div>
       </RCard>
     </div>
+
+    <!-- 改名弹窗 -->
+    <RModal v-model="showRenameModal" title="修改剧情标题" @confirm="handleRename">
+      <RInput
+        v-model="newStoryTitle"
+        placeholder="请输入新的剧情标题"
+        maxlength="100"
+      />
+    </RModal>
   </div>
 </template>
 
@@ -593,5 +683,41 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #f5f0eb;
+  color: #856a52;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #e5d4c1;
+  color: #4B3621;
+  transform: scale(1.1);
+}
+
+.action-btn.danger {
+  color: #d32f2f;
+}
+
+.action-btn.danger:hover {
+  background: #ffebee;
+  color: #c62828;
 }
 </style>

@@ -18,6 +18,7 @@ import CharacterCard from '@/components/CharacterCard.vue'
 import RColorPicker from '@/components/RColorPicker.vue'
 import RAvatarPicker from '@/components/RAvatarPicker.vue'
 import TagSelector from '@/components/TagSelector.vue'
+import ImageViewer from '@/components/ImageViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +41,12 @@ const newEntryChannel = ref('SAY')
 const newEntryTimestamp = ref('')
 const newEntryCharacterId = ref<number | null>(null)
 const adding = ref(false)
+
+// 图片条目相关
+const newEntryImageFile = ref<File | null>(null)
+const newEntryImagePreview = ref('')
+const newEntryImageDesc = ref('')
+const newEntryImageOffset = ref(0)
 
 // 可选人物卡列表
 const availableCharacters = ref<Character[]>([])
@@ -80,9 +87,26 @@ const editEntryChannel = ref('SAY')
 const editEntryType = ref('dialogue')
 const editEntryCharacterId = ref<number | null>(null)
 const editEntryTimestamp = ref('')
+const editEntryImageOffset = ref(0)
 const savingEntry = ref(false)
 
 const storyId = computed(() => Number(route.params.id))
+
+const showImageViewer = ref(false)
+const viewerImages = ref<string[]>([])
+const viewerStartIndex = ref(0)
+
+const imageEntries = computed(() => {
+  const result: { id: number; image: string }[] = []
+  for (const entry of entries.value) {
+    if (entry.type !== 'image') continue
+    const parsed = parseImageEntry(entry)
+    if (parsed?.image) {
+      result.push({ id: entry.id, image: parsed.image })
+    }
+  }
+  return result
+})
 
 // 权限检查：只有剧情上传者、管理员、版主可以编辑
 const canEdit = computed(() => {
@@ -179,23 +203,100 @@ async function saveEdit() {
   }
 }
 
+// 处理图片选择
+function handleImageSelect(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  // 检查文件类型
+  if (!file.type.startsWith('image/')) {
+    alert('请选择图片文件')
+    return
+  }
+
+  // 检查文件大小（最大10MB）
+  if (file.size > 10 * 1024 * 1024) {
+    alert('图片文件不能超过10MB')
+    return
+  }
+
+  newEntryImageFile.value = file
+
+  // 生成预览
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    newEntryImagePreview.value = e.target?.result as string
+  }
+  reader.readAsDataURL(file)
+}
+
+// 清除图片
+function clearImage() {
+  newEntryImageFile.value = null
+  newEntryImagePreview.value = ''
+  newEntryImageDesc.value = ''
+}
+
+function normalizeOffset(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(Math.max(Math.trunc(value), 0), 999)
+}
+
 async function handleAddEntry() {
-  if (!newEntryContent.value.trim()) return
+  // 验证：图片类型需要有图片文件，其他类型需要有内容
+  if (newEntryType.value === 'image') {
+    if (!newEntryImageFile.value) {
+      alert('请选择图片')
+      return
+    }
+  } else {
+    if (!newEntryContent.value.trim()) return
+  }
   adding.value = true
   try {
     // 转换时间格式为 ISO 8601
-    let timestamp: string | undefined
-    if (newEntryTimestamp.value) {
-      timestamp = new Date(newEntryTimestamp.value).toISOString()
+    const entryTime = newEntryTimestamp.value ? new Date(newEntryTimestamp.value) : new Date()
+    if (newEntryType.value === 'image') {
+      entryTime.setMilliseconds(normalizeOffset(newEntryImageOffset.value))
+    } else {
+      entryTime.setMilliseconds(0)
+    }
+    const timestamp = entryTime.toISOString()
+
+    // 准备内容
+    let content = newEntryContent.value
+
+    // 如果是图片类型，将图片转换为 base64 并与描述一起保存
+    if (newEntryType.value === 'image' && newEntryImageFile.value) {
+      const reader = new FileReader()
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = (e) => {
+          resolve(e.target?.result as string)
+        }
+        reader.readAsDataURL(newEntryImageFile.value!)
+      })
+      const base64Data = await base64Promise
+
+      // 将图片数据和描述保存为 JSON 格式
+      content = JSON.stringify({
+        image: base64Data,
+        description: newEntryImageDesc.value
+      })
     }
 
+    const speaker = newEntryType.value === 'image' ? '' : newEntrySpeaker.value
+    const channel = newEntryType.value === 'image' ? '' : newEntryChannel.value
+
     await addStoryEntries(storyId.value, [{
-      content: newEntryContent.value,
-      speaker: newEntrySpeaker.value,
+      content: content,
+      speaker: speaker,
       type: newEntryType.value,
-      channel: newEntryChannel.value,
+      channel: channel,
       timestamp: timestamp,
     }])
+
+    // 清理表单
     showAddModal.value = false
     newEntryContent.value = ''
     newEntrySpeaker.value = ''
@@ -203,6 +304,8 @@ async function handleAddEntry() {
     newEntryChannel.value = 'SAY'
     newEntryTimestamp.value = ''
     newEntryCharacterId.value = null
+    newEntryImageOffset.value = 0
+    clearImage()
     await loadStory()
   } catch (e) {
     console.error('添加失败:', e)
@@ -214,6 +317,26 @@ async function handleAddEntry() {
 function formatDate(dateStr: string): string {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+// 解析图片条目内容
+function parseImageEntry(entry: StoryEntry): { image: string; description: string } | null {
+  if (entry.type !== 'image') return null
+  try {
+    return JSON.parse(entry.content)
+  } catch {
+    return null
+  }
+}
+
+function openImageViewer(entryId: number) {
+  const images = imageEntries.value
+  if (!images.length) return
+  const index = images.findIndex((image) => image.id === entryId)
+  if (index < 0) return
+  viewerImages.value = images.map((image) => image.image)
+  viewerStartIndex.value = index
+  showImageViewer.value = true
 }
 
 function goBack() {
@@ -364,7 +487,7 @@ function copyShareLink() {
 }
 
 function showCharacterInfo(entry: StoryEntry, event: MouseEvent) {
-  if (entry.type === 'narration') return
+  if (entry.type === 'narration' || entry.type === 'image') return
   selectedCharacter.value = entry
   // 记录点击位置
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
@@ -651,6 +774,7 @@ function startEditEntry(entry: StoryEntry) {
   const minutes = String(timestamp.getMinutes()).padStart(2, '0')
   const seconds = String(timestamp.getSeconds()).padStart(2, '0')
   editEntryTimestamp.value = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+  editEntryImageOffset.value = entry.type === 'image' ? timestamp.getMilliseconds() : 0
   showEditEntryModal.value = true
 }
 
@@ -658,13 +782,25 @@ async function saveEntryEdit() {
   if (!editingEntry.value) return
   savingEntry.value = true
   try {
+    const entryTime = new Date(editEntryTimestamp.value)
+    if (editEntryType.value === 'image') {
+      entryTime.setMilliseconds(normalizeOffset(editEntryImageOffset.value))
+    } else {
+      entryTime.setMilliseconds(0)
+    }
+
+    const isImage = editEntryType.value === 'image'
+    const speaker = isImage ? '' : editEntrySpeaker.value
+    const channel = isImage ? '' : editEntryChannel.value
+    const characterId = isImage ? null : editEntryCharacterId.value
+
     await updateStoryEntry(storyId.value, editingEntry.value.id, {
       content: editEntryContent.value,
-      speaker: editEntrySpeaker.value,
-      channel: editEntryChannel.value,
+      speaker: speaker,
+      channel: channel,
       type: editEntryType.value,
-      character_id: editEntryCharacterId.value,
-      timestamp: new Date(editEntryTimestamp.value).toISOString(),
+      character_id: characterId,
+      timestamp: entryTime.toISOString(),
     })
 
     // 如果关联了新角色，确保角色信息在 charactersMap 中
@@ -883,6 +1019,7 @@ onMounted(() => {
         <div v-else class="entries-list">
           <div v-for="entry in entries" :key="entry.id" class="entry-item" :class="entry.type">
             <div
+              v-if="entry.type !== 'image'"
               class="entry-avatar"
               :class="{ clickable: entry.type !== 'narration' }"
               @click="showCharacterInfo(entry, $event)"
@@ -894,11 +1031,29 @@ onMounted(() => {
             </div>
             <div class="entry-content">
               <div class="entry-header">
-                <span class="speaker" :style="getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">{{ entry.speaker || '旁白' }}</span>
-                <span v-if="entry.channel" class="channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
+                <span v-if="entry.type !== 'image'" class="speaker" :style="getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">
+                  {{ entry.type === 'narration' ? '旁白' : (entry.speaker || '旁白') }}
+                </span>
+                <span v-if="entry.channel && entry.type !== 'narration' && entry.type !== 'image'" class="channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
                 <span class="timestamp">{{ formatDate(entry.timestamp) }}</span>
               </div>
-              <div class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
+
+              <!-- 普通文本内容 -->
+              <div v-if="entry.type !== 'image'" class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
+
+              <!-- 图片内容 -->
+              <div v-else-if="parseImageEntry(entry)" class="entry-image-content">
+                <div class="entry-image-wrapper" @click="openImageViewer(entry.id)" title="查看图像">
+                  <img :src="parseImageEntry(entry)!.image" alt="剧情图片" class="entry-image" />
+                  <div class="entry-image-hover">
+                    <i class="ri-zoom-in-line"></i>
+                    <span>查看图像</span>
+                  </div>
+                </div>
+                <p v-if="parseImageEntry(entry)!.description" class="image-description">
+                  {{ parseImageEntry(entry)!.description }}
+                </p>
+              </div>
             </div>
             <div v-if="canEdit" class="entry-actions">
               <button class="entry-action-btn" @click="insertEntryBefore(entry)" title="在此之前插入">
@@ -928,9 +1083,10 @@ onMounted(() => {
             <select v-model="newEntryType">
               <option value="dialogue">对话</option>
               <option value="narration">旁白</option>
+              <option value="image">图片</option>
             </select>
           </div>
-          <div class="form-field">
+          <div v-if="newEntryType !== 'image'" class="form-field">
             <label>频道</label>
             <select v-model="newEntryChannel">
               <option value="SAY">说</option>
@@ -952,7 +1108,19 @@ onMounted(() => {
           />
           <span class="field-hint">留空则使用当前时间，精确到秒</span>
         </div>
-        <div class="form-field">
+        <div v-if="newEntryType === 'image'" class="form-field">
+          <label>相对定位</label>
+          <input
+            type="number"
+            v-model.number="newEntryImageOffset"
+            min="0"
+            max="999"
+            step="1"
+            class="datetime-input"
+          />
+          <span class="field-hint">同一秒内排序用，0-999，数值越大越靠后</span>
+        </div>
+        <div v-if="newEntryType !== 'image'" class="form-field">
           <label>选择人物卡</label>
           <select
             :value="newEntryCharacterId"
@@ -967,13 +1135,38 @@ onMounted(() => {
           </select>
           <span class="field-hint">选择后自动填充说话者名称</span>
         </div>
-        <div class="form-field">
+        <div v-if="newEntryType !== 'image'" class="form-field">
           <label>说话者</label>
           <RInput v-model="newEntrySpeaker" placeholder="角色名称" />
         </div>
-        <div class="form-field">
+        <div v-if="newEntryType !== 'image'" class="form-field">
           <label>内容</label>
           <RichEditor v-model="newEntryContent" placeholder="输入内容..." min-height="120px" simple />
+        </div>
+
+        <!-- 图片上传 -->
+        <div v-if="newEntryType === 'image'" class="form-field">
+          <label>选择图片</label>
+          <input
+            type="file"
+            accept="image/*"
+            @change="handleImageSelect"
+            class="image-input"
+          />
+          <span class="field-hint">支持 JPG、PNG、GIF 等格式，最大 10MB</span>
+        </div>
+        <div v-if="newEntryType === 'image' && newEntryImagePreview" class="form-field">
+          <label>图片预览</label>
+          <div class="image-preview-box">
+            <img :src="newEntryImagePreview" alt="预览" class="image-preview" />
+            <button type="button" class="clear-image-btn" @click="clearImage">
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
+        </div>
+        <div v-if="newEntryType === 'image'" class="form-field">
+          <label>图片描述</label>
+          <RInput v-model="newEntryImageDesc" placeholder="为图片添加描述（可选）" />
         </div>
       </div>
       <template #footer>
@@ -1009,7 +1202,7 @@ onMounted(() => {
     />
 
     <!-- 编辑角色对话框 -->
-    <RModal v-model="showEditModal" title="编辑角色信息" width="560px">
+    <RModal v-model="showEditModal" title="编辑角色信息" width="560px" :mask-closable="false">
       <div v-if="editingCharacter" class="edit-character-form">
         <div class="form-field">
           <label>自定义头像</label>
@@ -1182,7 +1375,7 @@ onMounted(() => {
     </RModal>
 
     <!-- 编辑条目对话框 -->
-    <RModal v-model="showEditEntryModal" title="编辑条目" width="500px">
+    <RModal v-model="showEditEntryModal" title="编辑条目" width="500px" :mask-closable="false">
       <div class="add-form">
         <div class="form-row">
           <div class="form-field">
@@ -1190,9 +1383,10 @@ onMounted(() => {
             <select v-model="editEntryType">
               <option value="dialogue">对话</option>
               <option value="narration">旁白</option>
+              <option value="image">图片</option>
             </select>
           </div>
-          <div class="form-field">
+          <div v-if="editEntryType !== 'image'" class="form-field">
             <label>频道</label>
             <select v-model="editEntryChannel">
               <option value="SAY">说</option>
@@ -1204,7 +1398,7 @@ onMounted(() => {
             </select>
           </div>
         </div>
-        <div class="form-field">
+        <div v-if="editEntryType !== 'image'" class="form-field">
           <label>选择人物卡</label>
           <select
             :value="editEntryCharacterId"
@@ -1219,7 +1413,7 @@ onMounted(() => {
           </select>
           <span class="field-hint">选择后自动填充说话者名称</span>
         </div>
-        <div class="form-field">
+        <div v-if="editEntryType !== 'image'" class="form-field">
           <label>说话者</label>
           <RInput v-model="editEntrySpeaker" placeholder="角色名称" />
         </div>
@@ -1228,7 +1422,19 @@ onMounted(() => {
           <input type="datetime-local" v-model="editEntryTimestamp" step="1" class="datetime-input" />
           <span class="field-hint">修改时间会影响条目排序顺序</span>
         </div>
-        <div class="form-field">
+        <div v-if="editEntryType === 'image'" class="form-field">
+          <label>相对定位</label>
+          <input
+            type="number"
+            v-model.number="editEntryImageOffset"
+            min="0"
+            max="999"
+            step="1"
+            class="datetime-input"
+          />
+          <span class="field-hint">同一秒内排序用，0-999，数值越大越靠后</span>
+        </div>
+        <div v-if="editEntryType !== 'image'" class="form-field">
           <label>内容</label>
           <RichEditor v-model="editEntryContent" placeholder="输入内容..." min-height="120px" simple />
         </div>
@@ -1238,6 +1444,12 @@ onMounted(() => {
         <RButton type="primary" :loading="savingEntry" @click="saveEntryEdit">保存</RButton>
       </template>
     </RModal>
+
+    <ImageViewer
+      v-model="showImageViewer"
+      :images="viewerImages"
+      :start-index="viewerStartIndex"
+    />
   </div>
 </template>
 
@@ -1625,6 +1837,34 @@ onMounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
+.entry-item.image {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.entry-item.image .entry-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.entry-item.image .entry-header {
+  justify-content: center;
+}
+
+.entry-item.image .entry-header .timestamp {
+  margin-left: 0;
+}
+
+.entry-item.image .entry-image-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .entry-avatar {
   width: 40px;
   height: 40px;
@@ -1680,6 +1920,62 @@ onMounted(() => {
   color: var(--color-text);
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+/* 图片条目样式 */
+.entry-image-content {
+  margin-top: 8px;
+}
+
+.entry-image-wrapper {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  cursor: zoom-in;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.entry-image-hover {
+  position: absolute;
+  inset: 0;
+  background: rgba(44, 24, 16, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  border-radius: 8px;
+  pointer-events: none;
+  font-size: 13px;
+}
+
+.entry-image-wrapper:hover .entry-image-hover {
+  opacity: 1;
+}
+
+.entry-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 2px solid #e5d4c1;
+  display: block;
+}
+
+.image-description {
+  font-size: 14px;
+  color: #665242;
+  line-height: 1.6;
+  margin: 0;
+  padding: 8px 12px;
+  background: #f5f0eb;
+  border-radius: 6px;
+  border-left: 3px solid #d4a373;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .entry-item.narration {
@@ -2130,5 +2426,60 @@ onMounted(() => {
 
 .entry-action-btn.delete:hover {
   background: #e74c3c;
+}
+
+/* 图片上传相关样式 */
+.image-input {
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed #d4a373;
+  border-radius: 8px;
+  background: #f5f0eb;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.image-input:hover {
+  border-color: #b87333;
+  background: #ebe4dc;
+}
+
+.image-preview-box {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #e5d4c1;
+}
+
+.image-preview {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.clear-image-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.clear-image-btn:hover {
+  background: #e74c3c;
+  transform: scale(1.1);
 }
 </style>
