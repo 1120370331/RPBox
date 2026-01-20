@@ -2,6 +2,7 @@
 import UpdateNotification from '@/components/UpdateNotification.vue'
 import ChangelogDialog from '@/components/ChangelogDialog.vue'
 import RDialog from '@/components/RDialog.vue'
+import RToast from '@/components/RToast.vue'
 </script>
 
 <template>
@@ -9,6 +10,7 @@ import RDialog from '@/components/RDialog.vue'
   <UpdateNotification />
   <ChangelogDialog />
   <RDialog />
+  <RToast />
 </template>
 
 <style>
