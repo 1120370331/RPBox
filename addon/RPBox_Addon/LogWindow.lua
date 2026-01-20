@@ -44,7 +44,11 @@ local function GetDisplayName(record)
         if cached then
             local name = cached.FN or ""
             if cached.LN and cached.LN ~= "" then
-                name = name .. "·" .. cached.LN
+                if name ~= "" then
+                    name = name .. " " .. cached.LN
+                else
+                    name = cached.LN
+                end
             end
             if name ~= "" then return name end
         end
@@ -54,8 +58,12 @@ local function GetDisplayName(record)
     if record.sender and record.sender.trp3 then
         local trp3 = record.sender.trp3
         local name = trp3.FN or ""
-        if trp3.LN then
-            name = name .. "·" .. trp3.LN
+        if trp3.LN and trp3.LN ~= "" then
+            if name ~= "" then
+                name = name .. " " .. trp3.LN
+            else
+                name = trp3.LN
+            end
         end
         if name ~= "" then return name end
     end

@@ -295,7 +295,7 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
       content = stripNpcPrefix(content)
     } else {
       speaker = trp3?.FN
-        ? (trp3.LN ? `${trp3.FN}·${trp3.LN}` : trp3.FN)
+        ? (trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
         : record.sender.gameID.split('-')[0]
     }
 
