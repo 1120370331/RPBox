@@ -48,6 +48,24 @@ local NPC_WHISPER_COLOR = "CC99FF"  -- 淡紫色 (悄悄说)
 local NPC_YELL_COLOR = "FF4040"     -- 红色 (喊)
 local NPC_EMOTE_COLOR = "FF8040"    -- 橙色 (旁白/动作)
 
+local function StripInvalidLeadingBytes(text)
+    if not text or text == "" then return text end
+
+    -- Drop UTF-8 replacement chars (U+FFFD) if any
+    while text:sub(1, 3) == "\239\191\189" do
+        text = text:sub(4)
+    end
+
+    -- Drop orphaned UTF-8 continuation bytes (0x80-0xBF)
+    while true do
+        local b = text:byte(1)
+        if not b or b < 0x80 or b > 0xBF then break end
+        text = text:sub(2)
+    end
+
+    return text:gsub("^%s+", "")
+end
+
 -- 获取职业颜色（十六进制字符串）
 local function GetClassColor(classFilename)
     if not classFilename then return nil end
@@ -89,7 +107,7 @@ local function ParseNPCMessage(content)
     -- 跳过 WoW 颜色代码 |cFFxxxxxx 开头的情况
     if content:match("^|c") then return nil end
 
-    local text = content:sub(2):match("^%s*(.+)") -- 移除 | 和前导空格
+    local text = content:gsub("^|+", ""):match("^%s*(.+)") -- 移除开头 | 并清理前导空格
     if not text then return nil end
 
     -- 清理末尾的颜色代码 |r
@@ -102,6 +120,7 @@ local function ParseNPCMessage(content)
     npcName, message = text:match("^(.-)%s*悄悄说%s*[：:]%s*(.*)$")
     if npcName and message then
         message = message:gsub("|r%s*$", "")
+        message = StripInvalidLeadingBytes(message)
         return { name = npcName, type = "whisper", message = message, color = NPC_WHISPER_COLOR }
     end
 
@@ -452,6 +471,9 @@ local function RefreshLogContent()
                 local parsed = ParseNPCMessage(msgContent)
                 if parsed then cleanMsg = parsed.message end
             end
+            if npcSpeechType == "whisper" then
+                cleanMsg = StripInvalidLeadingBytes(cleanMsg)
+            end
             npcData = { name = cleanNpcName, type = npcSpeechType, message = cleanMsg, color = npcColor }
         elseif mk == "B" then
             local cleanMsg = msgContent
@@ -474,8 +496,8 @@ local function RefreshLogContent()
             if npcData.name and npcData.name ~= "" then
                 local npcColor = "|cFF" .. npcData.color
                 if npcData.type == "whisper" then
-                    lineText = format("|cFF888888%s|r %s[%s]|r 悄悄说：%s %s",
-                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                    lineText = format("|cFF888888%s|r %s[%s]|r %s悄悄说：%s|r %s",
+                        timeStr, npcColor, npcData.name, npcColor, npcData.message, senderTag)
                     plainText = format("%s [%s] 悄悄说：%s %s",
                         timeStr, npcData.name, npcData.message, plainSenderTag)
                 elseif npcData.type == "yell" then

@@ -352,6 +352,18 @@ function cleanWowText(text: string): string {
     .trim()
 }
 
+function stripNpcPrefix(text: string): string {
+  if (!text || text.startsWith('|c')) return text
+  return text.replace(/^\|+\s*/, '')
+}
+
+function getRecordContent(record: ChatRecord): string {
+  if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
+    return stripNpcPrefix(record.content)
+  }
+  return record.content
+}
+
 function getSenderName(record: ChatRecord): string {
   // NPC消息显示NPC名字（清理特殊字符）
   if (record.mark === 'N' && record.npc) {
@@ -619,7 +631,7 @@ defineExpose({
                   :style="(record.mark === 'N' && record.nt)
                     ? (getNpcTalkTextColor(record.nt) ? { color: getNpcTalkTextColor(record.nt) } : {})
                     : (getChannelTextColor(record.channel) ? { color: getChannelTextColor(record.channel) } : {})"
-                >{{ record.content }}</span>
+                >{{ getRecordContent(record) }}</span>
               </div>
             </div>
           </div>

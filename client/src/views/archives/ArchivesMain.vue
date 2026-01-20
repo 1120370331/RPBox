@@ -259,6 +259,11 @@ function cleanTRP3Content(content: string): string {
     .trim()
 }
 
+function stripNpcPrefix(content: string): string {
+  if (!content || content.startsWith('|c')) return content
+  return content.replace(/^\|+\s*/, '')
+}
+
 async function handleArchive(records: ChatRecord[]) {
   pendingRecords.value = records
   archiveMode.value = 'create'
@@ -276,6 +281,7 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
     let type: string = 'dialogue'
     let channel: string = record.channel
     let isNpc: boolean = false
+    let content = record.content
 
     if (record.mark === 'N' && record.npc) {
       speaker = record.npc
@@ -286,6 +292,7 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
     } else if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
       speaker = ''
       type = 'narration'
+      content = stripNpcPrefix(content)
     } else {
       speaker = trp3?.FN
         ? (trp3.LN ? `${trp3.FN}·${trp3.LN}` : trp3.FN)
@@ -296,7 +303,7 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
       source_id: `chat_${record.timestamp}`,
       type: type,
       speaker: speaker,
-      content: cleanTRP3Content(record.content),
+      content: cleanTRP3Content(content),
       channel: channel,
       timestamp: new Date(record.timestamp * 1000).toISOString(),
       ref_id: record.ref_id,
