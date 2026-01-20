@@ -237,12 +237,30 @@ end
 
 -- 解析 NPC/旁白消息
 -- 返回: mk, npcName, message, npcType
+local function StripInvalidLeadingBytes(text)
+    if not text or text == "" then return text end
+
+    -- Drop UTF-8 replacement chars (U+FFFD) if any
+    while text:sub(1, 3) == "\239\191\189" do
+        text = text:sub(4)
+    end
+
+    -- Drop orphaned UTF-8 continuation bytes (0x80-0xBF)
+    while true do
+        local b = text:byte(1)
+        if not b or b < 0x80 or b > 0xBF then break end
+        text = text:sub(2)
+    end
+
+    return text:gsub("^%s+", "")
+end
+
 local function ParseNPCMessage(content)
     if not content:match("^|") then return nil end
     -- 跳过 WoW 颜色代码 |cFFxxxxxx 开头的情况
     if content:match("^|c") then return nil end
 
-    local text = content:sub(2):match("^%s*(.+)")
+    local text = content:gsub("^|+", ""):match("^%s*(.+)")
     if not text then return nil end
 
     -- 清理末尾的颜色代码 |r
@@ -252,6 +270,7 @@ local function ParseNPCMessage(content)
     local npcName, message = text:match("^(.-)%s*悄悄说%s*[：:]%s*(.*)$")
     if npcName and message then
         message = message:gsub("|r%s*$", "")
+        message = StripInvalidLeadingBytes(message)
         return "N", npcName ~= "" and npcName or nil, message, "whisper"
     end
     -- 喊

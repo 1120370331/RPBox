@@ -1,7 +1,14 @@
 {
   "name": "RPBox_Addon",
-  "latest": "1.0.3",
+  "latest": "1.0.4",
   "versions": [
+    {
+      "version": "1.0.4",
+      "releaseDate": "2026-01-20",
+      "minClientVersion": "1.0.0",
+      "changelog": "修复 NPC 密语开头乱码与颜色显示问题；清理旁白/无名 NPC 前缀残留符号",
+      "downloadUrl": "/api/v1/addon/download/1.0.4"
+    },
     {
       "version": "1.0.3",
       "releaseDate": "2026-01-18",

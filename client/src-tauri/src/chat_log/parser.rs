@@ -98,6 +98,19 @@ pub struct ClientState {
     pub cleared_before: Option<i64>,
 }
 
+fn sanitize_npc_whisper_content(content: &str) -> String {
+    let mut start = 0;
+    for (idx, ch) in content.char_indices() {
+        if ch == '\u{FFFD}' {
+            start = idx + ch.len_utf8();
+            continue;
+        }
+        break;
+    }
+
+    content[start..].trim_start().to_string()
+}
+
 /// 扫描所有账号的聊天记录
 pub fn scan_chat_logs(wow_path: &str) -> Result<Vec<AccountChatLogs>, String> {
     // eprintln!("[RPBox] scan_chat_logs 输入路径: {}", wow_path);
@@ -279,12 +292,16 @@ fn parse_single_record(entry: &Value, profile_cache: &Value) -> Option<ChatRecor
     });
     if let Some(t) = t {
         let channel = obj.get("c").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let content = obj.get("m").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let mut content = obj.get("m").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let sender = obj.get("s").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let mark = obj.get("mk").and_then(|v| v.as_str()).map(|s| s.to_string());
         let npc = obj.get("npc").and_then(|v| v.as_str()).map(|s| s.to_string());
         let nt = obj.get("nt").and_then(|v| v.as_str()).map(|s| s.to_string());
         let profile_ref = obj.get("ref").and_then(|v| v.as_str());
+
+        if mark.as_deref() == Some("N") && nt.as_deref() == Some("whisper") {
+            content = sanitize_npc_whisper_content(&content);
+        }
 
         // 从ProfileCache获取TRP3信息
         let (trp3, raw_profile) = profile_ref.map(|ref_id| {
