@@ -14,6 +14,8 @@ func (s *Server) setupRoutes() {
 		v1.POST("/auth/send-code", s.sendVerificationCode)
 		v1.POST("/auth/register", s.register)
 		v1.POST("/auth/login", s.login)
+		v1.POST("/auth/forgot-password", s.forgotPassword)   // 发送重置密码验证码
+		v1.POST("/auth/reset-password", s.resetPassword)     // 重置密码
 
 		// 插件版本管理（公开）
 		v1.GET("/addon/manifest", s.getAddonManifest)
