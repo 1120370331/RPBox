@@ -89,6 +89,11 @@ type AccountBackupVersion struct {
 }
 
 // Story 剧情
+type StoryTagInfo struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
 type Story struct {
 	ID           uint      `gorm:"primarykey" json:"id"`
 	UserID       uint      `gorm:"index;not null" json:"user_id"`
@@ -102,6 +107,8 @@ type Story struct {
 	IsPublic     bool      `gorm:"default:false" json:"is_public"`      // 是否公开分享
 	ShareCode    string    `gorm:"size:16;index" json:"share_code"`     // 分享码
 	ViewCount    int       `gorm:"default:0" json:"view_count"`         // 浏览次数
+	EntryCount   int       `gorm:"-" json:"entry_count"`                // entry count for list views
+	TagList      []StoryTagInfo `gorm:"-" json:"tag_list"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -193,6 +200,7 @@ type Guild struct {
 	Icon        string `gorm:"size:128" json:"icon"`
 	Color       string `gorm:"size:8" json:"color"`
 	Banner      string `gorm:"type:text" json:"banner"` // 头图(base64)
+	BannerUpdatedAt *time.Time `json:"banner_updated_at,omitempty"`
 	Slogan      string `gorm:"size:256" json:"slogan"`  // 公会标语
 	Lore        string `gorm:"type:text" json:"lore"`   // 公会设定(富文本HTML)
 	Faction     string `gorm:"size:20" json:"faction"`  // 阵营: alliance|horde|neutral
@@ -258,6 +266,7 @@ type Item struct {
 	Type               string  `gorm:"size:20;index" json:"type"` // item|document|campaign|artwork
 	Icon               string  `gorm:"size:128" json:"icon"`
 	PreviewImage       string  `gorm:"type:text" json:"preview_image"` // 预览图（base64）
+	PreviewImageUpdatedAt *time.Time `json:"preview_image_updated_at,omitempty"`
 	Description        string  `gorm:"type:text" json:"description"`
 	DetailContent      string  `gorm:"type:text" json:"detail_content"`          // 富文本详情
 	ImportCode         string  `gorm:"type:text" json:"import_code"`             // TRP3导入代码（artwork类型可选）
@@ -378,6 +387,7 @@ type Post struct {
 	Content       string `gorm:"type:text;not null" json:"content"`
 	ContentType   string `gorm:"size:20;default:markdown" json:"content_type"` // markdown|html
 	CoverImage    string `gorm:"type:text" json:"cover_image"`                 // 封面图（URL或base64）
+	CoverImageUpdatedAt *time.Time `json:"cover_image_updated_at,omitempty"`
 	Category      string `gorm:"size:20;default:other;index" json:"category"`  // 分区: profile|guild|report|novel|item|event|other
 	GuildID       *uint  `gorm:"index" json:"guild_id"`                        // 关联公会（可选）
 	StoryID       *uint  `gorm:"index" json:"story_id"`                        // 关联剧情（可选）

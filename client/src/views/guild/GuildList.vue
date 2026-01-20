@@ -205,7 +205,7 @@ onMounted(loadData)
     <div v-else class="guild-grid">
       <div v-for="guild in displayGuilds" :key="guild.id" class="guild-card" @click="router.push(`/guild/${guild.id}`)">
         <!-- 头图 -->
-        <div class="card-banner" :style="{ background: guild.banner_url ? `url(${getImageUrl('guild-banner', guild.id, { w: 600, q: 80 })}) center/cover` : `linear-gradient(135deg, #${guild.color || 'B87333'}, #4B3621)` }">
+        <div class="card-banner" :style="{ background: guild.banner_url ? `url(${getImageUrl('guild-banner', guild.id, { w: 600, q: 80, v: guild.banner_updated_at || guild.updated_at })}) center/cover` : `linear-gradient(135deg, #${guild.color || 'B87333'}, #4B3621)` }">
           <div v-if="guild.faction" class="faction-badge" :class="getFactionClass(guild.faction)">
             {{ getFactionLabel(guild.faction) }}
           </div>

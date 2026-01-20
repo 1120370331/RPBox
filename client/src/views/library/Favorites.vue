@@ -151,7 +151,7 @@ function getCategoryLabel(category: string) {
               @click="goToPost(post.id)"
             >
               <div v-if="post.cover_image_url" class="post-cover">
-                <img :src="getImageUrl('post-cover', post.id, { w: 480, q: 80 })" alt="" loading="lazy" />
+                <img :src="getImageUrl('post-cover', post.id, { w: 480, q: 80, v: post.cover_image_updated_at || post.updated_at })" alt="" loading="lazy" />
               </div>
               <div class="post-body">
                 <div class="post-meta">
@@ -184,7 +184,7 @@ function getCategoryLabel(category: string) {
             >
               <LazyBgImage
                 class="item-image"
-                :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80 }) : undefined"
+                :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80, v: item.preview_image_updated_at || item.updated_at }) : undefined"
                 fallback-gradient="linear-gradient(135deg, #D4A373 0%, #8C7B70 100%)"
               >
                 <div v-if="!item.preview_image_url" class="placeholder-icon">

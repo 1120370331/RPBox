@@ -13,6 +13,11 @@ export interface Story {
   is_public: boolean
   share_code: string
   view_count: number
+  entry_count?: number
+  tag_list?: { name: string; color?: string }[]
+  added_by?: number
+  added_by_username?: string
+  added_by_avatar?: string
   created_at: string
   updated_at: string
 }
@@ -61,6 +66,7 @@ export interface StoryFilterParams {
   end_date?: string     // 结束日期 YYYY-MM-DD
   sort?: string         // 排序字段 created_at|updated_at|start_time
   order?: 'asc' | 'desc' // 排序方向
+  added_by?: number     // 公会上传者
 }
 
 export async function listStories(params?: StoryFilterParams): Promise<{ stories: Story[] }> {
@@ -74,6 +80,7 @@ export async function listStories(params?: StoryFilterParams): Promise<{ stories
     if (params.end_date) searchParams.set('end_date', params.end_date)
     if (params.sort) searchParams.set('sort', params.sort)
     if (params.order) searchParams.set('order', params.order)
+    if (params.added_by) searchParams.set('added_by', String(params.added_by))
   }
   const query = searchParams.toString()
   return request.get(`/stories${query ? '?' + query : ''}`)

@@ -564,7 +564,7 @@ function getEventStyle(event: EventItem) {
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
             <!-- 封面图 -->
             <div v-if="post.cover_image_url" class="cover-image">
-              <img :src="getImageUrl('post-cover', post.id, { w: 600, q: 80 })" alt="" loading="lazy" />
+              <img :src="getImageUrl('post-cover', post.id, { w: 600, q: 80, v: post.cover_image_updated_at || post.updated_at })" alt="" loading="lazy" />
             </div>
             <div class="card-footer">
               <div class="author-info">
@@ -603,7 +603,7 @@ function getEventStyle(event: EventItem) {
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
             <!-- 封面图 -->
             <div v-if="post.cover_image_url" class="cover-image small">
-              <img :src="getImageUrl('post-cover', post.id, { w: 400, q: 80 })" alt="" loading="lazy" />
+              <img :src="getImageUrl('post-cover', post.id, { w: 400, q: 80, v: post.cover_image_updated_at || post.updated_at })" alt="" loading="lazy" />
             </div>
             <div class="card-footer">
               <div class="author-info">

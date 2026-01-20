@@ -1,4 +1,5 @@
 import request from './request'
+import { getImageCacheVersion } from '@/utils/imageCache'
 
 // API 基础地址（用于拼接图片等静态资源的完整 URL）
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
@@ -15,6 +16,7 @@ export interface Item {
   icon: string
   preview_image: string    // 预览图（详情页使用）
   preview_image_url?: string  // 预览图缩略图 URL（列表页使用）
+  preview_image_updated_at?: string
   description: string
   detail_content: string   // 富文本详情
   import_code: string
@@ -231,10 +233,15 @@ export function getItemImageDownloadUrl(itemId: number, imageId: number, withWat
 }
 
 // 获取通用图片URL（支持缩略图，完整路径）
-export function getImageUrl(type: string, id: number, options?: { w?: number; q?: number }) {
+export function getImageUrl(type: string, id: number, options?: { w?: number; q?: number; v?: string | number }) {
   const params = new URLSearchParams()
   if (options?.w) params.set('w', String(options.w))
   if (options?.q) params.set('q', String(options.q))
+  if (options?.v !== undefined && options?.v !== null && options?.v !== '') {
+    params.set('v', String(options.v))
+  }
+  const cacheVersion = getImageCacheVersion()
+  if (cacheVersion) params.set('cv', cacheVersion)
   const queryString = params.toString()
   return `${API_HOST}/api/v1/images/${type}/${id}${queryString ? '?' + queryString : ''}`
 }

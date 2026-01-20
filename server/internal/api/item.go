@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
@@ -85,7 +86,7 @@ func (s *Server) listItems(c *gin.Context) {
 
 	// 列表查询排除大字段（import_code, raw_data, detail_content, preview_image）以提高性能
 	// preview_image 通过独立的图片 API 访问
-	if err := query.Select("items.id, items.author_id, items.name, items.type, items.icon, items.description, items.downloads, items.rating, items.rating_count, items.like_count, items.favorite_count, items.requires_permission, items.status, items.review_status, items.created_at, items.updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
+	if err := query.Select("items.id, items.author_id, items.name, items.type, items.icon, items.description, items.downloads, items.rating, items.rating_count, items.like_count, items.favorite_count, items.requires_permission, items.status, items.review_status, items.preview_image_updated_at, items.created_at, items.updated_at").Offset(offset).Limit(pageSize).Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -142,6 +143,10 @@ func (s *Server) listItems(c *gin.Context) {
 		if hasPreviewMap[item.ID] || item.Type == "artwork" {
 			previewURL = fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80", item.ID)
 		}
+		if item.PreviewImageUpdatedAt == nil && hasPreviewMap[item.ID] {
+			t := item.UpdatedAt
+			item.PreviewImageUpdatedAt = &t
+		}
 		result = append(result, ItemWithAuthor{
 			Item:            item,
 			AuthorUsername:  author.Username,
@@ -170,7 +175,7 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		Where(joinTable+".user_id = ?", userID).
 		Order(joinTable + "." + orderColumn + " DESC")
 
-	if err := query.Select("items.id, items.author_id, items.name, items.type, items.icon, items.description, items.downloads, items.rating, items.rating_count, items.like_count, items.favorite_count, items.requires_permission, items.status, items.review_status, items.created_at, items.updated_at").Find(&items).Error; err != nil {
+	if err := query.Select("items.id, items.author_id, items.name, items.type, items.icon, items.description, items.downloads, items.rating, items.rating_count, items.like_count, items.favorite_count, items.requires_permission, items.status, items.review_status, items.preview_image_updated_at, items.created_at, items.updated_at").Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -230,6 +235,10 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		previewURL := ""
 		if hasPreviewMap[item.ID] || item.Type == "artwork" {
 			previewURL = fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80", item.ID)
+		}
+		if item.PreviewImageUpdatedAt == nil && hasPreviewMap[item.ID] {
+			t := item.UpdatedAt
+			item.PreviewImageUpdatedAt = &t
 		}
 		result = append(result, ItemWithAuthor{
 			Item:            item,
@@ -325,6 +334,10 @@ func (s *Server) createItem(c *gin.Context) {
 		RequiresPermission: req.RequiresPermission,
 		EnableWatermark:    req.EnableWatermark,
 		Status:             req.Status,
+	}
+	if req.PreviewImage != "" {
+		now := time.Now()
+		item.PreviewImageUpdatedAt = &now
 	}
 
 	// 设置审核状态：版主/管理员自动通过，普通用户需要审核
@@ -562,6 +575,8 @@ func (s *Server) updateItem(c *gin.Context) {
 	}
 	if req.PreviewImage != "" {
 		item.PreviewImage = req.PreviewImage
+		now := time.Now()
+		item.PreviewImageUpdatedAt = &now
 	}
 	if req.ImportCode != "" {
 		item.ImportCode = req.ImportCode
