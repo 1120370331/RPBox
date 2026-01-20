@@ -39,6 +39,7 @@ async function handleSendCode() {
       }
     }, 1000) as unknown as number
   } catch (error: any) {
+    console.error('找回密码错误:', error)
     toast.error(error.message || '发送验证码失败')
   } finally {
     sendingCode.value = false
