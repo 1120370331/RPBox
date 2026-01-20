@@ -207,8 +207,11 @@ func (s *Server) getUserProfile(c *gin.Context) {
 	var profileCount int64
 	database.DB.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&profileCount)
 
-	// 返回公开信息（不包括email等敏感信息）
-	c.JSON(http.StatusOK, gin.H{
+	// 检查是否是查看自己的资料
+	currentUserID, exists := c.Get("userID")
+	isOwnProfile := exists && currentUserID.(uint) == user.ID
+
+	response := gin.H{
 		"id":            user.ID,
 		"username":      user.Username,
 		"avatar":        user.Avatar,
@@ -220,7 +223,15 @@ func (s *Server) getUserProfile(c *gin.Context) {
 		"story_count":   storyCount,
 		"profile_count": profileCount,
 		"created_at":    user.CreatedAt,
-	})
+	}
+
+	// 如果是查看自己的资料，返回敏感信息
+	if isOwnProfile {
+		response["email"] = user.Email
+		response["email_verified"] = user.EmailVerified
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // getUserGuilds 获取用户加入的公会列表
