@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
+	"github.com/rpbox/server/pkg/validator"
 )
 
 // testSendNotification 测试发送通知（仅用于开发测试）
@@ -16,7 +17,7 @@ func (s *Server) testSendNotification(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 

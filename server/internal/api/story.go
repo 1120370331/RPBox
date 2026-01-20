@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/pkg/validator"
 )
 
 // CreateStoryRequest 创建剧情请求
@@ -225,7 +226,7 @@ func (s *Server) createStory(c *gin.Context) {
 
 	var req CreateStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -312,7 +313,7 @@ func (s *Server) updateStory(c *gin.Context) {
 
 	var req CreateStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -367,7 +368,7 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 
 	var entries []CreateStoryEntryRequest
 	if err := c.ShouldBindJSON(&entries); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -429,7 +430,7 @@ func (s *Server) publishStory(c *gin.Context) {
 		IsPublic bool `json:"is_public"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -535,7 +536,7 @@ func (s *Server) updateStoryEntry(c *gin.Context) {
 
 	var req UpdateStoryEntryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 

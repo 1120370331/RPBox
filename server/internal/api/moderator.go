@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/pkg/validator"
 )
 
 // logAdminAction 记录管理员操作日志
@@ -107,7 +108,7 @@ func (s *Server) reviewPost(c *gin.Context) {
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -189,7 +190,7 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -286,7 +287,7 @@ func (s *Server) reviewItem(c *gin.Context) {
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -368,7 +369,7 @@ func (s *Server) reviewItemEdit(c *gin.Context) {
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -758,7 +759,7 @@ func (s *Server) reviewGuild(c *gin.Context) {
 
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -855,7 +856,7 @@ func (s *Server) changeGuildOwner(c *gin.Context) {
 
 	var req ChangeGuildOwnerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -1001,15 +1002,15 @@ func (s *Server) getMetricsHistory(c *gin.Context) {
 	startDate := endDate.AddDate(0, 0, -days+1)
 
 	type DailyData struct {
-		Date       string `json:"date"`
-		TotalUsers int64  `json:"total_users"`
-		TotalPosts int64  `json:"total_posts"`
-		TotalItems int64  `json:"total_items"`
-		TotalGuilds int64 `json:"total_guilds"`
-		NewUsers   int64  `json:"new_users"`
-		NewPosts   int64  `json:"new_posts"`
-		NewItems   int64  `json:"new_items"`
-		NewGuilds  int64  `json:"new_guilds"`
+		Date        string `json:"date"`
+		TotalUsers  int64  `json:"total_users"`
+		TotalPosts  int64  `json:"total_posts"`
+		TotalItems  int64  `json:"total_items"`
+		TotalGuilds int64  `json:"total_guilds"`
+		NewUsers    int64  `json:"new_users"`
+		NewPosts    int64  `json:"new_posts"`
+		NewItems    int64  `json:"new_items"`
+		NewGuilds   int64  `json:"new_guilds"`
 	}
 
 	var result []DailyData

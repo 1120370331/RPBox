@@ -15,6 +15,7 @@ import (
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
+	"github.com/rpbox/server/pkg/validator"
 )
 
 // CreateGuildRequest 创建公会请求
@@ -32,20 +33,20 @@ type CreateGuildRequest struct {
 
 // UpdateGuildRequest 更新公会请求
 type UpdateGuildRequest struct {
-	Name                 string `json:"name"`
-	Description          string `json:"description"`
-	Icon                 string `json:"icon"`
-	Color                string `json:"color"`
-	Banner               string `json:"banner"`
-	Slogan               string `json:"slogan"`
-	Lore                 string `json:"lore"`
-	Faction              string `json:"faction"`
-	Layout               int    `json:"layout"`
-	VisitorCanViewStories *bool `json:"visitor_can_view_stories"` // 访客可查看剧情
-	VisitorCanViewPosts   *bool `json:"visitor_can_view_posts"`   // 访客可查看帖子
-	MemberCanViewStories  *bool `json:"member_can_view_stories"`  // 成员可查看剧情
-	MemberCanViewPosts    *bool `json:"member_can_view_posts"`    // 成员可查看帖子
-	AutoApprove          *bool  `json:"auto_approve"`              // 自动审核（无需审核直接加入）
+	Name                  string `json:"name"`
+	Description           string `json:"description"`
+	Icon                  string `json:"icon"`
+	Color                 string `json:"color"`
+	Banner                string `json:"banner"`
+	Slogan                string `json:"slogan"`
+	Lore                  string `json:"lore"`
+	Faction               string `json:"faction"`
+	Layout                int    `json:"layout"`
+	VisitorCanViewStories *bool  `json:"visitor_can_view_stories"` // 访客可查看剧情
+	VisitorCanViewPosts   *bool  `json:"visitor_can_view_posts"`   // 访客可查看帖子
+	MemberCanViewStories  *bool  `json:"member_can_view_stories"`  // 成员可查看剧情
+	MemberCanViewPosts    *bool  `json:"member_can_view_posts"`    // 成员可查看帖子
+	AutoApprove           *bool  `json:"auto_approve"`             // 自动审核（无需审核直接加入）
 }
 
 // JoinGuildRequest 加入公会请求
@@ -135,7 +136,7 @@ func (s *Server) createGuild(c *gin.Context) {
 
 	var req CreateGuildRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -217,7 +218,7 @@ func (s *Server) updateGuild(c *gin.Context) {
 
 	var req UpdateGuildRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -349,7 +350,7 @@ func (s *Server) joinGuild(c *gin.Context) {
 
 	var req JoinGuildRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -457,7 +458,7 @@ func (s *Server) updateMemberRole(c *gin.Context) {
 
 	var req UpdateMemberRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -801,7 +802,7 @@ func (s *Server) applyGuild(c *gin.Context) {
 
 	var req ApplyGuildRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -946,7 +947,7 @@ func (s *Server) reviewGuildApplication(c *gin.Context) {
 
 	var req ReviewApplicationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 

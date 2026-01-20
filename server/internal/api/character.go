@@ -8,31 +8,32 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/pkg/validator"
 )
 
 // CreateCharacterRequest 创建角色请求 (TRP3字段1:1对应)
 type CreateCharacterRequest struct {
-	RefID   string `json:"ref_id"`
-	GameID  string `json:"game_id"`
-	IsNPC   bool   `json:"is_npc"`
+	RefID  string `json:"ref_id"`
+	GameID string `json:"game_id"`
+	IsNPC  bool   `json:"is_npc"`
 
 	// TRP3 characteristics
-	Race       string `json:"race"`        // RA
-	Class      string `json:"class"`       // CL
-	FirstName  string `json:"first_name"`  // FN
-	LastName   string `json:"last_name"`   // LN
-	FullTitle  string `json:"full_title"`  // FT
-	Title      string `json:"title"`       // TI
-	Icon       string `json:"icon"`        // IC
-	Color      string `json:"color"`       // CH
-	EyeColor   string `json:"eye_color"`   // EC
-	Age        string `json:"age"`         // AG
-	Height     string `json:"height"`      // HE
-	Residence  string `json:"residence"`   // RE
-	Birthplace string `json:"birthplace"`  // BP
-	MiscInfo   string `json:"misc_info"`   // MI (JSON)
-	Psycho     string `json:"psycho"`      // PS (JSON)
-	AboutText  string `json:"about_text"`  // about (JSON)
+	Race       string `json:"race"`       // RA
+	Class      string `json:"class"`      // CL
+	FirstName  string `json:"first_name"` // FN
+	LastName   string `json:"last_name"`  // LN
+	FullTitle  string `json:"full_title"` // FT
+	Title      string `json:"title"`      // TI
+	Icon       string `json:"icon"`       // IC
+	Color      string `json:"color"`      // CH
+	EyeColor   string `json:"eye_color"`  // EC
+	Age        string `json:"age"`        // AG
+	Height     string `json:"height"`     // HE
+	Residence  string `json:"residence"`  // RE
+	Birthplace string `json:"birthplace"` // BP
+	MiscInfo   string `json:"misc_info"`  // MI (JSON)
+	Psycho     string `json:"psycho"`     // PS (JSON)
+	AboutText  string `json:"about_text"` // about (JSON)
 
 	RawTRP3Data string `json:"raw_trp3_data"` // 原始完整JSON
 }
@@ -97,7 +98,7 @@ func (s *Server) createOrUpdateCharacter(c *gin.Context) {
 
 	var req CreateCharacterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -220,7 +221,7 @@ func (s *Server) updateCharacter(c *gin.Context) {
 
 	var req UpdateCharacterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
