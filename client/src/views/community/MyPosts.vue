@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { listPosts, deletePost, type PostWithAuthor } from '@/api/post'
+import { listPosts, deletePost, POST_CATEGORIES, type PostWithAuthor, type PostCategory } from '@/api/post'
 
 const router = useRouter()
 const mounted = ref(false)
@@ -9,6 +9,34 @@ const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
 const currentUserId = ref<number>(0)
 const filterStatus = ref<'published' | 'pending' | 'draft'>('published')
+const searchKeyword = ref('')
+const categoryFilter = ref<'all' | PostCategory>('all')
+const maxAnimatedPosts = 12
+
+const categoryLabelMap = new Map<PostCategory, string>(
+  POST_CATEGORIES.map((category) => [category.value, category.label])
+)
+
+function getCategoryLabel(category: PostCategory) {
+  return categoryLabelMap.get(category) || category
+}
+
+const plainTextMap = computed(() => {
+  const map = new Map<number, string>()
+  posts.value.forEach((post) => {
+    map.set(post.id, stripHtml(post.content || ''))
+  })
+  return map
+})
+
+function getPostPlainText(post: PostWithAuthor) {
+  return plainTextMap.value.get(post.id) || ''
+}
+
+function getPostPreview(post: PostWithAuthor) {
+  const text = getPostPlainText(post)
+  return text.length > 150 ? `${text.substring(0, 150)}...` : text
+}
 
 // 获取当前用户ID
 const userStr = localStorage.getItem('user')
@@ -23,16 +51,33 @@ if (userStr) {
 
 // 过滤后的帖子列表
 const filteredPosts = computed(() => {
+  let list: PostWithAuthor[] = []
   if (filterStatus.value === 'pending') {
     // 审核中：status为pending或review_status为pending
-    return posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending')
-  }
-  if (filterStatus.value === 'draft') {
+    list = posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending')
+  } else if (filterStatus.value === 'draft') {
     // 草稿
-    return posts.value.filter(p => p.status === 'draft')
+    list = posts.value.filter(p => p.status === 'draft')
+  } else {
+    // 我发布的：已发布且审核通过
+    list = posts.value.filter(p => p.status === 'published' && p.review_status === 'approved')
   }
-  // 我发布的：已发布且审核通过
-  return posts.value.filter(p => p.status === 'published' && p.review_status === 'approved')
+
+  if (categoryFilter.value !== 'all') {
+    list = list.filter(p => p.category === categoryFilter.value)
+  }
+
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return list
+  }
+
+  return list.filter((post) => {
+    const title = (post.title || '').toLowerCase()
+    const content = getPostPlainText(post).toLowerCase()
+    const categoryLabel = getCategoryLabel(post.category).toLowerCase()
+    return title.includes(keyword) || content.includes(keyword) || categoryLabel.includes(keyword)
+  })
 })
 
 // 统计数据
@@ -41,6 +86,21 @@ const stats = computed(() => {
   const pending = posts.value.filter(p => p.status === 'pending' || p.review_status === 'pending').length
   const draft = posts.value.filter(p => p.status === 'draft').length
   return { published, pending, draft }
+})
+
+const emptyMessage = computed(() => {
+  const hasKeyword = searchKeyword.value.trim().length > 0
+  const hasCategory = categoryFilter.value !== 'all'
+  if (hasKeyword || hasCategory) {
+    return '没有匹配的帖子'
+  }
+  if (filterStatus.value === 'draft') {
+    return '没有草稿'
+  }
+  if (filterStatus.value === 'pending') {
+    return '没有审核中的帖子'
+  }
+  return '没有已发布的帖子'
 })
 
 onMounted(async () => {
@@ -137,34 +197,54 @@ function stripHtml(html: string) {
     </div>
 
     <div class="filters anim-item" style="--delay: 2">
-      <button
-        class="filter-btn"
-        :class="{ active: filterStatus === 'published' }"
-        @click="filterStatus = 'published'"
-      >
-        我发布的
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: filterStatus === 'pending' }"
-        @click="filterStatus = 'pending'"
-      >
-        审核中
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: filterStatus === 'draft' }"
-        @click="filterStatus = 'draft'"
-      >
-        草稿箱
-      </button>
+      <div class="filter-buttons">
+        <button
+          class="filter-btn"
+          :class="{ active: filterStatus === 'published' }"
+          @click="filterStatus = 'published'"
+        >
+          我发布的
+        </button>
+        <button
+          class="filter-btn"
+          :class="{ active: filterStatus === 'pending' }"
+          @click="filterStatus = 'pending'"
+        >
+          审核中
+        </button>
+        <button
+          class="filter-btn"
+          :class="{ active: filterStatus === 'draft' }"
+          @click="filterStatus = 'draft'"
+        >
+          草稿箱
+        </button>
+      </div>
+      <div class="filter-search">
+        <i class="ri-search-line"></i>
+        <input
+          v-model="searchKeyword"
+          type="text"
+          placeholder="搜索标题或内容..."
+        />
+      </div>
+      <select v-model="categoryFilter" class="category-select">
+        <option value="all">全部分区</option>
+        <option
+          v-for="category in POST_CATEGORIES"
+          :key="category.value"
+          :value="category.value"
+        >
+          {{ category.label }}
+        </option>
+      </select>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
 
     <div v-else-if="filteredPosts.length === 0" class="empty anim-item" style="--delay: 3">
       <i class="ri-file-list-3-line"></i>
-      <p>{{ filterStatus === 'draft' ? '没有草稿' : filterStatus === 'pending' ? '没有审核中的帖子' : '没有已发布的帖子' }}</p>
+      <p>{{ emptyMessage }}</p>
       <button class="create-btn-large" @click="goToCreate">
         <i class="ri-add-line"></i>
         创建第一篇帖子
@@ -175,8 +255,8 @@ function stripHtml(html: string) {
       <div
         v-for="(post, index) in filteredPosts"
         :key="post.id"
-        class="post-card anim-item"
-        :style="`--delay: ${index + 3}`"
+        :class="['post-card', { 'anim-item': index < maxAnimatedPosts }]"
+        :style="index < maxAnimatedPosts ? { '--delay': index + 3 } : undefined"
       >
         <div class="post-header">
           <h2 class="post-title" @click="goToDetail(post.id)">{{ post.title }}</h2>
@@ -184,7 +264,7 @@ function stripHtml(html: string) {
           <span v-else-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">审核中</span>
         </div>
 
-        <div class="post-content">{{ stripHtml(post.content).substring(0, 150) }}{{ stripHtml(post.content).length > 150 ? '...' : '' }}</div>
+        <div class="post-content">{{ getPostPreview(post) }}</div>
 
         <div class="post-footer">
           <div class="post-meta">
@@ -316,7 +396,55 @@ function stripHtml(html: string) {
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
+}
+
+.filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.filter-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 2px solid #E5D4C1;
+  border-radius: 12px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.filter-search i {
+  font-size: 16px;
+  color: #8D7B68;
+}
+
+.filter-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #4B3621;
+  background: transparent;
+}
+
+.filter-search input::placeholder {
+  color: #8D7B68;
+}
+
+.category-select {
+  padding: 10px 14px;
+  border: 2px solid #E5D4C1;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 14px;
+  color: #4B3621;
+  min-width: 120px;
 }
 
 .filter-btn {

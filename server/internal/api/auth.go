@@ -10,6 +10,7 @@ import (
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/pkg/auth"
 	"github.com/rpbox/server/pkg/email"
+	"github.com/rpbox/server/pkg/validator"
 )
 
 type RegisterRequest struct {
@@ -32,13 +33,13 @@ type SendCodeRequest struct {
 func (s *Server) sendVerificationCode(c *gin.Context) {
 	var req SendCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
 	// 验证邮箱格式
 	if !email.ValidateEmail(req.Email) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email format"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "邮箱格式不正确"})
 		return
 	}
 
@@ -58,7 +59,7 @@ func (s *Server) sendVerificationCode(c *gin.Context) {
 	// 检查发送频率限制
 	canSend, err := s.verificationService.CheckRateLimit(ctx, req.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check rate limit"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "检查发送频率失败"})
 		return
 	}
 	if !canSend {
@@ -69,19 +70,19 @@ func (s *Server) sendVerificationCode(c *gin.Context) {
 	// 生成验证码
 	code, err := s.verificationService.GenerateCode()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate code"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成验证码失败"})
 		return
 	}
 
 	// 保存验证码到Redis
 	if err := s.verificationService.SaveCode(ctx, req.Email, code); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save code"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存验证码失败"})
 		return
 	}
 
 	// 发送邮件
 	if err := s.emailClient.SendVerificationCode(req.Email, code); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send email"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "发送邮件失败"})
 		return
 	}
 
@@ -93,7 +94,7 @@ func (s *Server) sendVerificationCode(c *gin.Context) {
 func (s *Server) register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -102,7 +103,7 @@ func (s *Server) register(c *gin.Context) {
 		ctx := context.Background()
 		valid, err := s.verificationService.VerifyCode(ctx, req.Email, req.VerificationCode)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify code"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "验证码校验失败"})
 			return
 		}
 		if !valid {
@@ -114,20 +115,20 @@ func (s *Server) register(c *gin.Context) {
 	// 检查用户名是否存在
 	var existing model.User
 	if err := database.DB.Where("username = ?", req.Username).First(&existing).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+		c.JSON(http.StatusConflict, gin.H{"error": "用户名已存在"})
 		return
 	}
 
 	// 检查邮箱是否已注册
 	if err := database.DB.Where("email = ?", req.Email).First(&existing).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+		c.JSON(http.StatusConflict, gin.H{"error": "邮箱已被注册"})
 		return
 	}
 
 	// 哈希密码
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
 		return
 	}
 
@@ -139,12 +140,12 @@ func (s *Server) register(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建用户失败"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "registered successfully",
+		"message": "注册成功",
 		"user_id": user.ID,
 	})
 }
@@ -152,18 +153,18 @@ func (s *Server) register(c *gin.Context) {
 func (s *Server) login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
 	var user model.User
 	if err := database.DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
 	if !auth.CheckPassword(req.Password, user.PassHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
@@ -194,7 +195,7 @@ func (s *Server) login(c *gin.Context) {
 
 	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
 		return
 	}
 

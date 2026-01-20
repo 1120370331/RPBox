@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/pkg/validator"
 )
 
 // getUserInfo 获取当前用户信息
@@ -150,7 +151,7 @@ func (s *Server) bindEmail(c *gin.Context) {
 		VerificationCode string `json:"verification_code" binding:"required,len=6"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
@@ -159,7 +160,7 @@ func (s *Server) bindEmail(c *gin.Context) {
 	// 验证邮箱验证码
 	valid, err := s.verificationService.VerifyCode(ctx, req.Email, req.VerificationCode)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify code"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "验证码校验失败"})
 		return
 	}
 	if !valid {
