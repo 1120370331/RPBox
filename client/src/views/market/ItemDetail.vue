@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
+import ImageViewer from '@/components/ImageViewer.vue'
+import { attachImagePreview } from '@/utils/imagePreview'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,10 +22,14 @@ const showImportCode = ref(false)
 const isLiked = ref(false)
 const isFavorited = ref(false)
 const submitting = ref(false)
+const detailContentRef = ref<HTMLElement | null>(null)
 
 // 画作图片查看
 const selectedImageIndex = ref(0)
 const showImageViewer = ref(false)
+const viewerImages = ref<string[]>([])
+const viewerStartIndex = ref(0)
+const viewerMode = ref<'artwork' | 'content'>('content')
 
 // 预览模式
 const isPreview = ref(false)
@@ -40,6 +46,20 @@ function getTypeText(type: string) {
     'artwork': '画作'
   }
   return typeMap[type] || type
+}
+
+function openArtworkViewer(index: number) {
+  viewerImages.value = images.value.map((img) => img.image_url)
+  viewerStartIndex.value = index
+  viewerMode.value = 'artwork'
+  showImageViewer.value = true
+}
+
+function openContentViewer(imageList: string[], index: number) {
+  viewerImages.value = imageList
+  viewerStartIndex.value = index
+  viewerMode.value = 'content'
+  showImageViewer.value = true
 }
 
 // 计算评论字数
@@ -118,6 +138,18 @@ async function loadItemDetail() {
     loading.value = false
   }
 }
+
+async function setupDetailContentPreview() {
+  await nextTick()
+  attachImagePreview(detailContentRef.value, (imageList, index) => {
+    openContentViewer(imageList, index)
+  }, '查看图像')
+}
+
+watch(() => item.value?.detail_content, () => {
+  if (!item.value?.detail_content) return
+  setupDetailContentPreview()
+})
 
 // 加载评论
 async function loadComments() {
@@ -243,17 +275,6 @@ function goBack() {
   router.push('/market')
 }
 
-// 打开图片查看器
-function openImageViewer(index: number) {
-  selectedImageIndex.value = index
-  showImageViewer.value = true
-}
-
-// 关闭图片查看器
-function closeImageViewer() {
-  showImageViewer.value = false
-}
-
 // 上一张图片
 function prevImage() {
   if (selectedImageIndex.value > 0) {
@@ -272,10 +293,10 @@ function nextImage() {
   }
 }
 
-// 下载当前图片
-function downloadCurrentImage() {
-  if (!item.value || images.value.length === 0) return
-  const img = images.value[selectedImageIndex.value]
+function handleViewerDownload(index: number) {
+  if (viewerMode.value !== 'artwork' || !item.value) return
+  const img = images.value[index]
+  if (!img) return
   const url = getItemImageDownloadUrl(item.value.id, img.id, true)
   window.open(url, '_blank')
   toast.success('开始下载图片')
@@ -317,11 +338,13 @@ function downloadAllImages() {
         <!-- 画作图片画廊（仅画作类型） -->
         <div v-if="isArtwork && images.length > 0" class="artwork-gallery">
           <div class="gallery-main">
-            <img
-              :src="images[selectedImageIndex]?.image_url"
-              alt="画作"
-              @click="openImageViewer(selectedImageIndex)"
-            />
+            <div class="image-preview" @click="openArtworkViewer(selectedImageIndex)">
+              <img
+                :src="images[selectedImageIndex]?.image_url"
+                alt="画作"
+              />
+              <span class="image-preview-overlay">查看图像</span>
+            </div>
             <div class="gallery-nav" v-if="images.length > 1">
               <button class="nav-btn prev" @click.stop="prevImage">
                 <i class="ri-arrow-left-s-line"></i>
@@ -392,7 +415,7 @@ function downloadAllImages() {
         <!-- 详细介绍 -->
         <div v-if="item.detail_content" class="item-detail-content">
           <h3>详细介绍</h3>
-          <div class="rich-content" v-html="item.detail_content"></div>
+          <div ref="detailContentRef" class="rich-content" v-html="item.detail_content"></div>
         </div>
 
         <div class="item-tags" v-if="tags.length > 0">
@@ -505,7 +528,7 @@ function downloadAllImages() {
               <div class="comment-header">
                 <div class="comment-user-info">
                   <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
-                  <div class="comment-rating">
+                  <div v-if="comment.rating > 0" class="comment-rating">
                     <i v-for="star in 5" :key="star" class="ri-star-fill" :class="{ active: star <= comment.rating }"></i>
                   </div>
                 </div>
@@ -518,27 +541,14 @@ function downloadAllImages() {
       </div>
     </div>
 
-    <!-- 图片查看器（全屏模态框） -->
-    <div v-if="showImageViewer && isArtwork" class="image-viewer-modal" @click.self="closeImageViewer">
-      <button class="viewer-close" @click="closeImageViewer">
-        <i class="ri-close-line"></i>
-      </button>
-      <button class="viewer-nav prev" @click="prevImage" v-if="images.length > 1">
-        <i class="ri-arrow-left-s-line"></i>
-      </button>
-      <div class="viewer-content">
-        <img :src="images[selectedImageIndex]?.image_url" alt="画作" />
-      </div>
-      <button class="viewer-nav next" @click="nextImage" v-if="images.length > 1">
-        <i class="ri-arrow-right-s-line"></i>
-      </button>
-      <div class="viewer-footer">
-        <span class="viewer-counter">{{ selectedImageIndex + 1 }} / {{ images.length }}</span>
-        <button class="viewer-download" @click="downloadCurrentImage">
-          <i class="ri-download-line"></i> 下载此图
-        </button>
-      </div>
-    </div>
+    <ImageViewer
+      v-model="showImageViewer"
+      :images="viewerImages"
+      :start-index="viewerStartIndex"
+      :show-download="viewerMode === 'artwork'"
+      download-label="下载此图"
+      @download="handleViewerDownload"
+    />
   </div>
 </template>
 
@@ -653,10 +663,46 @@ function downloadAllImages() {
   color: #5D4037;
 }
 
-.rich-content img {
+.rich-content :deep(img) {
   max-width: 100%;
+  height: auto;
+  display: block;
   border-radius: 8px;
   margin: 16px 0;
+}
+
+.item-detail-page :deep(.image-preview) {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  margin: 16px 0;
+  cursor: zoom-in;
+}
+
+.item-detail-page :deep(.image-preview img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  margin: 0;
+}
+
+.item-detail-page :deep(.image-preview-overlay) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.item-detail-page :deep(.image-preview:hover .image-preview-overlay) {
+  opacity: 1;
 }
 
 .item-header h1 {
@@ -1178,13 +1224,19 @@ function downloadAllImages() {
   border-radius: 12px;
   overflow: hidden;
   aspect-ratio: 16/10;
-  cursor: pointer;
 }
 
-.gallery-main img {
+.gallery-main .image-preview {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.gallery-main .image-preview img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  border-radius: 0;
 }
 
 .gallery-nav {

@@ -789,9 +789,9 @@ func (s *Server) addItemComment(c *gin.Context) {
 		return
 	}
 
-	// 验证评论长度：带评分时至少30字
-	if req.Rating > 0 && len([]rune(req.Content)) < 30 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "带评分的评价至少需要30个字符"})
+	// 验证评论长度：带评分时至少10字
+	if req.Rating > 0 && len([]rune(req.Content)) < 10 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "带评分的评价至少需要10个字符"})
 		return
 	}
 

@@ -5,6 +5,7 @@ import { getPublicStory, type Story, type StoryEntry } from '@/api/story'
 import { type Character } from '@/api/character'
 import WowIcon from '@/components/WowIcon.vue'
 import CharacterCard from '@/components/CharacterCard.vue'
+import ImageViewer from '@/components/ImageViewer.vue'
 
 const route = useRoute()
 
@@ -19,6 +20,22 @@ const author = ref('')
 const showCharacterCard = ref(false)
 const selectedEntry = ref<StoryEntry | null>(null)
 const characterCardPosition = ref({ x: 0, y: 0 })
+
+const showImageViewer = ref(false)
+const viewerImages = ref<string[]>([])
+const viewerStartIndex = ref(0)
+
+const imageEntries = computed(() => {
+  const result: { id: number; image: string }[] = []
+  for (const entry of entries.value) {
+    if (entry.type !== 'image') continue
+    const parsed = parseImageEntry(entry)
+    if (parsed?.image) {
+      result.push({ id: entry.id, image: parsed.image })
+    }
+  }
+  return result
+})
 
 // 播放控制
 const isPlaying = ref(false)
@@ -110,6 +127,25 @@ function getParticipants(): string[] {
   }
 }
 
+function parseImageEntry(entry: StoryEntry): { image: string; description: string } | null {
+  if (entry.type !== 'image') return null
+  try {
+    return JSON.parse(entry.content)
+  } catch {
+    return null
+  }
+}
+
+function openImageViewer(entryId: number) {
+  const images = imageEntries.value
+  if (!images.length) return
+  const index = images.findIndex((image) => image.id === entryId)
+  if (index < 0) return
+  viewerImages.value = images.map((image) => image.image)
+  viewerStartIndex.value = index
+  showImageViewer.value = true
+}
+
 // 获取条目对应的角色
 function getEntryCharacter(entry: StoryEntry): Character | undefined {
   if (entry.character_id) {
@@ -196,7 +232,7 @@ function isNpcEntry(entry: StoryEntry): boolean {
 
 // 点击头像显示角色卡片
 function showCharacterInfo(entry: StoryEntry, event: MouseEvent) {
-  if (entry.type === 'narration') return
+  if (entry.type === 'narration' || entry.type === 'image') return
   if (isNpcEntry(entry)) return  // NPC不显示角色卡片
   if (!getEntryCharacter(entry)) return
 
@@ -249,6 +285,7 @@ onUnmounted(stopPlay)
           :class="[entry.type, { 'fade-in': isPlaying && idx === currentIndex }]"
         >
           <div
+            v-if="entry.type !== 'image'"
             class="entry-avatar"
             :class="{ clickable: entry.type !== 'narration' && !isNpcEntry(entry) && !!getEntryCharacter(entry) }"
             @click="showCharacterInfo(entry, $event)"
@@ -265,13 +302,25 @@ onUnmounted(stopPlay)
             </template>
           </div>
           <div class="entry-body">
-            <div class="entry-speaker">
+            <div v-if="entry.type !== 'image'" class="entry-speaker">
               <span :style="entry.type !== 'narration' && getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">
                 {{ entry.type === 'narration' ? '旁白' : (entry.speaker || '未知') }}
               </span>
               <span v-if="entry.channel && entry.type !== 'narration'" class="entry-channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
             </div>
-            <div class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
+            <div v-if="entry.type !== 'image'" class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
+            <div v-else-if="parseImageEntry(entry)" class="entry-image-content">
+              <div class="entry-image-wrapper" @click="openImageViewer(entry.id)" title="查看图像">
+                <img :src="parseImageEntry(entry)!.image" alt="剧情图片" class="entry-image" />
+                <div class="entry-image-hover">
+                  <i class="ri-zoom-in-line"></i>
+                  <span>查看图像</span>
+                </div>
+              </div>
+              <p v-if="parseImageEntry(entry)!.description" class="image-description">
+                {{ parseImageEntry(entry)!.description }}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -310,6 +359,12 @@ onUnmounted(stopPlay)
     :speaker="selectedEntry?.speaker"
     :position="characterCardPosition"
     :editable="false"
+  />
+
+  <ImageViewer
+    v-model="showImageViewer"
+    :images="viewerImages"
+    :start-index="viewerStartIndex"
   />
 </template>
 
@@ -383,6 +438,19 @@ onUnmounted(stopPlay)
   border-radius: 12px;
   margin-bottom: 12px;
   box-shadow: 0 2px 8px rgba(75, 54, 33, 0.08);
+}
+
+.entry-item.image {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.entry-item.image .entry-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .entry-item.fade-in {
@@ -489,6 +557,63 @@ onUnmounted(stopPlay)
   font-size: 15px;
   color: #665242;
   line-height: 1.6;
+}
+
+.entry-image-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.entry-image-wrapper {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  cursor: zoom-in;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.entry-image-hover {
+  position: absolute;
+  inset: 0;
+  background: rgba(44, 24, 16, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  font-size: 13px;
+}
+
+.entry-image-wrapper:hover .entry-image-hover {
+  opacity: 1;
+}
+
+.entry-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 2px solid #e5d4c1;
+  display: block;
+}
+
+.image-description {
+  font-size: 14px;
+  color: #665242;
+  line-height: 1.6;
+  margin: 0;
+  padding: 8px 12px;
+  background: #f5f0eb;
+  border-radius: 6px;
+  border-left: 3px solid #d4a373;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .entry-item.narration {

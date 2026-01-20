@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
 import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import RDialog from '@/components/RDialog.vue'
+import ImageViewer from '@/components/ImageViewer.vue'
+import { attachImagePreview } from '@/utils/imagePreview'
 
 const router = useRouter()
 const route = useRoute()
@@ -40,6 +42,10 @@ const replyEmojiButtonRef = ref<HTMLElement | null>(null)
 
 const errorMessage = ref('')
 const commentError = ref('')
+const articleContentRef = ref<HTMLElement | null>(null)
+const showImageViewer = ref(false)
+const viewerImages = ref<string[]>([])
+const viewerStartIndex = ref(0)
 
 // 评论点赞状态
 const commentLikes = ref<Map<number, boolean>>(new Map())
@@ -130,6 +136,20 @@ onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
   await loadPost()
   await loadComments()
+})
+
+async function setupArticleImagePreview() {
+  await nextTick()
+  attachImagePreview(articleContentRef.value, (imageList, index) => {
+    viewerImages.value = imageList
+    viewerStartIndex.value = index
+    showImageViewer.value = true
+  }, '查看图像')
+}
+
+watch(() => post.value?.content, () => {
+  if (!post.value?.content) return
+  setupArticleImagePreview()
 })
 
 async function loadPost() {
@@ -417,7 +437,7 @@ async function handleDelete() {
 
             <div class="zen-divider"></div>
 
-            <div class="article-content" v-html="post.content"></div>
+            <div ref="articleContentRef" class="article-content" v-html="post.content"></div>
           </div>
 
           <!-- 作者操作 -->
@@ -585,6 +605,12 @@ async function handleDelete() {
     >
       <p>确定要删除这条评论吗？</p>
     </RDialog>
+
+    <ImageViewer
+      v-model="showImageViewer"
+      :images="viewerImages"
+      :start-index="viewerStartIndex"
+    />
   </div>
 </template>
 
@@ -872,8 +898,43 @@ async function handleDelete() {
 .article-content :deep(img) {
   max-width: 100%;
   height: auto;
+  display: block;
   border-radius: 4px;
   margin: 1.5em 0;
+}
+
+.article-content :deep(.image-preview) {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  margin: 1.5em 0;
+  cursor: zoom-in;
+}
+
+.article-content :deep(.image-preview img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+  margin: 0;
+}
+
+.article-content :deep(.image-preview-overlay) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.35);
+  color: #fff;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.article-content :deep(.image-preview:hover .image-preview-overlay) {
+  opacity: 1;
 }
 
 .article-content :deep(p) {

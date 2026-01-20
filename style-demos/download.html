@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>下载 RPBox 客户端 - 解锁完整功能</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4B3621',
+                        accent: '#B87333',
+                        secondary: '#856a52',
+                        bgPage: '#EED9C4',
+                        download: '#B87333',
+                        downloadHover: '#8B5A2B',
+                        success: '#28a745',
+                        unavailable: '#e74c3c',
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 20px 40px -15px rgba(75, 54, 33, 0.15)',
+                        'sharp': '0 1px 2px 0 rgba(75, 54, 33, 0.1)',
+                        'float': '0 30px 60px -12px rgba(0, 0, 0, 0.25)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Utilities for that Apple-esque polished look */
+        body {
+            background-color: #EED9C4;
+            color: #4B3621;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .hero-gradient {
+            background: linear-gradient(135deg, #4B3621 0%, #6d543e 100%);
+        }
+
+        /* Smooth reveal animation */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-up {
+            animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #EED9C4;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #B87333;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="selection:bg-accent selection:text-white overflow-x-hidden">
+
+    <!-- Navigation (Minimal) -->
+    <nav class="fixed w-full z-50 transition-all duration-300 glass-panel border-b border-primary/10">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-primary rounded flex items-center justify-center text-white font-bold">R</div>
+                <span class="font-semibold text-lg tracking-tight text-primary">RPBox</span>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-secondary">
+                <a href="#" class="hover:text-primary transition-colors">功能</a>
+                <a href="#" class="hover:text-primary transition-colors">社区</a>
+                <a href="#" class="text-accent">下载客户端</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-48 lg:pt-48 lg:pb-64 hero-gradient overflow-hidden">
+        <!-- Background Abstract Elements -->
+        <div class="absolute top-0 right-0 w-1/2 h-full bg-white/5 skew-x-12 transform origin-top-right"></div>
+        
+        <div class="max-w-7xl mx-auto px-6 relative z-10 grid lg:grid-cols-2 gap-16 items-center">
+            
+            <!-- Left Content -->
+            <div class="space-y-8 animate-fade-up">
+                <div class="inline-flex items-center gap-2 px-3 py-1 bg-white/10 border border-white/20 rounded-full backdrop-blur-sm">
+                    <span class="w-2 h-2 bg-accent rounded-full animate-pulse"></span>
+                    <span class="text-xs font-medium text-white/90 tracking-wide uppercase">v1.2.0 Windows 版现已发布</span>
+                </div>
+                
+                <h1 class="text-5xl lg:text-7xl font-bold text-white leading-[1.1] tracking-tight">
+                    解锁 RPBox<br>
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-accent to-[#e6a36c]">完整体验</span>
+                </h1>
+                
+                <p class="text-lg text-white/80 max-w-md leading-relaxed">
+                    云端同步人物卡、记录沉浸式 RP 剧情、发布精彩内容。专为魔兽世界角色扮演玩家打造。
+                </p>
+
+                <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                    <a href="#" class="group relative inline-flex items-center justify-center px-8 py-4 bg-accent text-white font-semibold text-lg rounded-full overflow-hidden transition-all hover:bg-downloadHover hover:shadow-lg hover:shadow-accent/30 active:scale-95">
+                        <span class="relative z-10 flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            下载 Windows 版
+                        </span>
+                    </a>
+                    <div class="flex flex-col justify-center text-xs text-white/60 pl-2">
+                        <span>大小: 145MB</span>
+                        <span>支持 Win10/11</span>
+                    </div>
+                </div>
+                
+                <div class="text-xs text-white/40 pt-2 flex items-center gap-4">
+                    <span class="flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg> 数字签名认证</span>
+                    <a href="#" class="hover:text-white underline decoration-white/30">查看 MacOS 计划</a>
+                </div>
+            </div>
+
+            <!-- Right Visual (Layered Depth) -->
+            <div class="relative hidden lg:block h-[500px]">
+                <!-- Back Image -->
+                <div class="absolute top-0 right-0 w-[400px] h-[500px] bg-secondary rounded-lg opacity-20 transform rotate-6 translate-x-12"></div>
+                <!-- Middle Image -->
+                <div class="absolute top-12 right-12 w-[400px] h-[500px] bg-white rounded-lg shadow-2xl overflow-hidden transform rotate-3 transition-transform duration-700 hover:rotate-0 hover:scale-105 hover:z-30 border border-white/10">
+                    <div class="bg-gray-100 h-8 border-b flex items-center px-4 gap-2">
+                        <div class="w-3 h-3 rounded-full bg-red-400"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-400"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-400"></div>
+                    </div>
+                    <div class="p-6">
+                        <!-- Simulated UI Content -->
+                        <div class="h-4 w-1/3 bg-gray-200 rounded mb-4"></div>
+                        <div class="space-y-2">
+                            <div class="h-2 w-full bg-gray-100 rounded"></div>
+                            <div class="h-2 w-5/6 bg-gray-100 rounded"></div>
+                            <div class="h-2 w-4/6 bg-gray-100 rounded"></div>
+                        </div>
+                        <div class="mt-8 grid grid-cols-2 gap-4">
+                            <div class="h-24 bg-primary/5 rounded border border-primary/10"></div>
+                            <div class="h-24 bg-primary/5 rounded border border-primary/10"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Front Image -->
+                <div class="absolute top-24 right-48 w-[380px] h-[260px] glass-panel rounded-xl shadow-float transform -rotate-2 border border-white/40 flex flex-col items-center justify-center z-20">
+                    <div class="text-center">
+                        <div class="w-16 h-16 bg-accent rounded-2xl mx-auto mb-4 flex items-center justify-center text-white text-2xl shadow-lg shadow-accent/40">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        </div>
+                        <h3 class="font-bold text-primary text-lg">道具库同步完成</h3>
+                        <p class="text-secondary text-sm mt-1">1,024 个项目已更新</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Section (Overlapping Layer) -->
+    <section class="relative z-20 -mt-24 px-6 mb-24">
+        <div class="max-w-5xl mx-auto bg-white shadow-float border border-white/50">
+            <!-- Header of Table -->
+            <div class="p-8 border-b border-gray-100 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-primary">为什么需要客户端？</h2>
+                    <p class="text-secondary mt-2">Web版仅用于浏览，客户端才是创造者的工具。</p>
+                </div>
+                <div class="flex gap-4 text-sm font-medium">
+                    <span class="flex items-center gap-2 text-secondary"><span class="w-2 h-2 rounded-full bg-gray-300"></span> Web版</span>
+                    <span class="flex items-center gap-2 text-accent"><span class="w-2 h-2 rounded-full bg-accent"></span> 客户端</span>
+                </div>
+            </div>
+
+            <!-- Table Content -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50/50 text-xs uppercase tracking-wider text-secondary">
+                            <th class="px-8 py-4 font-semibold">功能权益</th>
+                            <th class="px-8 py-4 font-semibold text-center w-32">Web版</th>
+                            <th class="px-8 py-4 font-semibold text-center w-32 bg-primary/5 text-primary">客户端版</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 text-sm">
+                        <!-- Row 1 -->
+                        <tr class="group hover:bg-gray-50 transition-colors">
+                            <td class="px-8 py-5">
+                                <div class="font-medium text-primary">浏览社区内容</div>
+                                <div class="text-xs text-gray-400 mt-0.5">查看其他玩家分享的故事</div>
+                            </td>
+                            <td class="px-8 py-5 text-center"><span class="text-success text-lg">✓</span></td>
+                            <td class="px-8 py-5 text-center bg-primary/5"><span class="text-success text-lg font-bold">✓</span></td>
+                        </tr>
+                        <!-- Row 2 -->
+                        <tr class="group hover:bg-gray-50 transition-colors">
+                            <td class="px-8 py-5">
+                                <div class="font-medium text-primary">发布人物卡 & 剧情</div>
+                                <div class="text-xs text-gray-400 mt-0.5">上传图片和长文本</div>
+                            </td>
+                            <td class="px-8 py-5 text-center"><span class="text-gray-300 text-lg">×</span></td>
+                            <td class="px-8 py-5 text-center bg-primary/5"><span class="text-success text-lg font-bold">✓</span></td>
+                        </tr>
+                        <!-- Row 3 -->
+                        <tr class="group hover:bg-gray-50 transition-colors">
+                            <td class="px-8 py-5">
+                                <div class="font-medium text-primary">本地自动备份</div>
+                                <div class="text-xs text-gray-400 mt-0.5">防止文字丢失</div>
+                            </td>
+                            <td class="px-8 py-5 text-center"><span class="text-gray-300 text-lg">×</span></td>
+                            <td class="px-8 py-5 text-center bg-primary/5"><span class="text-success text-lg font-bold">✓</span></td>
+                        </tr>
+                        <!-- Row 4 -->
+                        <tr class="group hover:bg-gray-50 transition-colors">
+                            <td class="px-8 py-5">
+                                <div class="font-medium text-primary">公会管理工具</div>
+                                <div class="text-xs text-gray-400 mt-0.5">成员同步与活动排期</div>
+                            </td>
+                            <td class="px-8 py-5 text-center"><span class="text-gray-300 text-lg">×</span></td>
+                            <td class="px-8 py-5 text-center bg-primary/5"><span class="text-success text-lg font-bold">✓</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <!-- Footer of Table -->
+            <div class="bg-primary/5 p-4 text-center border-t border-primary/10">
+                <a href="#" class="text-accent hover:text-primary text-sm font-medium transition-colors">下载客户端解锁全部功能 &rarr;</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Installation Steps -->
+    <section class="max-w-7xl mx-auto px-6 mb-32">
+        <h2 class="text-3xl font-bold text-primary mb-12 text-center">简单的开始方式</h2>
+        
+        <div class="grid md:grid-cols-3 gap-8 relative">
+            <!-- Connecting Line -->
+            <div class="hidden md:block absolute top-8 left-[16%] right-[16%] h-0.5 bg-primary/10 z-0"></div>
+
+            <!-- Step 1 -->
+            <div class="relative z-10 flex flex-col items-center text-center group">
+                <div class="w-16 h-16 bg-bgPage border-2 border-primary/20 rounded-2xl flex items-center justify-center text-xl font-bold text-primary mb-6 transition-transform group-hover:scale-110 group-hover:border-accent shadow-sm">
+                    1
+                </div>
+                <h3 class="text-lg font-bold text-primary mb-2">下载安装包</h3>
+                <p class="text-secondary text-sm leading-relaxed max-w-xs">
+                    点击上方的下载按钮获取 <code class="bg-white px-1 py-0.5 rounded border border-primary/10 text-xs">.exe</code> 文件。文件大小约 145MB。
+                </p>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="relative z-10 flex flex-col items-center text-center group">
+                <div class="w-16 h-16 bg-bgPage border-2 border-primary/20 rounded-2xl flex items-center justify-center text-xl font-bold text-primary mb-6 transition-transform group-hover:scale-110 group-hover:border-accent shadow-sm">
+                    2
+                </div>
+                <h3 class="text-lg font-bold text-primary mb-2">运行与安装</h3>
+                <p class="text-secondary text-sm leading-relaxed max-w-xs">
+                    双击运行。如遇 Windows 安全提示，请点击"更多信息"后选择"仍要运行"。
+                </p>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="relative z-10 flex flex-col items-center text-center group">
+                <div class="w-16 h-16 bg-bgPage border-2 border-primary/20 rounded-2xl flex items-center justify-center text-xl font-bold text-primary mb-6 transition-transform group-hover:scale-110 group-hover:border-accent shadow-sm">
+                    3
+                </div>
+                <h3 class="text-lg font-bold text-primary mb-2">登录并同步</h3>
+                <p class="text-secondary text-sm leading-relaxed max-w-xs">
+                    使用 Web 版账号登录，您的人物卡和收藏将自动同步至本地。
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Split Section: Changelog & FAQ -->
+    <section class="max-w-7xl mx-auto px-6 mb-32 grid lg:grid-cols-12 gap-12">
+        
+        <!-- Changelog (Left 7 cols) -->
+        <div class="lg:col-span-7 space-y-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-bold text-primary">更新日志</h2>
+                <a href="#" class="text-sm text-accent hover:text-primary transition-colors">查看全部历史 &rarr;</a>
+            </div>
+
+            <!-- Version Card 1 -->
+            <div class="bg-white p-6 border-l-4 border-accent shadow-sharp rounded-r-lg group hover:shadow-soft transition-all">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <span class="text-lg font-bold text-primary">v1.2.0</span>
+                        <span class="ml-2 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">最新</span>
+                    </div>
+                    <span class="text-sm text-secondary">2023-10-24</span>
+                </div>
+                <ul class="space-y-2 text-sm text-secondary">
+                    <li class="flex gap-2"><span class="text-success">●</span> 新增：公会日程表功能，支持拖拽排期</li>
+                    <li class="flex gap-2"><span class="text-success">●</span> 新增：本地草稿箱自动保存</li>
+                    <li class="flex gap-2"><span class="text-blue-500">●</span> 优化：图片上传压缩算法，速度提升 50%</li>
+                </ul>
+            </div>
+
+            <!-- Version Card 2 -->
+            <div class="bg-white/60 p-6 border-l-4 border-gray-300 shadow-sharp rounded-r-lg group hover:bg-white transition-all">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="text-lg font-bold text-primary opacity-80">v1.1.5</span>
+                    <span class="text-sm text-secondary opacity-80">2023-10-10</span>
+                </div>
+                <ul class="space-y-2 text-sm text-secondary opacity-80">
+                    <li class="flex gap-2"><span class="text-blue-500">●</span> 修复：部分用户登录状态丢失的问题</li>
+                    <li class="flex gap-2"><span class="text-blue-500">●</span> 优化：深色模式下的文字对比度</li>
+                </ul>
+            </div>
+             <!-- Version Card 3 -->
+             <div class="bg-white/40 p-6 border-l-4 border-gray-300 shadow-sharp rounded-r-lg group hover:bg-white transition-all">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="text-lg font-bold text-primary opacity-60">v1.1.0</span>
+                    <span class="text-sm text-secondary opacity-60">2023-09-28</span>
+                </div>
+                <p class="text-sm text-secondary opacity-60">
+                    客户端首次公测发布，包含基础人物卡管理功能。
+                </p>
+            </div>
+        </div>
+
+        <!-- FAQ (Right 5 cols) -->
+        <div class="lg:col-span-5">
+            <h2 class="text-2xl font-bold text-primary mb-8">常见问题</h2>
+            
+            <div class="space-y-4">
+                <!-- FAQ Item 1 -->
+                <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
+                    <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
+                        <span>安装失败或报错怎么办？</span>
+                        <span class="transition-transform group-open:rotate-180 text-accent">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </span>
+                    </summary>
+                    <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
+                        请确保您已关闭杀毒软件或将安装包添加至白名单。如果是网络问题，请尝试<a href="#" class="text-accent underline">备用下载链接</a>。
+                    </div>
+                </details>
+
+                <!-- FAQ Item 2 -->
+                <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
+                    <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
+                        <span>支持 Mac 或 Linux 吗？</span>
+                        <span class="transition-transform group-open:rotate-180 text-accent">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </span>
+                    </summary>
+                    <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
+                        目前仅支持 Windows 10/11。Mac 版本正在开发中，预计将于 Q4 发布测试版，敬请期待。
+                    </div>
+                </details>
+
+                <!-- FAQ Item 3 -->
+                <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
+                    <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
+                        <span>客户端占用多少空间？</span>
+                        <span class="transition-transform group-open:rotate-180 text-accent">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </span>
+                    </summary>
+                    
