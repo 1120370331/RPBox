@@ -168,7 +168,7 @@ func (s *Server) getImage(c *gin.Context) {
 
 // getOriginalImageBase64 从数据库获取原图 Base64
 func (s *Server) getOriginalImageBase64(imageType string, id string) (string, error) {
-	idNum, err := strconv.ParseUint(id, 10, 32)
+	idNum, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return "", err
 	}

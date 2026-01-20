@@ -1,8 +1,8 @@
 -- RPBox ChatLogger
--- 聊天记录采集模块（优化版数据结构）
+-- 聊天记录采集模块
 
-RPBox.ChatLogger = {}
-local ChatLogger = RPBox.ChatLogger
+local ADDON_NAME, ns = ...
+local L = ns.L or {}
 
 -- 监听的聊天频道
 local CHAT_EVENTS = {
@@ -14,226 +14,382 @@ local CHAT_EVENTS = {
     "CHAT_MSG_PARTY_LEADER",
     "CHAT_MSG_RAID",
     "CHAT_MSG_RAID_LEADER",
+    "CHAT_MSG_WHISPER",
+    "CHAT_MSG_WHISPER_INFORM",
+    "CHAT_MSG_GUILD",
 }
 
 -- 频道简写映射
 local CHANNEL_SHORT = {
-    ["CHAT_MSG_SAY"] = "SAY",
-    ["CHAT_MSG_YELL"] = "YELL",
-    ["CHAT_MSG_EMOTE"] = "EMOTE",
-    ["CHAT_MSG_TEXT_EMOTE"] = "EMOTE",
-    ["CHAT_MSG_PARTY"] = "PARTY",
-    ["CHAT_MSG_PARTY_LEADER"] = "PARTY",
-    ["CHAT_MSG_RAID"] = "RAID",
-    ["CHAT_MSG_RAID_LEADER"] = "RAID",
-    ["CHAT_MSG_WHISPER"] = "WHISPER",
-    ["CHAT_MSG_WHISPER_INFORM"] = "WHISPER",
+    CHAT_MSG_SAY = "SAY",
+    CHAT_MSG_YELL = "YELL",
+    CHAT_MSG_EMOTE = "EMOTE",
+    CHAT_MSG_TEXT_EMOTE = "TEXT_EMOTE",
+    CHAT_MSG_PARTY = "PARTY",
+    CHAT_MSG_PARTY_LEADER = "PARTY",
+    CHAT_MSG_RAID = "RAID",
+    CHAT_MSG_RAID_LEADER = "RAID",
+    CHAT_MSG_WHISPER = "WHISPER_IN",
+    CHAT_MSG_WHISPER_INFORM = "WHISPER_OUT",
+    CHAT_MSG_GUILD = "GUILD",
 }
 
--- 记录上限
-local MAX_RECORDS = 10000
-local WARN_THRESHOLD = 9000
+-- 去重缓存（基于秒级时间戳）
+local messageCache = {}
 
--- 自动白名单计时器
-local targetTimer = nil
+-- 检查消息是否重复
+local function IsDuplicateMessage(sender, msg, timestamp)
+    local secondTimestamp = math.floor(timestamp)
+    local signature = sender .. "|" .. msg .. "|" .. secondTimestamp
 
--- 初始化
-function ChatLogger:Init()
-    for _, event in ipairs(CHAT_EVENTS) do
-        ChatFrame_AddMessageEventFilter(event, function(_, _, msg, sender, ...)
-            self:OnChatMessage(event, msg, sender)
-            return false
-        end)
-    end
-
-    local frame = CreateFrame("Frame")
-    frame:RegisterEvent("PLAYER_TARGET_CHANGED")
-    frame:SetScript("OnEvent", function()
-        self:OnTargetChanged()
-    end)
-
-    print("|cFF00FF00[RPBox]|r 聊天记录模块已启动")
-end
-
--- 处理聊天消息
-function ChatLogger:OnChatMessage(event, msg, sender)
-    local unitID = sender
-    local isFromSelf = (unitID == UnitName("player") .. "-" .. GetRealmName())
-
-    if not self:ShouldRecord(unitID, isFromSelf) then
-        return
-    end
-
-    -- 解析消息类型和内容
-    local mark, npcName, content = self:ParseMessage(msg, event)
-
-    -- 获取TRP3信息并缓存
-    local profileID = self:CacheProfile(unitID)
-
-    -- 保存记录（新格式）
-    self:SaveRecord({
-        t = time(),
-        c = CHANNEL_SHORT[event] or event,
-        m = content,
-        mk = mark,
-        s = unitID,
-        ref = profileID,
-        npc = npcName,
-    })
-end
-
--- 解析消息类型（P/N/B）
-function ChatLogger:ParseMessage(msg, event)
-    -- 检测 TRP3 NPC 语法: |NPC名字
-    local npcName = msg:match("^|([^|]+)|")
-    if npcName then
-        local content = msg:gsub("^|[^|]+|%s*", "")
-        return "N", npcName, content
-    end
-
-    -- 检测旁白（通常是纯表情且无说话者特征）
-    if event == "CHAT_MSG_EMOTE" or event == "CHAT_MSG_TEXT_EMOTE" then
-        -- 简单判断：如果消息以动作描述开头，视为旁白
-        if msg:match("^[%*%[（(]") then
-            return "B", nil, msg
+    -- 清理超过5秒的旧缓存
+    local currentTime = time()
+    for sig, cachedTime in pairs(messageCache) do
+        if (currentTime - cachedTime) > 5 then
+            messageCache[sig] = nil
         end
     end
 
-    -- 默认为玩家消息
-    return "P", nil, msg
+    -- 检查是否存在
+    if messageCache[signature] then
+        return true
+    end
+
+    -- 添加到缓存
+    messageCache[signature] = secondTimestamp
+    return false
 end
 
--- 缓存角色卡并返回profileID
-function ChatLogger:CacheProfile(unitID)
-    if not TRP3_API or not TRP3_API.register then
-        return nil
-    end
+-- 获取 TRP3 角色信息并缓存
+local function GetTRP3InfoAndCache(unitID)
+    if not TRP3_API or not TRP3_API.register then return nil, nil end
+    if not TRP3_API.register.isUnitIDKnown(unitID) then return nil, nil end
 
     local character = TRP3_API.register.getUnitIDCharacter(unitID)
-    if not character or not character.profileID then
-        return nil
-    end
+    if not character or not character.profileID then return nil, nil end
 
     local profileID = character.profileID
     local profile = TRP3_API.register.getProfile(profileID)
-    if not profile or not profile.player then
-        return profileID
+    if not profile or not (profile.characteristics or profile.about or profile.misc) then return nil, nil end
+
+    -- 缓存完整角色卡数据
+    ns.CacheProfile(profileID, profile)
+
+    return profileID, profile
+end
+
+-- 获取自己的 TRP3 信息并缓存
+local function GetSelfTRP3InfoAndCache()
+    if not TRP3_API or not TRP3_API.profile then return nil, nil end
+
+    local profileID = TRP3_API.profile.getPlayerCurrentProfileID()
+    local player = TRP3_API.profile.getData("player")
+    if not player then return nil, nil end
+
+    -- 缓存完整角色卡数据
+    ns.CacheProfile(profileID, player)
+
+    return profileID, player
+end
+
+-- 获取角色的 TRP3 显示名称（纯文本，不含格式代码）
+local function GetTRP3DisplayName(unitID, isSelf)
+    local profileID, profile
+
+    if isSelf then
+        profileID, profile = GetSelfTRP3InfoAndCache()
+    else
+        profileID, profile = GetTRP3InfoAndCache(unitID)
     end
 
-    -- 缓存角色卡数据
-    local chars = profile.player.characteristics or {}
-    local misc = profile.player.misc or {}
+    if not profile or not profile.characteristics then
+        return nil
+    end
 
-    RPBox_ProfileCache[profileID] = {
-        v = 1,
-        FN = chars.FN,
-        LN = chars.LN,
-        TI = chars.TI,
-        FT = chars.FT,
-        RA = chars.RA,
-        CL = chars.CL,
-        AG = chars.AG,
-        EC = chars.EC,
-        HE = chars.HE,
-        WE = chars.WE,
-        BP = chars.BP,
-        RE = chars.RE,
-        IC = chars.IC,
-        CH = chars.CH,
-        -- 杂项数据
-        PE = misc.PE,  -- 第一印象 (Glance)
-    }
+    -- 只返回纯文本名字
+    local name = profile.characteristics.FN or unitID:match("^([^-]+)")
+    return name
+end
 
-    return profileID
+-- 转义 Lua 模式中的特殊字符
+local function EscapePattern(str)
+    return str:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+end
+
+-- 替换表情消息中的角色名为 TRP3 人物卡名称
+local function ReplaceEmoteNames(msg, senderID, listenerID)
+    if not msg or msg == "" then return msg end
+
+    -- 获取游戏角色名（不带服务器）
+    local senderName = senderID:match("^([^-]+)")
+    local listenerName = listenerID:match("^([^-]+)")
+
+    -- 判断是否是自己发送的消息
+    local isFromSelf = (senderID == listenerID)
+
+    -- 获取 TRP3 显示名称
+    local senderTRP3Name = GetTRP3DisplayName(senderID, isFromSelf)
+    local listenerTRP3Name = GetTRP3DisplayName(listenerID, true)
+
+    -- 如果是自己发送的消息，替换开头的"你"
+    if isFromSelf and senderTRP3Name then
+        msg = msg:gsub("^你", senderTRP3Name)
+    end
+
+    -- 替换发送者名字（通常在消息开头）
+    if senderTRP3Name and senderName and not isFromSelf then
+        local escapedSenderName = EscapePattern(senderName)
+        msg = msg:gsub("^" .. escapedSenderName, senderTRP3Name)
+    end
+
+    -- 替换"对你"、"向你"等包含"你"的常见表情短语（仅当不是自己发送时）
+    if listenerTRP3Name and not isFromSelf then
+        msg = msg:gsub("对你", "对" .. listenerTRP3Name)
+        msg = msg:gsub("向你", "向" .. listenerTRP3Name)
+        msg = msg:gsub("给你", "给" .. listenerTRP3Name)
+        msg = msg:gsub("朝你", "朝" .. listenerTRP3Name)
+        msg = msg:gsub("跟你", "跟" .. listenerTRP3Name)
+        msg = msg:gsub("和你", "和" .. listenerTRP3Name)
+    end
+
+    return msg
+end
+
+-- 检查频道是否启用
+local function IsChannelEnabled(channelShort)
+    local channels = RPBox_Config and RPBox_Config.channels
+    if not channels then return true end  -- 默认全部启用
+    local enabled = channels[channelShort]
+    if enabled == nil then return true end  -- 未配置的默认启用
+    return enabled
 end
 
 -- 判断是否应该记录
-function ChatLogger:ShouldRecord(unitID, isFromSelf)
-    if isFromSelf then return true end
-    if self:IsBlacklisted(unitID) then return false end
-    if self:GetProfileID(unitID) then return true end
-    if RPBox_Config.whitelist[unitID] then return true end
+local function ShouldRecord(unitID, isFromSelf, channelShort)
+    -- 检查总开关
+    if RPBox_Config.enabled == false then return false end
+
+    -- 先检查频道是否启用
+    if not IsChannelEnabled(channelShort) then return false end
+
+    -- 检查是否屏蔽自己
+    if isFromSelf then
+        if RPBox_Config.ignoreSelf then return false end
+        return true
+    end
+
+    -- 检查是否只接受公会成员
+    if RPBox_Config.guildOnly then
+        if not IsInGuild() then return false end
+        local isGuildMember = false
+        for i = 1, GetNumGuildMembers() do
+            local name = GetGuildRosterInfo(i)
+            if name then
+                local shortName = name:match("^([^-]+)")
+                if shortName == unitID or name == unitID then
+                    isGuildMember = true
+                    break
+                end
+            end
+        end
+        if not isGuildMember then return false end
+    end
+
+    if ns.IsBlacklisted(unitID) then return false end
+    local profileID = GetTRP3InfoAndCache(unitID)
+    if profileID then return true end
+    if ns.IsWhitelisted(unitID) then return true end
     return false
-end
-
--- 获取profileID
-function ChatLogger:GetProfileID(unitID)
-    if not TRP3_API or not TRP3_API.register then
-        return nil
-    end
-    local character = TRP3_API.register.getUnitIDCharacter(unitID)
-    return character and character.profileID
-end
-
--- 检查是否在黑名单
-function ChatLogger:IsBlacklisted(unitID)
-    if RPBox_Config.blacklist[unitID] then return true end
-    if C_FriendList and C_FriendList.IsIgnored then
-        local name = unitID:match("^([^-]+)")
-        if C_FriendList.IsIgnored(name) then return true end
-    end
-    if TRP3_API and TRP3_API.register and TRP3_API.register.isIDIgnored then
-        if TRP3_API.register.isIDIgnored(unitID) then return true end
-    end
-    return false
-end
-
--- 保存聊天记录（新格式）
-function ChatLogger:SaveRecord(record)
-    local dateStr = date("%Y-%m-%d", record.t)
-    local hourStr = date("%H", record.t)
-
-    RPBox_ChatLog[dateStr] = RPBox_ChatLog[dateStr] or {}
-    RPBox_ChatLog[dateStr][hourStr] = RPBox_ChatLog[dateStr][hourStr] or {}
-
-    -- 清理nil字段
-    if not record.npc then record.npc = nil end
-    if not record.ref then record.ref = nil end
-
-    table.insert(RPBox_ChatLog[dateStr][hourStr], record)
-    RPBox:UpdateSyncState()
-    self:CheckRecordLimit()
 end
 
 -- 检查记录上限
-function ChatLogger:CheckRecordLimit()
-    local count = RPBox:GetTotalRecordCount()
-    if count >= WARN_THRESHOLD and not RPBox_Config.warnedThisSession then
-        print("|cFFFFFF00[RPBox]|r 聊天记录已达 " .. count .. " 条")
+local function CheckRecordLimit()
+    local count = ns.GetTotalRecordCount()
+    local threshold = RPBox_Config.warnThreshold or 9000
+
+    if count >= threshold and not RPBox_Config.warnedThisSession then
+        print(format(L["RECORD_WARNING"] or "|cFFFFFF00[RPBox]|r 聊天记录已达 %d 条", count))
         print("|cFFFFFF00[RPBox]|r 建议 /reload 后在客户端导出并清理")
         RPBox_Config.warnedThisSession = true
     end
 end
 
--- 目标变化处理（自动白名单）
-function ChatLogger:OnTargetChanged()
-    if targetTimer then
-        targetTimer:Cancel()
-        targetTimer = nil
+-- 保存聊天记录
+local function SaveChatLog(record)
+    local timestamp = record.t or record.timestamp
+    local dateStr = date("%Y-%m-%d", timestamp)
+    local hourStr = date("%H", timestamp)
+
+    RPBox_ChatLog[dateStr] = RPBox_ChatLog[dateStr] or {}
+    RPBox_ChatLog[dateStr][hourStr] = RPBox_ChatLog[dateStr][hourStr] or {}
+
+    table.insert(RPBox_ChatLog[dateStr][hourStr], record)
+
+    -- 更新同步状态
+    ns.UpdateSyncState()
+
+    -- 触发新消息回调（用于自动刷新面板）
+    ns.TriggerOnNewMessage()
+
+    -- 检查记录上限
+    CheckRecordLimit()
+end
+
+-- 解析 NPC/旁白消息
+-- 返回: mk, npcName, message, npcType
+local function StripInvalidLeadingBytes(text)
+    if not text or text == "" then return text end
+
+    -- Drop UTF-8 replacement chars (U+FFFD) if any
+    while text:sub(1, 3) == "\239\191\189" do
+        text = text:sub(4)
     end
 
-    if not UnitExists("target") or not UnitIsPlayer("target") then
-        return
+    -- Drop orphaned UTF-8 continuation bytes (0x80-0xBF)
+    while true do
+        local b = text:byte(1)
+        if not b or b < 0x80 or b > 0xBF then break end
+        text = text:sub(2)
     end
 
-    local unitID = UnitName("target")
-    local realm = GetRealmName()
-    if unitID then
-        unitID = unitID .. "-" .. realm
+    return text:gsub("^%s+", "")
+end
+
+local function ParseNPCMessage(content)
+    if not content:match("^|") then return nil end
+    -- 跳过 WoW 颜色代码 |cFFxxxxxx 开头的情况
+    if content:match("^|c") then return nil end
+
+    local text = content:gsub("^|+", ""):match("^%s*(.+)")
+    if not text then return nil end
+
+    -- 清理末尾的颜色代码 |r
+    text = text:gsub("|r%s*$", "")
+
+    -- 悄悄说
+    local npcName, message = text:match("^(.-)%s*悄悄说%s*[：:]%s*(.*)$")
+    if npcName and message then
+        message = message:gsub("|r%s*$", "")
+        message = StripInvalidLeadingBytes(message)
+        return "N", npcName ~= "" and npcName or nil, message, "whisper"
+    end
+    -- 喊
+    npcName, message = text:match("^(.-)%s*喊%s*[：:]%s*(.*)$")
+    if npcName and message then
+        message = message:gsub("|r%s*$", "")
+        return "N", npcName ~= "" and npcName or nil, message, "yell"
+    end
+    -- 说
+    npcName, message = text:match("^(.-)%s*说%s*[：:]%s*(.*)$")
+    if npcName and message then
+        message = message:gsub("|r%s*$", "")
+        return "N", npcName ~= "" and npcName or nil, message, "say"
+    end
+    -- 旁白
+    return "B", nil, text, nil
+end
+
+-- 聊天消息处理
+local function OnChatMessage(self, event, msg, sender, ...)
+    local playerID = ns.GetPlayerID()
+    local senderID = sender
+
+    if not senderID:find("-") then
+        senderID = senderID .. "-" .. GetRealmName()
     end
 
-    if not unitID or RPBox_Config.whitelist[unitID] then
-        return
+    local isFromSelf = (senderID == playerID)
+    local channelShort = CHANNEL_SHORT[event] or event
+
+    if not ShouldRecord(senderID, isFromSelf, channelShort) then
+        return false
     end
 
-    targetTimer = C_Timer.NewTimer(2, function()
-        if UnitExists("target") then
-            local currentTarget = UnitName("target") .. "-" .. realm
-            if currentTarget == unitID then
-                RPBox_Config.whitelist[unitID] = true
-                print("|cFF00FF00[RPBox]|r " .. unitID .. " 已加入记录白名单")
-            end
+    -- 获取发送者GUID和职业
+    local senderGUID = select(12, ...)
+    local senderClass = nil
+    if senderGUID then
+        local _, classFilename = GetPlayerInfoByGUID(senderGUID)
+        senderClass = classFilename
+    end
+
+    -- 获取 profileID
+    local profileID
+    if isFromSelf then
+        profileID = GetSelfTRP3InfoAndCache()
+        if not senderClass then
+            local _, classFilename = UnitClass("player")
+            senderClass = classFilename
         end
-        targetTimer = nil
-    end)
+    else
+        profileID = GetTRP3InfoAndCache(senderID)
+    end
+
+    -- 解析消息类型
+    local mk, npcName, parsedMsg, npcType = ParseNPCMessage(msg)
+    if not mk then
+        mk = "P"  -- 普通玩家消息
+    end
+
+    -- 如果是表情消息，替换角色名为 TRP3 人物卡名称
+    if event == "CHAT_MSG_EMOTE" or event == "CHAT_MSG_TEXT_EMOTE" then
+        local originalMsg = parsedMsg or msg
+        local replacedMsg = ReplaceEmoteNames(originalMsg, senderID, playerID)
+        if replacedMsg then
+            parsedMsg = replacedMsg
+        end
+    end
+
+    -- 构建记录
+    local record = {
+        t = time(),
+        c = CHANNEL_SHORT[event] or event,
+        m = parsedMsg or msg,
+        mk = mk,
+        s = senderID,
+        ref = profileID,
+    }
+
+    -- 添加收听者信息（当前登录的角色）
+    local listenerGameID = ns.GetPlayerID()
+    local listenerProfileID = nil
+    if TRP3_API and TRP3_API.profile then
+        listenerProfileID = TRP3_API.profile.getPlayerCurrentProfileID()
+    end
+
+    if listenerGameID then
+        record.listeners = {
+            {
+                gameID = listenerGameID,
+                profileID = listenerProfileID
+            }
+        }
+    end
+
+    -- 保存职业信息
+    if senderClass then
+        record.cls = senderClass
+    end
+
+    -- NPC 消息添加 npc 和 nt 字段
+    if mk == "N" then
+        if npcName then
+            local cleanName = npcName:gsub("^|%s*", "")
+            if cleanName ~= "" then record.npc = cleanName end
+        end
+        if npcType then record.nt = npcType end
+    end
+
+    -- 去重检查：基于秒级时间戳
+    if IsDuplicateMessage(senderID, msg, record.t) then
+        return false
+    end
+
+    SaveChatLog(record)
+    return false
+end
+
+-- 注册聊天事件监听
+for _, event in ipairs(CHAT_EVENTS) do
+    ChatFrame_AddMessageEventFilter(event, OnChatMessage)
 end

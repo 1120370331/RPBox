@@ -10,6 +10,7 @@ import { useUpdater } from '@/composables/useUpdater'
 import { getAddonManifest } from '@/api/addon'
 import { bumpImageCacheVersion } from '@/utils/imageCache'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
+import RModal from '@/components/RModal.vue'
 
 interface WowInstallation {
   path: string
@@ -34,6 +35,46 @@ const appVersion = ref('0.0.0')
 const addonVersion = ref<string | null>(null)
 const addonChecking = ref(false)
 const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
+const showChangelogModal = ref(false)
+const showThanksModal = ref(false)
+
+const changelogEntries = [
+  {
+    title: 'RPBox 更新日志 v0.2.2',
+    content: `插件更新 V1.0.5
+修复 NPC 密语开头乱码与颜色显示问题；清理旁白/无名 NPC 前缀残留符号
+新功能追加
+1. 剧情归档升级，现在，可以在剧情中插入图片，并且时间轴上可以显示彩色标签；
+[图片]
+
+[图片]
+优化与修复
+1. 修复了编辑道具无法编辑详情的问题
+2. 优化了我的帖子、我的作品列表加载速度
+3. 邮箱验证已上线，请绑定自己的邮箱！
+4. 修复了道具帖子图片的显示问题
+5. 修复了记录格式的一些问题`,
+  },
+  {
+    title: 'RPBox 更新日志 v0.2.0-0.2.1',
+    content: `新功能追加
+1. 新增消息区域， 现在可以看到别人的和你的互动消息了。
+
+2.公会公会社区和公会帖子已上线，在这里，包括访客可以看到所有归档到公会的剧情和帖子（可配置）
+现在可以通过将剧情归档到公会来分享给其他人观看，后续将更新独立链接和网页版
+
+3. 道具市场更名创意市场，并添加了新分类画作，支持无损上传图像作品。优化了筛选逻辑。
+
+4. 现在创意市场和社区广场都添加了收藏夹和历史记录，可以看到自己收藏/浏览过的帖子。
+优化与修复
+1. 修复了社区广场和创意市场的分页逻辑失效问题
+2. 增强了RPBox插件对于/表情的采集逻辑，现在会将第一视角 你笑得很开心 替换为 玩家名笑得很开心，请更新RPBOX插件
+3. 优化了社区加载速度
+4. 添加了RPBox插件使用提示教程在剧情故事标签
+5. 美化了剧情故事查看的页面
+6. 现在在个人中心可以更改自己的用户名了（重新登录后生效），请记住自己的用户名！`,
+  },
+]
 
 onMounted(async () => {
   wowPath.value = localStorage.getItem('wow_path') || ''
@@ -443,10 +484,60 @@ async function handleCheckAddonUpdate() {
           </div>
         </div>
       </div>
+
+      <!-- 其他信息 -->
+      <div class="setting-card anim-item" style="--delay: 5.5">
+        <div class="action-buttons extra-actions">
+          <button class="btn btn-outline" @click="showChangelogModal = true">
+            <i class="ri-file-list-3-line"></i>
+            查看更新日志
+          </button>
+          <button class="btn btn-outline" @click="showThanksModal = true">
+            <i class="ri-heart-3-line"></i>
+            特别鸣谢
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 插件更新对话框 -->
     <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonInstalled" />
+    <RModal v-model="showChangelogModal" title="客户端更新日志" width="640px">
+      <div class="changelog-modal">
+        <div v-for="entry in changelogEntries" :key="entry.title" class="changelog-entry">
+          <div class="changelog-header">
+            <span class="changelog-tag">{{ entry.title }}</span>
+          </div>
+          <div class="changelog-content">{{ entry.content }}</div>
+        </div>
+      </div>
+    </RModal>
+    <RModal v-model="showThanksModal" title="特别鸣谢" width="520px">
+      <div class="thanks-modal">
+        <p class="thanks-intro">感谢以下伙伴对 RPBox 的支持与贡献：</p>
+        <div class="thanks-item">
+          <div class="thanks-title">
+            <i class="ri-heart-3-line"></i>
+            摩迪斯特雷德 &amp; 厘米特青绿石
+          </div>
+          <p class="thanks-desc">在初期给予大力宣发支持。</p>
+        </div>
+        <div class="thanks-item">
+          <div class="thanks-title">
+            <i class="ri-heart-3-line"></i>
+            海人
+          </div>
+          <p class="thanks-desc">赞助（1月18日）。</p>
+        </div>
+        <div class="thanks-item">
+          <div class="thanks-title">
+            <i class="ri-heart-3-line"></i>
+            <a href="https://github.com/Total-RP/Total-RP-3" target="_blank" rel="noopener">Total RP 3</a>
+          </div>
+          <p class="thanks-desc">感谢 Total RP 3 作者的开源。</p>
+        </div>
+      </div>
+    </RModal>
   </div>
 </template>
 
@@ -920,6 +1011,101 @@ async function handleCheckAddonUpdate() {
   margin: 0;
   font-size: 13px;
   color: rgba(251, 245, 239, 0.6);
+}
+
+/* 底部按钮区 */
+.extra-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 更新日志弹窗 */
+.changelog-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.changelog-entry {
+  background: #FDFBF9;
+  border: 1px solid #E8DCCF;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.changelog-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.changelog-tag {
+  background: #804030;
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.changelog-content {
+  color: #4B3621;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* 特别鸣谢弹窗 */
+.thanks-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.thanks-intro {
+  margin: 0;
+  font-size: 14px;
+  color: #4B3621;
+}
+
+.thanks-item {
+  background: #FDFBF9;
+  border: 1px solid #E8DCCF;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thanks-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #2C1810;
+}
+
+.thanks-title i {
+  color: #C44536;
+  font-size: 18px;
+}
+
+.thanks-title a {
+  color: #804030;
+  text-decoration: none;
+}
+
+.thanks-title a:hover {
+  text-decoration: underline;
+}
+
+.thanks-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #8C7B70;
 }
 
 /* 动画 */

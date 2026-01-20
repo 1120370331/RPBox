@@ -1,11 +1,18 @@
-## Interface: 110002
+## Interface: 110207
 ## Title: RPBox Addon
-## Notes: RPBox companion addon for chat logging and TRP3 integration
-## Notes-zhCN: RPBox 配套插件 - 聊天记录采集与TRP3集成
+## Notes: RPBox 配套插件 - 聊天记录采集与人物卡导出
+## Notes-zhCN: RPBox 配套插件 - 聊天记录采集与人物卡导出
 ## Author: RPBox Team
-## Version: 1.0.0
-## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_Config, RPBox_Sync
+## Version: 1.0.5
 ## Dependencies: totalRP3
+## OptionalDeps: totalRP3_Extended
+## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_ProfileExport, RPBox_Config, RPBox_Sync
+
+Locales\zhCN.lua
 
 Core.lua
+MainFrame.lua
 ChatLogger.lua
+LogWindow.lua
+ProfileExport.lua
+ItemSync.lua
