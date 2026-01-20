@@ -18,6 +18,14 @@ RPBox 是一个服务于魔兽世界 RP 玩家的工具箱，提供人物卡备�
 - **服务端**: Go + Gin + PostgreSQL
 - **插件**: Lua (WoW Addon)
 
+## 图片缓存机制
+
+- 列表/卡片只返回缩略图 URL，不返回 base64 图片。
+- 图片统一走 `/api/v1/images/:type/:id`，前端用 `getImageUrl` 拼接 `w`/`q`/`v`/`cv`。
+- `v` 由后端 `*_updated_at` 控制，图片变更必须更新该字段。
+- 图片接口支持 ETag，带 `v` 的请求可长缓存（immutable），不带 `v` 用短缓存。
+- 设置页“清除图片缓存”通过提升 `cv` 触发重新拉取。
+
 ## 快速开始
 
 ### 前置要求

@@ -170,6 +170,14 @@ const count = ref(0)
 错误响应: { "error": "error message" }
 ```
 
+## 图片缓存机制
+
+- 列表/卡片接口不返回 base64 图片，统一使用 `/api/v1/images/:type/:id` 获取。
+- 前端通过 `getImageUrl` 拼接 `w`/`q`/`v`/`cv`，`v` 来自 `*_updated_at`（没有时用 `updated_at`）。
+- 后端在图片变更时必须更新对应字段：`preview_image_updated_at`/`cover_image_updated_at`/`banner_updated_at`。
+- 图片接口需支持 ETag；带 `v` 的请求返回长缓存（immutable），不带 `v` 的请求使用短缓存。
+- 清除缓存只通过提升 `cv`（客户端 cache version）实现，不做通用 API 缓存。
+
 ## Git 规范
 
 ```bash
