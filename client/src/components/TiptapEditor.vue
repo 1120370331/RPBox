@@ -4,6 +4,8 @@ import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Image from '@tiptap/extension-image'
+import { uploadImage } from '@/api/item'
+import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
   modelValue: string
@@ -15,6 +17,42 @@ const emit = defineEmits<{
 }>()
 
 const imageInputRef = ref<HTMLInputElement | null>(null)
+const toast = useToast()
+const uploadCacheKey = 'tiptap_image_upload_cache'
+const uploadCache = new Map<string, string>()
+
+function loadUploadCache() {
+  try {
+    const cached = sessionStorage.getItem(uploadCacheKey)
+    if (!cached) return
+    const parsed = JSON.parse(cached) as Record<string, string>
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'string') {
+        uploadCache.set(key, value)
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load upload cache:', error)
+  }
+}
+
+function persistUploadCache() {
+  try {
+    const data: Record<string, string> = {}
+    uploadCache.forEach((value, key) => {
+      data[key] = value
+    })
+    sessionStorage.setItem(uploadCacheKey, JSON.stringify(data))
+  } catch (error) {
+    console.warn('Failed to persist upload cache:', error)
+  }
+}
+
+function getFileCacheKey(file: File) {
+  return `${file.name}-${file.size}-${file.lastModified}`
+}
+
+loadUploadCache()
 
 const editor = useEditor({
   content: props.modelValue,
@@ -52,17 +90,36 @@ function handleImageUpload(event: Event) {
   if (!file) return
 
   if (file.size > 20 * 1024 * 1024) {
-    alert('图片不能超过20MB')
+    toast.info('图片不能超过20MB')
+    input.value = ''
     return
   }
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const base64 = e.target?.result as string
-    editor.value?.chain().focus().setImage({ src: base64 }).run()
+  const cacheKey = getFileCacheKey(file)
+  const cachedUrl = uploadCache.get(cacheKey)
+  if (cachedUrl) {
+    editor.value?.chain().focus().setImage({ src: cachedUrl }).run()
+    input.value = ''
+    return
   }
-  reader.readAsDataURL(file)
-  input.value = ''
+
+  uploadImage(file)
+    .then((res: any) => {
+      const url = res?.data?.url || res?.url
+      if (!url) {
+        throw new Error('未获取到图片地址')
+      }
+      editor.value?.chain().focus().setImage({ src: url }).run()
+      uploadCache.set(cacheKey, url)
+      persistUploadCache()
+    })
+    .catch((error: any) => {
+      console.error('图片上传失败:', error)
+      toast.error(error.message || '图片上传失败')
+    })
+    .finally(() => {
+      input.value = ''
+    })
 }
 
 // 通过URL插入图片
@@ -342,8 +399,10 @@ function insertImageByUrl() {
 .editor-content :deep(img) {
   max-width: 100%;
   height: auto;
+  display: inline-block;
   border-radius: 4px;
-  margin: 1.5em 0;
+  margin: 0.6em 0.6em;
+  vertical-align: middle;
   cursor: pointer;
   transition: transform 0.2s;
 }

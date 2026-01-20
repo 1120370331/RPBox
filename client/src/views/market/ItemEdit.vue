@@ -5,6 +5,7 @@ import { getItem, updateItem, getItemTags, addItemTag, removeItemTag, getItemIma
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
+import TiptapEditor from '@/components/TiptapEditor.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -17,6 +18,7 @@ const item = ref<Item | null>(null)
 const form = ref<UpdateItemRequest>({
   name: '',
   description: '',
+  detail_content: '',
   icon: '',
   import_code: '',
   requires_permission: false,
@@ -63,6 +65,7 @@ async function loadItem() {
       item.value = res.data.item
       form.value.name = res.data.item.name
       form.value.description = res.data.item.description
+      form.value.detail_content = res.data.item.detail_content || ''
       form.value.icon = res.data.item.icon
       form.value.import_code = res.data.item.import_code || ''
       form.value.requires_permission = res.data.item.requires_permission || false
@@ -264,7 +267,7 @@ async function handleSubmit(status: 'draft' | 'published') {
 }
 
 function handleCancel() {
-  router.back()
+  router.push({ name: 'my-items' })
 }
 
 // 预览
@@ -274,9 +277,11 @@ function handlePreview() {
   // 构建预览数据
   const previewData = {
     ...item.value,
-    name: form.value.name || item.value.name,
-    description: form.value.description || item.value.description,
-    icon: form.value.icon || item.value.icon,
+    name: form.value.name,
+    description: form.value.description,
+    detail_content: form.value.detail_content,
+    icon: form.value.icon,
+    import_code: form.value.import_code,
   }
 
   sessionStorage.setItem('item_preview_data', JSON.stringify(previewData))
@@ -350,6 +355,16 @@ function getTypeText(type: string) {
           rows="4"
           class="content-textarea"
         ></textarea>
+      </div>
+
+      <!-- 详细介绍（富文本） -->
+      <div class="form-group">
+        <label>详细介绍</label>
+        <TiptapEditor
+          v-model="form.detail_content"
+          placeholder="可以添加图片、详细说明作品的使用方法..."
+        />
+        <p class="hint">支持插入图片，可以展示作品的详细效果</p>
       </div>
 
       <!-- 标签选择 -->

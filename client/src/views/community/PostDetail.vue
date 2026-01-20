@@ -898,23 +898,25 @@ async function handleDelete() {
 .article-content :deep(img) {
   max-width: 100%;
   height: auto;
-  display: block;
+  display: inline-block;
   border-radius: 4px;
-  margin: 1.5em 0;
+  margin: 0.8em 0.6em;
+  vertical-align: middle;
 }
 
 .article-content :deep(.image-preview) {
   position: relative;
-  display: block;
+  display: inline-block;
   max-width: 100%;
-  margin: 1.5em 0;
+  margin: 0.8em 0.6em;
+  vertical-align: middle;
   cursor: zoom-in;
 }
 
 .article-content :deep(.image-preview img) {
   max-width: 100%;
   height: auto;
-  display: block;
+  display: inline-block;
   border-radius: 4px;
   margin: 0;
 }
