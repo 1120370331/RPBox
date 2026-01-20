@@ -13,6 +13,8 @@ const loading = ref(false)
 const items = ref<Item[]>([])
 const currentUserId = ref<number>(0)
 const filterStatus = ref<'all' | 'draft' | 'pending' | 'published'>('all')
+const searchKeyword = ref('')
+const typeFilter = ref<'all' | 'item' | 'campaign' | 'artwork'>('all')
 
 // 获取当前用户ID
 const userStr = localStorage.getItem('user')
@@ -41,10 +43,27 @@ function getItemDisplayStatus(item: Item): 'draft' | 'pending' | 'published' | '
 
 // 过滤后的作品列表
 const filteredItems = computed(() => {
-  if (filterStatus.value === 'all') {
-    return items.value
+  let list = items.value
+
+  if (filterStatus.value !== 'all') {
+    list = list.filter(item => getItemDisplayStatus(item) === filterStatus.value)
   }
-  return items.value.filter(item => getItemDisplayStatus(item) === filterStatus.value)
+
+  if (typeFilter.value !== 'all') {
+    list = list.filter(item => item.type === typeFilter.value)
+  }
+
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return list
+  }
+
+  return list.filter(item => {
+    const name = (item.name || '').toLowerCase()
+    const description = (item.description || '').toLowerCase()
+    const typeText = getTypeText(item.type).toLowerCase()
+    return name.includes(keyword) || description.includes(keyword) || typeText.includes(keyword)
+  })
 })
 
 // 统计数据
@@ -55,6 +74,18 @@ const stats = computed(() => {
     pending: items.value.filter(i => getItemDisplayStatus(i) === 'pending').length,
     draft: items.value.filter(i => getItemDisplayStatus(i) === 'draft').length,
   }
+})
+
+const emptyMessage = computed(() => {
+  const hasKeyword = searchKeyword.value.trim().length > 0
+  const hasTypeFilter = typeFilter.value !== 'all'
+  if (hasKeyword || hasTypeFilter) {
+    return '没有匹配的作品'
+  }
+  if (filterStatus.value === 'all') {
+    return '还没有上传任何作品'
+  }
+  return `没有${filterStatus.value === 'draft' ? '草稿' : filterStatus.value === 'pending' ? '待审核' : '已发布'}的作品`
 })
 
 onMounted(async () => {
@@ -179,41 +210,57 @@ function getTypeText(type: string) {
     </div>
 
     <div class="filters anim-item" style="--delay: 2">
-      <button
-        class="filter-btn"
-        :class="{ active: filterStatus === 'all' }"
-        @click="filterStatus = 'all'"
-      >
-        全部
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: filterStatus === 'published' }"
-        @click="filterStatus = 'published'"
-      >
-        已发布
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: filterStatus === 'pending' }"
-        @click="filterStatus = 'pending'"
-      >
-        待审核
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: filterStatus === 'draft' }"
-        @click="filterStatus = 'draft'"
-      >
-        草稿
-      </button>
+      <div class="filter-buttons">
+        <button
+          class="filter-btn"
+          :class="{ active: filterStatus === 'all' }"
+          @click="filterStatus = 'all'"
+        >
+          全部
+        </button>
+        <button
+          class="filter-btn"
+          :class="{ active: filterStatus === 'published' }"
+          @click="filterStatus = 'published'"
+        >
+          已发布
+        </button>
+        <button
+          class="filter-btn"
+          :class="{ active: filterStatus === 'pending' }"
+          @click="filterStatus = 'pending'"
+        >
+          待审核
+        </button>
+        <button
+          class="filter-btn"
+          :class="{ active: filterStatus === 'draft' }"
+          @click="filterStatus = 'draft'"
+        >
+          草稿
+        </button>
+      </div>
+      <div class="filter-search">
+        <i class="ri-search-line"></i>
+        <input
+          v-model="searchKeyword"
+          type="text"
+          placeholder="搜索作品名称或描述..."
+        />
+      </div>
+      <select v-model="typeFilter" class="type-select">
+        <option value="all">全部类型</option>
+        <option value="item">道具</option>
+        <option value="campaign">剧本</option>
+        <option value="artwork">画作</option>
+      </select>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
 
     <div v-else-if="filteredItems.length === 0" class="empty anim-item" style="--delay: 3">
       <i class="ri-box-3-line"></i>
-      <p>{{ filterStatus === 'all' ? '还没有上传任何作品' : `没有${filterStatus === 'draft' ? '草稿' : filterStatus === 'pending' ? '待审核' : '已发布'}的作品` }}</p>
+      <p>{{ emptyMessage }}</p>
       <button class="create-btn-large" @click="goToUpload">
         <i class="ri-add-line"></i>
         上传第一个作品
@@ -222,10 +269,9 @@ function getTypeText(type: string) {
 
     <div v-else class="items-list">
       <div
-        v-for="(item, index) in filteredItems"
+        v-for="item in filteredItems"
         :key="item.id"
-        class="item-card anim-item"
-        :style="`--delay: ${index + 3}`"
+        class="item-card"
       >
         <div class="item-header">
           <div class="item-info">
@@ -375,7 +421,55 @@ function getTypeText(type: string) {
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
+}
+
+.filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.filter-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 2px solid #E5D4C1;
+  border-radius: 12px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.filter-search i {
+  font-size: 16px;
+  color: #8D7B68;
+}
+
+.filter-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #4B3621;
+  background: transparent;
+}
+
+.filter-search input::placeholder {
+  color: #8D7B68;
+}
+
+.type-select {
+  padding: 10px 14px;
+  border: 2px solid #E5D4C1;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 14px;
+  color: #4B3621;
+  min-width: 120px;
 }
 
 .filter-btn {

@@ -42,11 +42,15 @@ func (s *Server) sendVerificationCode(c *gin.Context) {
 		return
 	}
 
-	// 检查邮箱是否已被注册
+	// 检查邮箱是否已被其他用户注册（且已验证）
 	var existing model.User
 	if err := database.DB.Where("email = ?", req.Email).First(&existing).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "该邮箱已被注册"})
-		return
+		// 如果邮箱已存在且已验证，不允许再注册
+		if existing.EmailVerified {
+			c.JSON(http.StatusConflict, gin.H{"error": "该邮箱已被注册"})
+			return
+		}
+		// 如果邮箱存在但未验证，允许发送验证码（用于验证现有邮箱）
 	}
 
 	ctx := context.Background()
@@ -128,9 +132,10 @@ func (s *Server) register(c *gin.Context) {
 	}
 
 	user := model.User{
-		Username: req.Username,
-		Email:    req.Email,
-		PassHash: hash,
+		Username:      req.Username,
+		Email:         req.Email,
+		PassHash:      hash,
+		EmailVerified: req.VerificationCode != "", // 如果提供了验证码则标记为已验证
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {

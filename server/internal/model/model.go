@@ -3,13 +3,14 @@ package model
 import "time"
 
 type User struct {
-	ID       uint   `gorm:"primarykey" json:"id"`
-	Username string `gorm:"uniqueIndex;size:50" json:"username"`
-	Email    string `gorm:"uniqueIndex;size:100" json:"email"`
-	Avatar   string `gorm:"type:text" json:"avatar"`          // 头像(base64)
-	Role     string `gorm:"size:20;default:user" json:"role"` // user|moderator|admin
-	Password string `gorm:"-" json:"-"`
-	PassHash string `json:"-"`
+	ID            uint   `gorm:"primarykey" json:"id"`
+	Username      string `gorm:"uniqueIndex;size:50" json:"username"`
+	Email         string `gorm:"uniqueIndex;size:100" json:"email"`
+	EmailVerified bool   `gorm:"default:false" json:"email_verified"` // 邮箱是否已验证
+	Avatar        string `gorm:"type:text" json:"avatar"`              // 头像(base64)
+	Role          string `gorm:"size:20;default:user" json:"role"`     // user|moderator|admin
+	Password      string `gorm:"-" json:"-"`
+	PassHash      string `json:"-"`
 	// 个人资料字段
 	Bio      string `gorm:"size:500" json:"bio"`      // 个人简介
 	Location string `gorm:"size:100" json:"location"` // 地区

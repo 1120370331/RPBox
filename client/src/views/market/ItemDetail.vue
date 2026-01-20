@@ -666,23 +666,25 @@ function downloadAllImages() {
 .rich-content :deep(img) {
   max-width: 100%;
   height: auto;
-  display: block;
+  display: inline-block;
   border-radius: 8px;
-  margin: 16px 0;
+  margin: 12px 8px;
+  vertical-align: middle;
 }
 
 .item-detail-page :deep(.image-preview) {
   position: relative;
-  display: block;
+  display: inline-block;
   max-width: 100%;
-  margin: 16px 0;
+  margin: 12px 8px;
+  vertical-align: middle;
   cursor: zoom-in;
 }
 
 .item-detail-page :deep(.image-preview img) {
   max-width: 100%;
   height: auto;
-  display: block;
+  display: inline-block;
   border-radius: 8px;
   margin: 0;
 }

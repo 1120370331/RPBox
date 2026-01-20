@@ -174,8 +174,12 @@ func (s *Server) bindEmail(c *gin.Context) {
 		return
 	}
 
-	// 更新邮箱
-	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Update("email", req.Email).Error; err != nil {
+	// 更新邮箱并标记为已验证
+	updates := map[string]interface{}{
+		"email":          req.Email,
+		"email_verified": true,
+	}
+	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新邮箱失败"})
 		return
 	}

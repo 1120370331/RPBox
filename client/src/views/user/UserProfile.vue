@@ -138,15 +138,23 @@ function goBack() {
 }
 
 async function handleSendEmailCode() {
-  if (!newEmail.value || !newEmail.value.includes('@')) {
+  // 如果用户有未验证的邮箱，且没有输入新邮箱，则使用当前邮箱
+  const emailToVerify = newEmail.value || userProfile.value?.email
+
+  if (!emailToVerify || !emailToVerify.includes('@')) {
     toast.error('请输入有效的邮箱地址')
     return
   }
 
   sendingEmailCode.value = true
   try {
-    await sendVerificationCode(newEmail.value)
+    await sendVerificationCode(emailToVerify)
     toast.success('验证码已发送到您的邮箱')
+
+    // 如果使用的是当前邮箱，自动填充
+    if (!newEmail.value && userProfile.value?.email) {
+      newEmail.value = userProfile.value.email
+    }
 
     // 开始60秒倒计时
     emailCountdown.value = 60
@@ -280,12 +288,16 @@ async function handleBindEmail() {
               <div class="form-group email-section">
                 <div class="email-header">
                   <label>邮箱</label>
-                  <span v-if="userProfile.email" class="email-status">
+                  <span v-if="userProfile.email && userProfile.email_verified" class="email-status verified">
                     <i class="ri-checkbox-circle-fill"></i>
-                    已绑定
+                    已验证
                   </span>
-                  <span v-else class="email-status warning">
+                  <span v-else-if="userProfile.email && !userProfile.email_verified" class="email-status warning">
                     <i class="ri-error-warning-fill"></i>
+                    未验证
+                  </span>
+                  <span v-else class="email-status error">
+                    <i class="ri-close-circle-fill"></i>
                     未绑定
                   </span>
                 </div>
@@ -298,12 +310,16 @@ async function handleBindEmail() {
                   class="change-email-btn"
                   @click="showEmailBinding = true"
                 >
-                  {{ userProfile.email ? '更换邮箱' : '绑定邮箱' }}
+                  {{ userProfile.email ? (userProfile.email_verified ? '更换邮箱' : '验证邮箱') : '绑定邮箱' }}
                 </button>
 
                 <div v-if="showEmailBinding" class="email-binding-form">
                   <div class="form-group">
-                    <input v-model="newEmail" type="email" placeholder="新邮箱地址" />
+                    <input
+                      v-model="newEmail"
+                      type="email"
+                      :placeholder="userProfile.email && !userProfile.email_verified ? '验证当前邮箱或输入新邮箱' : '新邮箱地址'"
+                    />
                   </div>
                   <div class="verification-group">
                     <input v-model="emailCode" placeholder="验证码" maxlength="6" />
@@ -319,14 +335,18 @@ async function handleBindEmail() {
                     </button>
                   </div>
                   <div class="email-actions">
-                    <button type="button" class="bind-btn" @click="handleBindEmail">确认绑定</button>
+                    <button type="button" class="bind-btn" @click="handleBindEmail">确认{{ userProfile.email && !userProfile.email_verified ? '验证' : '绑定' }}</button>
                     <button type="button" class="cancel-bind-btn" @click="showEmailBinding = false; newEmail = ''; emailCode = ''">取消</button>
                   </div>
                 </div>
 
-                <p v-if="!userProfile.email" class="email-tip">
+                <p v-if="!userProfile.email" class="email-tip error-tip">
                   <i class="ri-information-line"></i>
                   绑定邮箱后可用于找回密码和账号安全验证
+                </p>
+                <p v-else-if="!userProfile.email_verified" class="email-tip warning-tip">
+                  <i class="ri-information-line"></i>
+                  邮箱未验证，验证后可用于找回密码和账号安全验证
                 </p>
               </div>
 
@@ -913,11 +933,18 @@ async function handleBindEmail() {
   gap: 4px;
   font-size: 11px;
   font-weight: 600;
+}
+
+.email-status.verified {
   color: #4ade80;
 }
 
 .email-status.warning {
   color: #FF9800;
+}
+
+.email-status.error {
+  color: #f87171;
 }
 
 .email-status i {
@@ -1041,8 +1068,15 @@ async function handleBindEmail() {
   gap: 6px;
   margin-top: 12px;
   font-size: 11px;
-  color: #FF9800;
   line-height: 1.4;
+}
+
+.email-tip.error-tip {
+  color: #f87171;
+}
+
+.email-tip.warning-tip {
+  color: #FF9800;
 }
 
 .email-tip i {
