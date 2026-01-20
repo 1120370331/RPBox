@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,18 +14,19 @@ func TranslateError(err error) string {
 		return ""
 	}
 
-	validationErrors, ok := err.(validator.ValidationErrors)
-	if !ok {
-		return err.Error()
+	// 尝试解包为 validator.ValidationErrors
+	var validationErrors validator.ValidationErrors
+	if errors.As(err, &validationErrors) {
+		var messages []string
+		for _, e := range validationErrors {
+			msg := translateFieldError(e)
+			messages = append(messages, msg)
+		}
+		return strings.Join(messages, "; ")
 	}
 
-	var messages []string
-	for _, e := range validationErrors {
-		msg := translateFieldError(e)
-		messages = append(messages, msg)
-	}
-
-	return strings.Join(messages, "; ")
+	// 如果不是验证错误，返回原始错误信息
+	return err.Error()
 }
 
 func translateFieldError(e validator.FieldError) string {
