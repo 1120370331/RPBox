@@ -1,7 +1,14 @@
 {
   "name": "RPBox_Addon",
-  "latest": "1.0.4",
+  "latest": "1.0.5",
   "versions": [
+    {
+      "version": "1.0.5",
+      "releaseDate": "2026-01-20",
+      "minClientVersion": "1.0.0",
+      "changelog": "移除 TRP 姓名间自动中点连接，统一改为空格显示",
+      "downloadUrl": "/api/v1/addon/download/1.0.5"
+    },
     {
       "version": "1.0.4",
       "releaseDate": "2026-01-20",

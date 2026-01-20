@@ -190,7 +190,11 @@ local function GetDisplayName(record)
         if cached then
             local name = cached.FN or ""
             if cached.LN and cached.LN ~= "" then
-                name = name .. "·" .. cached.LN
+                if name ~= "" then
+                    name = name .. " " .. cached.LN
+                else
+                    name = cached.LN
+                end
             end
             if name ~= "" then
                 displayName = name
@@ -209,7 +213,11 @@ local function GetDisplayName(record)
         else
             local name = trp3.FN or ""
             if trp3.LN and trp3.LN ~= "" then
-                name = name .. "·" .. trp3.LN
+                if name ~= "" then
+                    name = name .. " " .. trp3.LN
+                else
+                    name = trp3.LN
+                end
             end
             if name ~= "" then
                 displayName = name

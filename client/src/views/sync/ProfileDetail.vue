@@ -75,7 +75,7 @@ const mounted = ref(false)
 // 构建显示名称
 const displayName = computed(() => {
   const c = profile.value?.characteristics
-  if (c?.FN && c?.LN) return `${c.FN}·${c.LN}`
+  if (c?.FN && c?.LN) return `${c.FN} ${c.LN}`
   if (c?.FN) return c.FN
   return profile.value?.name || '未命名角色'
 })

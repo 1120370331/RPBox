@@ -372,7 +372,7 @@ function getSenderName(record: ChatRecord): string {
   // 玩家消息优先显示TRP3名字
   const trp3 = record.sender.trp3
   if (trp3?.FN) {
-    return trp3.LN ? `${trp3.FN}·${trp3.LN}` : trp3.FN
+    return trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN
   }
   return record.sender.gameID.split('-')[0]
 }
