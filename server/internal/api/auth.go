@@ -42,6 +42,13 @@ func (s *Server) sendVerificationCode(c *gin.Context) {
 		return
 	}
 
+	// 检查邮箱是否已被注册
+	var existing model.User
+	if err := database.DB.Where("email = ?", req.Email).First(&existing).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "该邮箱已被注册"})
+		return
+	}
+
 	ctx := context.Background()
 
 	// 检查发送频率限制
