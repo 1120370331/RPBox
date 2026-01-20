@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"io"
 	"net/http"
@@ -138,6 +139,48 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
+}
+
+// bindEmail 绑定/更新邮箱（需要验证码）
+func (s *Server) bindEmail(c *gin.Context) {
+	userID := c.GetUint("userID")
+
+	var req struct {
+		Email            string `json:"email" binding:"required,email"`
+		VerificationCode string `json:"verification_code" binding:"required,len=6"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := context.Background()
+
+	// 验证邮箱验证码
+	valid, err := s.verificationService.VerifyCode(ctx, req.Email, req.VerificationCode)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify code"})
+		return
+	}
+	if !valid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已过期"})
+		return
+	}
+
+	// 检查邮箱是否已被其他用户使用
+	var existing model.User
+	if err := database.DB.Where("email = ? AND id != ?", req.Email, userID).First(&existing).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "该邮箱已被其他用户使用"})
+		return
+	}
+
+	// 更新邮箱
+	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Update("email", req.Email).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新邮箱失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "邮箱绑定成功"})
 }
 
 // getUserProfile 获取指定用户的公开信息

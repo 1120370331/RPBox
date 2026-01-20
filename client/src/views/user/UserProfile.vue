@@ -3,7 +3,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { useToastStore } from '../../stores/toast'
-import { uploadAvatar } from '../../api/user'
+import { uploadAvatar, bindEmail } from '../../api/user'
+import { sendVerificationCode } from '../../api/auth'
 import request from '../../api/request'
 
 const route = useRoute()
@@ -20,6 +21,15 @@ const loading = ref(true)
 const editMode = ref(false)
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
+
+// 邮箱绑定相关
+const showEmailBinding = ref(false)
+const newEmail = ref('')
+const emailCode = ref('')
+const sendingEmailCode = ref(false)
+const emailCountdown = ref(0)
+
+let emailCountdownTimer: number | null = null
 
 // 表单数据
 const formData = ref({
@@ -126,6 +136,51 @@ function getRoleLabel(role: string) {
 function goBack() {
   router.back()
 }
+
+async function handleSendEmailCode() {
+  if (!newEmail.value || !newEmail.value.includes('@')) {
+    toast.error('请输入有效的邮箱地址')
+    return
+  }
+
+  sendingEmailCode.value = true
+  try {
+    await sendVerificationCode(newEmail.value)
+    toast.success('验证码已发送到您的邮箱')
+
+    // 开始60秒倒计时
+    emailCountdown.value = 60
+    emailCountdownTimer = setInterval(() => {
+      emailCountdown.value--
+      if (emailCountdown.value <= 0 && emailCountdownTimer) {
+        clearInterval(emailCountdownTimer)
+        emailCountdownTimer = null
+      }
+    }, 1000) as unknown as number
+  } catch (error: any) {
+    toast.error(error.message || '发送验证码失败')
+  } finally {
+    sendingEmailCode.value = false
+  }
+}
+
+async function handleBindEmail() {
+  if (!newEmail.value || !emailCode.value) {
+    toast.error('请填写邮箱和验证码')
+    return
+  }
+
+  try {
+    await bindEmail(newEmail.value, emailCode.value)
+    toast.success('邮箱绑定成功')
+    showEmailBinding.value = false
+    newEmail.value = ''
+    emailCode.value = ''
+    await loadUserProfile()
+  } catch (error: any) {
+    toast.error(error.message || '绑定失败')
+  }
+}
 </script>
 
 <template>
@@ -220,6 +275,61 @@ function goBack() {
                 <label>用户名</label>
                 <input v-model="formData.username" type="text" placeholder="你的用户名" maxlength="50">
               </div>
+
+              <!-- 邮箱绑定区域 -->
+              <div class="form-group email-section">
+                <div class="email-header">
+                  <label>邮箱</label>
+                  <span v-if="userProfile.email" class="email-status">
+                    <i class="ri-checkbox-circle-fill"></i>
+                    已绑定
+                  </span>
+                  <span v-else class="email-status warning">
+                    <i class="ri-error-warning-fill"></i>
+                    未绑定
+                  </span>
+                </div>
+                <div class="current-email">
+                  {{ userProfile.email || '未绑定邮箱' }}
+                </div>
+                <button
+                  v-if="!showEmailBinding"
+                  type="button"
+                  class="change-email-btn"
+                  @click="showEmailBinding = true"
+                >
+                  {{ userProfile.email ? '更换邮箱' : '绑定邮箱' }}
+                </button>
+
+                <div v-if="showEmailBinding" class="email-binding-form">
+                  <div class="form-group">
+                    <input v-model="newEmail" type="email" placeholder="新邮箱地址" />
+                  </div>
+                  <div class="verification-group">
+                    <input v-model="emailCode" placeholder="验证码" maxlength="6" />
+                    <button
+                      type="button"
+                      class="btn-send-code"
+                      @click="handleSendEmailCode"
+                      :disabled="!newEmail || emailCountdown > 0"
+                    >
+                      <span v-if="emailCountdown > 0">{{ emailCountdown }}s</span>
+                      <span v-else-if="sendingEmailCode">发送中...</span>
+                      <span v-else>获取验证码</span>
+                    </button>
+                  </div>
+                  <div class="email-actions">
+                    <button type="button" class="bind-btn" @click="handleBindEmail">确认绑定</button>
+                    <button type="button" class="cancel-bind-btn" @click="showEmailBinding = false; newEmail = ''; emailCode = ''">取消</button>
+                  </div>
+                </div>
+
+                <p v-if="!userProfile.email" class="email-tip">
+                  <i class="ri-information-line"></i>
+                  绑定邮箱后可用于找回密码和账号安全验证
+                </p>
+              </div>
+
               <div class="form-group">
                 <label>个人简介</label>
                 <textarea v-model="formData.bio" placeholder="介绍一下自己..." maxlength="500" rows="4"></textarea>
@@ -780,6 +890,164 @@ function goBack() {
 
 .cancel-btn:hover {
   background: #F2E6D8;
+}
+
+/* 邮箱绑定样式 */
+.email-section {
+  border: 1px solid #E8DCC8;
+  border-radius: 8px;
+  padding: 16px;
+  background: rgba(251, 245, 239, 0.5);
+}
+
+.email-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.email-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.email-status.warning {
+  color: #FF9800;
+}
+
+.email-status i {
+  font-size: 14px;
+}
+
+.current-email {
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #E8DCC8;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #4B3621;
+  margin-bottom: 12px;
+}
+
+.change-email-btn {
+  width: 100%;
+  padding: 8px;
+  background: #FBF5EF;
+  border: 1px solid #D4A373;
+  border-radius: 6px;
+  color: #B87333;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.change-email-btn:hover {
+  background: #F2E6D8;
+  border-color: #B87333;
+}
+
+.email-binding-form {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.verification-group {
+  display: flex;
+  gap: 8px;
+}
+
+.verification-group input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #E8DCC8;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.btn-send-code {
+  padding: 10px 16px;
+  border: 1px solid #B87333;
+  border-radius: 6px;
+  background: #fff;
+  color: #B87333;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.btn-send-code:hover:not(:disabled) {
+  background: #B87333;
+  color: #fff;
+}
+
+.btn-send-code:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.email-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bind-btn {
+  flex: 1;
+  padding: 8px;
+  background: #B87333;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bind-btn:hover {
+  background: #4B3621;
+}
+
+.cancel-bind-btn {
+  flex: 1;
+  padding: 8px;
+  background: #FBF5EF;
+  color: #8C7B70;
+  border: 1px solid #E8DCC8;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-bind-btn:hover {
+  background: #F2E6D8;
+}
+
+.email-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: #FF9800;
+  line-height: 1.4;
+}
+
+.email-tip i {
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 /* 3. 公会卡片 */
