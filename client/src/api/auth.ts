@@ -31,3 +31,17 @@ export function sendVerificationCode(email: string) {
     body: JSON.stringify({ email }),
   })
 }
+
+export function forgotPassword(email: string) {
+  return request<{ message: string }>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function resetPassword(email: string, verificationCode: string, newPassword: string) {
+  return request<{ message: string }>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, verification_code: verificationCode, new_password: newPassword }),
+  })
+}

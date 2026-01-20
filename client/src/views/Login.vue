@@ -46,7 +46,7 @@ async function handleLogin() {
           <input
             v-model="username"
             class="input"
-            placeholder="用户名"
+            placeholder="用户名或邮箱"
             required
           />
         </div>
@@ -58,6 +58,10 @@ async function handleLogin() {
             placeholder="密码"
             required
           />
+        </div>
+
+        <div class="form-actions anim-item" style="--delay: 2.5">
+          <router-link to="/forgot-password" class="forgot-password-link">忘记密码？</router-link>
         </div>
 
         <p v-if="error" class="error-msg">{{ error }}</p>
@@ -117,6 +121,24 @@ async function handleLogin() {
 
 .form-group .input {
   width: 100%;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -8px;
+}
+
+.forgot-password-link {
+  font-size: 13px;
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.forgot-password-link:hover {
+  color: #4B3621;
+  text-decoration: underline;
 }
 
 .error-msg {
