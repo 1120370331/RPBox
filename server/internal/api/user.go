@@ -108,7 +108,7 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 		Website  string `json:"website"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 

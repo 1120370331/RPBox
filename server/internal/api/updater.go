@@ -12,9 +12,9 @@ import (
 
 // UpdateResponse Tauri updater 响应格式
 type UpdateResponse struct {
-	Version   string            `json:"version"`
-	Notes     string            `json:"notes,omitempty"`
-	PubDate   string            `json:"pub_date,omitempty"`
+	Version   string              `json:"version"`
+	Notes     string              `json:"notes,omitempty"`
+	PubDate   string              `json:"pub_date,omitempty"`
 	Platforms map[string]Platform `json:"platforms,omitempty"`
 	// 单平台响应格式
 	URL       string `json:"url,omitempty"`
