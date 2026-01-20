@@ -1,20 +1,73 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { register } from '../api/auth'
+import { register, sendVerificationCode } from '../api/auth'
 
 const router = useRouter()
 const username = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const verificationCode = ref('')
 const error = ref('')
 const loading = ref(false)
+const sendingCode = ref(false)
+const codeSent = ref(false)
+const countdown = ref(0)
 const mounted = ref(false)
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 100)
 })
+
+const canSendCode = computed(() => {
+  return email.value.includes('@') && !sendingCode.value && countdown.value === 0
+})
+
+let countdownTimer: number | null = null
+
+async function handleSendCode() {
+  if (!email.value || !email.value.includes('@')) {
+    error.value = '请输入有效的邮箱地址'
+    return
+  }
+
+  sendingCode.value = true
+  error.value = ''
+
+  try {
+    const response = await sendVerificationCode(email.value)
+    codeSent.value = true
+
+    // 开始60秒倒计时
+    countdown.value = 60
+    countdownTimer = setInterval(() => {
+      countdown.value--
+      if (countdown.value <= 0 && countdownTimer) {
+        clearInterval(countdownTimer)
+        countdownTimer = null
+      }
+    }, 1000) as unknown as number
+
+    // 显示成功消息
+    const successMsg = response.message || '验证码已发送到您的邮箱'
+    error.value = '' // 清除错误，用成功消息替代
+    setTimeout(() => {
+      if (error.value === '') {
+        error.value = successMsg
+        setTimeout(() => {
+          if (error.value === successMsg) {
+            error.value = ''
+          }
+        }, 3000)
+      }
+    }, 0)
+  } catch (e: any) {
+    error.value = e.message || '发送验证码失败'
+  } finally {
+    sendingCode.value = false
+  }
+}
 
 async function handleRegister() {
   error.value = ''
@@ -24,9 +77,14 @@ async function handleRegister() {
     return
   }
 
+  if (!verificationCode.value) {
+    error.value = '请输入邮箱验证码'
+    return
+  }
+
   loading.value = true
   try {
-    await register(username.value, email.value, password.value)
+    await register(username.value, email.value, password.value, verificationCode.value)
     router.push('/login')
   } catch (e: any) {
     error.value = e.message
@@ -62,7 +120,27 @@ async function handleRegister() {
             required
           />
         </div>
-        <div class="form-group anim-item" style="--delay: 3">
+        <div class="form-group verification-group anim-item" style="--delay: 3">
+          <input
+            v-model="verificationCode"
+            class="input verification-input"
+            placeholder="邮箱验证码"
+            maxlength="6"
+            required
+          />
+          <button
+            type="button"
+            class="btn-send-code"
+            @click="handleSendCode"
+            :disabled="!canSendCode"
+          >
+            <span v-if="countdown > 0">{{ countdown }}s</span>
+            <span v-else-if="sendingCode">发送中...</span>
+            <span v-else-if="codeSent">重新发送</span>
+            <span v-else">获取验证码</span>
+          </button>
+        </div>
+        <div class="form-group anim-item" style="--delay: 4">
           <input
             v-model="password"
             type="password"
@@ -71,7 +149,7 @@ async function handleRegister() {
             required
           />
         </div>
-        <div class="form-group anim-item" style="--delay: 4">
+        <div class="form-group anim-item" style="--delay: 5">
           <input
             v-model="confirmPassword"
             type="password"
@@ -83,12 +161,12 @@ async function handleRegister() {
 
         <p v-if="error" class="error-msg">{{ error }}</p>
 
-        <button type="submit" class="btn-primary register-btn anim-item" style="--delay: 5" :disabled="loading">
+        <button type="submit" class="btn-primary register-btn anim-item" style="--delay: 6" :disabled="loading">
           {{ loading ? '注册中...' : '注册' }}
         </button>
       </form>
 
-      <div class="register-footer anim-item" style="--delay: 6">
+      <div class="register-footer anim-item" style="--delay: 7">
         <router-link to="/login">已有账号？立即登录</router-link>
       </div>
     </div>
@@ -161,6 +239,38 @@ async function handleRegister() {
   border-color: #B87333;
   transform: scale(1.02);
   box-shadow: 0 4px 12px rgba(184, 115, 51, 0.15);
+}
+
+.verification-group {
+  display: flex;
+  gap: 8px;
+}
+
+.verification-input {
+  flex: 1;
+}
+
+.btn-send-code {
+  padding: 12px 20px;
+  border: 1px solid #B87333;
+  border-radius: 8px;
+  background: #fff;
+  color: #B87333;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.3s;
+}
+
+.btn-send-code:hover:not(:disabled) {
+  background: #B87333;
+  color: #fff;
+}
+
+.btn-send-code:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .error-msg {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -8,17 +9,74 @@ import (
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/pkg/auth"
+	"github.com/rpbox/server/pkg/email"
 )
 
 type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
+	Username         string `json:"username" binding:"required,min=3,max=50"`
+	Email            string `json:"email" binding:"required,email"`
+	Password         string `json:"password" binding:"required,min=6"`
+	VerificationCode string `json:"verification_code"` // 可选，向后兼容
 }
 
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
+}
+
+type SendCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// sendVerificationCode 发送邮箱验证码
+func (s *Server) sendVerificationCode(c *gin.Context) {
+	var req SendCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 验证邮箱格式
+	if !email.ValidateEmail(req.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email format"})
+		return
+	}
+
+	ctx := context.Background()
+
+	// 检查发送频率限制
+	canSend, err := s.verificationService.CheckRateLimit(ctx, req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check rate limit"})
+		return
+	}
+	if !canSend {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "请等待1分钟后再试"})
+		return
+	}
+
+	// 生成验证码
+	code, err := s.verificationService.GenerateCode()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate code"})
+		return
+	}
+
+	// 保存验证码到Redis
+	if err := s.verificationService.SaveCode(ctx, req.Email, code); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save code"})
+		return
+	}
+
+	// 发送邮件
+	if err := s.emailClient.SendVerificationCode(req.Email, code); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send email"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "验证码已发送到您的邮箱",
+	})
 }
 
 func (s *Server) register(c *gin.Context) {
@@ -28,10 +86,30 @@ func (s *Server) register(c *gin.Context) {
 		return
 	}
 
+	// 如果提供了验证码，则验证
+	if req.VerificationCode != "" {
+		ctx := context.Background()
+		valid, err := s.verificationService.VerifyCode(ctx, req.Email, req.VerificationCode)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify code"})
+			return
+		}
+		if !valid {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已过期"})
+			return
+		}
+	}
+
 	// 检查用户名是否存在
 	var existing model.User
 	if err := database.DB.Where("username = ?", req.Username).First(&existing).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+		return
+	}
+
+	// 检查邮箱是否已注册
+	if err := database.DB.Where("email = ?", req.Email).First(&existing).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
 		return
 	}
 

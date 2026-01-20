@@ -10,6 +10,8 @@ type Config struct {
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Storage  StorageConfig  `mapstructure:"storage"`
 	Updater  UpdaterConfig  `mapstructure:"updater"`
+	Redis    RedisConfig    `mapstructure:"redis"`
+	SMTP     SMTPConfig     `mapstructure:"smtp"`
 }
 
 type UpdaterConfig struct {
@@ -47,6 +49,21 @@ type DatabaseConfig struct {
 type JWTConfig struct {
 	Secret string `mapstructure:"secret"`
 	Expire int    `mapstructure:"expire"`
+}
+
+type RedisConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     string `mapstructure:"port"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+}
+
+type SMTPConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	From     string `mapstructure:"from"`
 }
 
 func Load() (*Config, error) {

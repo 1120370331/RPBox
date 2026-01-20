@@ -11,6 +11,7 @@ func (s *Server) setupRoutes() {
 	v1 := s.router.Group("/api/v1")
 	{
 		// 公开接口
+		v1.POST("/auth/send-code", s.sendVerificationCode)
 		v1.POST("/auth/register", s.register)
 		v1.POST("/auth/login", s.login)
 
@@ -179,6 +180,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/user/info", s.getUserInfo)
 			auth.PUT("/user/info", s.updateUserInfo)
 			auth.POST("/user/avatar", s.updateAvatar)
+			auth.POST("/user/bind-email", s.bindEmail)
 			auth.GET("/users/:id", s.getUserProfile)
 			auth.GET("/users/:id/guilds", s.getUserGuilds)
 

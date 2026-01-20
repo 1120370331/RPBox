@@ -40,3 +40,8 @@ export async function uploadAvatar(file: File): Promise<{ avatar: string }> {
 
   return res.json()
 }
+
+// 绑定邮箱
+export async function bindEmail(email: string, verificationCode: string): Promise<{ message: string }> {
+  return request.post('/user/bind-email', { email, verification_code: verificationCode })
+}

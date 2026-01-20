@@ -18,9 +18,16 @@ export function login(username: string, password: string) {
   })
 }
 
-export function register(username: string, email: string, password: string) {
+export function register(username: string, email: string, password: string, verificationCode?: string) {
   return request<{ message: string }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, email, password, verification_code: verificationCode }),
+  })
+}
+
+export function sendVerificationCode(email: string) {
+  return request<{ message: string }>('/auth/send-code', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
   })
 }

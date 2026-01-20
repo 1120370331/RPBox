@@ -2,16 +2,20 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/rpbox/server/internal/config"
 	"github.com/rpbox/server/internal/middleware"
 	"github.com/rpbox/server/internal/service"
 	ws "github.com/rpbox/server/internal/websocket"
+	"github.com/rpbox/server/pkg/email"
 )
 
 type Server struct {
-	cfg    *config.Config
-	router *gin.Engine
-	wsHub  *ws.Hub
+	cfg                 *config.Config
+	router              *gin.Engine
+	wsHub               *ws.Hub
+	emailClient         *email.SMTPClient
+	verificationService *service.VerificationService
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -27,10 +31,31 @@ func NewServer(cfg *config.Config) *Server {
 	hub := ws.NewHub()
 	go hub.Run()
 
+	// 初始化 Redis 客户端
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Host + ":" + cfg.Redis.Port,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+
+	// 初始化邮件客户端
+	emailClient := email.NewSMTPClient(&email.SMTPConfig{
+		Host:     cfg.SMTP.Host,
+		Port:     cfg.SMTP.Port,
+		Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password,
+		From:     cfg.SMTP.From,
+	})
+
+	// 初始化验证码服务
+	verificationService := service.NewVerificationService(redisClient)
+
 	s := &Server{
-		cfg:    cfg,
-		router: router,
-		wsHub:  hub,
+		cfg:                 cfg,
+		router:              router,
+		wsHub:               hub,
+		emailClient:         emailClient,
+		verificationService: verificationService,
 	}
 
 	// 设置通知服务的 Hub 引用
