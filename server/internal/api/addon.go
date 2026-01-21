@@ -100,15 +100,20 @@ func (s *Server) downloadAddon(c *gin.Context) {
 		return
 	}
 
-	// 尝试从 versions 目录下载
-	zipPath := filepath.Join(s.getAddonStoragePath(), "versions", version+".zip")
+	// 优先从 versions 目录下载，避免 latest.zip 版本滞后
+	storagePath := s.getAddonStoragePath()
+	zipPath := filepath.Join(storagePath, "versions", version+".zip")
 
-	// 如果是最新版本，也检查 latest 目录
-	manifest, _ := s.loadManifest()
-	if manifest != nil && version == manifest.Latest {
-		latestZip := filepath.Join(s.getAddonStoragePath(), "latest.zip")
-		if _, err := os.Stat(latestZip); err == nil {
-			zipPath = latestZip
+	if _, err := os.Stat(zipPath); err != nil {
+		// 如果找不到版本包，且请求的是最新版本，再回退到 latest.zip
+		if os.IsNotExist(err) {
+			manifest, _ := s.loadManifest()
+			if manifest != nil && version == manifest.Latest {
+				latestZip := filepath.Join(storagePath, "latest.zip")
+				if _, latestErr := os.Stat(latestZip); latestErr == nil {
+					zipPath = latestZip
+				}
+			}
 		}
 	}
 
