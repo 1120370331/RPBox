@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"crypto/md5"
-	"encoding/base64"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -12,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nfnt/resize"
@@ -67,32 +65,19 @@ func (s *Server) getImage(c *gin.Context) {
 		return
 	}
 
-	// 从数据库获取原图 Base64
-	base64Data, err := s.getOriginalImageBase64(imageType, id)
+	// 从数据库获取原图（URL或Base64）
+	originalValue, err := s.getOriginalImageValue(imageType, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
 		return
 	}
 
-	if base64Data == "" {
+	if originalValue == "" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Image data is empty"})
 		return
 	}
 
-	// 解析 data URI (data:image/jpeg;base64,xxx)
-	var imgData []byte
-	if strings.HasPrefix(base64Data, "data:") {
-		parts := strings.SplitN(base64Data, ",", 2)
-		if len(parts) != 2 {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid image data"})
-			return
-		}
-		imgData, err = base64.StdEncoding.DecodeString(parts[1])
-	} else {
-		// 纯 Base64
-		imgData, err = base64.StdEncoding.DecodeString(base64Data)
-	}
-
+	imgData, contentType, err := s.loadImageBytes(c, originalValue)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode image"})
 		return
@@ -105,10 +90,13 @@ func (s *Server) getImage(c *gin.Context) {
 			c.Status(http.StatusNotModified)
 			return
 		}
-		c.Header("Content-Type", http.DetectContentType(imgData))
+		if contentType == "" {
+			contentType = http.DetectContentType(imgData)
+		}
+		c.Header("Content-Type", contentType)
 		c.Header("Cache-Control", cacheControl)
 		c.Header("ETag", etag)
-		c.Data(http.StatusOK, http.DetectContentType(imgData), imgData)
+		c.Data(http.StatusOK, contentType, imgData)
 		return
 	}
 
@@ -130,10 +118,13 @@ func (s *Server) getImage(c *gin.Context) {
 			c.Status(http.StatusNotModified)
 			return
 		}
-		c.Header("Content-Type", http.DetectContentType(imgData))
+		if contentType == "" {
+			contentType = http.DetectContentType(imgData)
+		}
+		c.Header("Content-Type", contentType)
 		c.Header("Cache-Control", cacheControl)
 		c.Header("ETag", etag)
-		c.Data(http.StatusOK, http.DetectContentType(imgData), imgData)
+		c.Data(http.StatusOK, contentType, imgData)
 		return
 	}
 
@@ -166,8 +157,8 @@ func (s *Server) getImage(c *gin.Context) {
 	c.Data(http.StatusOK, "image/jpeg", result)
 }
 
-// getOriginalImageBase64 从数据库获取原图 Base64
-func (s *Server) getOriginalImageBase64(imageType string, id string) (string, error) {
+// getOriginalImageValue 从数据库获取原图值（URL或Base64）
+func (s *Server) getOriginalImageValue(imageType string, id string) (string, error) {
 	idNum, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		return "", err

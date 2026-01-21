@@ -444,7 +444,7 @@ func (s *Server) getItem(c *gin.Context) {
 		for _, img := range images {
 			imageList = append(imageList, ImageResponse{
 				ID:        img.ID,
-				ImageURL:  "/api/v1/items/" + id + "/images/" + strconv.Itoa(int(img.ID)),
+				ImageURL:  buildPublicURL(c, "/api/v1/items/"+id+"/images/"+strconv.Itoa(int(img.ID))),
 				SortOrder: img.SortOrder,
 			})
 		}

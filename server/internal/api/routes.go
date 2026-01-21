@@ -1,12 +1,18 @@
 package api
 
-import "github.com/rpbox/server/internal/middleware"
+import (
+	"path/filepath"
+
+	"github.com/rpbox/server/internal/middleware"
+)
 
 func (s *Server) setupRoutes() {
 	s.router.GET("/health", s.healthCheck)
 
 	// 静态文件服务 - 更新包下载
 	s.router.Static("/releases", "./releases")
+	// 静态文件服务 - 图片上传
+	s.router.Static("/uploads", filepath.Join(s.cfg.Storage.Path, "uploads"))
 
 	v1 := s.router.Group("/api/v1")
 	{
@@ -14,8 +20,8 @@ func (s *Server) setupRoutes() {
 		v1.POST("/auth/send-code", s.sendVerificationCode)
 		v1.POST("/auth/register", s.register)
 		v1.POST("/auth/login", s.login)
-		v1.POST("/auth/forgot-password", s.forgotPassword)   // 发送重置密码验证码
-		v1.POST("/auth/reset-password", s.resetPassword)     // 重置密码
+		v1.POST("/auth/forgot-password", s.forgotPassword) // 发送重置密码验证码
+		v1.POST("/auth/reset-password", s.resetPassword)   // 重置密码
 
 		// 插件版本管理（公开）
 		v1.GET("/addon/manifest", s.getAddonManifest)

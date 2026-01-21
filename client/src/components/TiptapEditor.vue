@@ -84,27 +84,26 @@ function triggerImageUpload() {
   imageInputRef.value?.click()
 }
 
-function handleImageUpload(event: Event) {
+async function handleImageUpload(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+  const files = input.files ? Array.from(input.files) : []
+  if (files.length === 0) return
 
-  if (file.size > 20 * 1024 * 1024) {
-    toast.info('图片不能超过20MB')
-    input.value = ''
-    return
-  }
+  for (const file of files) {
+    if (file.size > 20 * 1024 * 1024) {
+      toast.info(`图片 ${file.name} 不能超过20MB`)
+      continue
+    }
 
-  const cacheKey = getFileCacheKey(file)
-  const cachedUrl = uploadCache.get(cacheKey)
-  if (cachedUrl) {
-    editor.value?.chain().focus().setImage({ src: cachedUrl }).run()
-    input.value = ''
-    return
-  }
+    const cacheKey = getFileCacheKey(file)
+    const cachedUrl = uploadCache.get(cacheKey)
+    if (cachedUrl) {
+      editor.value?.chain().focus().setImage({ src: cachedUrl }).run()
+      continue
+    }
 
-  uploadImage(file)
-    .then((res: any) => {
+    try {
+      const res: any = await uploadImage(file)
       const url = res?.data?.url || res?.url
       if (!url) {
         throw new Error('未获取到图片地址')
@@ -112,14 +111,13 @@ function handleImageUpload(event: Event) {
       editor.value?.chain().focus().setImage({ src: url }).run()
       uploadCache.set(cacheKey, url)
       persistUploadCache()
-    })
-    .catch((error: any) => {
+    } catch (error: any) {
       console.error('图片上传失败:', error)
       toast.error(error.message || '图片上传失败')
-    })
-    .finally(() => {
-      input.value = ''
-    })
+    }
+  }
+
+  input.value = ''
 }
 
 // 通过URL插入图片
@@ -254,6 +252,7 @@ function insertImageByUrl() {
       ref="imageInputRef"
       type="file"
       accept="image/*"
+      multiple
       style="display: none"
       @change="handleImageUpload"
     />

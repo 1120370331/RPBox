@@ -2,14 +2,13 @@ package api
 
 import (
 	"bytes"
-	"encoding/base64"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"image/png"
-	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 
@@ -71,39 +70,31 @@ func (s *Server) uploadItemImages(c *gin.Context) {
 	}
 
 	var uploaded []ImageResponse
-	for i, file := range files {
+	for _, file := range files {
 		if file.Size > 10*1024*1024 { // 单张10MB
 			continue
 		}
 
 		contentType := file.Header.Get("Content-Type")
-		if !strings.HasPrefix(contentType, "image/") {
+		if contentType != "" && !strings.HasPrefix(contentType, "image/") {
 			continue
 		}
 
-		f, err := file.Open()
+		imageURL, err := s.saveUploadedImage(c, file, path.Join("items", itemID))
 		if err != nil {
 			continue
 		}
-		data, err := io.ReadAll(f)
-		f.Close()
-		if err != nil {
-			continue
-		}
-
-		base64Data := base64.StdEncoding.EncodeToString(data)
-		imageData := "data:" + contentType + ";base64," + base64Data
 
 		imgRecord := model.ItemImage{
 			ItemID:    item.ID,
-			ImageData: imageData,
-			SortOrder: int(count) + i,
+			ImageData: imageURL,
+			SortOrder: int(count) + len(uploaded),
 		}
 		database.DB.Create(&imgRecord)
 
 		uploaded = append(uploaded, ImageResponse{
 			ID:        imgRecord.ID,
-			ImageURL:  "/api/v1/items/" + itemID + "/images/" + strconv.Itoa(int(imgRecord.ID)),
+			ImageURL:  buildPublicURL(c, "/api/v1/items/"+itemID+"/images/"+strconv.Itoa(int(imgRecord.ID))),
 			SortOrder: imgRecord.SortOrder,
 		})
 	}
@@ -137,7 +128,7 @@ func (s *Server) listItemImages(c *gin.Context) {
 	for _, img := range images {
 		result = append(result, ImageResponse{
 			ID:        img.ID,
-			ImageURL:  "/api/v1/items/" + itemID + "/images/" + strconv.Itoa(int(img.ID)),
+			ImageURL:  buildPublicURL(c, "/api/v1/items/"+itemID+"/images/"+strconv.Itoa(int(img.ID))),
 			SortOrder: img.SortOrder,
 		})
 	}
@@ -165,26 +156,13 @@ func (s *Server) getItemImage(c *gin.Context) {
 		return
 	}
 
-	// 解析base64
-	parts := strings.Split(img.ImageData, ",")
-	if len(parts) != 2 {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "图片数据格式错误"})
-		return
-	}
-
-	contentType := "image/jpeg"
-	if strings.Contains(parts[0], "image/png") {
-		contentType = "image/png"
-	} else if strings.Contains(parts[0], "image/gif") {
-		contentType = "image/gif"
-	} else if strings.Contains(parts[0], "image/webp") {
-		contentType = "image/webp"
-	}
-
-	data, err := base64.StdEncoding.DecodeString(parts[1])
+	data, contentType, err := s.loadImageBytes(c, img.ImageData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "图片解码失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "图片读取失败"})
 		return
+	}
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
 	}
 
 	c.Header("Content-Type", contentType)
@@ -210,28 +188,22 @@ func (s *Server) downloadItemImage(c *gin.Context) {
 		return
 	}
 
-	// 解析base64
-	parts := strings.Split(img.ImageData, ",")
-	if len(parts) != 2 {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "图片数据格式错误"})
-		return
-	}
-
-	data, err := base64.StdEncoding.DecodeString(parts[1])
+	data, contentType, err := s.loadImageBytes(c, img.ImageData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "图片解码失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "图片读取失败"})
 		return
 	}
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
 
-	contentType := "image/jpeg"
-	ext := ".jpg"
-	if strings.Contains(parts[0], "image/png") {
-		contentType = "image/png"
-		ext = ".png"
+	ext := imageExtension(contentType, "")
+	if ext == "" {
+		ext = ".jpg"
 	}
 
 	// 如果需要水印且作者开启了水印
-	if withWatermark && item.EnableWatermark {
+	if withWatermark && item.EnableWatermark && (contentType == "image/jpeg" || contentType == "image/png") {
 		// 获取作者用户名
 		var author model.User
 		database.DB.Select("username").First(&author, item.AuthorID)

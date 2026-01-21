@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPost, updatePost, getPostTags, type UpdatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
+import { uploadImage } from '@/api/item'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { addPostTag, removePostTag } from '@/api/post'
@@ -270,7 +271,7 @@ function handlePreview() {
 }
 
 // 压缩图片到指定大小以内
-async function compressImage(file: File, maxSizeKB: number = 1024): Promise<string> {
+async function compressImage(file: File, maxSizeKB: number = 1024): Promise<File> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -295,15 +296,27 @@ async function compressImage(file: File, maxSizeKB: number = 1024): Promise<stri
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(img, 0, 0, width, height)
 
-        let quality = 0.9
-        let result = canvas.toDataURL('image/jpeg', quality)
+        const toBlob = (quality: number) => new Promise<Blob>((resolveBlob, rejectBlob) => {
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              rejectBlob(new Error('图片处理失败'))
+              return
+            }
+            resolveBlob(blob)
+          }, 'image/jpeg', quality)
+        })
 
-        while (result.length > maxSizeKB * 1024 * 1.37 && quality > 0.1) {
-          quality -= 0.1
-          result = canvas.toDataURL('image/jpeg', quality)
-        }
+        void (async () => {
+          let quality = 0.9
+          let blob = await toBlob(quality)
+          while (blob.size > maxSizeKB * 1024 && quality > 0.1) {
+            quality -= 0.1
+            blob = await toBlob(quality)
+          }
 
-        resolve(result)
+          const baseName = file.name.replace(/\.[^.]+$/, '') || 'cover'
+          resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }))
+        })().catch(reject)
       }
       img.onerror = reject
       img.src = e.target?.result as string
@@ -327,12 +340,17 @@ async function handleCoverImageUpload(event: Event) {
   coverImageLoading.value = true
   try {
     const compressed = await compressImage(file, 1024)
-    coverImagePreview.value = compressed
-    form.value.cover_image = compressed
+    const res: any = await uploadImage(compressed)
+    const url = res?.data?.url || res?.url
+    if (!url) {
+      throw new Error('未获取到图片地址')
+    }
+    coverImagePreview.value = url
+    form.value.cover_image = url
     toast.success('封面图上传成功')
-  } catch (error) {
-    console.error('图片压缩失败:', error)
-    toast.error('图片处理失败')
+  } catch (error: any) {
+    console.error('封面图上传失败:', error)
+    toast.error(error?.message || '封面图上传失败')
   } finally {
     coverImageLoading.value = false
     input.value = ''
