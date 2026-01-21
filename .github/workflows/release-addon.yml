@@ -37,7 +37,7 @@ jobs:
           if [ -f "$NOTES_FILE" ]; then
             CHANGELOG=$(cat "$NOTES_FILE")
           else
-            CHANGELOG="Release $VERSION"
+            CHANGELOG=""
           fi
           echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
@@ -56,9 +56,6 @@ jobs:
           manifest_path = "server/storage/addons/RPBox_Addon/manifest.json"
           version = os.environ["VERSION"].strip()
           changelog = os.environ.get("CHANGELOG", "").strip()
-          if not changelog:
-            changelog = f"Release {version}"
-          changelog = " ".join(changelog.splitlines()).strip()
           release_date = datetime.date.today().isoformat()
 
           manifest = {"name": "RPBox_Addon", "latest": version, "versions": []}
@@ -66,7 +63,22 @@ jobs:
             with open(manifest_path, "r", encoding="utf-8") as f:
               manifest = json.load(f)
 
-          versions = [v for v in manifest.get("versions", []) if v.get("version") != version]
+          existing_entry = None
+          versions = []
+          for entry in manifest.get("versions", []):
+            if entry.get("version") == version:
+              existing_entry = entry
+              continue
+            versions.append(entry)
+
+          if not changelog:
+            if existing_entry and existing_entry.get("changelog"):
+              changelog = existing_entry["changelog"]
+            else:
+              changelog = f"Release {version}"
+          changelog = " ".join(changelog.splitlines()).strip()
+          if existing_entry and existing_entry.get("releaseDate"):
+            release_date = existing_entry["releaseDate"]
           versions.insert(0, {
             "version": version,
             "releaseDate": release_date,
