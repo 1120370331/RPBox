@@ -440,54 +440,35 @@ ls /home/devbox/RPBox/releases/0.1.6/
 
 客户端会自动检测 RPBox_Addon 插件的新版本，并提供一键安装功能。
 
-### 发布新版本插件
+### 发布新版本插件（CI）
 
-**步骤 1：更新插件源代码版本号**
+只需要推送 tag，CI 会自动完成版本号更新、打包、上传和 manifest 更新。
 
-编辑 `addon/RPBox_Addon/RPBox_Addon.toc`：
+**步骤 1：准备发布说明（可选）**
 
-```lua
-## Version: 1.0.2  # 修改为新版本号
-```
+新增 `addon/release-notes/<version>.txt`，内容为本次更新说明。
 
-**步骤 2：更新服务端 manifest**
-
-编辑 `server/storage/addons/RPBox_Addon/manifest.json`：
-
-```json
-{
-  "name": "RPBox_Addon",
-  "latest": "1.0.2",  # 修改为新版本号
-  "versions": [
-    {
-      "version": "1.0.2",  # 添加新版本信息
-      "releaseDate": "2026-01-17",
-      "minClientVersion": "1.0.0",
-      "changelog": "更新说明",
-      "downloadUrl": "/api/v1/addon/download/1.0.2"
-    }
-    # ... 保留旧版本信息
-  ]
-}
-```
-
-**步骤 3：打包并部署**
+**步骤 2：推送 tag**
 
 ```bash
-# 打包插件
-cd addon
-powershell -Command "Compress-Archive -Path 'RPBox_Addon' -DestinationPath 'RPBox_Addon.zip' -Force"
-
-# 复制到服务器存储目录
-cp RPBox_Addon.zip ../server/storage/addons/RPBox_Addon/latest.zip
+git tag addon-v1.0.7
+git push origin addon-v1.0.7
 ```
+
+**CI 自动完成**
+
+- 更新 `RPBox_Addon.toc` 的 `## Version`
+- 打包并上传 `versions/<version>.zip` 与 `latest.zip`
+- 更新服务器 `manifest.json`
+- 校验包内版本号与 tag 一致，失败会中断发布
 
 ### 重要说明
 
 - **覆盖安装**：插件安装采用覆盖模式，不会删除旧文件，避免文件锁定问题
 - **版本检测**：客户端通过读取 `.toc` 文件的 `## Version:` 字段来检测版本
 - **存储路径**：插件存储在 `server/storage/addons/RPBox_Addon/` 目录
-- **下载优先级**：服务端优先使用 `latest.zip`，如果不存在则使用 `versions/{version}.zip`
+- **下载优先级**：服务端优先使用 `versions/<version>.zip`，只有在版本包缺失时回退到 `latest.zip`
+- **manifest 维护**：`server/storage/addons/RPBox_Addon/manifest.json` 作为仓库参考，生产环境由 CI 自动更新
 
 ## CI/CD 流程
 
@@ -518,6 +499,8 @@ git tag addon-v1.1.0 && git push --tags
 # 插件发布
 .\scripts\release-addon.ps1 -Version "1.1.0" -Changelog "更新说明"
 ```
+
+> 插件发布脚本仅用于紧急手动发布，正常发版请使用 tag 触发 CI。
 
 ### GitHub Secrets 配置
 

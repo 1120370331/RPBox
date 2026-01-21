@@ -120,6 +120,25 @@ smtp:
 
 详细文档请参考 [CLAUDE.md](./CLAUDE.md)
 
+## 插件发版（自动化）
+
+发布 RPBox Addon 只需要打 tag，CI 会自动完成打包与部署：
+
+1. 可选：新增发版说明文件 `addon/release-notes/<版本号>.txt`
+2. 推送 tag（示例：`addon-v1.0.7`）
+
+```bash
+git tag addon-v1.0.7
+git push origin addon-v1.0.7
+```
+
+CI 会自动：
+- 更新插件 `RPBox_Addon.toc` 版本号
+- 打包并上传 `versions/<version>.zip` 与 `latest.zip`
+- 更新服务器 `manifest.json`
+
+注意：客户端下载优先使用 `versions/<version>.zip`，只有在版本包缺失时才回退到 `latest.zip`。
+
 ## 开源协议
 
 本项目采用分层开源策略：
