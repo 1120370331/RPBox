@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { login } from '../api/auth'
 import { useUserStore } from '../stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const username = ref('')
@@ -24,7 +25,10 @@ async function handleLogin() {
   try {
     const res = await login(username.value, password.value)
     userStore.setAuth(res.token, res.user)
-    router.push('/')
+    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+      ? route.query.redirect
+      : '/'
+    router.replace(redirect)
   } catch (e: any) {
     error.value = e.message
   } finally {

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from './components/AppLayout.vue'
+import { useUserStore } from './stores/user'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -49,6 +50,56 @@ const router = createRouter({
     { path: '/forgot-password', name: 'forgot-password', component: () => import('./views/ForgotPassword.vue') },
     { path: '/story/:code', name: 'story-playback', component: () => import('./views/archives/StoryPlayback.vue') },
   ],
+})
+
+const publicRoutes = new Set([
+  'login',
+  'register',
+  'forgot-password',
+  'story-playback',
+])
+
+function parseJwt(token: string): { exp?: number } | null {
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=')
+    const json = atob(padded)
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+function isTokenExpired(token: string): boolean {
+  const payload = parseJwt(token)
+  if (!payload?.exp) return true
+  return payload.exp * 1000 <= Date.now()
+}
+
+function clearAuthState() {
+  try {
+    const userStore = useUserStore()
+    userStore.logout()
+  } catch {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+  }
+}
+
+router.beforeEach((to) => {
+  const routeName = typeof to.name === 'string' ? to.name : ''
+  if (publicRoutes.has(routeName)) {
+    return true
+  }
+
+  const token = localStorage.getItem('token')
+  if (!token || isTokenExpired(token)) {
+    clearAuthState()
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  return true
 })
 
 export default router

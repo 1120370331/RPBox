@@ -561,7 +561,8 @@ local function RefreshLogContent()
         end
 
         row.text:SetText(lineText)
-        table.insert(MainFrame.logPlainText, plainText)
+        -- Keep copy order oldest -> newest.
+        table.insert(MainFrame.logPlainText, 1, plainText)
 
         local textHeight = row.text:GetStringHeight() or 16
         row:SetHeight(textHeight + 4)

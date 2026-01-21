@@ -264,10 +264,20 @@ export interface MetricsSummary {
   month: PeriodStats
 }
 
+export interface BasicMetrics {
+  story_archives: number
+  story_entries: number
+  profile_backups: number
+}
+
 export function getMetricsHistory(days: number = 30) {
   return request.get<{ metrics: DailyMetrics[]; days: number }>('/moderator/metrics/history', { params: { days } })
 }
 
 export function getMetricsSummary() {
   return request.get<MetricsSummary>('/moderator/metrics/summary')
+}
+
+export function getMetricsBasic() {
+  return request.get<BasicMetrics>('/moderator/metrics/basic')
 }
