@@ -7,8 +7,8 @@ type User struct {
 	Username      string `gorm:"uniqueIndex;size:50" json:"username"`
 	Email         string `gorm:"uniqueIndex;size:100" json:"email"`
 	EmailVerified bool   `gorm:"default:false" json:"email_verified"` // 邮箱是否已验证
-	Avatar        string `gorm:"type:text" json:"avatar"`              // 头像(base64)
-	Role          string `gorm:"size:20;default:user" json:"role"`     // user|moderator|admin
+	Avatar        string `gorm:"type:text" json:"avatar"`             // 头像(base64)
+	Role          string `gorm:"size:20;default:user" json:"role"`    // user|moderator|admin
 	Password      string `gorm:"-" json:"-"`
 	PassHash      string `json:"-"`
 	// 个人资料字段
@@ -95,22 +95,22 @@ type StoryTagInfo struct {
 }
 
 type Story struct {
-	ID           uint      `gorm:"primarykey" json:"id"`
-	UserID       uint      `gorm:"index;not null" json:"user_id"`
-	Title        string    `gorm:"size:256" json:"title"`
-	Description  string    `gorm:"type:text" json:"description"`
-	Participants string    `gorm:"type:text" json:"participants"` // JSON数组
-	Tags         string    `gorm:"size:512" json:"tags"`          // 逗号分隔
-	StartTime    time.Time `json:"start_time"`
-	EndTime      time.Time `json:"end_time"`
-	Status       string    `gorm:"size:20;default:draft" json:"status"` // draft, published
-	IsPublic     bool      `gorm:"default:false" json:"is_public"`      // 是否公开分享
-	ShareCode    string    `gorm:"size:16;index" json:"share_code"`     // 分享码
-	ViewCount    int       `gorm:"default:0" json:"view_count"`         // 浏览次数
-	EntryCount   int       `gorm:"-" json:"entry_count"`                // entry count for list views
+	ID           uint           `gorm:"primarykey" json:"id"`
+	UserID       uint           `gorm:"index;not null" json:"user_id"`
+	Title        string         `gorm:"size:256" json:"title"`
+	Description  string         `gorm:"type:text" json:"description"`
+	Participants string         `gorm:"type:text" json:"participants"` // JSON数组
+	Tags         string         `gorm:"size:512" json:"tags"`          // 逗号分隔
+	StartTime    time.Time      `json:"start_time"`
+	EndTime      time.Time      `json:"end_time"`
+	Status       string         `gorm:"size:20;default:draft" json:"status"` // draft, published
+	IsPublic     bool           `gorm:"default:false" json:"is_public"`      // 是否公开分享
+	ShareCode    string         `gorm:"size:16;index" json:"share_code"`     // 分享码
+	ViewCount    int            `gorm:"default:0" json:"view_count"`         // 浏览次数
+	EntryCount   int            `gorm:"-" json:"entry_count"`                // entry count for list views
 	TagList      []StoryTagInfo `gorm:"-" json:"tag_list"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 // StoryEntry 剧情条目
@@ -194,22 +194,22 @@ type StoryTag struct {
 
 // Guild 公会
 type Guild struct {
-	ID          uint   `gorm:"primarykey" json:"id"`
-	Name        string `gorm:"size:128;not null" json:"name"`
-	Description string `gorm:"type:text" json:"description"`
-	Icon        string `gorm:"size:128" json:"icon"`
-	Color       string `gorm:"size:8" json:"color"`
-	Banner      string `gorm:"type:text" json:"banner"` // 头图(base64)
+	ID              uint       `gorm:"primarykey" json:"id"`
+	Name            string     `gorm:"size:128;not null" json:"name"`
+	Description     string     `gorm:"type:text" json:"description"`
+	Icon            string     `gorm:"size:128" json:"icon"`
+	Color           string     `gorm:"size:8" json:"color"`
+	Banner          string     `gorm:"type:text" json:"banner"` // 头图(base64)
 	BannerUpdatedAt *time.Time `json:"banner_updated_at,omitempty"`
-	Slogan      string `gorm:"size:256" json:"slogan"`  // 公会标语
-	Lore        string `gorm:"type:text" json:"lore"`   // 公会设定(富文本HTML)
-	Faction     string `gorm:"size:20" json:"faction"`  // 阵营: alliance|horde|neutral
-	Layout      int    `gorm:"default:3" json:"layout"` // 主页布局: 1-4, 默认3
-	OwnerID     uint   `gorm:"index;not null" json:"owner_id"`
-	MemberCount int    `gorm:"default:1" json:"member_count"`
-	StoryCount  int    `gorm:"default:0" json:"story_count"`
-	IsPublic    bool   `gorm:"default:true" json:"is_public"`
-	InviteCode  string `gorm:"size:16;uniqueIndex" json:"invite_code"`
+	Slogan          string     `gorm:"size:256" json:"slogan"`  // 公会标语
+	Lore            string     `gorm:"type:text" json:"lore"`   // 公会设定(富文本HTML)
+	Faction         string     `gorm:"size:20" json:"faction"`  // 阵营: alliance|horde|neutral
+	Layout          int        `gorm:"default:3" json:"layout"` // 主页布局: 1-4, 默认3
+	OwnerID         uint       `gorm:"index;not null" json:"owner_id"`
+	MemberCount     int        `gorm:"default:1" json:"member_count"`
+	StoryCount      int        `gorm:"default:0" json:"story_count"`
+	IsPublic        bool       `gorm:"default:true" json:"is_public"`
+	InviteCode      string     `gorm:"size:16;uniqueIndex" json:"invite_code"`
 	// 审核相关字段
 	Status        string     `gorm:"size:20;default:pending" json:"status"` // pending|approved|rejected
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`              // 审核人ID
@@ -260,25 +260,25 @@ type StoryGuild struct {
 
 // Item TRP3道具
 type Item struct {
-	ID                 uint    `gorm:"primarykey" json:"id"`
-	AuthorID           uint    `gorm:"index;not null" json:"author_id"`
-	Name               string  `gorm:"size:256;not null" json:"name"`
-	Type               string  `gorm:"size:20;index" json:"type"` // item|document|campaign|artwork
-	Icon               string  `gorm:"size:128" json:"icon"`
-	PreviewImage       string  `gorm:"type:text" json:"preview_image"` // 预览图（base64）
+	ID                    uint       `gorm:"primarykey" json:"id"`
+	AuthorID              uint       `gorm:"index;not null" json:"author_id"`
+	Name                  string     `gorm:"size:256;not null" json:"name"`
+	Type                  string     `gorm:"size:20;index" json:"type"` // item|document|campaign|artwork
+	Icon                  string     `gorm:"size:128" json:"icon"`
+	PreviewImage          string     `gorm:"type:text" json:"preview_image"` // 预览图（URL或base64）
 	PreviewImageUpdatedAt *time.Time `json:"preview_image_updated_at,omitempty"`
-	Description        string  `gorm:"type:text" json:"description"`
-	DetailContent      string  `gorm:"type:text" json:"detail_content"`          // 富文本详情
-	ImportCode         string  `gorm:"type:text" json:"import_code"`             // TRP3导入代码（artwork类型可选）
-	RawData            string  `gorm:"type:text" json:"raw_data"`                // 原始Lua数据
-	RequiresPermission bool    `gorm:"default:false" json:"requires_permission"` // 是否需要TRP3权限授权
-	EnableWatermark    bool    `gorm:"default:true" json:"enable_watermark"`     // 画作是否启用水印
-	Downloads          int     `gorm:"default:0" json:"downloads"`
-	Rating             float64 `gorm:"default:0" json:"rating"`             // 平均评分
-	RatingCount        int     `gorm:"default:0" json:"rating_count"`       // 评分人数
-	LikeCount          int     `gorm:"default:0" json:"like_count"`         // 点赞数
-	FavoriteCount      int     `gorm:"default:0" json:"favorite_count"`     // 收藏数
-	Status             string  `gorm:"size:20;default:draft" json:"status"` // draft|pending|published|removed
+	Description           string     `gorm:"type:text" json:"description"`
+	DetailContent         string     `gorm:"type:text" json:"detail_content"`          // 富文本详情
+	ImportCode            string     `gorm:"type:text" json:"import_code"`             // TRP3导入代码（artwork类型可选）
+	RawData               string     `gorm:"type:text" json:"raw_data"`                // 原始Lua数据
+	RequiresPermission    bool       `gorm:"default:false" json:"requires_permission"` // 是否需要TRP3权限授权
+	EnableWatermark       bool       `gorm:"default:true" json:"enable_watermark"`     // 画作是否启用水印
+	Downloads             int        `gorm:"default:0" json:"downloads"`
+	Rating                float64    `gorm:"default:0" json:"rating"`             // 平均评分
+	RatingCount           int        `gorm:"default:0" json:"rating_count"`       // 评分人数
+	LikeCount             int        `gorm:"default:0" json:"like_count"`         // 点赞数
+	FavoriteCount         int        `gorm:"default:0" json:"favorite_count"`     // 收藏数
+	Status                string     `gorm:"size:20;default:draft" json:"status"` // draft|pending|published|removed
 	// 审核相关字段
 	ReviewStatus  string     `gorm:"size:20;default:pending;index" json:"review_status"` // pending|approved|rejected
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                           // 审核人ID
@@ -372,7 +372,7 @@ type ItemPendingEdit struct {
 type ItemImage struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	ItemID    uint      `gorm:"index;not null" json:"item_id"`
-	ImageData string    `gorm:"type:text;not null" json:"-"` // base64数据（不直接返回）
+	ImageData string    `gorm:"type:text;not null" json:"-"` // 图片数据（URL或base64，不直接返回）
 	SortOrder int       `gorm:"default:0" json:"sort_order"` // 排序顺序
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -381,22 +381,22 @@ type ItemImage struct {
 
 // Post 社区帖子
 type Post struct {
-	ID            uint   `gorm:"primarykey" json:"id"`
-	AuthorID      uint   `gorm:"index;not null" json:"author_id"`
-	Title         string `gorm:"size:256;not null" json:"title"`
-	Content       string `gorm:"type:text;not null" json:"content"`
-	ContentType   string `gorm:"size:20;default:markdown" json:"content_type"` // markdown|html
-	CoverImage    string `gorm:"type:text" json:"cover_image"`                 // 封面图（URL或base64）
+	ID                  uint       `gorm:"primarykey" json:"id"`
+	AuthorID            uint       `gorm:"index;not null" json:"author_id"`
+	Title               string     `gorm:"size:256;not null" json:"title"`
+	Content             string     `gorm:"type:text;not null" json:"content"`
+	ContentType         string     `gorm:"size:20;default:markdown" json:"content_type"` // markdown|html
+	CoverImage          string     `gorm:"type:text" json:"cover_image"`                 // 封面图（URL或base64）
 	CoverImageUpdatedAt *time.Time `json:"cover_image_updated_at,omitempty"`
-	Category      string `gorm:"size:20;default:other;index" json:"category"`  // 分区: profile|guild|report|novel|item|event|other
-	GuildID       *uint  `gorm:"index" json:"guild_id"`                        // 关联公会（可选）
-	StoryID       *uint  `gorm:"index" json:"story_id"`                        // 关联剧情（可选）
-	Status        string `gorm:"size:20;default:draft" json:"status"`          // draft|pending|published
-	IsPublic      bool   `gorm:"default:true" json:"is_public"`
-	ViewCount     int    `gorm:"default:0" json:"view_count"`
-	LikeCount     int    `gorm:"default:0" json:"like_count"`
-	CommentCount  int    `gorm:"default:0" json:"comment_count"`
-	FavoriteCount int    `gorm:"default:0" json:"favorite_count"`
+	Category            string     `gorm:"size:20;default:other;index" json:"category"` // 分区: profile|guild|report|novel|item|event|other
+	GuildID             *uint      `gorm:"index" json:"guild_id"`                       // 关联公会（可选）
+	StoryID             *uint      `gorm:"index" json:"story_id"`                       // 关联剧情（可选）
+	Status              string     `gorm:"size:20;default:draft" json:"status"`         // draft|pending|published
+	IsPublic            bool       `gorm:"default:true" json:"is_public"`
+	ViewCount           int        `gorm:"default:0" json:"view_count"`
+	LikeCount           int        `gorm:"default:0" json:"like_count"`
+	CommentCount        int        `gorm:"default:0" json:"comment_count"`
+	FavoriteCount       int        `gorm:"default:0" json:"favorite_count"`
 	// 版主管理字段
 	IsPinned   bool `gorm:"default:false" json:"is_pinned"`   // 置顶
 	IsFeatured bool `gorm:"default:false" json:"is_featured"` // 精华
