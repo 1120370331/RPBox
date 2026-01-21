@@ -155,6 +155,30 @@ function getEntryCharacter(entry: StoryEntry): Character | undefined {
   return undefined
 }
 
+function getCharacterDisplayName(character: Character): string {
+  if (character.custom_name) return character.custom_name
+  if (character.first_name) {
+    return character.last_name
+      ? `${character.first_name} ${character.last_name}`
+      : character.first_name
+  }
+  return character.game_id?.split('-')[0] || '未知角色'
+}
+
+function getEntrySpeakerName(entry: StoryEntry): string {
+  if (entry.type === 'narration') return '旁白'
+  const character = getEntryCharacter(entry)
+  if (character) {
+    return getCharacterDisplayName(character)
+  }
+  return entry.speaker || '未知'
+}
+
+function getEntrySpeakerInitial(entry: StoryEntry): string {
+  const name = getEntrySpeakerName(entry)
+  return name ? name.charAt(0) : '?'
+}
+
 // 获取条目的头像图标
 function getEntryIcon(entry: StoryEntry): string {
   const character = getEntryCharacter(entry)
@@ -297,14 +321,14 @@ onUnmounted(stopPlay)
               <span class="avatar-npc">NPC</span>
             </template>
             <template v-else>
-              <WowIcon v-if="getEntryIcon(entry)" :icon="getEntryIcon(entry)" :size="44" :fallback="entry.speaker?.charAt(0) || '?'" />
-              <span v-else>{{ entry.speaker?.charAt(0) || '?' }}</span>
+              <WowIcon v-if="getEntryIcon(entry)" :icon="getEntryIcon(entry)" :size="44" :fallback="getEntrySpeakerInitial(entry)" />
+              <span v-else>{{ getEntrySpeakerInitial(entry) }}</span>
             </template>
           </div>
           <div class="entry-body">
             <div v-if="entry.type !== 'image'" class="entry-speaker">
               <span :style="entry.type !== 'narration' && getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">
-                {{ entry.type === 'narration' ? '旁白' : (entry.speaker || '未知') }}
+                {{ getEntrySpeakerName(entry) }}
               </span>
               <span v-if="entry.channel && entry.type !== 'narration'" class="entry-channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
             </div>
@@ -356,7 +380,7 @@ onUnmounted(stopPlay)
   <CharacterCard
     v-model:visible="showCharacterCard"
     :character="selectedEntry ? getEntryCharacter(selectedEntry) : undefined"
-    :speaker="selectedEntry?.speaker"
+    :speaker="selectedEntry ? getEntrySpeakerName(selectedEntry) : undefined"
     :position="characterCardPosition"
     :editable="false"
   />
