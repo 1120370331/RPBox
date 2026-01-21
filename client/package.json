@@ -1,6 +1,6 @@
 {
   "name": "rpbox-client",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -40,3 +40,4 @@
     "vue-tsc": "^2.0.0"
   }
 }
+
