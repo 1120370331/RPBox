@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 interface Props {
   icon?: string
@@ -15,8 +15,20 @@ const props = withDefaults(defineProps<Props>(), {
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
 
+const isImageUrl = computed(() => {
+  if (!props.icon) return false
+  return (
+    props.icon.startsWith('http://') ||
+    props.icon.startsWith('https://') ||
+    props.icon.startsWith('data:') ||
+    props.icon.startsWith('blob:') ||
+    props.icon.startsWith('file:')
+  )
+})
+
 const iconUrl = computed(() => {
   if (!props.icon) return ''
+  if (isImageUrl.value) return props.icon
   return `${API_BASE}/icons/${props.icon.toLowerCase()}`
 })
 
@@ -25,7 +37,19 @@ const sizeStyle = computed(() => {
   return { width: s, height: s }
 })
 
-const showFallback = computed(() => !props.icon)
+const loadFailed = ref(false)
+const showFallback = computed(() => !props.icon || loadFailed.value)
+
+function handleError() {
+  loadFailed.value = true
+}
+
+watch(
+  () => props.icon,
+  () => {
+    loadFailed.value = false
+  }
+)
 </script>
 
 <template>
@@ -34,7 +58,7 @@ const showFallback = computed(() => !props.icon)
       v-if="!showFallback"
       :src="iconUrl"
       :alt="icon"
-      @error="($event.target as HTMLImageElement).style.display = 'none'"
+      @error="handleError"
     />
     <span v-if="showFallback" class="fallback">{{ fallback }}</span>
   </div>

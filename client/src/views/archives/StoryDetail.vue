@@ -434,6 +434,20 @@ function getCharacterDisplayName(character: Character): string {
   return character.game_id?.split('-')[0] || '未知角色'
 }
 
+function getEntrySpeakerName(entry: StoryEntry): string {
+  if (entry.type === 'narration') return '旁白'
+  const character = getEntryCharacter(entry)
+  if (character) {
+    return getCharacterDisplayName(character)
+  }
+  return entry.speaker || '旁白'
+}
+
+function getEntrySpeakerInitial(entry: StoryEntry): string {
+  const name = getEntrySpeakerName(entry)
+  return name ? name.charAt(0) : '?'
+}
+
 async function handleArchiveToGuild(guildId: number) {
   try {
     await archiveStoryToGuild(guildId, storyId.value)
@@ -1026,13 +1040,13 @@ onMounted(() => {
             >
               <span v-if="isNpcEntry(entry)" class="avatar-npc">NPC</span>
               <span v-else-if="isNarrationEntry(entry)" class="avatar-narration">旁白</span>
-              <WowIcon v-else-if="getEntryIcon(entry)" :icon="getEntryIcon(entry)" :size="40" :fallback="entry.speaker?.charAt(0) || '?'" />
-              <span v-else class="avatar-fallback">{{ entry.speaker?.charAt(0) || '?' }}</span>
+              <WowIcon v-else-if="getEntryIcon(entry)" :icon="getEntryIcon(entry)" :size="40" :fallback="getEntrySpeakerInitial(entry)" />
+              <span v-else class="avatar-fallback">{{ getEntrySpeakerInitial(entry) }}</span>
             </div>
             <div class="entry-content">
               <div class="entry-header">
                 <span v-if="entry.type !== 'image'" class="speaker" :style="getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">
-                  {{ entry.type === 'narration' ? '旁白' : (entry.speaker || '旁白') }}
+                  {{ getEntrySpeakerName(entry) }}
                 </span>
                 <span v-if="entry.channel && entry.type !== 'narration' && entry.type !== 'image'" class="channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
                 <span class="timestamp">{{ formatDate(entry.timestamp) }}</span>
@@ -1196,7 +1210,7 @@ onMounted(() => {
     <CharacterCard
       v-model:visible="showCharacterModal"
       :character="selectedCharacter ? getEntryCharacter(selectedCharacter) : undefined"
-      :speaker="selectedCharacter?.speaker"
+      :speaker="selectedCharacter ? getEntrySpeakerName(selectedCharacter) : undefined"
       :position="characterCardPosition"
       @edit="handleEditCharacter"
     />
