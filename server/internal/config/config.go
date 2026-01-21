@@ -34,8 +34,9 @@ type StorageConfig struct {
 }
 
 type ServerConfig struct {
-	Port string `mapstructure:"port"`
-	Mode string `mapstructure:"mode"`
+	Port          string `mapstructure:"port"`
+	Mode          string `mapstructure:"mode"`
+	MaxBodySizeMB int    `mapstructure:"max_body_size_mb"`
 }
 
 type DatabaseConfig struct {
@@ -75,6 +76,7 @@ func Load() (*Config, error) {
 	// 默认值 - 使用相对于当前工作目录的路径
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
+	viper.SetDefault("server.max_body_size_mb", 200)
 	viper.SetDefault("storage.path", "storage")  // 改为相对路径，不带 ./
 
 	if err := viper.ReadInConfig(); err != nil {

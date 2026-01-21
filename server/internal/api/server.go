@@ -22,10 +22,15 @@ func NewServer(cfg *config.Config) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	router := gin.Default()
 	router.Use(middleware.CORS())
-	router.Use(middleware.BodyLimit(50 << 20)) // 限制请求体 50MB（支持大量人物卡和道具数据）
+	maxBodySizeMB := cfg.Server.MaxBodySizeMB
+	if maxBodySizeMB <= 0 {
+		maxBodySizeMB = 200
+	}
+	maxBodySizeBytes := int64(maxBodySizeMB) << 20
+	router.Use(middleware.BodyLimit(maxBodySizeBytes))
 
-	// 设置 multipart 内存限制为 50MB
-	router.MaxMultipartMemory = 50 << 20 // 50 MB
+	// 设置 multipart 内存限制
+	router.MaxMultipartMemory = maxBodySizeBytes
 
 	// 创建 WebSocket Hub
 	hub := ws.NewHub()
