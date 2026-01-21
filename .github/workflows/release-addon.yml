@@ -29,6 +29,16 @@ jobs:
           mkdir -p releases/addon/$VERSION
           cd addon && zip -r ../releases/addon/$VERSION/RPBox_Addon_$VERSION.zip RPBox_Addon
 
+      - name: Verify packaged version
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          TOC_LINE=$(unzip -p releases/addon/$VERSION/RPBox_Addon_$VERSION.zip RPBox_Addon/RPBox_Addon.toc | tr -d '\r' | grep -E '^## Version:' | head -n1)
+          echo "Packaged TOC: $TOC_LINE"
+          if [ "$TOC_LINE" != "## Version: $VERSION" ]; then
+            echo "Addon version mismatch: expected $VERSION"
+            exit 1
+          fi
+
       - name: Prepare addon changelog
         id: changelog
         run: |
