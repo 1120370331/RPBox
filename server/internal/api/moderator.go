@@ -1088,3 +1088,22 @@ func (s *Server) getMetricsSummary(c *gin.Context) {
 		"month":     monthStats,
 	})
 }
+
+// getMetricsBasic 获取基础功能监控数据
+func (s *Server) getMetricsBasic(c *gin.Context) {
+	var storyArchives int64
+	var storyEntries int64
+	var profileBackups int64
+
+	database.DB.Model(&model.Story{}).Count(&storyArchives)
+	database.DB.Model(&model.StoryEntry{}).Count(&storyEntries)
+	database.DB.Model(&model.AccountBackup{}).
+		Select("COALESCE(SUM(profiles_count), 0)").
+		Scan(&profileBackups)
+
+	c.JSON(http.StatusOK, gin.H{
+		"story_archives":  storyArchives,
+		"story_entries":   storyEntries,
+		"profile_backups": profileBackups,
+	})
+}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { dialog } from '@/composables/useDialog'
@@ -38,12 +38,14 @@ import {
   getActionLogs,
   getMetricsHistory,
   getMetricsSummary,
+  getMetricsBasic,
   type ModeratorStats,
   type ReviewRequest,
   type SafeUser,
   type AdminActionLog,
   type DailyMetrics,
-  type MetricsSummary
+  type MetricsSummary,
+  type BasicMetrics
 } from '@/api/moderator'
 
 const router = useRouter()
@@ -125,6 +127,10 @@ const logsTargetType = ref('')
 const metricsHistory = ref<DailyMetrics[]>([])
 const metricsSummary = ref<MetricsSummary | null>(null)
 const metricsDays = ref(30)
+const metricsSubTab = ref<'growth' | 'basic'>('growth')
+const metricsLoading = ref(false)
+const basicMetrics = ref<BasicMetrics | null>(null)
+const basicMetricsLoading = ref(false)
 const metricsChartRef = ref<HTMLDivElement | null>(null)
 let metricsChart: echarts.ECharts | null = null
 
@@ -136,6 +142,10 @@ onMounted(async () => {
   }
   await loadStats()
   await loadPendingPosts()
+})
+
+onUnmounted(() => {
+  disposeMetricsChart()
 })
 
 async function loadStats() {
@@ -260,8 +270,13 @@ async function loadUsers() {
 }
 
 function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
+  if (tab === 'metrics' && !isAdmin.value) return
+  const previousTab = activeTab.value
   activeTab.value = tab
   page.value = 1
+  if (previousTab === 'metrics' && tab !== 'metrics') {
+    disposeMetricsChart()
+  }
   if (tab === 'review') {
     if (activeSubTab.value === 'posts') loadPendingPosts()
     else if (activeSubTab.value === 'items') loadPendingItems()
@@ -276,7 +291,8 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
   } else if (tab === 'logs') {
     loadActionLogs()
   } else if (tab === 'metrics') {
-    loadMetrics()
+    if (metricsSubTab.value === 'basic') loadBasicMetrics()
+    else loadMetrics()
   }
 }
 
@@ -398,7 +414,16 @@ function formatLogDetails(log: AdminActionLog): string {
 }
 
 // ========== 数据统计 ==========
+function disposeMetricsChart() {
+  if (metricsChart) {
+    metricsChart.dispose()
+    metricsChart = null
+  }
+}
+
 async function loadMetrics() {
+  if (!isAdmin.value) return
+  metricsLoading.value = true
   try {
     const [historyRes, summaryRes] = await Promise.all([
       getMetricsHistory(metricsDays.value),
@@ -407,14 +432,49 @@ async function loadMetrics() {
     metricsHistory.value = historyRes.metrics
     metricsSummary.value = summaryRes
     // 下一帧渲染图表
-    setTimeout(() => initMetricsChart(), 100)
+    if (activeTab.value === 'metrics' && metricsSubTab.value === 'growth') {
+      setTimeout(() => initMetricsChart(), 100)
+    }
   } catch (error) {
     console.error('加载统计数据失败:', error)
+  } finally {
+    metricsLoading.value = false
+  }
+}
+
+async function loadBasicMetrics() {
+  if (!isAdmin.value) return
+  basicMetricsLoading.value = true
+  try {
+    basicMetrics.value = await getMetricsBasic()
+  } catch (error) {
+    console.error('加载基础监控数据失败:', error)
+  } finally {
+    basicMetricsLoading.value = false
+  }
+}
+
+function switchMetricsSubTab(subTab: 'growth' | 'basic') {
+  if (metricsSubTab.value === subTab) return
+  metricsSubTab.value = subTab
+  if (subTab === 'growth') {
+    loadMetrics()
+  } else {
+    disposeMetricsChart()
+    loadBasicMetrics()
   }
 }
 
 function initMetricsChart() {
   if (!metricsChartRef.value) return
+
+  if (metricsChart) {
+    const currentDom = metricsChart.getDom()
+    if (metricsChart.isDisposed() || currentDom !== metricsChartRef.value) {
+      metricsChart.dispose()
+      metricsChart = null
+    }
+  }
 
   if (!metricsChart) {
     metricsChart = echarts.init(metricsChartRef.value)
@@ -462,6 +522,7 @@ function initMetricsChart() {
   }
 
   metricsChart.setOption(option)
+  metricsChart.resize()
 }
 
 // 打开预览弹窗
@@ -1039,6 +1100,7 @@ function formatBanTime(dateStr: string | null) {
           <span>操作日志</span>
         </div>
         <div
+          v-if="isAdmin"
           class="tab-item"
           :class="{ active: activeTab === 'metrics' }"
           @click="switchTab('metrics')"
@@ -1608,118 +1670,178 @@ function formatBanTime(dateStr: string | null) {
       </div>
 
       <!-- 数据统计 -->
-      <div v-if="activeTab === 'metrics'" class="content-list anim-item" style="--delay: 3">
-        <div class="filter-bar">
-          <select v-model="metricsDays" @change="loadMetrics">
-            <option :value="7">最近 7 天</option>
-            <option :value="14">最近 14 天</option>
-            <option :value="30">最近 30 天</option>
-            <option :value="60">最近 60 天</option>
-            <option :value="90">最近 90 天</option>
-          </select>
+      <div v-if="activeTab === 'metrics' && isAdmin" class="content-list anim-item" style="--delay: 3">
+        <div class="sub-tab-container metrics-subtabs">
+          <button
+            :class="{ active: metricsSubTab === 'growth' }"
+            @click="switchMetricsSubTab('growth')"
+          >
+            <i class="ri-line-chart-line"></i>
+            增长统计
+          </button>
+          <button
+            :class="{ active: metricsSubTab === 'basic' }"
+            @click="switchMetricsSubTab('basic')"
+          >
+            <i class="ri-dashboard-2-line"></i>
+            基础监控
+          </button>
         </div>
 
-        <!-- 摘要卡片 -->
-        <div v-if="metricsSummary" class="metrics-summary">
-          <div class="summary-card">
-            <div class="summary-header">
-              <span class="period">今日</span>
-            </div>
-            <div class="summary-body">
-              <div class="summary-item">
-                <span class="label">新用户</span>
-                <span class="value">{{ metricsSummary.today.users }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新帖子</span>
-                <span class="value">{{ metricsSummary.today.posts }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新作品</span>
-                <span class="value">{{ metricsSummary.today.items }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新公会</span>
-                <span class="value">{{ metricsSummary.today.guilds }}</span>
-              </div>
-            </div>
+        <template v-if="metricsSubTab === 'growth'">
+          <div class="filter-bar">
+            <select v-model="metricsDays" @change="loadMetrics">
+              <option :value="7">最近 7 天</option>
+              <option :value="14">最近 14 天</option>
+              <option :value="30">最近 30 天</option>
+              <option :value="60">最近 60 天</option>
+              <option :value="90">最近 90 天</option>
+            </select>
           </div>
-          <div class="summary-card">
-            <div class="summary-header">
-              <span class="period">昨日</span>
-            </div>
-            <div class="summary-body">
-              <div class="summary-item">
-                <span class="label">新用户</span>
-                <span class="value">{{ metricsSummary.yesterday.users }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新帖子</span>
-                <span class="value">{{ metricsSummary.yesterday.posts }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新作品</span>
-                <span class="value">{{ metricsSummary.yesterday.items }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新公会</span>
-                <span class="value">{{ metricsSummary.yesterday.guilds }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="summary-card">
-            <div class="summary-header">
-              <span class="period">本周</span>
-            </div>
-            <div class="summary-body">
-              <div class="summary-item">
-                <span class="label">新用户</span>
-                <span class="value">{{ metricsSummary.week.users }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新帖子</span>
-                <span class="value">{{ metricsSummary.week.posts }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新作品</span>
-                <span class="value">{{ metricsSummary.week.items }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新公会</span>
-                <span class="value">{{ metricsSummary.week.guilds }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="summary-card">
-            <div class="summary-header">
-              <span class="period">本月</span>
-            </div>
-            <div class="summary-body">
-              <div class="summary-item">
-                <span class="label">新用户</span>
-                <span class="value">{{ metricsSummary.month.users }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新帖子</span>
-                <span class="value">{{ metricsSummary.month.posts }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新作品</span>
-                <span class="value">{{ metricsSummary.month.items }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="label">新公会</span>
-                <span class="value">{{ metricsSummary.month.guilds }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- 趋势图表 -->
-        <div class="metrics-chart-container">
-          <h4><i class="ri-line-chart-line"></i> 增长趋势</h4>
-          <div ref="metricsChartRef" class="metrics-chart"></div>
-        </div>
+          <div v-if="metricsLoading" class="loading">
+            <i class="ri-loader-4-line loading-spinner"></i>
+            <span>加载中...</span>
+          </div>
+
+          <template v-else>
+            <!-- 摘要卡片 -->
+            <div v-if="metricsSummary" class="metrics-summary">
+              <div class="summary-card">
+                <div class="summary-header">
+                  <span class="period">今日</span>
+                </div>
+                <div class="summary-body">
+                  <div class="summary-item">
+                    <span class="label">新用户</span>
+                    <span class="value">{{ metricsSummary.today.users }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新帖子</span>
+                    <span class="value">{{ metricsSummary.today.posts }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新作品</span>
+                    <span class="value">{{ metricsSummary.today.items }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新公会</span>
+                    <span class="value">{{ metricsSummary.today.guilds }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-header">
+                  <span class="period">昨日</span>
+                </div>
+                <div class="summary-body">
+                  <div class="summary-item">
+                    <span class="label">新用户</span>
+                    <span class="value">{{ metricsSummary.yesterday.users }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新帖子</span>
+                    <span class="value">{{ metricsSummary.yesterday.posts }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新作品</span>
+                    <span class="value">{{ metricsSummary.yesterday.items }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新公会</span>
+                    <span class="value">{{ metricsSummary.yesterday.guilds }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-header">
+                  <span class="period">本周</span>
+                </div>
+                <div class="summary-body">
+                  <div class="summary-item">
+                    <span class="label">新用户</span>
+                    <span class="value">{{ metricsSummary.week.users }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新帖子</span>
+                    <span class="value">{{ metricsSummary.week.posts }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新作品</span>
+                    <span class="value">{{ metricsSummary.week.items }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新公会</span>
+                    <span class="value">{{ metricsSummary.week.guilds }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-header">
+                  <span class="period">本月</span>
+                </div>
+                <div class="summary-body">
+                  <div class="summary-item">
+                    <span class="label">新用户</span>
+                    <span class="value">{{ metricsSummary.month.users }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新帖子</span>
+                    <span class="value">{{ metricsSummary.month.posts }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新作品</span>
+                    <span class="value">{{ metricsSummary.month.items }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">新公会</span>
+                    <span class="value">{{ metricsSummary.month.guilds }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 趋势图表 -->
+            <div class="metrics-chart-container">
+              <h4><i class="ri-line-chart-line"></i> 增长趋势</h4>
+              <div ref="metricsChartRef" class="metrics-chart"></div>
+            </div>
+          </template>
+        </template>
+
+        <template v-else>
+          <div v-if="basicMetricsLoading" class="loading">
+            <i class="ri-loader-4-line loading-spinner"></i>
+            <span>加载中...</span>
+          </div>
+          <div v-else-if="basicMetrics" class="basic-metrics-grid">
+            <div class="basic-metric-card">
+              <div class="basic-metric-icon"><i class="ri-book-open-line"></i></div>
+              <div class="basic-metric-info">
+                <div class="basic-metric-value">{{ basicMetrics.story_archives || 0 }}</div>
+                <div class="basic-metric-label">系统剧情归档数</div>
+              </div>
+            </div>
+            <div class="basic-metric-card">
+              <div class="basic-metric-icon"><i class="ri-chat-3-line"></i></div>
+              <div class="basic-metric-info">
+                <div class="basic-metric-value">{{ basicMetrics.story_entries || 0 }}</div>
+                <div class="basic-metric-label">归档条目数</div>
+              </div>
+            </div>
+            <div class="basic-metric-card">
+              <div class="basic-metric-icon"><i class="ri-save-3-line"></i></div>
+              <div class="basic-metric-info">
+                <div class="basic-metric-value">{{ basicMetrics.profile_backups || 0 }}</div>
+                <div class="basic-metric-label">人物卡备份数</div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty-state">
+            <i class="ri-bar-chart-2-line"></i>
+            <p>暂无监控数据</p>
+          </div>
+        </template>
       </div>
 
       <!-- 审核弹窗 -->
@@ -3245,6 +3367,56 @@ function formatBanTime(dateStr: string | null) {
 .metrics-chart {
   width: 100%;
   height: 400px;
+}
+
+.metrics-subtabs {
+  margin-bottom: 8px;
+}
+
+.basic-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.basic-metric-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
+}
+
+.basic-metric-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(128, 64, 48, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #804030;
+  flex-shrink: 0;
+}
+
+.basic-metric-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.basic-metric-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2C1810;
+}
+
+.basic-metric-label {
+  font-size: 13px;
+  color: #8D7B68;
 }
 
 /* 分页样式 */

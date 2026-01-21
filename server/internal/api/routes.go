@@ -255,8 +255,9 @@ func (s *Server) setupRoutes() {
 				mod.GET("/action-logs", s.listActionLogs)
 
 				// 数据统计
-				mod.GET("/metrics/history", s.getMetricsHistory)
-				mod.GET("/metrics/summary", s.getMetricsSummary)
+				mod.GET("/metrics/history", middleware.AdminAuth(), s.getMetricsHistory)
+				mod.GET("/metrics/summary", middleware.AdminAuth(), s.getMetricsSummary)
+				mod.GET("/metrics/basic", middleware.AdminAuth(), s.getMetricsBasic)
 			}
 
 			// 管理员中心（需要管理员权限）

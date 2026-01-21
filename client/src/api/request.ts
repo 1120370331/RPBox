@@ -1,3 +1,6 @@
+import router from '../router'
+import { useUserStore } from '../stores/user'
+
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -26,6 +29,35 @@ function translateError(message: string): string {
     }
   }
   return message
+}
+
+let isHandlingUnauthorized = false
+
+function clearAuthState() {
+  try {
+    const userStore = useUserStore()
+    userStore.logout()
+  } catch {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+  }
+}
+
+function handleUnauthorized() {
+  if (isHandlingUnauthorized) return
+  isHandlingUnauthorized = true
+  clearAuthState()
+
+  const currentRoute = router.currentRoute.value
+  if (currentRoute?.name === 'login') {
+    isHandlingUnauthorized = false
+    return
+  }
+
+  const redirect = currentRoute?.fullPath || `${window.location.pathname}${window.location.search}${window.location.hash}`
+  router.replace({ name: 'login', query: { redirect } }).finally(() => {
+    isHandlingUnauthorized = false
+  })
 }
 
 async function baseRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -59,6 +91,9 @@ async function baseRequest<T>(path: string, options: RequestInit = {}): Promise<
   }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      handleUnauthorized()
+    }
     const message = data?.error || data?.message || res.statusText || 'Request failed'
     const translatedMessage = translateError(message)
     throw new Error(translatedMessage)
