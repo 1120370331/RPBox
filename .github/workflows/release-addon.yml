@@ -29,6 +29,59 @@ jobs:
           mkdir -p releases/addon/$VERSION
           cd addon && zip -r ../releases/addon/$VERSION/RPBox_Addon_$VERSION.zip RPBox_Addon
 
+      - name: Prepare addon changelog
+        id: changelog
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          NOTES_FILE="addon/release-notes/${VERSION}.txt"
+          if [ -f "$NOTES_FILE" ]; then
+            CHANGELOG=$(cat "$NOTES_FILE")
+          else
+            CHANGELOG="Release $VERSION"
+          fi
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update addon manifest
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          CHANGELOG: ${{ steps.changelog.outputs.CHANGELOG }}
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+
+          manifest_path = "server/storage/addons/RPBox_Addon/manifest.json"
+          version = os.environ["VERSION"].strip()
+          changelog = os.environ.get("CHANGELOG", "").strip()
+          if not changelog:
+            changelog = f"Release {version}"
+          changelog = " ".join(changelog.splitlines()).strip()
+          release_date = datetime.date.today().isoformat()
+
+          manifest = {"name": "RPBox_Addon", "latest": version, "versions": []}
+          if os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as f:
+              manifest = json.load(f)
+
+          versions = [v for v in manifest.get("versions", []) if v.get("version") != version]
+          versions.insert(0, {
+            "version": version,
+            "releaseDate": release_date,
+            "minClientVersion": "1.0.0",
+            "changelog": changelog,
+            "downloadUrl": f"/api/v1/addon/download/{version}",
+          })
+
+          manifest["latest"] = version
+          manifest["versions"] = versions
+          with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+          PY
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -42,9 +95,12 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           REMOTE_PATH="${{ secrets.ADDON_PATH }}"
 
-          # 上传版本目录
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH/$VERSION"
-          scp -P 2233 releases/addon/$VERSION/*.zip ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/$VERSION/
+          # 上传版本包到 versions
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH/versions"
+          scp -P 2233 releases/addon/$VERSION/RPBox_Addon_$VERSION.zip ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/versions/$VERSION.zip
 
           # 更新 latest
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cp $REMOTE_PATH/$VERSION/*.zip $REMOTE_PATH/latest.zip"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cp $REMOTE_PATH/versions/$VERSION.zip $REMOTE_PATH/latest.zip"
+
+          # 更新 manifest.json
+          scp -P 2233 server/storage/addons/RPBox_Addon/manifest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/manifest.json
