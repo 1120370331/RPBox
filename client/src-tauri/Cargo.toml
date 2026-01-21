@@ -1,6 +1,6 @@
 [package]
 name = "rpbox"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 
 [lib]
@@ -24,3 +24,4 @@ chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 tauri-plugin-dialog = "2"
 zip = "0.6"
+
