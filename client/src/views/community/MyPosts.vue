@@ -2,8 +2,12 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { listPosts, deletePost, POST_CATEGORIES, type PostWithAuthor, type PostCategory } from '@/api/post'
+import { useToast } from '@/composables/useToast'
+import { useDialog } from '@/composables/useDialog'
 
 const router = useRouter()
+const toast = useToast()
+const dialog = useDialog()
 const mounted = ref(false)
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
@@ -130,17 +134,20 @@ function goToEdit(id: number) {
 }
 
 async function handleDelete(post: PostWithAuthor) {
-  if (!confirm(`确定要删除帖子"${post.title}"吗？`)) {
-    return
-  }
+  const confirmed = await dialog.confirm({
+    title: '删除帖子',
+    message: `确定要删除帖子“${post.title}”吗？此操作不可恢复。`,
+    type: 'warning',
+  })
+  if (!confirmed) return
 
   try {
     await deletePost(post.id)
-    alert('删除成功')
+    toast.success('删除成功')
     await loadMyPosts()
   } catch (error) {
     console.error('删除失败:', error)
-    alert('删除失败，请重试')
+    toast.error('删除失败，请重试')
   }
 }
 
@@ -299,6 +306,7 @@ function stripHtml(html: string) {
         </div>
       </div>
     </div>
+
   </div>
 </template>
 

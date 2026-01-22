@@ -101,6 +101,16 @@ func (s *Server) listPosts(c *gin.Context) {
 		query = query.Where("category = ?", category)
 	}
 
+	isPinned := c.Query("is_pinned")
+	if isPinned != "" {
+		pinnedValue, err := strconv.ParseBool(isPinned)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的is_pinned参数"})
+			return
+		}
+		query = query.Where("is_pinned = ?", pinnedValue)
+	}
+
 	if tagID != "" {
 		// 通过标签筛选
 		var postTags []model.PostTag
@@ -318,6 +328,7 @@ func (s *Server) createPost(c *gin.Context) {
 func (s *Server) getPost(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	isModerator := checkModerator(userID)
 
 	var post model.Post
 	if err := database.DB.First(&post, id).Error; err != nil {
@@ -325,8 +336,8 @@ func (s *Server) getPost(c *gin.Context) {
 		return
 	}
 
-	// 权限检查：非公开帖子只有作者可见
-	if !post.IsPublic && post.AuthorID != userID {
+	// 权限检查：非公开帖子只有作者或管理员/版主可见
+	if !post.IsPublic && post.AuthorID != userID && !isModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权查看"})
 		return
 	}
@@ -390,6 +401,7 @@ func (s *Server) getPost(c *gin.Context) {
 func (s *Server) updatePost(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	isModerator := checkModerator(userID)
 
 	var post model.Post
 	if err := database.DB.First(&post, id).Error; err != nil {
@@ -397,8 +409,8 @@ func (s *Server) updatePost(c *gin.Context) {
 		return
 	}
 
-	// 只有作者可以更新
-	if post.AuthorID != userID {
+	// 只有作者或管理员/版主可以更新
+	if post.AuthorID != userID && !isModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
 		return
 	}
@@ -408,8 +420,6 @@ func (s *Server) updatePost(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
-
-	isModerator := checkModerator(userID)
 
 	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
 	if post.Status == "published" && post.ReviewStatus == "approved" && !isModerator {
@@ -498,6 +508,7 @@ func (s *Server) updatePost(c *gin.Context) {
 func (s *Server) deletePost(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	isModerator := checkModerator(userID)
 
 	var post model.Post
 	if err := database.DB.First(&post, id).Error; err != nil {
@@ -505,8 +516,8 @@ func (s *Server) deletePost(c *gin.Context) {
 		return
 	}
 
-	// 只有作者可以删除
-	if post.AuthorID != userID {
+	// 只有作者或管理员/版主可以删除
+	if post.AuthorID != userID && !isModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
 		return
 	}
@@ -516,6 +527,8 @@ func (s *Server) deletePost(c *gin.Context) {
 	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
+
+	s.cleanupPostImages(c, post)
 	database.DB.Delete(&post)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
@@ -665,6 +678,7 @@ type AddPostTagRequest struct {
 func (s *Server) addPostTag(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	isModerator := checkModerator(userID)
 
 	// 检查帖子所有权
 	var post model.Post
@@ -672,7 +686,7 @@ func (s *Server) addPostTag(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
 		return
 	}
-	if post.AuthorID != userID {
+	if post.AuthorID != userID && !isModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
 		return
 	}
@@ -713,6 +727,7 @@ func (s *Server) removePostTag(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	tagID, _ := strconv.ParseUint(c.Param("tagId"), 10, 32)
+	isModerator := checkModerator(userID)
 
 	// 检查帖子所有权
 	var post model.Post
@@ -720,7 +735,7 @@ func (s *Server) removePostTag(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
 		return
 	}
-	if post.AuthorID != userID {
+	if post.AuthorID != userID && !isModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
 		return
 	}

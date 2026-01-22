@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getPost, updatePost, getPostTags, type UpdatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
+import { getPost, updatePost, getPostTags, deletePost, type UpdatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { uploadImage } from '@/api/item'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { addPostTag, removePostTag } from '@/api/post'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import { useToast } from '@/composables/useToast'
+import { useDialog } from '@/composables/useDialog'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const toast = useToast()
+const dialog = useDialog()
 const userStore = useUserStore()
 const route = useRoute()
 const mounted = ref(false)
 const loading = ref(false)
+const deleting = ref(false)
 
 // 草稿 key 基于帖子 ID
 const getDraftKey = () => `post_edit_draft_${route.params.id}`
@@ -268,6 +271,30 @@ function handlePreview() {
   }
   sessionStorage.setItem('post_preview', JSON.stringify(previewData))
   router.push({ name: 'post-preview' })
+}
+
+async function handleDelete() {
+  if (deleting.value) return
+  const confirmed = await dialog.confirm({
+    title: '删除帖子',
+    message: '确定要删除这篇帖子吗？此操作不可恢复。',
+    type: 'warning',
+  })
+  if (!confirmed) return
+
+  deleting.value = true
+  try {
+    const id = Number(route.params.id)
+    await deletePost(id)
+    clearDraft()
+    toast.success('帖子已删除')
+    router.push({ name: 'community' })
+  } catch (error) {
+    console.error('删除帖子失败:', error)
+    toast.error('删除失败，请重试')
+  } finally {
+    deleting.value = false
+  }
 }
 
 // 压缩图片到指定大小以内
@@ -532,6 +559,10 @@ function removeCoverImage() {
 
       <!-- 操作按钮 -->
       <div class="actions-group">
+        <button class="action-btn delete" type="button" @click="handleDelete">
+          <i class="ri-delete-bin-line"></i>
+          删除
+        </button>
         <button class="action-btn preview" @click="handlePreview">
           <i class="ri-eye-line"></i>
           预览
@@ -1009,6 +1040,17 @@ function removeCoverImage() {
 .actions-group .action-btn.preview:hover {
   border-color: #B87333;
   color: #B87333;
+}
+
+.actions-group .action-btn.delete {
+  background: #FDECEC;
+  border: 1px solid #F3C7C7;
+  color: #B42318;
+}
+
+.actions-group .action-btn.delete:hover {
+  border-color: #E09A9A;
+  color: #9B1C1C;
 }
 
 .actions-group .action-btn.cancel {

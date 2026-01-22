@@ -675,6 +675,11 @@ func (s *Server) deleteItem(c *gin.Context) {
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemFavorite{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemRating{})
 
+	var itemImages []model.ItemImage
+	database.DB.Where("item_id = ?", id).Find(&itemImages)
+	s.cleanupItemImages(c, item, itemImages)
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemImage{})
+
 	// 删除道具
 	if err := database.DB.Delete(&item).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

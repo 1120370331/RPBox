@@ -53,6 +53,8 @@ export interface PostQueryParams {
   review_status?: string
   category?: string
   keyword?: string
+  is_pinned?: boolean
+  is_featured?: boolean
 }
 
 export function getAllPosts(params?: PostQueryParams) {
@@ -168,6 +170,10 @@ export function setUserRole(id: number, role: 'user' | 'moderator') {
 
 export function setUserSponsorLevel(id: number, sponsorLevel: number) {
   return request.put<{ message: string; user: any }>(`/admin/users/${id}/sponsor`, { sponsor_level: sponsorLevel })
+}
+
+export function broadcastSystemMessage(content: string) {
+  return request.post<{ message: string; count: number }>('/admin/notifications/broadcast', { content })
 }
 
 // ========== 用户管理（版主可用） ==========

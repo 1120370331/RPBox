@@ -4,13 +4,16 @@ import { useRouter, useRoute } from 'vue-router'
 import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
 import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
 import EmojiPicker from '@/components/EmojiPicker.vue'
-import RDialog from '@/components/RDialog.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { useToast } from '@/composables/useToast'
+import { useDialog } from '@/composables/useDialog'
 
 const router = useRouter()
 const route = useRoute()
+const toast = useToast()
+const dialog = useDialog()
 const mounted = ref(false)
 const loading = ref(false)
 const submittingComment = ref(false)
@@ -51,9 +54,6 @@ const viewerStartIndex = ref(0)
 // 评论点赞状态
 const commentLikes = reactive(new Map<number, boolean>())
 
-// 删除确认弹窗
-const showDeleteDialog = ref(false)
-const commentToDelete = ref<CommentWithAuthor | null>(null)
 
 // 获取当前用户ID和角色
 const userStr = localStorage.getItem('user')
@@ -67,8 +67,10 @@ if (userStr) {
   }
 }
 
-const isAuthor = computed(() => {
-  return post.value && currentUserId.value === post.value.author_id
+const canManagePost = computed(() => {
+  if (!post.value) return false
+  if (currentUserId.value === post.value.author_id) return true
+  return currentUserRole.value === 'moderator' || currentUserRole.value === 'admin'
 })
 
 // 检查是否可以删除评论
@@ -284,25 +286,23 @@ function handleReplyEmojiSelect(emoji: string) {
 }
 
 // 删除评论
-function handleDeleteComment(comment: CommentWithAuthor) {
-  commentToDelete.value = comment
-  showDeleteDialog.value = true
-}
-
-async function confirmDeleteComment() {
-  if (!commentToDelete.value) return
+async function handleDeleteComment(comment: CommentWithAuthor) {
+  const confirmed = await dialog.confirm({
+    title: '删除评论',
+    message: '确定要删除这条评论吗？',
+    type: 'warning',
+  })
+  if (!confirmed) return
 
   try {
-    await deleteComment(post.value.id, commentToDelete.value.id)
+    await deleteComment(post.value.id, comment.id)
     await loadComments()
     if (post.value.comment_count > 0) {
       post.value.comment_count--
     }
-    showDeleteDialog.value = false
-    commentToDelete.value = null
   } catch (error: any) {
     console.error('删除评论失败:', error)
-    alert('删除失败：' + (error.response?.data?.error || error.message))
+    toast.error('删除失败：' + (error.response?.data?.error || error.message))
   }
 }
 
@@ -388,12 +388,20 @@ watch(() => route.query.comment, () => {
 })
 
 async function handleDelete() {
-  if (!confirm('确定要删除这篇帖子吗？')) return
+  const confirmed = await dialog.confirm({
+    title: '删除帖子',
+    message: '确定要删除这篇帖子吗？此操作不可恢复。',
+    type: 'warning',
+  })
+  if (!confirmed) return
+
   try {
     await deletePost(post.value.id)
+    toast.success('帖子已删除')
     router.push({ name: 'community' })
   } catch (error) {
     console.error('删除失败:', error)
+    toast.error('删除失败，请重试')
   }
 }
 </script>
@@ -468,7 +476,7 @@ async function handleDelete() {
           </div>
 
           <!-- 作者操作 -->
-          <div v-if="isAuthor" class="owner-actions">
+          <div v-if="canManagePost" class="owner-actions">
             <button class="owner-btn" @click="goToEdit">
               <i class="ri-edit-line"></i> 编辑
             </button>
@@ -622,16 +630,6 @@ async function handleDelete() {
     <!-- Emoji选择器 -->
     <EmojiPicker :show="showEmojiPicker" :trigger-element="emojiButtonRef" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
     <EmojiPicker :show="showReplyEmojiPicker" :trigger-element="replyEmojiButtonRef" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
-
-    <!-- 删除确认弹窗 -->
-    <RDialog
-      v-model="showDeleteDialog"
-      title="删除评论"
-      type="warning"
-      @confirm="confirmDeleteComment"
-    >
-      <p>确定要删除这条评论吗？</p>
-    </RDialog>
 
     <ImageViewer
       v-model="showImageViewer"

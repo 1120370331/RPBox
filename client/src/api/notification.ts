@@ -30,8 +30,7 @@ export interface UnreadCountResponse {
 
 // 获取通知列表
 export function getNotifications(type: string = 'all', page: number = 1, pageSize: number = 20) {
-  return request<NotificationsResponse>('/notifications', {
-    method: 'GET',
+  return request.get<NotificationsResponse>('/notifications', {
     params: { type, page, page_size: pageSize },
   })
 }
