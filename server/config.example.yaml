@@ -10,12 +10,41 @@ database:
   password: "your-database-password"
   dbname: "rpbox"
 
+backup:
+  enabled: false
+  interval_minutes: 60
+  retention_days: 30
+  local_dir: "storage/backups"
+  environment: "dev"
+  pg_dump_path: "pg_dump"
+  run_on_start: true
+  timeout_minutes: 60
+  oss:
+    enabled: false
+    endpoint: "oss-cn-beijing.aliyuncs.com"
+    internal_endpoint: "oss-cn-beijing-internal.aliyuncs.com"
+    use_internal: false
+    use_https: true
+    use_cname: false
+    bucket: "your-backup-bucket"
+    access_key_id: "your-access-key-id"
+    access_key_secret: "your-access-key-secret"
+    prefix: "db-backups"
+
 jwt:
   secret: "your-secret-key-change-in-production"
   expire: 72
 
 storage:
   path: "storage"
+
+oss:
+  enabled: false
+  endpoint: "oss-cn-shanghai.aliyuncs.com"
+  bucket: "your-bucket-name"
+  access_key_id: ""
+  access_key_secret: ""
+  prefix: "images"
 
 redis:
   host: "localhost"

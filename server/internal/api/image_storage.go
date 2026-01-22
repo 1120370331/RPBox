@@ -61,6 +61,22 @@ func (s *Server) saveUploadedImage(c *gin.Context, header *multipart.FileHeader,
 	}
 
 	cleanSubdir := cleanUploadSubdir(subdir)
+	name, err := randomHex(16)
+	if err != nil {
+		return "", err
+	}
+	filename := name + ext
+	relativePath := path.Join(cleanSubdir, filename)
+
+	if s.ossEnabled() {
+		objectKey := s.buildOSSKey(cleanSubdir, filename)
+		if err := s.uploadToOSS(objectKey, data, contentType); err != nil {
+			return "", err
+		}
+		urlPath := path.Join("/", uploadDirName, relativePath)
+		return buildPublicURL(c, urlPath), nil
+	}
+
 	baseDir := filepath.Join(s.cfg.Storage.Path, uploadDirName)
 	targetDir := baseDir
 	if cleanSubdir != "" {
@@ -70,17 +86,12 @@ func (s *Server) saveUploadedImage(c *gin.Context, header *multipart.FileHeader,
 		return "", err
 	}
 
-	name, err := randomHex(16)
-	if err != nil {
-		return "", err
-	}
-	filename := name + ext
 	targetPath := filepath.Join(targetDir, filename)
 	if err := os.WriteFile(targetPath, data, 0644); err != nil {
 		return "", err
 	}
 
-	urlPath := path.Join("/", uploadDirName, cleanSubdir, filename)
+	urlPath := path.Join("/", uploadDirName, relativePath)
 	return buildPublicURL(c, urlPath), nil
 }
 
@@ -166,6 +177,14 @@ func decodeDataURI(dataURI string) ([]byte, string, error) {
 
 func (s *Server) readImageFromURL(c *gin.Context, raw string) ([]byte, string, error) {
 	if strings.HasPrefix(raw, "/uploads/") || strings.HasPrefix(raw, "uploads/") {
+		if s.ossEnabled() {
+			if key := uploadsKeyFromPath(raw); key != "" {
+				ossKey := s.buildOSSKey(key, "")
+				if data, contentType, err := s.readImageFromOSS(ossKey); err == nil {
+					return data, contentType, nil
+				}
+			}
+		}
 		return s.readImageFromLocalPath(raw)
 	}
 
@@ -175,6 +194,14 @@ func (s *Server) readImageFromURL(c *gin.Context, raw string) ([]byte, string, e
 			return nil, "", err
 		}
 		if parsed.Path != "" && strings.HasPrefix(parsed.Path, "/uploads/") && isSameHost(c, parsed.Host) {
+			if s.ossEnabled() {
+				if key := uploadsKeyFromPath(parsed.Path); key != "" {
+					ossKey := s.buildOSSKey(key, "")
+					if data, contentType, err := s.readImageFromOSS(ossKey); err == nil {
+						return data, contentType, nil
+					}
+				}
+			}
 			return s.readImageFromLocalPath(parsed.Path)
 		}
 
@@ -256,6 +283,19 @@ func cleanUploadSubdir(subdir string) string {
 		return ""
 	}
 	return cleaned
+}
+
+func uploadsKeyFromPath(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	cleaned := path.Clean("/" + trimmed)
+	cleaned = strings.TrimPrefix(cleaned, "/")
+	if !strings.HasPrefix(cleaned, "uploads/") {
+		return ""
+	}
+	return strings.TrimPrefix(cleaned, "uploads/")
 }
 
 func isImageURL(value string) bool {
