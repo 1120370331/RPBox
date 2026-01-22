@@ -79,18 +79,7 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           NOTES_FILE="client/release-notes/${VERSION}.txt"
           if [ -f "$NOTES_FILE" ]; then
-            NOTES=$(NOTES_FILE="$NOTES_FILE" python3 - <<'PY'
-import os
-
-path = os.environ["NOTES_FILE"]
-with open(path, "r", encoding="utf-8") as f:
-    content = f.read().strip()
-content = content.replace("\r\n", "\n").replace("\r", "\n")
-content = content.replace("\\", "\\\\").replace("\"", "\\\"").replace("&", "\\&").replace("|", "\\|")
-content = content.replace("\n", "\\n")
-print(content)
-PY
-          )
+            NOTES=$(NOTES_FILE="$NOTES_FILE" python3 -c 'import json, os; path=os.environ["NOTES_FILE"]; content=open(path, "r", encoding="utf-8").read().strip(); content=content.replace("\r\n", "\n").replace("\r", "\n"); content=json.dumps(content)[1:-1]; content=content.replace("&", "\\&").replace("|", "\\|"); print(content)')
           else
             NOTES=""
           fi
