@@ -114,6 +114,7 @@ jobs:
           NOTES="${{ steps.notes.outputs.NOTES }}"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
+            set -e
             # 更新配置文件中的版本号
             sed -i "s/latest_version:.*/latest_version: \"$VERSION\"/" /home/devbox/RPBox/server/config.yaml
             # 更新更新日志和发布时间
@@ -121,6 +122,17 @@ jobs:
               sed -i "s|release_notes:.*|release_notes: \"$NOTES\"|" /home/devbox/RPBox/server/config.yaml
             fi
             sed -i "s|pub_date:.*|pub_date: \"$PUB_DATE\"|" /home/devbox/RPBox/server/config.yaml
-            # 重启服务
-            sudo supervisorctl restart rpbox
+            # 重启服务（优先无交互sudo，其次直接supervisorctl）
+            if sudo -n true 2>/dev/null; then
+              sudo -n supervisorctl restart rpbox
+              sudo -n supervisorctl status rpbox
+            else
+              if command -v supervisorctl >/dev/null 2>&1; then
+                supervisorctl restart rpbox
+                supervisorctl status rpbox
+              else
+                echo "ERROR: supervisorctl not available or insufficient privileges"
+                exit 1
+              fi
+            fi
           EOF
