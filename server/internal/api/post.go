@@ -25,6 +25,7 @@ type CreatePostRequest struct {
 	StoryID        *uint   `json:"story_id"`
 	TagIDs         []uint  `json:"tag_ids"`
 	Status         string  `json:"status"`           // draft|published
+	IsPublic       *bool   `json:"is_public"`
 	EventType      string  `json:"event_type"`       // server|guild
 	EventStartTime *string `json:"event_start_time"` // ISO8601格式
 	EventEndTime   *string `json:"event_end_time"`
@@ -41,6 +42,7 @@ type UpdatePostRequest struct {
 	GuildID        *uint   `json:"guild_id"`
 	StoryID        *uint   `json:"story_id"`
 	Status         string  `json:"status"`
+	IsPublic       *bool   `json:"is_public"`
 	EventType      string  `json:"event_type"`
 	EventStartTime *string `json:"event_start_time"`
 	EventEndTime   *string `json:"event_end_time"`
@@ -63,9 +65,11 @@ func (s *Server) listPosts(c *gin.Context) {
 	category := c.Query("category") // 分区筛选
 
 	query := database.DB.Model(&model.Post{})
+	isSelfView := authorID != "" && authorID == strconv.Itoa(int(userID))
+	guildRole := ""
 
 	// 只显示公开的帖子，除非是查看自己的
-	if authorID != "" && authorID == strconv.Itoa(int(userID)) {
+	if isSelfView {
 		// 查看自己的帖子：可以看到所有状态（包括草稿）
 		query = query.Where("author_id = ?", authorID)
 		// 如果指定了状态，则过滤
@@ -74,7 +78,6 @@ func (s *Server) listPosts(c *gin.Context) {
 		}
 	} else {
 		// 查看他人帖子：只能看到已发布且审核通过的公开帖子
-		query = query.Where("is_public = ?", true)
 		query = query.Where("status = ?", "published")
 		query = query.Where("review_status = ?", "approved")
 		if authorID != "" {
@@ -85,15 +88,20 @@ func (s *Server) listPosts(c *gin.Context) {
 	if guildID != "" {
 		// 检查公会内容访问权限
 		guildIDUint, _ := strconv.ParseUint(guildID, 10, 32)
-		canAccess, _ := checkGuildContentAccess(uint(guildIDUint), userID, "post")
+		canAccess, role := checkGuildContentAccess(uint(guildIDUint), userID, "post")
 		if !canAccess {
 			c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
 			return
 		}
+		guildRole = role
 		query = query.Where("guild_id = ?", guildID)
-	} else {
-		// 社区广场：只显示无公会关联的帖子，或有公会关联但设置为公开的帖子
-		query = query.Where("guild_id IS NULL OR is_public = ?", true)
+		// 访客查看公会帖子时，仅返回公开帖子
+		if !isSelfView && guildRole == "" {
+			query = query.Where("is_public = ?", true)
+		}
+	} else if !isSelfView {
+		// 社区广场：只显示公开帖子
+		query = query.Where("is_public = ?", true)
 	}
 
 	// 分区筛选
@@ -267,6 +275,9 @@ func (s *Server) createPost(c *gin.Context) {
 		EventType:   req.EventType,
 		EventColor:  req.EventColor,
 	}
+	if req.GuildID != nil && req.IsPublic != nil {
+		post.IsPublic = *req.IsPublic
+	}
 	if req.CoverImage != "" {
 		now := time.Now()
 		post.CoverImageUpdatedAt = &now
@@ -336,10 +347,20 @@ func (s *Server) getPost(c *gin.Context) {
 		return
 	}
 
-	// 权限检查：非公开帖子只有作者或管理员/版主可见
-	if !post.IsPublic && post.AuthorID != userID && !isModerator {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权查看"})
-		return
+	// 权限检查：非公开帖子仅公会成员可见
+	if post.AuthorID != userID && !isModerator {
+		if !post.IsPublic {
+			if post.GuildID != nil {
+				canAccess, role := checkGuildContentAccess(*post.GuildID, userID, "post")
+				if !canAccess || role == "" {
+					c.JSON(http.StatusForbidden, gin.H{"error": "无权查看"})
+					return
+				}
+			} else {
+				c.JSON(http.StatusForbidden, gin.H{"error": "无权查看"})
+				return
+			}
+		}
 	}
 
 	// 增加浏览次数
@@ -451,6 +472,17 @@ func (s *Server) updatePost(c *gin.Context) {
 			editReq.Category = post.Category
 		}
 
+		if req.IsPublic != nil {
+			newPublic := true
+			if post.GuildID != nil {
+				newPublic = *req.IsPublic
+			}
+			if post.IsPublic != newPublic {
+				database.DB.Model(&post).Update("is_public", newPublic)
+				post.IsPublic = newPublic
+			}
+		}
+
 		database.DB.Save(&editReq)
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
@@ -486,6 +518,11 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 	post.GuildID = req.GuildID
 	post.StoryID = req.StoryID
+	if post.GuildID == nil {
+		post.IsPublic = true
+	} else if req.IsPublic != nil {
+		post.IsPublic = *req.IsPublic
+	}
 
 	// 处理发布时的审核逻辑
 	if req.Status == "published" && post.ReviewStatus != "approved" {
@@ -778,8 +815,8 @@ func canAccessPost(userID uint, post model.Post) bool {
 		return true
 	}
 	if post.GuildID != nil {
-		canAccess, _ := checkGuildContentAccess(*post.GuildID, userID, "post")
-		return canAccess
+		canAccess, role := checkGuildContentAccess(*post.GuildID, userID, "post")
+		return canAccess && role != ""
 	}
 	return false
 }

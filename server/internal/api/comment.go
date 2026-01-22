@@ -20,6 +20,7 @@ type CreateCommentRequest struct {
 // listComments 获取帖子的评论列表
 func (s *Server) listComments(c *gin.Context) {
 	postID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	userID := c.GetUint("userID")
 
 	// 检查帖子是否存在
 	var post model.Post
@@ -30,6 +31,19 @@ func (s *Server) listComments(c *gin.Context) {
 
 	var comments []model.Comment
 	database.DB.Where("post_id = ?", postID).Order("created_at ASC").Find(&comments)
+
+	likedMap := make(map[uint]bool)
+	if userID != 0 && len(comments) > 0 {
+		commentIDs := make([]uint, 0, len(comments))
+		for _, comment := range comments {
+			commentIDs = append(commentIDs, comment.ID)
+		}
+		var likes []model.CommentLike
+		database.DB.Where("user_id = ? AND comment_id IN ?", userID, commentIDs).Find(&likes)
+		for _, like := range likes {
+			likedMap[like.CommentID] = true
+		}
+	}
 
 	// 获取评论作者信息
 	authorIDs := make([]uint, len(comments))
@@ -53,6 +67,7 @@ func (s *Server) listComments(c *gin.Context) {
 		AuthorAvatar    string `json:"author_avatar"`
 		AuthorNameColor string `json:"author_name_color"`
 		AuthorNameBold  bool   `json:"author_name_bold"`
+		Liked           bool   `json:"liked"`
 	}
 	result := make([]CommentWithAuthor, len(comments))
 	for i, comment := range comments {
@@ -64,6 +79,7 @@ func (s *Server) listComments(c *gin.Context) {
 			AuthorAvatar:    author.Avatar,
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,
+			Liked:           likedMap[comment.ID],
 		}
 	}
 

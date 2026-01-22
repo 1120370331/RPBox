@@ -4,12 +4,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import ImageViewer from '@/components/ImageViewer.vue'
+import EmojiPicker from '@/components/EmojiPicker.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { renderEmoteContent } from '@/utils/emote'
+import { useEmoteStore } from '@/stores/emote'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const emoteStore = useEmoteStore()
 const loading = ref(false)
 const item = ref<Item | null>(null)
 const author = ref<any>(null)
@@ -19,6 +23,8 @@ const comments = ref<ItemComment[]>([])
 const newRating = ref(0)
 const hoverRating = ref(0)
 const newComment = ref('')
+const showEmojiPicker = ref(false)
+const emojiButtonRef = ref<HTMLElement | null>(null)
 const showImportCode = ref(false)
 const isLiked = ref(false)
 const isFavorited = ref(false)
@@ -74,6 +80,7 @@ const canSubmit = computed(() => {
 })
 
 onMounted(() => {
+  emoteStore.loadPacks()
   // 检测预览模式
   if (route.query.preview === '1') {
     isPreview.value = true
@@ -294,6 +301,21 @@ function nextImage() {
   }
 }
 
+function handleEmojiSelect(token: string) {
+  appendEmoteToken(newComment, token)
+  showEmojiPicker.value = false
+}
+
+function appendEmoteToken(target: { value: string }, token: string) {
+  const trimmed = target.value.trimEnd()
+  const spacer = trimmed.length > 0 ? ' ' : ''
+  target.value = `${trimmed}${spacer}${token} `
+}
+
+function renderCommentContent(content: string) {
+  return renderEmoteContent(content, emoteStore.emoteMap)
+}
+
 function handleViewerDownload(index: number) {
   if (viewerMode.value !== 'artwork' || !item.value) return
   const img = images.value[index]
@@ -502,6 +524,9 @@ function downloadAllImages() {
             rows="4"
           ></textarea>
           <div class="review-footer">
+            <button ref="emojiButtonRef" class="emoji-btn" @click="showEmojiPicker = true" type="button">
+              <i class="ri-emotion-line"></i>
+            </button>
             <span class="char-count" :class="{ warning: newRating > 0 && commentLength < 10 }">
               {{ commentLength }}{{ newRating > 0 ? '/10' : '' }} 字
             </span>
@@ -535,12 +560,14 @@ function downloadAllImages() {
                 </div>
                 <span class="comment-time">{{ new Date(comment.created_at).toLocaleDateString() }}</span>
               </div>
-              <p class="comment-content">{{ comment.content }}</p>
+              <div class="comment-content" v-html="renderCommentContent(comment.content)"></div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <EmojiPicker :show="showEmojiPicker" :trigger-element="emojiButtonRef" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
 
     <ImageViewer
       v-model="showImageViewer"
@@ -1094,6 +1121,29 @@ function downloadAllImages() {
   margin-top: 12px;
 }
 
+.emoji-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #fff;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  color: #8D7B68;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.emoji-btn:hover {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.emoji-btn i {
+  font-size: 18px;
+}
+
 .char-count {
   font-size: 13px;
   color: #999;
@@ -1214,6 +1264,15 @@ function downloadAllImages() {
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
+}
+
+.comment-content :deep(.comment-emote) {
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  display: inline-block;
+  margin: 4px 6px 4px 0;
+  vertical-align: middle;
 }
 
 /* 画作图片画廊样式 */

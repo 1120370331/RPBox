@@ -40,7 +40,7 @@ func (s *Server) listNotifications(c *gin.Context) {
 		if notif.ActorID != nil {
 			actorIDs = append(actorIDs, *notif.ActorID)
 		}
-		if notif.TargetType == "comment" {
+		if notif.TargetType == "comment" || (notif.TargetType == "" && notif.Type == "post_comment") {
 			commentIDs = append(commentIDs, notif.TargetID)
 		}
 	}
@@ -77,7 +77,7 @@ func (s *Server) listNotifications(c *gin.Context) {
 		item := NotificationWithActor{
 			Notification: notif,
 		}
-		if notif.TargetType == "comment" {
+		if notif.TargetType == "comment" || (notif.TargetType == "" && notif.Type == "post_comment") {
 			if postID, ok := commentPostMap[notif.TargetID]; ok {
 				item.TargetPostID = postID
 			}

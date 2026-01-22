@@ -17,6 +17,8 @@ func (s *Server) setupRoutes() {
 	} else {
 		s.router.Static("/uploads", filepath.Join(s.cfg.Storage.Path, "uploads"))
 	}
+	// 表情包静态资源
+	s.router.Static("/emotes", filepath.Join(s.cfg.Storage.Path, "emotes"))
 
 	v1 := s.router.Group("/api/v1")
 	{
@@ -37,6 +39,8 @@ func (s *Server) setupRoutes() {
 
 		// 图标服务（公开）
 		v1.GET("/icons/:name", s.getIcon)
+		// 表情包（公开）
+		v1.GET("/emotes", s.listEmotePacks)
 
 		// 预设标签（公开）
 		v1.GET("/tags/preset", s.getPresetTags)
@@ -268,6 +272,7 @@ func (s *Server) setupRoutes() {
 				mod.GET("/metrics/history", middleware.AdminAuth(), s.getMetricsHistory)
 				mod.GET("/metrics/summary", middleware.AdminAuth(), s.getMetricsSummary)
 				mod.GET("/metrics/basic", middleware.AdminAuth(), s.getMetricsBasic)
+				mod.GET("/metrics/basic/history", middleware.AdminAuth(), s.getMetricsBasicHistory)
 			}
 
 			// 管理员中心（需要管理员权限）
