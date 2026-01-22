@@ -11,8 +11,12 @@ func (s *Server) setupRoutes() {
 
 	// 静态文件服务 - 更新包下载
 	s.router.Static("/releases", "./releases")
-	// 静态文件服务 - 图片上传
-	s.router.Static("/uploads", filepath.Join(s.cfg.Storage.Path, "uploads"))
+	// 图片上传访问（本地或 OSS）
+	if s.ossEnabled() {
+		s.router.GET("/uploads/*filepath", s.getUploadObject)
+	} else {
+		s.router.Static("/uploads", filepath.Join(s.cfg.Storage.Path, "uploads"))
+	}
 
 	v1 := s.router.Group("/api/v1")
 	{

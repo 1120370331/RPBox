@@ -1,6 +1,9 @@
 package api
 
 import (
+	"sync"
+
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/rpbox/server/internal/config"
@@ -16,6 +19,9 @@ type Server struct {
 	wsHub               *ws.Hub
 	emailClient         *email.SMTPClient
 	verificationService *service.VerificationService
+	ossBucket           *oss.Bucket
+	ossInitOnce         sync.Once
+	ossInitErr          error
 }
 
 func NewServer(cfg *config.Config) *Server {

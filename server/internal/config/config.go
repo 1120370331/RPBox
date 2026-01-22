@@ -1,6 +1,10 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/spf13/viper"
 )
 
@@ -9,6 +13,8 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Storage  StorageConfig  `mapstructure:"storage"`
+	OSS      OSSConfig      `mapstructure:"oss"`
+	Backup   BackupConfig   `mapstructure:"backup"`
 	Updater  UpdaterConfig  `mapstructure:"updater"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	SMTP     SMTPConfig     `mapstructure:"smtp"`
@@ -31,6 +37,40 @@ func Get() *Config {
 
 type StorageConfig struct {
 	Path string `mapstructure:"path"`
+}
+
+type OSSConfig struct {
+	Enabled         bool   `mapstructure:"enabled"`
+	Endpoint        string `mapstructure:"endpoint"`
+	Bucket          string `mapstructure:"bucket"`
+	AccessKeyID     string `mapstructure:"access_key_id"`
+	AccessKeySecret string `mapstructure:"access_key_secret"`
+	Prefix          string `mapstructure:"prefix"`
+}
+
+type BackupConfig struct {
+	Enabled         bool            `mapstructure:"enabled"`
+	IntervalMinutes int             `mapstructure:"interval_minutes"`
+	RetentionDays   int             `mapstructure:"retention_days"`
+	LocalDir        string          `mapstructure:"local_dir"`
+	Environment     string          `mapstructure:"environment"`
+	PGDumpPath      string          `mapstructure:"pg_dump_path"`
+	RunOnStart      bool            `mapstructure:"run_on_start"`
+	TimeoutMinutes  int             `mapstructure:"timeout_minutes"`
+	OSS             BackupOSSConfig `mapstructure:"oss"`
+}
+
+type BackupOSSConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	Endpoint         string `mapstructure:"endpoint"`
+	InternalEndpoint string `mapstructure:"internal_endpoint"`
+	UseInternal      bool   `mapstructure:"use_internal"`
+	UseHTTPS         bool   `mapstructure:"use_https"`
+	UseCname         bool   `mapstructure:"use_cname"`
+	Bucket           string `mapstructure:"bucket"`
+	AccessKeyID      string `mapstructure:"access_key_id"`
+	AccessKeySecret  string `mapstructure:"access_key_secret"`
+	Prefix           string `mapstructure:"prefix"`
 }
 
 type ServerConfig struct {
@@ -77,12 +117,37 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
 	viper.SetDefault("server.max_body_size_mb", 200)
-	viper.SetDefault("storage.path", "storage")  // 改为相对路径，不带 ./
+	viper.SetDefault("storage.path", "storage") // 改为相对路径，不带 ./
+	viper.SetDefault("oss.enabled", false)
+	viper.SetDefault("oss.prefix", "images")
+	viper.SetDefault("backup.enabled", false)
+	viper.SetDefault("backup.interval_minutes", 60)
+	viper.SetDefault("backup.retention_days", 30)
+	viper.SetDefault("backup.local_dir", "storage/backups")
+	viper.SetDefault("backup.environment", "")
+	viper.SetDefault("backup.pg_dump_path", "pg_dump")
+	viper.SetDefault("backup.run_on_start", true)
+	viper.SetDefault("backup.timeout_minutes", 60)
+	viper.SetDefault("backup.oss.enabled", false)
+	viper.SetDefault("backup.oss.use_internal", false)
+	viper.SetDefault("backup.oss.use_https", true)
+	viper.SetDefault("backup.oss.use_cname", false)
+	viper.SetDefault("backup.oss.prefix", "db-backups")
+
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, err
 		}
+	}
+
+	if err := mergeLocalConfig("config.local.yaml"); err != nil {
+		return nil, err
+	}
+	if err := mergeLocalConfig(filepath.Join("config", "config.local.yaml")); err != nil {
+		return nil, err
 	}
 
 	var cfg Config
@@ -92,4 +157,19 @@ func Load() (*Config, error) {
 
 	globalConfig = &cfg
 	return &cfg, nil
+}
+
+func mergeLocalConfig(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	viper.SetConfigFile(path)
+	if err := viper.MergeInConfig(); err != nil {
+		return err
+	}
+	return nil
 }
