@@ -13,8 +13,9 @@ const {
 } = useUpdater()
 
 onMounted(() => {
-  // 暂时禁用启动时自动检查，改为手动检查
-  // checkForUpdate()
+  checkForUpdate().catch(() => {
+    // Ignore auto-check errors; user can retry in Settings.
+  })
 })
 </script>
 
