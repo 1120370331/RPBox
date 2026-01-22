@@ -100,12 +100,40 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           REMOTE_DIR="${{ secrets.RELEASE_PATH }}/$VERSION"
 
-          # 收集所有文件到临时目录
+          # 收集 NSIS 安装包与签名，避免跨目录同名文件覆盖导致签名错配
           mkdir -p upload_files
-          find artifacts -type f -exec cp {} upload_files/ \;
+          EXE_PATH=$(find artifacts -type f -path "*/nsis/*" -name "RPBox_*_x64-setup.exe" | head -n1)
+          if [ -z "$EXE_PATH" ]; then
+            EXE_PATH=$(find artifacts -type f -name "RPBox_*_x64-setup.exe" | head -n1)
+          fi
+          if [ -z "$EXE_PATH" ]; then
+            echo "ERROR: setup exe not found"
+            exit 1
+          fi
+          SIG_PATH="${EXE_PATH}.sig"
+          if [ ! -f "$SIG_PATH" ]; then
+            echo "ERROR: signature not found for $EXE_PATH"
+            exit 1
+          fi
+          cp "$EXE_PATH" "$SIG_PATH" upload_files/
+
+          # 可选上传 MSI 安装包与签名
+          MSI_PATH=$(find artifacts -type f -path "*/msi/*" -name "RPBox_*_x64_en-US.msi" | head -n1)
+          if [ -z "$MSI_PATH" ]; then
+            MSI_PATH=$(find artifacts -type f -name "RPBox_*_x64_en-US.msi" | head -n1)
+          fi
+          if [ -n "$MSI_PATH" ]; then
+            MSI_SIG="${MSI_PATH}.sig"
+            if [ -f "$MSI_SIG" ]; then
+              cp "$MSI_PATH" "$MSI_SIG" upload_files/
+            else
+              echo "WARN: msi signature missing: $MSI_SIG"
+              cp "$MSI_PATH" upload_files/
+            fi
+          fi
 
           # 创建远程目录并上传
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR"
           scp -P 2233 upload_files/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
 
       - name: Update server config
