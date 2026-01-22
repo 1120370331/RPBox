@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,6 +28,12 @@ type Platform struct {
 	Signature string `json:"signature"`
 }
 
+type LatestRelease struct {
+	LatestVersion string `json:"latest_version"`
+	Notes         string `json:"notes"`
+	PubDate       string `json:"pub_date"`
+}
+
 // checkUpdate 检查客户端更新
 func (s *Server) checkUpdate(c *gin.Context) {
 	target := c.Param("target")
@@ -35,8 +42,23 @@ func (s *Server) checkUpdate(c *gin.Context) {
 
 	// 读取最新版本信息
 	latestVersion := config.Get().Updater.LatestVersion
+	notes := config.Get().Updater.ReleaseNotes
+	pubDate := config.Get().Updater.PubDate
 	if latestVersion == "" {
 		latestVersion = "0.1.0"
+	}
+	if latest, err := readLatestRelease(); err == nil {
+		if latest.LatestVersion != "" {
+			latestVersion = latest.LatestVersion
+		}
+		if latest.Notes != "" {
+			notes = latest.Notes
+		}
+		if latest.PubDate != "" {
+			pubDate = latest.PubDate
+		}
+	} else if !os.IsNotExist(err) {
+		fmt.Printf("checkUpdate: failed to read latest.json: %v\n", err)
 	}
 
 	// 调试日志
@@ -83,8 +105,8 @@ func (s *Server) checkUpdate(c *gin.Context) {
 
 	response := UpdateResponse{
 		Version:   latestVersion,
-		Notes:     config.Get().Updater.ReleaseNotes,
-		PubDate:   config.Get().Updater.PubDate,
+		Notes:     notes,
+		PubDate:   pubDate,
 		URL:       url,
 		Signature: signature,
 	}
@@ -102,4 +124,20 @@ func getSignature(version, sigFileName string) string {
 		return ""
 	}
 	return string(data)
+}
+
+func readLatestRelease() (*LatestRelease, error) {
+	latestPath := filepath.Join("releases", "latest.json")
+	data, err := os.ReadFile(latestPath)
+	if err != nil {
+		return nil, err
+	}
+	var latest LatestRelease
+	if err := json.Unmarshal(data, &latest); err != nil {
+		return nil, err
+	}
+	if latest.LatestVersion == "" {
+		return nil, fmt.Errorf("latest.json missing latest_version")
+	}
+	return &latest, nil
 }
