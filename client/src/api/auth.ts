@@ -8,6 +8,12 @@ export interface LoginResponse {
     email: string
     avatar?: string
     role?: string
+    is_sponsor?: boolean
+    sponsor_level?: number
+    sponsor_color?: string
+    sponsor_bold?: boolean
+    name_color?: string
+    name_bold?: boolean
   }
 }
 

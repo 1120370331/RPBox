@@ -276,6 +276,7 @@ func (s *Server) setupRoutes() {
 			{
 				admin.GET("/users", s.listUsers)
 				admin.PUT("/users/:id/role", s.setUserRole)
+				admin.PUT("/users/:id/sponsor", s.setUserSponsor)
 			}
 		}
 	}

@@ -6,6 +6,9 @@ import { useToastStore } from '../../stores/toast'
 import { uploadAvatar, bindEmail } from '../../api/user'
 import { sendVerificationCode } from '../../api/auth'
 import request from '../../api/request'
+import RColorPicker from '@/components/RColorPicker.vue'
+import RCheckbox from '@/components/RCheckbox.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,6 +17,20 @@ const toast = useToastStore()
 
 const userId = computed(() => route.params.id as string)
 const isOwnProfile = computed(() => userStore.user?.id === Number(userId.value))
+const sponsorLevel = computed(() => {
+  const level = userProfile.value?.sponsor_level
+  if (typeof level === 'number') return level
+  return userProfile.value?.is_sponsor ? 2 : 0
+})
+const isSponsor = computed(() => sponsorLevel.value > 0)
+const canEditSponsorStyle = computed(() => sponsorLevel.value >= 2)
+const sponsorStyleTip = computed(() => {
+  if (canEditSponsorStyle.value) return ''
+  if (sponsorLevel.value === 1) {
+    return '当前为 Lv1 仅鸣谢，升级到 Lv2 可解锁昵称样式。'
+  }
+  return '成为赞助者以获得自定义昵称样式权限！'
+})
 
 const userProfile = ref<any>(null)
 const userGuilds = ref<any[]>([])
@@ -21,6 +38,8 @@ const loading = ref(true)
 const editMode = ref(false)
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
+const sponsorColor = ref('')
+const sponsorBold = ref(false)
 
 // 邮箱绑定相关
 const showEmailBinding = ref(false)
@@ -55,6 +74,19 @@ async function loadUserProfile() {
       location: res.location || '',
       website: res.website || ''
     }
+    sponsorColor.value = res.sponsor_color || ''
+    sponsorBold.value = !!res.sponsor_bold
+    if (isOwnProfile.value && userStore.user) {
+      const level = typeof res.sponsor_level === 'number' ? res.sponsor_level : (res.is_sponsor ? 2 : 0)
+      userStore.user.username = res.username
+      userStore.user.name_color = res.name_color
+      userStore.user.name_bold = res.name_bold
+      userStore.user.is_sponsor = level > 0
+      userStore.user.sponsor_level = level
+      userStore.user.sponsor_color = res.sponsor_color
+      userStore.user.sponsor_bold = res.sponsor_bold
+      localStorage.setItem('user', JSON.stringify(userStore.user))
+    }
   } catch (error: any) {
     console.error('加载用户信息失败:', error)
   } finally {
@@ -73,7 +105,12 @@ async function loadUserGuilds() {
 
 async function saveProfile() {
   try {
-    await request.put('/user/info', formData.value)
+    const payload: Record<string, any> = { ...formData.value }
+    if (canEditSponsorStyle.value) {
+      payload.sponsor_color = sponsorColor.value
+      payload.sponsor_bold = sponsorBold.value
+    }
+    await request.put('/user/info', payload)
     await loadUserProfile()
     editMode.value = false
     toast.success('保存成功')
@@ -91,6 +128,8 @@ function cancelEdit() {
     location: userProfile.value?.location || '',
     website: userProfile.value?.website || ''
   }
+  sponsorColor.value = userProfile.value?.sponsor_color || ''
+  sponsorBold.value = !!userProfile.value?.sponsor_bold
 }
 
 function triggerAvatarUpload() {
@@ -225,8 +264,9 @@ async function handleBindEmail() {
           </div>
           <input ref="avatarInputRef" type="file" accept="image/*" style="display: none" @change="handleAvatarChange" />
 
-          <h1 class="username">{{ userProfile.username }}</h1>
+          <h1 class="username" :style="buildNameStyle(userProfile.name_color, userProfile.name_bold)">{{ userProfile.username }}</h1>
           <div class="user-meta">
+            <span v-if="isSponsor" class="sponsor-badge">赞助 Lv{{ sponsorLevel }}</span>
             <span class="role-badge" :class="userProfile.role">
               {{ userProfile.role === 'admin' ? '管理员' : userProfile.role === 'moderator' ? '版主' : '用户' }}
             </span>
@@ -282,6 +322,20 @@ async function handleBindEmail() {
               <div class="form-group">
                 <label>用户名</label>
                 <input v-model="formData.username" type="text" placeholder="你的用户名" maxlength="50">
+              </div>
+
+              <div class="form-group sponsor-style" :class="{ locked: !canEditSponsorStyle }">
+                <div class="sponsor-style-header">
+                  <label>赞助者昵称样式</label>
+                  <span class="sponsor-badge" :class="{ locked: !canEditSponsorStyle }">
+                    {{ isSponsor ? `Lv${sponsorLevel} 赞助` : '赞助者权限' }}
+                  </span>
+                </div>
+                <div class="sponsor-style-controls" :class="{ disabled: !canEditSponsorStyle }">
+                  <RColorPicker v-model="sponsorColor" />
+                  <RCheckbox v-model="sponsorBold" label="加粗显示" />
+                </div>
+                <p v-if="!canEditSponsorStyle" class="sponsor-style-tip locked">{{ sponsorStyleTip }}</p>
               </div>
 
               <!-- 邮箱绑定区域 -->
@@ -657,6 +711,24 @@ async function handleBindEmail() {
   margin-bottom: 24px;
 }
 
+.sponsor-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #E7C67D, #D6A645);
+  color: #4B3621;
+  border: 1px solid rgba(214, 166, 69, 0.4);
+}
+
+.sponsor-badge.locked {
+  background: #F2E6D8;
+  color: #8C7B70;
+  border-color: #E0D2C1;
+}
+
 .role-badge {
   padding: 4px 10px;
   border-radius: 4px;
@@ -845,6 +917,48 @@ async function handleBindEmail() {
   color: #8C7B70;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.sponsor-style {
+  border: 1px dashed #E8DCC8;
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(251, 245, 239, 0.6);
+}
+
+.sponsor-style.locked {
+  border-color: #E0D2C1;
+  background: rgba(244, 238, 230, 0.8);
+}
+
+.sponsor-style-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sponsor-style-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sponsor-style-controls.disabled {
+  pointer-events: none;
+  opacity: 0.6;
+  filter: grayscale(1);
+}
+
+.sponsor-style-tip {
+  margin: 0;
+  font-size: 12px;
+  color: #8C7B70;
+}
+
+.sponsor-style-tip.locked {
+  color: #9C8E82;
 }
 
 .form-group input,

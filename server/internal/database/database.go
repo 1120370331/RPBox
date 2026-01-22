@@ -74,6 +74,9 @@ func Init(cfg *config.DatabaseConfig) error {
 			log.Printf("[DB Migration] %s - %v", sql, err)
 		}
 	}
+	if err := db.Exec("UPDATE users SET sponsor_level = 2 WHERE is_sponsor = true AND (sponsor_level IS NULL OR sponsor_level = 0)").Error; err != nil {
+		log.Printf("[DB Migration] update sponsor_level from is_sponsor - %v", err)
+	}
 
 	// 添加性能优化索引
 	indexMigrations := []string{

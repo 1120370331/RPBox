@@ -116,7 +116,7 @@ func (s *Server) listItems(c *gin.Context) {
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "role").Where("id IN ?", authorIDs).Find(&authors)
+		database.DB.Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	// 创建作者ID到用户信息的映射
@@ -131,12 +131,15 @@ func (s *Server) listItems(c *gin.Context) {
 		AuthorUsername  string `json:"author_username"`
 		AuthorAvatar    string `json:"author_avatar"`
 		AuthorRole      string `json:"author_role"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
 		PreviewImageURL string `json:"preview_image_url"`
 	}
 
 	var result []ItemWithAuthor
 	for _, item := range items {
 		author := authorMap[item.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
 		// 构造缩略图 URL：宽度 400，质量 80
 		// 只有确认有预览图或是画作类型才返回 URL
 		previewURL := ""
@@ -152,6 +155,8 @@ func (s *Server) listItems(c *gin.Context) {
 			AuthorUsername:  author.Username,
 			AuthorAvatar:    author.Avatar,
 			AuthorRole:      author.Role,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
 			PreviewImageURL: previewURL,
 		})
 	}
@@ -213,7 +218,7 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "role").Where("id IN ?", authorIDs).Find(&authors)
+		database.DB.Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	authorMap := make(map[uint]model.User)
@@ -226,12 +231,15 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		AuthorUsername  string `json:"author_username"`
 		AuthorAvatar    string `json:"author_avatar"`
 		AuthorRole      string `json:"author_role"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
 		PreviewImageURL string `json:"preview_image_url"`
 	}
 
 	result := make([]ItemWithAuthor, 0, len(filtered))
 	for _, item := range filtered {
 		author := authorMap[item.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
 		previewURL := ""
 		if hasPreviewMap[item.ID] || item.Type == "artwork" {
 			previewURL = fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80", item.ID)
@@ -245,6 +253,8 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 			AuthorUsername:  author.Username,
 			AuthorAvatar:    author.Avatar,
 			AuthorRole:      author.Role,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
 			PreviewImageURL: previewURL,
 		})
 	}
@@ -390,7 +400,20 @@ func (s *Server) getItem(c *gin.Context) {
 
 	// 获取作者信息
 	var author model.User
-	database.DB.Select("id", "username").First(&author, item.AuthorID)
+	database.DB.Select("id", "username", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").First(&author, item.AuthorID)
+	nameColor, nameBold := userDisplayStyle(author)
+	type AuthorInfo struct {
+		ID        uint   `json:"id"`
+		Username  string `json:"username"`
+		NameColor string `json:"name_color"`
+		NameBold  bool   `json:"name_bold"`
+	}
+	authorInfo := AuthorInfo{
+		ID:        author.ID,
+		Username:  author.Username,
+		NameColor: nameColor,
+		NameBold:  nameBold,
+	}
 
 	// 获取标签
 	var tags []model.Tag
@@ -423,7 +446,7 @@ func (s *Server) getItem(c *gin.Context) {
 
 	response := gin.H{
 		"item":      item,
-		"author":    author,
+		"author":    authorInfo,
 		"tags":      tags,
 		"liked":     liked,
 		"favorited": favorited,
@@ -769,18 +792,23 @@ func (s *Server) getItemComments(c *gin.Context) {
 	// 获取评论者信息
 	type CommentWithUser struct {
 		model.ItemComment
-		Username string `json:"username"`
-		Avatar   string `json:"avatar"`
+		Username  string `json:"username"`
+		Avatar    string `json:"avatar"`
+		NameColor string `json:"name_color"`
+		NameBold  bool   `json:"name_bold"`
 	}
 
 	var result []CommentWithUser
 	for _, comment := range comments {
 		var user model.User
-		database.DB.Select("username, avatar").First(&user, comment.UserID)
+		database.DB.Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").First(&user, comment.UserID)
+		nameColor, nameBold := userDisplayStyle(user)
 		result = append(result, CommentWithUser{
 			ItemComment: comment,
 			Username:    user.Username,
 			Avatar:      user.Avatar,
+			NameColor:   nameColor,
+			NameBold:    nameBold,
 		})
 	}
 

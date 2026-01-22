@@ -5,6 +5,13 @@ export interface UserInfo {
   username: string
   email: string
   avatar: string
+  role?: string
+  is_sponsor?: boolean
+  sponsor_level?: number
+  sponsor_color?: string
+  sponsor_bold?: boolean
+  name_color?: string
+  name_bold?: boolean
 }
 
 // 获取当前用户信息
@@ -13,7 +20,15 @@ export async function getUserInfo(): Promise<UserInfo> {
 }
 
 // 更新用户信息
-export async function updateUserInfo(data: { username?: string; email?: string }): Promise<void> {
+export async function updateUserInfo(data: {
+  username?: string
+  email?: string
+  bio?: string
+  location?: string
+  website?: string
+  sponsor_color?: string
+  sponsor_bold?: boolean
+}): Promise<void> {
   return request.put('/user/info', data)
 }
 

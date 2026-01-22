@@ -134,6 +134,8 @@ export interface UserQueryParams {
   page_size?: number
   role?: string
   keyword?: string
+  is_sponsor?: boolean
+  sponsor_level?: number
 }
 
 export interface SafeUser {
@@ -142,6 +144,10 @@ export interface SafeUser {
   email: string
   avatar: string
   role: string
+  is_sponsor?: boolean
+  sponsor_level?: number
+  name_color?: string
+  name_bold?: boolean
   is_muted: boolean
   muted_until: string | null
   mute_reason: string
@@ -158,6 +164,10 @@ export function getUsers(params?: UserQueryParams) {
 
 export function setUserRole(id: number, role: 'user' | 'moderator') {
   return request.put<{ message: string; user: any }>(`/admin/users/${id}/role`, { role })
+}
+
+export function setUserSponsorLevel(id: number, sponsorLevel: number) {
+  return request.put<{ message: string; user: any }>(`/admin/users/${id}/sponsor`, { sponsor_level: sponsorLevel })
 }
 
 // ========== 用户管理（版主可用） ==========
@@ -213,10 +223,14 @@ export interface AdminActionLog {
   operator_id: number
   operator_name: string
   operator_role: string
+  operator_name_color?: string
+  operator_name_bold?: boolean
   action_type: string
   target_type: string
   target_id: number
   target_name: string
+  target_name_color?: string
+  target_name_bold?: boolean
   details: string
   ip_address: string
   created_at: string
