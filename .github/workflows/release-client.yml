@@ -209,15 +209,29 @@ jobs:
           
           with open(path, "w", encoding="utf-8") as f:
               f.write("\n".join(out) + "\n")
-          PY
+            PY
             # 重启服务（优先无交互sudo，其次直接supervisorctl）
             if sudo -n true 2>/dev/null; then
               sudo -n supervisorctl restart rpbox
-              sudo -n supervisorctl status rpbox
+              for i in $(seq 1 20); do
+                status=$(sudo -n supervisorctl status rpbox || true)
+                echo "$status"
+                echo "$status" | grep -q RUNNING && exit 0
+                sleep 1
+              done
+              echo "ERROR: rpbox did not reach RUNNING"
+              exit 1
             else
               if command -v supervisorctl >/dev/null 2>&1; then
                 supervisorctl restart rpbox
-                supervisorctl status rpbox
+                for i in $(seq 1 20); do
+                  status=$(supervisorctl status rpbox || true)
+                  echo "$status"
+                  echo "$status" | grep -q RUNNING && exit 0
+                  sleep 1
+                done
+                echo "ERROR: rpbox did not reach RUNNING"
+                exit 1
               else
                 echo "ERROR: supervisorctl not available or insufficient privileges"
                 exit 1
