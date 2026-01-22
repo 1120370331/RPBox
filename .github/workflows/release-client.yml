@@ -141,7 +141,7 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           NOTES_B64="${{ steps.notes.outputs.NOTES_B64 }}"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
+          ssh -tt -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
             set -e
             VERSION="$VERSION"
             NOTES_B64="$NOTES_B64"
