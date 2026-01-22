@@ -1,0 +1,107 @@
+{
+  "packs": [
+    {
+      "id": "orphy",
+      "name": "奥菲表情包",
+      "icon": "/emotes/orphy/01.png",
+      "items": [
+        {
+          "id": "01",
+          "name": "奥菲_登场",
+          "text": "我来啦！",
+          "file": "/emotes/orphy/01.png"
+        },
+        {
+          "id": "02",
+          "name": "奥菲_疯狂输出",
+          "text": "疯狂输出",
+          "file": "/emotes/orphy/02.png"
+        },
+        {
+          "id": "03",
+          "name": "奥菲_疑惑",
+          "text": "诶？",
+          "file": "/emotes/orphy/03.png"
+        },
+        {
+          "id": "04",
+          "name": "奥菲_点赞",
+          "text": "奶思！",
+          "file": "/emotes/orphy/04.png"
+        },
+        {
+          "id": "05",
+          "name": "奥菲_震惊",
+          "text": "卧槽？！",
+          "file": "/emotes/orphy/05.png"
+        },
+        {
+          "id": "06",
+          "name": "奥菲_暗中观察",
+          "text": "盯",
+          "file": "/emotes/orphy/06.png"
+        },
+        {
+          "id": "07",
+          "name": "奥菲_报错",
+          "text": "炸了！",
+          "file": "/emotes/orphy/07.png"
+        },
+        {
+          "id": "08",
+          "name": "奥菲_拒绝",
+          "text": "哒咩！",
+          "file": "/emotes/orphy/08.png"
+        },
+        {
+          "id": "09",
+          "name": "奥菲_同步中",
+          "text": "正在做法",
+          "file": "/emotes/orphy/09.png"
+        },
+        {
+          "id": "10",
+          "name": "奥菲_灵感",
+          "text": "懂了！",
+          "file": "/emotes/orphy/10.png"
+        },
+        {
+          "id": "11",
+          "name": "奥菲_摸鱼",
+          "text": "ZZZ...",
+          "file": "/emotes/orphy/11.png"
+        },
+        {
+          "id": "12",
+          "name": "奥菲_乞讨",
+          "text": "求Star",
+          "file": "/emotes/orphy/12.png"
+        },
+        {
+          "id": "13",
+          "name": "奥菲_开心",
+          "text": "好耶！",
+          "file": "/emotes/orphy/13.png"
+        },
+        {
+          "id": "14",
+          "name": "奥菲_收到",
+          "text": "Roger!",
+          "file": "/emotes/orphy/14.png"
+        },
+        {
+          "id": "15",
+          "name": "奥菲_抓狂",
+          "text": "啊啊啊！",
+          "file": "/emotes/orphy/15.png"
+        },
+        {
+          "id": "16",
+          "name": "奥菲_期待",
+          "text": "搞快点",
+          "file": "/emotes/orphy/16.png"
+        }
+      ]
+    }
+  ]
+}

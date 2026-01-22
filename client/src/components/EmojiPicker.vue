@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useEmoteStore } from '@/stores/emote'
+import { buildEmoteToken } from '@/utils/emote'
+import type { EmoteItem, EmotePack } from '@/api/emote'
 
 const props = defineProps<{
   show: boolean
@@ -7,167 +10,43 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  select: [emoji: string]
+  select: [token: string]
   close: []
 }>()
 
+const emoteStore = useEmoteStore()
 const pickerStyle = ref<Record<string, string>>({})
 const searchQuery = ref('')
-const activeCategory = ref('recent')
-const recentEmojis = ref<string[]>([])
+const activePackId = ref('')
 
-const RECENT_KEY = 'rpbox:emoji-recent'
-const MAX_RECENT = 24
-const PICKER_WIDTH = 360
-const PICKER_HEIGHT = 420
+const PICKER_WIDTH = 420
+const PICKER_HEIGHT = 460
 
-const fallbackRecent = [
-  '😂', '🤣', '😊', '😉', '😍', '😘', '😋', '🤔',
-  '😐', '🙄', '😴', '😭', '😡', '😇', '😎', '🥳',
-  '👍', '👏', '🙏', '💪', '✨', '🔥', '💯', '🎉'
-]
+const packs = computed(() => emoteStore.packs)
 
-const baseCategories = [
-  {
-    id: 'face',
-    label: '表情',
-    tags: ['表情', '笑', '开心', '生气', '难过', '冷静'],
-    emojis: [
-      '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
-      '🙂', '😉', '😊', '😍', '😘', '😚', '😙', '😋',
-      '😛', '😜', '🤪', '🤔', '🤐', '😐', '😑', '😶',
-      '🙄', '😏', '😴', '😪', '😷', '🤒', '🤕', '😵',
-      '🥴', '😵‍💫', '🤯', '😤', '😠', '😡', '🤬', '😢',
-      '😭', '😮', '😲', '😳', '🥺', '🥹', '😇', '😎',
-      '🤓', '🥳', '🤡'
-    ]
-  },
-  {
-    id: 'gesture',
-    label: '手势',
-    tags: ['手势', '动作', '支持', '鼓掌', '加油'],
-    emojis: [
-      '👍', '👎', '👌', '🤌', '🤏', '✌️', '🤞', '🤟',
-      '🤘', '🤙', '👏', '🙌', '🫶', '🤲', '🙏', '💪',
-      '👊', '✊', '🤛', '🤜', '🫡'
-    ]
-  },
-  {
-    id: 'celebrate',
-    label: '庆祝',
-    tags: ['庆祝', '派对', '祝贺', '礼物', '节日'],
-    emojis: [
-      '🎉', '🎊', '🥳', '🎈', '🎂', '🍰', '🎁', '🏆',
-      '🥇', '🎯', '🧨', '✨', '🔥', '💥'
-    ]
-  },
-  {
-    id: 'heart',
-    label: '爱心',
-    tags: ['爱心', '喜欢', '心', '感情'],
-    emojis: [
-      '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤',
-      '🤍', '💖', '💗', '💓', '💞', '💕', '💔', '❤️‍🔥',
-      '❤️‍🩹'
-    ]
-  },
-  {
-    id: 'animal',
-    label: '动物',
-    tags: ['动物', '宠物', '萌'],
-    emojis: [
-      '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼',
-      '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔',
-      '🐧', '🐦', '🦉', '🐺'
-    ]
-  },
-  {
-    id: 'food',
-    label: '食物',
-    tags: ['食物', '饮料', '好吃'],
-    emojis: [
-      '🍎', '🍊', '🍋', '🍉', '🍇', '🍓', '🍑', '🍒',
-      '🥝', '🍍', '🥭', '🍌', '🍔', '🍟', '🍕', '🍜',
-      '🍣', '🍱', '🥟', '🍗', '🥗', '🍰', '🍪', '☕',
-      '🧋', '🍺', '🍻'
-    ]
-  },
-  {
-    id: 'symbol',
-    label: '符号',
-    tags: ['符号', '标记', '提醒'],
-    emojis: [
-      '✅', '❌', '⚠️', '🚫', '⭐', '🌟', '💯', '✔️',
-      '➕', '➖', '➗', '✖️', '🔔', '📌', '📝', '📣'
-    ]
+const activePack = computed<EmotePack | undefined>(() => {
+  if (!packs.value.length) return undefined
+  if (activePackId.value) {
+    return packs.value.find(pack => pack.id === activePackId.value) || packs.value[0]
   }
-]
-
-const categories = computed(() => {
-  const recent = recentEmojis.value.length > 0 ? recentEmojis.value : fallbackRecent
-  return [
-    { id: 'recent', label: '常用', tags: ['常用', '最近'], emojis: recent },
-    ...baseCategories
-  ]
+  return packs.value[0]
 })
 
-const emojiIndex = computed(() => {
-  const map = new Map<string, { emoji: string; tags: string[] }>()
-  baseCategories.forEach((category) => {
-    category.emojis.forEach((emoji) => {
-      if (!map.has(emoji)) {
-        map.set(emoji, { emoji, tags: [category.label, ...category.tags] })
-      }
-    })
-  })
-  recentEmojis.value.forEach((emoji) => {
-    if (!map.has(emoji)) {
-      map.set(emoji, { emoji, tags: ['常用', '最近'] })
-    }
-  })
-  return Array.from(map.values())
-})
-
-const activeList = computed(() => {
+const filteredItems = computed<EmoteItem[]>(() => {
+  const pack = activePack.value
+  if (!pack) return []
   const query = searchQuery.value.trim().toLowerCase()
-  if (!query) {
-    const category = categories.value.find(item => item.id === activeCategory.value) || categories.value[0]
-    return { title: category.label, emojis: category.emojis, isSearch: false }
-  }
-
-  const hits = emojiIndex.value
-    .filter(item => item.tags.some(tag => tag.toLowerCase().includes(query)))
-    .map(item => item.emoji)
-
-  return { title: '搜索结果', emojis: hits, isSearch: true }
+  if (!query) return pack.items
+  return pack.items.filter((item) => {
+    const name = item.name?.toLowerCase() || ''
+    const text = item.text?.toLowerCase() || ''
+    return name.includes(query) || text.includes(query)
+  })
 })
 
-function loadRecentEmojis() {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    if (Array.isArray(parsed)) {
-      recentEmojis.value = parsed.filter(item => typeof item === 'string')
-    }
-  } catch (error) {
-    recentEmojis.value = []
-  }
-}
-
-function saveRecentEmojis(emoji: string) {
-  const next = [emoji, ...recentEmojis.value.filter(item => item !== emoji)]
-  const trimmed = next.slice(0, MAX_RECENT)
-  recentEmojis.value = trimmed
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(trimmed))
-  } catch (error) {
-    // ignore storage errors
-  }
-}
-
-function handleSelect(emoji: string) {
-  saveRecentEmojis(emoji)
-  emit('select', emoji)
+function handleSelect(pack: EmotePack | undefined, item: EmoteItem) {
+  if (!pack) return
+  emit('select', buildEmoteToken(pack.id, item.id))
   emit('close')
 }
 
@@ -194,7 +73,7 @@ function updatePosition() {
 
   const rect = props.triggerElement.getBoundingClientRect()
   let top = rect.bottom + 8
-  let left = rect.left + rect.width / 2 - PICKER_WIDTH / 2
+  let left = rect.left
 
   if (left + PICKER_WIDTH > viewportWidth) {
     left = viewportWidth - PICKER_WIDTH - 16
@@ -219,6 +98,12 @@ function updatePosition() {
   }
 }
 
+watch(packs, (next) => {
+  if (!activePackId.value && next.length > 0) {
+    activePackId.value = next[0].id
+  }
+})
+
 watch(() => props.show, async (newShow) => {
   if (!newShow) {
     searchQuery.value = ''
@@ -226,12 +111,20 @@ watch(() => props.show, async (newShow) => {
     window.removeEventListener('scroll', updatePosition, true)
     return
   }
-  loadRecentEmojis()
-  activeCategory.value = recentEmojis.value.length > 0 ? 'recent' : 'face'
+  await emoteStore.loadPacks()
+  if (!activePackId.value && packs.value.length > 0) {
+    activePackId.value = packs.value[0].id
+  }
   await nextTick()
   updatePosition()
   window.addEventListener('resize', updatePosition)
   window.addEventListener('scroll', updatePosition, true)
+})
+
+watch(() => props.triggerElement, async () => {
+  if (!props.show) return
+  await nextTick()
+  updatePosition()
 })
 
 onBeforeUnmount(() => {
@@ -246,8 +139,8 @@ onBeforeUnmount(() => {
       <div class="emoji-picker-container" :style="pickerStyle">
         <div class="emoji-header">
           <div>
-            <div class="emoji-title">表情选择</div>
-            <div class="emoji-subtitle">偏好社区常用表情</div>
+            <div class="emoji-title">表情包</div>
+            <div class="emoji-subtitle">点击插入到评论</div>
           </div>
           <button class="emoji-close" type="button" @click="handleClose">
             <i class="ri-close-line"></i>
@@ -256,36 +149,42 @@ onBeforeUnmount(() => {
 
         <div class="emoji-search">
           <i class="ri-search-line"></i>
-          <input v-model="searchQuery" type="text" placeholder="搜索表情或分类" />
+          <input v-model="searchQuery" type="text" placeholder="搜索表情包文案" />
         </div>
 
         <div class="emoji-body">
           <aside class="emoji-categories custom-scrollbar">
             <button
-              v-for="category in categories"
-              :key="category.id"
+              v-for="pack in packs"
+              :key="pack.id"
               type="button"
               class="emoji-category"
-              :class="{ active: activeCategory === category.id }"
-              @click="activeCategory = category.id"
+              :class="{ active: activePack?.id === pack.id }"
+              @click="activePackId = pack.id"
+              :title="pack.name"
             >
-              <span>{{ category.label }}</span>
-              <i class="ri-arrow-right-s-line"></i>
+              <img v-if="pack.icon_url" :src="pack.icon_url" alt="" class="pack-icon" />
+              <span class="pack-name">{{ pack.name }}</span>
             </button>
           </aside>
 
           <section class="emoji-panel">
-            <div class="emoji-section-title">{{ activeList.title }}</div>
-            <div v-if="activeList.emojis.length === 0" class="emoji-empty">没有匹配表情</div>
+            <div class="emoji-section-title">
+              <span>{{ activePack?.name || '表情包' }}</span>
+              <span v-if="activePack" class="emoji-count">{{ filteredItems.length }} 张</span>
+            </div>
+            <div v-if="emoteStore.loading" class="emoji-empty">加载中...</div>
+            <div v-else-if="filteredItems.length === 0" class="emoji-empty">没有匹配表情</div>
             <div v-else class="emoji-grid custom-scrollbar">
               <button
-                v-for="emoji in activeList.emojis"
-                :key="emoji"
+                v-for="item in filteredItems"
+                :key="item.id"
                 type="button"
                 class="emoji-btn"
-                @click="handleSelect(emoji)"
+                @click="handleSelect(activePack, item)"
+                :title="item.text ? `${item.name} · ${item.text}` : item.name"
               >
-                {{ emoji }}
+                <img :src="item.url" :alt="item.name" />
               </button>
             </div>
           </section>
@@ -304,8 +203,8 @@ onBeforeUnmount(() => {
 }
 
 .emoji-picker-container {
-  width: 360px;
-  max-height: var(--picker-max-height, 420px);
+  width: 420px;
+  max-height: var(--picker-max-height, 460px);
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #FFFDF9 0%, #FFF8F0 100%);
@@ -378,7 +277,7 @@ onBeforeUnmount(() => {
 
 .emoji-body {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-columns: 110px minmax(0, 1fr);
   gap: 0;
   flex: 1;
   min-height: 0;
@@ -393,24 +292,19 @@ onBeforeUnmount(() => {
 
 .emoji-category {
   width: 100%;
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
+  gap: 8px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
   color: #8D7B68;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  margin-bottom: 6px;
-}
-
-.emoji-category i {
-  font-size: 14px;
-  opacity: 0.6;
+  margin-bottom: 8px;
 }
 
 .emoji-category.active {
@@ -419,9 +313,22 @@ onBeforeUnmount(() => {
   border-color: #2C1810;
 }
 
-.emoji-category.active i {
-  opacity: 1;
-  color: #fff;
+.pack-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(229, 212, 193, 0.6);
+  background: #fff;
+  object-fit: cover;
+}
+
+.emoji-category.active .pack-icon {
+  border-color: #fff;
+}
+
+.pack-name {
+  text-align: left;
+  line-height: 1.2;
 }
 
 .emoji-panel {
@@ -432,16 +339,24 @@ onBeforeUnmount(() => {
 }
 
 .emoji-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 12px;
   font-weight: 600;
   color: #8D7B68;
   margin-bottom: 10px;
 }
 
+.emoji-count {
+  font-size: 11px;
+  color: #B87333;
+}
+
 .emoji-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 10px;
   overflow-y: auto;
   padding-right: 4px;
   min-height: 0;
@@ -449,17 +364,22 @@ onBeforeUnmount(() => {
 
 .emoji-btn {
   border: none;
-  background: transparent;
-  font-size: 20px;
-  line-height: 1;
-  padding: 8px 6px;
-  border-radius: 10px;
+  background: #fff;
+  padding: 6px;
+  border-radius: 12px;
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
+  box-shadow: inset 0 0 0 1px rgba(229, 212, 193, 0.6);
+}
+
+.emoji-btn img {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
 .emoji-btn:hover {
-  background: rgba(184, 115, 51, 0.14);
+  background: rgba(184, 115, 51, 0.12);
   transform: translateY(-1px);
 }
 
@@ -484,11 +404,15 @@ onBeforeUnmount(() => {
 
 @media (max-width: 480px) {
   .emoji-picker-container {
-    width: 320px;
+    width: 340px;
+  }
+
+  .emoji-body {
+    grid-template-columns: 90px minmax(0, 1fr);
   }
 
   .emoji-grid {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
   }
 }
 </style>

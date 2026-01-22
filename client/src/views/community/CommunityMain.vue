@@ -1808,11 +1808,6 @@ function getEventStyle(event: EventItem) {
   margin-bottom: 10px;
 }
 
-.cover-image.small img {
-  max-height: 150px;
-  object-fit: cover;
-}
-
 /* ========== Image Preview ========== */
 .image-preview {
   display: flex;

@@ -7,13 +7,16 @@ import EmojiPicker from '@/components/EmojiPicker.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { renderEmoteContent } from '@/utils/emote'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
+import { useEmoteStore } from '@/stores/emote'
 
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
 const dialog = useDialog()
+const emoteStore = useEmoteStore()
 const mounted = ref(false)
 const loading = ref(false)
 const submittingComment = ref(false)
@@ -42,7 +45,7 @@ const submittingReply = ref(false)
 const showEmojiPicker = ref(false)
 const showReplyEmojiPicker = ref(false)
 const emojiButtonRef = ref<HTMLElement | null>(null)
-const replyEmojiButtonRef = ref<HTMLElement | null>(null)
+const replyEmojiTrigger = ref<HTMLElement | null>(null)
 
 const errorMessage = ref('')
 const commentError = ref('')
@@ -137,6 +140,7 @@ const organizedComments = computed(() => {
 
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
+  await emoteStore.loadPacks()
   await loadPost()
   await loadComments()
 })
@@ -183,6 +187,12 @@ async function loadComments() {
     const id = Number(route.params.id)
     const res = await listComments(id)
     comments.value = res.comments || []
+    commentLikes.clear()
+    comments.value.forEach((comment) => {
+      if (comment.liked) {
+        commentLikes.set(comment.id, true)
+      }
+    })
     await scrollToCommentFromRoute()
   } catch (error: any) {
     console.error('加载评论失败:', error)
@@ -276,13 +286,28 @@ async function submitReply() {
 
 // Emoji选择处理
 function handleEmojiSelect(emoji: string) {
-  commentContent.value += emoji
+  appendEmoteToken(commentContent, emoji)
   showEmojiPicker.value = false
 }
 
 function handleReplyEmojiSelect(emoji: string) {
-  replyContent.value += emoji
+  appendEmoteToken(replyContent, emoji)
   showReplyEmojiPicker.value = false
+}
+
+function openReplyEmojiPicker(event: MouseEvent) {
+  replyEmojiTrigger.value = event.currentTarget as HTMLElement
+  showReplyEmojiPicker.value = true
+}
+
+function appendEmoteToken(target: { value: string }, token: string) {
+  const trimmed = target.value.trimEnd()
+  const spacer = trimmed.length > 0 ? ' ' : ''
+  target.value = `${trimmed}${spacer}${token} `
+}
+
+function renderCommentContent(content: string) {
+  return renderEmoteContent(content, emoteStore.emoteMap)
 }
 
 // 删除评论
@@ -322,6 +347,7 @@ async function handleCommentLike(comment: CommentWithAuthor) {
     }
   } catch (error: any) {
     console.error('点赞失败:', error)
+    toast.error(error?.message || '点赞失败')
   }
 }
 
@@ -502,13 +528,13 @@ async function handleDelete() {
               <div class="comment-body">
                 <div class="comment-meta">
                   <span class="comment-author" :style="buildNameStyle(comment.author_name_color, comment.author_name_bold)">{{ comment.author_name }}</span>
-                  <button class="like-btn-inline" :class="{ active: commentLikes.get(comment.id) }" @click="handleCommentLike(comment)">
+                  <button class="like-btn-inline" :class="{ active: commentLikes.get(comment.id) }" type="button" @click.stop="handleCommentLike(comment)">
                     <i :class="commentLikes.get(comment.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
                     <span v-if="comment.like_count">{{ comment.like_count }}</span>
                   </button>
                   <span class="comment-time">{{ formatCommentTime(comment.created_at) }}</span>
                 </div>
-                <p class="comment-text">{{ comment.content }}</p>
+                <div class="comment-text" v-html="renderCommentContent(comment.content)"></div>
                 <div class="comment-actions">
                   <button class="reply-btn" @click="startReply(comment)">
                     <i class="ri-reply-line"></i> 回复
@@ -526,7 +552,7 @@ async function handleDelete() {
                     :disabled="submittingReply"
                   ></textarea>
                   <div class="reply-actions">
-                    <button ref="replyEmojiButtonRef" class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
+                    <button class="emoji-btn-small" @click="openReplyEmojiPicker" type="button">
                       <i class="ri-emotion-line"></i>
                     </button>
                     <div class="reply-actions-right">
@@ -549,12 +575,12 @@ async function handleDelete() {
                           回复 <span class="reply-to-name">@{{ reply.replyToName }}</span>
                         </span>
                         <span class="reply-time">{{ formatCommentTime(reply.created_at) }}</span>
-                        <button class="like-btn-inline" :class="{ active: commentLikes.get(reply.id) }" @click="handleCommentLike(reply)">
+                        <button class="like-btn-inline" :class="{ active: commentLikes.get(reply.id) }" type="button" @click.stop="handleCommentLike(reply)">
                           <i :class="commentLikes.get(reply.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
                           <span v-if="reply.like_count">{{ reply.like_count }}</span>
                         </button>
                       </div>
-                      <p class="reply-text">{{ reply.content }}</p>
+                      <div class="reply-text" v-html="renderCommentContent(reply.content)"></div>
                       <div class="comment-actions">
                         <button class="reply-btn" @click="startReply(reply)">
                           <i class="ri-reply-line"></i> 回复
@@ -572,7 +598,7 @@ async function handleDelete() {
                           :disabled="submittingReply"
                         ></textarea>
                         <div class="reply-actions">
-                          <button ref="replyEmojiButtonRef" class="emoji-btn-small" @click="showReplyEmojiPicker = true" type="button">
+                          <button class="emoji-btn-small" @click="openReplyEmojiPicker" type="button">
                             <i class="ri-emotion-line"></i>
                           </button>
                           <div class="reply-actions-right">
@@ -629,7 +655,7 @@ async function handleDelete() {
 
     <!-- Emoji选择器 -->
     <EmojiPicker :show="showEmojiPicker" :trigger-element="emojiButtonRef" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
-    <EmojiPicker :show="showReplyEmojiPicker" :trigger-element="replyEmojiButtonRef" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
+    <EmojiPicker :show="showReplyEmojiPicker" :trigger-element="replyEmojiTrigger" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
 
     <ImageViewer
       v-model="showImageViewer"
@@ -1224,6 +1250,16 @@ async function handleDelete() {
   line-height: 1.6;
   color: #4B3621;
   margin: 0;
+}
+
+.comment-text :deep(.comment-emote),
+.reply-text :deep(.comment-emote) {
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  display: inline-block;
+  margin: 4px 6px 4px 0;
+  vertical-align: middle;
 }
 
 .empty-comments {

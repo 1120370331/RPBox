@@ -65,6 +65,7 @@ export interface CommentWithAuthor extends Comment {
   author_name: string
   author_name_color?: string
   author_name_bold?: boolean
+  liked?: boolean
 }
 
 export interface CreatePostRequest {
