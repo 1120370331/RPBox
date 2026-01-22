@@ -75,17 +75,34 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Read release notes
-        id: notes
+      - name: Prepare updater metadata
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           NOTES_FILE="client/release-notes/${VERSION}.txt"
-          if [ -f "$NOTES_FILE" ]; then
-            NOTES_B64=$(NOTES_FILE="$NOTES_FILE" python3 -c 'import base64, os; path=os.environ["NOTES_FILE"]; content=open(path, "r", encoding="utf-8").read().strip(); content=content.replace("\r\n", "\n").replace("\r", "\n"); print(base64.b64encode(content.encode("utf-8")).decode("ascii"))')
-          else
-            NOTES_B64=""
-          fi
-          echo "NOTES_B64=$NOTES_B64" >> $GITHUB_OUTPUT
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          export VERSION NOTES_FILE PUB_DATE
+          python3 - <<'PY'
+          import json
+          import os
+
+          version = os.environ["VERSION"]
+          notes_file = os.environ["NOTES_FILE"]
+          pub_date = os.environ["PUB_DATE"]
+
+          notes = ""
+          if os.path.exists(notes_file):
+              with open(notes_file, "r", encoding="utf-8") as f:
+                  notes = f.read().strip().replace("\r\n", "\n").replace("\r", "\n")
+
+          data = {
+              "latest_version": version,
+              "notes": notes,
+              "pub_date": pub_date,
+          }
+
+          with open("latest.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False)
+          PY
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -135,106 +152,6 @@ jobs:
           # 创建远程目录并上传
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR"
           scp -P 2233 upload_files/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
-
-      - name: Update server config
-        run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
-          NOTES_B64="${{ steps.notes.outputs.NOTES_B64 }}"
-          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          ssh -tt -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << EOF
-            set -e
-            VERSION="$VERSION"
-            NOTES_B64="$NOTES_B64"
-            PUB_DATE="$PUB_DATE"
-            export VERSION NOTES_B64 PUB_DATE
-            python3 - <<'PY'
-          import base64
-          import re
-          from datetime import datetime
-          import os
-          
-          path = "/home/devbox/RPBox/server/config.yaml"
-          version = os.environ["VERSION"]
-          pub_date = os.environ["PUB_DATE"]
-          notes_b64 = os.environ.get("NOTES_B64", "")
-          
-          notes = ""
-          if notes_b64:
-              notes = base64.b64decode(notes_b64).decode("utf-8").strip()
-          
-          with open(path, "r", encoding="utf-8") as f:
-              lines = f.read().splitlines()
-          
-          base_url = None
-          for line in lines:
-              m = re.match(r"^\s*base_url:\s*(.+)$", line)
-              if m:
-                  base_url = m.group(1).strip()
-                  break
-          if not base_url:
-              base_url = "https://ksxvodevhonx.sealosbja.site/releases"
-          
-          def build_block():
-              block = []
-              block.append("updater:")
-              block.append(f"  latest_version: \\\"{version}\\\"")
-              block.append(f"  base_url: {base_url}")
-              if notes:
-                  block.append("  release_notes: |")
-                  for ln in notes.splitlines():
-                      block.append("    " + ln)
-              else:
-                  block.append("  release_notes: \\\"\\\"")
-              block.append(f"  pub_date: \\\"{pub_date}\\\"")
-              return block
-          
-          out = []
-          i = 0
-          replaced = False
-          while i < len(lines):
-              line = lines[i]
-              if re.match(r"^updater:\s*$", line):
-                  out.extend(build_block())
-                  replaced = True
-                  i += 1
-                  while i < len(lines) and not re.match(r"^[A-Za-z0-9_]+\s*:", lines[i]):
-                      i += 1
-                  continue
-              out.append(line)
-              i += 1
-          if not replaced:
-              if out and out[-1].strip() != "":
-                  out.append("")
-              out.extend(build_block())
-          
-          with open(path, "w", encoding="utf-8") as f:
-              f.write("\n".join(out) + "\n")
-            PY
-            # 重启服务（优先无交互sudo，其次直接supervisorctl）
-            if sudo -n true 2>/dev/null; then
-              sudo -n supervisorctl restart rpbox
-              for i in $(seq 1 20); do
-                status=$(sudo -n supervisorctl status rpbox || true)
-                echo "$status"
-                echo "$status" | grep -q RUNNING && exit 0
-                sleep 1
-              done
-              echo "ERROR: rpbox did not reach RUNNING"
-              exit 1
-            else
-              if command -v supervisorctl >/dev/null 2>&1; then
-                supervisorctl restart rpbox
-                for i in $(seq 1 20); do
-                  status=$(supervisorctl status rpbox || true)
-                  echo "$status"
-                  echo "$status" | grep -q RUNNING && exit 0
-                  sleep 1
-                done
-                echo "ERROR: rpbox did not reach RUNNING"
-                exit 1
-              else
-                echo "ERROR: supervisorctl not available or insufficient privileges"
-                exit 1
-              fi
-            fi
-          EOF
+          # 上传最新版本元数据（无需重启服务）
+          scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.RELEASE_PATH }}/latest.json
+          scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/latest.json
