@@ -1,0 +1,31 @@
+{
+  "id": "orphy",
+  "name": "奥菲表情包",
+  "source_image": "style-demos/Orphy.png",
+  "grid": {
+    "rows": 4,
+    "cols": 4
+  },
+  "output_dir": "server/storage/emotes/orphy",
+  "size": 128,
+  "background_threshold": 5,
+  "icon_id": "01",
+  "items": [
+    { "id": "01", "name": "奥菲_登场", "text": "我来啦！", "index": 1 },
+    { "id": "02", "name": "奥菲_疯狂输出", "text": "疯狂输出", "index": 2 },
+    { "id": "03", "name": "奥菲_疑惑", "text": "诶？", "index": 3 },
+    { "id": "04", "name": "奥菲_点赞", "text": "奶思！", "index": 4 },
+    { "id": "05", "name": "奥菲_震惊", "text": "卧槽？！", "index": 5 },
+    { "id": "06", "name": "奥菲_暗中观察", "text": "盯", "index": 6 },
+    { "id": "07", "name": "奥菲_报错", "text": "炸了！", "index": 7 },
+    { "id": "08", "name": "奥菲_拒绝", "text": "哒咩！", "index": 8 },
+    { "id": "09", "name": "奥菲_同步中", "text": "正在做法", "index": 9 },
+    { "id": "10", "name": "奥菲_灵感", "text": "懂了！", "index": 10 },
+    { "id": "11", "name": "奥菲_摸鱼", "text": "ZZZ...", "index": 11 },
+    { "id": "12", "name": "奥菲_乞讨", "text": "求Star", "index": 12 },
+    { "id": "13", "name": "奥菲_开心", "text": "好耶！", "index": 13 },
+    { "id": "14", "name": "奥菲_收到", "text": "Roger!", "index": 14 },
+    { "id": "15", "name": "奥菲_抓狂", "text": "啊啊啊！", "index": 15 },
+    { "id": "16", "name": "奥菲_期待", "text": "搞快点", "index": 16 }
+  ]
+}
