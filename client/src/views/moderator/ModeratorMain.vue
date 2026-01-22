@@ -6,6 +6,7 @@ import { dialog } from '@/composables/useDialog'
 import { getPost } from '@/api/post'
 import { getItem } from '@/api/item'
 import { getGuild } from '@/api/guild'
+import { buildNameStyle } from '@/utils/userNameStyle'
 import * as echarts from 'echarts'
 import {
   getModeratorStats,
@@ -28,6 +29,7 @@ import {
   deleteGuildByMod,
   getUsers,
   setUserRole,
+  setUserSponsorLevel,
   getModeratorUsers,
   muteUser,
   unmuteUser,
@@ -59,7 +61,7 @@ const isAdmin = computed(() => userStore.isAdmin)
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('review')
 const activeSubTab = ref<'posts' | 'items' | 'guilds' | 'users'>('posts')
-const adminSubTab = ref<'moderators' | 'guilds'>('guilds')
+const adminSubTab = ref<'moderators' | 'guilds' | 'sponsors'>('guilds')
 
 // 数据
 const stats = ref<ModeratorStats | null>(null)
@@ -83,6 +85,14 @@ const filterReviewStatus = ref('')
 const filterKeyword = ref('')
 const filterRole = ref('')
 const filterGuildStatus = ref('')
+const filterSponsorLevel = ref('')
+const sponsorLevelDrafts = ref<Record<number, number>>({})
+const sponsorLevelOptions = [
+  { value: 0, label: '无赞助' },
+  { value: 1, label: 'Lv1 仅鸣谢' },
+  { value: 2, label: 'Lv2 昵称样式' },
+  { value: 3, label: 'Lv3 个性化' }
+]
 
 // 审核预览弹窗
 const showPreviewModal = ref(false)
@@ -105,7 +115,14 @@ const newOwnerIdentifier = ref('')  // 用户名或邮箱
 
 // 设置角色弹窗
 const showRoleModal = ref(false)
-const roleTarget = ref<{ userId: number; username: string; currentRole: string; newRole: 'user' | 'moderator' } | null>(null)
+const roleTarget = ref<{
+  userId: number
+  username: string
+  currentRole: string
+  newRole: 'user' | 'moderator'
+  name_color?: string
+  name_bold?: boolean
+} | null>(null)
 
 // 用户管理弹窗
 const showUserActionModal = ref(false)
@@ -258,15 +275,37 @@ async function loadUsers() {
       page: page.value,
       page_size: pageSize.value,
       role: filterRole.value || undefined,
-      keyword: filterKeyword.value || undefined
+      keyword: filterKeyword.value || undefined,
+      sponsor_level: filterSponsorLevel.value === '' ? undefined : Number(filterSponsorLevel.value)
     })
     allUsers.value = res.users || []
     total.value = res.total
+    syncSponsorLevelDrafts()
   } catch (error) {
     console.error('加载用户失败:', error)
   } finally {
     loading.value = false
   }
+}
+
+function resolveSponsorLevel(user: SafeUser): number {
+  if (typeof user.sponsor_level === 'number') return user.sponsor_level
+  return user.is_sponsor ? 2 : 0
+}
+
+function syncSponsorLevelDrafts() {
+  const drafts: Record<number, number> = {}
+  for (const user of allUsers.value) {
+    drafts[user.id] = resolveSponsorLevel(user)
+  }
+  sponsorLevelDrafts.value = drafts
+}
+
+function formatSponsorLevel(level: number): string {
+  if (level <= 0) return '无赞助'
+  if (level === 1) return 'Lv1 仅鸣谢'
+  if (level === 2) return 'Lv2 昵称样式'
+  return 'Lv3 个性化'
 }
 
 function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
@@ -286,7 +325,7 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
     else if (activeSubTab.value === 'items') loadAllItems()
     else loadAllGuilds()
   } else if (tab === 'admin') {
-    if (adminSubTab.value === 'moderators') loadUsers()
+    if (adminSubTab.value === 'moderators' || adminSubTab.value === 'sponsors') loadUsers()
     else loadAllGuilds()
   } else if (tab === 'logs') {
     loadActionLogs()
@@ -311,11 +350,20 @@ function switchSubTab(subTab: 'posts' | 'items' | 'guilds' | 'users') {
   }
 }
 
-function switchAdminSubTab(subTab: 'moderators' | 'guilds') {
+function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors') {
   adminSubTab.value = subTab
   page.value = 1
-  if (subTab === 'moderators') loadUsers()
-  else loadAllGuilds()
+  if (subTab === 'moderators') {
+    filterSponsorLevel.value = ''
+    loadUsers()
+  } else if (subTab === 'sponsors') {
+    filterRole.value = ''
+    loadUsers()
+  } else {
+    filterRole.value = ''
+    filterSponsorLevel.value = ''
+    loadAllGuilds()
+  }
 }
 
 // ========== 操作日志 ==========
@@ -352,6 +400,7 @@ function formatActionType(type: string): string {
     'ban_user': '封禁用户',
     'unban_user': '解除封禁',
     'set_role': '设置角色',
+    'set_sponsor': '设置赞助',
     'disable_posts': '禁用帖子',
     'delete_posts': '删除用户帖子'
   }
@@ -400,6 +449,13 @@ function formatLogDetails(log: AdminActionLog): string {
     // 设置角色
     if (d.new_role) {
       parts.push(`新角色: ${d.new_role === 'moderator' ? '版主' : '普通用户'}`)
+    }
+
+    // 赞助者权限
+    if (d.sponsor_level !== undefined) {
+      parts.push(`赞助等级: ${formatSponsorLevel(d.sponsor_level)}`)
+    } else if (d.is_sponsor !== undefined) {
+      parts.push(`赞助者: ${d.is_sponsor ? '是' : '否'}`)
     }
 
     // 影响数量
@@ -559,11 +615,19 @@ async function openPreview(type: 'post' | 'item' | 'guild', id: number) {
       previewData.value = {
         ...item,
         author_name: author?.username || item?.author_name,
+        author_name_color: author?.name_color || item?.author_name_color,
+        author_name_bold: author?.name_bold ?? item?.author_name_bold,
         tags: tags || []
       }
     } else {
       const res = await getGuild(id)
-      previewData.value = res.guild
+      const guildFromList = pendingGuilds.value.find(g => g.id === id) || allGuilds.value.find(g => g.id === id)
+      previewData.value = {
+        ...res.guild,
+        owner_name: guildFromList?.owner_name,
+        owner_name_color: guildFromList?.owner_name_color,
+        owner_name_bold: guildFromList?.owner_name_bold
+      }
     }
   } catch (error: any) {
     console.error('加载详情失败:', error)
@@ -822,8 +886,15 @@ async function submitChangeOwner() {
   }
 }
 
-function openRoleModal(userId: number, username: string, currentRole: string, newRole: 'user' | 'moderator') {
-  roleTarget.value = { userId, username, currentRole, newRole }
+function openRoleModal(
+  userId: number,
+  username: string,
+  currentRole: string,
+  newRole: 'user' | 'moderator',
+  nameColor?: string,
+  nameBold?: boolean
+) {
+  roleTarget.value = { userId, username, currentRole, newRole, name_color: nameColor, name_bold: nameBold }
   showRoleModal.value = true
 }
 
@@ -836,6 +907,36 @@ async function submitRoleChange() {
   } catch (error) {
     console.error('设置角色失败:', error)
     alert('设置角色失败: ' + (error as Error).message)
+  }
+}
+
+async function applySponsorLevel(user: SafeUser) {
+  const currentLevel = resolveSponsorLevel(user)
+  const nextLevel = sponsorLevelDrafts.value[user.id] ?? currentLevel
+  if (nextLevel === currentLevel) return
+
+  const nextLabel = formatSponsorLevel(nextLevel)
+  const actionText = nextLevel === 0 ? '取消赞助' : `设置为 ${nextLabel}`
+  const confirmed = await dialog.confirm({
+    title: actionText,
+    message: `确定要将 ${user.username} ${actionText} 吗？`,
+    type: nextLevel === 0 ? 'warning' : 'success',
+    confirmText: actionText,
+    cancelText: '取消'
+  })
+
+  if (!confirmed) {
+    sponsorLevelDrafts.value[user.id] = currentLevel
+    return
+  }
+
+  try {
+    await setUserSponsorLevel(user.id, nextLevel)
+    await loadUsers()
+  } catch (error) {
+    sponsorLevelDrafts.value[user.id] = currentLevel
+    console.error('设置赞助等级失败:', error)
+    alert('设置赞助等级失败: ' + (error as Error).message)
   }
 }
 
@@ -1163,6 +1264,14 @@ function formatBanTime(dateStr: string | null) {
           版主管理
         </button>
         <button
+          v-if="isAdmin"
+          :class="{ active: adminSubTab === 'sponsors' }"
+          @click="switchAdminSubTab('sponsors')"
+        >
+          <i class="ri-vip-crown-2-line"></i>
+          赞助管理
+        </button>
+        <button
           :class="{ active: adminSubTab === 'guilds' }"
           @click="switchAdminSubTab('guilds')"
         >
@@ -1188,7 +1297,10 @@ function formatBanTime(dateStr: string | null) {
               <span class="status-badge pending">待审核</span>
             </div>
             <div class="item-meta">
-              <span><i class="ri-user-line"></i> {{ post.author_name }}</span>
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
+              </span>
               <span><i class="ri-time-line"></i> {{ formatDate(post.created_at) }}</span>
             </div>
             <div class="item-actions">
@@ -1228,7 +1340,10 @@ function formatBanTime(dateStr: string | null) {
               <span class="status-badge pending">待审核</span>
             </div>
             <div class="item-meta">
-              <span><i class="ri-user-line"></i> {{ item.author_name }}</span>
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_name }}</span>
+              </span>
               <span><i class="ri-time-line"></i> {{ formatDate(item.created_at) }}</span>
             </div>
             <div class="item-actions">
@@ -1263,7 +1378,10 @@ function formatBanTime(dateStr: string | null) {
               <span class="status-badge pending">待审核</span>
             </div>
             <div class="item-meta">
-              <span><i class="ri-user-line"></i> {{ guild.owner_name }}</span>
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(guild.owner_name_color, guild.owner_name_bold)">{{ guild.owner_name }}</span>
+              </span>
               <span><i class="ri-time-line"></i> {{ formatDate(guild.created_at) }}</span>
             </div>
             <div class="item-actions">
@@ -1316,7 +1434,10 @@ function formatBanTime(dateStr: string | null) {
               </div>
             </div>
             <div class="item-meta">
-              <span><i class="ri-user-line"></i> {{ post.author_name }}</span>
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
+              </span>
               <span><i class="ri-time-line"></i> {{ formatDate(post.created_at) }}</span>
             </div>
             <div class="item-actions">
@@ -1371,7 +1492,10 @@ function formatBanTime(dateStr: string | null) {
               </div>
             </div>
             <div class="item-meta">
-              <span><i class="ri-user-line"></i> {{ item.author_name }}</span>
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_name }}</span>
+              </span>
               <span><i class="ri-time-line"></i> {{ formatDate(item.created_at) }}</span>
             </div>
             <div class="item-actions">
@@ -1408,7 +1532,10 @@ function formatBanTime(dateStr: string | null) {
               <span class="status-badge" :class="guild.status">{{ getGuildStatusLabel(guild.status) }}</span>
             </div>
             <div class="item-meta">
-              <span><i class="ri-user-line"></i> {{ guild.owner_name }}</span>
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(guild.owner_name_color, guild.owner_name_bold)">{{ guild.owner_name }}</span>
+              </span>
               <span><i class="ri-group-line"></i> {{ guild.member_count }} 成员</span>
               <span><i class="ri-time-line"></i> {{ formatDate(guild.created_at) }}</span>
             </div>
@@ -1448,9 +1575,10 @@ function formatBanTime(dateStr: string | null) {
               <div class="user-info">
                 <img v-if="user.avatar" :src="user.avatar" class="user-avatar" />
                 <i v-else class="ri-user-line user-avatar-placeholder"></i>
-                <span class="item-title">{{ user.username }}</span>
+                <span class="item-title" :style="buildNameStyle(user.name_color, user.name_bold)">{{ user.username }}</span>
               </div>
               <div class="user-status-tags">
+                <span v-if="resolveSponsorLevel(user) > 0" class="sponsor-tag">赞助 Lv{{ resolveSponsorLevel(user) }}</span>
                 <span class="role-tag" :class="user.role">{{ getRoleLabel(user.role) }}</span>
                 <span v-if="user.is_muted" class="status-tag muted">禁言中</span>
                 <span v-if="user.is_banned" class="status-tag banned">已封禁</span>
@@ -1520,8 +1648,9 @@ function formatBanTime(dateStr: string | null) {
               <div class="user-info">
                 <img v-if="user.avatar" :src="user.avatar" class="user-avatar" />
                 <i v-else class="ri-user-line user-avatar-placeholder"></i>
-                <span class="item-title">{{ user.username }}</span>
+                <span class="item-title" :style="buildNameStyle(user.name_color, user.name_bold)">{{ user.username }}</span>
               </div>
+              <span v-if="resolveSponsorLevel(user) > 0" class="sponsor-tag">赞助 Lv{{ resolveSponsorLevel(user) }}</span>
               <span class="role-tag" :class="user.role">{{ getRoleLabel(user.role) }}</span>
             </div>
             <div class="item-meta">
@@ -1532,16 +1661,67 @@ function formatBanTime(dateStr: string | null) {
               <button
                 v-if="user.role === 'user'"
                 class="btn-approve"
-                @click="openRoleModal(user.id, user.username, user.role, 'moderator')"
+                @click="openRoleModal(user.id, user.username, user.role, 'moderator', user.name_color, user.name_bold)"
               >
                 <i class="ri-shield-star-line"></i> 设为版主
               </button>
               <button
                 v-else-if="user.role === 'moderator'"
                 class="btn-warning"
-                @click="openRoleModal(user.id, user.username, user.role, 'user')"
+                @click="openRoleModal(user.id, user.username, user.role, 'user', user.name_color, user.name_bold)"
               >
                 <i class="ri-shield-line"></i> 取消版主
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 管理标签 - 赞助管理 -->
+      <div v-if="activeTab === 'admin' && adminSubTab === 'sponsors'" class="content-list anim-item" style="--delay: 4">
+        <div class="filter-bar">
+          <input v-model="filterKeyword" placeholder="搜索用户名或邮箱..." @keyup.enter="loadUsers" />
+          <select v-model="filterSponsorLevel" @change="loadUsers">
+            <option value="">全部赞助等级</option>
+            <option value="1">Lv1 仅鸣谢</option>
+            <option value="2">Lv2 昵称样式</option>
+            <option value="3">Lv3 个性化</option>
+            <option value="0">非赞助者</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="allUsers.length === 0" class="empty-state">
+          <i class="ri-user-search-line"></i>
+          <p>暂无用户数据</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="user in allUsers" :key="user.id" class="item-card user-card">
+            <div class="item-header">
+              <div class="user-info">
+                <img v-if="user.avatar" :src="user.avatar" class="user-avatar" />
+                <i v-else class="ri-user-line user-avatar-placeholder"></i>
+                <span class="item-title" :style="buildNameStyle(user.name_color, user.name_bold)">{{ user.username }}</span>
+              </div>
+              <div class="user-status-tags">
+                <span v-if="resolveSponsorLevel(user) > 0" class="sponsor-tag">赞助 Lv{{ resolveSponsorLevel(user) }}</span>
+                <span class="role-tag" :class="user.role">{{ getRoleLabel(user.role) }}</span>
+              </div>
+            </div>
+            <div class="item-meta">
+              <span><i class="ri-mail-line"></i> {{ user.email }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(user.created_at) }}</span>
+            </div>
+            <div class="item-actions sponsor-level-actions">
+              <select v-model.number="sponsorLevelDrafts[user.id]" class="sponsor-level-select">
+                <option v-for="option in sponsorLevelOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+              <button class="btn-sponsor" @click="applySponsorLevel(user)">
+                <i class="ri-vip-crown-2-line"></i> 应用
               </button>
             </div>
           </div>
@@ -1574,7 +1754,10 @@ function formatBanTime(dateStr: string | null) {
               <span class="status-badge" :class="guild.status">{{ getGuildStatusLabel(guild.status) }}</span>
             </div>
             <div class="item-meta">
-              <span><i class="ri-user-line"></i> {{ guild.owner_name }}</span>
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(guild.owner_name_color, guild.owner_name_bold)">{{ guild.owner_name }}</span>
+              </span>
               <span><i class="ri-group-line"></i> {{ guild.member_count }} 成员</span>
               <span><i class="ri-time-line"></i> {{ formatDate(guild.created_at) }}</span>
             </div>
@@ -1611,6 +1794,7 @@ function formatBanTime(dateStr: string | null) {
             <option value="ban_user">封禁用户</option>
             <option value="unban_user">解除封禁</option>
             <option value="set_role">设置角色</option>
+            <option value="set_sponsor">设置赞助</option>
           </select>
           <select v-model="logsTargetType" @change="loadActionLogs">
             <option value="">全部类型</option>
@@ -1643,13 +1827,13 @@ function formatBanTime(dateStr: string | null) {
             <tbody>
               <tr v-for="log in actionLogs" :key="log.id">
                 <td>
-                  <span class="operator">{{ log.operator_name }}</span>
+                  <span class="operator" :style="buildNameStyle(log.operator_name_color, log.operator_name_bold)">{{ log.operator_name }}</span>
                   <span class="role-tag" :class="log.operator_role">{{ log.operator_role === 'admin' ? '管理员' : '版主' }}</span>
                 </td>
                 <td><span class="action-type">{{ formatActionType(log.action_type) }}</span></td>
                 <td>
                   <span class="target-type">{{ log.target_type }}</span>
-                  <span class="target-name">{{ log.target_name || `#${log.target_id}` }}</span>
+                  <span class="target-name" :style="buildNameStyle(log.target_name_color, log.target_name_bold)">{{ log.target_name || `#${log.target_id}` }}</span>
                 </td>
                 <td class="details-cell">{{ formatLogDetails(log) }}</td>
                 <td class="ip-cell">{{ log.ip_address }}</td>
@@ -1923,7 +2107,7 @@ function formatBanTime(dateStr: string | null) {
             <div class="role-change-info">
               <div class="user-preview">
                 <i class="ri-user-line"></i>
-                <span class="username">{{ roleTarget?.username }}</span>
+                <span class="username" :style="buildNameStyle(roleTarget?.name_color, roleTarget?.name_bold)">{{ roleTarget?.username }}</span>
               </div>
               <div class="role-arrow">
                 <span class="role-tag" :class="roleTarget?.currentRole">{{ getRoleLabel(roleTarget?.currentRole || '') }}</span>
@@ -1958,7 +2142,7 @@ function formatBanTime(dateStr: string | null) {
               <div class="user-preview">
                 <img v-if="userActionTarget?.avatar" :src="userActionTarget.avatar" class="user-avatar" />
                 <i v-else class="ri-user-line user-avatar-placeholder"></i>
-                <span class="username">{{ userActionTarget?.username }}</span>
+                <span class="username" :style="buildNameStyle(userActionTarget?.name_color, userActionTarget?.name_bold)">{{ userActionTarget?.username }}</span>
               </div>
               <p class="action-description">{{ getUserActionDescription() }}</p>
             </div>
@@ -2042,7 +2226,10 @@ function formatBanTime(dateStr: string | null) {
                 <div class="preview-header">
                   <h2 class="preview-title">{{ previewData.title }}</h2>
                   <div class="preview-meta">
-                    <span><i class="ri-user-line"></i> {{ previewData.author_name }}</span>
+                    <span>
+                      <i class="ri-user-line"></i>
+                      <span :style="buildNameStyle(previewData.author_name_color, previewData.author_name_bold)">{{ previewData.author_name }}</span>
+                    </span>
                     <span><i class="ri-time-line"></i> {{ formatDate(previewData.created_at) }}</span>
                     <span class="category-tag">{{ previewData.category }}</span>
                   </div>
@@ -2072,7 +2259,10 @@ function formatBanTime(dateStr: string | null) {
                     <h2 class="preview-title">{{ previewData.name }}</h2>
                   </div>
                   <div class="preview-meta">
-                    <span><i class="ri-user-line"></i> {{ previewData.author_name }}</span>
+                    <span>
+                      <i class="ri-user-line"></i>
+                      <span :style="buildNameStyle(previewData.author_name_color, previewData.author_name_bold)">{{ previewData.author_name }}</span>
+                    </span>
                     <span><i class="ri-time-line"></i> {{ formatDate(previewData.created_at) }}</span>
                     <span class="type-tag">{{ getItemTypeLabel(previewData.type) }}</span>
                   </div>
@@ -2107,7 +2297,11 @@ function formatBanTime(dateStr: string | null) {
                 <div class="preview-header">
                   <h2 class="preview-title">{{ previewData.name }}</h2>
                   <div class="preview-meta">
-                    <span><i class="ri-user-line"></i> 会长: {{ previewData.owner_name }}</span>
+                    <span>
+                      <i class="ri-user-line"></i>
+                      会长:
+                      <span :style="buildNameStyle(previewData.owner_name_color, previewData.owner_name_bold)">{{ previewData.owner_name }}</span>
+                    </span>
                     <span><i class="ri-time-line"></i> {{ formatDate(previewData.created_at) }}</span>
                   </div>
                 </div>
@@ -2449,6 +2643,41 @@ function formatBanTime(dateStr: string | null) {
   background: #388E3C;
 }
 
+.btn-sponsor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #E7C67D, #D6A645);
+  color: #4B3621;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-sponsor:hover {
+  background: linear-gradient(135deg, #EED79A, #E1B256);
+}
+
+.sponsor-level-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sponsor-level-select {
+  min-width: 160px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #E2D3C3;
+  background: #FFFDFB;
+  font-size: 13px;
+  color: #4B3621;
+}
+
 .btn-reject {
   display: flex;
   align-items: center;
@@ -2776,6 +3005,16 @@ function formatBanTime(dateStr: string | null) {
 }
 
 /* 角色标签 */
+.sponsor-tag {
+  padding: 5px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #E7C67D, #D6A645);
+  color: #4B3621;
+  border: 1px solid rgba(214, 166, 69, 0.4);
+}
+
 .role-tag {
   padding: 4px 12px;
   border-radius: 12px;

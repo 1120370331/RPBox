@@ -33,12 +33,20 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	var profileCount int64
 	database.DB.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&profileCount)
 
+	nameColor, nameBold := userDisplayStyle(user)
+	level := resolveSponsorLevel(user)
 	c.JSON(http.StatusOK, gin.H{
 		"id":            user.ID,
 		"username":      user.Username,
 		"email":         user.Email,
 		"avatar":        user.Avatar,
 		"role":          user.Role,
+		"is_sponsor":    level > sponsorLevelNone,
+		"sponsor_level": level,
+		"sponsor_color": user.SponsorColor,
+		"sponsor_bold":  user.SponsorBold,
+		"name_color":    nameColor,
+		"name_bold":     nameBold,
 		"bio":           user.Bio,
 		"location":      user.Location,
 		"website":       user.Website,
@@ -101,11 +109,13 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 	userID := c.GetUint("userID")
 
 	var req struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Bio      string `json:"bio"`
-		Location string `json:"location"`
-		Website  string `json:"website"`
+		Username     string  `json:"username"`
+		Email        string  `json:"email"`
+		Bio          string  `json:"bio"`
+		Location     string  `json:"location"`
+		Website      string  `json:"website"`
+		SponsorColor *string `json:"sponsor_color"`
+		SponsorBold  *bool   `json:"sponsor_bold"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
@@ -127,6 +137,32 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 	}
 	if req.Website != "" {
 		updates["website"] = req.Website
+	}
+	if req.SponsorColor != nil || req.SponsorBold != nil {
+		var user model.User
+		if err := database.DB.Select("id", "is_sponsor", "sponsor_level").First(&user, userID).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询用户失败"})
+			return
+		}
+		if resolveSponsorLevel(user) < sponsorLevelStyle {
+			c.JSON(http.StatusForbidden, gin.H{"error": "无权操作赞助者样式"})
+			return
+		}
+		if req.SponsorColor != nil {
+			if *req.SponsorColor == "" {
+				updates["sponsor_color"] = ""
+			} else {
+				normalized := normalizeHexValue(*req.SponsorColor)
+				if normalized == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "颜色格式无效"})
+					return
+				}
+				updates["sponsor_color"] = normalized
+			}
+		}
+		if req.SponsorBold != nil {
+			updates["sponsor_bold"] = *req.SponsorBold
+		}
 	}
 
 	if len(updates) == 0 {
@@ -212,11 +248,17 @@ func (s *Server) getUserProfile(c *gin.Context) {
 	currentUserID, exists := c.Get("userID")
 	isOwnProfile := exists && currentUserID.(uint) == user.ID
 
+	nameColor, nameBold := userDisplayStyle(user)
+	level := resolveSponsorLevel(user)
 	response := gin.H{
 		"id":            user.ID,
 		"username":      user.Username,
 		"avatar":        user.Avatar,
 		"role":          user.Role,
+		"is_sponsor":    level > sponsorLevelNone,
+		"sponsor_level": level,
+		"name_color":    nameColor,
+		"name_bold":     nameBold,
 		"bio":           user.Bio,
 		"location":      user.Location,
 		"website":       user.Website,
@@ -230,6 +272,8 @@ func (s *Server) getUserProfile(c *gin.Context) {
 	if isOwnProfile {
 		response["email"] = user.Email
 		response["email_verified"] = user.EmailVerified
+		response["sponsor_color"] = user.SponsorColor
+		response["sponsor_bold"] = user.SponsorBold
 	}
 
 	c.JSON(http.StatusOK, response)

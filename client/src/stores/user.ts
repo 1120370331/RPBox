@@ -6,6 +6,12 @@ interface UserData {
   username: string
   avatar?: string
   role?: string // user|moderator|admin
+  is_sponsor?: boolean
+  sponsor_level?: number
+  sponsor_color?: string
+  sponsor_bold?: boolean
+  name_color?: string
+  name_bold?: boolean
 }
 
 export const useUserStore = defineStore('user', () => {

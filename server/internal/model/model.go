@@ -9,6 +9,10 @@ type User struct {
 	EmailVerified bool   `gorm:"default:false" json:"email_verified"` // 邮箱是否已验证
 	Avatar        string `gorm:"type:text" json:"avatar"`             // 头像(base64)
 	Role          string `gorm:"size:20;default:user" json:"role"`    // user|moderator|admin
+	IsSponsor     bool   `gorm:"default:false" json:"is_sponsor"`     // 赞助者权限
+	SponsorLevel  int    `gorm:"default:0" json:"sponsor_level"`      // 赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
+	SponsorColor  string `gorm:"size:6" json:"sponsor_color"`         // 赞助者自定义颜色(HEX, 无#)
+	SponsorBold   bool   `gorm:"default:false" json:"sponsor_bold"`   // 赞助者名称加粗
 	Password      string `gorm:"-" json:"-"`
 	PassHash      string `json:"-"`
 	// 个人资料字段
@@ -67,6 +71,9 @@ type AccountBackup struct {
 	RuntimeSizeKB int       `json:"runtime_size_kb"`
 	ConfigData    string    `gorm:"type:text" json:"config_data,omitempty"` // JSON: TRP3 配置数据
 	ExtraData     string    `gorm:"type:text" json:"extra_data,omitempty"`  // JSON: TRP3 额外数据(角色绑定、伙伴等)
+	RawTrp3Lua    string    `gorm:"type:text" json:"raw_trp3_lua,omitempty"`
+	RawTrp3Data   string    `gorm:"type:text" json:"raw_trp3_data_lua,omitempty"`
+	RawTrp3Ext    string    `gorm:"type:text" json:"raw_trp3_extended_lua,omitempty"`
 	Checksum      string    `gorm:"type:text" json:"checksum"`
 	Version       int       `gorm:"default:1" json:"version"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -83,6 +90,9 @@ type AccountBackupVersion struct {
 	RuntimeData  string    `gorm:"type:text" json:"runtime_data,omitempty"`
 	ConfigData   string    `gorm:"type:text" json:"config_data,omitempty"`
 	ExtraData    string    `gorm:"type:text" json:"extra_data,omitempty"`
+	RawTrp3Lua   string    `gorm:"type:text" json:"raw_trp3_lua,omitempty"`
+	RawTrp3Data  string    `gorm:"type:text" json:"raw_trp3_data_lua,omitempty"`
+	RawTrp3Ext   string    `gorm:"type:text" json:"raw_trp3_extended_lua,omitempty"`
 	Checksum     string    `gorm:"type:text" json:"checksum"`
 	ChangeLog    string    `gorm:"type:text" json:"change_log"`
 	CreatedAt    time.Time `json:"created_at"`

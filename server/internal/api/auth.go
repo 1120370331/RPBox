@@ -200,6 +200,8 @@ func (s *Server) login(c *gin.Context) {
 		}
 	}
 
+	nameColor, nameBold := userDisplayStyle(user)
+	level := resolveSponsorLevel(user)
 	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
@@ -209,11 +211,17 @@ func (s *Server) login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"user": gin.H{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
-			"avatar":   user.Avatar,
-			"role":     user.Role,
+			"id":            user.ID,
+			"username":      user.Username,
+			"email":         user.Email,
+			"avatar":        user.Avatar,
+			"role":          user.Role,
+			"is_sponsor":    level > sponsorLevelNone,
+			"sponsor_level": level,
+			"sponsor_color": user.SponsorColor,
+			"sponsor_bold":  user.SponsorBold,
+			"name_color":    nameColor,
+			"name_bold":     nameBold,
 		},
 	})
 }

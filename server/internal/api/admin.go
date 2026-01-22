@@ -17,11 +17,26 @@ func (s *Server) listUsers(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	role := c.Query("role")
 	keyword := c.Query("keyword")
+	isSponsor := c.Query("is_sponsor")
+	sponsorLevel := c.Query("sponsor_level")
 
 	query := database.DB.Model(&model.User{})
 
 	if role != "" {
 		query = query.Where("role = ?", role)
+	}
+	if sponsorLevel != "" {
+		if level, err := strconv.Atoi(sponsorLevel); err == nil {
+			if level <= sponsorLevelNone {
+				query = query.Where("sponsor_level = ?", sponsorLevelNone)
+			} else {
+				query = query.Where("sponsor_level = ?", level)
+			}
+		}
+	} else if isSponsor == "true" || isSponsor == "1" {
+		query = query.Where("sponsor_level > ?", sponsorLevelNone)
+	} else if isSponsor == "false" || isSponsor == "0" {
+		query = query.Where("sponsor_level = ?", sponsorLevelNone)
 	}
 	if keyword != "" {
 		query = query.Where("username LIKE ? OR email LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
@@ -41,6 +56,10 @@ func (s *Server) listUsers(c *gin.Context) {
 		Email       string     `json:"email"`
 		Avatar      string     `json:"avatar"`
 		Role        string     `json:"role"`
+		IsSponsor   bool       `json:"is_sponsor"`
+		SponsorLevel int       `json:"sponsor_level"`
+		NameColor   string     `json:"name_color"`
+		NameBold    bool       `json:"name_bold"`
 		IsMuted     bool       `json:"is_muted"`
 		MutedUntil  *time.Time `json:"muted_until"`
 		MuteReason  string     `json:"mute_reason"`
@@ -52,12 +71,18 @@ func (s *Server) listUsers(c *gin.Context) {
 	}
 	result := make([]SafeUser, len(users))
 	for i, u := range users {
+		nameColor, nameBold := userDisplayStyle(u)
+		level := resolveSponsorLevel(u)
 		result[i] = SafeUser{
 			ID:          u.ID,
 			Username:    u.Username,
 			Email:       u.Email,
 			Avatar:      u.Avatar,
 			Role:        u.Role,
+			IsSponsor:   level > sponsorLevelNone,
+			SponsorLevel: level,
+			NameColor:   nameColor,
+			NameBold:    nameBold,
 			IsMuted:     u.IsMuted,
 			MutedUntil:  u.MutedUntil,
 			MuteReason:  u.MuteReason,
@@ -114,6 +139,66 @@ func (s *Server) setUserRole(c *gin.Context) {
 		"id":       user.ID,
 		"username": user.Username,
 		"role":     user.Role,
+	}})
+}
+
+// setUserSponsor 设置用户赞助者权限
+func (s *Server) setUserSponsor(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var user model.User
+	if err := database.DB.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	var req struct {
+		SponsorLevel *int  `json:"sponsor_level"`
+		IsSponsor    *bool `json:"is_sponsor"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if req.SponsorLevel == nil && req.IsSponsor == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少赞助等级"})
+		return
+	}
+
+	level := sponsorLevelNone
+	if req.SponsorLevel != nil {
+		level = *req.SponsorLevel
+	} else if req.IsSponsor != nil && *req.IsSponsor {
+		level = sponsorLevelStyle
+	}
+	if level < sponsorLevelNone || level > sponsorLevelPremium {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "赞助等级无效"})
+		return
+	}
+
+	updates := map[string]interface{}{
+		"is_sponsor":    level > sponsorLevelNone,
+		"sponsor_level": level,
+	}
+	if level < sponsorLevelStyle {
+		updates["sponsor_color"] = ""
+		updates["sponsor_bold"] = false
+	}
+
+	if err := database.DB.Model(&user).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+
+	logAdminAction(c, "set_sponsor", "user", user.ID, user.Username, map[string]interface{}{
+		"sponsor_level": level,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "赞助者权限已更新", "user": gin.H{
+		"id":         user.ID,
+		"username":   user.Username,
+		"is_sponsor": level > sponsorLevelNone,
+		"sponsor_level": level,
 	}})
 }
 
