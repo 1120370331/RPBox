@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Guild, GuildMember } from '@/api/guild'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const props = defineProps<{
   guild: Guild
@@ -120,7 +121,7 @@ function getRoleLabel(role: string): string {
               <span v-else>{{ m.username?.charAt(0) }}</span>
             </div>
             <div class="info">
-              <div class="name">{{ m.username }}</div>
+              <div class="name" :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</div>
               <div class="role">{{ getRoleLabel(m.role) }} • {{ 9850 - i * 1430 }} pts</div>
             </div>
             <i v-if="i === 0" class="ri-vip-crown-fill crown"></i>
@@ -159,7 +160,7 @@ function getRoleLabel(role: string): string {
           </div>
           <div class="activity-item">
             <span class="time">2h ago</span>
-            <p><span class="highlight">{{ members[0]?.username || 'Member' }}</span> 获得成就</p>
+            <p><span class="highlight" :style="buildNameStyle(members[0]?.name_color, members[0]?.name_bold)">{{ members[0]?.username || 'Member' }}</span> 获得成就</p>
           </div>
           <div class="activity-item">
             <span class="time">5h ago</span>

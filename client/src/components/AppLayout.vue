@@ -5,6 +5,7 @@ import { useNotificationStore } from '../stores/notification'
 import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const userStore = useUserStore()
 const notificationStore = useNotificationStore()
@@ -34,7 +35,7 @@ function handleLogout() {
 
 const menuItems = [
   { id: 'home', icon: 'ri-home-4-line', label: '首页', route: '/' },
-  { id: 'sync', icon: 'ri-user-star-line', label: '人物卡', route: '/sync' },
+  { id: 'sync', icon: 'ri-user-star-line', label: '人物卡备份', route: '/sync' },
   { id: 'archives', icon: 'ri-book-open-line', label: '剧情故事', route: '/archives' },
   { id: 'market', icon: 'ri-sword-line', label: '创意市场', route: '/market' },
   { id: 'community', icon: 'ri-chat-smile-2-line', label: '社区广场', route: '/community' },
@@ -124,7 +125,7 @@ const activeMenu = computed(() => {
           </router-link>
           <div class="user-info">
             <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
-              <h4>{{ userStore.user?.username }}</h4>
+              <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username }}</h4>
             </router-link>
             <p class="logout-link" @click="handleLogout">退出登录</p>
           </div>

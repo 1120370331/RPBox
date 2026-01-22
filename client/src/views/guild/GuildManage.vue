@@ -17,6 +17,7 @@ import {
 } from '@/api/guild'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
@@ -255,7 +256,7 @@ onMounted(async () => {
                 {{ member.username?.charAt(0)?.toUpperCase() || 'U' }}
               </div>
               <div class="member-details">
-                <h3>{{ member.username }}</h3>
+                <h3 :style="buildNameStyle(member.name_color, member.name_bold)">{{ member.username }}</h3>
                 <p class="join-date">加入时间: {{ formatDate(member.joined_at) }}</p>
               </div>
             </div>
@@ -318,7 +319,7 @@ onMounted(async () => {
                 {{ app.username?.charAt(0)?.toUpperCase() || 'U' }}
               </div>
               <div class="app-details">
-                <h3>{{ app.username }}</h3>
+                <h3 :style="buildNameStyle(app.name_color, app.name_bold)">{{ app.username }}</h3>
                 <p v-if="app.message" class="app-message">{{ app.message }}</p>
                 <p class="app-date">申请时间: {{ formatDate(app.created_at) }}</p>
               </div>

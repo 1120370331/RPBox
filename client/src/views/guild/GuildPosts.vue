@@ -5,6 +5,7 @@ import { listPosts, type PostWithAuthor, type ListPostsParams, POST_CATEGORIES, 
 import { getGuild, type Guild } from '@/api/guild'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
@@ -233,7 +234,7 @@ onMounted(async () => {
               <img v-if="post.author_avatar" :src="post.author_avatar" alt="" />
               <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
             </div>
-            <span class="author-name">{{ post.author_name }}</span>
+            <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
             <span class="post-time">{{ formatDate(post.created_at) }}</span>
           </div>
           <div class="post-stats">

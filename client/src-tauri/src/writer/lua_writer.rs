@@ -38,6 +38,52 @@ pub fn is_wow_running() -> bool {
     false
 }
 
+fn escape_lua_string(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{0008}' => out.push_str("\\b"),
+            '\u{000C}' => out.push_str("\\f"),
+            _ => {
+                let code = ch as u32;
+                if code <= 0x1F || code == 0x7F {
+                    out.push('\\');
+                    out.push_str(&format!("{:03}", code));
+                } else {
+                    out.push(ch);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn is_lua_identifier(key: &str) -> bool {
+    let mut chars = key.chars();
+    let first = match chars.next() {
+        Some(c) => c,
+        None => return false,
+    };
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn is_lua_keyword(key: &str) -> bool {
+    matches!(
+        key,
+        "and" | "break" | "do" | "else" | "elseif" | "end" | "false" | "for" | "function"
+            | "goto" | "if" | "in" | "local" | "nil" | "not" | "or" | "repeat" | "return"
+            | "then" | "true" | "until" | "while"
+    )
+}
+
 fn backup_file(path: &PathBuf) -> Result<(), WriteError> {
     if path.exists() {
         let backup_path = path.with_extension("lua.rpbox_backup");
@@ -70,12 +116,7 @@ pub fn to_lua_table(value: &Value, indent: usize) -> String {
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
         Value::String(s) => {
-            let escaped = s
-                .replace('\\', "\\\\")
-                .replace('"', "\\\"")
-                .replace('\n', "\\n")
-                .replace('\r', "\\r")
-                .replace('\t', "\\t");
+            let escaped = escape_lua_string(s);
             format!("\"{}\"", escaped)
         }
         Value::Array(arr) => {
@@ -98,19 +139,13 @@ pub fn to_lua_table(value: &Value, indent: usize) -> String {
             }
             let mut parts = Vec::new();
             for (k, v) in map {
-                // Lua identifiers must start with letter or underscore, not digit
-                let is_valid_identifier = k.chars().next().map_or(false, |c| c.is_ascii_alphabetic() || c == '_')
-                    && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+                // Lua identifiers must be valid and not keywords
+                let is_valid_identifier = is_lua_identifier(k) && !is_lua_keyword(k);
                 let key = if is_valid_identifier {
                     k.clone()
                 } else {
                     // Escape special characters in key
-                    let escaped_key = k
-                        .replace('\\', "\\\\")
-                        .replace('"', "\\\"")
-                        .replace('\n', "\\n")
-                        .replace('\r', "\\r")
-                        .replace('\t', "\\t");
+                    let escaped_key = escape_lua_string(k);
                     format!("[\"{}\"]", escaped_key)
                 };
                 parts.push(format!(
@@ -535,7 +570,12 @@ fn write_variable_to_file(lua_path: &PathBuf, var_name: &str, data: &Value) -> R
 }
 
 /// 写入 TRP3 额外数据（角色绑定、伙伴、预设等）
-pub fn write_extra_data(sv_dir: &PathBuf, extra_data: &Value) -> Result<(), WriteError> {
+pub fn write_extra_data(
+    sv_dir: &PathBuf,
+    extra_data: &Value,
+    write_trp3_vars: bool,
+    write_extended_vars: bool,
+) -> Result<(), WriteError> {
     if is_wow_running() {
         return Err(WriteError::WowRunning);
     }
@@ -560,15 +600,19 @@ pub fn write_extra_data(sv_dir: &PathBuf, extra_data: &Value) -> Result<(), Writ
         "TRP3_Security", "TRP3_Extended_Flyway",
     ];
 
-    for var_name in &trp3_vars {
-        if let Some(data) = obj.get(*var_name) {
-            write_variable_to_file(&trp3_path, var_name, data)?;
+    if write_trp3_vars {
+        for var_name in &trp3_vars {
+            if let Some(data) = obj.get(*var_name) {
+                write_variable_to_file(&trp3_path, var_name, data)?;
+            }
         }
     }
 
-    for var_name in &extended_vars {
-        if let Some(data) = obj.get(*var_name) {
-            write_variable_to_file(&extended_path, var_name, data)?;
+    if write_extended_vars {
+        for var_name in &extended_vars {
+            if let Some(data) = obj.get(*var_name) {
+                write_variable_to_file(&extended_path, var_name, data)?;
+            }
         }
     }
 

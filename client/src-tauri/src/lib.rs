@@ -288,6 +288,9 @@ async fn apply_account_backup(
     runtime_json: Option<String>,
     config_json: Option<String>,
     extra_json: Option<String>,
+    raw_trp3_lua: Option<String>,
+    raw_trp3_data_lua: Option<String>,
+    raw_trp3_extended_lua: Option<String>,
 ) -> Result<(), String> {
     let normalized = wow_path::normalize_wow_path(&wow_path)
         .ok_or_else(|| "未找到有效的WoW路径，请选择包含 WTF/Account 的目录".to_string())?;
@@ -296,69 +299,97 @@ async fn apply_account_backup(
         .join(&account_id)
         .join("SavedVariables");
     let sv_path = sv_dir.join("totalRP3.lua");
+    let data_path = sv_dir.join("totalRP3_Data.lua");
+    let extended_path = sv_dir.join("totalRP3_Extended.lua");
 
-    // 解析云端备份的所有 profiles
-    let cloud_profiles: serde_json::Map<String, Value> = serde_json::from_str(&profiles_json)
-        .map_err(|e| format!("云端数据解析失败: {}", e))?;
+    let use_raw_trp3 = raw_trp3_lua.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
+    let use_raw_data = raw_trp3_data_lua.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
+    let use_raw_extended = raw_trp3_extended_lua.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
 
-    // 如果本地文件存在，读取并合并；否则直接使用云端数据
-    let final_profiles = if sv_path.exists() {
-        let mut local_profiles = lua_parser::parse_variable(&sv_path, "TRP3_Profiles")
-            .map_err(|e| e.to_string())?;
-
-        let local_map = local_profiles
-            .as_object_mut()
-            .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
-
-        // 将云端的所有 profiles 合并到本地（覆盖同名的）
-        for (profile_id, profile_data) in cloud_profiles {
-            local_map.insert(profile_id, profile_data);
+    if use_raw_trp3 {
+        if let Some(raw) = raw_trp3_lua {
+            writer::write_profile_to_local(&sv_path, &raw)
+                .map_err(|e| e.to_string())?;
         }
-        local_profiles
     } else {
-        // 文件不存在，直接使用云端数据
-        Value::Object(cloud_profiles)
-    };
+        // 解析云端备份的所有 profiles
+        let cloud_profiles: serde_json::Map<String, Value> = serde_json::from_str(&profiles_json)
+            .map_err(|e| format!("云端数据解析失败: {}", e))?;
 
-    replace_trp3_profiles(&sv_path, &final_profiles)
-        .map_err(|e| e.to_string())?;
-
-    // 写回道具数据库（如果有）
-    if let Some(tools_data) = tools_json {
-        if !tools_data.is_empty() {
-            let tools_value: Value = serde_json::from_str(&tools_data)
-                .map_err(|e| format!("道具数据解析失败: {}", e))?;
-            writer::write_tools_db(&sv_dir, &tools_value)
+        // 如果本地文件存在，读取并合并；否则直接使用云端数据
+        let final_profiles = if sv_path.exists() {
+            let mut local_profiles = lua_parser::parse_variable(&sv_path, "TRP3_Profiles")
                 .map_err(|e| e.to_string())?;
+
+            let local_map = local_profiles
+                .as_object_mut()
+                .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
+
+            // 将云端的所有 profiles 合并到本地（覆盖同名的）
+            for (profile_id, profile_data) in cloud_profiles {
+                local_map.insert(profile_id, profile_data);
+            }
+            local_profiles
+        } else {
+            // 文件不存在，直接使用云端数据
+            Value::Object(cloud_profiles)
+        };
+
+        replace_trp3_profiles(&sv_path, &final_profiles)
+            .map_err(|e| e.to_string())?;
+    }
+
+    if use_raw_extended {
+        if let Some(raw) = raw_trp3_extended_lua {
+            writer::write_profile_to_local(&extended_path, &raw)
+                .map_err(|e| e.to_string())?;
+        }
+    } else {
+        // 写回道具数据库（如果有）
+        if let Some(tools_data) = tools_json {
+            if !tools_data.is_empty() {
+                let tools_value: Value = serde_json::from_str(&tools_data)
+                    .map_err(|e| format!("道具数据解析失败: {}", e))?;
+                writer::write_tools_db(&sv_dir, &tools_value)
+                    .map_err(|e| e.to_string())?;
+            }
         }
     }
 
-    // 写回运行时数据（如果有）
-    if let Some(runtime_data) = runtime_json {
-        if !runtime_data.is_empty() {
-            let runtime_value: Value = serde_json::from_str(&runtime_data)
-                .map_err(|e| format!("运行时数据解析失败: {}", e))?;
-            writer::write_runtime_data(&sv_dir, &runtime_value)
+    if use_raw_data {
+        if let Some(raw) = raw_trp3_data_lua {
+            writer::write_profile_to_local(&data_path, &raw)
                 .map_err(|e| e.to_string())?;
+        }
+    } else {
+        // 写回运行时数据（如果有）
+        if let Some(runtime_data) = runtime_json {
+            if !runtime_data.is_empty() {
+                let runtime_value: Value = serde_json::from_str(&runtime_data)
+                    .map_err(|e| format!("运行时数据解析失败: {}", e))?;
+                writer::write_runtime_data(&sv_dir, &runtime_value)
+                    .map_err(|e| e.to_string())?;
+            }
         }
     }
 
-    // 写回配置数据（如果有）
-    if let Some(config_data) = config_json {
-        if !config_data.is_empty() {
-            let config_value: Value = serde_json::from_str(&config_data)
-                .map_err(|e| format!("配置数据解析失败: {}", e))?;
-            writer::write_config(&sv_path, &config_value)
-                .map_err(|e| e.to_string())?;
+    if !use_raw_trp3 {
+        // 写回配置数据（如果有）
+        if let Some(config_data) = config_json {
+            if !config_data.is_empty() {
+                let config_value: Value = serde_json::from_str(&config_data)
+                    .map_err(|e| format!("配置数据解析失败: {}", e))?;
+                writer::write_config(&sv_path, &config_value)
+                    .map_err(|e| e.to_string())?;
+            }
         }
     }
 
-    // 写回额外数据（如果有）
     if let Some(extra_data) = extra_json {
-        if !extra_data.is_empty() {
+        if !extra_data.is_empty() && (!use_raw_trp3 || !use_raw_extended) {
             let extra_value: Value = serde_json::from_str(&extra_data)
                 .map_err(|e| format!("额外数据解析失败: {}", e))?;
-            writer::write_extra_data(&sv_dir, &extra_value)
+            writer::write_extra_data(&sv_dir, &extra_value, !use_raw_trp3, !use_raw_extended)
                 .map_err(|e| e.to_string())?;
         }
     }

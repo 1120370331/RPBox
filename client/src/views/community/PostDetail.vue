@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, computed, watch, nextTick, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
 import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
@@ -7,6 +7,7 @@ import EmojiPicker from '@/components/EmojiPicker.vue'
 import RDialog from '@/components/RDialog.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const route = useRoute()
@@ -48,7 +49,7 @@ const viewerImages = ref<string[]>([])
 const viewerStartIndex = ref(0)
 
 // 评论点赞状态
-const commentLikes = ref<Map<number, boolean>>(new Map())
+const commentLikes = reactive(new Map<number, boolean>())
 
 // 删除确认弹窗
 const showDeleteDialog = ref(false)
@@ -161,6 +162,8 @@ async function loadPost() {
     const res = await getPost(id)
     post.value = res.post
     post.value.author_name = res.author_name  // author_name 在响应顶层
+    post.value.author_name_color = res.author_name_color
+    post.value.author_name_bold = res.author_name_bold
     authorAvatar.value = res.author_avatar || ''
     liked.value = res.liked
     favorited.value = res.favorited
@@ -178,6 +181,7 @@ async function loadComments() {
     const id = Number(route.params.id)
     const res = await listComments(id)
     comments.value = res.comments || []
+    await scrollToCommentFromRoute()
   } catch (error: any) {
     console.error('加载评论失败:', error)
   }
@@ -304,16 +308,16 @@ async function confirmDeleteComment() {
 
 // 评论点赞
 async function handleCommentLike(comment: CommentWithAuthor) {
-  const isLiked = commentLikes.value.get(comment.id) || false
+  const isLiked = commentLikes.get(comment.id) || false
 
   try {
     if (isLiked) {
-      await unlikeComment(post.value.id, comment.id)
-      commentLikes.value.set(comment.id, false)
+      await unlikeComment(comment.id)
+      commentLikes.set(comment.id, false)
       comment.like_count = (comment.like_count || 0) - 1
     } else {
-      await likeComment(post.value.id, comment.id)
-      commentLikes.value.set(comment.id, true)
+      await likeComment(comment.id)
+      commentLikes.set(comment.id, true)
       comment.like_count = (comment.like_count || 0) + 1
     }
   } catch (error: any) {
@@ -360,6 +364,29 @@ function goToEdit() {
   router.push({ name: 'post-edit', params: { id: post.value.id } })
 }
 
+function getCommentIdFromRoute() {
+  const raw = route.query.comment
+  if (!raw) return null
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const id = Number(value)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+async function scrollToCommentFromRoute() {
+  const commentId = getCommentIdFromRoute()
+  if (!commentId) return
+  await nextTick()
+  const target = document.getElementById(`comment-${commentId}`)
+  if (!target) return
+  target.classList.add('comment-highlight')
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  window.setTimeout(() => target.classList.remove('comment-highlight'), 1600)
+}
+
+watch(() => route.query.comment, () => {
+  scrollToCommentFromRoute()
+})
+
 async function handleDelete() {
   if (!confirm('确定要删除这篇帖子吗？')) return
   try {
@@ -405,7 +432,7 @@ async function handleDelete() {
                 <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
               </div>
               <div class="author-info">
-                <h4 class="author-name">{{ post.author_name }}</h4>
+                <h4 class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</h4>
                 <span class="post-date">{{ formatDate(post.created_at) }}</span>
               </div>
             </div>
@@ -459,14 +486,14 @@ async function handleDelete() {
 
           <!-- 评论列表 -->
           <div class="comments-list">
-            <div v-for="comment in organizedComments" :key="comment.id" class="comment-item">
+            <div v-for="comment in organizedComments" :key="comment.id" class="comment-item" :id="`comment-${comment.id}`">
               <div class="comment-avatar">
                 <img v-if="comment.author_avatar" :src="comment.author_avatar" alt="" />
                 <span v-else>{{ comment.author_name.charAt(0) }}</span>
               </div>
               <div class="comment-body">
                 <div class="comment-meta">
-                  <span class="comment-author">{{ comment.author_name }}</span>
+                  <span class="comment-author" :style="buildNameStyle(comment.author_name_color, comment.author_name_bold)">{{ comment.author_name }}</span>
                   <button class="like-btn-inline" :class="{ active: commentLikes.get(comment.id) }" @click="handleCommentLike(comment)">
                     <i :class="commentLikes.get(comment.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
                     <span v-if="comment.like_count">{{ comment.like_count }}</span>
@@ -502,14 +529,14 @@ async function handleDelete() {
                 </div>
 
                 <div v-if="comment.replies && comment.replies.length > 0" class="replies-list">
-                  <div v-for="reply in comment.replies" :key="reply.id" class="reply-item">
+                  <div v-for="reply in comment.replies" :key="reply.id" class="reply-item" :id="`comment-${reply.id}`">
                     <div class="reply-avatar">
                       <img v-if="reply.author_avatar" :src="reply.author_avatar" alt="" />
                       <span v-else>{{ reply.author_name.charAt(0) }}</span>
                     </div>
                     <div class="reply-body">
                       <div class="reply-meta">
-                        <span class="reply-author">{{ reply.author_name }}</span>
+                        <span class="reply-author" :style="buildNameStyle(reply.author_name_color, reply.author_name_bold)">{{ reply.author_name }}</span>
                         <span v-if="reply.replyToName" class="reply-to">
                           回复 <span class="reply-to-name">@{{ reply.replyToName }}</span>
                         </span>
@@ -1133,6 +1160,14 @@ async function handleDelete() {
 .comment-item {
   display: flex;
   gap: 12px;
+}
+
+.comment-item.comment-highlight,
+.reply-item.comment-highlight {
+  background: rgba(184, 115, 51, 0.08);
+  outline: 2px solid rgba(184, 115, 51, 0.35);
+  outline-offset: 2px;
+  border-radius: 8px;
 }
 
 .comment-avatar {

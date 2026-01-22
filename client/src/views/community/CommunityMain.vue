@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { getGuild, type Guild } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const route = useRoute()
@@ -168,6 +169,12 @@ function formatEventTime(dateStr: string) {
   return date.toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+function formatEventTimeShort(dateStr?: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
 function formatEventMonth(dateStr: string) {
   if (!dateStr) return ''
   const date = new Date(dateStr)
@@ -193,11 +200,20 @@ function getCategoryClass(category: string) {
   return classMap[category] || 'cat-other'
 }
 
-// 获取角色样式类
-function getRoleClass(role: string) {
-  if (role === 'admin') return 'role-admin'
-  if (role === 'moderator') return 'role-moderator'
-  return ''
+function getEventTypeLabel(event: EventItem) {
+  const typeKey = event.event_type || 'other'
+  return eventTypeMeta[typeKey]?.label || eventTypeMeta.other.label
+}
+
+function resolveEventColor(event: EventItem) {
+  const typeKey = event.event_type || 'other'
+  return event.event_color || eventTypeMeta[typeKey]?.color || eventTypeMeta.other.color
+}
+
+function getEventPillStyle(event: EventItem) {
+  return {
+    '--pill-color': resolveEventColor(event)
+  }
 }
 
 // 从内容中提取第一张图片
@@ -228,10 +244,48 @@ function getPostImages(post: PostWithAuthor): string[] {
 // ========== 日历视图相关 ==========
 const currentMonth = ref(new Date())
 const calendarView = ref(true) // true: 日历视图, false: 列表视图
+const eventFilter = ref<'all' | 'server' | 'guild'>('all')
+const expandedDays = ref<Record<string, boolean>>({})
+
+const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+
+const eventTypeMeta: Record<string, { label: string; color: string }> = {
+  server: { label: '服务器活动', color: '#804030' },
+  guild: { label: '公会活动', color: '#B87333' },
+  other: { label: '活动', color: '#D97706' }
+}
+
+// 筛选后的活动
+const filteredEvents = computed(() => {
+  if (eventFilter.value === 'all') return events.value
+  return events.value.filter(event => event.event_type === eventFilter.value)
+})
+
+function getDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 // 切换视图模式
 function toggleCalendarView() {
   calendarView.value = !calendarView.value
+}
+
+function setEventFilter(filter: 'all' | 'server' | 'guild') {
+  eventFilter.value = filter
+}
+
+function isDayExpanded(dayKey: string) {
+  return !!expandedDays.value[dayKey]
+}
+
+function toggleDayExpanded(dayKey: string) {
+  const next = { ...expandedDays.value }
+  if (next[dayKey]) {
+    delete next[dayKey]
+  } else {
+    next[dayKey] = true
+  }
+  expandedDays.value = next
 }
 
 // 获取当月的所有日期
@@ -248,6 +302,7 @@ const calendarDays = computed(() => {
 
   // 生成日历数组
   const days: Array<{
+    key: string
     date: Date
     isCurrentMonth: boolean
     events: EventItem[]
@@ -256,8 +311,10 @@ const calendarDays = computed(() => {
   // 填充上个月的日期
   const prevMonthLastDay = new Date(year, month, 0).getDate()
   for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+    const date = new Date(year, month - 1, prevMonthLastDay - i)
     days.push({
-      date: new Date(year, month - 1, prevMonthLastDay - i),
+      key: getDateKey(date),
+      date,
       isCurrentMonth: false,
       events: []
     })
@@ -266,7 +323,8 @@ const calendarDays = computed(() => {
   // 填充当月日期
   for (let i = 1; i <= lastDay.getDate(); i++) {
     const date = new Date(year, month, i)
-    const dayEvents = events.value.filter(event => {
+    const dayEvents = filteredEvents.value.filter(event => {
+      if (!event.event_start_time) return false
       const eventStart = new Date(event.event_start_time)
       const eventEnd = event.event_end_time ? new Date(event.event_end_time) : null
 
@@ -283,18 +341,26 @@ const calendarDays = computed(() => {
         return currentDay.getTime() === startDay.getTime()
       }
     })
+    const sortedEvents = [...dayEvents].sort((a, b) => {
+      const aTime = a.event_start_time ? new Date(a.event_start_time).getTime() : 0
+      const bTime = b.event_start_time ? new Date(b.event_start_time).getTime() : 0
+      return aTime - bTime
+    })
     days.push({
+      key: getDateKey(date),
       date,
       isCurrentMonth: true,
-      events: dayEvents
+      events: sortedEvents
     })
   }
 
   // 填充下个月的日期，补齐到42个格子（6周）
   const remainingDays = 42 - days.length
   for (let i = 1; i <= remainingDays; i++) {
+    const date = new Date(year, month + 1, i)
     days.push({
-      date: new Date(year, month + 1, i),
+      key: getDateKey(date),
+      date,
       isCurrentMonth: false,
       events: []
     })
@@ -303,19 +369,76 @@ const calendarDays = computed(() => {
   return days
 })
 
+const monthEvents = computed(() => {
+  const year = currentMonth.value.getFullYear()
+  const month = currentMonth.value.getMonth()
+  return filteredEvents.value.filter(event => {
+    if (!event.event_start_time) return false
+    const start = new Date(event.event_start_time)
+    return start.getFullYear() === year && start.getMonth() === month
+  })
+})
+
+const calendarStats = computed(() => {
+  const monthList = monthEvents.value
+  const total = monthList.length
+  const dayMap = new Map<string, number>()
+  const typeMap = new Map<string, number>()
+
+  monthList.forEach(event => {
+    if (!event.event_start_time) return
+    const start = new Date(event.event_start_time)
+    const dateKey = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+    dayMap.set(dateKey, (dayMap.get(dateKey) || 0) + 1)
+    const typeKey = event.event_type || 'other'
+    typeMap.set(typeKey, (typeMap.get(typeKey) || 0) + 1)
+  })
+
+  let peakLabel = '--'
+  let peakCount = 0
+  dayMap.forEach((count, dateKey) => {
+    if (count > peakCount) {
+      peakCount = count
+      const [year, month, day] = dateKey.split('-').map(Number)
+      peakLabel = new Date(year, month - 1, day).toLocaleString('zh-CN', { month: 'short', day: 'numeric' })
+    }
+  })
+
+  let focusLabel = '--'
+  let focusCount = 0
+  typeMap.forEach((count, typeKey) => {
+    if (count > focusCount) {
+      focusCount = count
+      focusLabel = eventTypeMeta[typeKey]?.label || eventTypeMeta.other.label
+    }
+  })
+
+  return {
+    total,
+    activeDays: dayMap.size,
+    peakLabel,
+    peakCount,
+    focusLabel,
+    focusCount
+  }
+})
+
 // 切换到上个月
 function prevMonth() {
   currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() - 1)
+  expandedDays.value = {}
 }
 
 // 切换到下个月
 function nextMonth() {
   currentMonth.value = new Date(currentMonth.value.getFullYear(), currentMonth.value.getMonth() + 1)
+  expandedDays.value = {}
 }
 
 // 回到当前月
 function goToToday() {
   currentMonth.value = new Date()
+  expandedDays.value = {}
 }
 
 // 格式化月份标题
@@ -325,7 +448,7 @@ const monthTitle = computed(() => {
 
 // 获取活动样式（使用自定义颜色）
 function getEventStyle(event: EventItem) {
-  const color = event.event_color || '#D97706'
+  const color = resolveEventColor(event)
 
   // 将十六进制颜色转换为 RGB
   const hex = color.replace('#', '')
@@ -445,9 +568,9 @@ function getEventStyle(event: EventItem) {
           <div class="events-title">
             <i class="ri-calendar-event-line"></i>
             <span>近期活动</span>
-            <span class="events-count">{{ events.length }}</span>
+            <span class="events-count">{{ filteredEvents.length }}</span>
           </div>
-          <div class="header-actions">
+          <div class="events-header-actions">
             <button class="view-toggle-btn" @click.stop="toggleCalendarView" :title="calendarView ? '切换到列表视图' : '切换到日历视图'">
               <i :class="calendarView ? 'ri-list-check' : 'ri-calendar-line'"></i>
             </button>
@@ -459,33 +582,69 @@ function getEventStyle(event: EventItem) {
           <div v-else-if="events.length === 0" class="events-empty">暂无近期活动</div>
 
           <!-- 日历视图 -->
-          <div v-else-if="calendarView" class="calendar-view">
-            <div class="calendar-controls">
-              <button class="calendar-nav-btn" @click="prevMonth">
-                <i class="ri-arrow-left-s-line"></i>
-              </button>
-              <div class="calendar-month-title">{{ monthTitle }}</div>
-              <button class="calendar-nav-btn" @click="nextMonth">
-                <i class="ri-arrow-right-s-line"></i>
-              </button>
-              <button class="today-btn" @click="goToToday">今天</button>
+          <div v-else-if="calendarView" class="calendar-shell">
+            <div class="calendar-head">
+              <div class="calendar-head-left">
+                <span class="calendar-kicker">活动日历</span>
+                <div class="calendar-title-row">
+                  <h2 class="calendar-title">{{ monthTitle }}</h2>
+                  <span class="calendar-count">{{ calendarStats.total }} 场</span>
+                </div>
+                <p class="calendar-subtitle">点击活动查看详情。</p>
+              </div>
+              <div class="calendar-head-right">
+                <div class="calendar-sync">
+                  <span class="sync-dot"></span>
+                  已同步
+                </div>
+                <div class="calendar-controls">
+                  <button class="calendar-nav-btn" type="button" @click="prevMonth">
+                    <i class="ri-arrow-left-s-line"></i>
+                  </button>
+                  <div class="calendar-month-title">{{ monthTitle }}</div>
+                  <button class="calendar-nav-btn" type="button" @click="nextMonth">
+                    <i class="ri-arrow-right-s-line"></i>
+                  </button>
+                  <button class="today-btn" type="button" @click="goToToday">今天</button>
+                </div>
+              </div>
             </div>
 
-            <div class="calendar-grid">
-              <div class="calendar-weekdays">
-                <div class="weekday">日</div>
-                <div class="weekday">一</div>
-                <div class="weekday">二</div>
-                <div class="weekday">三</div>
-                <div class="weekday">四</div>
-                <div class="weekday">五</div>
-                <div class="weekday">六</div>
+            <div class="calendar-stats">
+              <div class="stat-card">
+                <div class="stat-label">本月活动</div>
+                <div class="stat-value">{{ calendarStats.total }}</div>
+                <div class="stat-foot">覆盖 {{ calendarStats.activeDays }} 天</div>
               </div>
+              <div class="stat-card">
+                <div class="stat-label">高峰日期</div>
+                <div class="stat-value">{{ calendarStats.peakLabel }}</div>
+                <div class="stat-foot">{{ calendarStats.peakCount || 0 }} 场</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">主要类型</div>
+                <div class="stat-value">{{ calendarStats.focusLabel }}</div>
+                <div class="stat-foot">{{ calendarStats.focusCount || 0 }} 场</div>
+              </div>
+            </div>
 
+            <div class="calendar-filters">
+              <span class="filter-label">类型筛选</span>
+              <div class="filter-chips">
+                <button class="filter-chip" :class="{ active: eventFilter === 'all' }" type="button" @click="setEventFilter('all')">全部</button>
+                <button class="filter-chip" :class="{ active: eventFilter === 'server' }" type="button" @click="setEventFilter('server')">服务器活动</button>
+                <button class="filter-chip" :class="{ active: eventFilter === 'guild' }" type="button" @click="setEventFilter('guild')">公会活动</button>
+              </div>
+            </div>
+
+            <div class="calendar-board">
+              <div class="calendar-weekdays">
+                <div v-for="day in weekDays" :key="day">{{ day }}</div>
+              </div>
               <div class="calendar-days">
                 <div
-                  v-for="(day, index) in calendarDays"
-                  :key="index"
+                  v-for="day in calendarDays"
+                  :key="day.key"
                   class="calendar-day"
                   :class="{
                     'other-month': !day.isCurrentMonth,
@@ -493,21 +652,30 @@ function getEventStyle(event: EventItem) {
                     'today': day.date.toDateString() === new Date().toDateString()
                   }"
                 >
-                  <div class="day-number">{{ day.date.getDate() }}</div>
-                  <div v-if="day.events.length > 0" class="day-events">
-                    <div
-                      v-for="event in day.events.slice(0, 2)"
+                  <div class="day-header">
+                    <span class="day-number">{{ day.date.getDate() }}</span>
+                    <span v-if="day.events.length > 0" class="day-count">{{ day.events.length }}场</span>
+                  </div>
+                  <div class="day-events">
+                    <button
+                      v-for="event in (isDayExpanded(day.key) ? day.events : day.events.slice(0, 2))"
                       :key="event.id"
-                      class="day-event-item"
-                      :style="getEventStyle(event)"
+                      class="day-pill"
+                      type="button"
+                      :style="getEventPillStyle(event)"
                       @click="goToPost(event.id)"
                     >
-                      <span class="event-dot" :style="{ backgroundColor: event.event_color || '#D97706' }"></span>
-                      <span class="event-title-short">{{ event.title }}</span>
-                    </div>
-                    <div v-if="day.events.length > 2" class="more-events">
-                      +{{ day.events.length - 2 }} 更多
-                    </div>
+                      <span class="pill-title">{{ event.title }}</span>
+                      <span class="pill-time">{{ formatEventTimeShort(event.event_start_time) }}</span>
+                    </button>
+                    <button
+                      v-if="day.events.length > 2"
+                      class="day-more"
+                      type="button"
+                      @click="toggleDayExpanded(day.key)"
+                    >
+                      {{ isDayExpanded(day.key) ? '收起' : `+${day.events.length - 2}` }}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -517,21 +685,19 @@ function getEventStyle(event: EventItem) {
           <!-- 列表视图 -->
           <div v-else class="events-list">
             <div
-              v-for="event in events"
+              v-for="event in filteredEvents"
               :key="event.id"
               class="event-item"
               @click="goToPost(event.id)"
             >
-              <div class="event-date" :style="{ backgroundColor: event.event_color || '#D97706' }">
+              <div class="event-date" :style="{ backgroundColor: resolveEventColor(event) }">
                 <span class="event-month">{{ formatEventMonth(event.event_start_time) }}</span>
                 <span class="event-day">{{ formatEventDay(event.event_start_time) }}</span>
               </div>
               <div class="event-info">
                 <h4 class="event-title">{{ event.title }}</h4>
                 <div class="event-meta">
-                  <span class="event-type" :style="getEventStyle(event)">
-                    {{ event.event_type === 'server' ? '服务器活动' : '公会活动' }}
-                  </span>
+                  <span class="event-type" :style="getEventStyle(event)">{{ getEventTypeLabel(event) }}</span>
                   <span class="event-time">{{ formatEventTime(event.event_start_time) }}</span>
                 </div>
               </div>
@@ -572,7 +738,7 @@ function getEventStyle(event: EventItem) {
                   <img v-if="post.author_avatar" :src="post.author_avatar" alt="" loading="lazy" />
                   <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
                 </div>
-                <span class="author-name" :class="getRoleClass(post.author_role)">{{ post.author_name }}</span>
+                <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
               </div>
               <div class="post-stats">
                 <span class="stat-item">
@@ -611,7 +777,7 @@ function getEventStyle(event: EventItem) {
                   <img v-if="post.author_avatar" :src="post.author_avatar" alt="" loading="lazy" />
                   <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
                 </div>
-                <span class="author-name">{{ post.author_name }}</span>
+                <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
               </div>
               <span class="comment-count">
                 <i class="ri-chat-3-line"></i>
@@ -942,38 +1108,61 @@ function getEventStyle(event: EventItem) {
 
 /* ========== Events Section ========== */
 .events-section {
-  background: #fff;
+  background: linear-gradient(135deg, #FFFDF9, #F8EFE6);
   border: 1px solid #E5D4C1;
-  border-radius: 8px;
+  border-radius: 16px;
   margin-bottom: 24px;
   overflow: hidden;
+  box-shadow: 0 16px 40px rgba(75, 54, 33, 0.08);
 }
 
 .events-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
+  padding: 18px 24px;
   cursor: pointer;
   transition: background 0.2s;
+  background: rgba(255, 255, 255, 0.75);
 }
 
 .events-header:hover {
-  background: #F5EFE7;
+  background: #fff;
 }
 
-.header-actions {
+.events-title {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #804030;
+}
+
+.events-title i {
+  font-size: 20px;
+}
+
+.events-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8D7B68;
+  background: rgba(184, 115, 51, 0.15);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.events-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .view-toggle-btn {
-  padding: 4px 8px;
-  background: transparent;
+  padding: 6px 10px;
+  background: #fff;
   border: 1px solid #E5D4C1;
-  border-radius: 4px;
+  border-radius: 8px;
   color: #8D7B68;
   cursor: pointer;
   transition: all 0.2s;
@@ -983,35 +1172,13 @@ function getEventStyle(event: EventItem) {
 }
 
 .view-toggle-btn:hover {
-  background: #F5EFE7;
-  border-color: #D97706;
-  color: #D97706;
+  background: rgba(184, 115, 51, 0.12);
+  border-color: #B87333;
+  color: #B87333;
 }
 
 .view-toggle-btn i {
   font-size: 16px;
-}
-
-.events-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #D97706;
-}
-
-.events-title i {
-  font-size: 18px;
-}
-
-.events-count {
-  font-size: 12px;
-  font-weight: 400;
-  color: #8D7B68;
-  background: #F5EFE7;
-  padding: 2px 8px;
-  border-radius: 10px;
 }
 
 .expand-icon {
@@ -1021,16 +1188,378 @@ function getEventStyle(event: EventItem) {
 }
 
 .events-body {
-  border-top: 1px solid #F5EFE7;
-  padding: 16px 20px;
+  border-top: 1px solid #F3E7DA;
+  padding: 20px 24px 24px;
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .events-loading,
 .events-empty {
   text-align: center;
-  padding: 20px;
+  padding: 24px;
   color: #8D7B68;
   font-size: 14px;
+}
+
+.calendar-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.calendar-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.calendar-head-left {
+  max-width: 520px;
+}
+
+.calendar-kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #8D7B68;
+  font-weight: 600;
+}
+
+.calendar-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.calendar-title {
+  font-family: 'Cinzel', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #2C1810;
+  margin: 0;
+}
+
+.calendar-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #804030;
+  background: rgba(128, 64, 48, 0.12);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.calendar-subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #8D7B68;
+}
+
+.calendar-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.calendar-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(91, 140, 90, 0.15);
+  color: #5B8C5A;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5B8C5A;
+  box-shadow: 0 0 0 4px rgba(91, 140, 90, 0.2);
+}
+
+.calendar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #E5D4C1;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.calendar-nav-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  background: #fff;
+  color: #8D7B68;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.calendar-nav-btn:hover {
+  background: rgba(184, 115, 51, 0.12);
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.calendar-nav-btn i {
+  font-size: 18px;
+}
+
+.calendar-month-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2C1810;
+  min-width: 120px;
+  text-align: center;
+}
+
+.today-btn {
+  padding: 6px 12px;
+  border: 1px solid #B87333;
+  border-radius: 8px;
+  background: #B87333;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.today-btn:hover {
+  background: #A66629;
+  border-color: #A66629;
+}
+
+.calendar-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  background: #fff;
+  border: 1px solid #F1E4D7;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 24px rgba(75, 54, 33, 0.08);
+}
+
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8D7B68;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #2C1810;
+}
+
+.stat-foot {
+  font-size: 12px;
+  color: #8D7B68;
+  margin-top: 6px;
+}
+
+.calendar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #F1E4D7;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.filter-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8D7B68;
+  font-weight: 600;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #E5D4C1;
+  background: #fff;
+  color: #4B3621;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-chip:hover {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.filter-chip.active {
+  background: #2C1810;
+  border-color: #2C1810;
+  color: #fff;
+}
+
+.calendar-board {
+  background: #fff;
+  border: 1px solid #F1E4D7;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 12px 28px rgba(75, 54, 33, 0.08);
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8D7B68;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.calendar-weekdays div {
+  padding: 6px 0;
+}
+
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.calendar-day {
+  min-height: 120px;
+  padding: 8px;
+  border: 1px solid #F1E4D7;
+  border-radius: 12px;
+  background: #fff;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.calendar-day.other-month {
+  background: #FAF7F2;
+  opacity: 0.4;
+}
+
+.calendar-day.today {
+  border-color: #B87333;
+  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.15);
+}
+
+.calendar-day.has-events {
+  background: #FFF6EC;
+}
+
+.calendar-day.has-events:hover {
+  border-color: #B87333;
+}
+
+.day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.day-number {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2C1810;
+}
+
+.day-count {
+  font-size: 10px;
+  color: #8D7B68;
+}
+
+.day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.day-pill {
+  border: 1px solid rgba(128, 64, 48, 0.08);
+  background: #fff;
+  border-left: 3px solid var(--pill-color, #D97706);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+}
+
+.day-pill:hover {
+  background: #FDF3E6;
+}
+
+.pill-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: #4B3621;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill-time {
+  font-size: 10px;
+  color: #8D7B68;
+  margin-left: 6px;
+}
+
+.day-more {
+  align-self: flex-start;
+  font-size: 10px;
+  color: #8D7B68;
+  font-weight: 600;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.day-more:hover {
+  color: #B87333;
 }
 
 .events-list {
@@ -1042,17 +1571,17 @@ function getEventStyle(event: EventItem) {
 .event-item {
   display: flex;
   gap: 16px;
-  padding: 12px;
-  background: #FFFBF5;
-  border: 1px solid #FDE68A;
-  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #F1E4D7;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .event-item:hover {
-  background: #FEF3C7;
-  border-color: #D97706;
+  border-color: #B87333;
+  background: #FFF3E4;
 }
 
 .event-date {
@@ -1060,10 +1589,9 @@ function getEventStyle(event: EventItem) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 50px;
+  min-width: 56px;
   padding: 8px;
-  background: #D97706;
-  border-radius: 6px;
+  border-radius: 10px;
   color: #fff;
 }
 
@@ -1108,186 +1636,29 @@ function getEventStyle(event: EventItem) {
   color: #8D7B68;
 }
 
-/* ========== Calendar View ========== */
-.calendar-view {
-  padding: 16px 0;
+@media (max-width: 1100px) {
+  .calendar-head-right {
+    align-items: flex-start;
+  }
+
+  .calendar-controls {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
-.calendar-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding: 0 16px;
-}
+@media (max-width: 860px) {
+  .calendar-stats {
+    grid-template-columns: 1fr;
+  }
 
-.calendar-nav-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid #E5D4C1;
-  border-radius: 6px;
-  background: #fff;
-  color: #8D7B68;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
+  .calendar-weekdays {
+    letter-spacing: 0.12em;
+  }
 
-.calendar-nav-btn:hover {
-  background: #F5EFE7;
-  border-color: #D97706;
-  color: #D97706;
-}
-
-.calendar-nav-btn i {
-  font-size: 18px;
-}
-
-.calendar-month-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #2C1810;
-  min-width: 120px;
-  text-align: center;
-}
-
-.today-btn {
-  padding: 6px 12px;
-  border: 1px solid #E5D4C1;
-  border-radius: 6px;
-  background: #fff;
-  color: #8D7B68;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.today-btn:hover {
-  background: #D97706;
-  border-color: #D97706;
-  color: #fff;
-}
-
-.calendar-grid {
-  padding: 0 16px;
-}
-
-.calendar-weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.weekday {
-  text-align: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: #8D7B68;
-  padding: 8px 0;
-}
-
-.calendar-days {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-}
-
-.calendar-day {
-  min-height: 80px;
-  padding: 8px;
-  border: 1px solid #E5D4C1;
-  border-radius: 6px;
-  background: #fff;
-  transition: all 0.2s;
-  display: flex;
-  flex-direction: column;
-}
-
-.calendar-day.other-month {
-  background: #FAFAF9;
-  opacity: 0.5;
-}
-
-.calendar-day.today {
-  border-color: #D97706;
-  background: #FFFBF5;
-  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.1);
-}
-
-.calendar-day.has-events {
-  background: #FEF3C7;
-  border-color: #FDE68A;
-}
-
-.calendar-day.has-events:hover {
-  background: #FDE68A;
-  border-color: #D97706;
-}
-
-.day-number {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2C1810;
-  margin-bottom: 4px;
-}
-
-.calendar-day.other-month .day-number {
-  color: #A99B8D;
-}
-
-.calendar-day.today .day-number {
-  color: #D97706;
-}
-
-.day-events {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.day-event-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-  overflow: hidden;
-}
-
-.day-event-item:hover {
-  filter: brightness(0.95);
-}
-
-.event-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  flex-shrink: 0;
-}
-
-.event-title-short {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-}
-
-.more-events {
-  font-size: 10px;
-  color: #8D7B68;
-  text-align: center;
-  padding: 2px;
-  font-weight: 500;
+  .calendar-day {
+    min-height: 100px;
+  }
 }
 
 .pinned-title {
@@ -1593,15 +1964,6 @@ function getEventStyle(event: EventItem) {
   color: #2C1810;
 }
 
-.author-name.role-admin {
-  color: #DC143C;
-  font-weight: 600;
-}
-
-.author-name.role-moderator {
-  color: #4682B4;
-  font-weight: 600;
-}
 
 .post-stats {
   display: flex;

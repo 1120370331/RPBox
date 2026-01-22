@@ -9,6 +9,7 @@ import { uploadAvatar } from '@/api/user'
 import { useUpdater } from '@/composables/useUpdater'
 import { getAddonManifest } from '@/api/addon'
 import { bumpImageCacheVersion } from '@/utils/imageCache'
+import { buildNameStyle } from '@/utils/userNameStyle'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import RModal from '@/components/RModal.vue'
 
@@ -284,7 +285,7 @@ async function handleCheckAddonUpdate() {
               </div>
             </div>
             <div class="avatar-info">
-              <h4>{{ userStore.user?.username || '未登录' }}</h4>
+              <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || '未登录' }}</h4>
               <p>点击头像更换，支持 JPG、PNG 格式，最大 20MB</p>
             </div>
             <input
@@ -515,10 +516,17 @@ async function handleCheckAddonUpdate() {
     <RModal v-model="showThanksModal" title="特别鸣谢" width="520px">
       <div class="thanks-modal">
         <p class="thanks-intro">感谢以下伙伴对 RPBox 的支持与贡献：</p>
+        <div class="thanks-item featured">
+          <div class="thanks-title">
+            <i class="ri-heart-3-line"></i>
+            厘米特·绿宝石
+          </div>
+          <p class="thanks-desc">对 RPBox 的赞助与宣发支持，特别感谢。</p>
+        </div>
         <div class="thanks-item">
           <div class="thanks-title">
             <i class="ri-heart-3-line"></i>
-            摩迪斯特雷德 &amp; 厘米特青绿石
+            摩迪斯特雷德
           </div>
           <p class="thanks-desc">在初期给予大力宣发支持。</p>
         </div>
@@ -1078,6 +1086,26 @@ async function handleCheckAddonUpdate() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.thanks-item.featured {
+  background: #F6E6D6;
+  border-color: #D8B58A;
+  border-left: 4px solid #C44536;
+  box-shadow: 0 6px 16px rgba(128, 64, 48, 0.12);
+}
+
+.thanks-item.featured .thanks-title {
+  color: #5B2E1E;
+  font-weight: 700;
+}
+
+.thanks-item.featured .thanks-title i {
+  color: #A63D2E;
+}
+
+.thanks-item.featured .thanks-desc {
+  color: #6F4A2C;
 }
 
 .thanks-title {

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { listMyPostLikes, listMyPostViews, type PostWithAuthor, POST_CATEGORIES } from '@/api/post'
 import { listMyItemLikes, listMyItemViews, type Item, getImageUrl } from '@/api/item'
 import LazyBgImage from '@/components/LazyBgImage.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const mounted = ref(false)
@@ -137,7 +138,7 @@ function getCategoryLabel(category: string) {
               <div class="post-body">
                 <div class="post-meta">
                   <span class="category-tag">{{ getCategoryLabel(post.category) }}</span>
-                  <span class="author-name">{{ post.author_name }}</span>
+                  <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
                 </div>
                 <h3 class="post-title">{{ post.title }}</h3>
                 <div class="post-stats">
@@ -176,7 +177,7 @@ function getCategoryLabel(category: string) {
                 <h3 class="item-title">{{ item.name }}</h3>
                 <div class="item-meta">
                   <span class="item-type">{{ typeMap[item.type as keyof typeof typeMap] || item.type }}</span>
-                  <span class="item-author">{{ item.author_username || '匿名' }}</span>
+                  <span class="item-author" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || '匿名' }}</span>
                 </div>
                 <div class="item-stats">
                   <span><i class="ri-heart-3-line"></i> {{ item.like_count }}</span>

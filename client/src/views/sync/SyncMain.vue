@@ -41,6 +41,9 @@ interface ExtraDataSummary {
 interface AccountInfo {
   account_id: string
   profiles: ProfileItem[]
+  raw_trp3_lua?: string
+  raw_trp3_data_lua?: string
+  raw_trp3_extended_lua?: string
   tools_db?: ToolsDbSummary
   runtime_data?: RuntimeDataSummary
   config?: ConfigSummary
@@ -460,6 +463,9 @@ async function confirmUpload() {
       runtime_size_kb: runtimeData?.size_kb || 0,
       config_data: configData?.raw_data,
       extra_data: extraData?.raw_data,
+      raw_trp3_lua: currentAccount?.raw_trp3_lua,
+      raw_trp3_data_lua: currentAccount?.raw_trp3_data_lua,
+      raw_trp3_extended_lua: currentAccount?.raw_trp3_extended_lua,
       checksum: computeLocalChecksum()
     })
     await loadProfiles()
@@ -545,7 +551,10 @@ async function restoreAll() {
       toolsJson: fullBackup.tools_data || null,
       runtimeJson: fullBackup.runtime_data || null,
       configJson: fullBackup.config_data || null,
-      extraJson: fullBackup.extra_data || null
+      extraJson: fullBackup.extra_data || null,
+      rawTrp3Lua: fullBackup.raw_trp3_lua || null,
+      rawTrp3DataLua: fullBackup.raw_trp3_data_lua || null,
+      rawTrp3ExtendedLua: fullBackup.raw_trp3_extended_lua || null
     })
     // 重新扫描本地数据
     await loadProfiles()

@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotificationStore } from '../stores/notification'
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, type Notification } from '../api/notification'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const notificationStore = useNotificationStore()
@@ -120,7 +121,14 @@ function handleNotificationClick(notification: Notification) {
   handleMarkAsRead(notification)
 
   // 根据通知类型跳转到对应页面
-  if (notification.target_type === 'post') {
+  if (notification.target_type === 'comment') {
+    if (notification.target_post_id) {
+      router.push({
+        path: `/community/post/${notification.target_post_id}`,
+        query: { comment: String(notification.target_id) }
+      })
+    }
+  } else if (notification.target_type === 'post') {
     router.push(`/community/post/${notification.target_id}`)
   } else if (notification.target_type === 'item') {
     router.push(`/market/${notification.target_id}`)
@@ -211,7 +219,7 @@ function getTypeBadge(type: string): string {
             <div class="notification-content">
               <div class="notification-header">
                 <h3 class="notification-title">
-                  <span class="username">{{ notification.actor_name || '系统' }}</span>
+                  <span class="username" :style="buildNameStyle(notification.actor_name_color, notification.actor_name_bold)">{{ notification.actor_name || '系统' }}</span>
                   {{ notification.content }}
                 </h3>
                 <time class="notification-time">{{ formatTime(notification.created_at) }}</time>

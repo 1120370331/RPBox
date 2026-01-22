@@ -55,6 +55,9 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		RuntimeSizeKB int    `json:"runtime_size_kb"`
 		ConfigData    string `json:"config_data"`
 		ExtraData     string `json:"extra_data"`
+		RawTrp3Lua    string `json:"raw_trp3_lua"`
+		RawTrp3Data   string `json:"raw_trp3_data_lua"`
+		RawTrp3Ext    string `json:"raw_trp3_extended_lua"`
 		Checksum      string `json:"checksum" binding:"required"`
 	}
 
@@ -64,8 +67,8 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 	}
 
 	// 调试日志：打印接收到的数据长度
-	log.Printf("[AccountBackup] upsert - account=%s, profiles=%d, tools_data_len=%d, tools_count=%d, runtime_data_len=%d, runtime_kb=%d",
-		req.AccountID, req.ProfilesCount, len(req.ToolsData), req.ToolsCount, len(req.RuntimeData), req.RuntimeSizeKB)
+	log.Printf("[AccountBackup] upsert - account=%s, profiles=%d, tools_data_len=%d, tools_count=%d, runtime_data_len=%d, runtime_kb=%d, raw_trp3_len=%d, raw_data_len=%d, raw_ext_len=%d",
+		req.AccountID, req.ProfilesCount, len(req.ToolsData), req.ToolsCount, len(req.RuntimeData), req.RuntimeSizeKB, len(req.RawTrp3Lua), len(req.RawTrp3Data), len(req.RawTrp3Ext))
 
 	checksum := req.Checksum
 
@@ -85,6 +88,9 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 			RuntimeSizeKB: req.RuntimeSizeKB,
 			ConfigData:    req.ConfigData,
 			ExtraData:     req.ExtraData,
+			RawTrp3Lua:    req.RawTrp3Lua,
+			RawTrp3Data:   req.RawTrp3Data,
+			RawTrp3Ext:    req.RawTrp3Ext,
 			Checksum:      checksum,
 			Version:       1,
 		}
@@ -111,6 +117,9 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		RuntimeData:  existing.RuntimeData,
 		ConfigData:   existing.ConfigData,
 		ExtraData:    existing.ExtraData,
+		RawTrp3Lua:   existing.RawTrp3Lua,
+		RawTrp3Data:  existing.RawTrp3Data,
+		RawTrp3Ext:   existing.RawTrp3Ext,
 		Checksum:     existing.Checksum,
 	}
 	database.DB.Create(&version)
@@ -125,6 +134,9 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 	existing.RuntimeSizeKB = req.RuntimeSizeKB
 	existing.ConfigData = req.ConfigData
 	existing.ExtraData = req.ExtraData
+	existing.RawTrp3Lua = req.RawTrp3Lua
+	existing.RawTrp3Data = req.RawTrp3Data
+	existing.RawTrp3Ext = req.RawTrp3Ext
 	existing.Checksum = checksum
 	existing.Version++
 	if err := database.DB.Save(&existing).Error; err != nil {
