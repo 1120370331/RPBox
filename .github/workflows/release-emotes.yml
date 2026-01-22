@@ -1,0 +1,52 @@
+name: Release Emotes
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'emote-v*'
+
+jobs:
+  release:
+    name: Build & Deploy Emotes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip pillow
+
+      - name: Build emote packs
+        run: python scripts/build_emotes.py
+
+      - name: Upload emote artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: emote-packs
+          path: server/storage/emotes
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p ${{ secrets.SERVER_PORT }} ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy emotes
+        env:
+          REMOTE_PATH: ${{ secrets.EMOTE_PATH }}
+        run: |
+          if [ -z "$REMOTE_PATH" ]; then
+            echo "EMOTE_PATH is not set."
+            exit 1
+          fi
+          ssh -p ${{ secrets.SERVER_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH"
+          scp -P ${{ secrets.SERVER_PORT }} -r server/storage/emotes/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/
