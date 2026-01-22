@@ -62,14 +62,14 @@ jobs:
     needs: build-windows
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: windows-artifacts
           path: artifacts
-
-      - name: Checkout code
-        uses: actions/checkout@v4
 
       - name: Get version from tag
         id: version
