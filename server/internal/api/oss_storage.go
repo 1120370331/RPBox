@@ -140,6 +140,20 @@ func (s *Server) readImageFromOSS(key string) ([]byte, string, error) {
 	return data, contentType, nil
 }
 
+func (s *Server) deleteFromOSS(key string) error {
+	normalized := normalizeOSSKey(key)
+	if normalized == "" {
+		return errors.New("empty object key")
+	}
+
+	bucket, err := s.getOSSBucket()
+	if err != nil {
+		return err
+	}
+
+	return bucket.DeleteObject(normalized)
+}
+
 func normalizeOSSKey(key string) string {
 	cleaned := path.Clean("/" + key)
 	cleaned = strings.TrimPrefix(cleaned, "/")

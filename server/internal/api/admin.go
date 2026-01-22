@@ -3,11 +3,14 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
+	ws "github.com/rpbox/server/internal/websocket"
 	"github.com/rpbox/server/pkg/validator"
 )
 
@@ -51,46 +54,46 @@ func (s *Server) listUsers(c *gin.Context) {
 
 	// 隐藏敏感信息
 	type SafeUser struct {
-		ID          uint       `json:"id"`
-		Username    string     `json:"username"`
-		Email       string     `json:"email"`
-		Avatar      string     `json:"avatar"`
-		Role        string     `json:"role"`
-		IsSponsor   bool       `json:"is_sponsor"`
-		SponsorLevel int       `json:"sponsor_level"`
-		NameColor   string     `json:"name_color"`
-		NameBold    bool       `json:"name_bold"`
-		IsMuted     bool       `json:"is_muted"`
-		MutedUntil  *time.Time `json:"muted_until"`
-		MuteReason  string     `json:"mute_reason"`
-		IsBanned    bool       `json:"is_banned"`
-		BannedUntil *time.Time `json:"banned_until"`
-		BanReason   string     `json:"ban_reason"`
-		PostCount   int        `json:"post_count"`
-		CreatedAt   time.Time  `json:"created_at"`
+		ID           uint       `json:"id"`
+		Username     string     `json:"username"`
+		Email        string     `json:"email"`
+		Avatar       string     `json:"avatar"`
+		Role         string     `json:"role"`
+		IsSponsor    bool       `json:"is_sponsor"`
+		SponsorLevel int        `json:"sponsor_level"`
+		NameColor    string     `json:"name_color"`
+		NameBold     bool       `json:"name_bold"`
+		IsMuted      bool       `json:"is_muted"`
+		MutedUntil   *time.Time `json:"muted_until"`
+		MuteReason   string     `json:"mute_reason"`
+		IsBanned     bool       `json:"is_banned"`
+		BannedUntil  *time.Time `json:"banned_until"`
+		BanReason    string     `json:"ban_reason"`
+		PostCount    int        `json:"post_count"`
+		CreatedAt    time.Time  `json:"created_at"`
 	}
 	result := make([]SafeUser, len(users))
 	for i, u := range users {
 		nameColor, nameBold := userDisplayStyle(u)
 		level := resolveSponsorLevel(u)
 		result[i] = SafeUser{
-			ID:          u.ID,
-			Username:    u.Username,
-			Email:       u.Email,
-			Avatar:      u.Avatar,
-			Role:        u.Role,
-			IsSponsor:   level > sponsorLevelNone,
+			ID:           u.ID,
+			Username:     u.Username,
+			Email:        u.Email,
+			Avatar:       u.Avatar,
+			Role:         u.Role,
+			IsSponsor:    level > sponsorLevelNone,
 			SponsorLevel: level,
-			NameColor:   nameColor,
-			NameBold:    nameBold,
-			IsMuted:     u.IsMuted,
-			MutedUntil:  u.MutedUntil,
-			MuteReason:  u.MuteReason,
-			IsBanned:    u.IsBanned,
-			BannedUntil: u.BannedUntil,
-			BanReason:   u.BanReason,
-			PostCount:   u.PostCount,
-			CreatedAt:   u.CreatedAt,
+			NameColor:    nameColor,
+			NameBold:     nameBold,
+			IsMuted:      u.IsMuted,
+			MutedUntil:   u.MutedUntil,
+			MuteReason:   u.MuteReason,
+			IsBanned:     u.IsBanned,
+			BannedUntil:  u.BannedUntil,
+			BanReason:    u.BanReason,
+			PostCount:    u.PostCount,
+			CreatedAt:    u.CreatedAt,
 		}
 	}
 
@@ -195,11 +198,89 @@ func (s *Server) setUserSponsor(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusOK, gin.H{"message": "赞助者权限已更新", "user": gin.H{
-		"id":         user.ID,
-		"username":   user.Username,
-		"is_sponsor": level > sponsorLevelNone,
+		"id":            user.ID,
+		"username":      user.Username,
+		"is_sponsor":    level > sponsorLevelNone,
 		"sponsor_level": level,
 	}})
+}
+
+// broadcastSystemNotification 发送系统通知（管理员）
+func (s *Server) broadcastSystemNotification(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	content := strings.TrimSpace(req.Content)
+	if content == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "通知内容不能为空"})
+		return
+	}
+
+	contentRunes := []rune(content)
+	if len(contentRunes) > 512 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "通知内容过长"})
+		return
+	}
+
+	var userIDs []uint
+	if err := database.DB.Model(&model.User{}).Pluck("id", &userIDs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取用户列表失败"})
+		return
+	}
+	if len(userIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "没有可发送的用户", "count": 0})
+		return
+	}
+
+	now := time.Now()
+	notifications := make([]model.Notification, 0, len(userIDs))
+	for _, userID := range userIDs {
+		notifications = append(notifications, model.Notification{
+			UserID:     userID,
+			Type:       "system",
+			TargetType: "system",
+			TargetID:   0,
+			Content:    content,
+			IsRead:     false,
+			CreatedAt:  now,
+		})
+	}
+
+	if err := database.DB.CreateInBatches(notifications, 200).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "发送通知失败"})
+		return
+	}
+
+	if s != nil && s.wsHub != nil {
+		for _, userID := range s.wsHub.GetOnlineUserIDs() {
+			_ = s.wsHub.SendToUser(userID, ws.MessageTypeNewNotification, map[string]interface{}{
+				"id":      0,
+				"type":    "system",
+				"content": content,
+			})
+			if count, err := service.GetUnreadCount(userID); err == nil {
+				_ = s.wsHub.SendToUser(userID, ws.MessageTypeUnreadCountUpdate, map[string]interface{}{
+					"count": count,
+				})
+			}
+		}
+	}
+
+	preview := content
+	if len(contentRunes) > 120 {
+		preview = string(contentRunes[:120]) + "..."
+	}
+	logAdminAction(c, "broadcast_notification", "system", 0, "system", map[string]interface{}{
+		"recipient_count": len(userIDs),
+		"content_preview": preview,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "通知已发送", "count": len(userIDs)})
 }
 
 // ========== 用户封禁管理 ==========
@@ -457,6 +538,12 @@ func (s *Server) deleteUserPosts(c *gin.Context) {
 			"affected_count": 0,
 		})
 		return
+	}
+
+	var posts []model.Post
+	database.DB.Select("id, content, cover_image").Where("author_id = ?", id).Find(&posts)
+	for _, post := range posts {
+		s.cleanupPostImages(c, post)
 	}
 
 	// 删除关联数据

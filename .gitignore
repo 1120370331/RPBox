@@ -272,3 +272,5 @@ id_ed25519*
 # Server storage cache
 server/storage/cache/
 server/storage/uploads/
+server/storage/backups/
+server/storage/**/*.dump

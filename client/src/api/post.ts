@@ -110,6 +110,7 @@ export interface ListPostsParams {
   author_id?: number
   status?: 'draft' | 'published' | 'all'
   category?: PostCategory
+  is_pinned?: boolean
 }
 
 // ========== 帖子管理 ==========

@@ -443,6 +443,8 @@ func (s *Server) listAllPosts(c *gin.Context) {
 	reviewStatus := c.Query("review_status")
 	category := c.Query("category")
 	keyword := c.Query("keyword")
+	isPinned := c.Query("is_pinned")
+	isFeatured := c.Query("is_featured")
 
 	query := database.DB.Model(&model.Post{})
 
@@ -457,6 +459,22 @@ func (s *Server) listAllPosts(c *gin.Context) {
 	}
 	if keyword != "" {
 		query = query.Where("title LIKE ?", "%"+keyword+"%")
+	}
+	if isPinned != "" {
+		value, err := strconv.ParseBool(isPinned)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的is_pinned参数"})
+			return
+		}
+		query = query.Where("is_pinned = ?", value)
+	}
+	if isFeatured != "" {
+		value, err := strconv.ParseBool(isFeatured)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的is_featured参数"})
+			return
+		}
+		query = query.Where("is_featured = ?", value)
 	}
 
 	var total int64
@@ -519,6 +537,8 @@ func (s *Server) deletePostByMod(c *gin.Context) {
 	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
+
+	s.cleanupPostImages(c, post)
 	database.DB.Delete(&post)
 
 	// 记录日志
@@ -682,6 +702,11 @@ func (s *Server) deleteItemByMod(c *gin.Context) {
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemLike{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemFavorite{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemRating{})
+
+	var itemImages []model.ItemImage
+	database.DB.Where("item_id = ?", id).Find(&itemImages)
+	s.cleanupItemImages(c, item, itemImages)
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemImage{})
 	database.DB.Delete(&item)
 
 	// 记录日志

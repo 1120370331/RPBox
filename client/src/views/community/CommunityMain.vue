@@ -12,6 +12,7 @@ const mounted = ref(false)
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
 const total = ref(0)
+const pinnedPosts = ref<PostWithAuthor[]>([])
 
 // 活动日历
 const events = ref<EventItem[]>([])
@@ -25,15 +26,6 @@ const filterGuildId = ref<number | null>(null)
 const currentGuild = ref<Guild | null>(null)
 const currentPage = ref(1)
 
-// 置顶帖子
-const pinnedPosts = computed(() => posts.value.filter(p => p.is_pinned))
-
-// 精华帖子（非置顶）
-const featuredPosts = computed(() => posts.value.filter(p => p.is_featured && !p.is_pinned))
-
-// 普通帖子（非置顶非精华）
-const normalPosts = computed(() => posts.value.filter(p => !p.is_pinned && !p.is_featured))
-
 onMounted(async () => {
   // 从 URL query 读取公会筛选
   if (route.query.guild_id) {
@@ -42,7 +34,7 @@ onMounted(async () => {
   }
 
   setTimeout(() => mounted.value = true, 50)
-  await Promise.all([loadPosts(), loadEvents()])
+  await Promise.all([loadPosts(), loadEvents(), loadPinnedPosts()])
 })
 
 // 监听路由变化
@@ -54,7 +46,7 @@ watch(() => route.query.guild_id, async (newGuildId) => {
     filterGuildId.value = null
     currentGuild.value = null
   }
-  await loadPosts()
+  await Promise.all([loadPosts(), loadPinnedPosts()])
 })
 
 async function loadGuildInfo() {
@@ -88,6 +80,7 @@ async function loadPosts() {
       sort: sortBy.value,
       order: 'desc',
       status: 'published',
+      is_pinned: false,
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -102,6 +95,29 @@ async function loadPosts() {
     console.error('加载帖子失败:', error)
   } finally {
     loading.value = false
+  }
+}
+
+async function loadPinnedPosts() {
+  try {
+    const params: ListPostsParams = {
+      page: 1,
+      page_size: 10,
+      sort: 'created_at',
+      order: 'desc',
+      status: 'published',
+      is_pinned: true,
+    }
+    if (filterCategory.value) {
+      params.category = filterCategory.value
+    }
+    if (filterGuildId.value) {
+      params.guild_id = filterGuildId.value
+    }
+    const res = await listPosts(params)
+    pinnedPosts.value = res.posts || []
+  } catch (error) {
+    console.error('加载置顶公告失败:', error)
   }
 }
 
@@ -141,7 +157,7 @@ function formatDate(dateStr: string) {
 async function changeCategoryFilter(category: PostCategory | '') {
   filterCategory.value = category
   currentPage.value = 1
-  await loadPosts()
+  await Promise.all([loadPosts(), loadPinnedPosts()])
 }
 
 function changePage(page: number) {
@@ -708,63 +724,22 @@ function getEventStyle(event: EventItem) {
 
       <!-- 帖子瀑布流 -->
       <div class="posts-grid anim-item" style="--delay: 3">
-        <!-- 精华帖子（大卡片） -->
         <div
-          v-for="post in featuredPosts"
-          :key="'f-' + post.id"
-          class="post-card featured"
-          @click="goToPost(post.id)"
-        >
-          <div class="featured-badge">
-            <i class="ri-star-fill"></i>
-            精华
-          </div>
-          <div class="card-body">
-            <div class="card-meta">
-              <span class="category-tag" :class="getCategoryClass(post.category)">
-                {{ getCategoryLabel(post.category) }}
-              </span>
-              <span class="post-time">{{ formatDate(post.created_at) }}</span>
-            </div>
-            <h2 class="post-title">{{ post.title }}</h2>
-            <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
-            <!-- 封面图 -->
-            <div v-if="post.cover_image_url" class="cover-image">
-              <img :src="getImageUrl('post-cover', post.id, { w: 600, q: 80, v: post.cover_image_updated_at || post.updated_at })" alt="" loading="lazy" />
-            </div>
-            <div class="card-footer">
-              <div class="author-info">
-                <div class="author-avatar">
-                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" loading="lazy" />
-                  <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
-                </div>
-                <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
-              </div>
-              <div class="post-stats">
-                <span class="stat-item">
-                  <i class="ri-eye-line"></i>
-                  {{ post.view_count }}
-                </span>
-                <span class="stat-item">
-                  <i class="ri-chat-3-line"></i>
-                  {{ post.comment_count }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 普通帖子（小卡片） -->
-        <div
-          v-for="post in normalPosts"
-          :key="'n-' + post.id"
+          v-for="post in posts"
+          :key="post.id"
           class="post-card standard"
           @click="goToPost(post.id)"
         >
           <div class="card-content">
-            <span class="category-tag" :class="getCategoryClass(post.category)">
-              {{ getCategoryLabel(post.category) }}
-            </span>
+            <div class="card-tags">
+              <span class="category-tag" :class="getCategoryClass(post.category)">
+                {{ getCategoryLabel(post.category) }}
+              </span>
+              <span v-if="post.is_featured" class="featured-tag">
+                <i class="ri-star-fill"></i>
+                精华
+              </span>
+            </div>
             <h3 class="post-title">{{ post.title }}</h3>
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
             <!-- 封面图 -->
@@ -788,7 +763,7 @@ function getEventStyle(event: EventItem) {
         </div>
 
         <!-- Empty State -->
-        <div v-if="posts.length === 0" class="empty-state">
+        <div v-if="posts.length === 0 && pinnedPosts.length === 0" class="empty-state">
           <i class="ri-article-line"></i>
           <p>暂无帖子</p>
           <button class="create-btn" @click="goToCreatePost">
@@ -2008,6 +1983,31 @@ function getEventStyle(event: EventItem) {
 
 .card-content {
   padding: 12px;
+}
+
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.featured-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(230, 162, 60, 0.15);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  color: #B45309;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.featured-tag i {
+  font-size: 11px;
 }
 
 .post-card.standard .post-title {

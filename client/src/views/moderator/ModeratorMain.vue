@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { dialog } from '@/composables/useDialog'
+import { useToast } from '@/composables/useToast'
 import { getPost } from '@/api/post'
 import { getItem } from '@/api/item'
 import { getGuild } from '@/api/guild'
@@ -15,6 +16,7 @@ import {
   reviewPost,
   reviewItem,
   getAllPosts,
+  type PostQueryParams,
   getAllItems,
   deletePostByMod,
   deleteItemByMod,
@@ -41,6 +43,7 @@ import {
   getMetricsHistory,
   getMetricsSummary,
   getMetricsBasic,
+  broadcastSystemMessage,
   type ModeratorStats,
   type ReviewRequest,
   type SafeUser,
@@ -52,6 +55,7 @@ import {
 
 const router = useRouter()
 const userStore = useUserStore()
+const toast = useToast()
 const mounted = ref(false)
 
 // 权限检查
@@ -61,7 +65,14 @@ const isAdmin = computed(() => userStore.isAdmin)
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('review')
 const activeSubTab = ref<'posts' | 'items' | 'guilds' | 'users'>('posts')
-const adminSubTab = ref<'moderators' | 'guilds' | 'sponsors'>('guilds')
+const adminSubTab = ref<'moderators' | 'guilds' | 'sponsors' | 'system'>('guilds')
+
+// 系统通知
+const systemMessage = ref('')
+const systemMessageSending = ref(false)
+const systemMessageMaxLength = 512
+const systemMessageLength = computed(() => systemMessage.value.length)
+const systemMessageTrimmed = computed(() => systemMessage.value.trim())
 
 // 数据
 const stats = ref<ModeratorStats | null>(null)
@@ -83,6 +94,7 @@ const total = ref(0)
 const filterStatus = ref('')
 const filterReviewStatus = ref('')
 const filterKeyword = ref('')
+const filterPostFlag = ref('')
 const filterRole = ref('')
 const filterGuildStatus = ref('')
 const filterSponsorLevel = ref('')
@@ -202,13 +214,22 @@ async function loadPendingItems() {
 async function loadAllPosts() {
   loading.value = true
   try {
-    const res = await getAllPosts({
+    const params: PostQueryParams = {
       page: page.value,
       page_size: pageSize.value,
       status: filterStatus.value || undefined,
       review_status: filterReviewStatus.value || undefined,
       keyword: filterKeyword.value || undefined
-    })
+    }
+    if (filterPostFlag.value === 'pinned') {
+      params.is_pinned = true
+    } else if (filterPostFlag.value === 'featured') {
+      params.is_featured = true
+    } else if (filterPostFlag.value === 'normal') {
+      params.is_pinned = false
+      params.is_featured = false
+    }
+    const res = await getAllPosts(params)
     allPosts.value = res.posts || []
     total.value = res.total
   } catch (error) {
@@ -325,8 +346,11 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
     else if (activeSubTab.value === 'items') loadAllItems()
     else loadAllGuilds()
   } else if (tab === 'admin') {
-    if (adminSubTab.value === 'moderators' || adminSubTab.value === 'sponsors') loadUsers()
-    else loadAllGuilds()
+    if (adminSubTab.value === 'moderators' || adminSubTab.value === 'sponsors') {
+      loadUsers()
+    } else if (adminSubTab.value === 'guilds') {
+      loadAllGuilds()
+    }
   } else if (tab === 'logs') {
     loadActionLogs()
   } else if (tab === 'metrics') {
@@ -350,7 +374,7 @@ function switchSubTab(subTab: 'posts' | 'items' | 'guilds' | 'users') {
   }
 }
 
-function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors') {
+function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors' | 'system') {
   adminSubTab.value = subTab
   page.value = 1
   if (subTab === 'moderators') {
@@ -359,10 +383,40 @@ function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors') {
   } else if (subTab === 'sponsors') {
     filterRole.value = ''
     loadUsers()
+  } else if (subTab === 'system') {
+    filterRole.value = ''
+    filterSponsorLevel.value = ''
   } else {
     filterRole.value = ''
     filterSponsorLevel.value = ''
     loadAllGuilds()
+  }
+}
+
+async function sendSystemMessage() {
+  if (!isAdmin.value) return
+  const content = systemMessageTrimmed.value
+  if (!content) {
+    toast.error('请输入系统通知内容')
+    return
+  }
+
+  const confirmed = await dialog.confirm({
+    title: '发送系统通知',
+    message: '该通知将发送给所有用户，确认继续？',
+    type: 'warning'
+  })
+  if (!confirmed) return
+
+  systemMessageSending.value = true
+  try {
+    const res = await broadcastSystemMessage(content)
+    toast.success(`已发送给 ${res.count} 位用户`)
+    systemMessage.value = ''
+  } catch (error) {
+    toast.error('发送失败: ' + (error as Error).message)
+  } finally {
+    systemMessageSending.value = false
   }
 }
 
@@ -402,7 +456,8 @@ function formatActionType(type: string): string {
     'set_role': '设置角色',
     'set_sponsor': '设置赞助',
     'disable_posts': '禁用帖子',
-    'delete_posts': '删除用户帖子'
+    'delete_posts': '删除用户帖子',
+    'broadcast_notification': '系统通知'
   }
   return map[type] || type
 }
@@ -461,6 +516,12 @@ function formatLogDetails(log: AdminActionLog): string {
     // 影响数量
     if (d.affected_count !== undefined) {
       parts.push(`${d.affected_count} 条`)
+    }
+    if (d.recipient_count !== undefined) {
+      parts.push(`发送 ${d.recipient_count} 人`)
+    }
+    if (d.content_preview) {
+      parts.push(`内容: ${d.content_preview}`)
     }
 
     return parts.length > 0 ? parts.join(' | ') : '-'
@@ -1263,19 +1324,27 @@ function formatBanTime(dateStr: string | null) {
           <i class="ri-user-star-line"></i>
           版主管理
         </button>
-        <button
-          v-if="isAdmin"
-          :class="{ active: adminSubTab === 'sponsors' }"
-          @click="switchAdminSubTab('sponsors')"
-        >
-          <i class="ri-vip-crown-2-line"></i>
-          赞助管理
-        </button>
-        <button
-          :class="{ active: adminSubTab === 'guilds' }"
-          @click="switchAdminSubTab('guilds')"
-        >
-          <i class="ri-team-line"></i>
+          <button
+            v-if="isAdmin"
+            :class="{ active: adminSubTab === 'sponsors' }"
+            @click="switchAdminSubTab('sponsors')"
+          >
+            <i class="ri-vip-crown-2-line"></i>
+            赞助管理
+          </button>
+          <button
+            v-if="isAdmin"
+            :class="{ active: adminSubTab === 'system' }"
+            @click="switchAdminSubTab('system')"
+          >
+            <i class="ri-notification-3-line"></i>
+            系统通知
+          </button>
+          <button
+            :class="{ active: adminSubTab === 'guilds' }"
+            @click="switchAdminSubTab('guilds')"
+          >
+            <i class="ri-team-line"></i>
           公会管理
         </button>
       </div>
@@ -1415,6 +1484,12 @@ function formatBanTime(dateStr: string | null) {
             <option value="approved">已通过</option>
             <option value="rejected">已拒绝</option>
           </select>
+          <select v-model="filterPostFlag" @change="loadAllPosts">
+            <option value="">全部帖子</option>
+            <option value="pinned">置顶</option>
+            <option value="featured">精华</option>
+            <option value="normal">普通</option>
+          </select>
         </div>
         <div v-if="loading" class="loading">
           <i class="ri-loader-4-line loading-spinner"></i>
@@ -1443,6 +1518,9 @@ function formatBanTime(dateStr: string | null) {
             <div class="item-actions">
               <button class="btn-preview" @click="router.push({ name: 'post-detail', params: { id: post.id } })">
                 <i class="ri-eye-line"></i> 查看
+              </button>
+              <button class="btn-edit" @click="router.push({ name: 'post-edit', params: { id: post.id } })">
+                <i class="ri-edit-line"></i> 编辑
               </button>
               <button class="btn-pin" :class="{ active: post.is_pinned }" @click="handlePinPost(post.id, post.is_pinned)">
                 <i class="ri-pushpin-line"></i> {{ post.is_pinned ? '取消置顶' : '置顶' }}
@@ -1724,6 +1802,34 @@ function formatBanTime(dateStr: string | null) {
                 <i class="ri-vip-crown-2-line"></i> 应用
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 管理标签 - 系统通知 -->
+      <div v-if="activeTab === 'admin' && adminSubTab === 'system'" class="content-list anim-item" style="--delay: 4">
+        <div class="item-card system-message-card">
+          <div class="item-header">
+            <span class="item-title">系统通知</span>
+            <span class="system-message-hint">发送给所有用户</span>
+          </div>
+          <textarea
+            v-model="systemMessage"
+            class="system-message-textarea"
+            :maxlength="systemMessageMaxLength"
+            rows="6"
+            placeholder="请输入系统通知内容..."
+          ></textarea>
+          <div class="system-message-actions">
+            <span class="char-count">{{ systemMessageLength }}/{{ systemMessageMaxLength }}</span>
+            <button class="btn-submit" :disabled="systemMessageSending || !systemMessageTrimmed" @click="sendSystemMessage">
+              <i class="ri-send-plane-2-line"></i>
+              {{ systemMessageSending ? '发送中...' : '发送通知' }}
+            </button>
+          </div>
+          <div class="warning-box">
+            <i class="ri-alert-line"></i>
+            <span>系统通知会进入所有用户的消息中心，请确认内容无误。</span>
           </div>
         </div>
       </div>
@@ -3151,6 +3257,25 @@ function formatBanTime(dateStr: string | null) {
   background: #651FFF;
 }
 
+/* 编辑按钮 */
+.btn-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #2F855A;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-edit:hover {
+  background: #276749;
+}
+
 /* 预览弹窗 */
 .preview-overlay {
   z-index: 1001;
@@ -3330,6 +3455,47 @@ function formatBanTime(dateStr: string | null) {
 
 .duration-unit {
   font-size: 14px;
+  color: #8D7B68;
+}
+
+/* 系统通知 */
+.system-message-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.system-message-textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 12px;
+  border: 2px solid #E5D4C1;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #4B3621;
+  background: #FFFDFB;
+  resize: vertical;
+}
+
+.system-message-textarea:focus {
+  outline: none;
+  border-color: #804030;
+}
+
+.system-message-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-message-hint {
+  font-size: 12px;
+  color: #8D7B68;
+}
+
+.char-count {
+  font-size: 12px;
   color: #8D7B68;
 }
 

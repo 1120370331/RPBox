@@ -139,3 +139,14 @@ func (h *Hub) GetOnlineCount() int {
 	defer h.mu.RUnlock()
 	return len(h.clients)
 }
+
+// GetOnlineUserIDs 获取在线用户ID列表
+func (h *Hub) GetOnlineUserIDs() []uint {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	userIDs := make([]uint, 0, len(h.clients))
+	for userID := range h.clients {
+		userIDs = append(userIDs, userID)
+	}
+	return userIDs
+}

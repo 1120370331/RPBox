@@ -235,11 +235,16 @@ func (s *Server) deleteItemImage(c *gin.Context) {
 		return
 	}
 
-	result := database.DB.Where("id = ? AND item_id = ?", imageID, itemID).Delete(&model.ItemImage{})
-	if result.RowsAffected == 0 {
+	var img model.ItemImage
+	if err := database.DB.Where("id = ? AND item_id = ?", imageID, itemID).First(&img).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "图片不存在"})
 		return
 	}
+
+	keys := make(map[string]struct{})
+	collectUploadKeysFromValue(c, img.ImageData, keys)
+	s.deleteUploadKeys(keys)
+	database.DB.Delete(&img)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
