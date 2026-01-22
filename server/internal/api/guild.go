@@ -443,13 +443,22 @@ func (s *Server) listGuildMembers(c *gin.Context) {
 
 	type MemberInfo struct {
 		model.GuildMember
-		Username string `json:"username"`
-		Avatar   string `json:"avatar"`
+		Username  string `json:"username"`
+		Avatar    string `json:"avatar"`
+		NameColor string `json:"name_color"`
+		NameBold  bool   `json:"name_bold"`
 	}
 	result := make([]MemberInfo, len(members))
 	for i, m := range members {
 		user := userMap[m.UserID]
-		result[i] = MemberInfo{GuildMember: m, Username: user.Username, Avatar: user.Avatar}
+		nameColor, nameBold := userDisplayStyle(user)
+		result[i] = MemberInfo{
+			GuildMember: m,
+			Username:    user.Username,
+			Avatar:      user.Avatar,
+			NameColor:   nameColor,
+			NameBold:    nameBold,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"members": result})
@@ -934,16 +943,21 @@ func (s *Server) listGuildApplications(c *gin.Context) {
 	// 组装结果
 	type ApplicationInfo struct {
 		model.GuildApplication
-		Username string `json:"username"`
-		Avatar   string `json:"avatar"`
+		Username  string `json:"username"`
+		Avatar    string `json:"avatar"`
+		NameColor string `json:"name_color"`
+		NameBold  bool   `json:"name_bold"`
 	}
 	result := make([]ApplicationInfo, len(applications))
 	for i, app := range applications {
 		user := userMap[app.UserID]
+		nameColor, nameBold := userDisplayStyle(user)
 		result[i] = ApplicationInfo{
 			GuildApplication: app,
 			Username:         user.Username,
 			Avatar:           user.Avatar,
+			NameColor:        nameColor,
+			NameBold:         nameBold,
 		}
 	}
 

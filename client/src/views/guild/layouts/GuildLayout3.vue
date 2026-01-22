@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Guild, GuildMember } from '@/api/guild'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const props = defineProps<{
   guild: Guild
@@ -126,7 +127,7 @@ function getRoleLabel(role: string): string {
               <img v-if="m.avatar" :src="m.avatar" alt="" />
               <span v-else>{{ m.username?.charAt(0) || '?' }}</span>
             </div>
-            <span class="name">{{ m.username }}</span>
+            <span class="name" :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</span>
           </div>
           <span class="role" :class="m.role">{{ getRoleLabel(m.role) }}</span>
         </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Guild, GuildMember } from '@/api/guild'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const props = defineProps<{
   guild: Guild
@@ -104,7 +105,7 @@ function getRoleLabel(role: string): string {
               <span v-else>{{ m.username?.charAt(0) || '?' }}</span>
             </div>
             <div class="member-info">
-              <div class="member-name">{{ m.username }}</div>
+              <div class="member-name" :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</div>
               <div class="member-role">{{ getRoleLabel(m.role) }}</div>
             </div>
           </div>
@@ -117,7 +118,7 @@ function getRoleLabel(role: string): string {
         <ul class="leaderboard">
           <li v-for="(m, i) in members.slice(0, 3)" :key="m.id">
             <span class="rank" :class="{ gold: i === 0 }">{{ i + 1 }}</span>
-            <span class="name">{{ m.username }}</span>
+            <span class="name" :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</span>
             <span class="score">{{ 2400 - i * 450 }}</span>
           </li>
         </ul>

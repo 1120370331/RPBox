@@ -236,20 +236,25 @@ func (s *Server) listStories(c *gin.Context) {
 		// 组装结果
 		type StoryWithUploader struct {
 			model.Story
-			AddedBy         uint   `json:"added_by"`
-			AddedByUsername string `json:"added_by_username"`
-			AddedByAvatar   string `json:"added_by_avatar"`
+			AddedBy          uint   `json:"added_by"`
+			AddedByUsername  string `json:"added_by_username"`
+			AddedByAvatar    string `json:"added_by_avatar"`
+			AddedByNameColor string `json:"added_by_name_color"`
+			AddedByNameBold  bool   `json:"added_by_name_bold"`
 		}
 
 		result := make([]StoryWithUploader, len(stories))
 		for i, story := range stories {
 			addedBy := addedByMap[story.ID]
 			uploader := userMap[addedBy]
+			nameColor, nameBold := userDisplayStyle(uploader)
 			result[i] = StoryWithUploader{
-				Story:           story,
-				AddedBy:         addedBy,
-				AddedByUsername: uploader.Username,
-				AddedByAvatar:   uploader.Avatar,
+				Story:            story,
+				AddedBy:          addedBy,
+				AddedByUsername:  uploader.Username,
+				AddedByAvatar:    uploader.Avatar,
+				AddedByNameColor: nameColor,
+				AddedByNameBold:  nameBold,
 			}
 		}
 

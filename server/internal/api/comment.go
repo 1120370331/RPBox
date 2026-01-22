@@ -49,16 +49,21 @@ func (s *Server) listComments(c *gin.Context) {
 	// 组装响应
 	type CommentWithAuthor struct {
 		model.Comment
-		AuthorName   string `json:"author_name"`
-		AuthorAvatar string `json:"author_avatar"`
+		AuthorName      string `json:"author_name"`
+		AuthorAvatar    string `json:"author_avatar"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
 	}
 	result := make([]CommentWithAuthor, len(comments))
 	for i, comment := range comments {
 		author := userMap[comment.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
 		result[i] = CommentWithAuthor{
-			Comment:      comment,
-			AuthorName:   author.Username,
-			AuthorAvatar: author.Avatar,
+			Comment:         comment,
+			AuthorName:      author.Username,
+			AuthorAvatar:    author.Avatar,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
 		}
 	}
 

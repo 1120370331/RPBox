@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Guild, GuildMember } from '@/api/guild'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const props = defineProps<{
   guild: Guild
@@ -103,7 +104,7 @@ const guildMaster = computed(() => {
                   <span v-else>{{ guildMaster.username?.charAt(0) }}</span>
                 </div>
                 <div>
-                  <div class="master-name">{{ guildMaster.username }}</div>
+                  <div class="master-name" :style="buildNameStyle(guildMaster?.name_color, guildMaster?.name_bold)">{{ guildMaster.username }}</div>
                   <div class="master-role">会长</div>
                 </div>
               </div>
@@ -161,7 +162,7 @@ const guildMaster = computed(() => {
                 <span v-else>{{ m.username?.charAt(0) }}</span>
               </div>
               <div class="member-details">
-                <h4>{{ m.username }}</h4>
+                <h4 :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</h4>
                 <p>{{ getRoleLabel(m.role) }}</p>
               </div>
               <div class="member-progress">

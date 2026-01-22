@@ -7,11 +7,14 @@ export interface Notification {
   actor_id?: number
   target_type: string
   target_id: number
+  target_post_id?: number
   content: string
   is_read: boolean
   created_at: string
   actor_name?: string
   actor_avatar?: string
+  actor_name_color?: string
+  actor_name_bold?: boolean
 }
 
 export interface NotificationsResponse {

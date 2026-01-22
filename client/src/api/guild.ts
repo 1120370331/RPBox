@@ -35,6 +35,8 @@ export interface GuildMember {
   username: string
   role: 'owner' | 'admin' | 'member'
   joined_at: string
+  name_color?: string
+  name_bold?: boolean
 }
 
 export interface CreateGuildRequest {
@@ -110,6 +112,8 @@ export interface GuildStoryWithUploader {
   added_by: number
   added_by_username: string
   added_by_avatar: string
+  added_by_name_color?: string
+  added_by_name_bold?: boolean
 }
 
 export async function listGuildStories(guildId: number, addedBy?: number): Promise<{ stories: GuildStoryWithUploader[] }> {
@@ -168,6 +172,8 @@ export interface GuildApplication {
   // 扩展字段
   username?: string
   avatar?: string
+  name_color?: string
+  name_bold?: boolean
   guild_name?: string
   guild_icon?: string
 }

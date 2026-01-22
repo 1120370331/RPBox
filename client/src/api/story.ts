@@ -18,6 +18,8 @@ export interface Story {
   added_by?: number
   added_by_username?: string
   added_by_avatar?: string
+  added_by_name_color?: string
+  added_by_name_bold?: boolean
   created_at: string
   updated_at: string
 }

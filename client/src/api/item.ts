@@ -11,6 +11,8 @@ export interface Item {
   author_id: number
   author_username?: string  // 作者用户名
   author_avatar?: string    // 作者头像
+  author_name_color?: string
+  author_name_bold?: boolean
   name: string
   type: 'item' | 'campaign' | 'artwork'  // item=道具, campaign=剧本, artwork=画作
   icon: string
@@ -51,6 +53,8 @@ export interface ItemComment {
   created_at: string
   updated_at: string
   username?: string
+  name_color?: string
+  name_bold?: boolean
 }
 
 export interface CreateItemRequest {

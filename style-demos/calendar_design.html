@@ -1,0 +1,384 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Calendar - Option 2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    },
+                    colors: {
+                        sidebar: '#4B3621',
+                        main: '#EED9C4',
+                        panel: '#FFFFFF',
+                        primary: '#804030',
+                        textMain: '#2C1810',
+                        textLight: '#FBF5EF',
+                        textSecondary: '#8C7B70',
+                        accent: '#D4A373',
+                        border: '#E8DCCF',
+                    },
+                    boxShadow: {
+                        'soft-sm': '0 2px 8px rgba(75,54,33,0.05)',
+                        'soft-md': '0 4px 20px rgba(75,54,33,0.08)',
+                        'soft-lg': '0 12px 40px rgba(75,54,33,0.12)',
+                    },
+                    borderRadius: {
+                        'mixed-xl': '24px 4px 24px 4px', // Special mixed radius
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* CSS Variables Mapping */
+        :root {
+            --color-primary: #804030;
+            --color-text-main: #2C1810;
+        }
+
+        body {
+            background-color: #EED9C4; /* --color-main-bg */
+            color: #2C1810; /* --color-text-main */
+        }
+
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #D4A373;
+            border-radius: 3px;
+        }
+
+        /* Loading Spinner */
+        .loader {
+            border: 3px solid rgba(128, 64, 48, 0.1);
+            border-left-color: #804030;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Event Hover Effect */
+        .event-item {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .event-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(128, 64, 48, 0.15);
+        }
+        
+        /* Grid Cell Hover */
+        .calendar-day:hover {
+            background-color: rgba(248, 245, 242, 0.5);
+        }
+
+        /* Fade Transition */
+        .fade-enter {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        .fade-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex items-center justify-center font-sans">
+
+    <!-- Main Calendar Container -->
+    <!-- Design Note: Using 'rounded-tr-[3rem] rounded-bl-[3rem]' for that mixed corner aesthetic -->
+    <div class="relative w-full max-w-6xl bg-panel shadow-soft-lg rounded-tl-sm rounded-tr-[3rem] rounded-br-sm rounded-bl-[3rem] overflow-hidden border border-white/60">
+        
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex items-center justify-center transition-opacity duration-300 opacity-0 pointer-events-none">
+            <div class="flex flex-col items-center gap-3">
+                <div class="loader"></div>
+                <span class="text-sm font-medium text-primary tracking-wide">SYNCING EVENTS...</span>
+            </div>
+        </div>
+
+        <!-- Header Section -->
+        <div class="px-8 py-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-border bg-gradient-to-r from-white to-[#FAF6F3]">
+            
+            <!-- Month Title & Year -->
+            <div class="mb-6 md:mb-0">
+                <h2 class="text-sm font-bold text-accent tracking-widest uppercase mb-1">Calendar</h2>
+                <div class="flex items-baseline gap-3">
+                    <h1 id="currentMonth" class="text-4xl md:text-5xl font-serif font-bold text-textMain leading-none">
+                        <!-- JS Injected -->
+                    </h1>
+                    <span id="currentYear" class="text-2xl font-serif text-textSecondary font-light">
+                        <!-- JS Injected -->
+                    </span>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex items-center gap-3 bg-white p-1.5 rounded-full border border-border shadow-soft-sm">
+                <button onclick="changeMonth(-1)" class="w-10 h-10 rounded-full flex items-center justify-center text-textMain hover:bg-main hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+                
+                <button onclick="goToToday()" class="px-4 py-2 text-sm font-semibold text-textMain hover:text-primary transition-colors border-x border-border/50 mx-1">
+                    Today
+                </button>
+                
+                <button onclick="changeMonth(1)" class="w-10 h-10 rounded-full flex items-center justify-center text-textMain hover:bg-main hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Calendar Body -->
+        <div class="bg-white">
+            <!-- Weekday Headers -->
+            <div class="grid grid-cols-7 border-b border-border">
+                <div class="py-4 text-center text-xs font-semibold text-accent uppercase tracking-widest">Sun</div>
+                <div class="py-4 text-center text-xs font-semibold text-accent uppercase tracking-widest">Mon</div>
+                <div class="py-4 text-center text-xs font-semibold text-accent uppercase tracking-widest">Tue</div>
+                <div class="py-4 text-center text-xs font-semibold text-accent uppercase tracking-widest">Wed</div>
+                <div class="py-4 text-center text-xs font-semibold text-accent uppercase tracking-widest">Thu</div>
+                <div class="py-4 text-center text-xs font-semibold text-accent uppercase tracking-widest">Fri</div>
+                <div class="py-4 text-center text-xs font-semibold text-accent uppercase tracking-widest">Sat</div>
+            </div>
+
+            <!-- Days Grid -->
+            <div id="calendarGrid" class="grid grid-cols-7 auto-rows-fr">
+                <!-- JS will inject cells here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- State Management ---
+        let currentDate = new Date();
+        let events = []; // Store fetched events
+
+        // --- Mock Data Generator (Simulating API) ---
+        function generateMockEvents(year, month) {
+            const types = ['server', 'guild'];
+            const titles = ['Raid Night', 'Town Hall', 'PvP Tournament', 'Guild Meeting', 'Server Maintenance', 'Community Party', 'Boss Rush'];
+            const mockData = [];
+            
+            // Generate 15 random events for the month
+            for(let i=0; i<15; i++) {
+                const day = Math.floor(Math.random() * 28) + 1;
+                const date = new Date(year, month, day);
+                const type = types[Math.floor(Math.random() * types.length)];
+                
+                mockData.push({
+                    id: i,
+                    title: titles[Math.floor(Math.random() * titles.length)],
+                    event_start_time: date.toISOString(),
+                    event_type: type
+                });
+            }
+            // Sort by date
+            return mockData.sort((a, b) => new Date(a.event_start_time) - new Date(b.event_start_time));
+        }
+
+        // --- API Simulation ---
+        async function listEvents(start, end) {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+            
+            // Simulate network delay
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const year = currentDate.getFullYear();
+                    const month = currentDate.getMonth();
+                    events = generateMockEvents(year, month);
+                    
+                    overlay.classList.add('opacity-0', 'pointer-events-none');
+                    resolve(events);
+                }, 600);
+            });
+        }
+
+        // --- Calendar Logic ---
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            // Update Header
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            document.getElementById('currentMonth').innerText = monthNames[month];
+            document.getElementById('currentYear').innerText = year;
+
+            // Date Calculations
+            const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0-6
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const daysInPrevMonth = new Date(year, month, 0).getDate();
+            
+            // Grid Generation (6 rows * 7 cols = 42 cells)
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '';
+            
+            let dayCount = 1;
+            let nextMonthDayCount = 1;
+
+            for (let i = 0; i < 42; i++) {
+                const cell = document.createElement('div');
+                // Base styles for cell - tall, sharp borders for grid look
+                cell.className = "calendar-day min-h-[130px] p-2 border-b border-r border-border relative flex flex-col group transition-colors duration-200";
+                
+                // Remove right border for last column
+                if ((i + 1) % 7 === 0) cell.classList.remove('border-r');
+                // Remove bottom border for last row (roughly)
+                if (i >= 35) cell.classList.remove('border-b');
+
+                let dateObj = null;
+                let isCurrentMonth = false;
+
+                // 1. Previous Month Days
+                if (i < firstDayOfMonth) {
+                    const prevDay = daysInPrevMonth - (firstDayOfMonth - 1 - i);
+                    cell.innerHTML = `<span class="text-textSecondary/40 text-sm font-medium p-1 block">${prevDay}</span>`;
+                    cell.classList.add('bg-[#FAF8F6]/50'); // Subtle shading for non-current days
+                    dateObj = new Date(year, month - 1, prevDay);
+                } 
+                // 2. Current Month Days
+                else if (dayCount <= daysInMonth) {
+                    isCurrentMonth = true;
+                    dateObj = new Date(year, month, dayCount);
+                    
+                    // Check if Today
+                    const today = new Date();
+                    const isToday = dayCount === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                    
+                    let dayHtml = `<span class="text-sm font-semibold p-1 block mb-1 inline-flex items-center justify-center 
+                        ${isToday ? 'bg-primary text-white w-7 h-7 rounded-full shadow-md' : 'text-textMain'}">
+                        ${dayCount}
+                    </span>`;
+                    
+                    cell.innerHTML = dayHtml;
+                    
+                    if(isToday) cell.classList.add('bg-white');
+
+                    // Filter events for this day
+                    const dayEvents = events.filter(e => {
+                        const eDate = new Date(e.event_start_time);
+                        return eDate.getDate() === dayCount && eDate.getMonth() === month && eDate.getFullYear() === year;
+                    });
+
+                    // Render Events
+                    renderEventsInCell(cell, dayEvents);
+
+                    dayCount++;
+                } 
+                // 3. Next Month Days
+                else {
+                    cell.innerHTML = `<span class="text-textSecondary/40 text-sm font-medium p-1 block">${nextMonthDayCount}</span>`;
+                    cell.classList.add('bg-[#FAF8F6]/50');
+                    dateObj = new Date(year, month + 1, nextMonthDayCount);
+                    nextMonthDayCount++;
+                }
+
+                grid.appendChild(cell);
+                
+                // Add fade-in animation staggered
+                cell.style.animation = `fadeIn 0.3s ease-out ${i * 0.01}s backwards`;
+            }
+        }
+
+        function renderEventsInCell(cellContainer, dayEvents) {
+            const container = document.createElement('div');
+            container.className = "flex flex-col gap-1.5 w-full mt-1";
+
+            const maxDisplay = 2;
+            const displayEvents = dayEvents.slice(0, maxDisplay);
+            const remaining = dayEvents.length - maxDisplay;
+
+            displayEvents.forEach(evt => {
+                const el = document.createElement('a');
+                el.href = `/post/${evt.id}`; // Navigation Logic
+                el.className = "event-item block text-xs truncate px-2.5 py-1.5 rounded-sm border-l-[3px] font-medium leading-tight cursor-pointer relative overflow-hidden";
+                
+                // Visual distinctions based on type
+                if (evt.event_type === 'server') {
+                    // Server: Primary color theme
+                    el.classList.add('bg-primary/5', 'text-primary', 'border-primary', 'hover:bg-primary/10');
+                } else {
+                    // Guild: Accent/Gold theme
+                    el.classList.add('bg-accent/10', 'text-[#8C5E35]', 'border-accent', 'hover:bg-accent/20');
+                }
+                
+                el.innerHTML = `
+                    <span class="relative z-10">${evt.title}</span>
+                `;
+                container.appendChild(el);
+            });
+
+            if (remaining > 0) {
+                const more = document.createElement('div');
+                more.className = "text-[10px] font-bold text-textSecondary px-2 mt-0.5 cursor-pointer hover:text-primary transition-colors";
+                more.innerText = `+${remaining} more`;
+                container.appendChild(more);
+            }
+
+            cellContainer.appendChild(container);
+        }
+
+        // --- Controls ---
+        async function changeMonth(offset) {
+            currentDate.setMonth(currentDate.getMonth() + offset);
+            await loadAndRender();
+        }
+
+        async function goToToday() {
+            currentDate = new Date();
+            await loadAndRender();
+        }
+
+        async function loadAndRender() {
+            // Calculate start/end dates for API (Simplified)
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const start = new Date(year, month, 1).toISOString();
+            const end = new Date(year, month + 1, 0).toISOString();
+
+            await listEvents(start, end);
+            renderCalendar();
+        }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAndRender();
+        });
+
+        // Add keyframe for cell animation
+        const styleSheet = document.createElement("style");
+        styleSheet.innerText = `
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(5px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `;
+        document.head.appendChild(styleSheet);
+
+    </script>
+</body>
+</html>

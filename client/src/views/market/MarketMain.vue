@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { listItems, type Item, getImageUrl } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import LazyBgImage from '@/components/LazyBgImage.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const mounted = ref(false)
@@ -244,7 +245,7 @@ watch([sortBy], () => {
               <span v-else class="author-avatar placeholder">
                 {{ (item.author_username || 'U').charAt(0) }}
               </span>
-              <span class="author-name">{{ item.author_username || '匿名' }}</span>
+              <span class="author-name" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || '匿名' }}</span>
             </div>
           </div>
           <p class="desc">{{ item.description || '暂无描述' }}</p>

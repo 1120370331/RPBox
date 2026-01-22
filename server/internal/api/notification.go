@@ -35,9 +35,13 @@ func (s *Server) listNotifications(c *gin.Context) {
 
 	// 获取通知相关的用户信息（actor）
 	actorIDs := make([]uint, 0)
+	commentIDs := make([]uint, 0)
 	for _, notif := range notifications {
 		if notif.ActorID != nil {
 			actorIDs = append(actorIDs, *notif.ActorID)
+		}
+		if notif.TargetType == "comment" {
+			commentIDs = append(commentIDs, notif.TargetID)
 		}
 	}
 
@@ -50,21 +54,41 @@ func (s *Server) listNotifications(c *gin.Context) {
 		userMap[u.ID] = u
 	}
 
+	commentPostMap := make(map[uint]uint)
+	if len(commentIDs) > 0 {
+		var commentRows []model.Comment
+		database.DB.Select("id", "post_id").Where("id IN ?", commentIDs).Find(&commentRows)
+		for _, c := range commentRows {
+			commentPostMap[c.ID] = c.PostID
+		}
+	}
+
 	// 组装响应
 	type NotificationWithActor struct {
 		model.Notification
-		ActorName   string `json:"actor_name,omitempty"`
-		ActorAvatar string `json:"actor_avatar,omitempty"`
+		ActorName      string `json:"actor_name,omitempty"`
+		ActorAvatar    string `json:"actor_avatar,omitempty"`
+		ActorNameColor string `json:"actor_name_color,omitempty"`
+		ActorNameBold  bool   `json:"actor_name_bold,omitempty"`
+		TargetPostID   uint   `json:"target_post_id,omitempty"`
 	}
 	result := make([]NotificationWithActor, len(notifications))
 	for i, notif := range notifications {
 		item := NotificationWithActor{
 			Notification: notif,
 		}
+		if notif.TargetType == "comment" {
+			if postID, ok := commentPostMap[notif.TargetID]; ok {
+				item.TargetPostID = postID
+			}
+		}
 		if notif.ActorID != nil {
 			if actor, ok := userMap[*notif.ActorID]; ok {
+				nameColor, nameBold := userDisplayStyle(actor)
 				item.ActorName = actor.Username
 				item.ActorAvatar = actor.Avatar
+				item.ActorNameColor = nameColor
+				item.ActorNameBold = nameBold
 			}
 		}
 		result[i] = item

@@ -8,6 +8,7 @@ import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import LazyBgImage from '@/components/LazyBgImage.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
@@ -366,7 +367,7 @@ onMounted(loadGuild)
                     <span v-else>{{ m.username?.charAt(0) || '?' }}</span>
                   </div>
                   <div class="info">
-                    <span class="name">{{ m.username }}</span>
+                    <span class="name" :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</span>
                     <span class="role" :class="m.role">{{ getRoleLabel(m.role) }}</span>
                   </div>
                 </div>

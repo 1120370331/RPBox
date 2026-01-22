@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { POST_CATEGORIES } from '@/api/post'
 import { useUserStore } from '@/stores/user'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -92,7 +93,7 @@ function getCategoryLabel(category: string) {
                 <span v-else>{{ userStore.user?.username?.charAt(0) || 'U' }}</span>
               </div>
               <div class="author-info">
-                <h4 class="author-name">{{ userStore.user?.username || '未知用户' }}</h4>
+                <h4 class="author-name" :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || '未知用户' }}</h4>
                 <span class="post-date">{{ formatDate() }}</span>
               </div>
             </div>

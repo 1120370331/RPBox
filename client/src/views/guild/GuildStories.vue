@@ -7,6 +7,7 @@ import { listGuildTags, listTags, type Tag } from '@/api/tag'
 import { useDialog } from '@/composables/useDialog'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const { confirm, alert } = useDialog()
 
@@ -425,7 +426,7 @@ onMounted(async () => {
               <img v-if="story.added_by_avatar" :src="story.added_by_avatar" alt="" loading="lazy" />
               <span v-else>{{ story.added_by_username?.charAt(0) || '?' }}</span>
             </div>
-            <span class="uploader-name">{{ story.added_by_username }}</span>
+            <span class="uploader-name" :style="buildNameStyle(story.added_by_name_color, story.added_by_name_bold)">{{ story.added_by_username }}</span>
           </span>
           <button v-if="isAdmin" class="remove-archive-btn" @click.stop="handleRemoveArchive(story.id)">
             <i class="ri-close-circle-line"></i>

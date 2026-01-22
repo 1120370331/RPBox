@@ -166,14 +166,17 @@ func (s *Server) listPosts(c *gin.Context) {
 	// 组装响应
 	type PostWithAuthor struct {
 		model.Post
-		AuthorName    string `json:"author_name"`
-		AuthorAvatar  string `json:"author_avatar"`
-		AuthorRole    string `json:"author_role"`
-		CoverImageURL string `json:"cover_image_url"`
+		AuthorName      string `json:"author_name"`
+		AuthorAvatar    string `json:"author_avatar"`
+		AuthorRole      string `json:"author_role"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
+		CoverImageURL   string `json:"cover_image_url"`
 	}
 	result := make([]PostWithAuthor, len(posts))
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
 		// 构造封面图 URL：宽度 600，质量 80
 		// 只有确认有封面图才返回 URL
 		coverURL := ""
@@ -185,11 +188,13 @@ func (s *Server) listPosts(c *gin.Context) {
 			p.CoverImageUpdatedAt = &t
 		}
 		result[i] = PostWithAuthor{
-			Post:          p,
-			AuthorName:    author.Username,
-			AuthorAvatar:  author.Avatar,
-			AuthorRole:    author.Role,
-			CoverImageURL: coverURL,
+			Post:            p,
+			AuthorName:      author.Username,
+			AuthorAvatar:    author.Avatar,
+			AuthorRole:      author.Role,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
+			CoverImageURL:   coverURL,
 		}
 	}
 
@@ -344,6 +349,7 @@ func (s *Server) getPost(c *gin.Context) {
 	// 获取作者信息
 	var author model.User
 	database.DB.First(&author, post.AuthorID)
+	nameColor, nameBold := userDisplayStyle(author)
 
 	// 获取标签
 	var postTags []model.PostTag
@@ -369,12 +375,14 @@ func (s *Server) getPost(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"post":          post,
-		"author_name":   author.Username,
-		"author_avatar": author.Avatar,
-		"tags":          tags,
-		"liked":         liked,
-		"favorited":     favorited,
+		"post":              post,
+		"author_name":       author.Username,
+		"author_avatar":     author.Avatar,
+		"author_name_color": nameColor,
+		"author_name_bold":  nameBold,
+		"tags":              tags,
+		"liked":             liked,
+		"favorited":         favorited,
 	})
 }
 
@@ -816,15 +824,18 @@ func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 
 	type PostWithAuthor struct {
 		model.Post
-		AuthorName    string `json:"author_name"`
-		AuthorAvatar  string `json:"author_avatar"`
-		AuthorRole    string `json:"author_role"`
-		CoverImageURL string `json:"cover_image_url"`
+		AuthorName      string `json:"author_name"`
+		AuthorAvatar    string `json:"author_avatar"`
+		AuthorRole      string `json:"author_role"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
+		CoverImageURL   string `json:"cover_image_url"`
 	}
 
 	result := make([]PostWithAuthor, 0, len(filtered))
 	for _, p := range filtered {
 		author := userMap[p.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
 		coverURL := ""
 		if hasCoverMap[p.ID] {
 			coverURL = fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80", p.ID)
@@ -834,11 +845,13 @@ func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 			p.CoverImageUpdatedAt = &t
 		}
 		result = append(result, PostWithAuthor{
-			Post:          p,
-			AuthorName:    author.Username,
-			AuthorAvatar:  author.Avatar,
-			AuthorRole:    author.Role,
-			CoverImageURL: coverURL,
+			Post:            p,
+			AuthorName:      author.Username,
+			AuthorAvatar:    author.Avatar,
+			AuthorRole:      author.Role,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
+			CoverImageURL:   coverURL,
 		})
 	}
 
@@ -897,8 +910,10 @@ func (s *Server) listEvents(c *gin.Context) {
 	// 获取作者和公会信息
 	type EventItem struct {
 		model.Post
-		AuthorName string `json:"author_name"`
-		GuildName  string `json:"guild_name,omitempty"`
+		AuthorName      string `json:"author_name"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
+		GuildName       string `json:"guild_name,omitempty"`
 	}
 
 	// 收集ID
@@ -912,12 +927,12 @@ func (s *Server) listEvents(c *gin.Context) {
 	}
 
 	// 查询用户名
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	if len(authorIDs) > 0 {
 		var users []model.User
 		database.DB.Where("id IN ?", authorIDs).Find(&users)
 		for _, u := range users {
-			userMap[u.ID] = u.Username
+			userMap[u.ID] = u
 		}
 	}
 
@@ -934,7 +949,14 @@ func (s *Server) listEvents(c *gin.Context) {
 	// 组装结果
 	result := make([]EventItem, len(posts))
 	for i, p := range posts {
-		item := EventItem{Post: p, AuthorName: userMap[p.AuthorID]}
+		author := userMap[p.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
+		item := EventItem{
+			Post:            p,
+			AuthorName:      author.Username,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
+		}
 		if p.GuildID != nil {
 			item.GuildName = guildMap[*p.GuildID]
 		}

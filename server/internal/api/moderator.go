@@ -78,18 +78,27 @@ func (s *Server) listPendingPosts(c *gin.Context) {
 	if len(authorIDs) > 0 {
 		database.DB.Where("id IN ?", authorIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	type PostWithAuthor struct {
 		model.Post
-		AuthorName string `json:"author_name"`
+		AuthorName      string `json:"author_name"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
 	}
 	result := make([]PostWithAuthor, len(posts))
 	for i, p := range posts {
-		result[i] = PostWithAuthor{Post: p, AuthorName: userMap[p.AuthorID]}
+		author := userMap[p.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
+		result[i] = PostWithAuthor{
+			Post:            p,
+			AuthorName:      author.Username,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"posts": result, "total": total})
@@ -157,19 +166,24 @@ func (s *Server) listPendingEdits(c *gin.Context) {
 	// 获取原帖子和作者信息
 	type EditWithInfo struct {
 		model.PostEditRequest
-		AuthorName    string `json:"author_name"`
-		OriginalTitle string `json:"original_title"`
+		AuthorName      string `json:"author_name"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
+		OriginalTitle   string `json:"original_title"`
 	}
 
 	result := make([]EditWithInfo, len(edits))
 	for i, edit := range edits {
 		var user model.User
-		database.DB.Select("username").First(&user, edit.AuthorID)
+		database.DB.First(&user, edit.AuthorID)
+		nameColor, nameBold := userDisplayStyle(user)
 		var post model.Post
 		database.DB.Select("title").First(&post, edit.PostID)
 		result[i] = EditWithInfo{
 			PostEditRequest: edit,
 			AuthorName:      user.Username,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
 			OriginalTitle:   post.Title,
 		}
 	}
@@ -257,18 +271,27 @@ func (s *Server) listPendingItems(c *gin.Context) {
 	if len(authorIDs) > 0 {
 		database.DB.Where("id IN ?", authorIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	type ItemWithAuthor struct {
 		model.Item
-		AuthorName string `json:"author_name"`
+		AuthorName      string `json:"author_name"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
 	}
 	result := make([]ItemWithAuthor, len(items))
 	for i, item := range items {
-		result[i] = ItemWithAuthor{Item: item, AuthorName: userMap[item.AuthorID]}
+		author := userMap[item.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
+		result[i] = ItemWithAuthor{
+			Item:            item,
+			AuthorName:      author.Username,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"items": result, "total": total})
@@ -336,19 +359,24 @@ func (s *Server) listPendingItemEdits(c *gin.Context) {
 	// 获取原道具和作者信息
 	type EditWithInfo struct {
 		model.ItemPendingEdit
-		AuthorName   string `json:"author_name"`
-		OriginalName string `json:"original_name"`
+		AuthorName      string `json:"author_name"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
+		OriginalName    string `json:"original_name"`
 	}
 
 	result := make([]EditWithInfo, len(edits))
 	for i, edit := range edits {
 		var user model.User
-		database.DB.Select("username").First(&user, edit.AuthorID)
+		database.DB.First(&user, edit.AuthorID)
+		nameColor, nameBold := userDisplayStyle(user)
 		var item model.Item
 		database.DB.Select("name").First(&item, edit.ItemID)
 		result[i] = EditWithInfo{
 			ItemPendingEdit: edit,
 			AuthorName:      user.Username,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
 			OriginalName:    item.Name,
 		}
 	}
@@ -448,18 +476,27 @@ func (s *Server) listAllPosts(c *gin.Context) {
 	if len(authorIDs) > 0 {
 		database.DB.Where("id IN ?", authorIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	type PostWithAuthor struct {
 		model.Post
-		AuthorName string `json:"author_name"`
+		AuthorName      string `json:"author_name"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
 	}
 	result := make([]PostWithAuthor, len(posts))
 	for i, p := range posts {
-		result[i] = PostWithAuthor{Post: p, AuthorName: userMap[p.AuthorID]}
+		author := userMap[p.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
+		result[i] = PostWithAuthor{
+			Post:            p,
+			AuthorName:      author.Username,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"posts": result, "total": total})
@@ -601,18 +638,27 @@ func (s *Server) listAllItems(c *gin.Context) {
 	if len(authorIDs) > 0 {
 		database.DB.Where("id IN ?", authorIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	type ItemWithAuthor struct {
 		model.Item
-		AuthorName string `json:"author_name"`
+		AuthorName      string `json:"author_name"`
+		AuthorNameColor string `json:"author_name_color"`
+		AuthorNameBold  bool   `json:"author_name_bold"`
 	}
 	result := make([]ItemWithAuthor, len(items))
 	for i, item := range items {
-		result[i] = ItemWithAuthor{Item: item, AuthorName: userMap[item.AuthorID]}
+		author := userMap[item.AuthorID]
+		nameColor, nameBold := userDisplayStyle(author)
+		result[i] = ItemWithAuthor{
+			Item:            item,
+			AuthorName:      author.Username,
+			AuthorNameColor: nameColor,
+			AuthorNameBold:  nameBold,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"items": result, "total": total})
@@ -729,18 +775,27 @@ func (s *Server) listPendingGuilds(c *gin.Context) {
 	if len(ownerIDs) > 0 {
 		database.DB.Where("id IN ?", ownerIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	type GuildWithOwner struct {
 		model.Guild
-		OwnerName string `json:"owner_name"`
+		OwnerName      string `json:"owner_name"`
+		OwnerNameColor string `json:"owner_name_color"`
+		OwnerNameBold  bool   `json:"owner_name_bold"`
 	}
 	result := make([]GuildWithOwner, len(guilds))
 	for i, g := range guilds {
-		result[i] = GuildWithOwner{Guild: g, OwnerName: userMap[g.OwnerID]}
+		owner := userMap[g.OwnerID]
+		nameColor, nameBold := userDisplayStyle(owner)
+		result[i] = GuildWithOwner{
+			Guild:          g,
+			OwnerName:      owner.Username,
+			OwnerNameColor: nameColor,
+			OwnerNameBold:  nameBold,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": result, "total": total})
@@ -821,18 +876,27 @@ func (s *Server) listAllGuilds(c *gin.Context) {
 	if len(ownerIDs) > 0 {
 		database.DB.Where("id IN ?", ownerIDs).Find(&users)
 	}
-	userMap := make(map[uint]string)
+	userMap := make(map[uint]model.User)
 	for _, u := range users {
-		userMap[u.ID] = u.Username
+		userMap[u.ID] = u
 	}
 
 	type GuildWithOwner struct {
 		model.Guild
-		OwnerName string `json:"owner_name"`
+		OwnerName      string `json:"owner_name"`
+		OwnerNameColor string `json:"owner_name_color"`
+		OwnerNameBold  bool   `json:"owner_name_bold"`
 	}
 	result := make([]GuildWithOwner, len(guilds))
 	for i, g := range guilds {
-		result[i] = GuildWithOwner{Guild: g, OwnerName: userMap[g.OwnerID]}
+		owner := userMap[g.OwnerID]
+		nameColor, nameBold := userDisplayStyle(owner)
+		result[i] = GuildWithOwner{
+			Guild:          g,
+			OwnerName:      owner.Username,
+			OwnerNameColor: nameColor,
+			OwnerNameBold:  nameBold,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": result, "total": total})
@@ -983,7 +1047,59 @@ func (s *Server) listActionLogs(c *gin.Context) {
 	var logs []model.AdminActionLog
 	query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&logs)
 
-	c.JSON(http.StatusOK, gin.H{"logs": logs, "total": total})
+	userIDs := make(map[uint]struct{})
+	for _, log := range logs {
+		if log.OperatorID != 0 {
+			userIDs[log.OperatorID] = struct{}{}
+		}
+		if log.TargetType == "user" && log.TargetID != 0 {
+			userIDs[log.TargetID] = struct{}{}
+		}
+	}
+
+	ids := make([]uint, 0, len(userIDs))
+	for id := range userIDs {
+		ids = append(ids, id)
+	}
+
+	userMap := make(map[uint]model.User)
+	if len(ids) > 0 {
+		var users []model.User
+		database.DB.Where("id IN ?", ids).Find(&users)
+		for _, u := range users {
+			userMap[u.ID] = u
+		}
+	}
+
+	type LogWithStyle struct {
+		model.AdminActionLog
+		OperatorNameColor string `json:"operator_name_color"`
+		OperatorNameBold  bool   `json:"operator_name_bold"`
+		TargetNameColor   string `json:"target_name_color,omitempty"`
+		TargetNameBold    bool   `json:"target_name_bold,omitempty"`
+	}
+
+	result := make([]LogWithStyle, len(logs))
+	for i, log := range logs {
+		operator := userMap[log.OperatorID]
+		operatorColor, operatorBold := userDisplayStyle(operator)
+		var targetColor string
+		var targetBold bool
+		if log.TargetType == "user" {
+			if target, ok := userMap[log.TargetID]; ok {
+				targetColor, targetBold = userDisplayStyle(target)
+			}
+		}
+		result[i] = LogWithStyle{
+			AdminActionLog:    log,
+			OperatorNameColor: operatorColor,
+			OperatorNameBold:  operatorBold,
+			TargetNameColor:   targetColor,
+			TargetNameBold:    targetBold,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"logs": result, "total": total})
 }
 
 // ========== Metrics 统计 ==========

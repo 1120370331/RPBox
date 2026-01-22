@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/rpbox/server/internal/api"
+	"github.com/rpbox/server/internal/backup"
 	"github.com/rpbox/server/internal/config"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/pkg/auth"
@@ -23,6 +24,9 @@ func main() {
 
 	// 初始化JWT
 	auth.Init(cfg.JWT.Secret)
+
+	// 启动定时备份
+	backup.Start(cfg)
 
 	// 启动服务器
 	server := api.NewServer(cfg)

@@ -12,12 +12,12 @@ const currentDate = ref(new Date())
 const currentYear = computed(() => currentDate.value.getFullYear())
 const currentMonth = computed(() => currentDate.value.getMonth())
 
-// 月份名称
-const monthNames = ['一月', '二月', '三月', '四月', '五月', '六月',
-                    '七月', '八月', '九月', '十月', '十一月', '十二月']
+// 月份名称 - 英文
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December']
 
-// 星期名称
-const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+// 星期名称 - 英文缩写
+const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 // 获取当月第一天是星期几
 const firstDayOfMonth = computed(() => {
@@ -106,12 +106,6 @@ function viewEvent(event: EventItem) {
   router.push({ name: 'post-detail', params: { id: event.id } })
 }
 
-// 格式化时间
-function formatTime(dateStr: string) {
-  const date = new Date(dateStr)
-  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
-}
-
 onMounted(() => {
   loadEvents()
 })
@@ -119,32 +113,47 @@ onMounted(() => {
 
 <template>
   <div class="event-calendar">
+    <!-- Loading Overlay -->
+    <div v-if="loading" class="loading-overlay">
+      <div class="loader"></div>
+      <span class="loading-text">SYNCING EVENTS...</span>
+    </div>
+
+    <!-- Header Section -->
     <div class="calendar-header">
+      <!-- Month Title & Year -->
       <div class="header-left">
-        <h3 class="calendar-title">
-          <i class="ri-calendar-event-line"></i>
-          活动日历
-        </h3>
+        <h2 class="calendar-label">Calendar</h2>
+        <div class="month-year">
+          <h1 class="current-month">{{ monthNames[currentMonth] }}</h1>
+          <span class="current-year">{{ currentYear }}</span>
+        </div>
       </div>
-      <div class="header-center">
+
+      <!-- Controls -->
+      <div class="header-controls">
         <button class="nav-btn" @click="prevMonth">
-          <i class="ri-arrow-left-s-line"></i>
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+          </svg>
         </button>
-        <span class="current-month">{{ currentYear }}年 {{ monthNames[currentMonth] }}</span>
+        <button class="today-btn" @click="goToToday">Today</button>
         <button class="nav-btn" @click="nextMonth">
-          <i class="ri-arrow-right-s-line"></i>
+          <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
         </button>
-      </div>
-      <div class="header-right">
-        <button class="today-btn" @click="goToToday">今天</button>
       </div>
     </div>
 
+    <!-- Calendar Body -->
     <div class="calendar-body">
+      <!-- Weekday Headers -->
       <div class="weekday-header">
         <div v-for="day in weekDays" :key="day" class="weekday">{{ day }}</div>
       </div>
 
+      <!-- Days Grid -->
       <div class="calendar-grid">
         <div
           v-for="(day, index) in calendarDays"
@@ -152,229 +161,344 @@ onMounted(() => {
           class="calendar-day"
           :class="{
             'other-month': !day.isCurrentMonth,
-            'today': day.isCurrentMonth && isToday(day.date),
-            'has-events': day.events.length > 0
+            'is-today': day.isCurrentMonth && isToday(day.date)
           }"
+          :style="{ animationDelay: `${index * 10}ms` }"
         >
-          <span class="day-number">{{ day.date }}</span>
+          <span
+            class="day-number"
+            :class="{ 'today-badge': day.isCurrentMonth && isToday(day.date) }"
+          >{{ day.date }}</span>
+
           <div v-if="day.events.length > 0" class="day-events">
-            <div
+            <a
               v-for="event in day.events.slice(0, 2)"
               :key="event.id"
-              class="event-dot"
+              class="event-item"
               :class="event.event_type"
               :title="event.title"
               @click="viewEvent(event)"
             >
-              <span class="event-time">{{ formatTime(event.event_start_time!) }}</span>
               <span class="event-title">{{ event.title }}</span>
-            </div>
+            </a>
             <div v-if="day.events.length > 2" class="more-events">
-              +{{ day.events.length - 2 }} 更多
+              +{{ day.events.length - 2 }} more
             </div>
           </div>
         </div>
       </div>
     </div>
-
-    <div v-if="loading" class="loading-overlay">
-      <i class="ri-loader-4-line spinning"></i>
-    </div>
   </div>
 </template>
 
 <style scoped>
+/* ========== Main Container ========== */
 .event-calendar {
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(75,54,33,0.05);
   position: relative;
+  width: 100%;
+  background: #FFFFFF;
+  box-shadow: 0 12px 40px rgba(75, 54, 33, 0.12);
+  border-radius: 4px 48px 4px 48px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
-.calendar-header {
+/* ========== Loading Overlay ========== */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(4px);
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  margin-bottom: 20px;
-}
-
-.calendar-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 18px;
-  color: #4B3621;
-  margin: 0;
-}
-
-.calendar-title i {
-  font-size: 22px;
-  color: #804030;
-}
-
-.header-center {
-  display: flex;
-  align-items: center;
+  justify-content: center;
   gap: 12px;
 }
 
+.loader {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(128, 64, 48, 0.1);
+  border-left-color: #804030;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #804030;
+  letter-spacing: 0.05em;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ========== Header Section ========== */
+.calendar-header {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  border-bottom: 1px solid #E8DCCF;
+  background: linear-gradient(to right, #FFFFFF, #FAF6F3);
+}
+
+@media (min-width: 768px) {
+  .calendar-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #D4A373;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 4px 0;
+}
+
+.month-year {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.current-month {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #2C1810;
+  line-height: 1;
+  margin: 0;
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+@media (min-width: 768px) {
+  .current-month {
+    font-size: 3rem;
+  }
+}
+
+.current-year {
+  font-size: 1.5rem;
+  font-weight: 300;
+  color: #8C7B70;
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+/* ========== Controls ========== */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #FFFFFF;
+  padding: 6px;
+  border-radius: 9999px;
+  border: 1px solid #E8DCCF;
+  box-shadow: 0 2px 8px rgba(75, 54, 33, 0.05);
+}
+
 .nav-btn {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border: none;
-  background: #F5EFE7;
-  border-radius: 8px;
+  background: transparent;
+  border-radius: 9999px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s;
+  color: #2C1810;
+  transition: all 0.2s;
 }
 
 .nav-btn:hover {
-  background: #E5D4C1;
+  background: #EED9C4;
+  color: #804030;
 }
 
-.nav-btn i {
-  font-size: 20px;
-  color: #4B3621;
+.nav-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(128, 64, 48, 0.2);
 }
 
-.current-month {
-  font-size: 16px;
-  font-weight: 600;
-  color: #2C1810;
-  min-width: 120px;
-  text-align: center;
+.nav-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .today-btn {
-  padding: 6px 16px;
-  border: 2px solid #804030;
-  background: #fff;
-  color: #804030;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border: none;
+  border-top: none;
+  border-bottom: none;
+  border-left: 1px solid rgba(232, 220, 207, 0.5);
+  border-right: 1px solid rgba(232, 220, 207, 0.5);
+  background: transparent;
+  color: #2C1810;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: color 0.2s;
+  margin: 0 4px;
 }
 
 .today-btn:hover {
-  background: #804030;
-  color: #fff;
+  color: #804030;
 }
 
+/* ========== Calendar Body ========== */
 .calendar-body {
-  border: 1px solid #E5D4C1;
-  border-radius: 12px;
-  overflow: hidden;
+  background: #FFFFFF;
 }
 
+/* ========== Weekday Headers ========== */
 .weekday-header {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  background: #F5EFE7;
+  border-bottom: 1px solid #E8DCCF;
 }
 
 .weekday {
-  padding: 12px;
+  padding: 16px 12px;
   text-align: center;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  color: #4B3621;
+  color: #D4A373;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
+/* ========== Days Grid ========== */
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
 }
 
 .calendar-day {
-  min-height: 80px;
+  min-height: 130px;
   padding: 8px;
-  border-top: 1px solid #E5D4C1;
-  border-right: 1px solid #E5D4C1;
-  background: #fff;
-  transition: background 0.2s;
+  border-bottom: 1px solid #E8DCCF;
+  border-right: 1px solid #E8DCCF;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.2s;
+  animation: fadeIn 0.3s ease-out backwards;
 }
 
+.calendar-day:hover {
+  background-color: rgba(248, 245, 242, 0.5);
+}
+
+/* Remove right border for last column */
 .calendar-day:nth-child(7n) {
   border-right: none;
 }
 
+/* Remove bottom border for last row */
+.calendar-day:nth-child(n+36) {
+  border-bottom: none;
+}
+
+/* ========== Other Month Days ========== */
 .calendar-day.other-month {
-  background: #FAFAFA;
+  background: rgba(250, 248, 246, 0.5);
 }
 
 .calendar-day.other-month .day-number {
-  color: #CCC;
+  color: rgba(140, 123, 112, 0.4);
 }
 
-.calendar-day.today {
-  background: #FFF9F0;
+/* ========== Today ========== */
+.calendar-day.is-today {
+  background: #FFFFFF;
 }
 
-.calendar-day.today .day-number {
-  background: #804030;
-  color: #fff;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.calendar-day.has-events:hover {
-  background: #FFF5E6;
-}
-
+/* ========== Day Number ========== */
 .day-number {
   font-size: 14px;
+  font-weight: 600;
   color: #2C1810;
-  font-weight: 500;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
 }
 
+.day-number.today-badge {
+  background: #804030;
+  color: #FFFFFF;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(128, 64, 48, 0.3);
+}
+
+/* ========== Events Container ========== */
 .day-events {
-  margin-top: 4px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
 }
 
-.event-dot {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
+/* ========== Event Item ========== */
+.event-item {
+  display: block;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  border-left: 3px solid;
+  font-weight: 500;
+  line-height: 1.3;
   cursor: pointer;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  transition: all 0.2s;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.event-dot.server {
-  background: #E3F2FD;
-  color: #1565C0;
+.event-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(128, 64, 48, 0.15);
 }
 
-.event-dot.guild {
-  background: #FFF3E0;
-  color: #E65100;
+/* Server Event Type - Primary color theme */
+.event-item.server {
+  background: rgba(128, 64, 48, 0.05);
+  color: #804030;
+  border-color: #804030;
 }
 
-.event-dot:hover {
-  transform: scale(1.02);
+.event-item.server:hover {
+  background: rgba(128, 64, 48, 0.1);
 }
 
-.event-time {
-  font-weight: 600;
-  flex-shrink: 0;
+/* Guild Event Type - Accent/Gold theme */
+.event-item.guild {
+  background: rgba(212, 163, 115, 0.1);
+  color: #8C5E35;
+  border-color: #D4A373;
+}
+
+.event-item.guild:hover {
+  background: rgba(212, 163, 115, 0.2);
 }
 
 .event-title {
@@ -382,33 +506,30 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
+/* ========== More Events ========== */
 .more-events {
-  font-size: 11px;
-  color: #8D7B68;
-  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #8C7B70;
+  padding: 0 8px;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255,255,255,0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16px;
-}
-
-.spinning {
-  font-size: 32px;
+.more-events:hover {
   color: #804030;
-  animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* ========== Fade In Animation ========== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

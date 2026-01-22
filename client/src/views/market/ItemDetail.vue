@@ -5,6 +5,7 @@ import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlik
 import { useToast } from '@/composables/useToast'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
@@ -377,11 +378,11 @@ function downloadAllImages() {
           <h1>{{ item.name }}</h1>
           <div class="item-meta">
             <span class="type-badge">{{ getTypeText(item.type) }}</span>
-            <span class="author">作者: {{ author?.username || '未知' }}</span>
+            <span class="author" :style="buildNameStyle(author?.name_color, author?.name_bold)">作者: {{ author?.username || '未知' }}</span>
             <span class="permission-badge" v-if="item.requires_permission && !isArtwork">
               <i class="ri-shield-keyhole-line"></i> 需要权限
               <div class="permission-tooltip">
-                <p><strong>道具作者：</strong>{{ author?.username || '未知' }}</p>
+                <p><strong>道具作者：</strong><span :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || '未知' }}</span></p>
                 <p>这个道具需要你在游戏内对道具 <strong>Shift+右键点击</strong> 来调整安全性设置后才能正常使用。</p>
               </div>
             </span>
@@ -527,7 +528,7 @@ function downloadAllImages() {
             <div class="comment-body">
               <div class="comment-header">
                 <div class="comment-user-info">
-                  <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
+                  <span class="comment-author" :style="buildNameStyle(comment.name_color, comment.name_bold)">{{ comment.username || '匿名用户' }}</span>
                   <div v-if="comment.rating > 0" class="comment-rating">
                     <i v-for="star in 5" :key="star" class="ri-star-fill" :class="{ active: star <= comment.rating }"></i>
                   </div>

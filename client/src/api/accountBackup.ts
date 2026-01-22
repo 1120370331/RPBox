@@ -12,6 +12,9 @@ export interface AccountBackup {
   runtime_size_kb: number
   config_data?: string
   extra_data?: string
+  raw_trp3_lua?: string
+  raw_trp3_data_lua?: string
+  raw_trp3_extended_lua?: string
   checksum: string
   version: number
   created_at: string
@@ -27,6 +30,9 @@ export interface AccountBackupVersion {
   runtime_data?: string
   config_data?: string
   extra_data?: string
+  raw_trp3_lua?: string
+  raw_trp3_data_lua?: string
+  raw_trp3_extended_lua?: string
   checksum: string
   change_log: string
   created_at: string
@@ -54,6 +60,9 @@ export async function upsertAccountBackup(data: {
   runtime_size_kb?: number
   config_data?: string
   extra_data?: string
+  raw_trp3_lua?: string
+  raw_trp3_data_lua?: string
+  raw_trp3_extended_lua?: string
   checksum: string
 }): Promise<AccountBackup> {
   return request.post<AccountBackup>('/account-backups', data)

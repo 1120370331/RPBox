@@ -36,6 +36,12 @@ pub struct AccountInfo {
     pub account_id: String,
     pub realms: Vec<RealmInfo>,
     pub profiles: Vec<ProfileSummary>,
+    /// Raw totalRP3.lua content
+    pub raw_trp3_lua: Option<String>,
+    /// Raw totalRP3_Data.lua content
+    pub raw_trp3_data_lua: Option<String>,
+    /// Raw totalRP3_Extended.lua content
+    pub raw_trp3_extended_lua: Option<String>,
     /// TRP3 Extended 道具数据库
     pub tools_db: Option<ToolsDbSummary>,
     /// TRP3 运行时数据 (他人人物卡等)
@@ -92,6 +98,11 @@ pub struct ProfileSummary {
     pub account_id: String,
     pub saved_variables_path: String,
     pub modified_at: DateTime<Utc>,
+}
+
+fn read_lua_file(path: &PathBuf) -> Option<String> {
+    let content = fs::read(path).ok()?;
+    Some(String::from_utf8_lossy(&content).to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +163,7 @@ pub fn scan_profiles(wow_path: &str) -> Result<ScanResult, String> {
 fn scan_account(account_path: &PathBuf, account_id: &str) -> Result<AccountInfo, String> {
     let mut realms = Vec::new();
     let mut profiles = Vec::new();
+    let sv_dir = account_path.join("SavedVariables");
 
     // Scan realms (server directories)
     if let Ok(entries) = std::fs::read_dir(account_path) {
@@ -167,12 +179,16 @@ fn scan_account(account_path: &PathBuf, account_id: &str) -> Result<AccountInfo,
     }
 
     // Scan profiles from SavedVariables
-    let sv_path = account_path.join("SavedVariables").join("totalRP3.lua");
+    let sv_path = sv_dir.join("totalRP3.lua");
     if sv_path.exists() {
         if let Ok(profile_list) = extract_profiles(&sv_path, account_id) {
             profiles = profile_list;
         }
     }
+
+    let raw_trp3_lua = read_lua_file(&sv_dir.join("totalRP3.lua"));
+    let raw_trp3_data_lua = read_lua_file(&sv_dir.join("totalRP3_Data.lua"));
+    let raw_trp3_extended_lua = read_lua_file(&sv_dir.join("totalRP3_Extended.lua"));
 
     // Scan TRP3 Extended tools database
     let tools_db = scan_tools_db(account_path);
@@ -190,6 +206,9 @@ fn scan_account(account_path: &PathBuf, account_id: &str) -> Result<AccountInfo,
         account_id: account_id.to_string(),
         realms,
         profiles,
+        raw_trp3_lua,
+        raw_trp3_data_lua,
+        raw_trp3_extended_lua,
         tools_db,
         runtime_data,
         config,
