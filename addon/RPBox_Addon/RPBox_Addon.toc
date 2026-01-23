@@ -1,4 +1,4 @@
-## Interface: 110207
+## Interface: 120000
 ## Title: RPBox Addon
 ## Notes: RPBox 配套插件 - 聊天记录采集与人物卡导出
 ## Notes-zhCN: RPBox 配套插件 - 聊天记录采集与人物卡导出
