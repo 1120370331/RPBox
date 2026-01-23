@@ -108,6 +108,10 @@ func (s *Service) RunOnce() {
 			log.Printf("[Backup] upload failed: %v", err)
 		} else {
 			log.Printf("[Backup] uploaded to oss: %s", objectKey)
+			// 上传成功后立即删除本地文件，节省磁盘空间
+			if err := os.Remove(filePath); err != nil {
+				log.Printf("[Backup] remove local file failed: %v", err)
+			}
 		}
 	}
 
