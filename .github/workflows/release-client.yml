@@ -71,6 +71,15 @@ jobs:
           name: windows-artifacts
           path: artifacts
 
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Artifacts directory structure ==="
+          find artifacts -type f | head -50
+          echo "=== Looking for EXE files ==="
+          find artifacts -name "*.exe" -type f
+          echo "=== Looking for SIG files ==="
+          find artifacts -name "*.sig" -type f
+
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
