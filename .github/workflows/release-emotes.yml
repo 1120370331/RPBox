@@ -8,23 +8,18 @@ on:
 
 jobs:
   release:
-    name: Build & Deploy Emotes
+    name: Deploy Emotes
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: python -m pip install --upgrade pip pillow rembg numpy
-
-      - name: Build emote packs
-        run: python scripts/build_emotes.py
+      - name: Verify emote assets
+        run: |
+          test -f server/storage/emotes/manifest.json
+          test -d server/storage/emotes/packs
+          test -d server/storage/emotes/orphy
 
       - name: Upload emote artifacts
         uses: actions/upload-artifact@v4
