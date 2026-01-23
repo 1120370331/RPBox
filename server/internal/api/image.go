@@ -20,7 +20,7 @@ import (
 
 // getImage 获取图片（支持缩略图）
 // GET /api/v1/images/:type/:id?w=300&q=80
-// type: item-preview, post-cover, user-avatar, guild-banner
+// type: item-preview, post-cover, user-avatar, guild-banner, guild-avatar
 func (s *Server) getImage(c *gin.Context) {
 	imageType := c.Param("type")
 	id := c.Param("id")
@@ -192,6 +192,13 @@ func (s *Server) getOriginalImageValue(imageType string, id string) (string, err
 			return "", err
 		}
 		return guild.Banner, nil
+
+	case "guild-avatar":
+		var guild model.Guild
+		if err := database.DB.Select("avatar").First(&guild, idNum).Error; err != nil {
+			return "", err
+		}
+		return guild.Avatar, nil
 
 	default:
 		return "", fmt.Errorf("unknown image type: %s", imageType)

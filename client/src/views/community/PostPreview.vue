@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { POST_CATEGORIES } from '@/api/post'
 import { useUserStore } from '@/stores/user'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -22,6 +23,7 @@ interface PreviewData {
 }
 
 const previewData = ref<PreviewData | null>(null)
+const articleContentRef = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
@@ -42,6 +44,12 @@ function loadPreviewData() {
   }
 }
 
+watch(() => previewData.value?.content, async () => {
+  await nextTick()
+  sanitizeJumpLinks(articleContentRef.value)
+  hydrateJumpCardImages(articleContentRef.value)
+})
+
 function goBackToEdit() {
   router.back()
 }
@@ -57,6 +65,16 @@ function formatDate(dateStr?: string) {
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
   return cat ? cat.label : '其他'
+}
+
+function handlePreviewContentClick(event: MouseEvent) {
+  handleJumpLinkClick(event, router, {
+    returnTo: {
+      type: 'post',
+      path: router.currentRoute.value.fullPath,
+      title: previewData.value?.title || '帖子',
+    },
+  })
 }
 </script>
 
@@ -131,7 +149,7 @@ function getCategoryLabel(category: string) {
 
             <div class="zen-divider"></div>
 
-            <div class="article-content" v-html="previewData.content || '<p>无内容</p>'"></div>
+            <div ref="articleContentRef" class="article-content" v-html="previewData.content || '<p>无内容</p>'" @click="handlePreviewContentClick"></div>
           </div>
         </article>
 
@@ -456,6 +474,17 @@ function getCategoryLabel(category: string) {
 
 .article-content :deep(strong) {
   color: #804030;
+}
+
+.article-content :deep(.mention) {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.12);
+  color: #804030;
+  font-weight: 600;
+  margin: 0 2px;
 }
 
 /* ========== 评论区 ========== */

@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useUserStore } from '../stores/user'
 import { useNotificationStore } from '../stores/notification'
 import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { handleJumpLinkClick, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
 
 const userStore = useUserStore()
 const notificationStore = useNotificationStore()
 const router = useRouter()
 const route = useRoute()
 const mounted = ref(false)
+const jumpReturn = ref<JumpReturnInfo | null>(null)
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
@@ -19,6 +21,12 @@ onMounted(() => {
     // 加载初始未读数量
     notificationStore.loadUnreadCount()
   }
+  document.addEventListener('click', handleGlobalJumpLink, true)
+  refreshJumpReturn()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleGlobalJumpLink, true)
 })
 
 // 侧边栏菜单点击时刷新未读消息数量
@@ -31,6 +39,45 @@ function handleMenuClick() {
 function handleLogout() {
   userStore.logout()
   router.push('/login')
+}
+
+function handleGlobalJumpLink(event: MouseEvent) {
+  const returnTo = resolvePostReturnTarget(event)
+  handleJumpLinkClick(event, router, { ignoreEditor: true, returnTo })
+}
+
+function resolvePostReturnTarget(event: MouseEvent) {
+  const target = event.target
+  const element = target instanceof Element ? target : (target instanceof Node ? target.parentElement : null)
+  if (!element) return
+  const inPostContent = element.closest('.post-detail-page .article-content, .post-preview-page .article-content')
+  if (!inPostContent) return
+  return {
+    type: 'post' as const,
+    path: route.fullPath,
+  }
+}
+
+function refreshJumpReturn() {
+  const value = getJumpReturn()
+  if (!value) {
+    jumpReturn.value = null
+    return
+  }
+  if (value.path === route.fullPath) {
+    clearJumpReturn()
+    jumpReturn.value = null
+    return
+  }
+  jumpReturn.value = value
+}
+
+function handleReturnToPost() {
+  if (!jumpReturn.value) return
+  const target = jumpReturn.value.path
+  clearJumpReturn()
+  jumpReturn.value = null
+  router.push(target)
 }
 
 const menuItems = [
@@ -72,6 +119,10 @@ watch(currentMenu, (menu) => {
     lastMainMenu.value = menu
   }
 }, { immediate: true })
+
+watch(() => route.fullPath, () => {
+  refreshJumpReturn()
+})
 
 const activeMenu = computed(() => {
   if (currentMenu.value) return currentMenu.value
@@ -143,6 +194,12 @@ const activeMenu = computed(() => {
 
     <!-- 主内容区 -->
     <main class="main-content">
+      <div v-if="jumpReturn?.type === 'post'" class="jump-return-bar">
+        <button class="jump-return-btn" type="button" @click="handleReturnToPost">
+          <i class="ri-arrow-left-line"></i>
+          返回帖子
+        </button>
+      </div>
       <router-view />
     </main>
 
@@ -373,5 +430,39 @@ const activeMenu = computed(() => {
   overflow-y: auto;
   background: var(--color-main-bg, #EED9C4);
   padding: 24px;
+}
+
+.jump-return-bar {
+  position: sticky;
+  top: 16px;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: none;
+  margin-bottom: 12px;
+}
+
+.jump-return-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #E5D4C1;
+  background: rgba(255, 255, 255, 0.92);
+  color: #4B3621;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(44, 24, 16, 0.08);
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+
+.jump-return-btn:hover {
+  border-color: #B87333;
+  color: #B87333;
+  transform: translateY(-1px);
 }
 </style>

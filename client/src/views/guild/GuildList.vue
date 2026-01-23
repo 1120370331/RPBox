@@ -213,7 +213,13 @@ onMounted(loadData)
         <!-- 卡片内容 -->
         <div class="card-body">
           <div class="guild-icon" :style="{ background: '#' + (guild.color || 'B87333') }">
-            {{ guild.name.charAt(0) }}
+            <img
+              v-if="guild.avatar_url || guild.avatar"
+              :src="getImageUrl('guild-avatar', guild.id, { w: 96, q: 80, v: guild.avatar_updated_at || guild.updated_at })"
+              alt=""
+              loading="lazy"
+            />
+            <span v-else>{{ guild.name.charAt(0) }}</span>
           </div>
           <div class="guild-info">
             <h3>{{ guild.name }}</h3>
@@ -418,6 +424,14 @@ onMounted(loadData)
   z-index: 10;
   border: 3px solid #fff;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+.guild-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .guild-info {

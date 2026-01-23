@@ -381,6 +381,11 @@ func (s *Server) createItem(c *gin.Context) {
 		database.DB.Create(&itemTag)
 	}
 
+	if item.Status != "draft" {
+		mentionMessage := "在作品《" + item.Name + "》中提到了你"
+		service.CreateMentionNotifications(userID, "item", item.ID, mentionMessage, item.DetailContent, item.Description)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"code": 0,
 		"data": item,
@@ -645,6 +650,11 @@ func (s *Server) updateItem(c *gin.Context) {
 		return
 	}
 
+	if item.Status != "draft" {
+		mentionMessage := "在作品《" + item.Name + "》中提到了你"
+		service.CreateMentionNotifications(userID, "item", item.ID, mentionMessage, item.DetailContent, item.Description)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": item,
@@ -903,6 +913,14 @@ func (s *Server) addItemComment(c *gin.Context) {
 		}
 		service.CreateNotification(&notification)
 	}
+
+	// @提及通知
+	mentionPreview := service.NormalizeMentionPreview(req.Content)
+	if len([]rune(mentionPreview)) > 50 {
+		mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+	}
+	mentionMessage := "在作品《" + item.Name + "》的评论中提到了你：" + mentionPreview
+	service.CreateMentionNotifications(userID, "item", uint(itemID), mentionMessage, req.Content)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"code": 0,

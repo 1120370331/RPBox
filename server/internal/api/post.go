@@ -332,6 +332,12 @@ func (s *Server) createPost(c *gin.Context) {
 		}
 	}
 
+	// @提及通知（非草稿）
+	if post.Status != "draft" {
+		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
+		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
+	}
+
 	c.JSON(http.StatusCreated, post)
 }
 
@@ -538,6 +544,11 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 
 	database.DB.Save(&post)
+
+	if post.Status != "draft" {
+		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
+		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": post})
 }
 

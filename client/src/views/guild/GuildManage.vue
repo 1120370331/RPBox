@@ -11,10 +11,12 @@ import {
   removeMember,
   listGuildApplications,
   reviewGuildApplication,
+  uploadGuildAvatar,
   type Guild,
   type GuildMember,
   type GuildApplication
 } from '@/api/guild'
+import { getImageUrl } from '@/api/item'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -30,6 +32,17 @@ const guild = ref<Guild | null>(null)
 const myRole = ref<string>('')
 const loading = ref(false)
 const activeTab = ref<'members' | 'applications'>('members')
+const avatarUploading = ref(false)
+const avatarInputRef = ref<HTMLInputElement | null>(null)
+
+const guildAvatarUrl = computed(() => {
+  if (!guild.value || (!guild.value.avatar_url && !guild.value.avatar)) return ''
+  return getImageUrl('guild-avatar', guild.value.id, {
+    w: 160,
+    q: 80,
+    v: guild.value.avatar_updated_at || guild.value.updated_at,
+  })
+})
 
 // 成员管理
 const members = ref<GuildMember[]>([])
@@ -69,6 +82,38 @@ async function loadGuild() {
     router.push('/guild')
   } finally {
     loading.value = false
+  }
+}
+
+function triggerAvatarUpload() {
+  avatarInputRef.value?.click()
+}
+
+async function handleAvatarUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !guild.value) return
+
+  if (file.size > 10 * 1024 * 1024) {
+    toast.error('头像文件不能超过10MB')
+    input.value = ''
+    return
+  }
+
+  avatarUploading.value = true
+  try {
+    const res = await uploadGuildAvatar(guildId.value, file)
+    guild.value.avatar = res.avatar
+    if (res.avatar_updated_at) {
+      guild.value.avatar_updated_at = res.avatar_updated_at
+    }
+    toast.success('头像更新成功')
+  } catch (e: any) {
+    console.error('头像上传失败:', e)
+    toast.error(e.message || '头像上传失败')
+  } finally {
+    avatarUploading.value = false
+    input.value = ''
   }
 }
 
@@ -223,6 +268,23 @@ onMounted(async () => {
           <h1 class="page-title">{{ guild.name }} - 管理中心</h1>
         </div>
       </header>
+
+      <div class="avatar-panel">
+        <div class="avatar-preview" :class="{ editable: isAdmin }" @click="isAdmin && triggerAvatarUpload()">
+          <img v-if="guildAvatarUrl" :src="guildAvatarUrl" alt="" />
+          <span v-else>{{ guild.name?.charAt(0) || 'G' }}</span>
+          <div v-if="isAdmin" class="avatar-overlay">
+            <i class="ri-camera-line"></i>
+          </div>
+        </div>
+        <div class="avatar-meta">
+          <div class="avatar-title">公会头像</div>
+          <div class="avatar-actions">
+            <RButton size="small" :loading="avatarUploading" @click="triggerAvatarUpload">上传头像</RButton>
+          </div>
+        </div>
+        <input ref="avatarInputRef" type="file" accept="image/*" hidden @change="handleAvatarUpload" />
+      </div>
 
       <!-- 标签页导航 -->
       <div class="tabs">
@@ -411,6 +473,79 @@ onMounted(async () => {
   font-weight: 700;
   color: #4B3621;
   margin: 0;
+}
+
+.avatar-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  margin-bottom: 24px;
+}
+
+.avatar-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #B87333, #4B3621);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  overflow: hidden;
+  position: relative;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 12px rgba(44, 24, 16, 0.2);
+}
+
+.avatar-preview.editable {
+  cursor: pointer;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #fff;
+  font-size: 18px;
+}
+
+.avatar-preview.editable:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.avatar-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avatar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4B3621;
+}
+
+.avatar-actions {
+  display: flex;
+  gap: 8px;
 }
 
 /* 标签页导航 */

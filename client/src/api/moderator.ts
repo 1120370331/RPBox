@@ -290,6 +290,13 @@ export interface BasicMetrics {
   profile_backups: number
 }
 
+export interface BasicDailyMetrics {
+  date: string
+  new_story_archives: number
+  new_story_entries: number
+  new_profile_backups: number
+}
+
 export function getMetricsHistory(days: number = 30) {
   return request.get<{ metrics: DailyMetrics[]; days: number }>('/moderator/metrics/history', { params: { days } })
 }
@@ -300,4 +307,8 @@ export function getMetricsSummary() {
 
 export function getMetricsBasic() {
   return request.get<BasicMetrics>('/moderator/metrics/basic')
+}
+
+export function getMetricsBasicHistory(days: number = 30) {
+  return request.get<{ metrics: BasicDailyMetrics[]; days: number }>('/moderator/metrics/basic/history', { params: { days } })
 }

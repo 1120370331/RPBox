@@ -14,6 +14,14 @@ export interface UserInfo {
   name_bold?: boolean
 }
 
+export interface UserMentionItem {
+  id: number
+  username: string
+  avatar?: string
+  name_color?: string
+  name_bold?: boolean
+}
+
 // 获取当前用户信息
 export async function getUserInfo(): Promise<UserInfo> {
   return request.get('/user/info')
@@ -59,4 +67,11 @@ export async function uploadAvatar(file: File): Promise<{ avatar: string }> {
 // 绑定邮箱
 export async function bindEmail(email: string, verificationCode: string): Promise<{ message: string }> {
   return request.post('/user/bind-email', { email, verification_code: verificationCode })
+}
+
+// 搜索用户（用于@提及）
+export async function searchUsers(keyword: string, limit: number = 10): Promise<{ users: UserMentionItem[] }> {
+  return request.get('/users/search', {
+    params: { q: keyword, limit },
+  })
 }

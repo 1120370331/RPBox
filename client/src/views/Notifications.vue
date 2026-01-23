@@ -143,6 +143,7 @@ function getTypeBadge(type: string): string {
     'item_like': 'LIKE',
     'post_comment': 'REPLY',
     'item_comment': 'REPLY',
+    'mention': 'AT',
     'guild_application': 'GUILD',
     'system': 'SYS'
   }

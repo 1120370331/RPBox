@@ -31,6 +31,7 @@ const router = createRouter({
         { path: 'library/favorites', name: 'library-favorites', component: () => import('./views/library/Favorites.vue') },
         { path: 'library/history', name: 'library-history', component: () => import('./views/library/History.vue') },
         { path: 'notifications', name: 'notifications', component: () => import('./views/Notifications.vue') },
+        { path: 'thanks', name: 'thanks', component: () => import('./views/Thanks.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/Settings.vue') },
         { path: 'guide', name: 'guide', component: () => import('./views/Guide.vue') },
         { path: 'guild', name: 'guild', component: () => import('./views/guild/GuildList.vue') },

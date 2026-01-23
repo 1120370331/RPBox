@@ -211,6 +211,8 @@ type Guild struct {
 	Color           string     `gorm:"size:8" json:"color"`
 	Banner          string     `gorm:"type:text" json:"banner"` // 头图(base64)
 	BannerUpdatedAt *time.Time `json:"banner_updated_at,omitempty"`
+	Avatar          string     `gorm:"type:text" json:"avatar"` // 头像(URL)
+	AvatarUpdatedAt *time.Time `json:"avatar_updated_at,omitempty"`
 	Slogan          string     `gorm:"size:256" json:"slogan"`  // 公会标语
 	Lore            string     `gorm:"type:text" json:"lore"`   // 公会设定(富文本HTML)
 	Faction         string     `gorm:"size:20" json:"faction"`  // 阵营: alliance|horde|neutral
