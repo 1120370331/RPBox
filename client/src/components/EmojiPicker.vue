@@ -162,15 +162,15 @@ onBeforeUnmount(() => {
               :class="{ active: activePack?.id === pack.id }"
               @click="activePackId = pack.id"
               :title="pack.name"
+              :aria-label="pack.name"
             >
               <img v-if="pack.icon_url" :src="pack.icon_url" alt="" class="pack-icon" />
-              <span class="pack-name">{{ pack.name }}</span>
             </button>
           </aside>
 
           <section class="emoji-panel">
             <div class="emoji-section-title">
-              <span>{{ activePack?.name || '表情包' }}</span>
+              <span>表情包</span>
               <span v-if="activePack" class="emoji-count">{{ filteredItems.length }} 张</span>
             </div>
             <div v-if="emoteStore.loading" class="emoji-empty">加载中...</div>
@@ -277,14 +277,14 @@ onBeforeUnmount(() => {
 
 .emoji-body {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: 80px minmax(0, 1fr);
   gap: 0;
   flex: 1;
   min-height: 0;
 }
 
 .emoji-categories {
-  padding: 12px 10px;
+  padding: 12px 8px;
   background: rgba(250, 245, 238, 0.9);
   border-right: 1px solid #F5EFE7;
   overflow-y: auto;
@@ -292,11 +292,10 @@ onBeforeUnmount(() => {
 
 .emoji-category {
   width: 100%;
-  display: grid;
-  grid-template-columns: 40px 1fr;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  justify-content: center;
+  padding: 8px 6px;
   border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
@@ -324,11 +323,6 @@ onBeforeUnmount(() => {
 
 .emoji-category.active .pack-icon {
   border-color: #fff;
-}
-
-.pack-name {
-  text-align: left;
-  line-height: 1.2;
 }
 
 .emoji-panel {
@@ -370,12 +364,17 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
   box-shadow: inset 0 0 0 1px rgba(229, 212, 193, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 76px;
 }
 
 .emoji-btn img {
-  width: 100%;
-  height: auto;
+  width: 64px;
+  height: 64px;
   display: block;
+  object-fit: contain;
 }
 
 .emoji-btn:hover {
@@ -408,7 +407,7 @@ onBeforeUnmount(() => {
   }
 
   .emoji-body {
-    grid-template-columns: 90px minmax(0, 1fr);
+    grid-template-columns: 68px minmax(0, 1fr);
   }
 
   .emoji-grid {

@@ -1,6 +1,6 @@
 {
   "name": "rpbox-client",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -19,6 +19,7 @@
     "@tauri-apps/plugin-shell": "^2.3.4",
     "@tauri-apps/plugin-updater": "^2",
     "@tiptap/extension-image": "^3.15.3",
+    "@tiptap/extension-mention": "^3.15.3",
     "@tiptap/extension-placeholder": "^3.15.3",
     "@tiptap/starter-kit": "^3.15.3",
     "@tiptap/vue-3": "^3.15.3",

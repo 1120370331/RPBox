@@ -5,9 +5,11 @@ import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlik
 import { useToast } from '@/composables/useToast'
 import ImageViewer from '@/components/ImageViewer.vue'
 import EmojiPicker from '@/components/EmojiPicker.vue'
+import EmoteEditor from '@/components/EmoteEditor.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { renderEmoteContent } from '@/utils/emote'
+import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { useEmoteStore } from '@/stores/emote'
 
 const route = useRoute()
@@ -25,6 +27,7 @@ const hoverRating = ref(0)
 const newComment = ref('')
 const showEmojiPicker = ref(false)
 const emojiButtonRef = ref<HTMLElement | null>(null)
+const commentEditorRef = ref<any>(null)
 const showImportCode = ref(false)
 const isLiked = ref(false)
 const isFavorited = ref(false)
@@ -152,12 +155,18 @@ async function setupDetailContentPreview() {
   attachImagePreview(detailContentRef.value, (imageList, index) => {
     openContentViewer(imageList, index)
   }, '查看图像')
+  sanitizeJumpLinks(detailContentRef.value)
+  hydrateJumpCardImages(detailContentRef.value)
 }
 
 watch(() => item.value?.detail_content, () => {
   if (!item.value?.detail_content) return
   setupDetailContentPreview()
 })
+
+function handleDetailContentClick(event: MouseEvent) {
+  handleJumpLinkClick(event, router)
+}
 
 // 加载评论
 async function loadComments() {
@@ -302,7 +311,11 @@ function nextImage() {
 }
 
 function handleEmojiSelect(token: string) {
-  appendEmoteToken(newComment, token)
+  if (commentEditorRef.value?.insertToken) {
+    commentEditorRef.value.insertToken(token)
+  } else {
+    appendEmoteToken(newComment, token)
+  }
   showEmojiPicker.value = false
 }
 
@@ -438,7 +451,7 @@ function downloadAllImages() {
         <!-- 详细介绍 -->
         <div v-if="item.detail_content" class="item-detail-content">
           <h3>详细介绍</h3>
-          <div ref="detailContentRef" class="rich-content" v-html="item.detail_content"></div>
+          <div ref="detailContentRef" class="rich-content" v-html="item.detail_content" @click="handleDetailContentClick"></div>
         </div>
 
         <div class="item-tags" v-if="tags.length > 0">
@@ -518,11 +531,11 @@ function downloadAllImages() {
               <i class="ri-close-line"></i>
             </button>
           </div>
-          <textarea
+          <EmoteEditor
+            ref="commentEditorRef"
             v-model="newComment"
             placeholder="写下你的评价...（带评分需至少10字）"
-            rows="4"
-          ></textarea>
+          />
           <div class="review-footer">
             <button ref="emojiButtonRef" class="emoji-btn" @click="showEmojiPicker = true" type="button">
               <i class="ri-emotion-line"></i>
@@ -698,6 +711,17 @@ function downloadAllImages() {
   border-radius: 8px;
   margin: 12px 8px;
   vertical-align: middle;
+}
+
+.rich-content :deep(.mention) {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.12);
+  color: #804030;
+  font-weight: 600;
+  margin: 0 2px;
 }
 
 .item-detail-page :deep(.image-preview) {
@@ -1098,7 +1122,7 @@ function downloadAllImages() {
   background: rgba(229, 57, 53, 0.1);
 }
 
-.review-input-box textarea {
+.review-input-box :deep(.emote-editor-input) {
   width: 100%;
   padding: 12px;
   border: 1px solid #E0E0E0;
@@ -1109,7 +1133,7 @@ function downloadAllImages() {
   background: #fff;
 }
 
-.review-input-box textarea:focus {
+.review-input-box :deep(.emote-editor-input:focus) {
   outline: none;
   border-color: #B87333;
 }
@@ -1267,12 +1291,23 @@ function downloadAllImages() {
 }
 
 .comment-content :deep(.comment-emote) {
-  width: 128px;
-  height: 128px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
   display: inline-block;
   margin: 4px 6px 4px 0;
   vertical-align: middle;
+}
+
+.comment-content :deep(.comment-mention) {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.12);
+  color: #804030;
+  font-weight: 600;
+  margin: 0 2px;
 }
 
 /* 画作图片画廊样式 */

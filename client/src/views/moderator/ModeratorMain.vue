@@ -43,6 +43,7 @@ import {
   getMetricsHistory,
   getMetricsSummary,
   getMetricsBasic,
+  getMetricsBasicHistory,
   broadcastSystemMessage,
   type ModeratorStats,
   type ReviewRequest,
@@ -50,7 +51,8 @@ import {
   type AdminActionLog,
   type DailyMetrics,
   type MetricsSummary,
-  type BasicMetrics
+  type BasicMetrics,
+  type BasicDailyMetrics
 } from '@/api/moderator'
 
 const router = useRouter()
@@ -159,6 +161,7 @@ const metricsDays = ref(30)
 const metricsSubTab = ref<'growth' | 'basic'>('growth')
 const metricsLoading = ref(false)
 const basicMetrics = ref<BasicMetrics | null>(null)
+const basicMetricsHistory = ref<BasicDailyMetrics[]>([])
 const basicMetricsLoading = ref(false)
 const metricsChartRef = ref<HTMLDivElement | null>(null)
 let metricsChart: echarts.ECharts | null = null
@@ -563,7 +566,15 @@ async function loadBasicMetrics() {
   if (!isAdmin.value) return
   basicMetricsLoading.value = true
   try {
-    basicMetrics.value = await getMetricsBasic()
+    const [basicRes, historyRes] = await Promise.all([
+      getMetricsBasic(),
+      getMetricsBasicHistory(metricsDays.value)
+    ])
+    basicMetrics.value = basicRes
+    basicMetricsHistory.value = historyRes.metrics
+    if (activeTab.value === 'metrics' && metricsSubTab.value === 'basic') {
+      setTimeout(() => initMetricsChart(), 100)
+    }
   } catch (error) {
     console.error('加载基础监控数据失败:', error)
   } finally {
@@ -574,10 +585,10 @@ async function loadBasicMetrics() {
 function switchMetricsSubTab(subTab: 'growth' | 'basic') {
   if (metricsSubTab.value === subTab) return
   metricsSubTab.value = subTab
+  disposeMetricsChart()
   if (subTab === 'growth') {
     loadMetrics()
   } else {
-    disposeMetricsChart()
     loadBasicMetrics()
   }
 }
@@ -597,11 +608,36 @@ function initMetricsChart() {
     metricsChart = echarts.init(metricsChartRef.value)
   }
 
-  const dates = metricsHistory.value.map((m: DailyMetrics) => m.date.slice(5)) // 只显示月-日
-  const newUsers = metricsHistory.value.map((m: DailyMetrics) => m.new_users)
-  const newPosts = metricsHistory.value.map((m: DailyMetrics) => m.new_posts)
-  const newItems = metricsHistory.value.map((m: DailyMetrics) => m.new_items)
-  const newGuilds = metricsHistory.value.map((m: DailyMetrics) => m.new_guilds)
+  const isGrowth = metricsSubTab.value === 'growth'
+  let dates: string[] = []
+  let legendData: string[] = []
+  let series: echarts.SeriesOption[] = []
+
+  if (isGrowth) {
+    dates = metricsHistory.value.map((m: DailyMetrics) => m.date.slice(5)) // 只显示月-日
+    const newUsers = metricsHistory.value.map((m: DailyMetrics) => m.new_users)
+    const newPosts = metricsHistory.value.map((m: DailyMetrics) => m.new_posts)
+    const newItems = metricsHistory.value.map((m: DailyMetrics) => m.new_items)
+    const newGuilds = metricsHistory.value.map((m: DailyMetrics) => m.new_guilds)
+    legendData = ['新增用户', '新增帖子', '新增作品', '新增公会']
+    series = [
+      { name: '新增用户', type: 'line', data: newUsers, smooth: true, itemStyle: { color: '#804030' } },
+      { name: '新增帖子', type: 'line', data: newPosts, smooth: true, itemStyle: { color: '#4682B4' } },
+      { name: '新增作品', type: 'line', data: newItems, smooth: true, itemStyle: { color: '#9370DB' } },
+      { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: '#6B9B6B' } }
+    ]
+  } else {
+    dates = basicMetricsHistory.value.map((m: BasicDailyMetrics) => m.date.slice(5))
+    const newArchives = basicMetricsHistory.value.map((m: BasicDailyMetrics) => m.new_story_archives)
+    const newEntries = basicMetricsHistory.value.map((m: BasicDailyMetrics) => m.new_story_entries)
+    const newBackups = basicMetricsHistory.value.map((m: BasicDailyMetrics) => m.new_profile_backups)
+    legendData = ['新增剧情归档', '新增归档条目', '新增人物卡备份']
+    series = [
+      { name: '新增剧情归档', type: 'line', data: newArchives, smooth: true, itemStyle: { color: '#8B4513' } },
+      { name: '新增归档条目', type: 'line', data: newEntries, smooth: true, itemStyle: { color: '#1E88E5' } },
+      { name: '新增人物卡备份', type: 'line', data: newBackups, smooth: true, itemStyle: { color: '#2E7D32' } }
+    ]
+  }
 
   const option: echarts.EChartsOption = {
     tooltip: {
@@ -609,7 +645,7 @@ function initMetricsChart() {
       axisPointer: { type: 'cross' }
     },
     legend: {
-      data: ['新增用户', '新增帖子', '新增作品', '新增公会'],
+      data: legendData,
       textStyle: { color: '#8D7B68' }
     },
     grid: {
@@ -630,12 +666,7 @@ function initMetricsChart() {
       axisLabel: { color: '#8D7B68' },
       splitLine: { lineStyle: { color: '#F5EBE0' } }
     },
-    series: [
-      { name: '新增用户', type: 'line', data: newUsers, smooth: true, itemStyle: { color: '#804030' } },
-      { name: '新增帖子', type: 'line', data: newPosts, smooth: true, itemStyle: { color: '#4682B4' } },
-      { name: '新增作品', type: 'line', data: newItems, smooth: true, itemStyle: { color: '#9370DB' } },
-      { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: '#6B9B6B' } }
-    ]
+    series
   }
 
   metricsChart.setOption(option)
@@ -1967,7 +1998,7 @@ function formatBanTime(dateStr: string | null) {
             @click="switchMetricsSubTab('growth')"
           >
             <i class="ri-line-chart-line"></i>
-            增长统计
+            社区统计
           </button>
           <button
             :class="{ active: metricsSubTab === 'basic' }"
@@ -2093,44 +2124,61 @@ function formatBanTime(dateStr: string | null) {
 
             <!-- 趋势图表 -->
             <div class="metrics-chart-container">
-              <h4><i class="ri-line-chart-line"></i> 增长趋势</h4>
+              <h4><i class="ri-line-chart-line"></i> 社区增长趋势</h4>
               <div ref="metricsChartRef" class="metrics-chart"></div>
             </div>
           </template>
         </template>
 
         <template v-else>
+          <div class="filter-bar">
+            <select v-model="metricsDays" @change="loadBasicMetrics">
+              <option :value="7">最近 7 天</option>
+              <option :value="14">最近 14 天</option>
+              <option :value="30">最近 30 天</option>
+              <option :value="60">最近 60 天</option>
+              <option :value="90">最近 90 天</option>
+            </select>
+          </div>
+
           <div v-if="basicMetricsLoading" class="loading">
             <i class="ri-loader-4-line loading-spinner"></i>
             <span>加载中...</span>
           </div>
-          <div v-else-if="basicMetrics" class="basic-metrics-grid">
-            <div class="basic-metric-card">
-              <div class="basic-metric-icon"><i class="ri-book-open-line"></i></div>
-              <div class="basic-metric-info">
-                <div class="basic-metric-value">{{ basicMetrics.story_archives || 0 }}</div>
-                <div class="basic-metric-label">系统剧情归档数</div>
+          <template v-else>
+            <div v-if="basicMetrics" class="basic-metrics-grid">
+              <div class="basic-metric-card">
+                <div class="basic-metric-icon"><i class="ri-book-open-line"></i></div>
+                <div class="basic-metric-info">
+                  <div class="basic-metric-value">{{ basicMetrics.story_archives || 0 }}</div>
+                  <div class="basic-metric-label">系统剧情归档数</div>
+                </div>
+              </div>
+              <div class="basic-metric-card">
+                <div class="basic-metric-icon"><i class="ri-chat-3-line"></i></div>
+                <div class="basic-metric-info">
+                  <div class="basic-metric-value">{{ basicMetrics.story_entries || 0 }}</div>
+                  <div class="basic-metric-label">归档条目数</div>
+                </div>
+              </div>
+              <div class="basic-metric-card">
+                <div class="basic-metric-icon"><i class="ri-save-3-line"></i></div>
+                <div class="basic-metric-info">
+                  <div class="basic-metric-value">{{ basicMetrics.profile_backups || 0 }}</div>
+                  <div class="basic-metric-label">人物卡备份数</div>
+                </div>
               </div>
             </div>
-            <div class="basic-metric-card">
-              <div class="basic-metric-icon"><i class="ri-chat-3-line"></i></div>
-              <div class="basic-metric-info">
-                <div class="basic-metric-value">{{ basicMetrics.story_entries || 0 }}</div>
-                <div class="basic-metric-label">归档条目数</div>
-              </div>
+            <div v-else class="empty-state">
+              <i class="ri-bar-chart-2-line"></i>
+              <p>暂无监控数据</p>
             </div>
-            <div class="basic-metric-card">
-              <div class="basic-metric-icon"><i class="ri-save-3-line"></i></div>
-              <div class="basic-metric-info">
-                <div class="basic-metric-value">{{ basicMetrics.profile_backups || 0 }}</div>
-                <div class="basic-metric-label">人物卡备份数</div>
-              </div>
+
+            <div v-if="basicMetrics" class="metrics-chart-container">
+              <h4><i class="ri-line-chart-line"></i> 基础监控趋势</h4>
+              <div ref="metricsChartRef" class="metrics-chart"></div>
             </div>
-          </div>
-          <div v-else class="empty-state">
-            <i class="ri-bar-chart-2-line"></i>
-            <p>暂无监控数据</p>
-          </div>
+          </template>
         </template>
       </div>
 
@@ -3782,6 +3830,7 @@ function formatBanTime(dateStr: string | null) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
+  margin-bottom: 24px;
 }
 
 .basic-metric-card {

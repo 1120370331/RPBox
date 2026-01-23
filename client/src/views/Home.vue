@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import RModal from '@/components/RModal.vue'
 
 const router = useRouter()
 const mounted = ref(false)
-const showThanksModal = ref(false)
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
@@ -31,7 +29,7 @@ const quickActions = [
         <button class="btn btn-secondary">
           <i class="ri-question-line"></i> 帮助
         </button>
-        <button class="btn btn-secondary" @click="showThanksModal = true">
+        <button class="btn btn-secondary" @click="router.push('/thanks')">
           <i class="ri-heart-3-line"></i> 特别鸣谢
         </button>
       </div>
@@ -67,39 +65,6 @@ const quickActions = [
       </div>
     </div>
 
-    <RModal v-model="showThanksModal" title="特别鸣谢" width="520px">
-      <div class="thanks-modal">
-        <p class="thanks-intro">感谢以下伙伴对 RPBox 的支持与贡献：</p>
-        <div class="thanks-item featured">
-          <div class="thanks-title">
-            <i class="ri-heart-3-line"></i>
-            厘米特·绿宝石
-          </div>
-          <p class="thanks-desc">对 RPBox 的赞助与宣发支持，特别感谢。</p>
-        </div>
-        <div class="thanks-item">
-          <div class="thanks-title">
-            <i class="ri-heart-3-line"></i>
-            摩迪斯特雷德
-          </div>
-          <p class="thanks-desc">在初期给予大力宣发支持。</p>
-        </div>
-        <div class="thanks-item">
-          <div class="thanks-title">
-            <i class="ri-heart-3-line"></i>
-            海人
-          </div>
-          <p class="thanks-desc">赞助（1月18日）。</p>
-        </div>
-        <div class="thanks-item">
-          <div class="thanks-title">
-            <i class="ri-heart-3-line"></i>
-            <a href="https://github.com/Total-RP/Total-RP-3" target="_blank" rel="noopener">Total RP 3</a>
-          </div>
-          <p class="thanks-desc">感谢 Total RP 3 作者的开源。</p>
-        </div>
-      </div>
-    </RModal>
   </div>
 </template>
 
@@ -254,77 +219,6 @@ const quickActions = [
 .card-arrow {
   font-size: 20px;
   color: #D4A373;
-}
-
-/* 特别鸣谢弹窗 */
-.thanks-modal {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.thanks-intro {
-  margin: 0;
-  font-size: 14px;
-  color: #4B3621;
-}
-
-.thanks-item {
-  background: #FDFBF9;
-  border: 1px solid #E8DCCF;
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.thanks-item.featured {
-  background: #F6E6D6;
-  border-color: #D8B58A;
-  border-left: 4px solid #C44536;
-  box-shadow: 0 6px 16px rgba(128, 64, 48, 0.12);
-}
-
-.thanks-item.featured .thanks-title {
-  color: #5B2E1E;
-  font-weight: 700;
-}
-
-.thanks-item.featured .thanks-title i {
-  color: #A63D2E;
-}
-
-.thanks-item.featured .thanks-desc {
-  color: #6F4A2C;
-}
-
-.thanks-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: #2C1810;
-}
-
-.thanks-title i {
-  color: #C44536;
-  font-size: 18px;
-}
-
-.thanks-title a {
-  color: #804030;
-  text-decoration: none;
-}
-
-.thanks-title a:hover {
-  text-decoration: underline;
-}
-
-.thanks-desc {
-  margin: 0;
-  font-size: 13px;
-  color: #8C7B70;
 }
 
 .anim-item {

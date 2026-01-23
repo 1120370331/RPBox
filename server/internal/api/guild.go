@@ -95,7 +95,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 	if len(guildIDs) > 0 {
 		// 列表查询排除大字段（banner）以提高性能
 		// banner 通过独立的图片 API 访问
-		database.DB.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
+		database.DB.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
 	}
 
 	// 获取有 banner 的公会 ID 列表
@@ -111,11 +111,25 @@ func (s *Server) listGuilds(c *gin.Context) {
 		hasBannerMap[id] = true
 	}
 
-	// 添加用户角色信息和 banner URL
+	// 获取有 avatar 的公会 ID 列表
+	var guildsWithAvatar []uint
+	if len(guildIDs) > 0 {
+		database.DB.Model(&model.Guild{}).
+			Select("id").
+			Where("id IN ? AND avatar IS NOT NULL AND avatar != ''", guildIDs).
+			Pluck("id", &guildsWithAvatar)
+	}
+	hasAvatarMap := make(map[uint]bool)
+	for _, id := range guildsWithAvatar {
+		hasAvatarMap[id] = true
+	}
+
+	// 添加用户角色信息和 banner/avatar URL
 	type GuildWithRole struct {
 		model.Guild
 		MyRole    string `json:"my_role"`
 		BannerURL string `json:"banner_url"`
+		AvatarURL string `json:"avatar_url"`
 	}
 	result := make([]GuildWithRole, len(guilds))
 	for i, g := range guilds {
@@ -128,7 +142,15 @@ func (s *Server) listGuilds(c *gin.Context) {
 			t := g.UpdatedAt
 			g.BannerUpdatedAt = &t
 		}
-		result[i] = GuildWithRole{Guild: g, MyRole: roleMap[g.ID], BannerURL: bannerURL}
+		avatarURL := ""
+		if hasAvatarMap[g.ID] {
+			avatarURL = fmt.Sprintf("/api/v1/images/guild-avatar/%d?w=200&q=80", g.ID)
+		}
+		if g.AvatarUpdatedAt == nil && hasAvatarMap[g.ID] {
+			t := g.UpdatedAt
+			g.AvatarUpdatedAt = &t
+		}
+		result[i] = GuildWithRole{Guild: g, MyRole: roleMap[g.ID], BannerURL: bannerURL, AvatarURL: avatarURL}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": result})
@@ -720,7 +742,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 
 	// 列表查询排除大字段（banner）以提高性能
 	// banner 通过独立的图片 API 访问
-	query.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+	query.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
 
 	// 获取有 banner 的公会 ID 列表
 	guildIDs := make([]uint, len(guilds))
@@ -740,10 +762,24 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 		hasBannerMap[id] = true
 	}
 
-	// 添加 banner URL
+	// 获取有 avatar 的公会 ID 列表
+	var guildsWithAvatar []uint
+	if len(guildIDs) > 0 {
+		database.DB.Model(&model.Guild{}).
+			Select("id").
+			Where("id IN ? AND avatar IS NOT NULL AND avatar != ''", guildIDs).
+			Pluck("id", &guildsWithAvatar)
+	}
+	hasAvatarMap := make(map[uint]bool)
+	for _, id := range guildsWithAvatar {
+		hasAvatarMap[id] = true
+	}
+
+	// 添加 banner/avatar URL
 	type GuildWithBanner struct {
 		model.Guild
 		BannerURL string `json:"banner_url"`
+		AvatarURL string `json:"avatar_url"`
 	}
 	result := make([]GuildWithBanner, len(guilds))
 	for i, g := range guilds {
@@ -756,7 +792,15 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 			t := g.UpdatedAt
 			g.BannerUpdatedAt = &t
 		}
-		result[i] = GuildWithBanner{Guild: g, BannerURL: bannerURL}
+		avatarURL := ""
+		if hasAvatarMap[g.ID] {
+			avatarURL = fmt.Sprintf("/api/v1/images/guild-avatar/%d?w=200&q=80", g.ID)
+		}
+		if g.AvatarUpdatedAt == nil && hasAvatarMap[g.ID] {
+			t := g.UpdatedAt
+			g.AvatarUpdatedAt = &t
+		}
+		result[i] = GuildWithBanner{Guild: g, BannerURL: bannerURL, AvatarURL: avatarURL}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": result})
@@ -816,6 +860,51 @@ func (s *Server) uploadGuildBanner(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "头图更新成功",
 		"banner":  bannerURL,
+	})
+}
+
+// uploadGuildAvatar 上传公会头像
+func (s *Server) uploadGuildAvatar(c *gin.Context) {
+	userID := c.GetUint("userID")
+	guildID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	// 检查权限
+	if !checkGuildAdmin(uint(guildID), userID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	header, err := c.FormFile("avatar")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择头像文件"})
+		return
+	}
+
+	// 检查文件大小 (最大 10MB)
+	if header.Size > 10*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "头像文件不能超过10MB"})
+		return
+	}
+
+	imageURL, err := s.saveUploadedImage(c, header, fmt.Sprintf("guilds/%d/avatar", guildID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存头像失败"})
+		return
+	}
+
+	now := time.Now()
+	if err := database.DB.Model(&model.Guild{}).Where("id = ?", guildID).Updates(map[string]interface{}{
+		"avatar":            imageURL,
+		"avatar_updated_at": now,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新头像失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":           "头像更新成功",
+		"avatar":            imageURL,
+		"avatar_updated_at": now,
 	})
 }
 

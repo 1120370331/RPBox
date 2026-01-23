@@ -8,6 +8,7 @@ import { listGuilds, type Guild } from '@/api/guild'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
 import TiptapEditor from '@/components/TiptapEditor.vue'
+import PostQuickJump from '@/components/PostQuickJump.vue'
 
 const DRAFT_KEY = 'post_create_draft'
 
@@ -36,6 +37,8 @@ const form = ref<CreatePostRequest>({
 const coverImagePreview = ref('')
 const coverImageLoading = ref(false)
 const coverImageInput = ref<HTMLInputElement | null>(null)
+const editorRef = ref<InstanceType<typeof TiptapEditor> | null>(null)
+const quickJumpOpen = ref(false)
 
 // 是否为活动分区
 const isEventCategory = computed(() => form.value.category === 'event')
@@ -335,6 +338,15 @@ function removeCoverImage() {
   coverImagePreview.value = ''
   form.value.cover_image = ''
 }
+
+function handleQuickInsert(html: string) {
+  editorRef.value?.insertContent(html)
+  quickJumpOpen.value = false
+}
+
+function toggleQuickJump() {
+  quickJumpOpen.value = !quickJumpOpen.value
+}
 </script>
 
 <template>
@@ -384,10 +396,26 @@ function removeCoverImage() {
       <!-- 内容编辑器 -->
       <div class="content-group">
         <TiptapEditor
+          ref="editorRef"
           v-model="form.content"
           placeholder="开始书写你的传奇..."
-        />
+        >
+          <template #toolbar>
+            <button
+              type="button"
+              class="toolbar-slot"
+              :class="{ active: quickJumpOpen }"
+              title="快速跳转"
+              @mousedown.prevent
+              @click="toggleQuickJump"
+            >
+              <i class="ri-links-line"></i>
+            </button>
+          </template>
+        </TiptapEditor>
       </div>
+
+      <PostQuickJump v-model="quickJumpOpen" :on-insert="handleQuickInsert" />
     </div>
 
     <!-- 设置区域 -->
@@ -401,6 +429,23 @@ function removeCoverImage() {
               {{ cat.label }}
             </option>
           </select>
+        </div>
+      </div>
+
+      <!-- 活动设置 -->
+      <div v-if="isEventCategory" class="setting-item setting-vertical">
+        <label class="setting-label">活动类型</label>
+        <div class="event-type-toggle">
+          <button
+            :class="{ active: form.event_type === 'server' }"
+            :disabled="!canPostServerEvent"
+            @click="form.event_type = 'server'"
+          >服务器</button>
+          <button
+            :class="{ active: form.event_type === 'guild' }"
+            :disabled="!canPostGuildEvent"
+            @click="form.event_type = 'guild'"
+          >公会</button>
         </div>
       </div>
 
@@ -439,23 +484,6 @@ function removeCoverImage() {
         </div>
       </div>
 
-      <!-- 活动设置 -->
-      <div v-if="isEventCategory" class="setting-item setting-vertical">
-        <label class="setting-label">活动类型</label>
-        <div class="event-type-toggle">
-          <button
-            :class="{ active: form.event_type === 'server' }"
-            :disabled="!canPostServerEvent"
-            @click="form.event_type = 'server'"
-          >服务器</button>
-          <button
-            :class="{ active: form.event_type === 'guild' }"
-            :disabled="!canPostGuildEvent"
-            @click="form.event_type = 'guild'"
-          >公会</button>
-        </div>
-      </div>
-
       <div v-if="isEventCategory && form.event_type === 'guild'" class="setting-item setting-vertical">
         <label class="setting-label">公会</label>
         <select v-model="form.guild_id" class="guild-select">
@@ -485,17 +513,6 @@ function removeCoverImage() {
       <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical event-color-group">
         <label class="setting-label">活动标记颜色</label>
         <div class="color-picker-wrapper">
-          <div class="preset-colors">
-            <button
-              v-for="color in ['#D97706', '#2196F3', '#16A34A', '#DC2626', '#9333EA', '#EA580C']"
-              :key="color"
-              class="color-preset"
-              :class="{ active: form.event_color === color }"
-              :style="{ backgroundColor: color }"
-              @click="form.event_color = color"
-              type="button"
-            ></button>
-          </div>
           <div class="custom-color-input">
             <input type="color" v-model="form.event_color" class="color-input" />
             <span class="color-value">{{ form.event_color }}</span>
@@ -975,32 +992,6 @@ function removeCoverImage() {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.preset-colors {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.color-preset {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  border: 3px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-}
-
-.color-preset:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.color-preset.active {
-  border-color: #2C1810;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2C1810;
 }
 
 .custom-color-input {

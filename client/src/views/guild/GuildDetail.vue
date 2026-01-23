@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, listGuildApplications, applyGuild, type Guild, type GuildMember } from '@/api/guild'
+import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, type Guild, type GuildMember } from '@/api/guild'
+import { getImageUrl } from '@/api/item'
 import { useDialog } from '@/composables/useDialog'
 import RModal from '@/components/RModal.vue'
 import RButton from '@/components/RButton.vue'
@@ -40,10 +41,21 @@ const editForm = ref({
 const bannerFile = ref<File | null>(null)
 const bannerPreview = ref('')
 const heroBannerInput = ref<HTMLInputElement | null>(null)
+const avatarFile = ref<File | null>(null)
+const avatarPreview = ref('')
+const heroAvatarInput = ref<HTMLInputElement | null>(null)
 
 const guildId = Number(route.params.id)
 
 const isAdmin = computed(() => myRole.value === 'owner' || myRole.value === 'admin')
+const guildAvatarUrl = computed(() => {
+  if (!guild.value || (!guild.value.avatar_url && !guild.value.avatar)) return ''
+  return getImageUrl('guild-avatar', guild.value.id, {
+    w: 160,
+    q: 80,
+    v: guild.value.avatar_updated_at || guild.value.updated_at,
+  })
+})
 
 async function loadGuild() {
   loading.value = true
@@ -140,6 +152,8 @@ function openSettings() {
   }
   bannerPreview.value = guild.value.banner || ''
   bannerFile.value = null
+  avatarPreview.value = guildAvatarUrl.value || ''
+  avatarFile.value = null
   showSettingsModal.value = true
 }
 
@@ -160,8 +174,30 @@ function handleBannerSelect(e: Event) {
   }
 }
 
+function handleAvatarSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input.files && input.files[0]) {
+    const file = input.files[0]
+    if (file.size > 10 * 1024 * 1024) {
+      alert({ title: '文件过大', message: '头像文件不能超过10MB', type: 'error' })
+      return
+    }
+    avatarFile.value = file
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      avatarPreview.value = e.target?.result as string
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
 function triggerBannerUpload() {
   heroBannerInput.value?.click()
+}
+
+function triggerAvatarUpload() {
+  if (!isAdmin.value) return
+  heroAvatarInput.value?.click()
 }
 
 async function handleHeroBannerSelect(e: Event) {
@@ -183,10 +219,39 @@ async function handleHeroBannerSelect(e: Event) {
   input.value = ''
 }
 
+async function handleHeroAvatarSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files || !input.files[0] || !guild.value) return
+
+  const file = input.files[0]
+  if (file.size > 10 * 1024 * 1024) {
+    await alert({ title: '文件过大', message: '头像文件不能超过10MB', type: 'error' })
+    return
+  }
+
+  try {
+    const res = await uploadGuildAvatar(guildId, file)
+    guild.value.avatar = res.avatar
+    if (res.avatar_updated_at) {
+      guild.value.avatar_updated_at = res.avatar_updated_at
+    }
+  } catch (e: any) {
+    await alert({ title: '上传失败', message: e.message || '上传失败', type: 'error' })
+  }
+  input.value = ''
+}
+
 async function saveSettings() {
   if (!guild.value) return
   saving.value = true
   try {
+    if (avatarFile.value) {
+      const res = await uploadGuildAvatar(guildId, avatarFile.value)
+      guild.value.avatar = res.avatar
+      if (res.avatar_updated_at) {
+        guild.value.avatar_updated_at = res.avatar_updated_at
+      }
+    }
     // 如果有新头图，先上传
     if (bannerFile.value) {
       const res = await uploadGuildBanner(guildId, bannerFile.value)
@@ -282,6 +347,13 @@ onMounted(loadGuild)
               <!-- 内容 -->
               <div class="hero-content">
                 <div class="content-box">
+                  <div class="guild-avatar" :class="{ editable: isAdmin }" @click="triggerAvatarUpload">
+                    <img v-if="guildAvatarUrl" :src="guildAvatarUrl" alt="" />
+                    <span v-else>{{ guild.name.charAt(0) }}</span>
+                    <div v-if="isAdmin" class="avatar-edit">
+                      <i class="ri-camera-line"></i>
+                    </div>
+                  </div>
                   <div class="badges">
                     <span v-if="guild.faction" class="badge faction" :class="guild.faction">
                       {{ getFactionLabel(guild.faction) }}
@@ -310,6 +382,7 @@ onMounted(loadGuild)
                     </button>
                   </div>
                   <input ref="heroBannerInput" type="file" accept="image/*" hidden @change="handleHeroBannerSelect" />
+                  <input ref="heroAvatarInput" type="file" accept="image/*" hidden @change="handleHeroAvatarSelect" />
                 </div>
               </div>
             </div>
@@ -401,6 +474,22 @@ onMounted(loadGuild)
     <!-- 设置弹窗 -->
     <RModal v-model="showSettingsModal" title="公会设置" width="560px">
       <div class="settings-form">
+        <!-- 头像上传 -->
+        <div class="form-section">
+          <label>公会头像</label>
+          <div
+            class="avatar-upload"
+            @click="($refs.avatarInput as HTMLInputElement).click()"
+          >
+            <img v-if="avatarPreview" :src="avatarPreview" alt="" />
+            <div v-else class="upload-hint">
+              <i class="ri-camera-line"></i>
+              <span>点击上传头像</span>
+            </div>
+          </div>
+          <input ref="avatarInput" type="file" accept="image/*" hidden @change="handleAvatarSelect" />
+        </div>
+
         <!-- 头图上传 -->
         <div class="form-section">
           <label>公会头图</label>
@@ -693,6 +782,52 @@ onMounted(loadGuild)
 
 .content-box {
   max-width: 500px;
+}
+
+.guild-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #B87333, #4B3621);
+  color: #fff;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  position: relative;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 6px 16px rgba(44, 24, 16, 0.25);
+}
+
+.guild-avatar.editable {
+  cursor: pointer;
+}
+
+.guild-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-edit {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #fff;
+  font-size: 18px;
+}
+
+.guild-avatar.editable:hover .avatar-edit {
+  opacity: 1;
 }
 
 .badges {
@@ -1207,6 +1342,48 @@ onMounted(loadGuild)
 
 .upload-hint span {
   font-size: 14px;
+}
+
+/* Avatar Upload */
+.avatar-upload {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  background: #FBF5EF;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  border: 2px dashed #E8DCCF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-upload:hover {
+  border-color: #804030;
+}
+
+.avatar-upload img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-upload .upload-hint {
+  opacity: 1;
+  background: rgba(128, 64, 48, 0.08);
+  color: #804030;
+}
+
+.avatar-upload img + .upload-hint {
+  opacity: 0;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+
+.avatar-upload:hover img + .upload-hint {
+  opacity: 1;
 }
 
 /* Article Content - 富文本渲染 */

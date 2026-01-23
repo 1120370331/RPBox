@@ -177,6 +177,14 @@ func (s *Server) createComment(c *gin.Context) {
 		}
 	}
 
+	// @提及通知
+	mentionPreview := service.NormalizeMentionPreview(req.Content)
+	if len([]rune(mentionPreview)) > 50 {
+		mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+	}
+	mentionMessage := "在《" + post.Title + "》的评论中提到了你：" + mentionPreview
+	service.CreateMentionNotifications(userID, "comment", comment.ID, mentionMessage, req.Content)
+
 	c.JSON(http.StatusCreated, comment)
 }
 

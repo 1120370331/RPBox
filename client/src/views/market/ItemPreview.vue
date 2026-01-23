@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Item } from '@/api/item'
+import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 
 const router = useRouter()
 const item = ref<Item | null>(null)
 const previewFrom = ref('')
+const detailContentRef = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   loadPreviewData()
@@ -35,6 +37,16 @@ function copyImportCode() {
   if (item.value?.import_code) {
     navigator.clipboard.writeText(item.value.import_code)
   }
+}
+
+watch(() => item.value?.detail_content, async () => {
+  await nextTick()
+  sanitizeJumpLinks(detailContentRef.value)
+  hydrateJumpCardImages(detailContentRef.value)
+})
+
+function handlePreviewContentClick(event: MouseEvent) {
+  handleJumpLinkClick(event, router)
 }
 </script>
 
@@ -94,7 +106,7 @@ function copyImportCode() {
         <!-- 详细介绍 -->
         <div v-if="item.detail_content" class="item-detail-content">
           <h3>详细介绍</h3>
-          <div class="rich-content" v-html="item.detail_content"></div>
+          <div ref="detailContentRef" class="rich-content" v-html="item.detail_content" @click="handlePreviewContentClick"></div>
         </div>
 
         <div class="action-buttons">
@@ -268,6 +280,17 @@ function copyImportCode() {
 .rich-content {
   line-height: 1.8;
   color: #5D4037;
+}
+
+.rich-content :deep(.mention) {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.12);
+  color: #804030;
+  font-weight: 600;
+  margin: 0 2px;
 }
 
 .action-buttons {

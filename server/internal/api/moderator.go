@@ -1248,3 +1248,44 @@ func (s *Server) getMetricsBasic(c *gin.Context) {
 		"profile_backups": profileBackups,
 	})
 }
+
+// getMetricsBasicHistory 获取基础监控历史趋势数据
+func (s *Server) getMetricsBasicHistory(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))
+	if days > 365 {
+		days = 365
+	}
+	if days < 1 {
+		days = 30
+	}
+
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -days+1)
+
+	type DailyData struct {
+		Date              string `json:"date"`
+		NewStoryArchives  int64  `json:"new_story_archives"`
+		NewStoryEntries   int64  `json:"new_story_entries"`
+		NewProfileBackups int64  `json:"new_profile_backups"`
+	}
+
+	var result []DailyData
+
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+
+		var data DailyData
+		data.Date = dateStr
+
+		database.DB.Model(&model.Story{}).Where("DATE(created_at) = ?", dateStr).Count(&data.NewStoryArchives)
+		database.DB.Model(&model.StoryEntry{}).Where("DATE(created_at) = ?", dateStr).Count(&data.NewStoryEntries)
+		database.DB.Model(&model.AccountBackup{}).
+			Select("COALESCE(SUM(profiles_count), 0)").
+			Where("DATE(created_at) = ?", dateStr).
+			Scan(&data.NewProfileBackups)
+
+		result = append(result, data)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"metrics": result, "days": days})
+}

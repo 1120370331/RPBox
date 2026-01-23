@@ -4,10 +4,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
 import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
 import EmojiPicker from '@/components/EmojiPicker.vue'
+import EmoteEditor from '@/components/EmoteEditor.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { renderEmoteContent } from '@/utils/emote'
+import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import { useEmoteStore } from '@/stores/emote'
@@ -46,6 +48,8 @@ const showEmojiPicker = ref(false)
 const showReplyEmojiPicker = ref(false)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const replyEmojiTrigger = ref<HTMLElement | null>(null)
+const commentEditorRef = ref<any>(null)
+const replyEditorRef = ref<any>(null)
 
 const errorMessage = ref('')
 const commentError = ref('')
@@ -152,6 +156,8 @@ async function setupArticleImagePreview() {
     viewerStartIndex.value = index
     showImageViewer.value = true
   }, '查看图像')
+  sanitizeJumpLinks(articleContentRef.value)
+  hydrateJumpCardImages(articleContentRef.value)
 }
 
 watch(() => post.value?.content, () => {
@@ -286,12 +292,21 @@ async function submitReply() {
 
 // Emoji选择处理
 function handleEmojiSelect(emoji: string) {
-  appendEmoteToken(commentContent, emoji)
+  if (commentEditorRef.value?.insertToken) {
+    commentEditorRef.value.insertToken(emoji)
+  } else {
+    appendEmoteToken(commentContent, emoji)
+  }
   showEmojiPicker.value = false
 }
 
 function handleReplyEmojiSelect(emoji: string) {
-  appendEmoteToken(replyContent, emoji)
+  const editor = Array.isArray(replyEditorRef.value) ? replyEditorRef.value[0] : replyEditorRef.value
+  if (editor?.insertToken) {
+    editor.insertToken(emoji)
+  } else {
+    appendEmoteToken(replyContent, emoji)
+  }
   showReplyEmojiPicker.value = false
 }
 
@@ -388,6 +403,16 @@ function goBack() {
 
 function goToEdit() {
   router.push({ name: 'post-edit', params: { id: post.value.id } })
+}
+
+function handleArticleClick(event: MouseEvent) {
+  handleJumpLinkClick(event, router, {
+    returnTo: {
+      type: 'post',
+      path: route.fullPath,
+      title: post.value?.title || '帖子',
+    },
+  })
 }
 
 function getCommentIdFromRoute() {
@@ -498,7 +523,7 @@ async function handleDelete() {
 
             <div class="zen-divider"></div>
 
-            <div ref="articleContentRef" class="article-content" v-html="post.content"></div>
+            <div ref="articleContentRef" class="article-content" v-html="post.content" @click="handleArticleClick"></div>
           </div>
 
           <!-- 作者操作 -->
@@ -546,11 +571,12 @@ async function handleDelete() {
 
                 <!-- 回复输入框 -->
                 <div v-if="replyingTo?.id === comment.id" class="reply-input-box">
-                  <textarea
+                  <EmoteEditor
+                    ref="replyEditorRef"
                     v-model="replyContent"
                     :placeholder="'回复 @' + comment.author_name"
                     :disabled="submittingReply"
-                  ></textarea>
+                  />
                   <div class="reply-actions">
                     <button class="emoji-btn-small" @click="openReplyEmojiPicker" type="button">
                       <i class="ri-emotion-line"></i>
@@ -592,11 +618,12 @@ async function handleDelete() {
 
                       <!-- 回复的回复输入框 -->
                       <div v-if="replyingTo?.id === reply.id" class="reply-input-box">
-                        <textarea
+                        <EmoteEditor
+                          ref="replyEditorRef"
                           v-model="replyContent"
                           :placeholder="'回复 @' + reply.author_name"
                           :disabled="submittingReply"
-                        ></textarea>
+                        />
                         <div class="reply-actions">
                           <button class="emoji-btn-small" @click="openReplyEmojiPicker" type="button">
                             <i class="ri-emotion-line"></i>
@@ -635,11 +662,12 @@ async function handleDelete() {
 
           <!-- 评论输入（底部） -->
           <div class="comment-input-box">
-            <textarea
+            <EmoteEditor
+              ref="commentEditorRef"
               v-model="commentContent"
               placeholder="分享你的想法..."
               :disabled="submittingComment"
-            ></textarea>
+            />
             <div class="input-footer">
               <button ref="emojiButtonRef" class="emoji-btn" @click="showEmojiPicker = true" type="button">
                 <i class="ri-emotion-line"></i>
@@ -1019,6 +1047,17 @@ async function handleDelete() {
   color: #804030;
 }
 
+.article-content :deep(.mention) {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.12);
+  color: #804030;
+  font-weight: 600;
+  margin: 0 2px;
+}
+
 /* ========== 作者操作 ========== */
 .owner-actions {
   display: flex;
@@ -1100,7 +1139,7 @@ async function handleDelete() {
   box-shadow: 0 0 0 3px rgba(128, 64, 48, 0.1);
 }
 
-.comment-input-box textarea {
+.comment-input-box :deep(.emote-editor-input) {
   width: 100%;
   background: transparent;
   border: none;
@@ -1113,7 +1152,7 @@ async function handleDelete() {
   min-height: 80px;
 }
 
-.comment-input-box textarea::placeholder {
+.comment-input-box :deep(.emote-editor-input)::before {
   color: rgba(141, 123, 104, 0.6);
 }
 
@@ -1254,12 +1293,24 @@ async function handleDelete() {
 
 .comment-text :deep(.comment-emote),
 .reply-text :deep(.comment-emote) {
-  width: 128px;
-  height: 128px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
   display: inline-block;
   margin: 4px 6px 4px 0;
   vertical-align: middle;
+}
+
+.comment-text :deep(.comment-mention),
+.reply-text :deep(.comment-mention) {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.12);
+  color: #804030;
+  font-weight: 600;
+  margin: 0 2px;
 }
 
 .empty-comments {
@@ -1374,7 +1425,7 @@ async function handleDelete() {
   border-radius: 6px;
 }
 
-.reply-input-box textarea {
+.reply-input-box :deep(.emote-editor-input) {
   width: 100%;
   min-height: 60px;
   padding: 8px;
@@ -1385,7 +1436,7 @@ async function handleDelete() {
   outline: none;
 }
 
-.reply-input-box textarea:focus {
+.reply-input-box :deep(.emote-editor-input:focus) {
   border-color: #B87333;
 }
 

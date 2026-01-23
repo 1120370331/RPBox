@@ -53,11 +53,13 @@ func GetNotifications(userID uint, notifType string, page, pageSize int) ([]mode
 		case "like":
 			query = query.Where("type IN ?", []string{"post_like", "item_like"})
 		case "comment":
-			query = query.Where("type IN ?", []string{"post_comment", "item_comment"})
+			query = query.Where("type IN ?", []string{"post_comment", "item_comment", "mention"})
 		case "guild":
 			query = query.Where("type IN ?", []string{"guild_application", "guild_invite"})
 		case "system":
 			query = query.Where("type = ?", "system")
+		case "mention":
+			query = query.Where("type = ?", "mention")
 		}
 	}
 

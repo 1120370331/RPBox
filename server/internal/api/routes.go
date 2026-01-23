@@ -149,6 +149,7 @@ func (s *Server) setupRoutes() {
 			auth.PUT("/guilds/:id/members/:uid", s.updateMemberRole)
 			auth.DELETE("/guilds/:id/members/:uid", s.removeMember)
 			auth.POST("/guilds/:id/banner", s.uploadGuildBanner)
+			auth.POST("/guilds/:id/avatar", s.uploadGuildAvatar)
 
 			// 公会申请系统
 			auth.POST("/guilds/:id/apply", s.applyGuild)
@@ -197,6 +198,7 @@ func (s *Server) setupRoutes() {
 			auth.PUT("/user/info", s.updateUserInfo)
 			auth.POST("/user/avatar", s.updateAvatar)
 			auth.POST("/user/bind-email", s.bindEmail)
+			auth.GET("/users/search", s.searchUsers)
 			auth.GET("/users/:id", s.getUserProfile)
 			auth.GET("/users/:id/guilds", s.getUserGuilds)
 

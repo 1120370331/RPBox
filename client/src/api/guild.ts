@@ -6,7 +6,11 @@ export interface Guild {
   description: string
   icon: string
   color: string
+  avatar?: string
+  avatar_url?: string
+  avatar_updated_at?: string
   banner: string
+  banner_url?: string
   banner_updated_at?: string
   slogan: string
   lore: string
@@ -154,6 +158,12 @@ export async function uploadGuildBanner(guildId: number, file: File): Promise<{ 
   const formData = new FormData()
   formData.append('banner', file)
   return request.post(`/guilds/${guildId}/banner`, formData)
+}
+
+export async function uploadGuildAvatar(guildId: number, file: File): Promise<{ avatar: string; avatar_updated_at?: string }> {
+  const formData = new FormData()
+  formData.append('avatar', file)
+  return request.post(`/guilds/${guildId}/avatar`, formData)
 }
 
 // ========== 公会申请系统 ==========
