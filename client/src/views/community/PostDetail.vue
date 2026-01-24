@@ -1246,8 +1246,6 @@ async function handleDelete() {
   font-weight: 600;
   color: #fff;
   flex-shrink: 0;
-  filter: grayscale(100%);
-  transition: filter 0.5s;
   overflow: hidden;
 }
 
@@ -1255,10 +1253,6 @@ async function handleDelete() {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.comment-item:hover .comment-avatar {
-  filter: grayscale(0%);
 }
 
 .comment-body {
