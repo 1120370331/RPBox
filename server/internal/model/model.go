@@ -5,7 +5,7 @@ import "time"
 type User struct {
 	ID            uint   `gorm:"primarykey" json:"id"`
 	Username      string `gorm:"uniqueIndex;size:50" json:"username"`
-	Email         string `gorm:"uniqueIndex;size:100" json:"email"`
+	Email         string `gorm:"uniqueIndex;size:100" json:"-"`
 	EmailVerified bool   `gorm:"default:false" json:"email_verified"` // 邮箱是否已验证
 	Avatar        string `gorm:"type:text" json:"avatar"`             // 头像(base64)
 	Role          string `gorm:"size:20;default:user" json:"role"`    // user|moderator|admin
