@@ -13,14 +13,22 @@ import (
 var DB *gorm.DB
 
 func Init(cfg *config.DatabaseConfig) error {
+	sslmode := cfg.SSLMode
+	if sslmode == "" {
+		sslmode = "require"
+	}
+
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, sslmode,
 	)
+	if cfg.SSLRootCert != "" {
+		dsn += fmt.Sprintf(" sslrootcert=%s", cfg.SSLRootCert)
+	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		return err
+		return fmt.Errorf("connect database with sslmode=%s: %w", sslmode, err)
 	}
 
 	// 自动迁移
