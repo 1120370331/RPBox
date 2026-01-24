@@ -274,3 +274,4 @@ server/storage/cache/
 server/storage/uploads/
 server/storage/backups/
 server/storage/**/*.dump
+server/storage/addons/RPBox_Addon/manifest.json
