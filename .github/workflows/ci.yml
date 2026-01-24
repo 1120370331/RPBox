@@ -47,8 +47,18 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
+            set -e
             cd ~/RPBox
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             cd server
+            echo "Building server..."
             go build -o rpbox-server cmd/server/main.go
+            if [ ! -f rpbox-server ]; then
+              echo "Build failed: rpbox-server not found"
+              exit 1
+            fi
+            echo "Build successful, restarting service..."
             sudo supervisorctl restart rpbox
+            sleep 2
+            sudo supervisorctl status rpbox
