@@ -3,6 +3,30 @@ server:
   mode: "debug"
   max_body_size_mb: 200
 
+cors:
+  allowed_origins:
+    - "https://totalrpbox.com"
+    - "https://www.totalrpbox.com"
+    - "https://ksxvodevhonx.sealosbja.site"
+    - "tauri://localhost"
+    - "https://tauri.localhost"
+  dev_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+    - "http://localhost:1420"
+    - "http://127.0.0.1:1420"
+
+rate_limit:
+  global:
+    rps: 100
+    burst: 200
+  auth:
+    rps: 1
+    burst: 3
+  api:
+    rps: 30
+    burst: 60
+
 database:
   host: "localhost"
   port: "5432"
