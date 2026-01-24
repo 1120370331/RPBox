@@ -114,15 +114,49 @@ jobs:
 
       - name: Deploy addon
         run: |
+          set -e
           VERSION=${{ steps.version.outputs.VERSION }}
           REMOTE_PATH="${{ secrets.ADDON_PATH }}"
 
+          echo "Deploying addon version $VERSION to $REMOTE_PATH"
+
           # 上传版本包到 versions
+          echo "Creating versions directory..."
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH/versions"
+
+          echo "Uploading version package..."
           scp -P 2233 releases/addon/$VERSION/RPBox_Addon_$VERSION.zip ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/versions/$VERSION.zip
 
           # 更新 latest
+          echo "Updating latest.zip..."
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cp $REMOTE_PATH/versions/$VERSION.zip $REMOTE_PATH/latest.zip"
 
           # 更新 manifest.json
+          echo "Uploading manifest.json..."
           scp -P 2233 server/storage/addons/RPBox_Addon/manifest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/manifest.json
+
+      - name: Verify deployment
+        run: |
+          set -e
+          VERSION=${{ steps.version.outputs.VERSION }}
+          REMOTE_PATH="${{ secrets.ADDON_PATH }}"
+
+          echo "Verifying deployment..."
+
+          # 验证版本包存在
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "test -f $REMOTE_PATH/versions/$VERSION.zip" || { echo "ERROR: Version package not found"; exit 1; }
+          echo "Version package: OK"
+
+          # 验证 latest.zip 存在
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "test -f $REMOTE_PATH/latest.zip" || { echo "ERROR: latest.zip not found"; exit 1; }
+          echo "latest.zip: OK"
+
+          # 验证 manifest.json 版本正确
+          REMOTE_VERSION=$(ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cat $REMOTE_PATH/manifest.json | grep -o '\"latest\": \"[^\"]*\"' | cut -d'\"' -f4")
+          if [ "$REMOTE_VERSION" != "$VERSION" ]; then
+            echo "ERROR: manifest.json version mismatch. Expected: $VERSION, Got: $REMOTE_VERSION"
+            exit 1
+          fi
+          echo "manifest.json version: OK ($REMOTE_VERSION)"
+
+          echo "Deployment verified successfully!"
