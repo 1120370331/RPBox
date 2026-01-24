@@ -43,3 +43,16 @@ Scope: actions that must be done on the production application server and revers
 | APP-SEC-005 | Install/renew CA-signed certificate | High | Automate renewal (e.g., certbot/ACME). |
 | APP-SEC-006 | Validate security headers and redirect | High | `curl -I` and securityheaders.com should show HSTS and 301. |
 | APP-SEC-007 | Restrict inbound ports | Medium | Allow 443 (and 80 for redirect); block direct access to app port. |
+
+# Server-side Secrets To-Do (Production Config)
+
+Scope: actions that must be done on the production server to remove plaintext secrets and use env/secret storage.
+
+| ID | Task | Importance | Notes |
+| --- | --- | --- | --- |
+| APP-SECRET-001 | Provision production secrets in env/secret manager | Critical | Set `DATABASE_PASSWORD`, `JWT_SECRET`, `SMTP_PASSWORD`, `REDIS_PASSWORD`, and OSS keys if enabled (`OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`). |
+| APP-SECRET-002 | Create `config.local.yaml` or environment file | Critical | Keep it out of VCS; override only sensitive fields and production-only values. |
+| APP-SECRET-003 | Remove plaintext secrets from deployed `config.yaml` | High | Ensure runtime values are injected via env or `config.local.yaml`. |
+| APP-SECRET-004 | Lock down secret file permissions | High | `chmod 600` and owned by the service user. |
+| APP-SECRET-005 | Rotate default/leaked credentials | High | Rotate DB, SMTP, JWT; expect user re-login after JWT rotation. |
+| APP-SECRET-006 | Restart API service and verify config load | High | Confirm login, email sending, Redis connection, and DB auth succeed. |

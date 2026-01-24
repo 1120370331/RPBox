@@ -274,6 +274,11 @@ func (s *Server) getUserProfile(c *gin.Context) {
 		response["email_verified"] = user.EmailVerified
 		response["sponsor_color"] = user.SponsorColor
 		response["sponsor_bold"] = user.SponsorBold
+	} else {
+		maskedEmail := user.MaskedEmail()
+		if maskedEmail != "" {
+			response["email"] = maskedEmail
+		}
 	}
 
 	c.JSON(http.StatusOK, response)
