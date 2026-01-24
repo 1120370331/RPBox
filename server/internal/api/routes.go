@@ -21,13 +21,18 @@ func (s *Server) setupRoutes() {
 	s.router.Static("/emotes", filepath.Join(s.cfg.Storage.Path, "emotes"))
 
 	v1 := s.router.Group("/api/v1")
+	v1.Use(middleware.RateLimit(s.cfg.RateLimit.API.RPS, s.cfg.RateLimit.API.Burst))
 	{
 		// 公开接口
-		v1.POST("/auth/send-code", s.sendVerificationCode)
-		v1.POST("/auth/register", s.register)
-		v1.POST("/auth/login", s.login)
-		v1.POST("/auth/forgot-password", s.forgotPassword) // 发送重置密码验证码
-		v1.POST("/auth/reset-password", s.resetPassword)   // 重置密码
+		authPublic := v1.Group("/auth")
+		authPublic.Use(middleware.StrictRateLimit(s.cfg.RateLimit.Auth.RPS, s.cfg.RateLimit.Auth.Burst))
+		{
+			authPublic.POST("/send-code", s.sendVerificationCode)
+			authPublic.POST("/register", s.register)
+			authPublic.POST("/login", s.login)
+			authPublic.POST("/forgot-password", s.forgotPassword) // 发送重置密码验证码
+			authPublic.POST("/reset-password", s.resetPassword)   // 重置密码
+		}
 
 		// 插件版本管理（公开）
 		v1.GET("/addon/manifest", s.getAddonManifest)
@@ -75,6 +80,8 @@ func (s *Server) setupRoutes() {
 
 			auth.GET("/stories", s.listStories)
 			auth.POST("/stories", s.createStory)
+			auth.POST("/stories/batch-delete", s.batchDeleteStories)
+			auth.POST("/stories/batch-move", s.batchMoveStories)
 			auth.GET("/stories/:id", s.getStory)
 			auth.PUT("/stories/:id", s.updateStory)
 			auth.DELETE("/stories/:id", s.deleteStory)

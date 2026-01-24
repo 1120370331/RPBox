@@ -18,6 +18,8 @@ type Config struct {
 	Updater  UpdaterConfig  `mapstructure:"updater"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	SMTP     SMTPConfig     `mapstructure:"smtp"`
+	CORS     CORSConfig     `mapstructure:"cors"`
+	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
 }
 
 type UpdaterConfig struct {
@@ -80,11 +82,13 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     string `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	DBName   string `mapstructure:"dbname"`
+	Host        string `mapstructure:"host"`
+	Port        string `mapstructure:"port"`
+	User        string `mapstructure:"user"`
+	Password    string `mapstructure:"password"`
+	DBName      string `mapstructure:"dbname"`
+	SSLMode     string `mapstructure:"sslmode"`
+	SSLRootCert string `mapstructure:"sslrootcert"`
 }
 
 type JWTConfig struct {
@@ -107,6 +111,22 @@ type SMTPConfig struct {
 	From     string `mapstructure:"from"`
 }
 
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+	DevOrigins     []string `mapstructure:"dev_origins"`
+}
+
+type RateLimitConfig struct {
+	Global RateLimitSetting `mapstructure:"global"`
+	Auth   RateLimitSetting `mapstructure:"auth"`
+	API    RateLimitSetting `mapstructure:"api"`
+}
+
+type RateLimitSetting struct {
+	RPS   float64 `mapstructure:"rps"`
+	Burst int     `mapstructure:"burst"`
+}
+
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -118,6 +138,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.mode", "debug")
 	viper.SetDefault("server.max_body_size_mb", 200)
 	viper.SetDefault("storage.path", "storage") // 改为相对路径，不带 ./
+	viper.SetDefault("database.sslmode", "require")
+	viper.SetDefault("database.sslrootcert", "")
 	viper.SetDefault("oss.enabled", false)
 	viper.SetDefault("oss.prefix", "images")
 	viper.SetDefault("backup.enabled", false)
@@ -133,6 +155,14 @@ func Load() (*Config, error) {
 	viper.SetDefault("backup.oss.use_https", true)
 	viper.SetDefault("backup.oss.use_cname", false)
 	viper.SetDefault("backup.oss.prefix", "db-backups")
+	viper.SetDefault("cors.allowed_origins", []string{})
+	viper.SetDefault("cors.dev_origins", []string{})
+	viper.SetDefault("rate_limit.global.rps", 100)
+	viper.SetDefault("rate_limit.global.burst", 200)
+	viper.SetDefault("rate_limit.auth.rps", 1)
+	viper.SetDefault("rate_limit.auth.burst", 3)
+	viper.SetDefault("rate_limit.api.rps", 30)
+	viper.SetDefault("rate_limit.api.burst", 60)
 
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()

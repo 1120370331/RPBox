@@ -27,7 +27,12 @@ type Server struct {
 func NewServer(cfg *config.Config) *Server {
 	gin.SetMode(cfg.Server.Mode)
 	router := gin.Default()
-	router.Use(middleware.CORS())
+	if cfg.Server.Mode == gin.ReleaseMode {
+		router.Use(middleware.HTTPSRedirect())
+	}
+	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.CORS(cfg))
+	router.Use(middleware.RateLimit(cfg.RateLimit.Global.RPS, cfg.RateLimit.Global.Burst))
 	maxBodySizeMB := cfg.Server.MaxBodySizeMB
 	if maxBodySizeMB <= 0 {
 		maxBodySizeMB = 200
