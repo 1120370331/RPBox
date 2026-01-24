@@ -49,8 +49,24 @@ jobs:
           script: |
             set -e
             cd ~/RPBox
+
+            # 备份 storage 目录中的运行时数据（不受 git 管理）
+            echo "Backing up storage data..."
+            if [ -d server/storage/addons ]; then
+              cp -r server/storage/addons /tmp/rpbox_addons_backup
+            fi
+
             git fetch origin main
             git reset --hard origin/main
+
+            # 恢复 storage 备份
+            echo "Restoring storage data..."
+            if [ -d /tmp/rpbox_addons_backup ]; then
+              mkdir -p server/storage/addons
+              cp -r /tmp/rpbox_addons_backup/* server/storage/addons/
+              rm -rf /tmp/rpbox_addons_backup
+            fi
+
             cd server
             echo "Building server..."
             go build -o rpbox-server cmd/server/main.go
