@@ -1,7 +1,14 @@
 {
   "name": "RPBox_Addon",
-  "latest": "1.0.7",
+  "latest": "1.0.8",
   "versions": [
+    {
+      "version": "1.0.8",
+      "releaseDate": "2026-01-23",
+      "minClientVersion": "1.0.0",
+      "changelog": "适配了12.0前夕版本",
+      "downloadUrl": "/api/v1/addon/download/1.0.8"
+    },
     {
       "version": "1.0.7",
       "releaseDate": "2026-01-21",
