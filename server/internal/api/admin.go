@@ -132,6 +132,7 @@ func (s *Server) setUserRole(c *gin.Context) {
 
 	user.Role = req.Role
 	database.DB.Save(&user)
+	s.invalidateUserProfileCache(c.Request.Context(), user.ID)
 
 	// 记录日志
 	logAdminAction(c, "set_role", "user", uint(id), user.Username, map[string]interface{}{
@@ -192,6 +193,7 @@ func (s *Server) setUserSponsor(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
 		return
 	}
+	s.invalidateUserProfileCache(c.Request.Context(), user.ID)
 
 	logAdminAction(c, "set_sponsor", "user", user.ID, user.Username, map[string]interface{}{
 		"sponsor_level": level,

@@ -2,10 +2,12 @@ package api
 
 import (
 	"sync"
+	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/config"
 	"github.com/rpbox/server/internal/middleware"
 	"github.com/rpbox/server/internal/service"
@@ -19,6 +21,7 @@ type Server struct {
 	wsHub               *ws.Hub
 	emailClient         *email.SMTPClient
 	verificationService *service.VerificationService
+	cache               cache.Cache
 	ossBucket           *oss.Bucket
 	ossInitOnce         sync.Once
 	ossInitErr          error
@@ -53,6 +56,7 @@ func NewServer(cfg *config.Config) *Server {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
+	cacheClient := cache.NewRedisCache(redisClient, cache.Options{Jitter: 5 * time.Second})
 
 	// 初始化邮件客户端
 	emailClient := email.NewSMTPClient(&email.SMTPConfig{
@@ -72,6 +76,7 @@ func NewServer(cfg *config.Config) *Server {
 		wsHub:               hub,
 		emailClient:         emailClient,
 		verificationService: verificationService,
+		cache:               cacheClient,
 	}
 
 	// 设置通知服务的 Hub 引用
