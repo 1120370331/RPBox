@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
@@ -24,7 +26,7 @@ type CreatePostRequest struct {
 	GuildID        *uint   `json:"guild_id"`
 	StoryID        *uint   `json:"story_id"`
 	TagIDs         []uint  `json:"tag_ids"`
-	Status         string  `json:"status"`           // draft|published
+	Status         string  `json:"status"` // draft|published
 	IsPublic       *bool   `json:"is_public"`
 	EventType      string  `json:"event_type"`       // server|guild
 	EventStartTime *string `json:"event_start_time"` // ISO8601格式
@@ -49,6 +51,44 @@ type UpdatePostRequest struct {
 	EventColor     string  `json:"event_color"`
 }
 
+type postListParams struct {
+	UserID   uint
+	Page     int
+	PageSize int
+	SortBy   string
+	Order    string
+	GuildID  string
+	TagID    string
+	AuthorID string
+	Status   string
+	Category string
+	IsPinned *bool
+}
+
+type postListResponse struct {
+	Posts []postListItem `json:"posts"`
+	Total int64          `json:"total"`
+}
+
+type postListItem struct {
+	model.Post
+	AuthorName      string `json:"author_name"`
+	AuthorAvatar    string `json:"author_avatar"`
+	AuthorRole      string `json:"author_role"`
+	AuthorNameColor string `json:"author_name_color"`
+	AuthorNameBold  bool   `json:"author_name_bold"`
+	CoverImageURL   string `json:"cover_image_url"`
+}
+
+type apiError struct {
+	status  int
+	message string
+}
+
+func (e *apiError) Error() string {
+	return e.message
+}
+
 // listPosts 获取帖子列表
 func (s *Server) listPosts(c *gin.Context) {
 	userID := c.GetUint("userID")
@@ -63,38 +103,95 @@ func (s *Server) listPosts(c *gin.Context) {
 	authorID := c.Query("author_id")
 	status := c.DefaultQuery("status", "published")
 	category := c.Query("category") // 分区筛选
+	isPinned := c.Query("is_pinned")
 
-	query := database.DB.Model(&model.Post{})
+	params := postListParams{
+		UserID:   userID,
+		Page:     page,
+		PageSize: pageSize,
+		SortBy:   sortBy,
+		Order:    order,
+		GuildID:  guildID,
+		TagID:    tagID,
+		AuthorID: authorID,
+		Status:   status,
+		Category: category,
+	}
+	if isPinned != "" {
+		pinnedValue, err := strconv.ParseBool(isPinned)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的is_pinned参数"})
+			return
+		}
+		params.IsPinned = &pinnedValue
+	}
+
 	isSelfView := authorID != "" && authorID == strconv.Itoa(int(userID))
+	if s.cache != nil && params.GuildID == "" && !isSelfView {
+		pinnedValue := "any"
+		if params.IsPinned != nil {
+			pinnedValue = strconv.FormatBool(*params.IsPinned)
+		}
+		filterKey := fmt.Sprintf("page=%d|size=%d|sort=%s|order=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
+			params.Page, params.PageSize, params.SortBy, params.Order, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
+		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
+		if err == nil {
+			cacheKey := cache.VersionedKey(postListCacheName, version, cache.HashKey(filterKey))
+			var cached postListResponse
+			if err := s.cache.Fetch(c.Request.Context(), cacheKey, cache.TTL["post:list"], &cached, func(ctx context.Context) (interface{}, error) {
+				return s.loadPostList(ctx, params)
+			}); err == nil {
+				c.JSON(http.StatusOK, cached)
+				return
+			}
+		}
+	}
+
+	response, err := s.loadPostList(c.Request.Context(), params)
+	if err != nil {
+		if apiErr, ok := err.(*apiError); ok {
+			c.JSON(apiErr.status, gin.H{"error": apiErr.message})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (s *Server) loadPostList(ctx context.Context, params postListParams) (postListResponse, error) {
+	db := database.DB.WithContext(ctx)
+	query := db.Model(&model.Post{})
+	isSelfView := params.AuthorID != "" && params.AuthorID == strconv.Itoa(int(params.UserID))
 	guildRole := ""
 
 	// 只显示公开的帖子，除非是查看自己的
 	if isSelfView {
 		// 查看自己的帖子：可以看到所有状态（包括草稿）
-		query = query.Where("author_id = ?", authorID)
+		query = query.Where("author_id = ?", params.AuthorID)
 		// 如果指定了状态，则过滤
-		if status != "" && status != "all" {
-			query = query.Where("status = ?", status)
+		if params.Status != "" && params.Status != "all" {
+			query = query.Where("status = ?", params.Status)
 		}
 	} else {
 		// 查看他人帖子：只能看到已发布且审核通过的公开帖子
 		query = query.Where("status = ?", "published")
 		query = query.Where("review_status = ?", "approved")
-		if authorID != "" {
-			query = query.Where("author_id = ?", authorID)
+		if params.AuthorID != "" {
+			query = query.Where("author_id = ?", params.AuthorID)
 		}
 	}
 
-	if guildID != "" {
+	if params.GuildID != "" {
 		// 检查公会内容访问权限
-		guildIDUint, _ := strconv.ParseUint(guildID, 10, 32)
-		canAccess, role := checkGuildContentAccess(uint(guildIDUint), userID, "post")
+		guildIDUint, _ := strconv.ParseUint(params.GuildID, 10, 32)
+		canAccess, role := checkGuildContentAccess(uint(guildIDUint), params.UserID, "post")
 		if !canAccess {
-			c.JSON(http.StatusForbidden, gin.H{"error": "无权查看公会内容"})
-			return
+			return postListResponse{}, &apiError{status: http.StatusForbidden, message: "无权查看公会内容"}
 		}
 		guildRole = role
-		query = query.Where("guild_id = ?", guildID)
+		query = query.Where("guild_id = ?", params.GuildID)
 		// 访客查看公会帖子时，仅返回公开帖子
 		if !isSelfView && guildRole == "" {
 			query = query.Where("is_public = ?", true)
@@ -105,24 +202,20 @@ func (s *Server) listPosts(c *gin.Context) {
 	}
 
 	// 分区筛选
-	if category != "" {
-		query = query.Where("category = ?", category)
+	if params.Category != "" {
+		query = query.Where("category = ?", params.Category)
 	}
 
-	isPinned := c.Query("is_pinned")
-	if isPinned != "" {
-		pinnedValue, err := strconv.ParseBool(isPinned)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的is_pinned参数"})
-			return
-		}
-		query = query.Where("is_pinned = ?", pinnedValue)
+	if params.IsPinned != nil {
+		query = query.Where("is_pinned = ?", *params.IsPinned)
 	}
 
-	if tagID != "" {
+	if params.TagID != "" {
 		// 通过标签筛选
 		var postTags []model.PostTag
-		database.DB.Where("tag_id = ?", tagID).Find(&postTags)
+		if err := db.Where("tag_id = ?", params.TagID).Find(&postTags).Error; err != nil {
+			return postListResponse{}, err
+		}
 		postIDs := make([]uint, len(postTags))
 		for i, pt := range postTags {
 			postIDs[i] = pt.PostID
@@ -130,25 +223,29 @@ func (s *Server) listPosts(c *gin.Context) {
 		if len(postIDs) > 0 {
 			query = query.Where("id IN ?", postIDs)
 		} else {
-			c.JSON(http.StatusOK, gin.H{"posts": []model.Post{}, "total": 0})
-			return
+			return postListResponse{Posts: []postListItem{}, Total: 0}, nil
 		}
 	}
 
 	// 统计总数
 	var total int64
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		return postListResponse{}, err
+	}
 
 	// 排序和分页
-	offset := (page - 1) * pageSize
-	query = query.Order(sortBy + " " + order).Offset(offset).Limit(pageSize)
+	offset := (params.Page - 1) * params.PageSize
+	query = query.Order(params.SortBy + " " + params.Order).Offset(offset).Limit(params.PageSize)
 
 	var posts []model.Post
 	// 列表查询排除大字段（content, cover_image）以提高性能
 	// cover_image 通过独立的图片 API 访问
 	if err := query.Select("id, author_id, title, content_type, category, guild_id, story_id, status, is_public, is_pinned, is_featured, view_count, like_count, comment_count, favorite_count, review_status, event_type, event_start_time, event_end_time, event_color, cover_image_updated_at, created_at, updated_at").Find(&posts).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
-		return
+		return postListResponse{}, err
+	}
+
+	if len(posts) == 0 {
+		return postListResponse{Posts: []postListItem{}, Total: total}, nil
 	}
 
 	// 获取有封面图的帖子 ID 列表
@@ -158,7 +255,7 @@ func (s *Server) listPosts(c *gin.Context) {
 	}
 	var postsWithCover []uint
 	if len(postIDs) > 0 {
-		database.DB.Model(&model.Post{}).
+		db.Model(&model.Post{}).
 			Select("id").
 			Where("id IN ? AND cover_image IS NOT NULL AND cover_image != ''", postIDs).
 			Pluck("id", &postsWithCover)
@@ -175,23 +272,16 @@ func (s *Server) listPosts(c *gin.Context) {
 	}
 
 	var users []model.User
-	database.DB.Where("id IN ?", authorIDs).Find(&users)
+	if len(authorIDs) > 0 {
+		db.Where("id IN ?", authorIDs).Find(&users)
+	}
 	userMap := make(map[uint]model.User)
 	for _, u := range users {
 		userMap[u.ID] = u
 	}
 
 	// 组装响应
-	type PostWithAuthor struct {
-		model.Post
-		AuthorName      string `json:"author_name"`
-		AuthorAvatar    string `json:"author_avatar"`
-		AuthorRole      string `json:"author_role"`
-		AuthorNameColor string `json:"author_name_color"`
-		AuthorNameBold  bool   `json:"author_name_bold"`
-		CoverImageURL   string `json:"cover_image_url"`
-	}
-	result := make([]PostWithAuthor, len(posts))
+	result := make([]postListItem, len(posts))
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
@@ -205,7 +295,7 @@ func (s *Server) listPosts(c *gin.Context) {
 			t := p.UpdatedAt
 			p.CoverImageUpdatedAt = &t
 		}
-		result[i] = PostWithAuthor{
+		result[i] = postListItem{
 			Post:            p,
 			AuthorName:      author.Username,
 			AuthorAvatar:    author.Avatar,
@@ -216,7 +306,7 @@ func (s *Server) listPosts(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"posts": result, "total": total})
+	return postListResponse{Posts: result, Total: total}, nil
 }
 
 // createPost 创建帖子
@@ -337,6 +427,7 @@ func (s *Server) createPost(c *gin.Context) {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
+	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusCreated, post)
 }
@@ -490,6 +581,7 @@ func (s *Server) updatePost(c *gin.Context) {
 		}
 
 		database.DB.Save(&editReq)
+		s.bumpPostListCache(c.Request.Context())
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
 			"message": "编辑请求已提交，等待审核",
@@ -549,6 +641,7 @@ func (s *Server) updatePost(c *gin.Context) {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
+	s.bumpPostListCache(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": post})
 }
 
@@ -578,6 +671,7 @@ func (s *Server) deletePost(c *gin.Context) {
 
 	s.cleanupPostImages(c, post)
 	database.DB.Delete(&post)
+	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
@@ -885,17 +979,7 @@ func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		userMap[u.ID] = u
 	}
 
-	type PostWithAuthor struct {
-		model.Post
-		AuthorName      string `json:"author_name"`
-		AuthorAvatar    string `json:"author_avatar"`
-		AuthorRole      string `json:"author_role"`
-		AuthorNameColor string `json:"author_name_color"`
-		AuthorNameBold  bool   `json:"author_name_bold"`
-		CoverImageURL   string `json:"cover_image_url"`
-	}
-
-	result := make([]PostWithAuthor, 0, len(filtered))
+	result := make([]postListItem, 0, len(filtered))
 	for _, p := range filtered {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
@@ -907,7 +991,7 @@ func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 			t := p.UpdatedAt
 			p.CoverImageUpdatedAt = &t
 		}
-		result = append(result, PostWithAuthor{
+		result = append(result, postListItem{
 			Post:            p,
 			AuthorName:      author.Username,
 			AuthorAvatar:    author.Avatar,
