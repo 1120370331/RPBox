@@ -56,3 +56,17 @@ Scope: actions that must be done on the production server to remove plaintext se
 | APP-SECRET-004 | Lock down secret file permissions | High | `chmod 600` and owned by the service user. |
 | APP-SECRET-005 | Rotate default/leaked credentials | High | Rotate DB, SMTP, JWT; expect user re-login after JWT rotation. |
 | APP-SECRET-006 | Restart API service and verify config load | High | Confirm login, email sending, Redis connection, and DB auth succeed. |
+
+# Server-side Cache To-Do (Redis)
+
+Scope: actions that must be done on the API server to complete Redis cache rollout and validation.
+
+| ID | Task | Importance | Notes |
+| --- | --- | --- | --- |
+| CACHE-001 | Ensure Redis is reachable from API server | Critical | Verify host/port/password/DB, confirm low-latency `PING`. |
+| CACHE-002 | Add cache invalidation for moderator/admin post changes | High | Bump post list cache when reviews, pin/feature, hide, or bulk delete occur. |
+| CACHE-003 | Decide consistency policy for list counters | High | If strict, bump cache on like/comment/favorite updates; otherwise accept TTL drift. |
+| CACHE-004 | Add cache hit/miss metrics | High | Log hit/miss or expose Prometheus counters for cache operations. |
+| CACHE-005 | Tune Redis client timeouts/retries | High | Avoid request latency spikes when Redis is down. |
+| CACHE-006 | Validate cache behavior under load | Medium | Compare latency and DB QPS with cache on/off. |
+| CACHE-007 | Document cache keys and TTLs | Low | Record key patterns, TTLs, and invalidation rules. |
