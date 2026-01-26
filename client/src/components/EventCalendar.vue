@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listEvents, type EventItem } from '@/api/post'
 
 const router = useRouter()
+const { t } = useI18n()
 const events = ref<EventItem[]>([])
 const loading = ref(false)
 const currentDate = ref(new Date())
@@ -12,12 +14,32 @@ const currentDate = ref(new Date())
 const currentYear = computed(() => currentDate.value.getFullYear())
 const currentMonth = computed(() => currentDate.value.getMonth())
 
-// 月份名称 - 英文
-const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                    'July', 'August', 'September', 'October', 'November', 'December']
+// 月份名称 - 使用 i18n
+const monthNames = computed(() => [
+  t('common.calendar.months.january'),
+  t('common.calendar.months.february'),
+  t('common.calendar.months.march'),
+  t('common.calendar.months.april'),
+  t('common.calendar.months.may'),
+  t('common.calendar.months.june'),
+  t('common.calendar.months.july'),
+  t('common.calendar.months.august'),
+  t('common.calendar.months.september'),
+  t('common.calendar.months.october'),
+  t('common.calendar.months.november'),
+  t('common.calendar.months.december'),
+])
 
-// 星期名称 - 英文缩写
-const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+// 星期名称 - 使用 i18n
+const weekDays = computed(() => [
+  t('common.calendar.weekdays.sun'),
+  t('common.calendar.weekdays.mon'),
+  t('common.calendar.weekdays.tue'),
+  t('common.calendar.weekdays.wed'),
+  t('common.calendar.weekdays.thu'),
+  t('common.calendar.weekdays.fri'),
+  t('common.calendar.weekdays.sat'),
+])
 
 // 获取当月第一天是星期几
 const firstDayOfMonth = computed(() => {
@@ -116,14 +138,14 @@ onMounted(() => {
     <!-- Loading Overlay -->
     <div v-if="loading" class="loading-overlay">
       <div class="loader"></div>
-      <span class="loading-text">SYNCING EVENTS...</span>
+      <span class="loading-text">{{ $t('common.calendar.syncingEvents') }}</span>
     </div>
 
     <!-- Header Section -->
     <div class="calendar-header">
       <!-- Month Title & Year -->
       <div class="header-left">
-        <h2 class="calendar-label">Calendar</h2>
+        <h2 class="calendar-label">{{ $t('common.calendar.title') }}</h2>
         <div class="month-year">
           <h1 class="current-month">{{ monthNames[currentMonth] }}</h1>
           <span class="current-year">{{ currentYear }}</span>
@@ -137,7 +159,7 @@ onMounted(() => {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
           </svg>
         </button>
-        <button class="today-btn" @click="goToToday">Today</button>
+        <button class="today-btn" @click="goToToday">{{ $t('common.calendar.today') }}</button>
         <button class="nav-btn" @click="nextMonth">
           <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
@@ -182,7 +204,7 @@ onMounted(() => {
               <span class="event-title">{{ event.title }}</span>
             </a>
             <div v-if="day.events.length > 2" class="more-events">
-              +{{ day.events.length - 2 }} more
+              {{ $t('common.calendar.moreEvents', { n: day.events.length - 2 }) }}
             </div>
           </div>
         </div>
@@ -196,11 +218,11 @@ onMounted(() => {
 .event-calendar {
   position: relative;
   width: 100%;
-  background: #FFFFFF;
-  box-shadow: 0 12px 40px rgba(75, 54, 33, 0.12);
+  background: var(--color-panel-bg, #FFFFFF);
+  box-shadow: var(--shadow-lg, 0 12px 40px rgba(75, 54, 33, 0.12));
   border-radius: 4px 48px 4px 48px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--color-border-light, rgba(255, 255, 255, 0.6));
 }
 
 /* ========== Loading Overlay ========== */
@@ -220,8 +242,8 @@ onMounted(() => {
 .loader {
   width: 24px;
   height: 24px;
-  border: 3px solid rgba(128, 64, 48, 0.1);
-  border-left-color: #804030;
+  border: 3px solid var(--color-primary-light, rgba(128, 64, 48, 0.1));
+  border-left-color: var(--color-secondary, #804030);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -229,7 +251,7 @@ onMounted(() => {
 .loading-text {
   font-size: 14px;
   font-weight: 500;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   letter-spacing: 0.05em;
 }
 
@@ -244,8 +266,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  border-bottom: 1px solid #E8DCCF;
-  background: linear-gradient(to right, #FFFFFF, #FAF6F3);
+  border-bottom: 1px solid var(--color-border, #E8DCCF);
+  background: linear-gradient(to right, var(--color-panel-bg, #FFFFFF), var(--color-card-bg, #FAF6F3));
 }
 
 @media (min-width: 768px) {
@@ -264,7 +286,7 @@ onMounted(() => {
 .calendar-label {
   font-size: 12px;
   font-weight: 700;
-  color: #D4A373;
+  color: var(--color-accent, #D4A373);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin: 0 0 4px 0;
@@ -279,7 +301,7 @@ onMounted(() => {
 .current-month {
   font-size: 2.5rem;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   line-height: 1;
   margin: 0;
   font-family: 'Playfair Display', Georgia, serif;
@@ -294,7 +316,7 @@ onMounted(() => {
 .current-year {
   font-size: 1.5rem;
   font-weight: 300;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   font-family: 'Playfair Display', Georgia, serif;
 }
 
@@ -303,11 +325,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: #FFFFFF;
+  background: var(--color-panel-bg, #FFFFFF);
   padding: 6px;
   border-radius: 9999px;
-  border: 1px solid #E8DCCF;
-  box-shadow: 0 2px 8px rgba(75, 54, 33, 0.05);
+  border: 1px solid var(--color-border, #E8DCCF);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(75, 54, 33, 0.05));
 }
 
 .nav-btn {
@@ -320,18 +342,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   transition: all 0.2s;
 }
 
 .nav-btn:hover {
-  background: #EED9C4;
-  color: #804030;
+  background: var(--color-background, #EED9C4);
+  color: var(--color-secondary, #804030);
 }
 
 .nav-btn:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(128, 64, 48, 0.2);
+  box-shadow: 0 0 0 2px var(--color-primary-light, rgba(128, 64, 48, 0.2));
 }
 
 .nav-icon {
@@ -344,10 +366,10 @@ onMounted(() => {
   border: none;
   border-top: none;
   border-bottom: none;
-  border-left: 1px solid rgba(232, 220, 207, 0.5);
-  border-right: 1px solid rgba(232, 220, 207, 0.5);
+  border-left: 1px solid var(--color-border-light, rgba(232, 220, 207, 0.5));
+  border-right: 1px solid var(--color-border-light, rgba(232, 220, 207, 0.5));
   background: transparent;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -356,19 +378,19 @@ onMounted(() => {
 }
 
 .today-btn:hover {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 /* ========== Calendar Body ========== */
 .calendar-body {
-  background: #FFFFFF;
+  background: var(--color-panel-bg, #FFFFFF);
 }
 
 /* ========== Weekday Headers ========== */
 .weekday-header {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  border-bottom: 1px solid #E8DCCF;
+  border-bottom: 1px solid var(--color-border, #E8DCCF);
 }
 
 .weekday {
@@ -376,7 +398,7 @@ onMounted(() => {
   text-align: center;
   font-size: 12px;
   font-weight: 600;
-  color: #D4A373;
+  color: var(--color-accent, #D4A373);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -390,9 +412,9 @@ onMounted(() => {
 .calendar-day {
   min-height: 130px;
   padding: 8px;
-  border-bottom: 1px solid #E8DCCF;
-  border-right: 1px solid #E8DCCF;
-  background: #FFFFFF;
+  border-bottom: 1px solid var(--color-border, #E8DCCF);
+  border-right: 1px solid var(--color-border, #E8DCCF);
+  background: var(--color-panel-bg, #FFFFFF);
   display: flex;
   flex-direction: column;
   transition: background-color 0.2s;
@@ -400,7 +422,7 @@ onMounted(() => {
 }
 
 .calendar-day:hover {
-  background-color: rgba(248, 245, 242, 0.5);
+  background-color: var(--color-card-bg-hover, rgba(248, 245, 242, 0.5));
 }
 
 /* Remove right border for last column */
@@ -415,23 +437,23 @@ onMounted(() => {
 
 /* ========== Other Month Days ========== */
 .calendar-day.other-month {
-  background: rgba(250, 248, 246, 0.5);
+  background: var(--color-card-bg, rgba(250, 248, 246, 0.5));
 }
 
 .calendar-day.other-month .day-number {
-  color: rgba(140, 123, 112, 0.4);
+  color: var(--color-text-muted, rgba(140, 123, 112, 0.4));
 }
 
 /* ========== Today ========== */
 .calendar-day.is-today {
-  background: #FFFFFF;
+  background: var(--color-panel-bg, #FFFFFF);
 }
 
 /* ========== Day Number ========== */
 .day-number {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   padding: 4px;
   display: inline-flex;
   align-items: center;
@@ -440,12 +462,12 @@ onMounted(() => {
 }
 
 .day-number.today-badge {
-  background: #804030;
-  color: #FFFFFF;
+  background: var(--color-secondary, #804030);
+  color: var(--color-text-light, #FFFFFF);
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(128, 64, 48, 0.3);
+  box-shadow: 0 2px 8px rgba(var(--shadow-base, 128, 64, 48), 0.3);
 }
 
 /* ========== Events Container ========== */
@@ -476,29 +498,29 @@ onMounted(() => {
 
 .event-item:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(128, 64, 48, 0.15);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(128, 64, 48, 0.15));
 }
 
 /* Server Event Type - Primary color theme */
 .event-item.server {
-  background: rgba(128, 64, 48, 0.05);
-  color: #804030;
-  border-color: #804030;
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.05));
+  color: var(--color-secondary, #804030);
+  border-color: var(--color-secondary, #804030);
 }
 
 .event-item.server:hover {
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--btn-secondary-bg, rgba(128, 64, 48, 0.1));
 }
 
 /* Guild Event Type - Accent/Gold theme */
 .event-item.guild {
-  background: rgba(212, 163, 115, 0.1);
-  color: #8C5E35;
-  border-color: #D4A373;
+  background: rgba(var(--shadow-base, 212, 163, 115), 0.1);
+  color: var(--color-primary, #8C5E35);
+  border-color: var(--color-accent, #D4A373);
 }
 
 .event-item.guild:hover {
-  background: rgba(212, 163, 115, 0.2);
+  background: rgba(var(--shadow-base, 212, 163, 115), 0.2);
 }
 
 .event-title {
@@ -510,7 +532,7 @@ onMounted(() => {
 .more-events {
   font-size: 10px;
   font-weight: 700;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   padding: 0 8px;
   margin-top: 2px;
   cursor: pointer;
@@ -518,7 +540,7 @@ onMounted(() => {
 }
 
 .more-events:hover {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 /* ========== Fade In Animation ========== */
