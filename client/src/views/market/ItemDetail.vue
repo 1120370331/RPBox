@@ -12,6 +12,8 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { useEmoteStore } from '@/stores/emote'
+import CollectionBanner from '@/components/CollectionBanner.vue'
+import { getItemCollection } from '@/api/collection'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,6 +48,9 @@ const viewerMode = ref<'artwork' | 'content'>('content')
 // 预览模式
 const isPreview = ref(false)
 const previewFrom = ref('')
+
+// 合集
+const collection = ref<any>(null)
 
 // 是否为画作类型
 const isArtwork = computed(() => item.value?.type === 'artwork')
@@ -139,11 +144,25 @@ async function loadItemDetail() {
           image_url: getItemImageUrl(id, img.id)
         }))
       }
+      // 加载合集信息
+      await loadItemCollection(id)
     }
   } catch (error) {
     console.error('加载作品详情失败:', error)
   } finally {
     loading.value = false
+  }
+}
+
+// 加载作品所属合集
+async function loadItemCollection(itemId: number) {
+  try {
+    const res: any = await getItemCollection(itemId)
+    if (res.code === 0 && res.data) {
+      collection.value = res.data
+    }
+  } catch (error) {
+    console.error('加载合集信息失败:', error)
   }
 }
 
@@ -365,6 +384,14 @@ function downloadAllImages() {
           <i class="ri-arrow-left-line"></i> {{ t('market.detail.preview.backToEdit') }}
         </button>
       </div>
+
+      <!-- 合集横幅 -->
+      <CollectionBanner
+        v-if="collection && !isPreview"
+        :collection="collection"
+        :current-id="item.id"
+        content-type="item"
+      />
 
       <!-- 道具信息 -->
       <div class="item-info">
@@ -600,7 +627,7 @@ function downloadAllImages() {
 .loading {
   text-align: center;
   padding: 60px 20px;
-  color: #999;
+  color: var(--color-text-muted);
   font-size: 16px;
 }
 
@@ -609,17 +636,17 @@ function downloadAllImages() {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: rgba(255,255,255,0.8);
+  background: var(--color-panel-bg);
   border: none;
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-primary);
   margin-bottom: 24px;
 }
 
 .back-btn:hover {
-  background: rgba(255,255,255,1);
+  background: var(--color-card-bg);
 }
 
 .preview-banner {
@@ -651,8 +678,8 @@ function downloadAllImages() {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-text-light);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -662,14 +689,14 @@ function downloadAllImages() {
 }
 
 .back-edit-btn:hover {
-  background: #A66629;
+  background: var(--color-secondary);
 }
 
 .item-info {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 32px;
-  box-shadow: 0 8px 20px rgba(93,64,55,0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .item-preview {
@@ -687,18 +714,18 @@ function downloadAllImages() {
 .item-detail-content {
   margin-top: 24px;
   padding-top: 24px;
-  border-top: 1px solid #E0E0E0;
+  border-top: 1px solid var(--color-border);
 }
 
 .item-detail-content h3 {
   font-size: 18px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 16px;
 }
 
 .rich-content {
   line-height: 1.8;
-  color: #5D4037;
+  color: var(--color-primary);
 }
 
 .rich-content :deep(img) {
@@ -715,8 +742,8 @@ function downloadAllImages() {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
   font-weight: 600;
   margin: 0 2px;
 }
@@ -758,7 +785,7 @@ function downloadAllImages() {
 
 .item-header h1 {
   font-size: 32px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 12px;
 }
 
@@ -771,14 +798,14 @@ function downloadAllImages() {
 
 .type-badge {
   padding: 6px 16px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-text-light);
   border-radius: 20px;
   font-size: 14px;
 }
 
 .author {
-  color: #999;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -806,8 +833,8 @@ function downloadAllImages() {
   transform: translateX(-50%);
   margin-top: 8px;
   padding: 12px 16px;
-  background: #3E2723;
-  color: #fff;
+  background: var(--color-text-main);
+  color: var(--color-text-light);
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.6;
@@ -816,7 +843,7 @@ function downloadAllImages() {
   visibility: hidden;
   transition: all 0.2s;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  box-shadow: var(--shadow-lg);
 }
 
 .permission-tooltip::before {
@@ -827,7 +854,7 @@ function downloadAllImages() {
   transform: translateX(-50%);
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-bottom: 6px solid #3E2723;
+  border-bottom: 6px solid var(--color-text-main);
 }
 
 .permission-tooltip p {
@@ -848,19 +875,19 @@ function downloadAllImages() {
   gap: 24px;
   margin-bottom: 24px;
   padding-bottom: 24px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .stat-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 15px;
 }
 
 .stat-item i {
-  color: #B87333;
+  color: var(--color-accent);
   font-size: 18px;
 }
 
@@ -870,12 +897,12 @@ function downloadAllImages() {
 
 .item-description h3 {
   font-size: 18px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 12px;
 }
 
 .item-description p {
-  color: #666;
+  color: var(--color-text-secondary);
   line-height: 1.6;
   font-size: 15px;
 }
@@ -889,8 +916,8 @@ function downloadAllImages() {
 
 .tag {
   padding: 6px 14px;
-  background: #F5F0EB;
-  color: #795548;
+  background: var(--color-card-bg);
+  color: var(--color-primary);
   border-radius: 20px;
   font-size: 13px;
 }
@@ -906,8 +933,8 @@ function downloadAllImages() {
   height: 48px;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-secondary) 100%);
+  color: var(--color-text-light);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -920,7 +947,7 @@ function downloadAllImages() {
 
 .copy-code-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(184,115,51,0.4);
+  box-shadow: 0 4px 12px rgba(var(--shadow-base), 0.4);
 }
 
 .secondary-actions {
@@ -930,10 +957,10 @@ function downloadAllImages() {
 .download-btn {
   width: 100%;
   height: 40px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: #fff;
-  color: #666;
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -944,17 +971,17 @@ function downloadAllImages() {
 }
 
 .download-btn:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .like-btn, .favorite-btn {
   flex: 1;
   height: 48px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: #fff;
-  color: #666;
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -990,7 +1017,7 @@ function downloadAllImages() {
 .import-code-section {
   margin-top: 24px;
   padding: 20px;
-  background: #F5F0EB;
+  background: var(--color-card-bg);
   border-radius: 12px;
 }
 
@@ -1003,7 +1030,7 @@ function downloadAllImages() {
 
 .import-code-header h3 {
   font-size: 16px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -1012,8 +1039,8 @@ function downloadAllImages() {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-text-light);
   border: none;
   border-radius: 8px;
   font-size: 13px;
@@ -1022,45 +1049,45 @@ function downloadAllImages() {
 }
 
 .copy-btn:hover {
-  background: #A66629;
+  background: var(--color-secondary);
 }
 
 .import-code-textarea {
   width: 100%;
   padding: 12px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   font-family: 'Courier New', monospace;
   font-size: 12px;
-  background: #fff;
+  background: var(--color-panel-bg);
   resize: vertical;
 }
 
 .import-hint {
   margin-top: 12px;
   font-size: 13px;
-  color: #795548;
+  color: var(--color-primary);
   text-align: center;
 }
 
 .comments-section {
   margin-top: 32px;
   padding: 24px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
-  box-shadow: 0 8px 20px rgba(93,64,55,0.05);
+  box-shadow: 0 8px 20px rgba(var(--shadow-base), 0.05);
 }
 
 .comments-section h3 {
   font-size: 18px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 20px;
 }
 
 .review-input-box {
   margin-bottom: 24px;
   padding: 20px;
-  background: #F5F0EB;
+  background: var(--color-card-bg);
   border-radius: 12px;
 }
 
@@ -1073,7 +1100,7 @@ function downloadAllImages() {
 
 .rating-label {
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main);
   font-weight: 600;
 }
 
@@ -1084,7 +1111,7 @@ function downloadAllImages() {
 
 .rating-stars i {
   font-size: 24px;
-  color: #E0E0E0;
+  color: var(--color-border);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -1106,7 +1133,7 @@ function downloadAllImages() {
 .clear-rating-btn {
   background: none;
   border: none;
-  color: #999;
+  color: var(--color-text-muted);
   cursor: pointer;
   padding: 2px 6px;
   font-size: 14px;
@@ -1122,17 +1149,17 @@ function downloadAllImages() {
 .review-input-box :deep(.emote-editor-input) {
   width: 100%;
   padding: 12px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
   resize: vertical;
-  background: #fff;
+  background: var(--color-panel-bg);
 }
 
 .review-input-box :deep(.emote-editor-input:focus) {
   outline: none;
-  border-color: #B87333;
+  border-color: var(--color-accent);
 }
 
 .review-footer {
@@ -1148,17 +1175,17 @@ function downloadAllImages() {
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: #fff;
-  border: 1px solid #E0E0E0;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .emoji-btn:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .emoji-btn i {
@@ -1167,7 +1194,7 @@ function downloadAllImages() {
 
 .char-count {
   font-size: 13px;
-  color: #999;
+  color: var(--color-text-muted);
 }
 
 .char-count.warning {
@@ -1176,8 +1203,8 @@ function downloadAllImages() {
 
 .submit-review-btn {
   padding: 10px 24px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-text-light);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -1187,7 +1214,7 @@ function downloadAllImages() {
 }
 
 .submit-review-btn:hover:not(:disabled) {
-  background: #A66629;
+  background: var(--color-secondary);
 }
 
 .submit-review-btn:disabled {
@@ -1204,13 +1231,13 @@ function downloadAllImages() {
 .empty-comments {
   text-align: center;
   padding: 40px 20px;
-  color: #999;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
 .comment-item {
   padding: 16px;
-  background: #F5F0EB;
+  background: var(--color-card-bg);
   border-radius: 8px;
   display: flex;
   gap: 12px;
@@ -1220,8 +1247,8 @@ function downloadAllImages() {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+  color: var(--color-text-light);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1257,7 +1284,7 @@ function downloadAllImages() {
 
 .comment-author {
   font-weight: 600;
-  color: #5D4037;
+  color: var(--color-text-main);
   font-size: 14px;
 }
 
@@ -1268,7 +1295,7 @@ function downloadAllImages() {
 
 .comment-rating i {
   font-size: 12px;
-  color: #E0E0E0;
+  color: var(--color-border);
 }
 
 .comment-rating i.active {
@@ -1277,11 +1304,11 @@ function downloadAllImages() {
 
 .comment-time {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-muted);
 }
 
 .comment-content {
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
@@ -1301,8 +1328,8 @@ function downloadAllImages() {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
   font-weight: 600;
   margin: 0 2px;
 }
@@ -1403,11 +1430,11 @@ function downloadAllImages() {
 }
 
 .thumb-item:hover {
-  border-color: rgba(184,115,51,0.5);
+  border-color: rgba(var(--shadow-base), 0.5);
 }
 
 .thumb-item.active {
-  border-color: #B87333;
+  border-color: var(--color-accent);
 }
 
 /* 下载图片按钮 */
@@ -1416,8 +1443,8 @@ function downloadAllImages() {
   height: 48px;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-secondary) 100%);
+  color: var(--color-text-light);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -1430,7 +1457,7 @@ function downloadAllImages() {
 
 .download-images-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(184,115,51,0.4);
+  box-shadow: 0 4px 12px rgba(var(--shadow-base), 0.4);
 }
 
 /* 图片查看器模态框 */
@@ -1538,8 +1565,8 @@ function downloadAllImages() {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-text-light);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -1549,6 +1576,6 @@ function downloadAllImages() {
 }
 
 .viewer-download:hover {
-  background: #A66629;
+  background: var(--color-secondary);
 }
 </style>
