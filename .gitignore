@@ -275,3 +275,7 @@ server/storage/uploads/
 server/storage/backups/
 server/storage/**/*.dump
 server/storage/addons/RPBox_Addon/manifest.json
+
+# Temp files
+.tmp_server_pid
+*.bak
