@@ -393,10 +393,139 @@ func (s *Server) deleteStory(c *gin.Context) {
 
 	// 删除剧情条目
 	database.DB.Where("story_id = ?", id).Delete(&model.StoryEntry{})
+	// 删除剧情标签关联
+	database.DB.Where("story_id = ?", id).Delete(&model.StoryTag{})
 	// 删除剧情
 	database.DB.Delete(&story)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+// BatchDeleteStoriesRequest 批量删除剧情请求
+type BatchDeleteStoriesRequest struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+// batchDeleteStories 批量删除剧情
+func (s *Server) batchDeleteStories(c *gin.Context) {
+	userID := c.GetUint("userID")
+
+	var req BatchDeleteStoriesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要删除的剧情"})
+		return
+	}
+
+	// 验证所有剧情都属于当前用户
+	var count int64
+	database.DB.Model(&model.Story{}).
+		Where("id IN ? AND user_id = ?", req.IDs, userID).
+		Count(&count)
+
+	if count != int64(len(req.IDs)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "部分剧情不存在或无权删除"})
+		return
+	}
+
+	// 删除剧情条目
+	database.DB.Where("story_id IN ?", req.IDs).Delete(&model.StoryEntry{})
+	// 删除剧情标签关联
+	database.DB.Where("story_id IN ?", req.IDs).Delete(&model.StoryTag{})
+	// 删除剧情
+	database.DB.Where("id IN ? AND user_id = ?", req.IDs, userID).Delete(&model.Story{})
+
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功", "count": len(req.IDs)})
+}
+
+// BatchMoveStoriesRequest 批量移动剧情请求
+type BatchMoveStoriesRequest struct {
+	SourceIDs []uint `json:"source_ids" binding:"required"`
+	TargetID  uint   `json:"target_id" binding:"required"`
+}
+
+// batchMoveStories 批量移动剧情条目到目标剧情
+func (s *Server) batchMoveStories(c *gin.Context) {
+	userID := c.GetUint("userID")
+
+	var req BatchMoveStoriesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	if len(req.SourceIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要移动的剧情"})
+		return
+	}
+
+	// 验证目标剧情属于当前用户
+	var targetStory model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", req.TargetID, userID).
+		First(&targetStory).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "目标剧情不存在"})
+		return
+	}
+
+	// 验证所有源剧情都属于当前用户
+	var count int64
+	database.DB.Model(&model.Story{}).
+		Where("id IN ? AND user_id = ?", req.SourceIDs, userID).
+		Count(&count)
+
+	if count != int64(len(req.SourceIDs)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "部分剧情不存在或无权操作"})
+		return
+	}
+
+	// 获取目标剧情当前最大排序号
+	var maxOrder int
+	database.DB.Model(&model.StoryEntry{}).
+		Where("story_id = ?", req.TargetID).
+		Select("COALESCE(MAX(sort_order), 0)").
+		Scan(&maxOrder)
+
+	// 移动所有条目到目标剧情
+	database.DB.Model(&model.StoryEntry{}).
+		Where("story_id IN ?", req.SourceIDs).
+		Update("story_id", req.TargetID)
+
+	// 更新排序号（简单处理：按原顺序追加）
+	var entries []model.StoryEntry
+	database.DB.Where("story_id = ? AND sort_order <= ?", req.TargetID, maxOrder).
+		Order("sort_order").Find(&entries)
+
+	// 删除源剧情的标签关联
+	database.DB.Where("story_id IN ?", req.SourceIDs).Delete(&model.StoryTag{})
+	// 删除源剧情
+	database.DB.Where("id IN ? AND user_id = ?", req.SourceIDs, userID).Delete(&model.Story{})
+
+	// 更新目标剧情的时间范围
+	type storyEntryStats struct {
+		MinTime *time.Time `gorm:"column:min_time"`
+		MaxTime *time.Time `gorm:"column:max_time"`
+	}
+	var stat storyEntryStats
+	zeroTime := time.Time{}
+	database.DB.Model(&model.StoryEntry{}).
+		Select("MIN(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS min_time, MAX(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS max_time", zeroTime, zeroTime).
+		Where("story_id = ?", req.TargetID).
+		Scan(&stat)
+
+	updates := map[string]interface{}{"updated_at": time.Now()}
+	if stat.MinTime != nil {
+		updates["start_time"] = *stat.MinTime
+	}
+	if stat.MaxTime != nil {
+		updates["end_time"] = *stat.MaxTime
+	}
+	database.DB.Model(&targetStory).Updates(updates)
+
+	c.JSON(http.StatusOK, gin.H{"message": "移动成功", "count": len(req.SourceIDs)})
 }
 
 func (s *Server) addStoryEntries(c *gin.Context) {

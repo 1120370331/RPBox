@@ -221,6 +221,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/ws/notifications", s.handleWebSocket)
 
 			// 通用图片上传
+			auth.POST("/upload/attachment", s.uploadAttachment)
 			auth.POST("/upload/image", s.uploadImage)
 
 			// 版主中心（需要版主权限）
