@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listPosts, type PostWithAuthor, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { getGuild, type Guild } from '@/api/guild'
 import RButton from '@/components/RButton.vue'
@@ -9,6 +10,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const guildId = Number(route.params.id)
 
 const loading = ref(true)
@@ -105,16 +107,16 @@ function formatDate(dateStr: string) {
   const diff = now.getTime() - date.getTime()
   const hours = Math.floor(diff / (1000 * 60 * 60))
 
-  if (hours < 1) return '刚刚'
-  if (hours < 24) return `${hours}小时前`
+  if (hours < 1) return t('guild.posts.timeJustNow')
+  if (hours < 24) return t('guild.posts.timeHoursAgo', { n: hours })
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}天前`
-  return date.toLocaleDateString('zh-CN')
+  if (days < 7) return t('guild.posts.timeDaysAgo', { n: days })
+  return date.toLocaleDateString()
 }
 
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
-  return cat ? cat.label : '其他'
+  return cat ? cat.label : t('guild.posts.categoryOther')
 }
 
 function stripHtml(html: string) {
@@ -135,11 +137,11 @@ onMounted(async () => {
     <div class="page-header">
       <button class="back-btn" @click="goBack">
         <i class="ri-arrow-left-line"></i>
-        返回
+        {{ t('guild.manage.back') }}
       </button>
       <div class="header-content">
-        <h1 class="page-title">{{ guild?.name }} - 帖子</h1>
-        <p class="page-desc">查看公会成员发布的帖子</p>
+        <h1 class="page-title">{{ guild?.name }} - {{ t('guild.posts.title') }}</h1>
+        <p class="page-desc">{{ t('guild.posts.pageDesc') }}</p>
       </div>
     </div>
 
@@ -147,11 +149,11 @@ onMounted(async () => {
     <div class="quick-nav">
       <button class="nav-btn active">
         <i class="ri-article-line"></i>
-        公会帖子
+        {{ t('guild.posts.guildPosts') }}
       </button>
       <button class="nav-btn" @click="goToStories">
         <i class="ri-book-2-line"></i>
-        公会剧情
+        {{ t('guild.posts.guildStories') }}
       </button>
     </div>
 
@@ -161,7 +163,7 @@ onMounted(async () => {
         <button
           :class="{ active: filterCategory === '' }"
           @click="changeCategory('')"
-        >全部</button>
+        >{{ t('guild.posts.all') }}</button>
         <button
           v-for="cat in POST_CATEGORIES"
           :key="cat.value"
@@ -170,11 +172,11 @@ onMounted(async () => {
         >{{ cat.label }}</button>
       </div>
       <div class="sort-select">
-        <span class="sort-label">排序:</span>
+        <span class="sort-label">{{ t('guild.posts.sort') }}:</span>
         <select v-model="sortBy" @change="changeSort">
-          <option value="created_at">最新发布</option>
-          <option value="like_count">热门讨论</option>
-          <option value="view_count">最多浏览</option>
+          <option value="created_at">{{ t('guild.posts.sortLatest') }}</option>
+          <option value="like_count">{{ t('guild.posts.sortPopular') }}</option>
+          <option value="view_count">{{ t('guild.posts.sortViews') }}</option>
         </select>
       </div>
     </div>
@@ -186,30 +188,30 @@ onMounted(async () => {
         <input
           v-model="searchKeyword"
           type="text"
-          placeholder="搜索帖子标题或内容..."
+          :placeholder="t('guild.posts.searchPlaceholder')"
         />
       </div>
       <div class="post-count">
-        共 {{ filteredPosts.length }} 个帖子
+        {{ t('guild.posts.postCount', { n: filteredPosts.length }) }}
       </div>
     </div>
 
     <!-- 帖子列表 -->
     <div v-if="loading" class="loading">
       <i class="ri-loader-4-line rotating"></i>
-      加载中...
+      {{ t('guild.posts.loading') }}
     </div>
 
     <REmpty v-else-if="noPermission"
       icon="ri-lock-line"
-      message="无权限查看"
-      description="您没有权限查看该公会的帖子"
+      :message="t('guild.posts.noPermission')"
+      :description="t('guild.posts.noPermissionDesc')"
     />
 
     <REmpty v-else-if="posts.length === 0"
       icon="ri-article-line"
-      message="暂无帖子"
-      description="公会成员可以发布帖子并关联到公会"
+      :message="t('guild.posts.empty')"
+      :description="t('guild.posts.emptyDesc')"
     />
 
     <div v-else class="posts-list">
@@ -222,8 +224,8 @@ onMounted(async () => {
         <div class="post-header">
           <div class="header-tags">
             <span class="category-tag">{{ getCategoryLabel(post.category) }}</span>
-            <span v-if="post.is_pinned" class="pinned-tag">置顶</span>
-            <span v-if="post.is_featured" class="featured-tag">精华</span>
+            <span v-if="post.is_pinned" class="pinned-tag">{{ t('guild.posts.pinned') }}</span>
+            <span v-if="post.is_featured" class="featured-tag">{{ t('guild.posts.featured') }}</span>
           </div>
         </div>
         <h3 class="post-title">{{ post.title }}</h3>
@@ -252,8 +254,8 @@ onMounted(async () => {
 
       <REmpty v-if="filteredPosts.length === 0 && searchKeyword"
         icon="ri-search-line"
-        message="未找到匹配的帖子"
-        :description="`没有找到包含 '${searchKeyword}' 的帖子`"
+        :message="t('guild.posts.noMatch')"
+        :description="t('guild.posts.noMatchDesc', { keyword: searchKeyword })"
       />
     </div>
 
@@ -267,7 +269,7 @@ onMounted(async () => {
         <i class="ri-arrow-left-s-line"></i>
       </button>
       <span class="page-info">
-        第 {{ currentPage }} / {{ Math.ceil(total / pageSize) }} 页
+        {{ t('guild.posts.pageInfo', { current: currentPage, total: Math.ceil(total / pageSize) }) }}
       </span>
       <button
         class="page-btn"

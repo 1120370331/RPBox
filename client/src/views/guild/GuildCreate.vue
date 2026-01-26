@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { createGuild } from '@/api/guild'
 import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const name = ref('')
 const description = ref('')
 const slogan = ref('')
@@ -21,7 +23,7 @@ function handleBannerSelect(e: Event) {
   if (input.files && input.files[0]) {
     const file = input.files[0]
     if (file.size > 20 * 1024 * 1024) {
-      alert('头图文件不能超过20MB')
+      alert(t('guild.create.fileTooLarge'))
       return
     }
     bannerFile.value = file
@@ -57,13 +59,13 @@ async function handleCreate() {
 
 <template>
   <div class="create-page">
-    <h1>创建公会</h1>
-    <p class="tip">创建公会需要版主审核通过后才能在公会广场显示</p>
+    <h1>{{ t('guild.create.title') }}</h1>
+    <p class="tip">{{ t('guild.create.tip') }}</p>
 
     <div class="form">
       <!-- 头图上传 -->
       <div class="field banner-field">
-        <label>公会头图</label>
+        <label>{{ t('guild.create.banner') }}</label>
         <div
           class="banner-upload"
           :style="{ background: bannerPreview ? `url(${bannerPreview}) center/cover` : `linear-gradient(135deg, #${color}, #4B3621)` }"
@@ -71,51 +73,51 @@ async function handleCreate() {
         >
           <div class="upload-hint" v-if="!bannerPreview">
             <i class="ri-image-add-line"></i>
-            <span>点击上传头图</span>
+            <span>{{ t('guild.create.uploadBanner') }}</span>
           </div>
         </div>
         <input ref="bannerInput" type="file" accept="image/*" hidden @change="handleBannerSelect" />
       </div>
 
       <div class="field">
-        <label>公会名称 *</label>
-        <RInput v-model="name" placeholder="输入公会名称" />
+        <label>{{ t('guild.create.nameRequired') }}</label>
+        <RInput v-model="name" :placeholder="t('guild.create.namePlaceholder')" />
       </div>
 
       <div class="field">
-        <label>公会标语</label>
-        <RInput v-model="slogan" placeholder="一句话介绍公会" />
+        <label>{{ t('guild.create.slogan') }}</label>
+        <RInput v-model="slogan" :placeholder="t('guild.create.sloganPlaceholder')" />
       </div>
 
       <div class="field">
-        <label>公会描述</label>
-        <textarea v-model="description" placeholder="详细描述公会..." rows="3"></textarea>
+        <label>{{ t('guild.create.description') }}</label>
+        <textarea v-model="description" :placeholder="t('guild.create.descriptionPlaceholder')" rows="3"></textarea>
       </div>
 
       <div class="row">
         <div class="field">
-          <label>所在服务器</label>
-          <RInput v-model="server" placeholder="如：暗影之月" />
+          <label>{{ t('guild.create.server') }}</label>
+          <RInput v-model="server" :placeholder="t('guild.create.serverPlaceholder')" />
         </div>
         <div class="field">
-          <label>阵营</label>
+          <label>{{ t('guild.info.faction') }}</label>
           <select v-model="faction">
-            <option value="">请选择</option>
-            <option value="alliance">联盟</option>
-            <option value="horde">部落</option>
-            <option value="neutral">中立</option>
+            <option value="">{{ t('guild.settings.selectFaction') }}</option>
+            <option value="alliance">{{ t('guild.info.alliance') }}</option>
+            <option value="horde">{{ t('guild.info.horde') }}</option>
+            <option value="neutral">{{ t('guild.info.neutral') }}</option>
           </select>
         </div>
       </div>
 
       <div class="field">
-        <label>主题色</label>
+        <label>{{ t('guild.create.themeColor') }}</label>
         <input type="color" :value="'#' + color" @input="color = ($event.target as HTMLInputElement).value.replace('#', '')" />
       </div>
 
       <div class="actions">
-        <RButton @click="router.back()">取消</RButton>
-        <RButton type="primary" :loading="creating" @click="handleCreate">创建</RButton>
+        <RButton @click="router.back()">{{ t('guild.action.cancel') }}</RButton>
+        <RButton type="primary" :loading="creating" @click="handleCreate">{{ t('guild.create.create') }}</RButton>
       </div>
     </div>
   </div>

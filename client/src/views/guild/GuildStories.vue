@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listStories, type Story, type StoryFilterParams } from '@/api/story'
 import { getGuild, listGuildMembers, removeStoryFromGuild, type Guild, type GuildStoryWithUploader } from '@/api/guild'
 import { listGuildTags, listTags, type Tag } from '@/api/tag'
@@ -13,6 +14,7 @@ const { confirm, alert } = useDialog()
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const guildId = Number(route.params.id)
 
 const loading = ref(true)
@@ -189,8 +191,8 @@ function resetFilter() {
 
 async function handleRemoveArchive(storyId: number) {
   const confirmed = await confirm({
-    title: '取消归档',
-    message: '确定要将此剧情从公会归档中移除吗？',
+    title: t('guild.stories.removeArchiveTitle'),
+    message: t('guild.stories.removeArchiveMsg'),
     type: 'warning'
   })
   if (!confirmed) return
@@ -199,14 +201,14 @@ async function handleRemoveArchive(storyId: number) {
     await removeStoryFromGuild(guildId, storyId)
     stories.value = stories.value.filter(s => s.id !== storyId)
     await alert({
-      title: '成功',
-      message: '已取消归档',
+      title: t('guild.stories.success'),
+      message: t('guild.stories.removeSuccess'),
       type: 'success'
     })
   } catch (e: any) {
     await alert({
-      title: '操作失败',
-      message: e.message || '取消归档失败',
+      title: t('guild.stories.operationFailed'),
+      message: e.message || t('guild.stories.removeFailed'),
       type: 'error'
     })
   }
@@ -222,13 +224,13 @@ function formatDate(dateStr: string) {
 }
 
 function calculateDuration(startTime: string, endTime: string): string {
-  if (!startTime || !endTime) return '未知'
+  if (!startTime || !endTime) return t('guild.stories.durationUnknown')
 
   const start = new Date(startTime)
   const end = new Date(endTime)
   const diffMs = end.getTime() - start.getTime()
 
-  if (diffMs < 0) return '未知'
+  if (diffMs < 0) return t('guild.stories.durationUnknown')
 
   const diffMinutes = Math.floor(diffMs / (1000 * 60))
   const diffHours = Math.floor(diffMinutes / 60)
@@ -236,14 +238,14 @@ function calculateDuration(startTime: string, endTime: string): string {
 
   if (diffDays > 0) {
     const hours = diffHours % 24
-    return hours > 0 ? `${diffDays}天${hours}小时` : `${diffDays}天`
+    return hours > 0 ? t('guild.stories.durationDaysHours', { days: diffDays, hours }) : t('guild.stories.durationDays', { days: diffDays })
   } else if (diffHours > 0) {
     const minutes = diffMinutes % 60
-    return minutes > 0 ? `${diffHours}小时${minutes}分钟` : `${diffHours}小时`
+    return minutes > 0 ? t('guild.stories.durationHoursMinutes', { hours: diffHours, minutes }) : t('guild.stories.durationHours', { hours: diffHours })
   } else if (diffMinutes > 0) {
-    return `${diffMinutes}分钟`
+    return t('guild.stories.durationMinutes', { minutes: diffMinutes })
   } else {
-    return '不到1分钟'
+    return t('guild.stories.durationLessThanMinute')
   }
 }
 
@@ -261,11 +263,11 @@ onMounted(async () => {
     <div class="page-header">
       <button class="back-btn" @click="goBack">
         <i class="ri-arrow-left-line"></i>
-        返回
+        {{ t('guild.manage.back') }}
       </button>
       <div class="header-content">
-        <h1 class="page-title">{{ guild?.name }} - 剧情归档</h1>
-        <p class="page-desc">查看公会成员归档的剧情记录</p>
+        <h1 class="page-title">{{ guild?.name }} - {{ t('guild.stories.title') }}</h1>
+        <p class="page-desc">{{ t('guild.stories.pageDesc') }}</p>
       </div>
     </div>
 
@@ -273,11 +275,11 @@ onMounted(async () => {
     <div class="quick-nav">
       <button class="nav-btn" @click="goToPosts">
         <i class="ri-article-line"></i>
-        公会帖子
+        {{ t('guild.stories.guildPosts') }}
       </button>
       <button class="nav-btn active">
         <i class="ri-book-2-line"></i>
-        公会剧情
+        {{ t('guild.stories.guildStories') }}
       </button>
     </div>
 
@@ -288,15 +290,15 @@ onMounted(async () => {
         <input
           v-model="searchKeyword"
           type="text"
-          placeholder="搜索剧情标题或描述..."
+          :placeholder="t('guild.stories.searchPlaceholder')"
         />
       </div>
       <button class="filter-toggle-btn" @click="showFilter = !showFilter">
         <i class="ri-filter-3-line"></i>
-        筛选
+        {{ t('guild.stories.filter') }}
       </button>
       <div class="story-count">
-        共 {{ filteredStories.length }} 个剧情
+        {{ t('guild.stories.storyCount', { n: filteredStories.length }) }}
       </div>
     </div>
 
@@ -304,7 +306,7 @@ onMounted(async () => {
     <div v-if="showFilter" class="filter-panel">
       <!-- 标签筛选 -->
       <div class="filter-section">
-        <label class="filter-label">标签筛选</label>
+        <label class="filter-label">{{ t('guild.stories.tagFilter') }}</label>
         <div class="tag-filters">
           <span
             v-for="tag in tags"
@@ -316,28 +318,28 @@ onMounted(async () => {
           >
             {{ tag.name }}
           </span>
-          <span v-if="tags.length === 0" class="empty-hint">暂无标签</span>
+          <span v-if="tags.length === 0" class="empty-hint">{{ t('guild.stories.noTags') }}</span>
         </div>
       </div>
 
       <!-- 日期范围 -->
       <div class="filter-section">
-        <label class="filter-label">日期范围</label>
+        <label class="filter-label">{{ t('guild.stories.dateRange') }}</label>
         <div class="date-range">
           <input v-model="startDate" type="date" class="date-input" />
-          <span class="date-separator">至</span>
+          <span class="date-separator">{{ t('guild.stories.dateTo') }}</span>
           <input v-model="endDate" type="date" class="date-input" />
         </div>
       </div>
 
       <!-- 排序 -->
       <div class="filter-section">
-        <label class="filter-label">排序</label>
+        <label class="filter-label">{{ t('guild.stories.sort') }}</label>
         <div class="sort-controls">
           <select v-model="sortBy" class="filter-select">
-            <option value="created_at">创建时间</option>
-            <option value="updated_at">更新时间</option>
-            <option value="start_time">剧情时间</option>
+            <option value="created_at">{{ t('guild.stories.sortCreated') }}</option>
+            <option value="updated_at">{{ t('guild.stories.sortUpdated') }}</option>
+            <option value="start_time">{{ t('guild.stories.sortStoryTime') }}</option>
           </select>
           <button
             class="sort-order-btn"
@@ -350,9 +352,9 @@ onMounted(async () => {
 
       <!-- 上传者筛选 -->
       <div class="filter-section">
-        <label class="filter-label">按上传者筛选</label>
+        <label class="filter-label">{{ t('guild.stories.filterByUploader') }}</label>
         <select v-model="selectedUploaderId" class="filter-select">
-          <option :value="undefined">全部成员</option>
+          <option :value="undefined">{{ t('guild.stories.allMembers') }}</option>
           <option v-for="member in members" :key="member.user_id" :value="member.user_id">
             {{ member.username }}
           </option>
@@ -363,11 +365,11 @@ onMounted(async () => {
       <div class="filter-actions">
         <button class="filter-btn reset-btn" @click="resetFilter">
           <i class="ri-refresh-line"></i>
-          重置
+          {{ t('guild.stories.reset') }}
         </button>
         <button class="filter-btn apply-btn" @click="applyFilter">
           <i class="ri-check-line"></i>
-          应用筛选
+          {{ t('guild.stories.applyFilter') }}
         </button>
       </div>
     </div>
@@ -375,19 +377,19 @@ onMounted(async () => {
     <!-- 剧情列表 -->
     <div v-if="loading" class="loading">
       <i class="ri-loader-4-line rotating"></i>
-      加载中...
+      {{ t('guild.stories.loading') }}
     </div>
 
     <REmpty v-else-if="noPermission"
       icon="ri-lock-line"
-      message="无权限查看"
-      description="您没有权限查看该公会的剧情归档"
+      :message="t('guild.stories.noPermission')"
+      :description="t('guild.stories.noPermissionDesc')"
     />
 
     <REmpty v-else-if="stories.length === 0"
       icon="ri-book-2-line"
-      message="暂无剧情归档"
-      description="公会管理员可以将剧情归档到公会"
+      :message="t('guild.stories.empty')"
+      :description="t('guild.stories.emptyDesc')"
     />
 
     <div v-else class="stories-list">
@@ -415,7 +417,7 @@ onMounted(async () => {
         <div class="story-meta">
           <span class="meta-item">
             <i class="ri-message-3-line"></i>
-            {{ story.entry_count || 0 }} 条记录
+            {{ t('guild.stories.entryCount', { n: story.entry_count || 0 }) }}
           </span>
           <span class="meta-item">
             <i class="ri-time-line"></i>
@@ -430,15 +432,15 @@ onMounted(async () => {
           </span>
           <button v-if="isAdmin" class="remove-archive-btn" @click.stop="handleRemoveArchive(story.id)">
             <i class="ri-close-circle-line"></i>
-            取消归档
+            {{ t('guild.stories.removeArchive') }}
           </button>
         </div>
       </div>
 
       <REmpty v-if="filteredStories.length === 0 && searchKeyword"
         icon="ri-search-line"
-        message="未找到匹配的剧情"
-        :description="`没有找到包含 '${searchKeyword}' 的剧情`"
+        :message="t('guild.stories.noMatch')"
+        :description="t('guild.stories.noMatchDesc', { keyword: searchKeyword })"
       />
     </div>
   </div>
