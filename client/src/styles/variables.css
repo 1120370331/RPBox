@@ -1,33 +1,97 @@
 /* RPBox 设计系统 - 全局变量 */
+/* 注意：主题颜色由 theme store 动态设置，这里只定义默认值 */
 
 :root {
   /* 主色调 */
+  --color-primary: #4B3621;
+  --color-primary-hover: #3D2C1B;
+  --color-primary-light: rgba(75, 54, 33, 0.1);
+  --color-secondary: #804030;
+  --color-secondary-hover: #6B3528;
+  --color-accent: #B87333;
+  --color-accent-hover: #A66329;
+  --color-background: #EED9C4;
+  --color-highlight: #D2691E;
+
+  /* 侧边栏 */
   --color-sidebar-bg: #4B3621;
+  --color-sidebar-text: #FBF5EF;
+  --color-sidebar-text-muted: rgba(251, 245, 239, 0.7);
+  --color-sidebar-hover: rgba(238, 217, 196, 0.1);
+
+  /* 布局颜色 */
   --color-main-bg: #EED9C4;
   --color-panel-bg: #FFFFFF;
-  --color-primary: #804030;
+  --color-card-bg: #FDFBF9;
+  --color-card-bg-hover: rgba(128, 64, 48, 0.05);
 
   /* 文字颜色 */
   --color-text-main: #2C1810;
   --color-text-light: #FBF5EF;
   --color-text-secondary: #8C7B70;
-
-  /* 强调色 */
-  --color-accent: #D4A373;
+  --color-text-muted: rgba(75, 54, 33, 0.5);
+  --text-light: #FBF5EF;
+  --text-dark: #2C1810;
 
   /* 边框 */
   --color-border: #E8DCCF;
+  --color-border-light: #F0E6DC;
+  --color-border-hover: #D4A373;
 
-  /* 圆角 */
+  /* 按钮 */
+  --btn-primary-bg: #804030;
+  --btn-primary-text: #FFFFFF;
+  --btn-primary-hover: #6B3528;
+  --btn-secondary-bg: rgba(128, 64, 48, 0.1);
+  --btn-secondary-text: #804030;
+  --btn-secondary-hover: rgba(128, 64, 48, 0.15);
+  --btn-outline-border: #E8DCCF;
+  --btn-outline-text: #2C1810;
+  --btn-outline-hover: rgba(128, 64, 48, 0.05);
+  --btn-danger-bg: #DC3545;
+  --btn-danger-hover: #C82333;
+
+  /* 输入框 */
+  --input-bg: #FDFBF9;
+  --input-border: #E8DCCF;
+  --input-focus: #804030;
+  --input-placeholder: #8C7B70;
+
+  /* 开关/选中状态 */
+  --switch-active: #804030;
+  --switch-inactive: #D4D4D4;
+  --checkbox-active: #804030;
+
+  /* 标签/徽章 */
+  --tag-bg: rgba(128, 64, 48, 0.1);
+  --tag-text: #804030;
+  --badge-bg: #804030;
+
+  /* 阴影 */
+  --shadow-base: 75, 54, 33;
+  --shadow-sm: 0 2px 8px rgba(75, 54, 33, 0.05);
+  --shadow-md: 0 4px 20px rgba(75, 54, 33, 0.08);
+  --shadow-lg: 0 8px 32px rgba(75, 54, 33, 0.12);
+
+  /* 滚动条 */
+  --scrollbar-thumb: #DCC8B8;
+  --scrollbar-thumb-hover: #BFA08A;
+
+  /* 特殊元素 */
+  --icon-bg: rgba(128, 64, 48, 0.1);
+  --icon-color: #804030;
+  --link-color: #B87333;
+  --link-hover: #D2691E;
+
+  /* 渐变 */
+  --gradient-start: #804030;
+  --gradient-end: #4B3621;
+
+  /* 圆角 - 固定值 */
   --border-radius: 16px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-
-  /* 阴影 */
-  --shadow-sm: 0 2px 8px rgba(75, 54, 33, 0.05);
-  --shadow-md: 0 4px 20px rgba(75, 54, 33, 0.08);
-  --shadow-lg: 0 8px 32px rgba(75, 54, 33, 0.12);
 }
 
 /* 全局重置 */
@@ -54,10 +118,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #DCC8B8;
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #BFA08A;
+  background: var(--scrollbar-thumb-hover);
 }

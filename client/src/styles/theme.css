@@ -1,0 +1,241 @@
+/* RPBox 主题覆盖样式 */
+/* 此文件使用 CSS 变量覆盖全局组件样式，实现主题切换 */
+
+/* ========== 按钮样式 ========== */
+
+/* 主要按钮 */
+.btn-primary {
+  background: var(--btn-primary-bg) !important;
+  color: var(--btn-primary-text) !important;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--btn-primary-hover) !important;
+  box-shadow: 0 4px 12px rgba(var(--shadow-base), 0.3) !important;
+}
+
+/* 次要按钮 */
+.btn-secondary {
+  background: var(--btn-secondary-bg) !important;
+  color: var(--btn-secondary-text) !important;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--btn-secondary-hover) !important;
+}
+
+/* 轮廓按钮 */
+.btn-outline {
+  background: transparent !important;
+  border-color: var(--btn-outline-border) !important;
+  color: var(--btn-outline-text) !important;
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--btn-outline-hover) !important;
+  border-color: var(--color-border-hover) !important;
+}
+
+/* 危险按钮 */
+.btn-danger {
+  background: var(--btn-danger-bg) !important;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--btn-danger-hover) !important;
+}
+
+/* ========== 卡片样式 ========== */
+
+.setting-card,
+.card,
+.panel,
+.content-card,
+.item-card,
+.post-card,
+.profile-card {
+  background: var(--color-panel-bg) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.card-header {
+  border-bottom-color: var(--color-border) !important;
+}
+
+.card-icon {
+  background: var(--icon-bg) !important;
+}
+
+.card-icon i {
+  color: var(--icon-color) !important;
+}
+
+.card-title h3 {
+  color: var(--color-text-main) !important;
+}
+
+.card-title p {
+  color: var(--color-text-secondary) !important;
+}
+
+/* ========== 输入框样式 ========== */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="number"],
+textarea,
+.input,
+.path-input {
+  background: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--color-text-main) !important;
+}
+
+input:focus,
+textarea:focus,
+.input:focus,
+.path-input:focus {
+  border-color: var(--input-focus) !important;
+  box-shadow: 0 0 0 3px rgba(var(--shadow-base), 0.1) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder) !important;
+}
+
+/* ========== 开关样式 ========== */
+
+.switch {
+  background: var(--switch-inactive) !important;
+}
+
+.switch.active {
+  background: var(--switch-active) !important;
+}
+
+/* ========== 标签/徽章样式 ========== */
+
+.tag,
+.flavor-tag,
+.category-tag {
+  background: var(--tag-bg) !important;
+  color: var(--tag-text) !important;
+}
+
+.badge {
+  background: var(--badge-bg) !important;
+}
+
+/* ========== 列表项样式 ========== */
+
+.path-item,
+.list-item,
+.switch-item {
+  background: var(--color-card-bg) !important;
+  border-color: var(--color-border) !important;
+}
+
+.path-item:hover,
+.list-item:hover,
+.switch-item:hover {
+  background: var(--color-card-bg-hover) !important;
+  border-color: var(--color-border-hover) !important;
+}
+
+.path-item.selected,
+.list-item.selected {
+  background: var(--color-primary-light) !important;
+  border-color: var(--color-secondary) !important;
+}
+
+/* ========== 文字颜色 ========== */
+
+.text-main {
+  color: var(--color-text-main) !important;
+}
+
+.text-secondary {
+  color: var(--color-text-secondary) !important;
+}
+
+.text-muted {
+  color: var(--color-text-muted) !important;
+}
+
+/* ========== 链接样式 ========== */
+
+a {
+  color: var(--link-color);
+}
+
+a:hover {
+  color: var(--link-hover);
+}
+
+/* ========== 工具栏样式 ========== */
+
+.top-toolbar,
+.toolbar {
+  background-color: var(--color-panel-bg) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.breadcrumbs i {
+  color: var(--icon-color) !important;
+}
+
+.breadcrumbs .current {
+  color: var(--icon-color) !important;
+}
+
+/* ========== 图标样式 ========== */
+
+.path-info i,
+.status-icon.installed {
+  color: var(--icon-color) !important;
+}
+
+/* ========== 关于卡片渐变 ========== */
+
+.about-card {
+  background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%) !important;
+}
+
+.about-logo {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ========== 更新日志样式 ========== */
+
+.changelog-entry {
+  background: var(--color-card-bg) !important;
+  border-color: var(--color-border) !important;
+}
+
+.changelog-tag {
+  background: var(--badge-bg) !important;
+}
+
+.changelog-content {
+  color: var(--color-primary) !important;
+}
+
+/* ========== 插件状态样式 ========== */
+
+.addon-info {
+  background: var(--color-card-bg) !important;
+}
+
+.status-version {
+  color: var(--icon-color) !important;
+}
+
+/* ========== 头像渐变 ========== */
+
+.avatar-preview,
+.avatar {
+  background: linear-gradient(135deg, var(--color-accent), var(--color-text-secondary)) !important;
+}
