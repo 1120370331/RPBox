@@ -104,6 +104,14 @@ export async function deleteStory(id: number): Promise<void> {
   return request.delete(`/stories/${id}`)
 }
 
+export async function deleteStories(ids: number[]): Promise<void> {
+  return request.post('/stories/batch-delete', { ids })
+}
+
+export async function moveStoriesToStory(sourceIds: number[], targetId: number): Promise<void> {
+  return request.post('/stories/batch-move', { source_ids: sourceIds, target_id: targetId })
+}
+
 export async function addStoryEntries(id: number, entries: CreateStoryEntryRequest[]): Promise<void> {
   return request.post(`/stories/${id}/entries`, entries)
 }

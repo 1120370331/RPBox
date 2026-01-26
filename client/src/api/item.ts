@@ -203,6 +203,14 @@ export function uploadImage(file: File) {
   })
 }
 
+export function uploadAttachment(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/upload/attachment', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 // ========== 画作图片相关 API ==========
 
 // 上传画作图片（支持多张）
