@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { dialog } from '../../composables/useDialog'
 import * as accountBackupApi from '../../api/accountBackup'
@@ -53,6 +54,7 @@ interface AccountInfo {
 type WorkflowStep = 'scan' | 'backup' | 'upload' | 'verify' | 'finish'
 
 const router = useRouter()
+const { t } = useI18n()
 const accounts = ref<AccountInfo[]>([])
 const selectedAccount = ref('')
 const isLoading = ref(false)
@@ -99,21 +101,21 @@ const currentExtraData = computed(() => {
 })
 
 // 额外数据变量名称映射
-const extraVarNames: Record<string, string> = {
-  TRP3_Characters: '角色绑定',
-  TRP3_Companions: '伙伴数据',
-  TRP3_Presets: '预设',
-  TRP3_Notes: '笔记',
-  TRP3_Flyway: '数据迁移',
-  TRP3_MatureFilter: '成人过滤',
-  TRP3_Colors: '颜色设置',
-  TRP3_SavedAutomation: '自动化',
-  TRP3_Exchange_DB: '交换数据',
-  TRP3_Stashes: '储藏',
-  TRP3_Drop: '掉落',
-  TRP3_Security: '安全设置',
-  TRP3_Extended_Flyway: 'Ext迁移'
-}
+const extraVarNames = computed<Record<string, string>>(() => ({
+  TRP3_Characters: t('sync.extraVars.TRP3_Characters'),
+  TRP3_Companions: t('sync.extraVars.TRP3_Companions'),
+  TRP3_Presets: t('sync.extraVars.TRP3_Presets'),
+  TRP3_Notes: t('sync.extraVars.TRP3_Notes'),
+  TRP3_Flyway: t('sync.extraVars.TRP3_Flyway'),
+  TRP3_MatureFilter: t('sync.extraVars.TRP3_MatureFilter'),
+  TRP3_Colors: t('sync.extraVars.TRP3_Colors'),
+  TRP3_SavedAutomation: t('sync.extraVars.TRP3_SavedAutomation'),
+  TRP3_Exchange_DB: t('sync.extraVars.TRP3_Exchange_DB'),
+  TRP3_Stashes: t('sync.extraVars.TRP3_Stashes'),
+  TRP3_Drop: t('sync.extraVars.TRP3_Drop'),
+  TRP3_Security: t('sync.extraVars.TRP3_Security'),
+  TRP3_Extended_Flyway: t('sync.extraVars.TRP3_Extended_Flyway')
+}))
 
 // 解析额外数据列表
 interface ExtraVarItem {
@@ -128,7 +130,7 @@ const extraDataList = computed<ExtraVarItem[]>(() => {
     const data = JSON.parse(extra.raw_data)
     return Object.keys(data).map(key => ({
       key,
-      name: extraVarNames[key] || key,
+      name: extraVarNames.value[key] || key,
       hasData: data[key] && Object.keys(data[key]).length > 0
     })).filter(item => item.hasData)
   } catch {
@@ -144,7 +146,7 @@ const cloudExtraDataList = computed<ExtraVarItem[]>(() => {
     const data = JSON.parse(backup.extra_data)
     return Object.keys(data).map(key => ({
       key,
-      name: extraVarNames[key] || key,
+      name: extraVarNames.value[key] || key,
       hasData: data[key] && Object.keys(data[key]).length > 0
     })).filter(item => item.hasData)
   } catch {
@@ -299,13 +301,13 @@ const dataLossWarning = computed(() => {
   const localRuntime = currentRuntimeData.value?.size_kb || 0
 
   if (localProfiles < backup.profiles_count) {
-    warnings.push(`人物卡: ${localProfiles} < 云端 ${backup.profiles_count}`)
+    warnings.push(t('sync.warning.profilesLess', { local: localProfiles, cloud: backup.profiles_count }))
   }
   if (localTools < (backup.tools_count || 0)) {
-    warnings.push(`道具: ${localTools} < 云端 ${backup.tools_count}`)
+    warnings.push(t('sync.warning.toolsLess', { local: localTools, cloud: backup.tools_count }))
   }
   if (localRuntime < (backup.runtime_size_kb || 0)) {
-    warnings.push(`他人数据: ${localRuntime}KB < 云端 ${backup.runtime_size_kb}KB`)
+    warnings.push(t('sync.warning.runtimeLess', { local: localRuntime, cloud: backup.runtime_size_kb }))
   }
 
   return warnings.length > 0 ? warnings : null
@@ -318,8 +320,8 @@ const isDeleting = ref(false)
 
 function isDoneStep(stepKey: WorkflowStep) {
   if (workflowStep.value === 'finish') return true
-  const currentIndex = workflowSteps.findIndex(s => s.key === workflowStep.value)
-  const targetIndex = workflowSteps.findIndex(s => s.key === stepKey)
+  const currentIndex = workflowSteps.value.findIndex(s => s.key === workflowStep.value)
+  const targetIndex = workflowSteps.value.findIndex(s => s.key === stepKey)
   return targetIndex < currentIndex
 }
 
@@ -353,7 +355,7 @@ onMounted(async () => {
     return
   }
   if (!isAuthed.value) {
-    authMessage.value = '请先登录以继续备份人物卡'
+    authMessage.value = t('sync.tip.authRequired')
     router.push('/login?redirect=/sync')
     return
   }
@@ -400,7 +402,7 @@ function getStatus(_id: string): 'synced' | 'pending' | 'conflict' {
 
 async function openConfirmModal() {
   if (!isAuthed.value) {
-    await dialog.alert({ title: '提示', message: '请先登录再执行备份', type: 'warning' })
+    await dialog.alert({ title: t('sync.dialog.tip'), message: t('sync.dialog.loginFirst'), type: 'warning' })
     router.push('/login?redirect=/sync')
     return
   }
@@ -409,7 +411,7 @@ async function openConfirmModal() {
 }
 
 function formatTime(time?: string) {
-  if (!time) return '未知'
+  if (!time) return t('sync.dialog.unknown')
   const d = new Date(time)
   if (Number.isNaN(d.getTime())) return time
   return d.toLocaleString()
@@ -428,8 +430,8 @@ async function confirmUpload() {
       profilesData[p.id] = JSON.parse(p.raw_lua)
     } catch {
       await dialog.alert({
-        title: '数据损坏',
-        message: `人物卡「${p.name}」数据损坏，无法上传`,
+        title: t('sync.dialog.dataCorrupt'),
+        message: t('sync.dialog.profileCorrupt', { name: p.name }),
         type: 'error'
       })
       return
@@ -469,9 +471,9 @@ async function confirmUpload() {
       checksum: computeLocalChecksum()
     })
     await loadProfiles()
-    await dialog.alert({ title: '成功', message: '账号备份完成', type: 'success' })
+    await dialog.alert({ title: t('sync.dialog.success'), message: t('sync.dialog.backupSuccess'), type: 'success' })
   } catch (e: any) {
-    await dialog.alert({ title: '错误', message: `备份失败：${e?.message || e}`, type: 'error' })
+    await dialog.alert({ title: t('sync.dialog.error'), message: t('sync.dialog.backupFailed', { error: e?.message || e }), type: 'error' })
   } finally {
     isSyncing.value = false
     showConfirmModal.value = false
@@ -503,9 +505,9 @@ async function confirmDelete() {
   try {
     await accountBackupApi.deleteAccountBackup(pendingDeleteAccount.value)
     cloudBackups.value.delete(pendingDeleteAccount.value)
-    await dialog.alert({ title: '成功', message: '云端备份已删除', type: 'success' })
+    await dialog.alert({ title: t('sync.dialog.success'), message: t('sync.dialog.deleteSuccess'), type: 'success' })
   } catch (e: any) {
-    await dialog.alert({ title: '错误', message: `删除失败：${e?.message || e}`, type: 'error' })
+    await dialog.alert({ title: t('sync.dialog.error'), message: t('sync.dialog.deleteFailed', { error: e?.message || e }), type: 'error' })
   } finally {
     isDeleting.value = false
     showDeleteModal.value = false
@@ -515,22 +517,22 @@ async function confirmDelete() {
 
 async function restoreAll() {
   if (!isAuthed.value) {
-    await dialog.alert({ title: '提示', message: '请先登录再执行写回', type: 'warning' })
+    await dialog.alert({ title: t('sync.dialog.tip'), message: t('sync.dialog.loginFirstRestore'), type: 'warning' })
     router.push('/login?redirect=/sync')
     return
   }
   const backup = currentBackup.value
   if (!backup) {
-    await dialog.alert({ title: '提示', message: '当前账号在云端暂无备份', type: 'info' })
+    await dialog.alert({ title: t('sync.dialog.tip'), message: t('sync.dialog.noCloudBackup'), type: 'info' })
     return
   }
   const extras = [
-    backup.tools_count ? `${backup.tools_count} 个道具` : '',
-    backup.runtime_size_kb ? `${backup.runtime_size_kb}KB 运行时数据` : ''
+    backup.tools_count ? t('sync.dialog.toolsCount', { count: backup.tools_count }) : '',
+    backup.runtime_size_kb ? t('sync.dialog.runtimeSize', { size: backup.runtime_size_kb }) : ''
   ].filter(Boolean).join('、')
   const ok = await dialog.confirm({
-    title: '确认写回',
-    message: `将从云端写回账号 ${selectedAccount.value} 的 ${backup.profiles_count} 个人物卡${extras ? `、${extras}` : ''}到本地，需保证游戏已关闭。是否继续？`,
+    title: t('sync.dialog.confirmRestore'),
+    message: t('sync.dialog.restoreConfirm', { account: selectedAccount.value, count: backup.profiles_count, extras: extras ? t('sync.dialog.restoreExtras', { extras }) : '' }),
     type: 'warning'
   })
   if (!ok) return
@@ -540,7 +542,7 @@ async function restoreAll() {
     // 获取完整备份数据
     const fullBackup = await accountBackupApi.getAccountBackup(selectedAccount.value)
     if (!fullBackup.profiles_data) {
-      await dialog.alert({ title: '错误', message: '云端备份数据为空', type: 'error' })
+      await dialog.alert({ title: t('sync.dialog.error'), message: t('sync.dialog.cloudDataEmpty'), type: 'error' })
       return
     }
     // 调用 Tauri 命令写回整个账号
@@ -575,32 +577,32 @@ async function restoreAll() {
       })
       await loadProfiles()
     }
-    await dialog.alert({ title: '成功', message: '写回完成，重启游戏后生效', type: 'success' })
+    await dialog.alert({ title: t('sync.dialog.success'), message: t('sync.dialog.restoreSuccess'), type: 'success' })
   } catch (e: any) {
-    await dialog.alert({ title: '错误', message: `写回失败：${e?.message || e}`, type: 'error' })
+    await dialog.alert({ title: t('sync.dialog.error'), message: t('sync.dialog.restoreFailed', { error: e?.message || e }), type: 'error' })
   } finally {
     isRestoring.value = false
   }
 }
 
-const workflowSteps = [
-  { key: 'scan', label: '选择子账号', desc: '选择WOW子账号', icon: 'ri-search-line' },
-  { key: 'backup', label: '自动备份', desc: '本地数据防护', icon: 'ri-shield-check-line' },
-  { key: 'upload', label: '上传云端', desc: '增量同步+进度', icon: 'ri-cloud-upload-line' },
-  { key: 'verify', label: '校验/冲突', desc: 'checksum/版本对比', icon: 'ri-loop-left-line' },
-  { key: 'finish', label: '完成', desc: '版本归档，可回滚', icon: 'ri-checkbox-circle-line' }
-] satisfies { key: WorkflowStep; label: string; desc: string; icon: string }[]
+const workflowSteps = computed(() => [
+  { key: 'scan', label: t('sync.steps.scan'), desc: t('sync.steps.scanDesc'), icon: 'ri-search-line' },
+  { key: 'backup', label: t('sync.steps.backup'), desc: t('sync.steps.backupDesc'), icon: 'ri-shield-check-line' },
+  { key: 'upload', label: t('sync.steps.upload'), desc: t('sync.steps.uploadDesc'), icon: 'ri-cloud-upload-line' },
+  { key: 'verify', label: t('sync.steps.verify'), desc: t('sync.steps.verifyDesc'), icon: 'ri-loop-left-line' },
+  { key: 'finish', label: t('sync.steps.finish'), desc: t('sync.steps.finishDesc'), icon: 'ri-checkbox-circle-line' }
+] as { key: WorkflowStep; label: string; desc: string; icon: string }[])
 </script>
 
 <template>
   <div class="sync-page" :class="{ 'animate-in': mounted }">
     <div v-if="!isAuthed" class="auth-tip anim-item" style="--delay: 0">
       <i class="ri-information-line"></i>
-      <span>{{ authMessage || '请先登录以继续备份人物卡' }}</span>
+      <span>{{ authMessage || $t('sync.tip.authRequired') }}</span>
     </div>
     <div v-else-if="hasCloudData" class="cloud-tip anim-item" style="--delay: 0">
       <i class="ri-cloud-line"></i>
-      <span>云端已有人物卡备份，上传时可选择覆盖或先查看详情；发生冲突时会提示确认。</span>
+      <span>{{ $t('sync.tip.cloudHasBackup') }}</span>
     </div>
     <!-- 顶部栏 -->
     <header class="topbar anim-item" style="--delay: 0">
@@ -608,9 +610,9 @@ const workflowSteps = [
         <div class="breadcrumbs">
           <i class="ri-home-4-line"></i>
           <span class="separator">/</span>
-          <span>人物卡</span>
+          <span>{{ $t('sync.breadcrumb.profile') }}</span>
           <span class="separator">/</span>
-          <span class="current">备份同步</span>
+          <span class="current">{{ $t('sync.breadcrumb.backupSync') }}</span>
         </div>
         <div class="mode-tabs">
           <button
@@ -618,31 +620,31 @@ const workflowSteps = [
             :class="{ active: viewMode === 'upload' }"
             @click="viewMode = 'upload'"
           >
-            <i class="ri-cloud-upload-line"></i> 云端备份
+            <i class="ri-cloud-upload-line"></i> {{ $t('sync.tabs.cloudBackup') }}
           </button>
           <button
             class="tab-btn"
             :class="{ active: viewMode === 'restore' }"
             @click="viewMode = 'restore'"
           >
-            <i class="ri-download-2-line"></i> 写回本地
+            <i class="ri-download-2-line"></i> {{ $t('sync.tabs.restoreLocal') }}
           </button>
           <button
             class="tab-btn"
             :class="{ active: viewMode === 'cloud' }"
             @click="viewMode = 'cloud'"
           >
-            <i class="ri-cloud-line"></i> 查看云端
+            <i class="ri-cloud-line"></i> {{ $t('sync.tabs.viewCloud') }}
           </button>
         </div>
       </div>
       <div class="toolbar-actions">
         <div class="path-info">
-          <span class="label">WoW 路径</span>
-          <span class="value">{{ wowPath || '未配置' }}</span>
+          <span class="label">{{ $t('sync.toolbar.wowPath') }}</span>
+          <span class="value">{{ wowPath || $t('sync.toolbar.notConfigured') }}</span>
         </div>
         <div class="account-info">
-          <span class="label">选择WOW子账号</span>
+          <span class="label">{{ $t('sync.toolbar.selectAccount') }}</span>
           <select v-model="selectedAccount" class="account-select">
             <option v-for="acc in accounts" :key="acc.account_id" :value="acc.account_id">
               {{ acc.account_id }}
@@ -650,8 +652,8 @@ const workflowSteps = [
           </select>
         </div>
         <div class="refresh-info">
-          <span class="label">刷新</span>
-          <button class="btn-icon" @click="loadProfiles" :disabled="isLoading" title="刷新">
+          <span class="label">{{ $t('sync.toolbar.refresh') }}</span>
+          <button class="btn-icon" @click="loadProfiles" :disabled="isLoading" :title="$t('sync.toolbar.refresh')">
           <i class="ri-refresh-line"></i>
         </button>
         </div>
@@ -662,7 +664,7 @@ const workflowSteps = [
         >
           <i v-if="isSyncing || isRestoring" class="ri-loader-4-line spin"></i>
           <i v-else :class="viewMode === 'upload' ? 'ri-save-3-line' : 'ri-download-2-line'"></i>
-          {{ viewMode === 'upload' ? (isSyncing ? '同步中...' : '一键备份') : (isRestoring ? '写回中...' : '写回本地') }}
+          {{ viewMode === 'upload' ? (isSyncing ? $t('sync.toolbar.syncing') : $t('sync.toolbar.oneClickBackup')) : (isRestoring ? $t('sync.toolbar.restoring') : $t('sync.toolbar.restoreLocal')) }}
         </button>
       </div>
     </header>
@@ -670,7 +672,7 @@ const workflowSteps = [
     <!-- 总览卡片 -->
     <div class="overview-grid anim-item" style="--delay: 1">
       <div class="overview-card">
-        <div class="title">账号 {{ selectedAccount || '未选择' }} 备份进度</div>
+        <div class="title">{{ $t('sync.overview.backupProgress', { account: selectedAccount || $t('sync.overview.notSelected') }) }}</div>
         <div class="progress">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: `${overallProgress}%` }"></div>
@@ -678,24 +680,24 @@ const workflowSteps = [
           <span class="progress-text">{{ overallProgress }}%</span>
         </div>
         <div class="summary-row">
-          <div class="pill">自动备份</div>
-          <div class="pill">增量同步</div>
+          <div class="pill">{{ $t('sync.overview.autoBackup') }}</div>
+          <div class="pill">{{ $t('sync.overview.incrementalSync') }}</div>
           <div class="pill" :class="{ warning: stats.conflict > 0 }">
-            有差异 {{ stats.conflict }}
+            {{ $t('sync.overview.hasDiff') }} {{ stats.conflict }}
           </div>
         </div>
       </div>
       <div class="stat-card synced">
         <div class="stat-value">{{ stats.synced }}</div>
-        <div class="stat-label">已同步</div>
+        <div class="stat-label">{{ $t('sync.stats.synced') }}</div>
       </div>
       <div class="stat-card pending">
         <div class="stat-value">{{ stats.pending }}</div>
-        <div class="stat-label">待备份</div>
+        <div class="stat-label">{{ $t('sync.stats.pending') }}</div>
       </div>
       <div class="stat-card conflict">
         <div class="stat-value">{{ stats.conflict }}</div>
-        <div class="stat-label">有差异</div>
+        <div class="stat-label">{{ $t('sync.stats.conflict') }}</div>
       </div>
   </div>
 
@@ -703,45 +705,45 @@ const workflowSteps = [
   <div v-if="showConfirmModal" class="modal-overlay">
     <div class="modal">
       <div class="modal-header">
-        <h3>确认备份到云端</h3>
-        <span class="tag" v-if="stats.conflict > 0">云端已有备份</span>
+        <h3>{{ $t('sync.modal.confirmBackupTitle') }}</h3>
+        <span class="tag" v-if="stats.conflict > 0">{{ $t('sync.modal.hasCloudBackup') }}</span>
       </div>
       <p class="muted">
-        即将上传账号「{{ selectedAccount }}」的数据到云端，云端已有数据时将覆盖为本地版本。
+        {{ $t('sync.modal.backupDesc', { account: selectedAccount }) }}
       </p>
       <div class="confirm-info">
         <div class="info-row">
-          <span class="label">账号</span>
+          <span class="label">{{ $t('sync.modal.account') }}</span>
           <span class="value">{{ selectedAccount }}</span>
         </div>
         <div class="info-row">
-          <span class="label">人物卡</span>
-          <span class="value">{{ currentProfiles.length }} 个</span>
+          <span class="label">{{ $t('sync.modal.profiles') }}</span>
+          <span class="value">{{ $t('sync.panel.count', { count: currentProfiles.length }) }}</span>
         </div>
         <div class="info-row">
-          <span class="label">道具数据库</span>
-          <span class="value">{{ currentToolsDb ? `${currentToolsDb.item_count} 个` : '无' }}</span>
+          <span class="label">{{ $t('sync.modal.toolsDb') }}</span>
+          <span class="value">{{ currentToolsDb ? $t('sync.panel.count', { count: currentToolsDb.item_count }) : $t('sync.modal.none') }}</span>
         </div>
         <div class="info-row">
-          <span class="label">他人数据</span>
-          <span class="value">{{ currentRuntimeData ? `${currentRuntimeData.size_kb} KB` : '无' }}</span>
+          <span class="label">{{ $t('sync.modal.runtimeData') }}</span>
+          <span class="value">{{ currentRuntimeData ? `${currentRuntimeData.size_kb} KB` : $t('sync.modal.none') }}</span>
         </div>
         <div class="info-row">
-          <span class="label">TRP3配置</span>
-          <span class="value">{{ currentConfig ? '有' : '无' }}</span>
+          <span class="label">{{ $t('sync.modal.trp3Config') }}</span>
+          <span class="value">{{ currentConfig ? $t('sync.modal.has') : $t('sync.modal.none') }}</span>
         </div>
         <div class="info-row">
-          <span class="label">额外数据</span>
-          <span class="value">{{ extraDataList.length > 0 ? `${extraDataList.length} 项` : '无' }}</span>
+          <span class="label">{{ $t('sync.modal.extraData') }}</span>
+          <span class="value">{{ extraDataList.length > 0 ? $t('sync.panel.itemCount', { count: extraDataList.length }) : $t('sync.modal.none') }}</span>
         </div>
         <div class="info-row">
-          <span class="label">同步状态</span>
+          <span class="label">{{ $t('sync.modal.syncStatus') }}</span>
           <span class="value status" :class="accountSyncStatus">
-            {{ accountSyncStatus === 'synced' ? '已同步' : accountSyncStatus === 'pending' ? '待备份' : '有差异' }}
+            {{ accountSyncStatus === 'synced' ? $t('sync.status.synced') : accountSyncStatus === 'pending' ? $t('sync.status.pending') : $t('sync.status.conflict') }}
           </span>
         </div>
         <div class="info-row" v-if="currentBackup">
-          <span class="label">云端版本</span>
+          <span class="label">{{ $t('sync.modal.cloudVersion') }}</span>
           <span class="value">v{{ currentBackup.version }} · {{ formatTime(currentBackup.updated_at) }}</span>
         </div>
       </div>
@@ -749,17 +751,17 @@ const workflowSteps = [
       <div v-if="dataLossWarning" class="data-loss-warning">
         <div class="warning-header">
           <i class="ri-alert-line"></i>
-          <span>警告：本地数据少于云端</span>
+          <span>{{ $t('sync.warning.dataLossTitle') }}</span>
         </div>
         <ul class="warning-list">
           <li v-for="(w, i) in dataLossWarning" :key="i">{{ w }}</li>
         </ul>
-        <p class="warning-tip">继续上传将覆盖云端数据，可能导致数据丢失。请确认是否继续？</p>
+        <p class="warning-tip">{{ $t('sync.warning.dataLossTip') }}</p>
       </div>
       <div class="modal-actions">
-        <button class="btn-secondary ghost" @click="showConfirmModal = false">取消</button>
+        <button class="btn-secondary ghost" @click="showConfirmModal = false">{{ $t('sync.modal.cancel') }}</button>
         <button class="btn-primary" @click="confirmUpload" :disabled="isSyncing">
-          <i class="ri-save-3-line"></i> {{ isSyncing ? '上传中...' : '确认备份' }}
+          <i class="ri-save-3-line"></i> {{ isSyncing ? $t('sync.modal.uploading') : $t('sync.modal.confirmBackup') }}
         </button>
       </div>
     </div>
@@ -769,35 +771,35 @@ const workflowSteps = [
   <div v-if="showDeleteModal" class="modal-overlay">
     <div class="modal delete-modal">
       <div class="modal-header">
-        <h3>确认删除云端备份</h3>
+        <h3>{{ $t('sync.modal.deleteTitle') }}</h3>
       </div>
       <p class="muted">
-        即将删除账号「{{ pendingDeleteAccount }}」的云端备份，此操作不可恢复。
+        {{ $t('sync.modal.deleteDesc', { account: pendingDeleteAccount }) }}
       </p>
       <div class="delete-info" v-if="pendingDeleteAccount && cloudBackups.get(pendingDeleteAccount)">
         <div class="info-row">
-          <span class="label">账号</span>
+          <span class="label">{{ $t('sync.modal.account') }}</span>
           <span class="value">{{ pendingDeleteAccount }}</span>
         </div>
         <div class="info-row">
-          <span class="label">人物卡数量</span>
-          <span class="value">{{ cloudBackups.get(pendingDeleteAccount)?.profiles_count }} 个</span>
+          <span class="label">{{ $t('sync.modal.profileCount') }}</span>
+          <span class="value">{{ $t('sync.panel.count', { count: cloudBackups.get(pendingDeleteAccount)?.profiles_count }) }}</span>
         </div>
         <div class="info-row">
-          <span class="label">版本</span>
+          <span class="label">{{ $t('sync.modal.version') }}</span>
           <span class="value">v{{ cloudBackups.get(pendingDeleteAccount)?.version }}</span>
         </div>
         <div class="info-row">
-          <span class="label">更新时间</span>
+          <span class="label">{{ $t('sync.modal.updateTime') }}</span>
           <span class="value">{{ formatTime(cloudBackups.get(pendingDeleteAccount)?.updated_at) }}</span>
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn-secondary ghost" @click="showDeleteModal = false">取消</button>
+        <button class="btn-secondary ghost" @click="showDeleteModal = false">{{ $t('sync.modal.cancel') }}</button>
         <button class="btn-danger" @click="confirmDelete" :disabled="isDeleting">
           <i v-if="isDeleting" class="ri-loader-4-line spin"></i>
           <i v-else class="ri-delete-bin-line"></i>
-          {{ isDeleting ? '删除中...' : '确认删除' }}
+          {{ isDeleting ? $t('sync.modal.deleting') : $t('sync.modal.confirmDelete') }}
         </button>
       </div>
     </div>
@@ -809,26 +811,26 @@ const workflowSteps = [
       <aside v-if="viewMode === 'upload'" class="panel left-panel anim-item" style="--delay: 1.2">
         <div class="panel-header">
           <div class="panel-title">
-            <i class="ri-user-star-line"></i> 人物卡列表
+            <i class="ri-user-star-line"></i> {{ $t('sync.panel.profileList') }}
           </div>
-          <div class="badge">{{ currentProfiles.length }} 个</div>
+          <div class="badge">{{ $t('sync.panel.count', { count: currentProfiles.length }) }}</div>
         </div>
 
         <div class="panel-body">
           <div class="search-bar">
             <i class="ri-search-line"></i>
-            <input v-model="search" type="text" placeholder="搜索角色..." />
+            <input v-model="search" type="text" :placeholder="$t('sync.panel.searchPlaceholder')" />
           </div>
 
           <div v-if="isLoading" class="loading-state">
             <div class="loader"></div>
-            <p>正在加载人物卡...</p>
+            <p>{{ $t('sync.panel.loading') }}</p>
           </div>
 
           <div v-else-if="currentProfiles.length === 0" class="empty-state">
             <div class="empty-icon">👤</div>
-            <p>未找到人物卡，检查路径设置</p>
-            <button class="btn-secondary small" @click="router.push('/sync/setup')">重新配置</button>
+            <p>{{ $t('sync.panel.noProfilesFound') }}</p>
+            <button class="btn-secondary small" @click="router.push('/sync/setup')">{{ $t('sync.panel.reconfigure') }}</button>
           </div>
 
           <div v-else class="task-list">
@@ -851,9 +853,9 @@ const workflowSteps = [
                 <div class="icon-pill" v-if="p.icon" :title="p.icon">{{ p.icon }}</div>
                 <div class="status-line">
                   <span class="status" :class="getStatus(p.id)">
-                    <template v-if="getStatus(p.id) === 'synced'">✓ 已同步</template>
-                    <template v-else-if="getStatus(p.id) === 'pending'">○ 待备份</template>
-                    <template v-else>↔ 有差异</template>
+                    <template v-if="getStatus(p.id) === 'synced'">{{ $t('sync.status.syncedIcon') }}</template>
+                    <template v-else-if="getStatus(p.id) === 'pending'">{{ $t('sync.status.pendingIcon') }}</template>
+                    <template v-else>{{ $t('sync.status.conflictIcon') }}</template>
                   </span>
                   <span class="hint">ID: {{ p.id.slice(0, 6) }}…</span>
                 </div>
@@ -868,21 +870,21 @@ const workflowSteps = [
       <aside v-if="viewMode === 'upload'" class="panel tools-panel anim-item" style="--delay: 1.25">
         <div class="panel-header">
           <div class="panel-title">
-            <i class="ri-box-3-line"></i> 道具数据库
+            <i class="ri-box-3-line"></i> {{ $t('sync.panel.toolsDb') }}
           </div>
-          <div class="badge" v-if="currentToolsDb">{{ currentToolsDb.item_count }} 个</div>
-          <div class="badge empty" v-else>未安装 Extended</div>
+          <div class="badge" v-if="currentToolsDb">{{ $t('sync.panel.count', { count: currentToolsDb.item_count }) }}</div>
+          <div class="badge empty" v-else>{{ $t('sync.panel.noExtended') }}</div>
         </div>
 
         <div class="panel-body">
           <div v-if="!currentToolsDb" class="empty-state small">
             <div class="empty-icon">📦</div>
-            <p>未检测到 TRP3 Extended 道具数据库</p>
+            <p>{{ $t('sync.panel.noToolsDb') }}</p>
           </div>
 
           <div v-else-if="toolsList.length === 0" class="empty-state small">
             <div class="empty-icon">📦</div>
-            <p>道具数据库为空</p>
+            <p>{{ $t('sync.panel.emptyToolsDb') }}</p>
           </div>
 
           <div v-else class="tools-list">
@@ -908,22 +910,22 @@ const workflowSteps = [
       <aside v-if="viewMode === 'upload'" class="panel runtime-panel anim-item" style="--delay: 1.28">
         <div class="panel-header">
           <div class="panel-title">
-            <i class="ri-database-2-line"></i> 他人数据
+            <i class="ri-database-2-line"></i> {{ $t('sync.panel.runtimeData') }}
           </div>
           <div class="badge" v-if="currentRuntimeData">{{ currentRuntimeData.size_kb }} KB</div>
-          <div class="badge empty" v-else>无数据</div>
+          <div class="badge empty" v-else>{{ $t('sync.panel.noData') }}</div>
         </div>
 
         <div class="panel-body">
           <div v-if="!currentRuntimeData" class="empty-state small">
             <div class="empty-icon">💾</div>
-            <p>未检测到他人数据</p>
+            <p>{{ $t('sync.panel.noRuntimeData') }}</p>
           </div>
 
           <div v-else class="runtime-info">
             <div class="runtime-stat">
               <i class="ri-file-list-line"></i>
-              <span>他人人物卡缓存</span>
+              <span>{{ $t('sync.panel.runtimeCache') }}</span>
             </div>
             <div class="runtime-meta">
               <span class="size">{{ currentRuntimeData.size_kb }} KB</span>
@@ -937,16 +939,16 @@ const workflowSteps = [
       <aside v-if="viewMode === 'upload'" class="panel extra-panel anim-item" style="--delay: 1.3">
         <div class="panel-header">
           <div class="panel-title">
-            <i class="ri-settings-3-line"></i> 额外数据
+            <i class="ri-settings-3-line"></i> {{ $t('sync.panel.extraData') }}
           </div>
-          <div class="badge" v-if="extraDataList.length">{{ extraDataList.length }} 项</div>
-          <div class="badge empty" v-else>无数据</div>
+          <div class="badge" v-if="extraDataList.length">{{ $t('sync.panel.itemCount', { count: extraDataList.length }) }}</div>
+          <div class="badge empty" v-else>{{ $t('sync.panel.noData') }}</div>
         </div>
 
         <div class="panel-body">
           <div v-if="extraDataList.length === 0" class="empty-state small">
             <div class="empty-icon">⚙️</div>
-            <p>未检测到额外数据</p>
+            <p>{{ $t('sync.panel.noExtraData') }}</p>
           </div>
 
           <div v-else class="extra-list">
@@ -973,11 +975,11 @@ const workflowSteps = [
         <div class="panel-header">
           <div class="panel-title">
             <i class="ri-shield-star-line"></i>
-            <span v-if="viewMode === 'upload'">备份工作流</span>
-            <span v-else>写回本地</span>
+            <span v-if="viewMode === 'upload'">{{ $t('sync.workflow.title') }}</span>
+            <span v-else>{{ $t('sync.workflow.restoreTitle') }}</span>
           </div>
-          <div class="tag" v-if="viewMode === 'upload'">覆盖 PRD: 自动备份 / 冲突检测 / 回滚</div>
-          <div class="tag" v-else>PRD: 写回前自动备份 / 关闭游戏后写入</div>
+          <div class="tag" v-if="viewMode === 'upload'">{{ $t('sync.workflow.prdBackup') }}</div>
+          <div class="tag" v-else>{{ $t('sync.workflow.prdRestore') }}</div>
         </div>
 
         <div class="panel-body right-body" v-if="viewMode === 'upload'">
@@ -985,22 +987,22 @@ const workflowSteps = [
           <div class="card steps-card">
             <div class="card-header">
               <div>
-                <h3>流程进度</h3>
-                <div class="muted">选择子账号 → 备份 → 上传 → 校验 → 完成</div>
+                <h3>{{ $t('sync.workflow.progress') }}</h3>
+                <div class="muted">{{ $t('sync.workflow.progressDesc') }}</div>
               </div>
               <div class="step-summary">
                 <span class="pill">
-                  当前：{{
+                  {{ $t('sync.workflow.current') }}{{
                     workflowStep === 'upload'
-                      ? '上传中'
+                      ? $t('sync.workflow.uploading')
                       : workflowStep === 'verify'
-                        ? '校验/冲突处理'
+                        ? $t('sync.workflow.verifying')
                         : workflowStep === 'finish'
-                          ? '账号已备份完成'
-                          : '已选择子账号'
+                          ? $t('sync.workflow.finished')
+                          : $t('sync.workflow.accountSelected')
                   }}
                 </span>
-                <span class="pill ghost" v-if="stats.conflict > 0">本地与云端有差异</span>
+                <span class="pill ghost" v-if="stats.conflict > 0">{{ $t('sync.workflow.localCloudDiff') }}</span>
               </div>
             </div>
             <div class="steps-row">
@@ -1023,13 +1025,13 @@ const workflowSteps = [
             </div>
 
             <div class="next-actions">
-              <div class="muted">下一步指引</div>
+              <div class="muted">{{ $t('sync.workflow.nextStep') }}</div>
               <div class="actions-row">
-                <span v-if="workflowStep === 'verify' && stats.conflict > 0">本地与云端数据有差异，可上传覆盖或写回本地</span>
-                <span v-else-if="workflowStep === 'upload'">正在上传，完成后会自动校验</span>
-                <span v-else-if="workflowStep === 'backup'">准备备份，确认选中角色后点击一键备份</span>
-                <span v-else-if="workflowStep === 'finish'">已完成，可查看版本历史或写回本地</span>
-                <span v-else>请先选择WOW子账号</span>
+                <span v-if="workflowStep === 'verify' && stats.conflict > 0">{{ $t('sync.workflow.guideDiff') }}</span>
+                <span v-else-if="workflowStep === 'upload'">{{ $t('sync.workflow.guideUploading') }}</span>
+                <span v-else-if="workflowStep === 'backup'">{{ $t('sync.workflow.guideBackup') }}</span>
+                <span v-else-if="workflowStep === 'finish'">{{ $t('sync.workflow.guideFinish') }}</span>
+                <span v-else>{{ $t('sync.workflow.guideSelectAccount') }}</span>
               </div>
             </div>
           </div>
@@ -1040,20 +1042,20 @@ const workflowSteps = [
           <div class="card steps-card">
             <div class="card-header">
               <div>
-                <h3>写回本地</h3>
-                <div class="muted">账号 {{ selectedAccount || '未选择' }} · 关闭游戏后执行</div>
+                <h3>{{ $t('sync.restore.title') }}</h3>
+                <div class="muted">{{ $t('sync.restore.accountInfo', { account: selectedAccount || $t('sync.overview.notSelected') }) }}</div>
               </div>
             </div>
             <ul class="checklist">
-              <li><i class="ri-shut-down-line"></i> 请先关闭魔兽世界</li>
-              <li><i class="ri-checkbox-multiple-line"></i> 支持单角色/全量写回</li>
-              <li><i class="ri-history-line"></i> 保留最近 10 个版本，可回滚</li>
+              <li><i class="ri-shut-down-line"></i> {{ $t('sync.restore.closeGame') }}</li>
+              <li><i class="ri-checkbox-multiple-line"></i> {{ $t('sync.restore.supportPartial') }}</li>
+              <li><i class="ri-history-line"></i> {{ $t('sync.restore.keepVersions') }}</li>
             </ul>
             <div class="cta-row">
               <button class="btn-primary" :disabled="isRestoring || !hasCloudData" @click="restoreAll">
                 <i v-if="isRestoring" class="ri-loader-4-line spin"></i>
                 <i v-else class="ri-cloud-download-line"></i>
-                {{ isRestoring ? '写回中...' : '从云端写回本地（账号）' }}
+                {{ isRestoring ? $t('sync.toolbar.restoring') : $t('sync.restore.restoreFromCloud') }}
               </button>
             </div>
           </div>
@@ -1064,7 +1066,7 @@ const workflowSteps = [
           <div class="cloud-header">
             <div class="cloud-title">
               <i class="ri-cloud-line"></i>
-              <span>云端备份管理</span>
+              <span>{{ $t('sync.cloud.title') }}</span>
             </div>
             <div class="cloud-stats" v-if="currentBackup">
               <span class="stat-pill">v{{ currentBackup.version }}</span>
@@ -1074,13 +1076,13 @@ const workflowSteps = [
 
           <div v-if="!currentBackup" class="empty-state">
             <div class="empty-icon">☁️</div>
-            <p>当前账号暂无云端备份</p>
-            <button class="btn-secondary small" @click="viewMode = 'upload'">去备份</button>
+            <p>{{ $t('sync.cloud.noBackup') }}</p>
+            <button class="btn-secondary small" @click="viewMode = 'upload'">{{ $t('sync.cloud.goBackup') }}</button>
           </div>
 
           <div v-else-if="isLoadingCloudData" class="loading-state">
             <div class="loader"></div>
-            <p>正在加载云端数据...</p>
+            <p>{{ $t('sync.cloud.loadingData') }}</p>
           </div>
 
           <div v-else class="cloud-content">
@@ -1090,35 +1092,35 @@ const workflowSteps = [
                 <i class="ri-user-star-line"></i>
                 <div class="summary-info">
                   <span class="summary-value">{{ cloudProfilesList.length }}</span>
-                  <span class="summary-label">人物卡</span>
+                  <span class="summary-label">{{ $t('sync.cloud.profiles') }}</span>
                 </div>
               </div>
               <div class="summary-card">
                 <i class="ri-box-3-line"></i>
                 <div class="summary-info">
                   <span class="summary-value">{{ currentBackup.tools_count || 0 }}</span>
-                  <span class="summary-label">道具</span>
+                  <span class="summary-label">{{ $t('sync.cloud.tools') }}</span>
                 </div>
               </div>
               <div class="summary-card">
                 <i class="ri-database-2-line"></i>
                 <div class="summary-info">
                   <span class="summary-value">{{ currentBackup.runtime_size_kb || 0 }} KB</span>
-                  <span class="summary-label">他人数据</span>
+                  <span class="summary-label">{{ $t('sync.cloud.runtimeData') }}</span>
                 </div>
               </div>
               <div class="summary-card">
                 <i class="ri-settings-3-line"></i>
                 <div class="summary-info">
                   <span class="summary-value">{{ cloudExtraDataList.length }}</span>
-                  <span class="summary-label">额外数据</span>
+                  <span class="summary-label">{{ $t('sync.cloud.extraData') }}</span>
                 </div>
               </div>
             </div>
 
             <!-- 人物卡列表 -->
             <div class="cloud-section">
-              <div class="section-title">人物卡列表</div>
+              <div class="section-title">{{ $t('sync.cloud.profileList') }}</div>
               <div class="cloud-list">
                 <div
                   v-for="p in cloudProfilesList"
@@ -1146,7 +1148,7 @@ const workflowSteps = [
 
             <!-- 额外数据列表 -->
             <div class="cloud-section" v-if="cloudExtraDataList.length > 0">
-              <div class="section-title">额外数据</div>
+              <div class="section-title">{{ $t('sync.cloud.extraData') }}</div>
               <div class="extra-tags">
                 <span
                   v-for="item in cloudExtraDataList"

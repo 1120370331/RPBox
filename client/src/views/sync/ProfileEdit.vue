@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
+
+const { t } = useI18n()
 
 type TemplateOption = '1' | '2' | '3'
 
@@ -58,17 +61,17 @@ const form = ref<ProfileForm>({
   aboutText: '',
   template: '3',
   t2Blocks: [
-    { title: '框架1', text: '', icon: '', background: '' },
-    { title: '框架2', text: '', icon: '', background: '' }
+    { title: '', text: '', icon: '', background: '' },
+    { title: '', text: '', icon: '', background: '' }
   ],
   t3Physical: '',
   t3Personality: '',
   t3History: '',
-  misc: [{ name: '昵称', value: '', icon: '', preset: '3' }],
+  misc: [{ name: '', value: '', icon: '', preset: '3' }],
   personality: [
-    { left: '理性', right: '感性', value: 10 },
-    { left: '外向', right: '内向', value: 10 },
-    { left: '冷静', right: '冲动', value: 10 }
+    { left: '', right: '', value: 10 },
+    { left: '', right: '', value: 10 },
+    { left: '', right: '', value: 10 }
   ]
 })
 
@@ -111,7 +114,7 @@ async function loadProfile() {
       if (about.template) form.value.template = String(about.template) as TemplateOption
       if (about.t2?.length) {
         form.value.t2Blocks = about.t2.map((b: any, idx: number) => ({
-          title: b.title || `框架${idx + 1}`,
+          title: b.title || t('sync.edit.frame', { num: idx + 1 }),
           text: b.text || b.TX || '',
           icon: b.icon || b.IC || '',
           background: b.background || b.BK || ''
@@ -191,113 +194,113 @@ async function saveProfile() {
 <template>
   <div class="profile-edit">
     <div class="header">
-      <button class="back-btn" @click="router.back()">&larr; 返回</button>
-      <h2>编辑 {{ profileName }}</h2>
+      <button class="back-btn" @click="router.back()">&larr; {{ $t('sync.edit.back') }}</button>
+      <h2>{{ $t('sync.edit.editProfile', { name: profileName }) }}</h2>
       <button class="btn btn-primary" @click="saveProfile" :disabled="isSaving">
-        {{ isSaving ? '保存中...' : '保存' }}
+        {{ isSaving ? $t('sync.edit.saving') : $t('sync.edit.save') }}
       </button>
     </div>
 
-    <div v-if="isLoading" class="loading">加载中...</div>
+    <div v-if="isLoading" class="loading">{{ $t('sync.edit.loading') }}</div>
 
     <form v-else @submit.prevent="saveProfile">
       <div class="section">
-        <h3>基本信息（characteristics）</h3>
+        <h3>{{ $t('sync.edit.basicInfoSection') }}</h3>
         <div class="form-grid">
           <div class="form-item">
-            <label>名 (FN)</label>
-            <input v-model="form.firstName" type="text" placeholder="角色名" />
+            <label>{{ $t('sync.edit.firstName') }}</label>
+            <input v-model="form.firstName" type="text" :placeholder="$t('sync.edit.placeholders.firstName')" />
           </div>
           <div class="form-item">
-            <label>姓 (LN)</label>
-            <input v-model="form.lastName" type="text" placeholder="角色姓氏" />
+            <label>{{ $t('sync.edit.lastName') }}</label>
+            <input v-model="form.lastName" type="text" :placeholder="$t('sync.edit.placeholders.lastName')" />
           </div>
           <div class="form-item">
-            <label>头衔 (TI)</label>
-            <input v-model="form.title" type="text" placeholder="称号或头衔" />
+            <label>{{ $t('sync.edit.titleLabel') }}</label>
+            <input v-model="form.title" type="text" :placeholder="$t('sync.edit.placeholders.title')" />
           </div>
           <div class="form-item">
-            <label>全名/英文 (FT)</label>
-            <input v-model="form.fullTitle" type="text" placeholder="Full Title" />
+            <label>{{ $t('sync.edit.fullTitle') }}</label>
+            <input v-model="form.fullTitle" type="text" :placeholder="$t('sync.edit.placeholders.fullTitle')" />
           </div>
           <div class="form-item">
-            <label>种族 (RA)</label>
-            <input v-model="form.race" type="text" placeholder="种族" />
+            <label>{{ $t('sync.edit.race') }}</label>
+            <input v-model="form.race" type="text" :placeholder="$t('sync.edit.placeholders.race')" />
           </div>
           <div class="form-item">
-            <label>职业 (CL)</label>
-            <input v-model="form.class" type="text" placeholder="职业" />
+            <label>{{ $t('sync.edit.classLabel') }}</label>
+            <input v-model="form.class" type="text" :placeholder="$t('sync.edit.placeholders.classLabel')" />
           </div>
           <div class="form-item">
-            <label>年龄 (AG)</label>
-            <input v-model="form.age" type="text" placeholder="年龄" />
+            <label>{{ $t('sync.edit.age') }}</label>
+            <input v-model="form.age" type="text" :placeholder="$t('sync.edit.placeholders.age')" />
           </div>
           <div class="form-item">
-            <label>身高 (HE)</label>
-            <input v-model="form.height" type="text" placeholder="身高" />
+            <label>{{ $t('sync.edit.height') }}</label>
+            <input v-model="form.height" type="text" :placeholder="$t('sync.edit.placeholders.height')" />
           </div>
           <div class="form-item">
-            <label>体重 (WE)</label>
-            <input v-model="form.weight" type="text" placeholder="体重" />
+            <label>{{ $t('sync.edit.weight') }}</label>
+            <input v-model="form.weight" type="text" :placeholder="$t('sync.edit.placeholders.weight')" />
           </div>
           <div class="form-item">
-            <label>眼睛颜色 (EC)</label>
-            <input v-model="form.eyeColor" type="text" placeholder="如：琥珀色" />
+            <label>{{ $t('sync.edit.eyeColor') }}</label>
+            <input v-model="form.eyeColor" type="text" :placeholder="$t('sync.edit.placeholders.eyeColor')" />
           </div>
           <div class="form-item">
-            <label>眼睛颜色Hex (EH)</label>
+            <label>{{ $t('sync.edit.eyeColorHex') }}</label>
             <input v-model="form.eyeColorHex" type="color" />
           </div>
           <div class="form-item">
-            <label>职业颜色Hex (CH)</label>
+            <label>{{ $t('sync.edit.classColorHex') }}</label>
             <input v-model="form.classColorHex" type="color" />
           </div>
           <div class="form-item">
-            <label>出生地 (BP)</label>
-            <input v-model="form.birthplace" type="text" placeholder="出生地" />
+            <label>{{ $t('sync.edit.birthplace') }}</label>
+            <input v-model="form.birthplace" type="text" :placeholder="$t('sync.edit.placeholders.birthplace')" />
           </div>
           <div class="form-item">
-            <label>居住地 (RE)</label>
-            <input v-model="form.residence" type="text" placeholder="现居住地" />
+            <label>{{ $t('sync.edit.residence') }}</label>
+            <input v-model="form.residence" type="text" :placeholder="$t('sync.edit.placeholders.residence')" />
           </div>
           <div class="form-item">
-            <label>感情状态 (RS)</label>
+            <label>{{ $t('sync.edit.relationshipStatus') }}</label>
             <select v-model="form.relationshipStatus">
-              <option value="0">未知</option>
-              <option value="1">单身</option>
-              <option value="2">恋爱中</option>
-              <option value="3">已婚</option>
-              <option value="4">离异</option>
-              <option value="5">丧偶</option>
+              <option value="0">{{ $t('sync.edit.relationshipOptions.unknown') }}</option>
+              <option value="1">{{ $t('sync.edit.relationshipOptions.single') }}</option>
+              <option value="2">{{ $t('sync.edit.relationshipOptions.inRelationship') }}</option>
+              <option value="3">{{ $t('sync.edit.relationshipOptions.married') }}</option>
+              <option value="4">{{ $t('sync.edit.relationshipOptions.divorced') }}</option>
+              <option value="5">{{ $t('sync.edit.relationshipOptions.widowed') }}</option>
             </select>
           </div>
           <div class="form-item">
-            <label>头像图标 (IC)</label>
-            <input v-model="form.icon" type="text" placeholder="游戏图标路径" />
+            <label>{{ $t('sync.edit.icon') }}</label>
+            <input v-model="form.icon" type="text" :placeholder="$t('sync.edit.placeholders.icon')" />
           </div>
         </div>
       </div>
 
       <div class="section">
-        <h3>关于 (about)</h3>
+        <h3>{{ $t('sync.edit.aboutSection') }}</h3>
         <div class="form-grid template-grid">
           <div class="form-item">
-            <label>模板选择 (TE)</label>
+            <label>{{ $t('sync.edit.templateSelect') }}</label>
             <div class="radio-row">
-              <label><input type="radio" value="1" v-model="form.template" /> 模板1</label>
-              <label><input type="radio" value="2" v-model="form.template" /> 模板2</label>
-              <label><input type="radio" value="3" v-model="form.template" /> 模板3</label>
+              <label><input type="radio" value="1" v-model="form.template" /> {{ $t('sync.edit.template1') }}</label>
+              <label><input type="radio" value="2" v-model="form.template" /> {{ $t('sync.edit.template2') }}</label>
+              <label><input type="radio" value="3" v-model="form.template" /> {{ $t('sync.edit.template3') }}</label>
             </div>
           </div>
           <div class="form-item">
-            <label>标题</label>
-            <input v-model="form.aboutTitle" type="text" placeholder="关于标题" />
+            <label>{{ $t('sync.edit.aboutTitle') }}</label>
+            <input v-model="form.aboutTitle" type="text" :placeholder="$t('sync.edit.aboutTitlePlaceholder')" />
           </div>
         </div>
 
         <div v-if="form.template === '1'" class="form-item">
-          <label>模板1 文本 (T1.TX)</label>
-          <textarea v-model="form.aboutText" rows="6" placeholder="角色描述..."></textarea>
+          <label>{{ $t('sync.edit.template1Text') }}</label>
+          <textarea v-model="form.aboutText" rows="6" :placeholder="$t('sync.edit.template1Placeholder')"></textarea>
         </div>
 
         <div v-if="form.template === '2'" class="t2-grid">
@@ -307,58 +310,58 @@ async function saveProfile() {
             class="t2-card"
           >
             <div class="t2-head">
-              <strong>框架 {{ idx + 1 }}</strong>
-              <input v-model="block.title" type="text" placeholder="标题" />
+              <strong>{{ $t('sync.edit.frame', { num: idx + 1 }) }}</strong>
+              <input v-model="block.title" type="text" :placeholder="$t('sync.edit.frameTitlePlaceholder')" />
             </div>
-            <textarea v-model="block.text" rows="4" placeholder="内容 (T2[].TX)"></textarea>
+            <textarea v-model="block.text" rows="4" :placeholder="$t('sync.edit.frameContentPlaceholder')"></textarea>
             <div class="t2-row">
-              <input v-model="block.icon" type="text" placeholder="图标 (IC)" />
-              <input v-model="block.background" type="text" placeholder="背景 (BK)" />
+              <input v-model="block.icon" type="text" :placeholder="$t('sync.edit.frameIconPlaceholder')" />
+              <input v-model="block.background" type="text" :placeholder="$t('sync.edit.frameBackgroundPlaceholder')" />
             </div>
           </div>
-          <button class="btn-secondary ghost" type="button" @click="form.t2Blocks.push({ title: '新框架', text: '', icon: '', background: '' })">+ 添加框架</button>
+          <button class="btn-secondary ghost" type="button" @click="form.t2Blocks.push({ title: $t('sync.edit.newFrame'), text: '', icon: '', background: '' })">{{ $t('sync.edit.addFrame') }}</button>
         </div>
 
         <div v-if="form.template === '3'" class="t3-grid">
           <div class="form-item">
-            <label>外貌 (T3.PH.TX)</label>
-            <textarea v-model="form.t3Physical" rows="4" placeholder="外貌描述"></textarea>
+            <label>{{ $t('sync.edit.appearanceLabel') }}</label>
+            <textarea v-model="form.t3Physical" rows="4" :placeholder="$t('sync.edit.appearancePlaceholder')"></textarea>
           </div>
           <div class="form-item">
-            <label>性格 (T3.PS.TX)</label>
-            <textarea v-model="form.t3Personality" rows="4" placeholder="性格描述"></textarea>
+            <label>{{ $t('sync.edit.personalityLabel') }}</label>
+            <textarea v-model="form.t3Personality" rows="4" :placeholder="$t('sync.edit.personalityPlaceholder')"></textarea>
           </div>
           <div class="form-item">
-            <label>历史 (T3.HI.TX)</label>
-            <textarea v-model="form.t3History" rows="4" placeholder="历史描述"></textarea>
+            <label>{{ $t('sync.edit.historyLabel') }}</label>
+            <textarea v-model="form.t3History" rows="4" :placeholder="$t('sync.edit.historyPlaceholder')"></textarea>
           </div>
         </div>
       </div>
 
       <div class="section">
-        <h3>性格特征 (PS 数值)</h3>
+        <h3>{{ $t('sync.edit.personalitySection') }}</h3>
         <div class="traits-grid">
           <div class="trait" v-for="(trait, idx) in form.personality" :key="idx">
             <div class="trait-head">
-              <input v-model="trait.left" type="text" placeholder="左侧特征" />
-              <input v-model="trait.right" type="text" placeholder="右侧特征" />
+              <input v-model="trait.left" type="text" :placeholder="$t('sync.edit.leftTrait')" />
+              <input v-model="trait.right" type="text" :placeholder="$t('sync.edit.rightTrait')" />
             </div>
             <input v-model.number="trait.value" type="range" min="0" max="20" />
-            <div class="trait-value">当前值: {{ trait.value }}</div>
+            <div class="trait-value">{{ $t('sync.edit.currentValue', { value: trait.value }) }}</div>
           </div>
         </div>
       </div>
 
       <div class="section">
-        <h3>其他信息 (MI)</h3>
+        <h3>{{ $t('sync.edit.miscSection') }}</h3>
         <div class="misc-grid">
           <div class="misc-row" v-for="(item, idx) in form.misc" :key="idx">
-            <input v-model="item.name" type="text" placeholder="字段名称 (NA)" />
-            <input v-model="item.value" type="text" placeholder="字段值 (VA)" />
-            <input v-model="item.icon" type="text" placeholder="图标 (IC)" />
-            <input v-model="item.preset" type="text" placeholder="预设ID (可选)" />
+            <input v-model="item.name" type="text" :placeholder="$t('sync.edit.fieldName')" />
+            <input v-model="item.value" type="text" :placeholder="$t('sync.edit.fieldValue')" />
+            <input v-model="item.icon" type="text" :placeholder="$t('sync.edit.fieldIcon')" />
+            <input v-model="item.preset" type="text" :placeholder="$t('sync.edit.presetId')" />
           </div>
-          <button class="btn-secondary ghost" type="button" @click="form.misc.push({ name: '', value: '', icon: '' })">+ 添加字段</button>
+          <button class="btn-secondary ghost" type="button" @click="form.misc.push({ name: '', value: '', icon: '' })">{{ $t('sync.edit.addField') }}</button>
         </div>
       </div>
     </form>
