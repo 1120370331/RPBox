@@ -1,33 +1,49 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 
+const { t } = useI18n()
+
 // 感情状态枚举
-const RelationshipStatusMap: Record<number, string> = {
-  1: '单身', 2: '恋爱中', 3: '已婚', 4: '离异', 5: '丧偶'
-}
+const RelationshipStatusMap = computed<Record<number, string>>(() => ({
+  1: t('sync.detail.relationshipStatus.single'),
+  2: t('sync.detail.relationshipStatus.inRelationship'),
+  3: t('sync.detail.relationshipStatus.married'),
+  4: t('sync.detail.relationshipStatus.divorced'),
+  5: t('sync.detail.relationshipStatus.widowed')
+}))
 
 // 性格特征预设
-const PersonalityPresets: Record<number, { left: string; right: string }> = {
-  1: { left: '混乱', right: '守序' },
-  2: { left: '贞洁', right: '好色' },
-  3: { left: '宽容', right: '记仇' },
-  4: { left: '利他', right: '自私' },
-  5: { left: '诚实', right: '欺骗' },
-  6: { left: '温和', right: '残暴' },
-  7: { left: '迷信', right: '理性' },
-  8: { left: '叛逆', right: '典范' },
-  9: { left: '谨慎', right: '冲动' },
-  10: { left: '禁欲', right: '享乐' },
-  11: { left: '勇敢', right: '懦弱' }
-}
+const PersonalityPresets = computed<Record<number, { left: string; right: string }>>(() => ({
+  1: { left: t('sync.detail.personalityPresets.chaotic'), right: t('sync.detail.personalityPresets.lawful') },
+  2: { left: t('sync.detail.personalityPresets.chaste'), right: t('sync.detail.personalityPresets.lustful') },
+  3: { left: t('sync.detail.personalityPresets.forgiving'), right: t('sync.detail.personalityPresets.vengeful') },
+  4: { left: t('sync.detail.personalityPresets.altruistic'), right: t('sync.detail.personalityPresets.selfish') },
+  5: { left: t('sync.detail.personalityPresets.honest'), right: t('sync.detail.personalityPresets.deceitful') },
+  6: { left: t('sync.detail.personalityPresets.gentle'), right: t('sync.detail.personalityPresets.brutal') },
+  7: { left: t('sync.detail.personalityPresets.superstitious'), right: t('sync.detail.personalityPresets.rational') },
+  8: { left: t('sync.detail.personalityPresets.rebellious'), right: t('sync.detail.personalityPresets.paragon') },
+  9: { left: t('sync.detail.personalityPresets.cautious'), right: t('sync.detail.personalityPresets.impulsive') },
+  10: { left: t('sync.detail.personalityPresets.ascetic'), right: t('sync.detail.personalityPresets.hedonistic') },
+  11: { left: t('sync.detail.personalityPresets.brave'), right: t('sync.detail.personalityPresets.cowardly') }
+}))
 
 // 其他信息预设类型
-const MiscInfoPresets: Record<number, string> = {
-  1: '自定义', 2: '家族/家名', 3: '昵称', 4: '座右铭', 5: '面部特征',
-  6: '穿孔', 7: '代词', 8: 'RP公会名', 9: 'RP公会头衔', 10: '纹身', 11: '声音参考'
-}
+const MiscInfoPresets = computed<Record<number, string>>(() => ({
+  1: t('sync.detail.miscPresets.custom'),
+  2: t('sync.detail.miscPresets.familyName'),
+  3: t('sync.detail.miscPresets.nickname'),
+  4: t('sync.detail.miscPresets.motto'),
+  5: t('sync.detail.miscPresets.facialFeatures'),
+  6: t('sync.detail.miscPresets.piercings'),
+  7: t('sync.detail.miscPresets.pronouns'),
+  8: t('sync.detail.miscPresets.rpGuildName'),
+  9: t('sync.detail.miscPresets.rpGuildRank'),
+  10: t('sync.detail.miscPresets.tattoos'),
+  11: t('sync.detail.miscPresets.voiceRef')
+}))
 
 interface PersonalityTrait {
   ID?: number; LT?: string; RT?: string; V2?: number
@@ -77,7 +93,7 @@ const displayName = computed(() => {
   const c = profile.value?.characteristics
   if (c?.FN && c?.LN) return `${c.FN} ${c.LN}`
   if (c?.FN) return c.FN
-  return profile.value?.name || '未命名角色'
+  return profile.value?.name || t('sync.detail.unnamed')
 })
 
 // 构建标签
@@ -86,21 +102,21 @@ const metaBadges = computed(() => {
   const c = profile.value?.characteristics
   if (c?.RA) badges.push(c.RA)
   if (c?.CL) badges.push(c.CL)
-  if (c?.RS && RelationshipStatusMap[c.RS]) badges.push(RelationshipStatusMap[c.RS])
+  if (c?.RS && RelationshipStatusMap.value[c.RS]) badges.push(RelationshipStatusMap.value[c.RS])
   return badges
 })
 
 // 获取性格特征标签
 function getTraitLabels(trait: PersonalityTrait) {
-  if (trait.ID && PersonalityPresets[trait.ID]) return PersonalityPresets[trait.ID]
-  return { left: trait.LT || '左', right: trait.RT || '右' }
+  if (trait.ID && PersonalityPresets.value[trait.ID]) return PersonalityPresets.value[trait.ID]
+  return { left: trait.LT || t('sync.detail.left'), right: trait.RT || t('sync.detail.right') }
 }
 
 // 获取其他信息名称
 function getMiscName(misc: MiscInfo): string {
   if (misc.NA) return misc.NA
-  if (misc.ID && MiscInfoPresets[misc.ID]) return MiscInfoPresets[misc.ID]
-  return '其他'
+  if (misc.ID && MiscInfoPresets.value[misc.ID]) return MiscInfoPresets.value[misc.ID]
+  return t('sync.detail.other')
 }
 
 // 检查各部分是否有内容 - 改为始终显示
@@ -146,13 +162,13 @@ async function loadProfile() {
       <div class="breadcrumbs">
         <i class="ri-home-4-line"></i>
         <span class="separator">/</span>
-        <span>人物卡</span>
+        <span>{{ $t('sync.detail.breadcrumbProfile') }}</span>
         <span class="separator">/</span>
         <span class="current">{{ displayName }}</span>
       </div>
       <div class="toolbar-actions">
         <button class="btn btn-secondary" @click="router.back()">
-          <i class="ri-arrow-left-line"></i> 返回
+          <i class="ri-arrow-left-line"></i> {{ $t('sync.detail.back') }}
         </button>
       </div>
     </header>
@@ -160,7 +176,7 @@ async function loadProfile() {
     <!-- 加载状态 -->
     <div v-if="isLoading" class="loading-state">
       <div class="loader"></div>
-      <p>正在加载人物卡...</p>
+      <p>{{ $t('sync.detail.loading') }}</p>
     </div>
 
     <!-- 主内容 -->
@@ -182,42 +198,42 @@ async function loadProfile() {
       <!-- 基本信息 -->
       <section class="panel anim-item" style="--delay: 2" v-if="hasBasicInfo">
         <div class="panel-header">
-          <div class="panel-title"><i class="ri-profile-line"></i> 基本信息</div>
+          <div class="panel-title"><i class="ri-profile-line"></i> {{ $t('sync.detail.basicInfo') }}</div>
         </div>
         <div class="panel-body">
           <div class="form-grid">
             <div class="form-group">
-              <label class="form-label">头衔</label>
+              <label class="form-label">{{ $t('sync.detail.title') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.TI }">{{ profile.characteristics?.TI || '-' }}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">全名</label>
+              <label class="form-label">{{ $t('sync.detail.fullName') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.FT }">{{ profile.characteristics?.FT || '-' }}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">年龄</label>
+              <label class="form-label">{{ $t('sync.detail.age') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.AG }">{{ profile.characteristics?.AG || '-' }}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">身高</label>
+              <label class="form-label">{{ $t('sync.detail.height') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.HE }">{{ profile.characteristics?.HE || '-' }}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">体重</label>
+              <label class="form-label">{{ $t('sync.detail.weight') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.WE }">{{ profile.characteristics?.WE || '-' }}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">眼睛颜色</label>
+              <label class="form-label">{{ $t('sync.detail.eyeColor') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.EC }" :style="profile.characteristics?.EH ? { color: '#' + profile.characteristics.EH } : {}">
                 {{ profile.characteristics?.EC || '-' }}
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">出生地</label>
+              <label class="form-label">{{ $t('sync.detail.birthplace') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.BP }">{{ profile.characteristics?.BP || '-' }}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">居住地</label>
+              <label class="form-label">{{ $t('sync.detail.residence') }}</label>
               <div class="form-value" :class="{ empty: !profile.characteristics?.RE }">{{ profile.characteristics?.RE || '-' }}</div>
             </div>
           </div>
@@ -227,18 +243,18 @@ async function loadProfile() {
       <!-- 当前状态 -->
       <section class="panel anim-item" style="--delay: 3" v-if="hasCharacter">
         <div class="panel-header">
-          <div class="panel-title"><i class="ri-emotion-line"></i> 当前状态</div>
+          <div class="panel-title"><i class="ri-emotion-line"></i> {{ $t('sync.detail.currentStatus') }}</div>
           <div class="rp-badge" :class="profile.character?.RP === 1 ? 'ic' : 'ooc'">
-            {{ profile.character?.RP === 1 ? 'IC 角色扮演中' : 'OOC 非角色扮演' }}
+            {{ profile.character?.RP === 1 ? $t('sync.detail.icStatus') : $t('sync.detail.oocStatus') }}
           </div>
         </div>
         <div class="panel-body">
           <div class="status-content">
-            <label class="form-label">当前状态</label>
+            <label class="form-label">{{ $t('sync.detail.currentStatus') }}</label>
             <p :class="{ empty: !profile.character?.CU }">{{ profile.character?.CU || '-' }}</p>
           </div>
           <div class="status-ooc">
-            <label class="form-label">OOC 备注</label>
+            <label class="form-label">{{ $t('sync.detail.oocNote') }}</label>
             <p :class="{ empty: !profile.character?.CO }">{{ profile.character?.CO || '-' }}</p>
           </div>
         </div>
@@ -247,13 +263,13 @@ async function loadProfile() {
       <!-- 关于 -->
       <section class="panel anim-item" style="--delay: 4" v-if="hasAbout">
         <div class="panel-header">
-          <div class="panel-title"><i class="ri-book-open-line"></i> 关于</div>
-          <span class="template-badge">模板 {{ profile.about?.TE || 1 }}</span>
+          <div class="panel-title"><i class="ri-book-open-line"></i> {{ $t('sync.detail.about') }}</div>
+          <span class="template-badge">{{ $t('sync.detail.template', { num: profile.about?.TE || 1 }) }}</span>
         </div>
         <div class="panel-body">
           <!-- 模板1：单一文本 -->
           <div v-if="(profile.about?.TE || 1) === 1" class="about-text" :class="{ empty: !profile.about?.T1?.TX }">
-            {{ profile.about?.T1?.TX || '暂无内容' }}
+            {{ profile.about?.T1?.TX || $t('sync.detail.noContent') }}
           </div>
           <!-- 模板2：多框架 -->
           <div v-else-if="profile.about?.TE === 2" class="about-blocks">
@@ -262,20 +278,20 @@ async function loadProfile() {
                 <p>{{ block.TX || '' }}</p>
               </div>
             </template>
-            <div v-else class="empty">暂无内容</div>
+            <div v-else class="empty">{{ $t('sync.detail.noContent') }}</div>
           </div>
           <!-- 模板3：外貌/性格/历史 -->
           <div v-else-if="profile.about?.TE === 3" class="about-sections">
             <div class="about-section">
-              <h4>外貌</h4>
+              <h4>{{ $t('sync.detail.appearance') }}</h4>
               <p :class="{ empty: !profile.about?.T3?.PH?.TX }">{{ profile.about?.T3?.PH?.TX || '-' }}</p>
             </div>
             <div class="about-section">
-              <h4>性格</h4>
+              <h4>{{ $t('sync.detail.personality') }}</h4>
               <p :class="{ empty: !profile.about?.T3?.PS?.TX }">{{ profile.about?.T3?.PS?.TX || '-' }}</p>
             </div>
             <div class="about-section">
-              <h4>历史</h4>
+              <h4>{{ $t('sync.detail.history') }}</h4>
               <p :class="{ empty: !profile.about?.T3?.HI?.TX }">{{ profile.about?.T3?.HI?.TX || '-' }}</p>
             </div>
           </div>
@@ -285,7 +301,7 @@ async function loadProfile() {
       <!-- 性格特征 -->
       <section class="panel anim-item" style="--delay: 5" v-if="hasPersonality">
         <div class="panel-header">
-          <div class="panel-title"><i class="ri-mental-health-line"></i> 性格特征</div>
+          <div class="panel-title"><i class="ri-mental-health-line"></i> {{ $t('sync.detail.personalityTraits') }}</div>
         </div>
         <div class="panel-body">
           <div class="traits-grid">
@@ -305,7 +321,7 @@ async function loadProfile() {
       <!-- 其他信息 -->
       <section class="panel anim-item" style="--delay: 6" v-if="hasMiscInfo">
         <div class="panel-header">
-          <div class="panel-title"><i class="ri-file-list-3-line"></i> 其他信息</div>
+          <div class="panel-title"><i class="ri-file-list-3-line"></i> {{ $t('sync.detail.otherInfo') }}</div>
         </div>
         <div class="panel-body">
           <div class="misc-grid">

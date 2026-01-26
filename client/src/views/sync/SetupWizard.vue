@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 interface DetectedPath {
   path: string
@@ -9,6 +10,7 @@ interface DetectedPath {
 }
 
 const router = useRouter()
+const { t } = useI18n()
 const currentStep = ref(1)
 const isLoading = ref(false)
 const isScanning = ref(false)
@@ -62,7 +64,7 @@ async function browseFolder() {
     const { open } = await import('@tauri-apps/plugin-dialog')
     const selected = await open({
       directory: true,
-      title: '选择WoW安装目录'
+      title: t('sync.setup.selectWowDirTitle')
     })
     if (selected) {
       // 智能规范化路径
@@ -72,18 +74,18 @@ async function browseFolder() {
         selectedPath.value = normalized
         pathError.value = ''
       } else {
-        pathError.value = '未找到有效的WoW安装，请选择正确的目录'
+        pathError.value = t('sync.setup.errorInvalidPath')
       }
     }
   } catch (e) {
     console.error('打开文件夹选择器失败:', e)
-    pathError.value = '无法打开文件选择器'
+    pathError.value = t('sync.setup.errorOpenDialog')
   }
 }
 
 async function validateAndNext() {
   if (!selectedPath.value) {
-    pathError.value = '请选择或输入WoW安装路径'
+    pathError.value = t('sync.setup.errorNoPath')
     return
   }
 
@@ -98,7 +100,7 @@ async function validateAndNext() {
     profileCount.value = result.accounts.reduce((sum, a) => sum + (a.profiles?.length || 0), 0)
     currentStep.value = 2
   } catch (e) {
-    pathError.value = '无法访问该路径，请检查是否正确'
+    pathError.value = t('sync.setup.errorAccessPath')
   } finally {
     isLoading.value = false
   }
@@ -116,7 +118,7 @@ function complete() {
       <!-- 头部 -->
       <div class="card-header">
         <div class="logo">RPBOX</div>
-        <h1>人物卡同步设置</h1>
+        <h1>{{ $t('sync.setup.title') }}</h1>
         <div class="steps">
           <span :class="{ active: currentStep >= 1 }">1</span>
           <span class="line" :class="{ active: currentStep >= 2 }"></span>
@@ -126,15 +128,15 @@ function complete() {
 
       <!-- Step 1: 输入路径 -->
       <div v-if="currentStep === 1" class="step-content">
-        <h2>选择魔兽世界安装目录</h2>
+        <h2>{{ $t('sync.setup.selectWowDir') }}</h2>
 
         <!-- 自动检测结果 -->
         <div v-if="isScanning" class="scanning">
-          <span class="spinner">↻</span> 正在扫描...
+          <span class="spinner">↻</span> {{ $t('sync.setup.scanning') }}
         </div>
 
         <div v-else-if="detectedPaths.length > 0" class="detected-list">
-          <p class="hint">已检测到以下安装：</p>
+          <p class="hint">{{ $t('sync.setup.detectedInstalls') }}</p>
           <div
             v-for="p in detectedPaths"
             :key="p.path"
@@ -143,43 +145,43 @@ function complete() {
             @click="selectPath(p.path)"
           >
             <span class="path-name">{{ p.path }}</span>
-            <span class="path-info">{{ p.accounts?.length || 0 }} 个账号</span>
+            <span class="path-info">{{ $t('sync.setup.accountCount', { count: p.accounts?.length || 0 }) }}</span>
           </div>
         </div>
 
         <div v-else class="no-detect">
-          <p>未能自动检测到WoW安装</p>
+          <p>{{ $t('sync.setup.noDetect') }}</p>
         </div>
 
         <!-- 手动输入 -->
         <div class="manual-section">
-          <p class="hint">手动选择或输入路径：</p>
-          <button class="btn-browse" @click="browseFolder">📁 浏览文件夹</button>
+          <p class="hint">{{ $t('sync.setup.manualHint') }}</p>
+          <button class="btn-browse" @click="browseFolder">📁 {{ $t('sync.setup.browseFolder') }}</button>
           <div class="manual-row">
             <input
               v-model="manualPath"
               type="text"
               class="path-input"
-              placeholder="或直接输入路径..."
+              :placeholder="$t('sync.setup.inputPlaceholder')"
             />
-            <button class="btn-small" @click="useManualPath">确定</button>
+            <button class="btn-small" @click="useManualPath">{{ $t('sync.setup.confirm') }}</button>
           </div>
         </div>
 
         <p v-if="pathError" class="error">{{ pathError }}</p>
-        <p v-if="selectedPath" class="selected-hint">已选择: {{ selectedPath }}</p>
+        <p v-if="selectedPath" class="selected-hint">{{ $t('sync.setup.selected', { path: selectedPath }) }}</p>
 
         <button class="btn-primary" @click="validateAndNext" :disabled="isLoading || !selectedPath">
-          {{ isLoading ? '验证中...' : '下一步' }}
+          {{ isLoading ? $t('sync.setup.validating') : $t('sync.setup.nextStep') }}
         </button>
       </div>
 
       <!-- Step 2: 完成 -->
       <div v-if="currentStep === 2" class="step-content success">
         <div class="success-icon">✓</div>
-        <h2>设置完成</h2>
-        <p class="result">发现 <strong>{{ profileCount }}</strong> 个人物卡</p>
-        <button class="btn-primary" @click="complete">开始使用</button>
+        <h2>{{ $t('sync.setup.complete') }}</h2>
+        <p class="result" v-html="$t('sync.setup.foundProfiles', { count: `<strong>${profileCount}</strong>` })"></p>
+        <button class="btn-primary" @click="complete">{{ $t('sync.setup.startUsing') }}</button>
       </div>
     </div>
   </div>
