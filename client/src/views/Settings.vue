@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { getVersion } from '@tauri-apps/api/app'
 import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
+import { useThemeStore, themes, type Theme } from '@/stores/theme'
+import { useLocaleStore, type LocaleType } from '@/stores/locale'
 import { uploadAvatar } from '@/api/user'
 import { useUpdater } from '@/composables/useUpdater'
 import { getAddonManifest } from '@/api/addon'
@@ -20,9 +23,20 @@ interface WowInstallation {
 }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const userStore = useUserStore()
 const toast = useToastStore()
+const themeStore = useThemeStore()
+const localeStore = useLocaleStore()
 const { checking, updateAvailable, updateInfo, checkForUpdate, downloadAndInstall, downloading, downloadProgress, lastError } = useUpdater()
+
+// 检查是否为 LV3+ 赞助者
+const sponsorLevel = computed(() => {
+  const level = userStore.user?.sponsor_level
+  if (typeof level === 'number') return level
+  return userStore.user?.is_sponsor ? 2 : 0
+})
+const canUseTheme = computed(() => sponsorLevel.value >= 3)
 
 const mounted = ref(false)
 const wowPath = ref('')
@@ -123,17 +137,17 @@ function saveSettings() {
 }
 
 async function clearCache() {
-  if (confirm('确定要清除本地缓存吗？')) {
+  if (confirm(t('settings.data.confirmClearCache'))) {
     await invoke('clear_sync_cache')
-    alert('缓存已清除')
+    toast.success(t('settings.data.cacheCleared'))
   }
 }
 
 function clearImageCache() {
-  if (!confirm('确定要清除图片缓存吗？')) return
+  if (!confirm(t('settings.data.confirmClearImageCache'))) return
   bumpImageCacheVersion()
   sessionStorage.removeItem('tiptap_image_upload_cache')
-  toast.success('图片缓存已清除')
+  toast.success(t('settings.data.imageCacheCleared'))
 }
 
 function resetSetup() {
@@ -145,26 +159,26 @@ async function handleCheckUpdate() {
   try {
     const update = await checkForUpdate()
     if (update) {
-      toast.success(`发现新版本 ${update.version}`)
+      toast.success(`${t('settings.about.foundNewVersion')} ${update.version}`)
     } else {
-      toast.info('当前已是最新版本')
+      toast.info(t('settings.about.alreadyLatest'))
     }
   } catch (e: any) {
     console.error('[Settings] 检查更新失败:', e)
-    const errorMsg = lastError.value || e?.message || '未知错误'
-    toast.error(`检查更新失败: ${errorMsg}`)
+    const errorMsg = lastError.value || e?.message || 'Unknown error'
+    toast.error(`${t('settings.about.checkFailed')}: ${errorMsg}`)
   }
 }
 
 async function handleDownloadAndInstall() {
   try {
-    toast.info('开始下载更新...')
+    toast.info(t('settings.about.startDownload'))
     await downloadAndInstall()
-    toast.success('更新下载完成，即将重启应用')
+    toast.success(t('settings.about.downloadComplete'))
   } catch (e: any) {
     console.error('[Settings] 下载更新失败:', e)
-    const errorMsg = lastError.value || e?.message || '未知错误'
-    toast.error(`下载更新失败: ${errorMsg}`)
+    const errorMsg = lastError.value || e?.message || 'Unknown error'
+    toast.error(`${t('settings.about.downloadFailed')}: ${errorMsg}`)
   }
 }
 
@@ -178,7 +192,7 @@ async function handleAvatarChange(event: Event) {
   if (!file) return
 
   if (file.size > 20 * 1024 * 1024) {
-    toast.warning('头像文件不能超过20MB')
+    toast.warning(t('settings.profile.avatarSizeLimit'))
     return
   }
 
@@ -186,9 +200,9 @@ async function handleAvatarChange(event: Event) {
   try {
     const res = await uploadAvatar(file)
     userStore.updateAvatar(res.avatar)
-    toast.success('头像更新成功')
+    toast.success(t('settings.profile.avatarUpdated'))
   } catch (error: any) {
-    toast.error(error.message || '上传失败')
+    toast.error(error.message || t('settings.profile.uploadFailed'))
   } finally {
     avatarUploading.value = false
     input.value = ''
@@ -223,7 +237,7 @@ async function handleCheckAddonUpdate() {
   console.log('[Settings] 开始检查插件更新, 当前版本:', addonVersion.value)
 
   if (!addonVersion.value) {
-    toast.warning('请先安装 RPBox Addon 插件')
+    toast.warning(t('settings.addon.installFirst'))
     return
   }
 
@@ -235,22 +249,49 @@ async function handleCheckAddonUpdate() {
     const latestVersion = manifest.latest
 
     if (addonVersion.value === latestVersion) {
-      toast.success('当前已是最新版本')
+      toast.success(t('settings.addon.alreadyLatest'))
     } else {
       console.log('[Settings] 发现新版本:', latestVersion)
       const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
-      const changelog = latestVersionInfo?.changelog || '暂无更新说明'
+      const changelog = latestVersionInfo?.changelog || t('settings.addon.noChangelog')
       const flavor = localStorage.getItem('selected_flavor') || '_retail_'
       console.log('[Settings] 显示更新对话框')
       addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog, wowPath.value, flavor)
     }
   } catch (e) {
     console.error('检查插件更新失败:', e)
-    toast.error('检查更新失败')
+    toast.error(t('settings.addon.checkFailed'))
   } finally {
     addonChecking.value = false
   }
 }
+
+// 生成主题预览样式
+function getThemePreviewStyle(theme: Theme) {
+  return {
+    '--preview-sidebar': theme.colors.sidebarBg,
+    '--preview-bg': theme.colors.background,
+    '--preview-panel': theme.colors.panelBg,
+    '--preview-accent': theme.colors.accent,
+  }
+}
+
+// 语言选项
+const languageOptions = [
+  { value: 'zh-CN' as LocaleType, label: '简体中文' },
+  { value: 'en-US' as LocaleType, label: 'English' },
+]
+
+// 切换语言
+function changeLanguage(lang: LocaleType) {
+  localeStore.setLocale(lang)
+  locale.value = lang
+}
+
+// 同步 locale store 到 i18n
+watch(() => localeStore.currentLocale, (newLocale) => {
+  locale.value = newLocale
+}, { immediate: true })
 </script>
 
 <template>
@@ -259,11 +300,11 @@ async function handleCheckAddonUpdate() {
     <div class="top-toolbar anim-item" style="--delay: 0">
       <div class="breadcrumbs">
         <i class="ri-settings-3-line"></i>
-        <span class="current">系统设置</span>
+        <span class="current">{{ $t('settings.title') }}</span>
       </div>
       <div class="toolbar-actions">
         <button class="btn btn-secondary" @click="router.back()">
-          <i class="ri-arrow-left-line"></i> 返回
+          <i class="ri-arrow-left-line"></i> {{ $t('settings.back') }}
         </button>
       </div>
     </div>
@@ -277,14 +318,14 @@ async function handleCheckAddonUpdate() {
             <i class="ri-user-line"></i>
           </div>
           <div class="card-title">
-            <h3>个人资料</h3>
-            <p>管理您的头像和账户信息</p>
+            <h3>{{ $t('settings.profile.title') }}</h3>
+            <p>{{ $t('settings.profile.description') }}</p>
           </div>
         </div>
         <div class="card-body">
           <div class="avatar-section">
             <div class="avatar-preview" @click="triggerAvatarUpload">
-              <img v-if="userStore.user?.avatar" :src="userStore.user.avatar" alt="头像" />
+              <img v-if="userStore.user?.avatar" :src="userStore.user.avatar" alt="avatar" />
               <span v-else class="avatar-placeholder">
                 {{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}
               </span>
@@ -293,8 +334,8 @@ async function handleCheckAddonUpdate() {
               </div>
             </div>
             <div class="avatar-info">
-              <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || '未登录' }}</h4>
-              <p>点击头像更换，支持 JPG、PNG 格式，最大 20MB</p>
+              <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || $t('settings.profile.notLoggedIn') }}</h4>
+              <p>{{ $t('settings.profile.avatarHint') }}</p>
             </div>
             <input
               ref="avatarInputRef"
@@ -307,6 +348,79 @@ async function handleCheckAddonUpdate() {
         </div>
       </div>
 
+      <!-- 主题设置 -->
+      <div class="setting-card anim-item" style="--delay: 1.5">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-palette-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>{{ $t('settings.appearance.theme') }}</h3>
+            <p>{{ $t('settings.appearance.themeDesc') }}</p>
+          </div>
+          <span v-if="!canUseTheme" class="sponsor-badge">
+            <i class="ri-vip-crown-line"></i> {{ $t('settings.appearance.sponsorOnly') }}
+          </span>
+        </div>
+        <div class="card-body">
+          <div v-if="canUseTheme" class="theme-grid">
+            <div
+              v-for="theme in themes"
+              :key="theme.id"
+              class="theme-item"
+              :class="{ active: themeStore.currentThemeId === theme.id }"
+              @click="themeStore.setTheme(theme.id)"
+            >
+              <div class="theme-preview" :style="getThemePreviewStyle(theme)">
+                <div class="preview-sidebar"></div>
+                <div class="preview-content">
+                  <div class="preview-header"></div>
+                  <div class="preview-card"></div>
+                </div>
+              </div>
+              <span class="theme-name">{{ theme.name }}</span>
+              <i v-if="themeStore.currentThemeId === theme.id" class="ri-checkbox-circle-fill theme-check"></i>
+            </div>
+          </div>
+          <div v-else class="theme-locked">
+            <div class="locked-content">
+              <i class="ri-lock-line"></i>
+              <p>{{ $t('settings.appearance.sponsorHint') }}</p>
+              <button class="btn btn-outline" @click="router.push('/thanks')">
+                <i class="ri-heart-3-line"></i> {{ $t('settings.appearance.learnSponsor') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 语言设置 -->
+      <div class="setting-card anim-item" style="--delay: 1.8">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-translate-2"></i>
+          </div>
+          <div class="card-title">
+            <h3>{{ t('settings.language.title') }}</h3>
+            <p>{{ t('settings.language.description') }}</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="language-options">
+            <div
+              v-for="lang in languageOptions"
+              :key="lang.value"
+              class="language-item"
+              :class="{ active: localeStore.currentLocale === lang.value }"
+              @click="changeLanguage(lang.value)"
+            >
+              <span class="language-label">{{ lang.label }}</span>
+              <i v-if="localeStore.currentLocale === lang.value" class="ri-checkbox-circle-fill"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- WoW 安装路径 -->
       <div class="setting-card anim-item" style="--delay: 2">
         <div class="card-header">
@@ -314,8 +428,8 @@ async function handleCheckAddonUpdate() {
             <i class="ri-folder-3-line"></i>
           </div>
           <div class="card-title">
-            <h3>WoW 安装路径</h3>
-            <p>配置魔兽世界的安装目录</p>
+            <h3>{{ $t('settings.game.title') }}</h3>
+            <p>{{ $t('settings.game.description') }}</p>
           </div>
         </div>
         <div class="card-body">
@@ -323,12 +437,12 @@ async function handleCheckAddonUpdate() {
             <input
               v-model="wowPath"
               type="text"
-              placeholder="请输入或选择魔兽世界安装路径"
+              :placeholder="$t('settings.game.wowPathPlaceholder')"
               class="path-input"
             />
             <button class="btn btn-primary" @click="detectPaths" :disabled="isScanning">
               <i :class="isScanning ? 'ri-loader-4-line spin' : 'ri-search-line'"></i>
-              {{ isScanning ? '扫描中...' : '自动检测' }}
+              {{ isScanning ? $t('settings.game.scanning') : $t('settings.game.autoDetect') }}
             </button>
           </div>
           <div v-if="detectedPaths.length > 0" class="detected-paths">
@@ -356,15 +470,15 @@ async function handleCheckAddonUpdate() {
             <i class="ri-refresh-line"></i>
           </div>
           <div class="card-title">
-            <h3>同步设置</h3>
-            <p>配置数据同步行为</p>
+            <h3>{{ $t('settings.sync.title') }}</h3>
+            <p>{{ $t('settings.sync.description') }}</p>
           </div>
         </div>
         <div class="card-body">
           <label class="switch-item" @click="syncOnStartup = !syncOnStartup; saveSettings()">
             <div class="switch-info">
-              <span class="switch-label">启动时自动同步</span>
-              <span class="switch-desc">应用启动后自动检查并同步数据</span>
+              <span class="switch-label">{{ $t('settings.sync.autoSyncOnStartup') }}</span>
+              <span class="switch-desc">{{ $t('settings.sync.autoSyncOnStartupDesc') }}</span>
             </div>
             <div class="switch" :class="{ active: syncOnStartup }">
               <div class="switch-thumb"></div>
@@ -372,8 +486,8 @@ async function handleCheckAddonUpdate() {
           </label>
           <label class="switch-item" @click="autoSync = !autoSync; saveSettings()">
             <div class="switch-info">
-              <span class="switch-label">变更时自动同步</span>
-              <span class="switch-desc">检测到本地文件变更时自动上传</span>
+              <span class="switch-label">{{ $t('settings.sync.autoSyncOnChange') }}</span>
+              <span class="switch-desc">{{ $t('settings.sync.autoSyncOnChangeDesc') }}</span>
             </div>
             <div class="switch" :class="{ active: autoSync }">
               <div class="switch-thumb"></div>
@@ -389,23 +503,23 @@ async function handleCheckAddonUpdate() {
             <i class="ri-database-2-line"></i>
           </div>
           <div class="card-title">
-            <h3>数据管理</h3>
-            <p>管理本地缓存和配置</p>
+            <h3>{{ $t('settings.data.title') }}</h3>
+            <p>{{ $t('settings.data.description') }}</p>
           </div>
         </div>
         <div class="card-body">
           <div class="action-buttons">
             <button class="btn btn-outline" @click="clearImageCache">
               <i class="ri-brush-line"></i>
-              清除图片缓存
+              {{ $t('settings.data.clearImageCache') }}
             </button>
             <button class="btn btn-outline" @click="clearCache">
               <i class="ri-delete-bin-line"></i>
-              清除本地缓存
+              {{ $t('settings.data.clearLocalCache') }}
             </button>
             <button class="btn btn-danger" @click="resetSetup">
               <i class="ri-restart-line"></i>
-              重新配置
+              {{ $t('settings.data.reconfigure') }}
             </button>
           </div>
         </div>
@@ -418,8 +532,8 @@ async function handleCheckAddonUpdate() {
             <i class="ri-puzzle-line"></i>
           </div>
           <div class="card-title">
-            <h3>插件管理</h3>
-            <p>管理 RPBox Addon 插件版本</p>
+            <h3>{{ $t('settings.addon.title') }}</h3>
+            <p>{{ $t('settings.addon.description') }}</p>
           </div>
         </div>
         <div class="card-body">
@@ -427,7 +541,7 @@ async function handleCheckAddonUpdate() {
             <div class="addon-status">
               <i class="ri-checkbox-circle-fill status-icon installed"></i>
               <div class="status-text">
-                <span class="status-label">已安装</span>
+                <span class="status-label">{{ $t('settings.addon.installed') }}</span>
                 <span class="status-version">v{{ addonVersion }}</span>
               </div>
             </div>
@@ -437,20 +551,20 @@ async function handleCheckAddonUpdate() {
               :disabled="addonChecking"
             >
               <i :class="addonChecking ? 'ri-loader-4-line spin' : 'ri-refresh-line'"></i>
-              {{ addonChecking ? '检查中...' : '检测更新' }}
+              {{ addonChecking ? $t('settings.addon.checking') : $t('settings.addon.checkUpdate') }}
             </button>
           </div>
           <div v-else class="addon-info">
             <div class="addon-status">
               <i class="ri-error-warning-fill status-icon not-installed"></i>
               <div class="status-text">
-                <span class="status-label">未安装</span>
-                <span class="status-desc">请前往剧情归档页面安装插件</span>
+                <span class="status-label">{{ $t('settings.addon.notInstalled') }}</span>
+                <span class="status-desc">{{ $t('settings.addon.notInstalledDesc') }}</span>
               </div>
             </div>
             <button class="btn btn-outline" @click="router.push('/archives')">
               <i class="ri-download-line"></i>
-              前往安装
+              {{ $t('settings.addon.goToInstall') }}
             </button>
           </div>
         </div>
@@ -465,7 +579,7 @@ async function handleCheckAddonUpdate() {
           <div class="about-info">
             <h3>RPBox</h3>
             <p class="version">v{{ appVersion }}</p>
-            <p class="desc">魔兽世界 RP 玩家的工具箱</p>
+            <p class="desc">{{ $t('settings.about.appDesc') }}</p>
           </div>
           <div class="about-actions">
             <button
@@ -475,11 +589,11 @@ async function handleCheckAddonUpdate() {
               :disabled="checking"
             >
               <i :class="checking ? 'ri-loader-4-line spin' : 'ri-refresh-line'"></i>
-              {{ checking ? '检查中...' : '检查更新' }}
+              {{ checking ? $t('settings.about.checking') : $t('settings.about.checkUpdate') }}
             </button>
             <template v-else>
               <div class="update-info">
-                <span class="new-version">新版本 {{ updateInfo?.version }}</span>
+                <span class="new-version">{{ $t('settings.about.newVersion') }} {{ updateInfo?.version }}</span>
               </div>
               <button
                 class="btn btn-update"
@@ -487,7 +601,7 @@ async function handleCheckAddonUpdate() {
                 :disabled="downloading"
               >
                 <i :class="downloading ? 'ri-loader-4-line spin' : 'ri-download-line'"></i>
-                {{ downloading ? `下载中 ${Math.round(downloadProgress)}%` : '立即更新' }}
+                {{ downloading ? `${$t('settings.about.downloading')} ${Math.round(downloadProgress)}%` : $t('settings.about.downloadUpdate') }}
               </button>
             </template>
           </div>
@@ -499,11 +613,11 @@ async function handleCheckAddonUpdate() {
         <div class="action-buttons extra-actions">
           <button class="btn btn-outline" @click="showChangelogModal = true">
             <i class="ri-file-list-3-line"></i>
-            查看更新日志
+            {{ $t('settings.about.viewChangelog') }}
           </button>
           <button class="btn btn-outline" @click="router.push('/thanks')">
             <i class="ri-heart-3-line"></i>
-            特别鸣谢
+            {{ $t('settings.about.thanks') }}
           </button>
         </div>
       </div>
@@ -511,7 +625,7 @@ async function handleCheckAddonUpdate() {
 
     <!-- 插件更新对话框 -->
     <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonInstalled" />
-    <RModal v-model="showChangelogModal" title="客户端更新日志" width="640px">
+    <RModal v-model="showChangelogModal" :title="$t('settings.about.clientChangelog')" width="640px">
       <div class="changelog-modal">
         <div v-for="entry in changelogEntries" :key="entry.title" class="changelog-entry">
           <div class="changelog-header">
@@ -533,14 +647,14 @@ async function handleCheckAddonUpdate() {
 
 /* 顶部工具栏 */
 .top-toolbar {
-  background-color: #FFFFFF;
+  background-color: var(--color-panel-bg);
   border-radius: 16px;
   height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  box-shadow: 0 4px 20px rgba(75, 54, 33, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .breadcrumbs {
@@ -548,16 +662,16 @@ async function handleCheckAddonUpdate() {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .breadcrumbs i {
   font-size: 18px;
-  color: #804030;
+  color: var(--icon-color);
 }
 
 .breadcrumbs .current {
-  color: #804030;
+  color: var(--icon-color);
   font-weight: 600;
 }
 
@@ -576,10 +690,10 @@ async function handleCheckAddonUpdate() {
 
 /* 设置卡片 */
 .setting-card {
-  background: #FFFFFF;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 4px 20px rgba(75, 54, 33, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
@@ -588,13 +702,13 @@ async function handleCheckAddonUpdate() {
   gap: 16px;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #E8DCCF;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .card-icon {
   width: 48px;
   height: 48px;
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--icon-bg);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -603,20 +717,20 @@ async function handleCheckAddonUpdate() {
 
 .card-icon i {
   font-size: 24px;
-  color: #804030;
+  color: var(--icon-color);
 }
 
 .card-title h3 {
   margin: 0 0 4px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .card-title p {
   margin: 0;
   font-size: 13px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 /* 头像区域 */
@@ -630,7 +744,7 @@ async function handleCheckAddonUpdate() {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-text-secondary));
   position: relative;
   cursor: pointer;
   overflow: hidden;
@@ -678,13 +792,13 @@ async function handleCheckAddonUpdate() {
   margin: 0 0 4px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .avatar-info p {
   margin: 0;
   font-size: 13px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 /* 路径输入 */
@@ -696,22 +810,22 @@ async function handleCheckAddonUpdate() {
 .path-input {
   flex: 1;
   padding: 12px 16px;
-  border: 1px solid #E8DCCF;
+  border: 1px solid var(--input-border);
   border-radius: 10px;
-  background: #FDFBF9;
-  color: #2C1810;
+  background: var(--input-bg);
+  color: var(--color-text-main);
   font-size: 14px;
   transition: all 0.2s;
 }
 
 .path-input:focus {
   outline: none;
-  border-color: #804030;
-  box-shadow: 0 0 0 3px rgba(128, 64, 48, 0.1);
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(var(--shadow-base), 0.1);
 }
 
 .path-input::placeholder {
-  color: #8C7B70;
+  color: var(--input-placeholder);
 }
 
 /* 检测到的路径 */
@@ -727,21 +841,21 @@ async function handleCheckAddonUpdate() {
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
-  background: #FDFBF9;
-  border: 1px solid #E8DCCF;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .path-item:hover {
-  background: rgba(128, 64, 48, 0.05);
-  border-color: #D4A373;
+  background: var(--color-card-bg-hover);
+  border-color: var(--color-border-hover);
 }
 
 .path-item.selected {
-  background: rgba(128, 64, 48, 0.08);
-  border-color: #804030;
+  background: var(--color-primary-light);
+  border-color: var(--color-secondary);
 }
 
 .path-info {
@@ -754,12 +868,12 @@ async function handleCheckAddonUpdate() {
 
 .path-info i {
   font-size: 18px;
-  color: #804030;
+  color: var(--icon-color);
 }
 
 .path-text {
   font-size: 13px;
-  color: #2C1810;
+  color: var(--color-text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -767,8 +881,8 @@ async function handleCheckAddonUpdate() {
 
 .flavor-tag {
   font-size: 12px;
-  color: #8C7B70;
-  background: rgba(128, 64, 48, 0.1);
+  color: var(--color-text-secondary);
+  background: var(--tag-bg);
   padding: 4px 10px;
   border-radius: 6px;
   white-space: nowrap;
@@ -780,7 +894,7 @@ async function handleCheckAddonUpdate() {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: #FDFBF9;
+  background: var(--color-card-bg);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
@@ -792,7 +906,7 @@ async function handleCheckAddonUpdate() {
 }
 
 .switch-item:hover {
-  background: rgba(128, 64, 48, 0.05);
+  background: var(--color-card-bg-hover);
 }
 
 .switch-info {
@@ -804,19 +918,19 @@ async function handleCheckAddonUpdate() {
 .switch-label {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .switch-desc {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 /* 开关组件 */
 .switch {
   width: 44px;
   height: 24px;
-  background: #D4D4D4;
+  background: var(--switch-inactive);
   border-radius: 12px;
   position: relative;
   transition: all 0.3s;
@@ -824,7 +938,7 @@ async function handleCheckAddonUpdate() {
 }
 
 .switch.active {
-  background: #804030;
+  background: var(--switch-active);
 }
 
 .switch-thumb {
@@ -874,48 +988,48 @@ async function handleCheckAddonUpdate() {
 }
 
 .btn-primary {
-  background: #804030;
-  color: #FFFFFF;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #6B3528;
-  box-shadow: 0 4px 12px rgba(128, 64, 48, 0.3);
+  background: var(--btn-primary-hover);
+  box-shadow: 0 4px 12px rgba(var(--shadow-base), 0.3);
 }
 
 .btn-secondary {
-  background: rgba(128, 64, 48, 0.1);
-  color: #804030;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
 }
 
 .btn-secondary:hover {
-  background: rgba(128, 64, 48, 0.15);
+  background: var(--btn-secondary-hover);
 }
 
 .btn-outline {
   background: transparent;
-  border: 1px solid #E8DCCF;
-  color: #2C1810;
+  border: 1px solid var(--btn-outline-border);
+  color: var(--btn-outline-text);
 }
 
 .btn-outline:hover {
-  background: rgba(128, 64, 48, 0.05);
-  border-color: #D4A373;
+  background: var(--btn-outline-hover);
+  border-color: var(--color-border-hover);
 }
 
 .btn-danger {
-  background: #DC3545;
+  background: var(--btn-danger-bg);
   color: #FFFFFF;
 }
 
 .btn-danger:hover {
-  background: #C82333;
+  background: var(--btn-danger-hover);
   box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 }
 
 /* 关于卡片 */
 .about-card {
-  background: linear-gradient(135deg, #804030 0%, #4B3621 100%);
+  background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
 }
 
 .about-content {
@@ -942,12 +1056,12 @@ async function handleCheckAddonUpdate() {
 }
 
 .btn-update {
-  background: #D4A373;
-  color: #2C1810;
+  background: var(--color-accent);
+  color: var(--color-text-main);
 }
 
 .btn-update:hover:not(:disabled) {
-  background: #E5B584;
+  background: var(--color-accent-hover);
 }
 
 .update-info {
@@ -958,7 +1072,7 @@ async function handleCheckAddonUpdate() {
 
 .new-version {
   font-size: 13px;
-  color: #D4A373;
+  color: var(--color-accent);
   font-weight: 600;
 }
 
@@ -1011,8 +1125,8 @@ async function handleCheckAddonUpdate() {
 }
 
 .changelog-entry {
-  background: #FDFBF9;
-  border: 1px solid #E8DCCF;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 16px;
 }
@@ -1025,7 +1139,7 @@ async function handleCheckAddonUpdate() {
 }
 
 .changelog-tag {
-  background: #804030;
+  background: var(--badge-bg);
   color: #FFFFFF;
   font-size: 12px;
   font-weight: 600;
@@ -1034,7 +1148,7 @@ async function handleCheckAddonUpdate() {
 }
 
 .changelog-content {
-  color: #4B3621;
+  color: var(--color-primary);
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -1075,7 +1189,7 @@ async function handleCheckAddonUpdate() {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: #FDFBF9;
+  background: var(--color-card-bg);
   border-radius: 10px;
 }
 
@@ -1107,17 +1221,178 @@ async function handleCheckAddonUpdate() {
 .status-label {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .status-version {
   font-size: 13px;
-  color: #804030;
+  color: var(--icon-color);
   font-weight: 500;
 }
 
 .status-desc {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
+}
+
+/* 主题设置样式 */
+.sponsor-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  color: #4B3621;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  margin-left: auto;
+}
+
+.sponsor-badge i {
+  font-size: 12px;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.theme-item {
+  position: relative;
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 8px;
+  background: #FDFBF9;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.theme-item:hover {
+  background: rgba(128, 64, 48, 0.05);
+  border-color: var(--color-border);
+}
+
+.theme-item.active {
+  border-color: var(--color-secondary);
+  background: rgba(128, 64, 48, 0.08);
+}
+
+.theme-preview {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  background: var(--preview-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.preview-sidebar {
+  width: 25%;
+  background: var(--preview-sidebar);
+}
+
+.preview-content {
+  flex: 1;
+  padding: 8%;
+  display: flex;
+  flex-direction: column;
+  gap: 8%;
+}
+
+.preview-header {
+  height: 15%;
+  background: var(--preview-accent);
+  border-radius: 2px;
+  opacity: 0.8;
+}
+
+.preview-card {
+  flex: 1;
+  background: var(--preview-panel);
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.theme-name {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-main);
+}
+
+.theme-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 18px;
+  color: var(--color-secondary);
+}
+
+.theme-locked {
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.locked-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.locked-content i {
+  font-size: 40px;
+  color: #D4D4D4;
+}
+
+.locked-content p {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  max-width: 280px;
+}
+
+/* 语言设置样式 */
+.language-options {
+  display: flex;
+  gap: 12px;
+}
+
+.language-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--color-card-bg);
+  border: 2px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.language-item:hover {
+  background: var(--color-card-bg-hover);
+  border-color: var(--color-border-hover);
+}
+
+.language-item.active {
+  border-color: var(--color-secondary);
+  background: var(--color-primary-light);
+}
+
+.language-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-main);
+}
+
+.language-item i {
+  font-size: 18px;
+  color: var(--color-secondary);
 }
 </style>
