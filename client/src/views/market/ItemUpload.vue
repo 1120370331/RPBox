@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { createItem, uploadImage, uploadItemImages } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
@@ -8,6 +9,7 @@ import { useUserStore } from '@/stores/user'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToast()
 const userStore = useUserStore()
 const loading = ref(false)
@@ -44,7 +46,7 @@ const isArtwork = computed(() => form.value.type === 'artwork')
 onMounted(() => {
   // 检查登录状态
   if (!userStore.user || !userStore.token) {
-    toast.info('请先登录后再上传作品')
+    toast.info(t('market.upload.loginRequired'))
     router.push('/login')
     return
   }
@@ -98,17 +100,17 @@ async function handleSubmit(status: 'draft' | 'published') {
   // 画作类型需要至少一张图片
   if (isArtwork.value) {
     if (!form.value.name) {
-      toast.info('请填写作品名称')
+      toast.info(t('market.upload.form.nameRequired'))
       return
     }
     if (artworkImages.value.length === 0) {
-      toast.info('请至少上传一张图片')
+      toast.info(t('market.upload.form.artworkRequired'))
       return
     }
   } else {
     // 非画作类型需要导入代码
     if (!form.value.name || !form.value.import_code) {
-      toast.info('请填写作品名称和导入代码')
+      toast.info(t('market.upload.form.importCodeRequired'))
       return
     }
   }
@@ -127,20 +129,20 @@ async function handleSubmit(status: 'draft' | 'published') {
           await uploadItemImages(itemId, files)
         } catch (uploadError: any) {
           console.error('图片上传失败:', uploadError)
-          toast.info('作品已创建，但部分图片上传失败')
+          toast.info(t('market.upload.messages.imageUploadPartialFailed'))
         }
       }
 
       clearDraft()
-      const msg = status === 'draft' ? '草稿已保存！' : '发布成功，等待审核！'
+      const msg = status === 'draft' ? t('market.upload.messages.draftSaved') : t('market.upload.messages.publishSuccess')
       toast.success(msg)
       router.push('/market/my-items')
     } else {
-      toast.error(res.error || res.message || '保存失败')
+      toast.error(res.error || res.message || t('market.upload.messages.saveFailed'))
     }
   } catch (error: any) {
     console.error('上传失败:', error)
-    toast.error(error.message || '上传失败，请重试')
+    toast.error(error.message || t('market.upload.messages.uploadFailed'))
   } finally {
     loading.value = false
   }
@@ -154,7 +156,7 @@ function goBack() {
 // 预览
 function handlePreview() {
   if (!form.value.name) {
-    toast.info('请先填写作品名称')
+    toast.info(t('market.upload.actions.previewNameRequired'))
     return
   }
 
@@ -190,7 +192,7 @@ async function handlePreviewImageUpload(event: Event) {
 
   const file = input.files[0]
   if (file.size > 5 * 1024 * 1024) {
-    toast.info('图片大小不能超过5MB')
+    toast.info(t('market.upload.form.imageSizeLimit'))
     return
   }
 
@@ -199,10 +201,10 @@ async function handlePreviewImageUpload(event: Event) {
     const res: any = await uploadImage(file)
     if (res.code === 0) {
       form.value.preview_image = res.data.url
-      toast.success('预览图上传成功')
+      toast.success(t('market.upload.form.previewImageSuccess'))
     }
   } catch (error: any) {
-    toast.error(error.message || '上传失败')
+    toast.error(error.message || t('market.upload.messages.uploadFailed'))
   } finally {
     uploadingImage.value = false
   }
@@ -222,7 +224,7 @@ function handleArtworkImagesSelect(event: Event) {
   const remainingSlots = maxImages - artworkImages.value.length
 
   if (remainingSlots <= 0) {
-    toast.info('最多只能上传20张图片')
+    toast.info(t('market.upload.form.maxImagesReached'))
     return
   }
 
@@ -230,12 +232,12 @@ function handleArtworkImagesSelect(event: Event) {
 
   for (const file of filesToAdd) {
     if (file.size > 10 * 1024 * 1024) {
-      toast.info(`图片 ${file.name} 超过10MB，已跳过`)
+      toast.info(t('market.upload.form.imageTooLarge', { name: file.name }))
       continue
     }
 
     if (!file.type.startsWith('image/')) {
-      toast.info(`文件 ${file.name} 不是图片，已跳过`)
+      toast.info(t('market.upload.form.notAnImage', { name: file.name }))
       continue
     }
 
@@ -267,51 +269,51 @@ loadTags()
     <div class="upload-container">
       <!-- 返回按钮 -->
       <button class="back-btn" @click="goBack">
-        <i class="ri-arrow-left-line"></i> 返回列表
+        <i class="ri-arrow-left-line"></i> {{ t('market.upload.backToList') }}
       </button>
 
       <!-- 表单标题 -->
       <div class="form-header">
-        <h1>上传作品</h1>
-        <p>分享你的 TRP3 Extended 创意作品给其他玩家</p>
+        <h1>{{ t('market.upload.title') }}</h1>
+        <p>{{ t('market.upload.subtitle') }}</p>
       </div>
 
       <!-- 上传表单 -->
       <form class="upload-form" @submit.prevent="handleSubmit">
         <!-- 作品名称 -->
         <div class="form-group">
-          <label>作品名称 <span class="required">*</span></label>
+          <label>{{ t('market.upload.form.name') }} <span class="required">*</span></label>
           <input
             v-model="form.name"
             type="text"
-            placeholder="请输入作品名称"
+            :placeholder="t('market.upload.form.namePlaceholder')"
             required
           />
         </div>
 
         <!-- 作品类型 -->
         <div class="form-group">
-          <label>作品类型 <span class="required">*</span></label>
+          <label>{{ t('market.upload.form.type') }} <span class="required">*</span></label>
           <select v-model="form.type" required>
-            <option value="item">道具</option>
-            <option value="campaign">剧本</option>
-            <option value="artwork">画作</option>
+            <option value="item">{{ t('market.types.item') }}</option>
+            <option value="campaign">{{ t('market.types.campaign') }}</option>
+            <option value="artwork">{{ t('market.types.artwork') }}</option>
           </select>
         </div>
 
         <!-- 预览图上传 -->
         <div class="form-group">
-          <label>预览图</label>
+          <label>{{ t('market.upload.form.previewImage') }}</label>
           <div class="preview-upload">
             <div v-if="form.preview_image" class="preview-image">
-              <img :src="form.preview_image" alt="预览图" />
+              <img :src="form.preview_image" :alt="t('market.upload.form.previewImageAlt')" />
               <button type="button" class="remove-btn" @click="removePreviewImage">
                 <i class="ri-close-line"></i>
               </button>
             </div>
             <div v-else class="upload-area" @click="previewImageInput?.click()">
               <i class="ri-image-add-line"></i>
-              <span>{{ uploadingImage ? '上传中...' : '点击上传预览图' }}</span>
+              <span>{{ uploadingImage ? t('market.upload.form.uploading') : t('market.upload.form.clickToUpload') }}</span>
             </div>
             <input
               ref="previewImageInput"
@@ -321,32 +323,32 @@ loadTags()
               @change="handlePreviewImageUpload"
             />
           </div>
-          <p class="hint">建议尺寸 400x300，最大 5MB</p>
+          <p class="hint">{{ t('market.upload.form.previewImageHint') }}</p>
         </div>
 
         <!-- 描述 -->
         <div class="form-group">
-          <label>简短描述</label>
+          <label>{{ t('market.upload.form.description') }}</label>
           <textarea
             v-model="form.description"
-            placeholder="请简短描述这个作品的功能和特点..."
+            :placeholder="t('market.upload.form.descriptionPlaceholder')"
             rows="3"
           ></textarea>
         </div>
 
         <!-- 详细介绍（富文本） -->
         <div class="form-group">
-          <label>详细介绍</label>
+          <label>{{ t('market.upload.form.detailContent') }}</label>
           <TiptapEditor
             v-model="form.detail_content"
-            placeholder="可以添加图片、详细说明作品的使用方法..."
+            :placeholder="t('market.upload.form.detailContentPlaceholder')"
           />
-          <p class="hint">支持插入图片，可以展示作品的详细效果</p>
+          <p class="hint">{{ t('market.upload.form.detailContentHint') }}</p>
         </div>
 
         <!-- 画作图片上传（仅画作类型） -->
         <div class="form-group" v-if="isArtwork">
-          <label>画作图片 <span class="required">*</span></label>
+          <label>{{ t('market.upload.form.artworkImages') }} <span class="required">*</span></label>
           <div class="artwork-images">
             <!-- 已选择的图片列表 -->
             <div class="image-grid" v-if="artworkImages.length > 0">
@@ -355,7 +357,7 @@ loadTags()
                 :key="index"
                 class="image-item"
               >
-                <img :src="img.preview" alt="画作图片" />
+                <img :src="img.preview" :alt="t('market.upload.form.artworkImageAlt')" />
                 <button type="button" class="remove-btn" @click="removeArtworkImage(index)">
                   <i class="ri-close-line"></i>
                 </button>
@@ -368,13 +370,13 @@ loadTags()
                 @click="artworkImagesInput?.click()"
               >
                 <i class="ri-add-line"></i>
-                <span>添加更多</span>
+                <span>{{ t('market.upload.form.addMore') }}</span>
               </div>
             </div>
             <!-- 空状态 -->
             <div v-else class="upload-area" @click="artworkImagesInput?.click()">
               <i class="ri-image-add-line"></i>
-              <span>点击选择图片（最多20张）</span>
+              <span>{{ t('market.upload.form.clickToSelectImages') }}</span>
             </div>
             <input
               ref="artworkImagesInput"
@@ -385,37 +387,37 @@ loadTags()
               @change="handleArtworkImagesSelect"
             />
           </div>
-          <p class="hint">支持 JPG、PNG 格式，单张最大 10MB，最多上传 20 张</p>
+          <p class="hint">{{ t('market.upload.form.artworkImagesHint') }}</p>
         </div>
 
         <!-- 水印设置（仅画作类型） -->
         <div class="form-group" v-if="isArtwork">
-          <label>水印设置</label>
+          <label>{{ t('market.upload.form.watermarkSettings') }}</label>
           <div class="watermark-toggle">
             <label class="toggle-switch">
               <input type="checkbox" v-model="form.enable_watermark" />
               <span class="slider"></span>
             </label>
-            <span class="toggle-label">下载时添加水印（用户名）</span>
+            <span class="toggle-label">{{ t('market.upload.form.watermarkLabel') }}</span>
           </div>
-          <p class="hint">开启后，其他用户下载图片时会自动在右下角添加你的用户名作为水印</p>
+          <p class="hint">{{ t('market.upload.form.watermarkHint') }}</p>
         </div>
 
         <!-- 导入代码（非画作类型） -->
         <div class="form-group" v-if="!isArtwork">
-          <label>TRP3 导入代码 <span class="required">*</span></label>
+          <label>{{ t('market.upload.form.importCode') }} <span class="required">*</span></label>
           <textarea
             v-model="form.import_code"
-            placeholder="请粘贴从 TRP3 Extended 导出的代码..."
+            :placeholder="t('market.upload.form.importCodePlaceholder')"
             rows="6"
             required
           ></textarea>
-          <p class="hint">从 TRP3 Extended 中导出作品，然后将代码粘贴到这里</p>
+          <p class="hint">{{ t('market.upload.form.importCodeHint') }}</p>
         </div>
 
         <!-- 标签选择 -->
         <div class="form-group" v-if="itemTags.length > 0">
-          <label>作品分类标签</label>
+          <label>{{ t('market.upload.form.tags') }}</label>
           <div class="tag-selector">
             <label
               v-for="tag in itemTags"
@@ -436,15 +438,15 @@ loadTags()
 
         <!-- 提交按钮 -->
         <div class="form-actions">
-          <button type="button" class="cancel-btn" @click="goBack">取消</button>
+          <button type="button" class="cancel-btn" @click="goBack">{{ t('market.upload.actions.cancel') }}</button>
           <button type="button" class="preview-btn" @click="handlePreview" :disabled="loading">
-            <i class="ri-eye-line"></i> 预览
+            <i class="ri-eye-line"></i> {{ t('market.upload.actions.preview') }}
           </button>
           <button type="button" class="draft-btn" @click="handleSubmit('draft')" :disabled="loading">
-            保存草稿
+            {{ t('market.upload.actions.saveDraft') }}
           </button>
           <button type="button" class="publish-btn" @click="handleSubmit('published')" :disabled="loading">
-            <i class="ri-upload-line"></i> 发布
+            <i class="ri-upload-line"></i> {{ t('market.upload.actions.publish') }}
           </button>
         </div>
       </form>

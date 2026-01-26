@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listItems, type Item, getImageUrl } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import LazyBgImage from '@/components/LazyBgImage.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
+const { t } = useI18n()
 const mounted = ref(false)
 const loading = ref(false)
 const items = ref<Item[]>([])
@@ -19,12 +21,12 @@ const authorName = ref('')
 const itemTags = ref<Tag[]>([])
 const activeTagId = ref<number | null>(null)
 
-const typeMap = {
-  '': '全部',
-  'item': '道具',
-  'campaign': '剧本',
-  'artwork': '画作'
-}
+const typeMap = computed(() => ({
+  '': t('market.types.all'),
+  'item': t('market.types.item'),
+  'campaign': t('market.types.campaign'),
+  'artwork': t('market.types.artwork')
+}))
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
@@ -147,19 +149,19 @@ watch([sortBy], () => {
     <!-- 头部 -->
     <div class="header anim-item" style="--delay: 0">
       <div class="header-top">
-        <h1>创意市场</h1>
+        <h1>{{ t('market.title') }}</h1>
         <div class="header-actions">
           <button class="favorites-btn" @click="goToFavorites">
-            <i class="ri-bookmark-3-line"></i> 收藏夹
+            <i class="ri-bookmark-3-line"></i> {{ t('market.action.favorites') }}
           </button>
           <button class="history-btn" @click="goToHistory">
-            <i class="ri-history-line"></i> 历史记录
+            <i class="ri-history-line"></i> {{ t('market.action.history') }}
           </button>
           <button class="my-items-btn" @click="goToMyItems">
-            <i class="ri-folder-user-line"></i> 我的作品
+            <i class="ri-folder-user-line"></i> {{ t('market.action.myItems') }}
           </button>
           <button class="upload-btn" @click="goToUpload">
-            <i class="ri-upload-line"></i> 上传作品
+            <i class="ri-upload-line"></i> {{ t('market.action.upload') }}
           </button>
         </div>
       </div>
@@ -167,7 +169,7 @@ watch([sortBy], () => {
         <input
           v-model="searchText"
           type="text"
-          placeholder="搜索作品名称、类型或标签..."
+          :placeholder="t('market.filter.search')"
           @keyup.enter="handleSearch"
         />
         <i class="ri-search-line" @click="handleSearch"></i>
@@ -188,12 +190,12 @@ watch([sortBy], () => {
 
       <!-- 道具分类标签筛选（仅对道具和剧本类型显示） -->
       <div class="filter-tags" v-if="itemTags.length > 0 && activeType !== 'artwork'">
-        <span class="filter-label">分类：</span>
+        <span class="filter-label">{{ t('market.filter.categoryLabel') }}</span>
         <span
           class="tag-item"
           :class="{ active: activeTagId === null }"
           @click="changeTag(null)"
-        >全部</span>
+        >{{ t('market.filter.all') }}</span>
         <span
           v-for="tag in itemTags"
           :key="tag.id"
@@ -208,22 +210,22 @@ watch([sortBy], () => {
         <input
           v-model="authorName"
           type="text"
-          placeholder="按发布者筛选..."
+          :placeholder="t('market.filter.authorPlaceholder')"
           class="author-input"
           @keyup.enter="handleSearch"
         />
         <select v-model="sortBy" class="sort-select">
-          <option value="created_at">最新</option>
-          <option value="downloads">最热</option>
-          <option value="rating">评分</option>
+          <option value="created_at">{{ t('market.filter.newest') }}</option>
+          <option value="downloads">{{ t('market.filter.popular') }}</option>
+          <option value="rating">{{ t('market.filter.rating') }}</option>
         </select>
       </div>
     </div>
 
     <!-- 卡片网格 -->
     <div class="card-grid anim-item" style="--delay: 2">
-      <div v-if="loading" class="loading-state">加载中...</div>
-      <div v-else-if="items.length === 0" class="empty-state">暂无作品</div>
+      <div v-if="loading" class="loading-state">{{ t('market.loading') }}</div>
+      <div v-else-if="items.length === 0" class="empty-state">{{ t('market.empty') }}</div>
       <div v-else v-for="item in items" :key="item.id" class="card" @click="viewDetail(item.id)">
         <LazyBgImage
           class="card-image"
@@ -245,16 +247,16 @@ watch([sortBy], () => {
               <span v-else class="author-avatar placeholder">
                 {{ (item.author_username || 'U').charAt(0) }}
               </span>
-              <span class="author-name" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || '匿名' }}</span>
+              <span class="author-name" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || t('market.item.anonymous') }}</span>
             </div>
           </div>
-          <p class="desc">{{ item.description || '暂无描述' }}</p>
+          <p class="desc">{{ item.description || t('market.item.noDescription') }}</p>
           <div class="card-footer">
             <span class="stat"><i class="ri-download-line"></i> {{ item.downloads }}</span>
             <span class="rating"><i class="ri-star-fill"></i> {{ item.rating.toFixed(1) }}</span>
           </div>
           <button class="import-btn" @click.stop="viewDetail(item.id)">
-            <i class="ri-eye-line"></i> 查看详情
+            <i class="ri-eye-line"></i> {{ t('market.action.viewDetail') }}
           </button>
         </div>
       </div>
@@ -268,17 +270,17 @@ watch([sortBy], () => {
         @click="changePage(currentPage - 1)"
       >
         <i class="ri-arrow-left-s-line"></i>
-        上一页
+        {{ t('market.pagination.prev') }}
       </button>
       <span class="page-info">
-        第 {{ currentPage }} / {{ Math.ceil(total / 12) }} 页
+        {{ t('market.pagination.pageInfo', { current: currentPage, total: Math.ceil(total / 12) }) }}
       </span>
       <button
         class="page-btn"
         :disabled="currentPage >= Math.ceil(total / 12)"
         @click="changePage(currentPage + 1)"
       >
-        下一页
+        {{ t('market.pagination.next') }}
         <i class="ri-arrow-right-s-line"></i>
       </button>
     </div>
@@ -313,7 +315,7 @@ watch([sortBy], () => {
 
 .header h1 {
   font-size: 36px;
-  color: #3E2723;
+  color: var(--color-text-main, #3E2723);
   margin: 0;
 }
 
@@ -324,9 +326,9 @@ watch([sortBy], () => {
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  background: #fff;
-  color: #B87333;
-  border: 2px solid #B87333;
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-accent, #B87333);
+  border: 2px solid var(--color-accent, #B87333);
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
@@ -339,7 +341,7 @@ watch([sortBy], () => {
 .my-items-btn:hover,
 .favorites-btn:hover,
 .history-btn:hover {
-  background: #FFF8F0;
+  background: var(--color-card-bg, #FFF8F0);
 }
 
 .upload-btn {
@@ -347,8 +349,8 @@ watch([sortBy], () => {
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent, #B87333);
+  color: var(--color-text-light, #fff);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -360,7 +362,7 @@ watch([sortBy], () => {
 }
 
 .upload-btn:hover {
-  background: #A66629;
+  background: var(--color-accent-hover, #A66629);
 }
 
 .search-box {
@@ -376,7 +378,9 @@ watch([sortBy], () => {
   border: none;
   padding: 0 48px 0 20px;
   font-size: 15px;
-  box-shadow: 0 4px 12px rgba(184,115,51,0.15);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(184,115,51,0.15));
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-text-main, #2C1810);
 }
 
 .search-box i {
@@ -385,7 +389,7 @@ watch([sortBy], () => {
   top: 50%;
   transform: translateY(-50%);
   font-size: 20px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   cursor: pointer;
 }
 
@@ -396,9 +400,9 @@ watch([sortBy], () => {
   gap: 24px;
   flex-wrap: wrap;
   padding: 16px 24px;
-  background: rgba(255,255,255,0.8);
+  background: var(--color-panel-bg, rgba(255,255,255,0.8));
   border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(184,115,51,0.1);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(184,115,51,0.1));
 }
 
 .filter-types {
@@ -420,80 +424,80 @@ watch([sortBy], () => {
   flex-wrap: wrap;
   width: 100%;
   padding-top: 12px;
-  border-top: 1px solid rgba(229, 212, 193, 0.5);
+  border-top: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.5));
 }
 
 .filter-label {
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   font-weight: 500;
 }
 
 .tag-item {
   padding: 6px 14px;
   border-radius: 16px;
-  background: rgba(255,255,255,0.6);
+  background: var(--color-card-bg, rgba(255,255,255,0.6));
   cursor: pointer;
   font-size: 13px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   border: 1px solid transparent;
   transition: all 0.3s;
 }
 
 .tag-item:hover {
-  background: rgba(255,255,255,0.9);
-  border-color: var(--tag-color, #B87333);
+  background: var(--color-panel-bg, rgba(255,255,255,0.9));
+  border-color: var(--tag-color, var(--color-accent, #B87333));
 }
 
 .tag-item.active {
-  background: var(--tag-color, #B87333);
-  color: #fff;
-  border-color: var(--tag-color, #B87333);
+  background: var(--tag-color, var(--color-accent, #B87333));
+  color: var(--color-text-light, #fff);
+  border-color: var(--tag-color, var(--color-accent, #B87333));
 }
 
 .author-input {
   padding: 8px 16px;
   border-radius: 20px;
-  background: rgba(255,255,255,0.9);
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, rgba(255,255,255,0.9));
+  border: 1px solid var(--color-border, #E5D4C1);
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   min-width: 180px;
   transition: all 0.3s;
 }
 
 .author-input:focus {
   outline: none;
-  border-color: #B87333;
-  box-shadow: 0 0 0 3px rgba(184,115,51,0.1);
+  border-color: var(--color-accent, #B87333);
+  box-shadow: 0 0 0 3px var(--color-primary-light, rgba(184,115,51,0.1));
 }
 
 .author-input::placeholder {
-  color: #999;
+  color: var(--color-text-secondary, #999);
 }
 
 .tag {
   padding: 8px 18px;
   border-radius: 20px;
-  background: rgba(255,255,255,0.6);
+  background: var(--color-card-bg, rgba(255,255,255,0.6));
   cursor: pointer;
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   border: 1px solid transparent;
 }
 
 .tag.active {
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent, #B87333);
+  color: var(--color-text-light, #fff);
 }
 
 .sort-select {
   padding: 8px 18px;
   border-radius: 20px;
-  background: rgba(255,255,255,0.6);
+  background: var(--color-card-bg, rgba(255,255,255,0.6));
   border: 1px solid transparent;
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   cursor: pointer;
 }
 
@@ -508,15 +512,15 @@ watch([sortBy], () => {
   grid-column: 1 / -1;
   text-align: center;
   padding: 60px 20px;
-  color: #999;
+  color: var(--color-text-secondary, #999);
   font-size: 16px;
 }
 
 .card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 8px 20px rgba(93,64,55,0.05);
+  box-shadow: var(--shadow-md, 0 8px 20px rgba(93,64,55,0.05));
   transition: transform 0.3s;
 }
 
@@ -526,7 +530,7 @@ watch([sortBy], () => {
 
 .card-image {
   height: 140px;
-  background: linear-gradient(135deg, #D4A373 0%, #8C7B70 100%);
+  background: linear-gradient(135deg, var(--color-accent, #D4A373) 0%, var(--color-text-secondary, #8C7B70) 100%);
   background-size: cover;
   background-position: center;
   display: flex;
@@ -570,8 +574,8 @@ watch([sortBy], () => {
 }
 
 .author-avatar.placeholder {
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
+  color: var(--color-text-light, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -581,7 +585,7 @@ watch([sortBy], () => {
 
 .author-name {
   font-size: 12px;
-  color: #795548;
+  color: var(--color-text-secondary, #795548);
   max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -594,22 +598,22 @@ watch([sortBy], () => {
 
 .card-content h3 {
   font-size: 18px;
-  color: #3E2723;
+  color: var(--color-text-main, #3E2723);
   margin-bottom: 4px;
 }
 
 .type-badge {
   display: inline-block;
   font-size: 12px;
-  color: #795548;
-  background: #F5EFE7;
+  color: var(--color-text-secondary, #795548);
+  background: var(--color-card-bg, #F5EFE7);
   padding: 3px 8px;
   border-radius: 4px;
 }
 
 .desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary, #666);
   line-height: 1.5;
   margin-bottom: 12px;
 }
@@ -618,8 +622,8 @@ watch([sortBy], () => {
 .mini-tag {
   font-size: 12px;
   padding: 3px 8px;
-  background: #F5F0EB;
-  color: #795548;
+  background: var(--color-card-bg, #F5F0EB);
+  color: var(--color-text-secondary, #795548);
   border-radius: 4px;
 }
 
@@ -627,19 +631,19 @@ watch([sortBy], () => {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  color: #999;
+  color: var(--color-text-secondary, #999);
   margin-bottom: 12px;
 }
 
-.rating { color: #FFB300; }
+.rating { color: var(--color-rating, #FFB300); }
 
 .import-btn {
   width: 100%;
   height: 40px;
   border: none;
   border-radius: 10px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent, #B87333);
+  color: var(--color-text-light, #fff);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -676,10 +680,10 @@ watch([sortBy], () => {
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -687,9 +691,9 @@ watch([sortBy], () => {
 }
 
 .page-btn:hover:not(:disabled) {
-  background: #FFF8F0;
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--color-card-bg, #FFF8F0);
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .page-btn:disabled {
@@ -699,7 +703,7 @@ watch([sortBy], () => {
 
 .page-info {
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   font-weight: 500;
 }
 </style>
