@@ -126,16 +126,16 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           REMOTE_DIR="${{ secrets.RELEASE_PATH }}/$VERSION"
 
-          # 收集文件到 upload_files 目录
-          mkdir -p upload_files
+          # 查找构建产物
           EXE_PATH=$(find artifacts -type f -path "*/nsis/*" -name "RPBox_*_x64-setup.exe" | head -n1)
           [ -z "$EXE_PATH" ] && EXE_PATH=$(find artifacts -type f -name "RPBox_*_x64-setup.exe" | head -n1)
           [ -z "$EXE_PATH" ] && { echo "ERROR: setup exe not found"; exit 1; }
           SIG_PATH="${EXE_PATH}.sig"
           [ ! -f "$SIG_PATH" ] && { echo "ERROR: signature not found"; exit 1; }
-          cp "$EXE_PATH" "$SIG_PATH" latest.json upload_files/
 
-          # 使用 rsync 一次性上传（启用压缩，比多次scp快）
+          # 创建远程目录并上传文件
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
-          rsync -avz --progress -e "ssh -p 2233" upload_files/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
-          rsync -avz -e "ssh -p 2233" upload_files/latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.RELEASE_PATH }}/latest.json
+          scp -P 2233 -C "$EXE_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          scp -P 2233 -C "$SIG_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.RELEASE_PATH }}/latest.json
