@@ -542,3 +542,45 @@ type Notification struct {
 	IsRead     bool      `gorm:"default:false;index" json:"is_read"` // 是否已读
 	CreatedAt  time.Time `json:"created_at"`
 }
+
+// ========== 合集系统 ==========
+
+// Collection 合集
+type Collection struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	AuthorID    uint      `gorm:"index;not null" json:"author_id"`
+	Name        string    `gorm:"size:128;not null" json:"name"`
+	Description string    `gorm:"type:text" json:"description"`
+	CoverImage  string    `gorm:"type:text" json:"cover_image"`
+	ContentType string    `gorm:"size:20;default:mixed" json:"content_type"` // post|item|mixed
+	ItemCount   int       `gorm:"default:0" json:"item_count"`
+	IsPublic    bool      `gorm:"default:true" json:"is_public"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// CollectionPost 合集-帖子关联
+type CollectionPost struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	CollectionID uint      `gorm:"uniqueIndex:idx_collection_post;not null" json:"collection_id"`
+	PostID       uint      `gorm:"uniqueIndex:idx_collection_post;not null" json:"post_id"`
+	SortOrder    int       `gorm:"default:0" json:"sort_order"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// CollectionItem 合集-作品关联
+type CollectionItem struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	CollectionID uint      `gorm:"uniqueIndex:idx_collection_item;not null" json:"collection_id"`
+	ItemID       uint      `gorm:"uniqueIndex:idx_collection_item;not null" json:"item_id"`
+	SortOrder    int       `gorm:"default:0" json:"sort_order"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// CollectionFavorite 合集收藏
+type CollectionFavorite struct {
+	ID           uint      `gorm:"primarykey" json:"id"`
+	UserID       uint      `gorm:"uniqueIndex:idx_collection_favorite;not null" json:"user_id"`
+	CollectionID uint      `gorm:"uniqueIndex:idx_collection_favorite;not null" json:"collection_id"`
+	CreatedAt    time.Time `json:"created_at"`
+}

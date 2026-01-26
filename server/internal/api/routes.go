@@ -224,6 +224,26 @@ func (s *Server) setupRoutes() {
 			auth.POST("/upload/attachment", s.uploadAttachment)
 			auth.POST("/upload/image", s.uploadImage)
 
+			// 合集管理
+			auth.GET("/collections", s.listCollections)
+			auth.POST("/collections", s.createCollection)
+			auth.GET("/collections/:id", s.getCollection)
+			auth.PUT("/collections/:id", s.updateCollection)
+			auth.DELETE("/collections/:id", s.deleteCollection)
+			auth.GET("/collections/:id/posts", s.getCollectionPosts)
+			auth.POST("/collections/:id/posts", s.addPostToCollection)
+			auth.DELETE("/collections/:id/posts/:postId", s.removePostFromCollection)
+			auth.GET("/collections/:id/items", s.getCollectionItems)
+			auth.POST("/collections/:id/items", s.addItemToCollection)
+			auth.DELETE("/collections/:id/items/:itemId", s.removeItemFromCollection)
+			auth.GET("/user/collections", s.listUserCollections)
+			auth.GET("/posts/:id/collection", s.getPostCollection)
+			auth.GET("/items/:id/collection", s.getItemCollection)
+			// 合集收藏
+			auth.POST("/collections/:id/favorite", s.favoriteCollection)
+			auth.DELETE("/collections/:id/favorite", s.unfavoriteCollection)
+			auth.GET("/user/favorite-collections", s.listMyCollectionFavorites)
+
 			// 版主中心（需要版主权限）
 			mod := auth.Group("/moderator")
 			mod.Use(middleware.ModeratorAuth())

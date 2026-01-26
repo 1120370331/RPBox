@@ -1,0 +1,66 @@
+name: Upload Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 0.2.8)'
+        required: true
+        type: string
+
+jobs:
+  upload:
+    name: Upload to Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release from GitHub
+        run: |
+          VERSION=${{ inputs.version }}
+          mkdir -p upload_files
+
+          # 从 GitHub Releases 下载（如果存在）
+          # 或者从本地上传的 artifacts 获取
+          echo "Preparing to upload version $VERSION"
+
+      - name: Prepare metadata
+        run: |
+          VERSION=${{ inputs.version }}
+          NOTES_FILE="client/release-notes/${VERSION}.txt"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          NOTES=""
+          if [ -f "$NOTES_FILE" ]; then
+            NOTES=$(cat "$NOTES_FILE")
+          fi
+
+          cat > latest.json << EOF
+          {
+            "latest_version": "$VERSION",
+            "notes": "$NOTES",
+            "pub_date": "$PUB_DATE"
+          }
+          EOF
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload metadata only
+        run: |
+          VERSION=${{ inputs.version }}
+          REMOTE_DIR="${{ secrets.RELEASE_PATH }}/$VERSION"
+
+          # 只上传 latest.json（假设安装包已手动上传）
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
+          rsync -avz -e "ssh -p 2233" latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.RELEASE_PATH }}/latest.json
+          rsync -avz -e "ssh -p 2233" latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/latest.json
+
+          echo "Metadata uploaded for version $VERSION"

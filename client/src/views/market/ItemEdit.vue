@@ -7,6 +7,8 @@ import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
 import TiptapEditor from '@/components/TiptapEditor.vue'
+import CollectionSelector from '@/components/CollectionSelector.vue'
+import { getItemCollection, addItemToCollection, removeItemFromCollection } from '@/api/collection'
 
 const router = useRouter()
 const route = useRoute()
@@ -44,6 +46,10 @@ const originalTags = ref<number[]>([])
 // 是否有待审核的编辑
 const hasPendingEdit = ref(false)
 
+// 合集
+const selectedCollectionId = ref<number | null>(null)
+const originalCollectionId = ref<number | null>(null)
+
 onMounted(async () => {
   // 检查登录状态
   if (!userStore.user || !userStore.token) {
@@ -56,6 +62,7 @@ onMounted(async () => {
   await loadItem()
   await loadTags()
   await loadItemTags()
+  await loadItemCollection()
 })
 
 async function loadItem() {
@@ -124,6 +131,19 @@ async function loadItemTags() {
     }
   } catch (error) {
     console.error('加载作品标签失败:', error)
+  }
+}
+
+async function loadItemCollection() {
+  try {
+    const id = Number(route.params.id)
+    const res: any = await getItemCollection(id)
+    if (res.code === 0 && res.data) {
+      originalCollectionId.value = res.data.id
+      selectedCollectionId.value = res.data.id
+    }
+  } catch (error) {
+    console.error('加载作品合集失败:', error)
   }
 }
 
@@ -254,6 +274,16 @@ async function handleSubmit(status: 'draft' | 'published') {
       }
     }
 
+    // 更新合集
+    if (selectedCollectionId.value !== originalCollectionId.value) {
+      if (originalCollectionId.value) {
+        await removeItemFromCollection(originalCollectionId.value, id)
+      }
+      if (selectedCollectionId.value) {
+        await addItemToCollection(selectedCollectionId.value, id)
+      }
+    }
+
     if (item.value?.status === 'published' && status === 'published') {
       toast.success(t('market.edit.messages.editPending'))
     } else {
@@ -379,6 +409,12 @@ function getTypeText(type: string) {
           </div>
         </div>
       </div>
+
+      <!-- 合集选择 -->
+      <CollectionSelector
+        v-model="selectedCollectionId"
+        content-type="item"
+      />
 
       <!-- 画作图片管理（仅画作类型） -->
       <div class="form-group" v-if="isArtwork">

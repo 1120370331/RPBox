@@ -9,6 +9,8 @@ import { listGuilds, type Guild } from '@/api/guild'
 import { addPostTag, removePostTag } from '@/api/post'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
+import CollectionSelector from '@/components/CollectionSelector.vue'
+import { getPostCollection, addPostToCollection, removePostFromCollection } from '@/api/collection'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import { useUserStore } from '@/stores/user'
@@ -63,6 +65,8 @@ const tags = ref<Tag[]>([])
 const guilds = ref<Guild[]>([])
 const selectedTags = ref<number[]>([])
 const originalTags = ref<number[]>([])
+const selectedCollectionId = ref<number | null>(null)
+const originalCollectionId = ref<number | null>(null)
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -128,6 +132,7 @@ onMounted(async () => {
   await loadTags()
   await loadGuilds()
   await loadPostTags()
+  await loadPostCollection()
 
   // 每 10 秒自动保存
   autoSaveTimer = setInterval(saveDraft, 10000)
@@ -208,6 +213,19 @@ async function loadPostTags() {
   }
 }
 
+async function loadPostCollection() {
+  try {
+    const id = Number(route.params.id)
+    const res: any = await getPostCollection(id)
+    if (res.code === 0 && res.data) {
+      originalCollectionId.value = res.data.id
+      selectedCollectionId.value = res.data.id
+    }
+  } catch (error) {
+    console.error('加载帖子合集失败:', error)
+  }
+}
+
 function toggleTag(tagId: number) {
   const index = selectedTags.value.indexOf(tagId)
   if (index > -1) {
@@ -242,6 +260,16 @@ async function handleSubmit(status: 'draft' | 'published') {
     }
     for (const tagId of removedTags) {
       await removePostTag(id, tagId)
+    }
+
+    // 更新合集
+    if (selectedCollectionId.value !== originalCollectionId.value) {
+      if (originalCollectionId.value) {
+        await removePostFromCollection(originalCollectionId.value, id)
+      }
+      if (selectedCollectionId.value) {
+        await addPostToCollection(selectedCollectionId.value, id)
+      }
     }
 
     clearDraft() // 保存成功后清除草稿
@@ -575,6 +603,12 @@ function toggleQuickJump() {
           </div>
         </div>
       </div>
+
+      <!-- 合集选择 -->
+      <CollectionSelector
+        v-model="selectedCollectionId"
+        content-type="post"
+      />
 
       <!-- 操作按钮 -->
       <div class="actions-group">

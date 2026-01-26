@@ -68,6 +68,10 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.AdminActionLog{},
 		&model.DailyMetrics{},
 		&model.Notification{},
+		&model.Collection{},
+		&model.CollectionPost{},
+		&model.CollectionItem{},
+		&model.CollectionFavorite{},
 	); err != nil {
 		return err
 	}

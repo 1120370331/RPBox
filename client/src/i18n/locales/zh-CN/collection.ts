@@ -1,0 +1,44 @@
+export default {
+  selector: {
+    label: '添加到合集',
+    none: '不添加到合集',
+  },
+  create: {
+    title: '新建合集',
+    name: '合集名称',
+    namePlaceholder: '输入合集名称',
+    description: '合集简介',
+    descPlaceholder: '简单描述这个合集的内容（可选）',
+    nameRequired: '请输入合集名称',
+    success: '合集创建成功',
+    failed: '创建合集失败',
+  },
+  detail: {
+    loadFailed: '加载合集失败',
+    items: '项内容',
+    posts: '帖子',
+    works: '作品',
+    empty: '合集中暂无内容',
+  },
+  delete: {
+    title: '删除合集',
+    confirm: '确定要删除这个合集吗？删除后无法恢复。',
+    success: '合集已删除',
+    failed: '删除合集失败',
+  },
+  nav: {
+    prev: '上一篇',
+    next: '下一篇',
+  },
+  banner: {
+    belongsTo: '属于合集',
+    totalCount: '共{count}篇',
+  },
+  favorite: {
+    favorite: '收藏',
+    favorited: '已收藏',
+    added: '已添加到收藏',
+    removed: '已取消收藏',
+    failed: '操作失败',
+  },
+}

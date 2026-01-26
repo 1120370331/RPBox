@@ -128,7 +128,10 @@ watch(() => route.fullPath, () => {
 
 const activeMenu = computed(() => {
   if (currentMenu.value) return currentMenu.value
-  if (route.path.startsWith('/library')) return lastMainMenu.value
+  // 合集页面和收藏夹页面保持在上一个主菜单
+  if (route.path.startsWith('/library') || route.path.startsWith('/collection')) {
+    return lastMainMenu.value
+  }
   return 'home'
 })
 </script>

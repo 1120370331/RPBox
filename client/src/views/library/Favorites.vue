@@ -1,24 +1,28 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listMyFavorites, type PostWithAuthor, POST_CATEGORIES } from '@/api/post'
 import { listMyItemFavorites, type Item, getImageUrl } from '@/api/item'
+import { listMyCollectionFavorites, type CollectionWithAuthor } from '@/api/collection'
 import LazyBgImage from '@/components/LazyBgImage.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
+const { t } = useI18n()
 const mounted = ref(false)
 const loading = ref(false)
-const activeTab = ref<'posts' | 'items'>('posts')
+const activeTab = ref<'posts' | 'items' | 'collections'>('posts')
 const posts = ref<PostWithAuthor[]>([])
 const items = ref<Item[]>([])
+const collections = ref<CollectionWithAuthor[]>([])
 const searchText = ref('')
 
-const typeMap = {
-  'item': '道具',
-  'campaign': '剧本',
-  'artwork': '画作'
-}
+const typeMap = computed(() => ({
+  'item': t('library.favorites.itemTypes.item'),
+  'campaign': t('library.favorites.itemTypes.campaign'),
+  'artwork': t('library.favorites.itemTypes.artwork')
+}))
 
 const keyword = computed(() => searchText.value.trim().toLowerCase())
 
@@ -38,12 +42,23 @@ const filteredPosts = computed(() => {
 const filteredItems = computed(() => {
   if (!keyword.value) return items.value
   return items.value.filter((item) => {
-    const typeLabel = typeMap[item.type as keyof typeof typeMap] || item.type
+    const typeLabel = typeMap.value[item.type as keyof typeof typeMap.value] || item.type
     return [
       item.name,
       item.author_username,
       item.type,
       typeLabel,
+    ].some(value => value && value.toLowerCase().includes(keyword.value))
+  })
+})
+
+const filteredCollections = computed(() => {
+  if (!keyword.value) return collections.value
+  return collections.value.filter((col) => {
+    return [
+      col.name,
+      col.author_name,
+      col.description,
     ].some(value => value && value.toLowerCase().includes(keyword.value))
   })
 })
@@ -63,11 +78,14 @@ async function loadFavorites() {
     if (activeTab.value === 'posts') {
       const res = await listMyFavorites()
       posts.value = res.posts || []
-    } else {
+    } else if (activeTab.value === 'items') {
       const res: any = await listMyItemFavorites()
       if (res.code === 0) {
         items.value = res.data.items || []
       }
+    } else if (activeTab.value === 'collections') {
+      const res = await listMyCollectionFavorites()
+      collections.value = res.collections || []
     }
   } catch (error) {
     console.error('加载收藏失败:', error)
@@ -88,6 +106,10 @@ function goToItem(id: number) {
   router.push({ name: 'item-detail', params: { id } })
 }
 
+function goToCollection(id: number) {
+  router.push({ name: 'collection-detail', params: { id } })
+}
+
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
   return cat ? cat.label : '其他'
@@ -100,11 +122,11 @@ function getCategoryLabel(category: string) {
       <div class="header-left">
         <button class="back-btn" @click="goBack">
           <i class="ri-arrow-left-line"></i>
-          返回
+          {{ t('library.favorites.back') }}
         </button>
         <div>
-          <h1 class="page-title">收藏夹</h1>
-          <p class="page-subtitle">你收藏的帖子与作品都会在这里</p>
+          <h1 class="page-title">{{ t('library.favorites.title') }}</h1>
+          <p class="page-subtitle">{{ t('library.favorites.subtitle') }}</p>
         </div>
       </div>
       <div class="tab-group">
@@ -114,7 +136,7 @@ function getCategoryLabel(category: string) {
           @click="activeTab = 'posts'"
         >
           <i class="ri-chat-3-line"></i>
-          帖子
+          {{ t('library.favorites.tabs.posts') }}
         </button>
         <button
           class="tab-btn"
@@ -122,7 +144,15 @@ function getCategoryLabel(category: string) {
           @click="activeTab = 'items'"
         >
           <i class="ri-box-3-line"></i>
-          作品
+          {{ t('library.favorites.tabs.items') }}
+        </button>
+        <button
+          class="tab-btn"
+          :class="{ active: activeTab === 'collections' }"
+          @click="activeTab = 'collections'"
+        >
+          <i class="ri-book-2-line"></i>
+          {{ t('library.favorites.tabs.collections') }}
         </button>
       </div>
       <div class="search-box">
@@ -130,19 +160,19 @@ function getCategoryLabel(category: string) {
         <input
           v-model="searchText"
           type="text"
-          placeholder="搜索收藏..."
+          :placeholder="t('library.favorites.searchPlaceholder')"
         />
       </div>
     </div>
 
     <div class="content anim-item" style="--delay: 1">
-      <div v-if="loading" class="loading-state">加载中...</div>
+      <div v-if="loading" class="loading-state">{{ t('library.favorites.loading') }}</div>
 
       <template v-else>
         <div v-if="activeTab === 'posts'">
           <div v-if="filteredPosts.length === 0" class="empty-state">
             <i class="ri-bookmark-line"></i>
-            <p>{{ searchText ? '未找到匹配的收藏帖子' : '暂无收藏帖子' }}</p>
+            <p>{{ searchText ? t('library.favorites.empty.postsSearch') : t('library.favorites.empty.posts') }}</p>
           </div>
           <div v-else class="post-grid">
             <div
@@ -171,10 +201,10 @@ function getCategoryLabel(category: string) {
           </div>
         </div>
 
-        <div v-else>
+        <div v-else-if="activeTab === 'items'">
           <div v-if="filteredItems.length === 0" class="empty-state">
             <i class="ri-bookmark-line"></i>
-            <p>{{ searchText ? '未找到匹配的收藏作品' : '暂无收藏作品' }}</p>
+            <p>{{ searchText ? t('library.favorites.empty.itemsSearch') : t('library.favorites.empty.items') }}</p>
           </div>
           <div v-else class="item-grid">
             <div
@@ -195,13 +225,40 @@ function getCategoryLabel(category: string) {
               <div class="item-body">
                 <h3 class="item-title">{{ item.name }}</h3>
                 <div class="item-meta">
-                  <span class="item-type">{{ typeMap[item.type as keyof typeof typeMap] || item.type }}</span>
-                  <span class="item-author" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || '匿名' }}</span>
+                  <span class="item-type">{{ typeMap[item.type] || item.type }}</span>
+                  <span class="item-author" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || t('library.favorites.anonymous') }}</span>
                 </div>
                 <div class="item-stats">
                   <span><i class="ri-heart-3-line"></i> {{ item.like_count }}</span>
                   <span><i class="ri-star-line"></i> {{ item.favorite_count }}</span>
                   <span><i class="ri-star-fill"></i> {{ item.rating.toFixed(1) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="activeTab === 'collections'">
+          <div v-if="filteredCollections.length === 0" class="empty-state">
+            <i class="ri-bookmark-line"></i>
+            <p>{{ searchText ? t('library.favorites.empty.collectionsSearch') : t('library.favorites.empty.collections') }}</p>
+          </div>
+          <div v-else class="collection-grid">
+            <div
+              v-for="col in filteredCollections"
+              :key="col.id"
+              class="collection-card"
+              @click="goToCollection(col.id)"
+            >
+              <div class="collection-icon">
+                <i class="ri-book-2-line"></i>
+              </div>
+              <div class="collection-body">
+                <h3 class="collection-title">{{ col.name }}</h3>
+                <p class="collection-desc">{{ col.description || t('library.favorites.noDescription') }}</p>
+                <div class="collection-meta">
+                  <span class="collection-author">{{ col.author_name }}</span>
+                  <span class="collection-count">{{ t('library.favorites.itemCount', { count: col.item_count }) }}</span>
                 </div>
               </div>
             </div>
@@ -478,6 +535,78 @@ function getCategoryLabel(category: string) {
 
 .item-stats i {
   margin-right: 4px;
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.collection-card {
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  gap: 16px;
+}
+
+.collection-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(75, 54, 33, 0.12);
+  border-color: var(--color-accent, #B87333);
+}
+
+.collection-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--color-accent, #B87333);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-light, #fff);
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.collection-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.collection-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-main, #2C1810);
+  margin: 0 0 6px 0;
+}
+
+.collection-desc {
+  font-size: 13px;
+  color: var(--color-text-muted, #8D7B68);
+  margin: 0 0 10px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-text-muted, #8D7B68);
+}
+
+.collection-author {
+  font-weight: 500;
+}
+
+.collection-count {
+  color: var(--color-secondary, #6B4E36);
 }
 
 @media (max-width: 768px) {

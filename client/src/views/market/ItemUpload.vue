@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createItem, uploadImage, uploadItemImages } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
+import { addItemToCollection } from '@/api/collection'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
 import TiptapEditor from '@/components/TiptapEditor.vue'
+import CollectionSelector from '@/components/CollectionSelector.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -38,6 +40,9 @@ const form = ref({
 
 // 画作图片（待上传）
 const artworkImages = ref<{ file: File; preview: string }[]>([])
+
+// 合集选择
+const selectedCollectionId = ref<number | null>(null)
 
 // 是否为画作类型
 const isArtwork = computed(() => form.value.type === 'artwork')
@@ -130,6 +135,15 @@ async function handleSubmit(status: 'draft' | 'published') {
         } catch (uploadError: any) {
           console.error('图片上传失败:', uploadError)
           toast.info(t('market.upload.messages.imageUploadPartialFailed'))
+        }
+      }
+
+      // 添加到合集
+      if (selectedCollectionId.value) {
+        try {
+          await addItemToCollection(selectedCollectionId.value, itemId)
+        } catch (collectionError) {
+          console.error('添加到合集失败:', collectionError)
         }
       }
 
@@ -435,6 +449,12 @@ loadTags()
             </label>
           </div>
         </div>
+
+        <!-- 合集选择 -->
+        <CollectionSelector
+          v-model="selectedCollectionId"
+          content-type="item"
+        />
 
         <!-- 提交按钮 -->
         <div class="form-actions">

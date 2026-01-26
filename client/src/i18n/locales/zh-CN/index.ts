@@ -8,6 +8,8 @@ import community from './community'
 import market from './market'
 import guild from './guild'
 import home from './home'
+import collection from './collection'
+import library from './library'
 
 export default {
   common,
@@ -20,4 +22,6 @@ export default {
   market,
   guild,
   home,
+  collection,
+  library,
 }
