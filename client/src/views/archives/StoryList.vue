@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { listStories, deleteStory, updateStory, type Story, type StoryFilterParams } from '@/api/story'
+import { useI18n } from 'vue-i18n'
+import { listStories, deleteStory, deleteStories, moveStoriesToStory, updateStory, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { useDialog } from '@/composables/useDialog'
@@ -11,6 +12,7 @@ import RModal from '@/components/RModal.vue'
 import RInput from '@/components/RInput.vue'
 import StoryFilter from '@/components/StoryFilter.vue'
 
+const { t } = useI18n()
 const { confirm, alert } = useDialog()
 
 const props = defineProps<{
@@ -35,6 +37,101 @@ const filterParams = ref<StoryFilterParams>(props.initialFilter || {})
 const showRenameModal = ref(false)
 const renamingStory = ref<Story | null>(null)
 const newStoryTitle = ref('')
+
+// 管理模式
+const manageMode = ref(false)
+const selectedIds = ref<number[]>([])
+const batchDeleting = ref(false)
+
+// 移动到其它剧情
+const showMoveModal = ref(false)
+const moveTargetId = ref<number | null>(null)
+const batchMoving = ref(false)
+
+function enterManageMode() {
+  manageMode.value = true
+  selectedIds.value = []
+}
+
+function exitManageMode() {
+  manageMode.value = false
+  selectedIds.value = []
+}
+
+function toggleSelect(id: number) {
+  const index = selectedIds.value.indexOf(id)
+  if (index === -1) {
+    selectedIds.value.push(id)
+  } else {
+    selectedIds.value.splice(index, 1)
+  }
+}
+
+function selectAll() {
+  if (selectedIds.value.length === stories.value.length) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = stories.value.map(s => s.id)
+  }
+}
+
+async function handleBatchDelete() {
+  if (selectedIds.value.length === 0) return
+
+  const confirmed = await confirm({
+    title: t('archives.batch.deleteConfirmTitle'),
+    message: t('archives.batch.deleteConfirmMessage', { count: selectedIds.value.length }),
+    type: 'error'
+  })
+  if (!confirmed) return
+
+  batchDeleting.value = true
+  try {
+    await deleteStories(selectedIds.value)
+    stories.value = stories.value.filter(s => !selectedIds.value.includes(s.id))
+    exitManageMode()
+  } catch (e: any) {
+    await alert({
+      title: t('archives.batch.deleteFailed'),
+      message: e.message || t('archives.batch.batchDeleteFailed'),
+      type: 'error'
+    })
+  } finally {
+    batchDeleting.value = false
+  }
+}
+
+// 可选的目标剧情（排除已选中的）
+const availableTargetStories = computed(() => {
+  return stories.value.filter(s => !selectedIds.value.includes(s.id))
+})
+
+function openMoveModal() {
+  if (selectedIds.value.length === 0) return
+  moveTargetId.value = null
+  showMoveModal.value = true
+}
+
+async function handleBatchMove() {
+  if (selectedIds.value.length === 0 || !moveTargetId.value) return
+
+  batchMoving.value = true
+  try {
+    await moveStoriesToStory(selectedIds.value, moveTargetId.value)
+    // 移动成功后，删除源剧情并刷新列表
+    stories.value = stories.value.filter(s => !selectedIds.value.includes(s.id))
+    showMoveModal.value = false
+    exitManageMode()
+  } catch (e: any) {
+    await alert({
+      title: t('archives.batch.moveFailed'),
+      message: e.message || t('archives.batch.batchMoveFailed'),
+      type: 'error'
+    })
+  } finally {
+    batchMoving.value = false
+  }
+}
 
 async function loadStories() {
   loading.value = true
@@ -86,8 +183,8 @@ function handleResetFilter() {
 
 async function handleDelete(id: number) {
   const confirmed = await confirm({
-    title: '删除剧情',
-    message: '确定要删除这个剧情吗？此操作不可恢复！',
+    title: t('archives.confirm.deleteTitle'),
+    message: t('archives.confirm.deleteMessage'),
     type: 'error'
   })
   if (!confirmed) return
@@ -97,8 +194,8 @@ async function handleDelete(id: number) {
     stories.value = stories.value.filter(s => s.id !== id)
   } catch (e: any) {
     await alert({
-      title: '删除失败',
-      message: e.message || '删除失败',
+      title: t('archives.batch.deleteFailed'),
+      message: e.message || t('archives.batch.deleteFailed'),
       type: 'error'
     })
   }
@@ -122,8 +219,8 @@ async function handleRename() {
     showRenameModal.value = false
   } catch (e: any) {
     await alert({
-      title: '改名失败',
-      message: e.message || '改名失败',
+      title: t('archives.modal.renameFailed'),
+      message: e.message || t('archives.modal.renameFailed'),
       type: 'error'
     })
   }
@@ -170,15 +267,19 @@ const groupedStories = computed(() => {
 
   for (const story of stories.value) {
     const date = new Date(story.created_at)
-    const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`
+    const year = date.getFullYear()
+    const month = date.getMonth() + 1
+    const monthKey = `${year}-${month}`
     if (!monthMap.has(monthKey)) {
       monthMap.set(monthKey, [])
     }
     monthMap.get(monthKey)!.push(story)
   }
 
-  for (const [month, items] of monthMap) {
-    groups.push({ month, stories: items })
+  for (const [key, items] of monthMap) {
+    const [year, month] = key.split('-').map(Number)
+    const monthLabel = t('common.calendar.yearMonth', { year, month })
+    groups.push({ month: monthLabel, stories: items })
   }
 
   return groups
@@ -213,21 +314,37 @@ defineExpose({
           class="toggle-btn"
           :class="{ active: viewMode === 'timeline' }"
           @click="viewMode = 'timeline'"
+          :disabled="manageMode"
         >
-          <i class="ri-time-line"></i> 时间线
+          <i class="ri-time-line"></i> {{ t('archives.view.timeline') }}
         </button>
         <button
           class="toggle-btn"
           :class="{ active: viewMode === 'grid' }"
           @click="viewMode = 'grid'"
+          :disabled="manageMode"
         >
-          <i class="ri-grid-line"></i> 网格
+          <i class="ri-grid-line"></i> {{ t('archives.view.grid') }}
         </button>
       </div>
-      <RButton @click="showFilter = !showFilter">
-        <i class="ri-filter-3-line"></i>
-        {{ showFilter ? '隐藏筛选' : '显示筛选' }}
-      </RButton>
+      <div class="toolbar-actions">
+        <RButton v-if="!manageMode" @click="showFilter = !showFilter">
+          <i class="ri-filter-3-line"></i>
+          {{ showFilter ? t('archives.filter.hideFilter') : t('archives.filter.showFilter') }}
+        </RButton>
+        <RButton v-if="!manageMode" :disabled="stories.length === 0" @click="enterManageMode">
+          <i class="ri-checkbox-multiple-line"></i> {{ t('archives.action.manage') }}
+        </RButton>
+        <template v-if="manageMode">
+          <RButton @click="selectAll">
+            <i class="ri-checkbox-line"></i>
+            {{ selectedIds.length === stories.length ? t('archives.action.deselectAll') : t('archives.action.selectAll') }}
+          </RButton>
+          <RButton @click="exitManageMode">
+            <i class="ri-close-line"></i> {{ t('archives.action.exitManage') }}
+          </RButton>
+        </template>
+      </div>
     </div>
 
     <!-- 筛选面板 -->
@@ -239,8 +356,8 @@ defineExpose({
       @reset="handleResetFilter"
     />
 
-    <REmpty v-if="!loading && stories.length === 0" description="暂无剧情记录">
-      <RButton type="primary" @click="$emit('create')">创建第一个剧情</RButton>
+    <REmpty v-if="!loading && stories.length === 0" :description="t('archives.empty.noRecords')">
+      <RButton type="primary" @click="$emit('create')">{{ t('archives.action.createFirst') }}</RButton>
     </REmpty>
 
     <!-- 时间线视图 -->
@@ -252,14 +369,22 @@ defineExpose({
           v-for="(story, index) in group.stories"
           :key="story.id"
           class="timeline-item"
-          :class="index % 2 === 0 ? 'left' : 'right'"
+          :class="[index % 2 === 0 ? 'left' : 'right', { selected: selectedIds.includes(story.id) }]"
         >
           <div class="timeline-connector"></div>
           <div class="timeline-dot"></div>
-          <div class="timeline-card" @click="$emit('view', story.id)">
+          <div
+            class="timeline-card"
+            :class="{ 'manage-mode': manageMode }"
+            @click="manageMode ? toggleSelect(story.id) : $emit('view', story.id)"
+          >
+            <!-- 管理模式复选框 -->
+            <div v-if="manageMode" class="card-checkbox" @click.stop="toggleSelect(story.id)">
+              <i :class="selectedIds.includes(story.id) ? 'ri-checkbox-fill' : 'ri-checkbox-blank-line'"></i>
+            </div>
             <div class="card-date">{{ formatDate(story.created_at) }}</div>
             <h3 class="card-title">{{ story.title }}</h3>
-            <p class="card-desc">{{ story.description || '暂无描述' }}</p>
+            <p class="card-desc">{{ story.description || t('archives.story.noDescription') }}</p>
             <div v-if="getTagChips(story).length" class="card-tags">
               <span
                 v-for="tag in getTagChips(story)"
@@ -270,7 +395,7 @@ defineExpose({
                 {{ tag.name }}
               </span>
             </div>
-            <div class="card-footer">
+            <div v-if="!manageMode" class="card-footer">
               <div class="participants">
                 <span v-for="(p, i) in getParticipants(story).slice(0, 3)" :key="i" class="avatar">
                   {{ p.charAt(0) }}
@@ -283,7 +408,7 @@ defineExpose({
                 <button class="action-btn danger" @click.stop="handleDelete(story.id)">
                   <i class="ri-delete-bin-line"></i>
                 </button>
-                <span class="view-link">查看详情 <i class="ri-arrow-right-s-line"></i></span>
+                <span class="view-link">{{ t('archives.action.viewDetail') }} <i class="ri-arrow-right-s-line"></i></span>
               </div>
             </div>
           </div>
@@ -293,15 +418,26 @@ defineExpose({
 
     <!-- 网格视图 -->
     <div v-else class="stories-grid">
-      <RCard v-for="story in stories" :key="story.id" class="story-card" hoverable>
+      <RCard
+        v-for="story in stories"
+        :key="story.id"
+        class="story-card"
+        :class="{ selected: selectedIds.includes(story.id), 'manage-mode': manageMode }"
+        hoverable
+        @click="manageMode ? toggleSelect(story.id) : undefined"
+      >
+        <!-- 管理模式复选框 -->
+        <div v-if="manageMode" class="grid-checkbox" @click.stop="toggleSelect(story.id)">
+          <i :class="selectedIds.includes(story.id) ? 'ri-checkbox-fill' : 'ri-checkbox-blank-line'"></i>
+        </div>
         <div class="story-header">
           <span class="story-date">{{ formatDate(story.created_at) }}</span>
           <span class="story-status" :class="story.status">
-            {{ story.status === 'published' ? '已发布' : '草稿' }}
+            {{ story.status === 'published' ? t('archives.story.published') : t('archives.story.draft') }}
           </span>
         </div>
         <h3 class="story-title">{{ story.title }}</h3>
-        <p class="story-desc">{{ story.description || '暂无描述' }}</p>
+        <p class="story-desc">{{ story.description || t('archives.story.noDescription') }}</p>
         <div v-if="getTagChips(story).length" class="story-tags">
           <span
             v-for="tag in getTagChips(story)"
@@ -312,7 +448,7 @@ defineExpose({
             {{ tag.name }}
           </span>
         </div>
-        <div class="story-footer">
+        <div v-if="!manageMode" class="story-footer">
           <div class="participants">
             <span v-for="(p, i) in getParticipants(story).slice(0, 3)" :key="i" class="participant">
               {{ p.charAt(0) }}
@@ -322,21 +458,70 @@ defineExpose({
             </span>
           </div>
           <div class="actions">
-            <RButton size="small" @click="$emit('view', story.id)">查看</RButton>
-            <RButton size="small" @click="openRenameModal(story)">改名</RButton>
-            <RButton size="small" type="danger" @click="handleDelete(story.id)">删除</RButton>
+            <RButton size="small" @click="$emit('view', story.id)">{{ t('archives.action.view') }}</RButton>
+            <RButton size="small" @click="openRenameModal(story)">{{ t('archives.action.rename') }}</RButton>
+            <RButton size="small" type="danger" @click="handleDelete(story.id)">{{ t('archives.action.delete') }}</RButton>
           </div>
         </div>
       </RCard>
     </div>
 
     <!-- 改名弹窗 -->
-    <RModal v-model="showRenameModal" title="修改剧情标题" @confirm="handleRename">
+    <RModal v-model="showRenameModal" :title="t('archives.modal.renameTitle')" @confirm="handleRename">
       <RInput
         v-model="newStoryTitle"
-        placeholder="请输入新的剧情标题"
+        :placeholder="t('archives.modal.renamePlaceholder')"
         maxlength="100"
       />
+    </RModal>
+
+    <!-- 批量操作栏 -->
+    <Transition name="slide-up">
+      <div v-if="manageMode && selectedIds.length > 0" class="batch-action-bar">
+        <span class="selected-count">{{ t('archives.batch.selected', { count: selectedIds.length }) }}</span>
+        <div class="batch-actions">
+          <RButton :disabled="availableTargetStories.length === 0" @click="openMoveModal">
+            <i class="ri-folder-transfer-line"></i> {{ t('archives.action.moveToStory') }}
+          </RButton>
+          <RButton type="danger" :loading="batchDeleting" @click="handleBatchDelete">
+            <i class="ri-delete-bin-line"></i> {{ t('archives.action.delete') }}
+          </RButton>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 移动到其它剧情弹窗 -->
+    <RModal v-model="showMoveModal" :title="t('archives.modal.moveTitle')" width="480px">
+      <div class="move-form">
+        <p class="move-tip">{{ t('archives.modal.moveTip', { count: selectedIds.length }) }}</p>
+        <div class="form-field">
+          <label>{{ t('archives.modal.selectTarget') }}</label>
+          <div v-if="availableTargetStories.length === 0" class="no-target">
+            {{ t('archives.modal.noTarget') }}
+          </div>
+          <div v-else class="target-selector">
+            <div
+              v-for="story in availableTargetStories"
+              :key="story.id"
+              class="target-option"
+              :class="{ selected: moveTargetId === story.id }"
+              @click="moveTargetId = story.id"
+            >
+              <i :class="moveTargetId === story.id ? 'ri-checkbox-circle-fill' : 'ri-checkbox-blank-circle-line'"></i>
+              <div class="target-info">
+                <div class="target-title">{{ story.title }}</div>
+                <div class="target-meta">{{ t('archives.story.records', { count: story.entry_count || 0 }) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showMoveModal = false">{{ t('archives.action.cancel') }}</RButton>
+        <RButton type="primary" :loading="batchMoving" :disabled="!moveTargetId" @click="handleBatchMove">
+          {{ t('archives.action.confirmMove') }}
+        </RButton>
+      </template>
     </RModal>
   </div>
 </template>
@@ -358,7 +543,7 @@ defineExpose({
 .view-toggle {
   display: flex;
   gap: 4px;
-  background: #f5f0eb;
+  background: var(--color-card-bg, #f5f0eb);
   padding: 4px;
   border-radius: 8px;
 }
@@ -369,7 +554,7 @@ defineExpose({
   background: transparent;
   border-radius: 6px;
   font-size: 13px;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -378,14 +563,14 @@ defineExpose({
 }
 
 .toggle-btn:hover {
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .toggle-btn.active {
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-primary, #4B3621);
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: var(--shadow-sm, 0 2px 4px rgba(0,0,0,0.05));
 }
 
 .stories-grid {
@@ -496,7 +681,7 @@ defineExpose({
   padding: 40px 20px;
   min-height: 200px;
   width: 100%;
-  background: linear-gradient(135deg, #f5f0eb 0%, #ebe4dc 100%);
+  background: linear-gradient(135deg, var(--color-card-bg, #f5f0eb) 0%, var(--color-background, #ebe4dc) 100%);
   border-radius: 16px;
 }
 
@@ -506,7 +691,7 @@ defineExpose({
   top: 0;
   bottom: 0;
   width: 4px;
-  background: #4B3621;
+  background: var(--color-primary, #4B3621);
   transform: translateX(-50%);
   opacity: 0.3;
   z-index: 1;
@@ -521,8 +706,8 @@ defineExpose({
   text-align: center;
   font-size: 15px;
   font-weight: 600;
-  color: #4B3621;
-  background: #f5f0eb;
+  color: var(--color-primary, #4B3621);
+  background: var(--color-card-bg, #f5f0eb);
   padding: 8px 20px;
   border-radius: 20px;
   display: block;
@@ -556,8 +741,8 @@ defineExpose({
 .timeline-dot {
   width: 18px;
   height: 18px;
-  background: #EED9C4;
-  border: 4px solid #4B3621;
+  background: var(--color-background, #EED9C4);
+  border: 4px solid var(--color-primary, #4B3621);
   border-radius: 50%;
   position: absolute;
   left: 50%;
@@ -567,9 +752,9 @@ defineExpose({
 }
 
 .timeline-item:hover .timeline-dot {
-  background: #B87333;
-  border-color: #B87333;
-  box-shadow: 0 0 0 4px rgba(184, 115, 51, 0.2);
+  background: var(--color-accent, #B87333);
+  border-color: var(--color-accent, #B87333);
+  box-shadow: 0 0 0 4px var(--color-primary-light, rgba(184, 115, 51, 0.2));
 }
 
 /* 连接线 - 从卡片到时间轴 */
@@ -577,7 +762,7 @@ defineExpose({
   position: absolute;
   top: 28px;
   height: 3px;
-  background: #4B3621;
+  background: var(--color-primary, #4B3621);
   opacity: 0.3;
   z-index: 1;
 }
@@ -595,10 +780,10 @@ defineExpose({
 }
 
 .timeline-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 4px 16px rgba(75, 54, 33, 0.08);
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(75, 54, 33, 0.08));
   cursor: pointer;
   transition: all 0.3s;
   max-width: 100%;
@@ -606,13 +791,13 @@ defineExpose({
 
 .timeline-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(75, 54, 33, 0.12);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(75, 54, 33, 0.12));
 }
 
 .card-date {
   display: inline-block;
-  background: rgba(184, 115, 51, 0.1);
-  color: #B87333;
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
+  color: var(--color-accent, #B87333);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 12px;
@@ -622,14 +807,14 @@ defineExpose({
 
 .card-title {
   font-size: 16px;
-  color: #2c1e12;
+  color: var(--color-text-main, #2c1e12);
   font-weight: 600;
   margin: 0 0 8px 0;
 }
 
 .card-desc {
   font-size: 14px;
-  color: #665242;
+  color: var(--color-text-secondary, #665242);
   line-height: 1.6;
   margin: 0 0 12px 0;
 }
@@ -645,15 +830,15 @@ defineExpose({
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
-  background: rgba(184, 115, 51, 0.1);
-  color: #B87333;
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
+  color: var(--color-accent, #B87333);
 }
 
 .card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #f0e6dc;
+  border-top: 1px solid var(--color-border-light, #f0e6dc);
   padding-top: 12px;
 }
 
@@ -661,15 +846,15 @@ defineExpose({
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #D4A373;
-  color: #fff;
+  background: var(--color-accent, #D4A373);
+  color: var(--color-text-light, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
   margin-left: -8px;
-  border: 2px solid #fff;
+  border: 2px solid var(--color-panel-bg, #fff);
 }
 
 .avatar:first-child {
@@ -677,7 +862,7 @@ defineExpose({
 }
 
 .view-link {
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   font-size: 13px;
   font-weight: 500;
   display: flex;
@@ -696,8 +881,8 @@ defineExpose({
   height: 32px;
   border: none;
   border-radius: 50%;
-  background: #f5f0eb;
-  color: #856a52;
+  background: var(--color-card-bg, #f5f0eb);
+  color: var(--color-text-secondary, #856a52);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -707,8 +892,8 @@ defineExpose({
 }
 
 .action-btn:hover {
-  background: #e5d4c1;
-  color: #4B3621;
+  background: var(--color-border, #e5d4c1);
+  color: var(--color-primary, #4B3621);
   transform: scale(1.1);
 }
 
@@ -719,5 +904,185 @@ defineExpose({
 .action-btn.danger:hover {
   background: #ffebee;
   color: #c62828;
+}
+
+/* 工具栏操作区 */
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 管理模式样式 */
+.card-checkbox,
+.grid-checkbox {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-size: 22px;
+  color: var(--color-secondary, #804030);
+  z-index: 10;
+  cursor: pointer;
+}
+
+.card-checkbox i,
+.grid-checkbox i {
+  transition: transform 0.2s;
+}
+
+.card-checkbox:hover i,
+.grid-checkbox:hover i {
+  transform: scale(1.1);
+}
+
+.timeline-card.manage-mode {
+  position: relative;
+  padding-left: 40px;
+}
+
+.story-card.manage-mode {
+  position: relative;
+}
+
+.story-card.manage-mode .grid-checkbox {
+  top: 16px;
+  left: 16px;
+}
+
+/* 选中状态 */
+.timeline-item.selected .timeline-card,
+.story-card.selected {
+  border: 2px solid var(--color-secondary, #804030);
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.05));
+}
+
+.timeline-item.selected .timeline-dot {
+  background: var(--color-secondary, #804030);
+  border-color: var(--color-secondary, #804030);
+}
+
+/* 批量操作栏 */
+.batch-action-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-panel-bg, #fff);
+  border-radius: 12px;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: var(--shadow-lg, 0 4px 24px rgba(75, 54, 33, 0.15));
+  z-index: 100;
+}
+
+.selected-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-primary, #4B3621);
+}
+
+.batch-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* 滑入动画 */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+/* 禁用状态 */
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 移动弹窗样式 */
+.move-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.move-tip {
+  font-size: 14px;
+  color: var(--color-text-secondary, #856a52);
+  margin: 0;
+  padding: 12px;
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
+  border-radius: 8px;
+}
+
+.target-selector {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border, #d1bfa8);
+  border-radius: 8px;
+}
+
+.target-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-light, #f0e6dc);
+  transition: background 0.2s;
+}
+
+.target-option:last-child {
+  border-bottom: none;
+}
+
+.target-option:hover {
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.05));
+}
+
+.target-option.selected {
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
+}
+
+.target-option i {
+  font-size: 20px;
+  color: var(--color-text-secondary, #856a52);
+}
+
+.target-option.selected i {
+  color: var(--color-secondary, #804030);
+}
+
+.target-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.target-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-primary, #4B3621);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.target-meta {
+  font-size: 12px;
+  color: var(--color-text-secondary, #856a52);
+  margin-top: 2px;
+}
+
+.no-target {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-secondary, #856a52);
+  font-size: 14px;
 }
 </style>

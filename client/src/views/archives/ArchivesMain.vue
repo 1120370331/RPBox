@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import RTabs from '@/components/RTabs.vue'
 import RTabPane from '@/components/RTabPane.vue'
@@ -49,6 +50,7 @@ interface ChatRecord {
 const mounted = ref(false)
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const activeTab = ref('staging')
 const wowPath = ref(localStorage.getItem('wow_path') || '')
 
@@ -385,11 +387,11 @@ function handleViewStory(id: number) {
     <!-- 顶部工具栏 -->
     <div class="top-toolbar anim-item" style="--delay: 0">
       <div class="page-title">
-        <h1>剧情记录</h1>
-        <p>记录每一个精彩瞬间，编织属于你的冒险史诗</p>
+        <h1>{{ $t('archives.pageTitle') }}</h1>
+        <p>{{ $t('archives.pageSubtitle') }}</p>
       </div>
       <button class="btn-create" @click="showCreateModal = true">
-        <i class="ri-add-line"></i> 新建剧情
+        <i class="ri-add-line"></i> {{ $t('archives.action.createNew') }}
       </button>
     </div>
 
@@ -398,16 +400,16 @@ function handleViewStory(id: number) {
       <!-- 未安装状态 -->
       <template v-if="!addonInstalled">
         <i class="ri-plug-line"></i>
-        <span>需要安装 RPBox 插件才能采集聊天记录</span>
+        <span>{{ $t('archives.addon.needInstall') }}</span>
         <RButton size="small" type="primary" @click="showAddonInstaller = true">
-          安装插件
+          {{ $t('archives.addon.install') }}
         </RButton>
       </template>
 
       <!-- 已安装状态 -->
       <template v-else>
         <i class="ri-checkbox-circle-fill addon-installed-icon"></i>
-        <span>RPBox Addon 已安装</span>
+        <span>{{ $t('archives.addon.installed') }}</span>
         <span class="addon-version">v{{ addonVersion }}</span>
         <RButton
           size="small"
@@ -415,7 +417,7 @@ function handleViewStory(id: number) {
           :loading="addonChecking"
         >
           <i class="ri-refresh-line"></i>
-          {{ addonChecking ? '检查中...' : '检测更新' }}
+          {{ addonChecking ? $t('archives.addon.checking') : $t('archives.addon.checkUpdate') }}
         </RButton>
       </template>
     </div>
@@ -426,15 +428,15 @@ function handleViewStory(id: number) {
         <i class="ri-lightbulb-flash-line"></i>
       </div>
       <div class="tips-content">
-        <div class="tips-title">插件使用提示</div>
+        <div class="tips-title">{{ $t('archives.tips.title') }}</div>
         <ul class="tips-list">
-          <li><code>/rpbox</code> 打开主面板</li>
-          <li><code>/rpbox help</code> 查看所有命令</li>
-          <li>默认只监听具有 TRP 人物卡信息的玩家</li>
-          <li>如需监听非TRP玩家，选中目标 2 秒后自动加入白名单后即可监听</li>
+          <li><code>/rpbox</code> {{ $t('archives.tips.openPanel') }}</li>
+          <li><code>/rpbox help</code> {{ $t('archives.tips.viewCommands') }}</li>
+          <li>{{ $t('archives.tips.defaultListen') }}</li>
+          <li>{{ $t('archives.tips.whitelistTip') }}</li>
         </ul>
       </div>
-      <button class="tips-close-btn" @click="dismissUsageTips" title="不再显示">
+      <button class="tips-close-btn" @click="dismissUsageTips" :title="$t('archives.tips.dontShowAgain')">
         <i class="ri-close-line"></i>
       </button>
     </div>
@@ -443,26 +445,26 @@ function handleViewStory(id: number) {
     <div v-if="currentGuild" class="guild-filter-banner anim-item" style="--delay: 0.7">
       <div class="banner-content">
         <i class="ri-shield-line"></i>
-        <span>正在查看「<strong>{{ currentGuild.name }}</strong>」的相关剧情</span>
+        <span v-html="$t('archives.filter.viewingGuild', { name: `<strong>${currentGuild.name}</strong>` })"></span>
       </div>
       <button class="clear-filter-btn" @click="router.push({ name: 'archives' })">
         <i class="ri-close-line"></i>
-        清除筛选
+        {{ $t('archives.filter.clearFilter') }}
       </button>
     </div>
 
     <!-- Tab切换 -->
     <RTabs v-model="activeTab" class="anim-item" style="--delay: 1">
-      <RTabPane v-if="!filterGuildId" name="staging" label="待归档池">
+      <RTabPane v-if="!filterGuildId" name="staging" :label="$t('archives.tabs.staging')">
         <StagingPool ref="stagingPoolRef" @archive="handleArchive" />
       </RTabPane>
-      <RTabPane name="stories" label="我的剧情">
+      <RTabPane name="stories" :label="$t('archives.tabs.stories')">
         <StoryList ref="storyListRef" :initialFilter="storyFilter" @create="showCreateModal = true" @view="handleViewStory" />
       </RTabPane>
     </RTabs>
 
     <!-- 创建/追加剧情对话框 -->
-    <RModal v-model="showCreateModal" :title="pendingRecords.length > 0 ? '归档对话记录' : '新建剧情'" width="480px">
+    <RModal v-model="showCreateModal" :title="pendingRecords.length > 0 ? $t('archives.modal.archiveTitle') : $t('archives.modal.createTitle')" width="480px">
       <div class="create-form">
         <!-- 模式切换（仅在有待归档记录时显示） -->
         <div v-if="pendingRecords.length > 0" class="mode-switcher">
@@ -471,29 +473,29 @@ function handleViewStory(id: number) {
             :class="{ active: archiveMode === 'create' }"
             @click="archiveMode = 'create'"
           >
-            <i class="ri-add-line"></i> 创建新剧情
+            <i class="ri-add-line"></i> {{ $t('archives.mode.createNew') }}
           </button>
           <button
             class="mode-btn"
             :class="{ active: archiveMode === 'append' }"
             @click="archiveMode = 'append'"
           >
-            <i class="ri-file-add-line"></i> 追加到已有剧情
+            <i class="ri-file-add-line"></i> {{ $t('archives.mode.appendExisting') }}
           </button>
         </div>
 
         <!-- 创建模式：显示标题、描述、标签 -->
         <template v-if="archiveMode === 'create'">
           <div class="form-field">
-            <label>剧情标题</label>
-            <RInput v-model="newStoryTitle" placeholder="输入剧情标题" />
+            <label>{{ $t('archives.modal.storyTitle') }}</label>
+            <RInput v-model="newStoryTitle" :placeholder="$t('archives.modal.storyTitlePlaceholder')" />
           </div>
           <div class="form-field">
-            <label>剧情描述</label>
-            <textarea v-model="newStoryDesc" placeholder="简要描述这个剧情..." rows="3"></textarea>
+            <label>{{ $t('archives.modal.storyDesc') }}</label>
+            <textarea v-model="newStoryDesc" :placeholder="$t('archives.modal.storyDescPlaceholder')" rows="3"></textarea>
           </div>
           <div class="form-field">
-            <label>添加标签</label>
+            <label>{{ $t('archives.modal.addTags') }}</label>
             <div class="tag-selector">
               <span
                 v-for="tag in allTags"
@@ -512,12 +514,12 @@ function handleViewStory(id: number) {
         <!-- 追加模式：显示剧情选择器 -->
         <template v-else>
           <div class="form-field">
-            <label>选择剧情</label>
+            <label>{{ $t('archives.modal.selectStory') }}</label>
             <div v-if="loadingStories" class="loading-stories">
-              <i class="ri-loader-4-line spinning"></i> 加载中...
+              <i class="ri-loader-4-line spinning"></i> {{ $t('archives.status.loading') }}
             </div>
             <div v-else-if="userStories.length === 0" class="no-stories">
-              暂无剧情，请先创建一个剧情
+              {{ $t('archives.empty.noStories') }}
             </div>
             <div v-else class="story-selector">
               <div
@@ -529,7 +531,7 @@ function handleViewStory(id: number) {
               >
                 <div class="story-option-title">{{ story.title }}</div>
                 <div class="story-option-meta">
-                  更新于 {{ new Date(story.updated_at).toLocaleDateString() }}
+                  {{ $t('archives.modal.updatedAt', { date: new Date(story.updated_at).toLocaleDateString() }) }}
                 </div>
               </div>
             </div>
@@ -537,18 +539,18 @@ function handleViewStory(id: number) {
         </template>
 
         <p v-if="pendingRecords.length > 0" class="pending-info">
-          将归档 {{ pendingRecords.length }} 条对话记录
+          {{ $t('archives.modal.pendingRecords', { count: pendingRecords.length }) }}
         </p>
       </div>
       <template #footer>
-        <RButton @click="showCreateModal = false">取消</RButton>
+        <RButton @click="showCreateModal = false">{{ $t('archives.action.cancel') }}</RButton>
         <RButton
           type="primary"
           :loading="creating"
           :disabled="archiveMode === 'append' && !selectedStoryId"
           @click="handleCreateStory"
         >
-          {{ archiveMode === 'create' ? '创建' : '追加' }}
+          {{ archiveMode === 'create' ? $t('archives.action.create') : $t('archives.action.append') }}
         </RButton>
       </template>
     </RModal>
@@ -584,19 +586,19 @@ function handleViewStory(id: number) {
 
 .page-title h1 {
   font-size: 28px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   margin: 0 0 4px 0;
 }
 
 .page-title p {
   font-size: 14px;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
   margin: 0;
 }
 
 .btn-create {
-  background: #804030;
-  color: #fff;
+  background: var(--color-secondary, #804030);
+  color: var(--color-text-light, #fff);
   border: none;
   padding: 12px 24px;
   border-radius: 8px;
@@ -636,7 +638,7 @@ function handleViewStory(id: number) {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: #4B3621;
+  background: var(--color-primary, #4B3621);
   transform: translateX(-50%);
   opacity: 0.3;
 }
@@ -653,8 +655,8 @@ function handleViewStory(id: number) {
 .timeline-dot {
   width: 16px;
   height: 16px;
-  background: #EED9C4;
-  border: 3px solid #4B3621;
+  background: var(--color-background, #EED9C4);
+  border: 3px solid var(--color-primary, #4B3621);
   border-radius: 50%;
   position: absolute;
   left: 50%;
@@ -664,22 +666,22 @@ function handleViewStory(id: number) {
 }
 
 .timeline-item.highlight .timeline-dot {
-  border-color: #B87333;
-  box-shadow: 0 0 0 4px rgba(184,115,51,0.2);
+  border-color: var(--color-accent, #B87333);
+  box-shadow: 0 0 0 4px var(--color-primary-light, rgba(184,115,51,0.2));
 }
 
 .story-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 8px 24px rgba(75,54,33,0.08);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(75,54,33,0.08));
   max-width: 400px;
 }
 
 .card-date {
   display: inline-block;
-  background: rgba(184,115,51,0.1);
-  color: #B87333;
+  background: var(--color-primary-light, rgba(184,115,51,0.1));
+  color: var(--color-accent, #B87333);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 13px;
@@ -689,14 +691,14 @@ function handleViewStory(id: number) {
 
 .card-title {
   font-size: 18px;
-  color: #2c1e12;
+  color: var(--color-text-main, #2c1e12);
   font-weight: 600;
   margin-bottom: 12px;
 }
 
 .card-body {
   font-size: 14px;
-  color: #665242;
+  color: var(--color-text-secondary, #665242);
   line-height: 1.7;
   margin-bottom: 16px;
 }
@@ -705,7 +707,7 @@ function handleViewStory(id: number) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #f0e6dc;
+  border-top: 1px solid var(--color-border-light, #f0e6dc);
   padding-top: 16px;
 }
 
@@ -713,22 +715,22 @@ function handleViewStory(id: number) {
 .avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid var(--color-panel-bg, #fff);
   margin-left: -8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-light, #fff);
 }
-.avatar:nth-child(1) { background: #D4A373; margin-left: 0; }
-.avatar:nth-child(2) { background: #A98467; }
-.avatar:nth-child(3) { background: #ADC178; }
-.avatar:nth-child(4) { background: #A9D6E5; }
+.avatar:nth-child(1) { background: var(--color-accent, #D4A373); margin-left: 0; }
+.avatar:nth-child(2) { background: var(--avatar-color-2, #A98467); }
+.avatar:nth-child(3) { background: var(--avatar-color-3, #ADC178); }
+.avatar:nth-child(4) { background: var(--avatar-color-4, #A9D6E5); }
 
 .view-detail {
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   font-size: 13px;
   font-weight: 600;
   display: flex;
@@ -759,31 +761,31 @@ function handleViewStory(id: number) {
 .form-field label {
   font-size: 14px;
   font-weight: 500;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .form-field textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--color-border, #d1bfa8);
   border-radius: 8px;
   font-size: 14px;
   resize: vertical;
   font-family: inherit;
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-primary, #4B3621);
 }
 
 .form-field textarea:focus {
   outline: none;
-  border-color: #B87333;
-  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.1);
+  border-color: var(--color-accent, #B87333);
+  box-shadow: 0 0 0 2px var(--color-primary-light, rgba(184, 115, 51, 0.1));
 }
 
 .pending-info {
   font-size: 13px;
-  color: #B87333;
-  background: rgba(184, 115, 51, 0.1);
+  color: var(--color-accent, #B87333);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
   padding: 8px 12px;
   border-radius: 6px;
   margin: 0;
@@ -794,16 +796,16 @@ function handleViewStory(id: number) {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: rgba(184, 115, 51, 0.1);
-  border: 1px solid rgba(184, 115, 51, 0.2);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
+  border: 1px solid var(--color-accent-border, rgba(184, 115, 51, 0.2));
   border-radius: 8px;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   font-size: 14px;
 }
 
 .addon-notice i {
   font-size: 18px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .addon-notice span {
@@ -811,17 +813,17 @@ function handleViewStory(id: number) {
 }
 
 .addon-installed-icon {
-  color: #4CAF50 !important;
+  color: var(--color-success, #4CAF50) !important;
 }
 
 .addon-version {
   flex: none !important;
   padding: 4px 10px;
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--btn-secondary-bg, rgba(128, 64, 48, 0.1));
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 /* 使用提示横幅 */
@@ -830,18 +832,18 @@ function handleViewStory(id: number) {
   align-items: flex-start;
   gap: 14px;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%);
-  border: 1px solid #FFE0B2;
-  border-left: 4px solid #FFB300;
+  background: var(--color-warning-bg, linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%));
+  border: 1px solid var(--color-warning-border, #FFE0B2);
+  border-left: 4px solid var(--color-warning, #FFB300);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(255, 179, 0, 0.1);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(255, 179, 0, 0.1));
 }
 
 .tips-icon {
   flex-shrink: 0;
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, #FFB300, #FF9800);
+  background: linear-gradient(135deg, var(--color-warning, #FFB300), var(--color-warning-dark, #FF9800));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -850,7 +852,7 @@ function handleViewStory(id: number) {
 
 .tips-icon i {
   font-size: 20px;
-  color: #fff;
+  color: var(--color-text-light, #fff);
 }
 
 .tips-content {
@@ -860,7 +862,7 @@ function handleViewStory(id: number) {
 .tips-title {
   font-size: 15px;
   font-weight: 600;
-  color: #E65100;
+  color: var(--color-warning-dark, #E65100);
   margin-bottom: 8px;
 }
 
@@ -868,17 +870,17 @@ function handleViewStory(id: number) {
   margin: 0;
   padding-left: 18px;
   font-size: 13px;
-  color: #5D4037;
+  color: var(--color-text-main, #5D4037);
   line-height: 1.8;
 }
 
 .tips-list code {
   padding: 2px 6px;
-  background: rgba(184, 115, 51, 0.15);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.15));
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .tips-close-btn {
@@ -888,7 +890,7 @@ function handleViewStory(id: number) {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: #BF8040;
+  color: var(--color-accent, #BF8040);
   font-size: 18px;
   cursor: pointer;
   display: flex;
@@ -898,8 +900,8 @@ function handleViewStory(id: number) {
 }
 
 .tips-close-btn:hover {
-  background: rgba(191, 128, 64, 0.15);
-  color: #E65100;
+  background: var(--color-primary-light, rgba(191, 128, 64, 0.15));
+  color: var(--color-warning-dark, #E65100);
 }
 
 /* 公会筛选横幅 */
@@ -908,11 +910,11 @@ function handleViewStory(id: number) {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #FFF5E6, #FFF9F0);
-  border: 1px solid #E5D4C1;
-  border-left: 4px solid #B87333;
+  background: linear-gradient(135deg, var(--color-card-bg, #FFF5E6), var(--color-panel-bg, #FFF9F0));
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-left: 4px solid var(--color-accent, #B87333);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(184, 115, 51, 0.08);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(184, 115, 51, 0.08));
 }
 
 .banner-content {
@@ -920,16 +922,16 @@ function handleViewStory(id: number) {
   align-items: center;
   gap: 12px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .banner-content i {
   font-size: 20px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .banner-content strong {
-  color: #804030;
+  color: var(--color-secondary, #804030);
   font-weight: 600;
 }
 
@@ -938,19 +940,19 @@ function handleViewStory(id: number) {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 6px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .clear-filter-btn:hover {
-  background: #FFF5E6;
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--color-card-bg, #FFF5E6);
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .clear-filter-btn i {
@@ -992,10 +994,10 @@ function handleViewStory(id: number) {
 .mode-btn {
   flex: 1;
   padding: 10px 16px;
-  border: 1.5px solid #d1bfa8;
+  border: 1.5px solid var(--color-border, #d1bfa8);
   border-radius: 8px;
-  background: #fff;
-  color: #665242;
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-text-secondary, #665242);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -1007,28 +1009,28 @@ function handleViewStory(id: number) {
 }
 
 .mode-btn:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .mode-btn.active {
-  background: #804030;
-  border-color: #804030;
-  color: #fff;
+  background: var(--color-secondary, #804030);
+  border-color: var(--color-secondary, #804030);
+  color: var(--color-text-light, #fff);
 }
 
 /* 剧情选择器 */
 .story-selector {
   max-height: 240px;
   overflow-y: auto;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--color-border, #d1bfa8);
   border-radius: 8px;
 }
 
 .story-option {
   padding: 12px 14px;
   cursor: pointer;
-  border-bottom: 1px solid #f0e6dc;
+  border-bottom: 1px solid var(--color-border-light, #f0e6dc);
   transition: background 0.2s;
 }
 
@@ -1037,31 +1039,31 @@ function handleViewStory(id: number) {
 }
 
 .story-option:hover {
-  background: rgba(184, 115, 51, 0.05);
+  background: var(--color-card-bg-hover, rgba(184, 115, 51, 0.05));
 }
 
 .story-option.selected {
-  background: rgba(184, 115, 51, 0.1);
-  border-left: 3px solid #B87333;
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
+  border-left: 3px solid var(--color-accent, #B87333);
 }
 
 .story-option-title {
   font-size: 14px;
   font-weight: 500;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   margin-bottom: 4px;
 }
 
 .story-option-meta {
   font-size: 12px;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
 }
 
 .loading-stories,
 .no-stories {
   padding: 24px;
   text-align: center;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
   font-size: 14px;
 }
 

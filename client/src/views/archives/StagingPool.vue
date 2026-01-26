@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import RCheckbox from '@/components/RCheckbox.vue'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import WowIcon from '@/components/WowIcon.vue'
+
+const { t } = useI18n()
 
 interface TRP3Info {
   FN?: string
@@ -392,12 +395,9 @@ function getMarkClass(mark?: string): string {
 }
 
 function getNpcTalkLabel(nt?: string): string {
-  const map: Record<string, string> = {
-    'say': '说',
-    'yell': '喊',
-    'whisper': '密语',
-  }
-  return nt ? map[nt] || nt : ''
+  if (!nt) return ''
+  const key = `archives.staging.npcTalk.${nt}`
+  return t(key)
 }
 
 // 获取NPC说话类型对应的CSS类
@@ -435,25 +435,10 @@ function normalizeChannel(channel: string): string {
 }
 
 function getChannelLabel(channel: string): string {
-  const map: Record<string, string> = {
-    // 新格式（简写）
-    'SAY': '说',
-    'YELL': '喊',
-    'EMOTE': '表情',
-    'TEXT_EMOTE': '表情',
-    'PARTY': '小队',
-    'RAID': '团队',
-    'WHISPER': '密语',
-    // 旧格式（完整事件名）
-    'CHAT_MSG_SAY': '说',
-    'CHAT_MSG_YELL': '喊',
-    'CHAT_MSG_EMOTE': '表情',
-    'CHAT_MSG_TEXT_EMOTE': '表情',
-    'CHAT_MSG_PARTY': '小队',
-    'CHAT_MSG_RAID': '团队',
-    'CHAT_MSG_WHISPER': '密语',
-  }
-  return map[channel] || channel
+  // 标准化频道名称
+  const normalized = normalizeChannel(channel).toLowerCase()
+  const key = `archives.staging.channel.${normalized}`
+  return t(key)
 }
 
 // 获取频道对应的文字颜色
@@ -502,11 +487,11 @@ defineExpose({
   <div class="staging-pool">
     <div class="staging-header">
       <div class="staging-info">
-        <span>待归档池 ({{ totalRecords }}条)</span>
+        <span>{{ t('archives.staging.titleWithCount', { count: totalRecords }) }}</span>
       </div>
       <div class="staging-actions">
         <RButton :loading="loading" @click="syncFromPlugin">
-          <i class="ri-refresh-line"></i> 同步
+          <i class="ri-refresh-line"></i> {{ t('archives.staging.sync') }}
         </RButton>
       </div>
     </div>
@@ -515,19 +500,19 @@ defineExpose({
     <div class="filter-panel">
       <div class="filter-row">
         <div class="filter-group">
-          <label>开始日期</label>
+          <label>{{ t('archives.staging.startDate') }}</label>
           <input type="date" v-model="filterStartDate" class="date-input" />
         </div>
         <div class="filter-group">
-          <label>结束日期</label>
+          <label>{{ t('archives.staging.endDate') }}</label>
           <input type="date" v-model="filterEndDate" class="date-input" />
         </div>
         <RButton size="small" @click="clearFilters">
-          <i class="ri-close-line"></i> 清除筛选
+          <i class="ri-close-line"></i> {{ t('archives.filter.clearFilter') }}
         </RButton>
       </div>
       <div class="filter-row">
-        <label>聊天类型：</label>
+        <label>{{ t('archives.staging.chatType') }}</label>
         <div class="channel-filters">
           <button
             v-for="channel in ['SAY', 'YELL', 'EMOTE', 'PARTY', 'RAID', 'WHISPER']"
@@ -541,7 +526,7 @@ defineExpose({
         </div>
       </div>
       <div class="filter-row">
-        <label>收听者人物：</label>
+        <label>{{ t('archives.staging.listener') }}</label>
         <div class="channel-filters">
           <button
             v-for="listener in availableListeners"
@@ -553,15 +538,15 @@ defineExpose({
             {{ listener.name }}
           </button>
           <span v-if="availableListeners.length === 0" class="filter-empty-hint">
-            暂无数据（需要新的聊天记录）
+            {{ t('archives.staging.noListenerData') }}
           </span>
         </div>
       </div>
     </div>
 
-    <REmpty v-if="!loading && totalRecords === 0" description="需要安装 RPBox Addon 插件才能采集聊天记录">
+    <REmpty v-if="!loading && totalRecords === 0" :description="t('archives.staging.emptyHint')">
       <router-link class="tutorial-link" :to="{ name: 'guide' }">
-        <i class="ri-book-open-line"></i> 查看使用教程
+        <i class="ri-book-open-line"></i> {{ t('archives.staging.viewTutorial') }}
       </router-link>
     </REmpty>
 
@@ -582,7 +567,7 @@ defineExpose({
             <i :class="expandedDates.has(date) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
             <span>{{ date }}</span>
             <span class="record-count">
-              ({{ Object.values(groupedRecords[date]).flat().length }}条)
+              {{ t('archives.staging.recordCount', { count: Object.values(groupedRecords[date]).flat().length }) }}
             </span>
           </div>
         </div>
@@ -603,7 +588,7 @@ defineExpose({
               <div class="hour-header-content" @click="toggleHour(`${date}-${hour}`)">
                 <i :class="expandedHours.has(`${date}-${hour}`) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
                 <span>{{ hour }}:00 - {{ hour }}:59</span>
-                <span class="record-count">({{ groupedRecords[date][hour].length }}条)</span>
+                <span class="record-count">{{ t('archives.staging.recordCount', { count: groupedRecords[date][hour].length }) }}</span>
               </div>
             </div>
 
@@ -640,9 +625,9 @@ defineExpose({
     </div>
 
     <div v-if="selectedCount > 0" class="staging-footer">
-      <span>已选 {{ selectedCount }} 条对话</span>
+      <span>{{ t('archives.staging.selectedCount', { count: selectedCount }) }}</span>
       <RButton type="primary" @click="$emit('archive', getSelectedRecords())">
-        归档选中内容
+        {{ t('archives.staging.archiveSelected') }}
       </RButton>
     </div>
   </div>
