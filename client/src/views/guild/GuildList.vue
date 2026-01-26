@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listGuilds, joinGuild, listPublicGuilds, applyGuild, listMyApplications, cancelApplication, type Guild, type GuildApplication } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
 import { useToastStore } from '@/stores/toast'
@@ -10,6 +11,7 @@ import RModal from '@/components/RModal.vue'
 import RInput from '@/components/RInput.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToastStore()
 const loading = ref(false)
 const activeTab = ref<'my' | 'public'>('public')
@@ -91,11 +93,11 @@ async function handleJoin() {
     await joinGuild(inviteCode.value)
     showJoinModal.value = false
     inviteCode.value = ''
-    toast.success('加入成功')
+    toast.success(t('guild.joinModal.success'))
     loadData()
   } catch (e: any) {
     console.error('加入失败:', e)
-    toast.error(e.message || '加入失败')
+    toast.error(e.message || t('guild.joinModal.failed'))
   } finally {
     joining.value = false
   }
@@ -117,11 +119,11 @@ async function handleApply() {
     await applyGuild(applyingGuildId.value, applyMessage.value)
     showApplyModal.value = false
     applyMessage.value = ''
-    toast.success('申请已提交')
+    toast.success(t('guild.applyModal.success'))
     loadMyApplications()
   } catch (e: any) {
     console.error('申请失败:', e)
-    toast.error(e.message || '申请失败')
+    toast.error(e.message || t('guild.applyModal.failed'))
   } finally {
     applying.value = false
   }
@@ -140,11 +142,11 @@ async function handleCancelApplication(guildId: number, event: Event) {
 
   try {
     await cancelApplication(guildId, app.id)
-    toast.success('已取消申请')
+    toast.success(t('guild.applyModal.cancelSuccess'))
     loadMyApplications()
   } catch (e: any) {
     console.error('取消申请失败:', e)
-    toast.error(e.message || '取消失败')
+    toast.error(e.message || t('guild.applyModal.cancelFailed'))
   }
 }
 
@@ -153,13 +155,15 @@ function handleSearch() {
 }
 
 function getRoleLabel(role?: string): string {
-  const map: Record<string, string> = { owner: '会长', admin: '管理员', member: '成员' }
-  return map[role || ''] || ''
+  if (!role) return ''
+  const key = `guild.role.${role}`
+  return t(key)
 }
 
 function getFactionLabel(f: string): string {
-  const map: Record<string, string> = { alliance: '联盟', horde: '部落', neutral: '中立' }
-  return map[f] || ''
+  if (!f) return ''
+  const key = `guild.info.${f}`
+  return t(key)
 }
 
 function getFactionClass(f: string): string {
@@ -174,32 +178,32 @@ onMounted(loadData)
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="tabs">
-        <button :class="{ active: activeTab === 'public' }" @click="activeTab = 'public'">公会广场</button>
-        <button :class="{ active: activeTab === 'my' }" @click="activeTab = 'my'">我的公会</button>
+        <button :class="{ active: activeTab === 'public' }" @click="activeTab = 'public'">{{ t('guild.tabs.public') }}</button>
+        <button :class="{ active: activeTab === 'my' }" @click="activeTab = 'my'">{{ t('guild.tabs.my') }}</button>
       </div>
       <div class="header-actions">
-        <RButton @click="showJoinModal = true">加入公会</RButton>
-        <RButton type="primary" @click="router.push('/guild/create')">创建公会</RButton>
+        <RButton @click="showJoinModal = true">{{ t('guild.action.joinGuild') }}</RButton>
+        <RButton type="primary" @click="router.push('/guild/create')">{{ t('guild.action.createGuild') }}</RButton>
       </div>
     </div>
 
     <!-- 筛选栏（仅公会广场显示） -->
     <div v-if="activeTab === 'public'" class="filter-bar">
-      <RInput v-model="keyword" placeholder="搜索公会名称..." class="search-input" @keyup.enter="handleSearch" />
+      <RInput v-model="keyword" :placeholder="t('guild.searchPlaceholder')" class="search-input" @keyup.enter="handleSearch" />
       <select v-model="faction" @change="handleSearch">
-        <option value="">全部阵营</option>
-        <option value="alliance">联盟</option>
-        <option value="horde">部落</option>
-        <option value="neutral">中立</option>
+        <option value="">{{ t('guild.allFactions') }}</option>
+        <option value="alliance">{{ t('guild.info.alliance') }}</option>
+        <option value="horde">{{ t('guild.info.horde') }}</option>
+        <option value="neutral">{{ t('guild.info.neutral') }}</option>
       </select>
-      <RButton @click="handleSearch">搜索</RButton>
+      <RButton @click="handleSearch">{{ t('guild.action.search') }}</RButton>
     </div>
 
     <!-- 加载中 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('guild.loading') }}</div>
 
     <!-- 空状态 -->
-    <REmpty v-else-if="displayGuilds.length === 0" :description="activeTab === 'my' ? '暂未加入任何公会' : '暂无公会'" />
+    <REmpty v-else-if="displayGuilds.length === 0" :description="activeTab === 'my' ? t('guild.emptyMy') : t('guild.empty')" />
 
     <!-- 公会卡片列表 -->
     <div v-else class="guild-grid">
@@ -223,10 +227,10 @@ onMounted(loadData)
           </div>
           <div class="guild-info">
             <h3>{{ guild.name }}</h3>
-            <p class="slogan">{{ guild.slogan || guild.description || '暂无描述' }}</p>
+            <p class="slogan">{{ guild.slogan || guild.description || t('guild.info.noDescription') }}</p>
             <div class="guild-meta">
-              <span><i class="ri-user-line"></i> {{ guild.member_count }} 成员</span>
-              <span><i class="ri-book-line"></i> {{ guild.story_count }} 剧情</span>
+              <span><i class="ri-user-line"></i> {{ guild.member_count }} {{ t('guild.info.members') }}</span>
+              <span><i class="ri-book-line"></i> {{ guild.story_count }} {{ t('guild.info.stories') }}</span>
               <span v-if="guild.server" class="server"><i class="ri-server-line"></i> {{ guild.server }}</span>
             </div>
             <span v-if="guild.my_role" class="role-badge">{{ getRoleLabel(guild.my_role) }}</span>
@@ -239,7 +243,7 @@ onMounted(loadData)
                 @click="openApplyModal(guild.id, $event)"
               >
                 <i class="ri-user-add-line"></i>
-                申请加入
+                {{ t('guild.action.join') }}
               </button>
               <button
                 v-else-if="getApplicationStatus(guild.id) === 'pending'"
@@ -247,7 +251,7 @@ onMounted(loadData)
                 @click="handleCancelApplication(guild.id, $event)"
               >
                 <i class="ri-close-line"></i>
-                取消申请
+                {{ t('guild.action.cancelApplication') }}
               </button>
             </div>
           </div>
@@ -256,29 +260,29 @@ onMounted(loadData)
     </div>
 
     <!-- 加入公会弹窗 -->
-    <RModal v-model="showJoinModal" title="加入公会" width="400px">
-      <RInput v-model="inviteCode" placeholder="输入邀请码" />
+    <RModal v-model="showJoinModal" :title="t('guild.joinModal.title')" width="400px">
+      <RInput v-model="inviteCode" :placeholder="t('guild.joinModal.placeholder')" />
       <template #footer>
-        <RButton @click="showJoinModal = false">取消</RButton>
-        <RButton type="primary" :loading="joining" @click="handleJoin">加入</RButton>
+        <RButton @click="showJoinModal = false">{{ t('guild.action.cancel') }}</RButton>
+        <RButton type="primary" :loading="joining" @click="handleJoin">{{ t('guild.action.joinGuild') }}</RButton>
       </template>
     </RModal>
 
     <!-- 申请加入公会弹窗 -->
-    <RModal v-model="showApplyModal" title="申请加入公会" width="500px">
+    <RModal v-model="showApplyModal" :title="t('guild.applyModal.title')" width="500px">
       <div class="apply-form">
-        <p class="apply-hint">请简单介绍一下自己，说明为什么想加入这个公会</p>
+        <p class="apply-hint">{{ t('guild.applyModal.hint') }}</p>
         <textarea
           v-model="applyMessage"
-          placeholder="申请留言（可选）"
+          :placeholder="t('guild.applyModal.placeholder')"
           rows="4"
           maxlength="500"
           class="apply-textarea"
         ></textarea>
       </div>
       <template #footer>
-        <RButton @click="showApplyModal = false">取消</RButton>
-        <RButton type="primary" :loading="applying" @click="handleApply">提交申请</RButton>
+        <RButton @click="showApplyModal = false">{{ t('guild.action.cancel') }}</RButton>
+        <RButton type="primary" :loading="applying" @click="handleApply">{{ t('guild.action.submitApplication') }}</RButton>
       </template>
     </RModal>
   </div>

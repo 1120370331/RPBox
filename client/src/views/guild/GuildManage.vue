@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@/stores/toast'
 import { useDialog } from '@/composables/useDialog'
 import { useUserStore } from '@/stores/user'
@@ -23,6 +24,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToastStore()
 const { confirm } = useDialog()
 const userStore = useUserStore()
@@ -72,13 +74,13 @@ async function loadGuild() {
 
     // 权限检查
     if (!isAdmin.value) {
-      toast.error('无权访问此页面')
+      toast.error(t('guild.manage.noAccess'))
       router.push(`/guild/${guildId.value}`)
       return
     }
   } catch (e: any) {
     console.error('加载公会信息失败:', e)
-    toast.error(e.message || '加载失败')
+    toast.error(e.message || t('guild.manage.loadFailed'))
     router.push('/guild')
   } finally {
     loading.value = false
@@ -95,7 +97,7 @@ async function handleAvatarUpload(event: Event) {
   if (!file || !guild.value) return
 
   if (file.size > 10 * 1024 * 1024) {
-    toast.error('头像文件不能超过10MB')
+    toast.error(t('guild.manage.avatarSizeLimit'))
     input.value = ''
     return
   }
@@ -107,10 +109,10 @@ async function handleAvatarUpload(event: Event) {
     if (res.avatar_updated_at) {
       guild.value.avatar_updated_at = res.avatar_updated_at
     }
-    toast.success('头像更新成功')
+    toast.success(t('guild.manage.avatarSuccess'))
   } catch (e: any) {
     console.error('头像上传失败:', e)
-    toast.error(e.message || '头像上传失败')
+    toast.error(e.message || t('guild.manage.avatarFailed'))
   } finally {
     avatarUploading.value = false
     input.value = ''
@@ -125,7 +127,7 @@ async function loadMembers() {
     members.value = res.members || []
   } catch (e: any) {
     console.error('加载成员列表失败:', e)
-    toast.error(e.message || '加载失败')
+    toast.error(e.message || t('guild.manage.loadFailed'))
   } finally {
     loadingMembers.value = false
   }
@@ -140,7 +142,7 @@ async function loadApplications() {
     applications.value = res.applications || []
   } catch (e: any) {
     console.error('加载申请列表失败:', e)
-    toast.error(e.message || '加载失败')
+    toast.error(e.message || t('guild.manage.loadFailed'))
   } finally {
     loadingApplications.value = false
   }
@@ -149,85 +151,87 @@ async function loadApplications() {
 // 设置成员角色
 async function handleSetRole(member: GuildMember, newRole: 'admin' | 'member') {
   if (member.role === 'owner') {
-    toast.warning('无法修改会长的角色')
+    toast.warning(t('guild.manage.members.cannotModifyOwner'))
     return
   }
 
-  const roleLabel = newRole === 'admin' ? '管理员' : '普通成员'
+  const roleLabel = newRole === 'admin' ? t('guild.manage.members.roleAdmin') : t('guild.manage.members.roleMember')
   const confirmed = await confirm({
-    title: '确认修改角色',
-    message: `确定要将 ${member.username} 设置为${roleLabel}吗？`
+    title: t('guild.manage.members.confirmSetRole'),
+    message: t('guild.manage.members.confirmSetRoleMsg', { name: member.username, role: roleLabel })
   })
 
   if (!confirmed) return
 
   try {
     await updateMemberRole(guildId.value, member.user_id, newRole)
-    toast.success('角色修改成功')
+    toast.success(t('guild.manage.members.setRoleSuccess'))
     loadMembers()
   } catch (e: any) {
     console.error('修改角色失败:', e)
-    toast.error(e.message || '修改失败')
+    toast.error(e.message || t('guild.manage.members.setRoleFailed'))
   }
 }
 
 // 移除成员
 async function handleRemoveMember(member: GuildMember) {
   if (member.role === 'owner') {
-    toast.warning('无法移除会长')
+    toast.warning(t('guild.manage.members.cannotRemoveOwner'))
     return
   }
 
   const confirmed = await confirm({
-    title: '确认移除成员',
-    message: `确定要将 ${member.username} 移出公会吗？此操作不可撤销。`
+    title: t('guild.manage.members.confirmRemove'),
+    message: t('guild.manage.members.confirmRemoveMsg', { name: member.username })
   })
 
   if (!confirmed) return
 
   try {
     await removeMember(guildId.value, member.user_id)
-    toast.success('成员已移除')
+    toast.success(t('guild.manage.members.removeSuccess'))
     loadMembers()
   } catch (e: any) {
     console.error('移除成员失败:', e)
-    toast.error(e.message || '移除失败')
+    toast.error(e.message || t('guild.manage.members.removeFailed'))
   }
 }
 
 // 审批申请
 async function handleReviewApplication(app: GuildApplication, action: 'approve' | 'reject') {
-  const actionLabel = action === 'approve' ? '通过' : '拒绝'
+  const isApprove = action === 'approve'
   const confirmed = await confirm({
-    title: `确认${actionLabel}申请`,
-    message: `确定要${actionLabel} ${app.username} 的加入申请吗？`
+    title: isApprove ? t('guild.manage.applications.confirmApprove') : t('guild.manage.applications.confirmReject'),
+    message: isApprove
+      ? t('guild.manage.applications.confirmApproveMsg', { name: app.username })
+      : t('guild.manage.applications.confirmRejectMsg', { name: app.username })
   })
 
   if (!confirmed) return
 
   try {
     await reviewGuildApplication(guildId.value, app.id, action)
-    toast.success(`已${actionLabel}申请`)
+    toast.success(isApprove ? t('guild.manage.applications.approveSuccess') : t('guild.manage.applications.rejectSuccess'))
     loadApplications()
     if (action === 'approve') {
       loadMembers() // 通过后刷新成员列表
     }
   } catch (e: any) {
     console.error('审批失败:', e)
-    toast.error(e.message || '审批失败')
+    toast.error(e.message || t('guild.manage.applications.reviewFailed'))
   }
 }
 
 // 获取角色标签
 function getRoleLabel(role: string): string {
-  const map: Record<string, string> = { owner: '会长', admin: '管理员', member: '成员' }
-  return map[role] || ''
+  if (!role) return ''
+  return t(`guild.role.${role}`)
 }
 
 // 获取申请状态标签
 function getStatusLabel(status: string): string {
-  const map: Record<string, string> = { pending: '待审核', approved: '已通过', rejected: '已拒绝' }
-  return map[status] || ''
+  if (!status) return ''
+  return t(`guild.manage.status.${status}`)
 }
 
 // 格式化日期
@@ -255,7 +259,7 @@ onMounted(async () => {
 <template>
   <div class="guild-manage">
     <!-- 加载中 -->
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('guild.loading') }}</div>
 
     <div v-else-if="guild" class="manage-container">
       <!-- 页面头部 -->
@@ -263,9 +267,9 @@ onMounted(async () => {
         <div class="header-left">
           <button class="back-btn" @click="router.push(`/guild/${guildId}`)">
             <i class="ri-arrow-left-line"></i>
-            返回
+            {{ t('guild.manage.back') }}
           </button>
-          <h1 class="page-title">{{ guild.name }} - 管理中心</h1>
+          <h1 class="page-title">{{ guild.name }} - {{ t('guild.manage.title') }}</h1>
         </div>
       </header>
 
@@ -278,9 +282,9 @@ onMounted(async () => {
           </div>
         </div>
         <div class="avatar-meta">
-          <div class="avatar-title">公会头像</div>
+          <div class="avatar-title">{{ t('guild.manage.avatar') }}</div>
           <div class="avatar-actions">
-            <RButton size="small" :loading="avatarUploading" @click="triggerAvatarUpload">上传头像</RButton>
+            <RButton size="small" :loading="avatarUploading" @click="triggerAvatarUpload">{{ t('guild.manage.uploadAvatar') }}</RButton>
           </div>
         </div>
         <input ref="avatarInputRef" type="file" accept="image/*" hidden @change="handleAvatarUpload" />
@@ -293,14 +297,14 @@ onMounted(async () => {
           @click="activeTab = 'members'"
         >
           <i class="ri-team-line"></i>
-          成员管理
+          {{ t('guild.manage.tabs.members') }}
         </button>
         <button
           :class="{ active: activeTab === 'applications' }"
           @click="activeTab = 'applications'"
         >
           <i class="ri-user-add-line"></i>
-          申请审批
+          {{ t('guild.manage.tabs.applications') }}
           <span v-if="applications.filter(a => a.status === 'pending').length > 0" class="badge">
             {{ applications.filter(a => a.status === 'pending').length }}
           </span>
@@ -309,8 +313,8 @@ onMounted(async () => {
 
       <!-- 成员管理标签页 -->
       <div v-show="activeTab === 'members'" class="tab-content">
-        <div v-if="loadingMembers" class="loading">加载中...</div>
-        <REmpty v-else-if="members.length === 0" description="暂无成员" />
+        <div v-if="loadingMembers" class="loading">{{ t('guild.loading') }}</div>
+        <REmpty v-else-if="members.length === 0" :description="t('guild.manage.members.empty')" />
         <div v-else class="members-list">
           <div v-for="member in members" :key="member.id" class="member-item">
             <div class="member-info">
@@ -319,7 +323,7 @@ onMounted(async () => {
               </div>
               <div class="member-details">
                 <h3 :style="buildNameStyle(member.name_color, member.name_bold)">{{ member.username }}</h3>
-                <p class="join-date">加入时间: {{ formatDate(member.joined_at) }}</p>
+                <p class="join-date">{{ t('guild.manage.members.joinDate') }}: {{ formatDate(member.joined_at) }}</p>
               </div>
             </div>
             <div class="member-actions">
@@ -332,21 +336,21 @@ onMounted(async () => {
                   size="small"
                   @click="handleSetRole(member, 'admin')"
                 >
-                  设为管理员
+                  {{ t('guild.manage.members.setAdmin') }}
                 </RButton>
                 <RButton
                   v-else-if="member.role === 'admin'"
                   size="small"
                   @click="handleSetRole(member, 'member')"
                 >
-                  取消管理员
+                  {{ t('guild.manage.members.removeAdmin') }}
                 </RButton>
                 <RButton
                   size="small"
                   type="danger"
                   @click="handleRemoveMember(member)"
                 >
-                  移除
+                  {{ t('guild.manage.members.remove') }}
                 </RButton>
               </template>
             </div>
@@ -362,18 +366,18 @@ onMounted(async () => {
             :class="{ active: applicationFilter === 'pending' }"
             @click="applicationFilter = 'pending'; loadApplications()"
           >
-            待审核
+            {{ t('guild.manage.applications.pending') }}
           </button>
           <button
             :class="{ active: applicationFilter === 'all' }"
             @click="applicationFilter = 'all'; loadApplications()"
           >
-            全部
+            {{ t('guild.manage.applications.all') }}
           </button>
         </div>
 
-        <div v-if="loadingApplications" class="loading">加载中...</div>
-        <REmpty v-else-if="applications.length === 0" description="暂无申请" />
+        <div v-if="loadingApplications" class="loading">{{ t('guild.loading') }}</div>
+        <REmpty v-else-if="applications.length === 0" :description="t('guild.manage.applications.empty')" />
         <div v-else class="applications-list">
           <div v-for="app in applications" :key="app.id" class="application-item">
             <div class="app-info">
@@ -383,7 +387,7 @@ onMounted(async () => {
               <div class="app-details">
                 <h3 :style="buildNameStyle(app.name_color, app.name_bold)">{{ app.username }}</h3>
                 <p v-if="app.message" class="app-message">{{ app.message }}</p>
-                <p class="app-date">申请时间: {{ formatDate(app.created_at) }}</p>
+                <p class="app-date">{{ t('guild.manage.applications.applyDate') }}: {{ formatDate(app.created_at) }}</p>
               </div>
             </div>
             <div class="app-actions">
@@ -397,7 +401,7 @@ onMounted(async () => {
                   @click="handleReviewApplication(app, 'approve')"
                 >
                   <i class="ri-check-line"></i>
-                  通过
+                  {{ t('guild.manage.applications.approve') }}
                 </RButton>
                 <RButton
                   size="small"
@@ -405,7 +409,7 @@ onMounted(async () => {
                   @click="handleReviewApplication(app, 'reject')"
                 >
                   <i class="ri-close-line"></i>
-                  拒绝
+                  {{ t('guild.manage.applications.reject') }}
                 </RButton>
               </template>
             </div>

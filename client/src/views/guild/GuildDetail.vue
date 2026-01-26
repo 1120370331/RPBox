@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, type Guild, type GuildMember } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
 import { useDialog } from '@/composables/useDialog'
@@ -13,6 +14,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const { confirm, alert } = useDialog()
 
 const loading = ref(true)
@@ -84,8 +86,8 @@ async function loadGuild() {
 
 async function handleLeave() {
   const confirmed = await confirm({
-    title: '退出公会',
-    message: '确定要退出公会吗？',
+    title: t('guild.leave.title'),
+    message: t('guild.leave.message'),
     type: 'warning'
   })
   if (!confirmed) return
@@ -93,7 +95,7 @@ async function handleLeave() {
     await leaveGuild(guildId)
     router.push('/guild')
   } catch (e: any) {
-    await alert({ title: '退出失败', message: e.message || '退出失败', type: 'error' })
+    await alert({ title: t('guild.leave.failed'), message: e.message || t('guild.leave.failed'), type: 'error' })
   }
 }
 
@@ -103,27 +105,27 @@ async function handleApply() {
     // 检查是否为自动加入
     if ((res as any).auto_approved) {
       await alert({
-        title: '加入成功',
-        message: '您已成功加入公会！',
+        title: t('guild.apply.joinSuccess'),
+        message: t('guild.apply.joinSuccessMessage'),
         type: 'success'
       })
     } else {
       await alert({
-        title: '申请已提交',
-        message: '您的入会申请已提交，请等待管理员审核',
+        title: t('guild.apply.submitted'),
+        message: t('guild.apply.submittedMessage'),
         type: 'success'
       })
     }
     await loadGuild() // 重新加载公会信息
   } catch (e: any) {
-    await alert({ title: '申请失败', message: e.message || '申请失败', type: 'error' })
+    await alert({ title: t('guild.apply.failed'), message: e.message || t('guild.apply.failed'), type: 'error' })
   }
 }
 
 async function handleDelete() {
   const confirmed = await confirm({
-    title: '解散公会',
-    message: '确定要解散公会吗？此操作不可恢复！',
+    title: t('guild.disband.title'),
+    message: t('guild.disband.message'),
     type: 'error'
   })
   if (!confirmed) return
@@ -131,7 +133,7 @@ async function handleDelete() {
     await deleteGuild(guildId)
     router.push('/guild')
   } catch (e: any) {
-    await alert({ title: '解散失败', message: e.message || '解散失败', type: 'error' })
+    await alert({ title: t('guild.disband.failed'), message: e.message || t('guild.disband.failed'), type: 'error' })
   }
 }
 
@@ -162,7 +164,7 @@ function handleBannerSelect(e: Event) {
   if (input.files && input.files[0]) {
     const file = input.files[0]
     if (file.size > 20 * 1024 * 1024) {
-      alert({ title: '文件过大', message: '头图文件不能超过20MB', type: 'error' })
+      alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.bannerSizeLimit'), type: 'error' })
       return
     }
     bannerFile.value = file
@@ -179,7 +181,7 @@ function handleAvatarSelect(e: Event) {
   if (input.files && input.files[0]) {
     const file = input.files[0]
     if (file.size > 10 * 1024 * 1024) {
-      alert({ title: '文件过大', message: '头像文件不能超过10MB', type: 'error' })
+      alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.avatarSizeLimit'), type: 'error' })
       return
     }
     avatarFile.value = file
@@ -206,7 +208,7 @@ async function handleHeroBannerSelect(e: Event) {
 
   const file = input.files[0]
   if (file.size > 20 * 1024 * 1024) {
-    await alert({ title: '文件过大', message: '头图文件不能超过20MB', type: 'error' })
+    await alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.bannerSizeLimit'), type: 'error' })
     return
   }
 
@@ -214,7 +216,7 @@ async function handleHeroBannerSelect(e: Event) {
     const res = await uploadGuildBanner(guildId, file)
     guild.value.banner = res.banner
   } catch (e: any) {
-    await alert({ title: '上传失败', message: e.message || '上传失败', type: 'error' })
+    await alert({ title: t('guild.settings.uploadFailed'), message: e.message || t('guild.settings.uploadFailed'), type: 'error' })
   }
   input.value = ''
 }
@@ -225,7 +227,7 @@ async function handleHeroAvatarSelect(e: Event) {
 
   const file = input.files[0]
   if (file.size > 10 * 1024 * 1024) {
-    await alert({ title: '文件过大', message: '头像文件不能超过10MB', type: 'error' })
+    await alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.avatarSizeLimit'), type: 'error' })
     return
   }
 
@@ -236,7 +238,7 @@ async function handleHeroAvatarSelect(e: Event) {
       guild.value.avatar_updated_at = res.avatar_updated_at
     }
   } catch (e: any) {
-    await alert({ title: '上传失败', message: e.message || '上传失败', type: 'error' })
+    await alert({ title: t('guild.settings.uploadFailed'), message: e.message || t('guild.settings.uploadFailed'), type: 'error' })
   }
   input.value = ''
 }
@@ -275,20 +277,20 @@ async function saveSettings() {
     await loadGuild()
     showSettingsModal.value = false
   } catch (e: any) {
-    await alert({ title: '保存失败', message: e.message || '保存失败', type: 'error' })
+    await alert({ title: t('guild.settings.saveFailed'), message: e.message || t('guild.settings.saveFailed'), type: 'error' })
   } finally {
     saving.value = false
   }
 }
 
 function getRoleLabel(role: string): string {
-  const map: Record<string, string> = { owner: '会长', admin: '管理员', member: '成员' }
-  return map[role] || role
+  if (!role) return ''
+  return t(`guild.role.${role}`)
 }
 
 function getFactionLabel(f: string): string {
-  const map: Record<string, string> = { alliance: '联盟', horde: '部落', neutral: '中立' }
-  return map[f] || ''
+  if (!f) return ''
+  return t(`guild.info.${f}`)
 }
 
 function goToEvents() {
@@ -306,7 +308,7 @@ onMounted(loadGuild)
 
 <template>
   <div class="guild-detail">
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('guild.loading') }}</div>
 
     <template v-else-if="guild">
       <!-- 主内容区 -->
@@ -321,11 +323,11 @@ onMounted(loadGuild)
           <div class="top-actions">
             <button class="icon-btn" @click="loadGuild"><i class="ri-refresh-line"></i></button>
             <button v-if="isAdmin" class="primary-btn manage-btn" @click="router.push(`/guild/${guildId}/manage`)">
-              <i class="ri-team-line"></i> 管理公会
+              <i class="ri-team-line"></i> {{ t('guild.action.manageGuild') }}
               <span v-if="pendingApplicationCount > 0" class="pending-badge">{{ pendingApplicationCount }}</span>
             </button>
             <button v-if="isAdmin" class="primary-btn" @click="openSettings">
-              <i class="ri-settings-3-line"></i> 设置
+              <i class="ri-settings-3-line"></i> {{ t('guild.action.settings') }}
             </button>
           </div>
         </header>
@@ -359,26 +361,26 @@ onMounted(loadGuild)
                       {{ getFactionLabel(guild.faction) }}
                     </span>
                     <span class="badge members">
-                      <i class="ri-user-line"></i> {{ guild.member_count }} 成员
+                      <i class="ri-user-line"></i> {{ guild.member_count }} {{ t('guild.info.members') }}
                     </span>
                   </div>
                   <h1>{{ guild.name }}</h1>
-                  <p class="slogan">{{ guild.slogan || guild.description || '暂无描述' }}</p>
+                  <p class="slogan">{{ guild.slogan || guild.description || t('guild.info.noDescription') }}</p>
 
                   <div class="hero-actions">
                     <div v-if="!myRole" class="apply-action">
                       <button class="btn-outline" @click="handleApply">
-                        申请入会
+                        {{ t('guild.action.applyJoin') }}
                       </button>
                       <span v-if="guild.auto_approve" class="auto-approve-hint">
-                        <i class="ri-check-line"></i> 无需审核
+                        <i class="ri-check-line"></i> {{ t('guild.detail.autoApprove') }}
                       </span>
                     </div>
                     <button v-else-if="myRole !== 'owner'" class="btn-outline" @click="handleLeave">
-                      退出公会
+                      {{ t('guild.action.leave') }}
                     </button>
                     <button v-if="isAdmin" class="btn-outline" @click="triggerBannerUpload">
-                      <i class="ri-image-edit-line"></i> 更换头图
+                      <i class="ri-image-edit-line"></i> {{ t('guild.action.changeBanner') }}
                     </button>
                   </div>
                   <input ref="heroBannerInput" type="file" accept="image/*" hidden @change="handleHeroBannerSelect" />
@@ -390,20 +392,20 @@ onMounted(loadGuild)
             <!-- 侧边公告卡片 -->
             <div class="announcement-card">
               <div class="card-header">
-                <h3>公会信息</h3>
+                <h3>{{ t('guild.info.guildInfo') }}</h3>
                 <span class="tag">INFO</span>
               </div>
               <ul class="info-list">
                 <li v-if="isAdmin">
-                  <span class="label">邀请码</span>
+                  <span class="label">{{ t('guild.info.inviteCode') }}</span>
                   <span class="value code">{{ guild.invite_code }}</span>
                 </li>
                 <li>
-                  <span class="label">剧情数</span>
+                  <span class="label">{{ t('guild.info.storyCount') }}</span>
                   <span class="value">{{ guild.story_count }}</span>
                 </li>
                 <li v-if="myRole">
-                  <span class="label">我的身份</span>
+                  <span class="label">{{ t('guild.info.myRole') }}</span>
                   <span class="value role">{{ getRoleLabel(myRole) }}</span>
                 </li>
               </ul>
@@ -415,23 +417,23 @@ onMounted(loadGuild)
             <!-- 公会介绍 -->
             <div class="bento-card desc-card">
               <div class="card-icon"><i class="ri-file-text-line"></i></div>
-              <h3>公会介绍</h3>
-              <p>{{ guild.description || '暂无详细介绍，会长可以在设置中添加。' }}</p>
+              <h3>{{ t('guild.detail.guildIntro') }}</h3>
+              <p>{{ guild.description || t('guild.detail.noIntro') }}</p>
             </div>
 
             <!-- 公会设定 -->
             <div class="bento-card lore-card" :class="{ clickable: guild.lore }" @click="guild.lore && (showLoreModal = true)">
               <div class="card-icon"><i class="ri-quill-pen-line"></i></div>
-              <h3>公会设定 <i v-if="guild.lore" class="ri-arrow-right-s-line"></i></h3>
+              <h3>{{ t('guild.detail.guildLore') }} <i v-if="guild.lore" class="ri-arrow-right-s-line"></i></h3>
               <div v-if="guild.lore" class="lore-preview" v-html="guild.lore"></div>
-              <p v-else class="empty-hint">暂无公会设定，会长可以在设置中添加。</p>
+              <p v-else class="empty-hint">{{ t('guild.detail.noLore') }}</p>
             </div>
 
             <!-- 成员列表 -->
             <div v-if="myRole" class="bento-card members-card">
               <div class="card-header">
-                <h3>成员列表</h3>
-                <span class="count">{{ members.length }}人</span>
+                <h3>{{ t('guild.detail.memberList') }}</h3>
+                <span class="count">{{ members.length }}{{ t('guild.detail.memberCountUnit') }}</span>
               </div>
               <div class="member-list">
                 <div v-for="m in members" :key="m.id" class="member-item">
@@ -449,15 +451,15 @@ onMounted(loadGuild)
 
             <!-- 快捷操作 -->
             <div class="bento-card actions-card">
-              <h3>快捷操作</h3>
+              <h3>{{ t('guild.detail.quickActions') }}</h3>
               <div class="quick-actions">
                 <button class="action-btn" @click="goToEvents">
                   <i class="ri-calendar-event-line"></i>
-                  <span>公会帖子</span>
+                  <span>{{ t('guild.detail.guildPosts') }}</span>
                 </button>
                 <button class="action-btn" @click="goToStories">
                   <i class="ri-book-2-line"></i>
-                  <span>过往剧情</span>
+                  <span>{{ t('guild.detail.pastStories') }}</span>
                 </button>
               </div>
             </div>
@@ -467,16 +469,16 @@ onMounted(loadGuild)
     </template>
 
     <!-- 公会设定详情弹窗 -->
-    <RModal v-model="showLoreModal" title="公会设定" width="800px">
+    <RModal v-model="showLoreModal" :title="t('guild.detail.guildLore')" width="800px">
       <div class="article-content" v-html="guild?.lore"></div>
     </RModal>
 
     <!-- 设置弹窗 -->
-    <RModal v-model="showSettingsModal" title="公会设置" width="560px">
+    <RModal v-model="showSettingsModal" :title="t('guild.settings.title')" width="560px">
       <div class="settings-form">
         <!-- 头像上传 -->
         <div class="form-section">
-          <label>公会头像</label>
+          <label>{{ t('guild.settings.avatar') }}</label>
           <div
             class="avatar-upload"
             @click="($refs.avatarInput as HTMLInputElement).click()"
@@ -484,7 +486,7 @@ onMounted(loadGuild)
             <img v-if="avatarPreview" :src="avatarPreview" alt="" />
             <div v-else class="upload-hint">
               <i class="ri-camera-line"></i>
-              <span>点击上传头像</span>
+              <span>{{ t('guild.settings.uploadAvatar') }}</span>
             </div>
           </div>
           <input ref="avatarInput" type="file" accept="image/*" hidden @change="handleAvatarSelect" />
@@ -492,7 +494,7 @@ onMounted(loadGuild)
 
         <!-- 头图上传 -->
         <div class="form-section">
-          <label>公会头图</label>
+          <label>{{ t('guild.settings.banner') }}</label>
           <div
             class="banner-upload"
             :style="bannerPreview
@@ -502,7 +504,7 @@ onMounted(loadGuild)
           >
             <div class="upload-hint">
               <i class="ri-image-add-line"></i>
-              <span>点击上传头图</span>
+              <span>{{ t('guild.settings.uploadBanner') }}</span>
             </div>
           </div>
           <input ref="bannerInput" type="file" accept="image/*" hidden @change="handleBannerSelect" />
@@ -510,32 +512,32 @@ onMounted(loadGuild)
 
         <!-- 基本信息 -->
         <div class="form-section">
-          <label>公会名称</label>
-          <RInput v-model="editForm.name" placeholder="输入公会名称" />
+          <label>{{ t('guild.settings.name') }}</label>
+          <RInput v-model="editForm.name" :placeholder="t('guild.settings.namePlaceholder')" />
         </div>
 
         <div class="form-section">
-          <label>公会标语</label>
-          <RInput v-model="editForm.slogan" placeholder="一句话介绍公会" />
+          <label>{{ t('guild.settings.slogan') }}</label>
+          <RInput v-model="editForm.slogan" :placeholder="t('guild.settings.sloganPlaceholder')" />
         </div>
 
         <div class="form-section">
-          <label>公会介绍</label>
-          <textarea v-model="editForm.description" placeholder="详细介绍公会..." rows="3"></textarea>
+          <label>{{ t('guild.settings.intro') }}</label>
+          <textarea v-model="editForm.description" :placeholder="t('guild.settings.introPlaceholder')" rows="3"></textarea>
         </div>
 
         <div class="form-row">
           <div class="form-section">
-            <label>阵营</label>
+            <label>{{ t('guild.info.faction') }}</label>
             <select v-model="editForm.faction">
-              <option value="">请选择</option>
-              <option value="alliance">联盟</option>
-              <option value="horde">部落</option>
-              <option value="neutral">中立</option>
+              <option value="">{{ t('guild.settings.selectFaction') }}</option>
+              <option value="alliance">{{ t('guild.info.alliance') }}</option>
+              <option value="horde">{{ t('guild.info.horde') }}</option>
+              <option value="neutral">{{ t('guild.info.neutral') }}</option>
             </select>
           </div>
           <div class="form-section">
-            <label>主题色</label>
+            <label>{{ t('guild.settings.themeColor') }}</label>
             <input
               type="color"
               :value="'#' + editForm.color"
@@ -545,20 +547,20 @@ onMounted(loadGuild)
         </div>
 
         <div class="form-section lore-section">
-          <label>公会设定</label>
-          <TiptapEditor v-model="editForm.lore" placeholder="编写公会的背景设定、历史故事..." />
+          <label>{{ t('guild.settings.lore') }}</label>
+          <TiptapEditor v-model="editForm.lore" :placeholder="t('guild.settings.lorePlaceholder')" />
         </div>
 
         <!-- 隐私设置 -->
         <div class="form-section privacy-section">
-          <label>隐私设置</label>
+          <label>{{ t('guild.privacy.title') }}</label>
           <div class="privacy-toggles">
             <div class="toggle-group">
-              <div class="toggle-group-label">访客可见</div>
+              <div class="toggle-group-label">{{ t('guild.privacy.visitorVisible') }}</div>
               <div class="toggle-item">
                 <div class="toggle-info">
-                  <span class="toggle-label">剧情归档</span>
-                  <span class="toggle-hint">非公会成员可以查看公会归档的剧情</span>
+                  <span class="toggle-label">{{ t('guild.privacy.storyArchive') }}</span>
+                  <span class="toggle-hint">{{ t('guild.privacy.visitorStoryHint') }}</span>
                 </div>
                 <label class="switch">
                   <input type="checkbox" v-model="editForm.visitor_can_view_stories" />
@@ -567,8 +569,8 @@ onMounted(loadGuild)
               </div>
               <div class="toggle-item">
                 <div class="toggle-info">
-                  <span class="toggle-label">公会帖子</span>
-                  <span class="toggle-hint">非公会成员可以查看公会帖子</span>
+                  <span class="toggle-label">{{ t('guild.privacy.guildPosts') }}</span>
+                  <span class="toggle-hint">{{ t('guild.privacy.visitorPostHint') }}</span>
                 </div>
                 <label class="switch">
                   <input type="checkbox" v-model="editForm.visitor_can_view_posts" />
@@ -577,11 +579,11 @@ onMounted(loadGuild)
               </div>
             </div>
             <div class="toggle-group">
-              <div class="toggle-group-label">成员可见</div>
+              <div class="toggle-group-label">{{ t('guild.privacy.memberVisible') }}</div>
               <div class="toggle-item">
                 <div class="toggle-info">
-                  <span class="toggle-label">剧情归档</span>
-                  <span class="toggle-hint">普通成员可以查看公会归档的剧情（管理员始终可见）</span>
+                  <span class="toggle-label">{{ t('guild.privacy.storyArchive') }}</span>
+                  <span class="toggle-hint">{{ t('guild.privacy.memberStoryHint') }}</span>
                 </div>
                 <label class="switch">
                   <input type="checkbox" v-model="editForm.member_can_view_stories" />
@@ -590,8 +592,8 @@ onMounted(loadGuild)
               </div>
               <div class="toggle-item">
                 <div class="toggle-info">
-                  <span class="toggle-label">公会帖子</span>
-                  <span class="toggle-hint">普通成员可以查看公会帖子（管理员始终可见）</span>
+                  <span class="toggle-label">{{ t('guild.privacy.guildPosts') }}</span>
+                  <span class="toggle-hint">{{ t('guild.privacy.memberPostHint') }}</span>
                 </div>
                 <label class="switch">
                   <input type="checkbox" v-model="editForm.member_can_view_posts" />
@@ -601,8 +603,8 @@ onMounted(loadGuild)
             </div>
             <div class="toggle-item standalone">
               <div class="toggle-info">
-                <span class="toggle-label">自动审核</span>
-                <span class="toggle-hint">开启后新成员无需审核即可直接加入公会</span>
+                <span class="toggle-label">{{ t('guild.privacy.autoApprove') }}</span>
+                <span class="toggle-hint">{{ t('guild.privacy.autoApproveHint') }}</span>
               </div>
               <label class="switch">
                 <input type="checkbox" v-model="editForm.auto_approve" />
@@ -614,8 +616,8 @@ onMounted(loadGuild)
       </div>
 
       <template #footer>
-        <RButton @click="showSettingsModal = false">取消</RButton>
-        <RButton type="primary" :loading="saving" @click="saveSettings">保存</RButton>
+        <RButton @click="showSettingsModal = false">{{ t('guild.action.cancel') }}</RButton>
+        <RButton type="primary" :loading="saving" @click="saveSettings">{{ t('guild.action.save') }}</RButton>
       </template>
     </RModal>
   </div>
@@ -624,7 +626,7 @@ onMounted(loadGuild)
 <style scoped>
 .guild-detail {
   min-height: 100vh;
-  background: #EED9C4;
+  background: var(--color-background, #EED9C4);
 }
 
 .loading {
@@ -633,7 +635,7 @@ onMounted(loadGuild)
   justify-content: center;
   min-height: 100vh;
   font-size: 16px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
 }
 
 .main-content {
@@ -650,7 +652,7 @@ onMounted(loadGuild)
   padding: 16px 24px;
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid #E8DCCF;
+  border-bottom: 1px solid var(--color-border, #E8DCCF);
 }
 
 .breadcrumb {
@@ -661,15 +663,15 @@ onMounted(loadGuild)
 }
 
 .breadcrumb .path {
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
 }
 
 .breadcrumb .sep {
-  color: #D4A373;
+  color: var(--color-accent, #D4A373);
 }
 
 .breadcrumb .current {
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-weight: 600;
 }
 
@@ -683,7 +685,7 @@ onMounted(loadGuild)
   height: 36px;
   border: none;
   background: transparent;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   border-radius: 8px;
   cursor: pointer;
   display: flex;
@@ -694,8 +696,8 @@ onMounted(loadGuild)
 }
 
 .icon-btn:hover {
-  background: rgba(128, 64, 48, 0.1);
-  color: #804030;
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.1));
+  color: var(--color-secondary, #804030);
 }
 
 .primary-btn {
@@ -703,8 +705,8 @@ onMounted(loadGuild)
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #804030;
-  color: #fff;
+  background: var(--color-secondary, #804030);
+  color: var(--color-text-light, #fff);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -714,7 +716,7 @@ onMounted(loadGuild)
 }
 
 .primary-btn:hover {
-  background: #6B3626;
+  background: var(--color-secondary-hover, #6B3626);
 }
 
 .manage-btn {
@@ -726,7 +728,7 @@ onMounted(loadGuild)
   top: -6px;
   right: -6px;
   background: #FF9800;
-  color: #fff;
+  color: var(--color-text-light, #fff);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
@@ -941,10 +943,10 @@ onMounted(loadGuild)
 
 /* Announcement Card */
 .announcement-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 4px 12px rgba(44, 24, 16, 0.08);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(44, 24, 16, 0.08));
 }
 
 .announcement-card .card-header {
@@ -957,15 +959,15 @@ onMounted(loadGuild)
 .announcement-card h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0;
 }
 
 .announcement-card .tag {
   font-size: 10px;
   font-weight: 700;
-  color: #804030;
-  background: rgba(128, 64, 48, 0.1);
+  color: var(--color-secondary, #804030);
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.1));
   padding: 4px 8px;
   border-radius: 4px;
 }
@@ -984,23 +986,23 @@ onMounted(loadGuild)
 }
 
 .info-list .label {
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
 }
 
 .info-list .value {
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-weight: 500;
 }
 
 .info-list .value.code {
   font-family: monospace;
-  background: #f5f0eb;
+  background: var(--color-card-bg, #f5f0eb);
   padding: 4px 8px;
   border-radius: 4px;
 }
 
 .info-list .value.role {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 /* Bento Grid */
@@ -1011,21 +1013,21 @@ onMounted(loadGuild)
 }
 
 .bento-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 4px 12px rgba(44, 24, 16, 0.08);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(44, 24, 16, 0.08));
 }
 
 .bento-card .card-icon {
   width: 40px;
   height: 40px;
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.1));
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   font-size: 20px;
   margin-bottom: 16px;
 }
@@ -1033,13 +1035,13 @@ onMounted(loadGuild)
 .bento-card h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0 0 12px 0;
 }
 
 .bento-card p {
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   line-height: 1.6;
   margin: 0;
 }
@@ -1051,7 +1053,7 @@ onMounted(loadGuild)
 
 .lore-content {
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   line-height: 1.8;
   max-height: 200px;
   overflow-y: auto;
@@ -1066,7 +1068,7 @@ onMounted(loadGuild)
 }
 
 .empty-hint {
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   font-style: italic;
 }
 
@@ -1078,7 +1080,7 @@ onMounted(loadGuild)
 
 .bento-card.clickable:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(44, 24, 16, 0.12);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(44, 24, 16, 0.12));
 }
 
 .bento-card.clickable h3 i {
@@ -1093,7 +1095,7 @@ onMounted(loadGuild)
 /* Lore Preview */
 .lore-preview {
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   line-height: 1.8;
   max-height: 120px;
   overflow: hidden;
@@ -1107,7 +1109,7 @@ onMounted(loadGuild)
   left: 0;
   right: 0;
   height: 40px;
-  background: linear-gradient(transparent, #fff);
+  background: linear-gradient(transparent, var(--color-panel-bg, #fff));
 }
 
 .lore-preview :deep(p) {
@@ -1128,7 +1130,7 @@ onMounted(loadGuild)
 
 .members-card .count {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
 }
 
 .member-list {
@@ -1149,8 +1151,8 @@ onMounted(loadGuild)
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
+  color: var(--color-text-light, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1172,16 +1174,16 @@ onMounted(loadGuild)
 .member-item .name {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .member-item .role {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
 }
 
 .member-item .role.owner {
-  color: #D4A373;
+  color: var(--color-accent, #D4A373);
 }
 
 .member-item .role.admin {
@@ -1205,7 +1207,7 @@ onMounted(loadGuild)
   align-items: center;
   gap: 8px;
   padding: 16px;
-  background: #f5f0eb;
+  background: var(--color-card-bg, #f5f0eb);
   border: none;
   border-radius: 12px;
   cursor: pointer;
@@ -1213,17 +1215,17 @@ onMounted(loadGuild)
 }
 
 .action-btn:hover {
-  background: #ebe3db;
+  background: var(--color-border, #ebe3db);
 }
 
 .action-btn i {
   font-size: 24px;
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .action-btn span {
   font-size: 12px;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 /* Settings Form */
@@ -1242,12 +1244,12 @@ onMounted(loadGuild)
 .form-section label {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .form-section textarea {
   padding: 12px;
-  border: 1px solid #E8DCCF;
+  border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 8px;
   font-size: 14px;
   resize: vertical;
@@ -1256,26 +1258,26 @@ onMounted(loadGuild)
 
 .form-section textarea:focus {
   outline: none;
-  border-color: #804030;
+  border-color: var(--color-secondary, #804030);
 }
 
 .form-section select {
   padding: 12px;
-  border: 1px solid #E8DCCF;
+  border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 8px;
   font-size: 14px;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
 }
 
 .form-section select:focus {
   outline: none;
-  border-color: #804030;
+  border-color: var(--color-secondary, #804030);
 }
 
 .form-section input[type="color"] {
   width: 60px;
   height: 36px;
-  border: 1px solid #E8DCCF;
+  border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 8px;
   cursor: pointer;
 }
@@ -1293,12 +1295,12 @@ onMounted(loadGuild)
 
 .lore-section :deep(.tiptap-editor) {
   min-height: 200px;
-  border: 1px solid #E8DCCF;
+  border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 8px;
 }
 
 .lore-section :deep(.tiptap-editor:focus-within) {
-  border-color: #804030;
+  border-color: var(--color-secondary, #804030);
 }
 
 /* Banner Upload */
@@ -1310,12 +1312,12 @@ onMounted(loadGuild)
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  border: 2px dashed #E8DCCF;
+  border: 2px dashed var(--color-border, #E8DCCF);
   transition: all 0.2s;
 }
 
 .banner-upload:hover {
-  border-color: #804030;
+  border-color: var(--color-secondary, #804030);
 }
 
 .upload-hint {
@@ -1327,7 +1329,7 @@ onMounted(loadGuild)
   justify-content: center;
   gap: 8px;
   background: rgba(0, 0, 0, 0.4);
-  color: #fff;
+  color: var(--color-text-light, #fff);
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -1349,18 +1351,18 @@ onMounted(loadGuild)
   width: 120px;
   height: 120px;
   border-radius: 12px;
-  background: #FBF5EF;
+  background: var(--color-card-bg, #FBF5EF);
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  border: 2px dashed #E8DCCF;
+  border: 2px dashed var(--color-border, #E8DCCF);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .avatar-upload:hover {
-  border-color: #804030;
+  border-color: var(--color-secondary, #804030);
 }
 
 .avatar-upload img {
@@ -1372,14 +1374,14 @@ onMounted(loadGuild)
 
 .avatar-upload .upload-hint {
   opacity: 1;
-  background: rgba(128, 64, 48, 0.08);
-  color: #804030;
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.08));
+  color: var(--color-secondary, #804030);
 }
 
 .avatar-upload img + .upload-hint {
   opacity: 0;
   background: rgba(0, 0, 0, 0.4);
-  color: #fff;
+  color: var(--color-text-light, #fff);
 }
 
 .avatar-upload:hover img + .upload-hint {
@@ -1390,7 +1392,7 @@ onMounted(loadGuild)
 .article-content {
   font-size: 15px;
   line-height: 1.8;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .article-content :deep(h1),
@@ -1398,7 +1400,7 @@ onMounted(loadGuild)
 .article-content :deep(h3) {
   margin: 24px 0 12px 0;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .article-content :deep(h1) { font-size: 24px; }
@@ -1422,9 +1424,9 @@ onMounted(loadGuild)
 .article-content :deep(blockquote) {
   margin: 16px 0;
   padding: 12px 20px;
-  border-left: 4px solid #D4A373;
-  background: #f5f0eb;
-  color: #4B3621;
+  border-left: 4px solid var(--color-accent, #D4A373);
+  background: var(--color-card-bg, #f5f0eb);
+  color: var(--color-primary, #4B3621);
 }
 
 .article-content :deep(img) {
@@ -1434,12 +1436,12 @@ onMounted(loadGuild)
 }
 
 .article-content :deep(a) {
-  color: #804030;
+  color: var(--color-secondary, #804030);
   text-decoration: underline;
 }
 
 .article-content :deep(code) {
-  background: #f5f0eb;
+  background: var(--color-card-bg, #f5f0eb);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: monospace;
@@ -1447,8 +1449,8 @@ onMounted(loadGuild)
 }
 
 .article-content :deep(pre) {
-  background: #2C1810;
-  color: #EED9C4;
+  background: var(--color-text-main, #2C1810);
+  color: var(--color-background, #EED9C4);
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
@@ -1462,7 +1464,7 @@ onMounted(loadGuild)
 
 .article-content :deep(hr) {
   border: none;
-  border-top: 1px solid #E8DCCF;
+  border-top: 1px solid var(--color-border, #E8DCCF);
   margin: 24px 0;
 }
 
@@ -1470,7 +1472,7 @@ onMounted(loadGuild)
 .privacy-section {
   margin-top: 8px;
   padding-top: 16px;
-  border-top: 1px solid #E8DCCF;
+  border-top: 1px solid var(--color-border, #E8DCCF);
 }
 
 .privacy-toggles {
@@ -1484,7 +1486,7 @@ onMounted(loadGuild)
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #f5f0eb;
+  background: var(--color-card-bg, #f5f0eb);
   border-radius: 8px;
 }
 
@@ -1497,12 +1499,12 @@ onMounted(loadGuild)
 .toggle-label {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .toggle-hint {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
 }
 
 /* Toggle Group */
@@ -1511,19 +1513,19 @@ onMounted(loadGuild)
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  background: #f9f6f3;
+  background: var(--color-card-bg, #f9f6f3);
   border-radius: 12px;
 }
 
 .toggle-group-label {
   font-size: 13px;
   font-weight: 600;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   margin-bottom: 4px;
 }
 
 .toggle-group .toggle-item {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
 }
 
 .toggle-item.standalone {
@@ -1552,7 +1554,7 @@ onMounted(loadGuild)
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #E8DCCF;
+  background-color: var(--color-border, #E8DCCF);
   transition: 0.3s;
   border-radius: 26px;
 }
@@ -1571,7 +1573,7 @@ onMounted(loadGuild)
 }
 
 input:checked + .slider {
-  background-color: #804030;
+  background-color: var(--color-secondary, #804030);
 }
 
 input:checked + .slider:before {
