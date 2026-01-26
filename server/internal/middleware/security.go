@@ -48,7 +48,25 @@ func isHTTPS(c *gin.Context) bool {
 	if c.Request.TLS != nil {
 		return true
 	}
-	return strings.EqualFold(forwardedProto(c), "https")
+	if strings.EqualFold(forwardedProto(c), "https") {
+		return true
+	}
+	// Check other common proxy headers
+	if strings.EqualFold(c.GetHeader("X-Forwarded-Ssl"), "on") {
+		return true
+	}
+	if strings.EqualFold(c.GetHeader("X-Url-Scheme"), "https") {
+		return true
+	}
+	if strings.EqualFold(c.GetHeader("Front-End-Https"), "on") {
+		return true
+	}
+	// Trust requests from localhost (behind reverse proxy)
+	clientIP := c.ClientIP()
+	if clientIP == "127.0.0.1" || clientIP == "::1" {
+		return true
+	}
+	return false
 }
 
 func forwardedProto(c *gin.Context) string {
