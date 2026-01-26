@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { login } from '../api/auth'
 import { useUserStore } from '../stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const userStore = useUserStore()
 
 const username = ref('')
@@ -42,7 +44,7 @@ async function handleLogin() {
     <div class="login-card" :class="{ 'animate-in': mounted }">
       <div class="login-header anim-item" style="--delay: 0">
         <div class="logo">RPBOX</div>
-        <p class="subtitle">魔兽世界 RP 玩家工具箱</p>
+        <p class="subtitle">{{ t('auth.login.subtitle') }}</p>
       </div>
 
       <form class="login-form" @submit.prevent="handleLogin">
@@ -50,7 +52,7 @@ async function handleLogin() {
           <input
             v-model="username"
             class="input"
-            placeholder="用户名或邮箱"
+            :placeholder="t('auth.login.usernamePlaceholder')"
             required
           />
         </div>
@@ -59,24 +61,24 @@ async function handleLogin() {
             v-model="password"
             type="password"
             class="input"
-            placeholder="密码"
+            :placeholder="t('auth.login.passwordPlaceholder')"
             required
           />
         </div>
 
         <div class="form-actions anim-item" style="--delay: 2.5">
-          <router-link to="/forgot-password" class="forgot-password-link">忘记密码？</router-link>
+          <router-link to="/forgot-password" class="forgot-password-link">{{ t('auth.login.forgotPassword') }}</router-link>
         </div>
 
         <p v-if="error" class="error-msg">{{ error }}</p>
 
         <button type="submit" class="btn-primary login-btn anim-item" style="--delay: 3" :disabled="loading">
-          {{ loading ? '登录中...' : '登录' }}
+          {{ loading ? t('auth.login.submitting') : t('auth.login.submit') }}
         </button>
       </form>
 
       <div class="login-footer anim-item" style="--delay: 4">
-        <router-link to="/register">没有账号？立即注册</router-link>
+        <router-link to="/register">{{ t('auth.login.noAccount') }} {{ t('auth.login.register') }}</router-link>
       </div>
     </div>
   </div>
