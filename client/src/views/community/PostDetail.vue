@@ -14,6 +14,7 @@ import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import { useEmoteStore } from '@/stores/emote'
+import CollectionBanner from '@/components/CollectionBanner.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -499,6 +500,13 @@ async function handleDelete() {
         <article class="article-card anim-item" style="--delay: 1">
           <div class="article-decoration"></div>
 
+          <!-- 合集横幅 -->
+          <CollectionBanner
+            v-if="post"
+            type="post"
+            :content-id="post.id"
+          />
+
           <!-- 文章头部：作者 + 操作 -->
           <div class="article-top">
             <div class="author-section">
@@ -718,7 +726,7 @@ async function handleDelete() {
 .loading {
   text-align: center;
   padding: 80px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 16px;
 }
 
@@ -752,7 +760,7 @@ async function handleDelete() {
   gap: 12px;
   background: none;
   border: none;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
@@ -762,25 +770,25 @@ async function handleDelete() {
 }
 
 .back-btn:hover {
-  color: #804030;
+  color: var(--color-secondary);
 }
 
 .back-icon {
   width: 40px;
   height: 40px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-panel-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(var(--shadow-base), 0.04);
   transition: all 0.3s;
 }
 
 .back-btn:hover .back-icon {
-  border-color: #804030;
-  background: rgba(128, 64, 48, 0.05);
+  border-color: var(--color-secondary);
+  background: var(--color-primary-light);
 }
 
 .back-icon i {
@@ -796,8 +804,8 @@ async function handleDelete() {
 
 /* ========== 文章卡片 ========== */
 .article-card {
-  background: #fff;
-  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
+  background: var(--color-panel-bg);
+  box-shadow: 0 4px 20px -2px rgba(var(--shadow-base), 0.05);
   position: relative;
 }
 
@@ -807,7 +815,7 @@ async function handleDelete() {
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, transparent, #804030, transparent);
+  background: linear-gradient(90deg, transparent, var(--color-secondary), transparent);
   opacity: 0.3;
 }
 
@@ -817,7 +825,7 @@ async function handleDelete() {
   justify-content: space-between;
   align-items: center;
   padding: 20px 32px;
-  border-bottom: 1px solid #F5EFE7;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .author-section {
@@ -834,15 +842,15 @@ async function handleDelete() {
   min-height: 48px;
   max-height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #804030);
-  border: 2px solid #fff;
-  box-shadow: 0 2px 8px rgba(128, 64, 48, 0.2);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+  border: 2px solid var(--color-panel-bg);
+  box-shadow: 0 2px 8px rgba(var(--shadow-base), 0.2);
   display: block;
   text-align: center;
   line-height: 44px;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--color-text-light);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -864,13 +872,13 @@ async function handleDelete() {
   font-family: 'Merriweather', serif;
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
 }
 
 .post-date {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
 }
 
 /* ========== 操作按钮 ========== */
@@ -885,24 +893,24 @@ async function handleDelete() {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
   border-radius: 20px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .action-btn:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .action-btn.active {
-  background: rgba(128, 64, 48, 0.1);
-  border-color: #804030;
-  color: #804030;
+  background: var(--color-primary-light);
+  border-color: var(--color-secondary);
+  color: var(--color-secondary);
 }
 
 .action-btn:disabled {
@@ -918,7 +926,7 @@ async function handleDelete() {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -941,7 +949,7 @@ async function handleDelete() {
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  background: #F5EFE7;
+  background: var(--color-card-bg);
   margin-bottom: 20px;
 }
 
@@ -949,13 +957,13 @@ async function handleDelete() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #B87333;
+  background: var(--color-accent);
 }
 
 .category-badge span:last-child {
   font-size: 11px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -964,7 +972,7 @@ async function handleDelete() {
   font-family: 'Merriweather', serif;
   font-size: 32px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.4;
   margin: 0 0 20px 0;
 }
@@ -973,12 +981,12 @@ async function handleDelete() {
   font-family: 'Merriweather', serif;
   font-style: italic;
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
 }
 
 .zen-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, #E5D4C1, transparent);
+  background: linear-gradient(90deg, transparent, var(--color-border), transparent);
   margin: 32px 0;
 }
 
@@ -987,7 +995,7 @@ async function handleDelete() {
   font-family: 'Merriweather', serif;
   font-size: 16px;
   line-height: 1.9;
-  color: #4B3621;
+  color: var(--color-primary);
 }
 
 .article-content :deep(img) {
@@ -1040,27 +1048,27 @@ async function handleDelete() {
 
 .article-content :deep(h2),
 .article-content :deep(h3) {
-  color: #2C1810;
+  color: var(--color-text-main);
   font-weight: 700;
   margin-top: 2em;
   margin-bottom: 1em;
   padding-left: 16px;
-  border-left: 3px solid #B87333;
+  border-left: 3px solid var(--color-accent);
 }
 
 .article-content :deep(blockquote) {
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
   padding: 24px;
   margin: 2em 0;
   font-style: italic;
   text-align: center;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-size: 18px;
 }
 
 .article-content :deep(strong) {
-  color: #804030;
+  color: var(--color-secondary);
 }
 
 .article-content :deep(.mention) {
@@ -1068,8 +1076,8 @@ async function handleDelete() {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
   font-weight: 600;
   margin: 0 2px;
 }
@@ -1081,7 +1089,7 @@ async function handleDelete() {
   align-items: center;
   gap: 12px;
   padding: 20px 32px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light);
 }
 
 .owner-btn {
@@ -1089,18 +1097,18 @@ async function handleDelete() {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .owner-btn:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .owner-btn.delete {
@@ -1116,16 +1124,16 @@ async function handleDelete() {
 
 /* ========== 评论区 ========== */
 .comments-section {
-  background: #fff;
+  background: var(--color-panel-bg);
   padding: 32px;
-  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
+  box-shadow: 0 4px 20px -2px rgba(var(--shadow-base), 0.05);
 }
 
 .comments-title {
   font-family: 'Merriweather', serif;
   font-size: 20px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1136,23 +1144,23 @@ async function handleDelete() {
   font-family: 'Inter', sans-serif;
   font-size: 13px;
   font-weight: 400;
-  color: #8D7B68;
-  background: #F5EFE7;
+  color: var(--color-text-muted);
+  background: var(--color-card-bg);
   padding: 4px 12px;
   border-radius: 20px;
 }
 
 /* 评论输入框 */
 .comment-input-box {
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   padding: 16px;
-  box-shadow: 0 2px 8px rgba(75, 54, 33, 0.04);
+  box-shadow: 0 2px 8px rgba(var(--shadow-base), 0.04);
   transition: box-shadow 0.3s;
 }
 
 .comment-input-box:focus-within {
-  box-shadow: 0 0 0 3px rgba(128, 64, 48, 0.1);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .comment-input-box :deep(.emote-editor-input) {
@@ -1163,13 +1171,14 @@ async function handleDelete() {
   resize: none;
   font-size: 14px;
   line-height: 1.6;
-  color: #4B3621;
+  color: var(--color-primary);
   font-family: inherit;
   min-height: 80px;
 }
 
 .comment-input-box :deep(.emote-editor-input)::before {
-  color: rgba(141, 123, 104, 0.6);
+  color: var(--color-text-muted);
+  opacity: 0.6;
 }
 
 .input-footer {
@@ -1177,13 +1186,13 @@ async function handleDelete() {
   justify-content: space-between;
   align-items: center;
   padding-top: 12px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light);
   margin-top: 12px;
 }
 
 .post-btn {
-  background: #2C1810;
-  color: #fff;
+  background: var(--color-text-main);
+  color: var(--color-text-light);
   border: none;
   padding: 8px 20px;
   font-size: 11px;
@@ -1195,7 +1204,7 @@ async function handleDelete() {
 }
 
 .post-btn:hover {
-  background: #804030;
+  background: var(--color-secondary);
 }
 
 .post-btn:disabled {
@@ -1211,17 +1220,17 @@ async function handleDelete() {
   width: 36px;
   height: 36px;
   background: transparent;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .emoji-btn:hover {
-  background: #F5EFE7;
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--color-card-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .emoji-btn i {
@@ -1243,8 +1252,8 @@ async function handleDelete() {
 
 .comment-item.comment-highlight,
 .reply-item.comment-highlight {
-  background: rgba(184, 115, 51, 0.08);
-  outline: 2px solid rgba(184, 115, 51, 0.35);
+  background: var(--color-primary-light);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -1253,14 +1262,14 @@ async function handleDelete() {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #804030);
-  border: 1px solid #E5D4C1;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+  border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-light);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -1286,18 +1295,18 @@ async function handleDelete() {
 .comment-author {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .comment-time {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
 }
 
 .comment-text {
   font-size: 14px;
   line-height: 1.6;
-  color: #4B3621;
+  color: var(--color-primary);
   margin: 0;
 }
 
@@ -1317,8 +1326,8 @@ async function handleDelete() {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
   font-weight: 600;
   margin: 0 2px;
 }
@@ -1326,7 +1335,7 @@ async function handleDelete() {
 .empty-comments {
   text-align: center;
   padding: 40px 16px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -1338,14 +1347,14 @@ async function handleDelete() {
   padding: 4px 8px;
   background: none;
   border: none;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 12px;
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .reply-btn:hover {
-  color: #804030;
+  color: var(--color-secondary);
 }
 
 .comment-actions {
@@ -1362,14 +1371,14 @@ async function handleDelete() {
   padding: 4px 8px;
   background: none;
   border: none;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 12px;
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .like-btn:hover {
-  color: #804030;
+  color: var(--color-secondary);
 }
 
 .like-btn.active {
@@ -1387,7 +1396,7 @@ async function handleDelete() {
   padding: 2px 6px;
   background: none;
   border: none;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 11px;
   cursor: pointer;
   transition: color 0.2s;
@@ -1395,7 +1404,7 @@ async function handleDelete() {
 }
 
 .like-btn-inline:hover {
-  color: #804030;
+  color: var(--color-secondary);
 }
 
 .like-btn-inline.active {
@@ -1431,7 +1440,7 @@ async function handleDelete() {
 .reply-input-box {
   margin-top: 12px;
   padding: 12px;
-  background: #F5EFE7;
+  background: var(--color-card-bg);
   border-radius: 6px;
 }
 
@@ -1439,7 +1448,7 @@ async function handleDelete() {
   width: 100%;
   min-height: 60px;
   padding: 8px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 13px;
   resize: none;
@@ -1447,7 +1456,7 @@ async function handleDelete() {
 }
 
 .reply-input-box :deep(.emote-editor-input:focus) {
-  border-color: #B87333;
+  border-color: var(--color-accent);
 }
 
 .reply-actions {
@@ -1470,17 +1479,17 @@ async function handleDelete() {
   width: 28px;
   height: 28px;
   background: transparent;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .emoji-btn-small:hover {
-  background: #F5EFE7;
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--color-card-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .emoji-btn-small i {
@@ -1490,19 +1499,19 @@ async function handleDelete() {
 .cancel-btn {
   padding: 6px 12px;
   background: none;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   font-size: 12px;
   cursor: pointer;
 }
 
 .submit-btn {
   padding: 6px 12px;
-  background: #804030;
+  background: var(--color-secondary);
   border: none;
   border-radius: 4px;
-  color: #fff;
+  color: var(--color-text-light);
   font-size: 12px;
   cursor: pointer;
 }
@@ -1515,7 +1524,7 @@ async function handleDelete() {
 .replies-list {
   margin-top: 16px;
   padding-left: 12px;
-  border-left: 2px solid #F5EFE7;
+  border-left: 2px solid var(--color-border-light);
 }
 
 .reply-item {
@@ -1525,21 +1534,21 @@ async function handleDelete() {
 }
 
 .reply-item:not(:last-child) {
-  border-bottom: 1px solid #F5EFE7;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .reply-avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #804030);
-  border: 1px solid #E5D4C1;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+  border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-light);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -1566,28 +1575,28 @@ async function handleDelete() {
 .reply-author {
   font-size: 13px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .reply-to {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
 }
 
 .reply-to-name {
-  color: #804030;
+  color: var(--color-secondary);
   font-weight: 500;
 }
 
 .reply-time {
   font-size: 11px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
 }
 
 .reply-text {
   font-size: 13px;
   line-height: 1.5;
-  color: #4B3621;
+  color: var(--color-primary);
   margin: 0;
 }
 
@@ -1598,24 +1607,24 @@ async function handleDelete() {
   align-items: center;
   gap: 16px;
   padding: 20px 0;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light);
   margin-top: 20px;
 }
 
 .comments-pagination .page-btn {
   padding: 6px 14px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  color: #4B3621;
+  color: var(--color-primary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .comments-pagination .page-btn:hover:not(:disabled) {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .comments-pagination .page-btn:disabled {
@@ -1625,7 +1634,7 @@ async function handleDelete() {
 
 .page-info {
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
 }
 
 /* ========== 动画 ========== */

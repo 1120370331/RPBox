@@ -887,10 +887,10 @@ defineExpose({
 
 <style scoped>
 .rich-editor {
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
-  background: #fff;
+  background: var(--color-panel-bg);
 }
 
 .toolbar {
@@ -898,8 +898,8 @@ defineExpose({
   flex-wrap: wrap;
   gap: 4px;
   padding: 12px;
-  background: #F5EFE7;
-  border-bottom: 2px solid #E5D4C1;
+  background: var(--color-card-bg);
+  border-bottom: 2px solid var(--color-border);
 }
 
 .toolbar button {
@@ -911,18 +911,18 @@ defineExpose({
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: #4B3621;
+  color: var(--color-primary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .toolbar button:hover {
-  background: #E5D4C1;
+  background: var(--color-border);
 }
 
 .toolbar button.active {
-  background: #804030;
-  color: #fff;
+  background: var(--color-secondary);
+  color: var(--color-text-light);
 }
 
 .toolbar button:disabled {
@@ -943,7 +943,7 @@ defineExpose({
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: #4B3621;
+  color: var(--color-primary);
   cursor: pointer;
   transition: all 0.2s;
   padding: 0;
@@ -951,12 +951,12 @@ defineExpose({
 }
 
 .toolbar :deep(.toolbar-slot:hover) {
-  background: #E5D4C1;
+  background: var(--color-border);
 }
 
 .toolbar :deep(.toolbar-slot.active) {
-  background: #804030;
-  color: #fff;
+  background: var(--color-secondary);
+  color: var(--color-text-light);
 }
 
 .toolbar :deep(.toolbar-slot:disabled) {
@@ -971,7 +971,7 @@ defineExpose({
 .divider {
   width: 1px;
   height: 24px;
-  background: #E5D4C1;
+  background: var(--color-border);
   margin: 6px 8px;
 }
 
@@ -986,13 +986,13 @@ defineExpose({
   font-family: 'Merriweather', serif;
   font-size: 16px;
   line-height: 1.9;
-  color: #4B3621;
+  color: var(--color-primary);
 }
 
 .editor-content :deep(.tiptap p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);
   float: left;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   pointer-events: none;
   height: 0;
 }
@@ -1001,20 +1001,20 @@ defineExpose({
   font-size: 28px;
   font-weight: 700;
   margin: 16px 0 8px;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .editor-content :deep(h2) {
   font-size: 24px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 1.5em 0 0.8em;
 }
 
 .editor-content :deep(h3) {
   font-size: 20px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 1.2em 0 0.6em;
 }
 
@@ -1033,16 +1033,16 @@ defineExpose({
 }
 
 .editor-content :deep(blockquote) {
-  border-left: 4px solid #B87333;
+  border-left: 4px solid var(--color-accent);
   padding-left: 20px;
   margin: 1.5em 0;
-  color: #6B5344;
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
 .editor-content :deep(pre) {
-  background: #2C1810;
-  color: #EED9C4;
+  background: var(--color-text-main);
+  color: var(--color-border);
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
@@ -1070,12 +1070,12 @@ defineExpose({
 }
 
 .editor-content :deep(img.ProseMirror-selectednode) {
-  outline: 3px solid #804030;
+  outline: 3px solid var(--color-secondary);
   outline-offset: 2px;
 }
 
 .editor-content :deep(strong) {
-  color: #804030;
+  color: var(--color-secondary);
 }
 
 .editor-content :deep(.mention) {
@@ -1083,8 +1083,8 @@ defineExpose({
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
   font-weight: 600;
   font-size: 0.9em;
 }
@@ -1097,10 +1097,10 @@ defineExpose({
   position: absolute;
   z-index: 2000;
   min-width: 200px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  box-shadow: 0 12px 24px rgba(44, 24, 16, 0.12);
+  box-shadow: 0 12px 24px rgba(var(--shadow-base), 0.12);
   padding: 8px;
 }
 
@@ -1125,7 +1125,7 @@ defineExpose({
 
 :global(.mention-suggestion__item.is-active),
 :global(.mention-suggestion__item:hover) {
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--color-primary-light);
 }
 
 :global(.mention-suggestion__avatar) {
@@ -1133,8 +1133,8 @@ defineExpose({
   height: 28px;
   border-radius: 50%;
   object-fit: cover;
-  background: #F5EFE7;
-  color: #804030;
+  background: var(--color-card-bg);
+  color: var(--color-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1143,18 +1143,18 @@ defineExpose({
 }
 
 :global(.mention-suggestion__avatar--fallback) {
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
 }
 
 :global(.mention-suggestion__name) {
   font-size: 13px;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 :global(.mention-suggestion__empty) {
   padding: 8px;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-muted);
   text-align: center;
 }
 </style>
