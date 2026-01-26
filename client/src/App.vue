@@ -1,8 +1,16 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useThemeStore } from '@/stores/theme'
 import UpdateNotification from '@/components/UpdateNotification.vue'
 import ChangelogDialog from '@/components/ChangelogDialog.vue'
 import RDialog from '@/components/RDialog.vue'
 import RToast from '@/components/RToast.vue'
+
+const themeStore = useThemeStore()
+
+onMounted(() => {
+  themeStore.initTheme()
+})
 </script>
 
 <template>
