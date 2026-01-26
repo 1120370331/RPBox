@@ -44,6 +44,8 @@ const router = createRouter({
         { path: 'moderator', name: 'moderator', component: () => import('./views/moderator/ModeratorMain.vue') },
         // 用户主页
         { path: 'user/:id', name: 'user-profile', component: () => import('./views/user/UserProfile.vue') },
+        // 合集
+        { path: 'collection/:id', name: 'collection-detail', component: () => import('./views/collection/CollectionDetail.vue') },
       ]
     },
     { path: '/login', name: 'login', component: () => import('./views/Login.vue') },

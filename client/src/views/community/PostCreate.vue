@@ -10,6 +10,8 @@ import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
+import CollectionSelector from '@/components/CollectionSelector.vue'
+import { addPostToCollection } from '@/api/collection'
 
 const DRAFT_KEY = 'post_create_draft'
 
@@ -68,6 +70,7 @@ watch(() => form.value.category, (newVal) => {
 const tags = ref<Tag[]>([])
 const guilds = ref<Guild[]>([])
 const selectedTags = ref<number[]>([])
+const selectedCollectionId = ref<number | null>(null)
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -208,7 +211,13 @@ async function handleSubmit(status: 'draft' | 'published') {
       form.value.event_end_time = new Date(form.value.event_end_time).toISOString()
     }
 
-    await createPost(form.value)
+    const res: any = await createPost(form.value)
+
+    // 添加到合集
+    if (selectedCollectionId.value && res.data?.id) {
+      await addPostToCollection(selectedCollectionId.value, res.data.id)
+    }
+
     clearDraft() // 发布成功后清除草稿
     toast.success(status === 'published' ? t('community.create.publishSuccess') : t('community.create.draftSuccess'))
     router.push({ name: 'my-posts' })
@@ -521,6 +530,12 @@ function toggleQuickJump() {
           </div>
         </div>
       </div>
+
+      <!-- 合集选择 -->
+      <CollectionSelector
+        v-model="selectedCollectionId"
+        content-type="post"
+      />
 
       <!-- 操作按钮 -->
       <div class="actions-group">

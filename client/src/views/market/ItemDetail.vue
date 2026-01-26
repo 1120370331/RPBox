@@ -13,7 +13,6 @@ import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { useEmoteStore } from '@/stores/emote'
 import CollectionBanner from '@/components/CollectionBanner.vue'
-import { getItemCollection } from '@/api/collection'
 
 const route = useRoute()
 const router = useRouter()
@@ -48,9 +47,6 @@ const viewerMode = ref<'artwork' | 'content'>('content')
 // 预览模式
 const isPreview = ref(false)
 const previewFrom = ref('')
-
-// 合集
-const collection = ref<any>(null)
 
 // 是否为画作类型
 const isArtwork = computed(() => item.value?.type === 'artwork')
@@ -144,25 +140,11 @@ async function loadItemDetail() {
           image_url: getItemImageUrl(id, img.id)
         }))
       }
-      // 加载合集信息
-      await loadItemCollection(id)
     }
   } catch (error) {
     console.error('加载作品详情失败:', error)
   } finally {
     loading.value = false
-  }
-}
-
-// 加载作品所属合集
-async function loadItemCollection(itemId: number) {
-  try {
-    const res: any = await getItemCollection(itemId)
-    if (res.code === 0 && res.data) {
-      collection.value = res.data
-    }
-  } catch (error) {
-    console.error('加载合集信息失败:', error)
   }
 }
 
@@ -387,10 +369,9 @@ function downloadAllImages() {
 
       <!-- 合集横幅 -->
       <CollectionBanner
-        v-if="collection && !isPreview"
-        :collection="collection"
-        :current-id="item.id"
-        content-type="item"
+        v-if="item && !isPreview"
+        type="item"
+        :content-id="item.id"
       />
 
       <!-- 道具信息 -->
