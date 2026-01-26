@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// getUploadObject serves uploaded images from local storage or OSS.
+// getUploadObject serves uploaded objects from local storage or OSS.
 func (s *Server) getUploadObject(c *gin.Context) {
 	rawPath := strings.TrimPrefix(c.Param("filepath"), "/")
 	if rawPath == "" {
