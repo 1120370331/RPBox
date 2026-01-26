@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { register, sendVerificationCode } from '../api/auth'
 
 const router = useRouter()
+const { t } = useI18n()
 const username = ref('')
 const email = ref('')
 const password = ref('')
@@ -28,7 +30,7 @@ let countdownTimer: number | null = null
 
 async function handleSendCode() {
   if (!email.value || !email.value.includes('@')) {
-    error.value = '请输入有效的邮箱地址'
+    error.value = t('common.validation.invalidEmail')
     return
   }
 
@@ -50,7 +52,7 @@ async function handleSendCode() {
     }, 1000) as unknown as number
 
     // 显示成功消息
-    const successMsg = response.message || '验证码已发送到您的邮箱'
+    const successMsg = response.message || t('auth.register.codeSent')
     error.value = '' // 清除错误，用成功消息替代
     setTimeout(() => {
       if (error.value === '') {
@@ -63,7 +65,7 @@ async function handleSendCode() {
       }
     }, 0)
   } catch (e: any) {
-    error.value = e.message || '发送验证码失败'
+    error.value = e.message || t('auth.register.sendCodeFailed')
   } finally {
     sendingCode.value = false
   }
@@ -73,12 +75,12 @@ async function handleRegister() {
   error.value = ''
 
   if (password.value !== confirmPassword.value) {
-    error.value = '两次输入的密码不一致'
+    error.value = t('auth.register.passwordMismatch')
     return
   }
 
   if (!verificationCode.value) {
-    error.value = '请输入邮箱验证码'
+    error.value = t('auth.register.codeRequired')
     return
   }
 
@@ -99,7 +101,7 @@ async function handleRegister() {
     <div class="register-card" :class="{ 'animate-in': mounted }">
       <div class="register-header anim-item" style="--delay: 0">
         <div class="logo">RPBOX</div>
-        <p class="subtitle">创建你的冒险者账号</p>
+        <p class="subtitle">{{ t('auth.register.subtitle') }}</p>
       </div>
 
       <form class="register-form" @submit.prevent="handleRegister">
@@ -107,7 +109,7 @@ async function handleRegister() {
           <input
             v-model="username"
             class="input"
-            placeholder="用户名"
+            :placeholder="t('auth.register.usernamePlaceholder')"
             required
           />
         </div>
@@ -116,7 +118,7 @@ async function handleRegister() {
             v-model="email"
             type="email"
             class="input"
-            placeholder="邮箱"
+            :placeholder="t('auth.register.emailPlaceholder')"
             required
           />
         </div>
@@ -124,7 +126,7 @@ async function handleRegister() {
           <input
             v-model="verificationCode"
             class="input verification-input"
-            placeholder="邮箱验证码"
+            :placeholder="t('auth.register.codePlaceholder')"
             maxlength="6"
             required
           />
@@ -135,9 +137,9 @@ async function handleRegister() {
             :disabled="!canSendCode"
           >
             <span v-if="countdown > 0">{{ countdown }}s</span>
-            <span v-else-if="sendingCode">发送中...</span>
-            <span v-else-if="codeSent">重新发送</span>
-            <span v-else">获取验证码</span>
+            <span v-else-if="sendingCode">{{ t('auth.register.sending') }}</span>
+            <span v-else-if="codeSent">{{ t('auth.register.resend') }}</span>
+            <span v-else>{{ t('auth.register.getCode') }}</span>
           </button>
         </div>
         <div class="form-group anim-item" style="--delay: 4">
@@ -145,7 +147,7 @@ async function handleRegister() {
             v-model="password"
             type="password"
             class="input"
-            placeholder="密码"
+            :placeholder="t('auth.register.passwordPlaceholder')"
             required
           />
         </div>
@@ -154,7 +156,7 @@ async function handleRegister() {
             v-model="confirmPassword"
             type="password"
             class="input"
-            placeholder="确认密码"
+            :placeholder="t('auth.register.confirmPasswordPlaceholder')"
             required
           />
         </div>
@@ -162,12 +164,12 @@ async function handleRegister() {
         <p v-if="error" class="error-msg">{{ error }}</p>
 
         <button type="submit" class="btn-primary register-btn anim-item" style="--delay: 6" :disabled="loading">
-          {{ loading ? '注册中...' : '注册' }}
+          {{ loading ? t('auth.register.submitting') : t('auth.register.submit') }}
         </button>
       </form>
 
       <div class="register-footer anim-item" style="--delay: 7">
-        <router-link to="/login">已有账号？立即登录</router-link>
+        <router-link to="/login">{{ t('auth.register.hasAccount') }} {{ t('auth.register.login') }}</router-link>
       </div>
     </div>
   </div>

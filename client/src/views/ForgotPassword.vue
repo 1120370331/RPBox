@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { forgotPassword, resetPassword } from '../api/auth'
 import { useToastStore } from '../stores/toast'
 
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToastStore()
 
 const step = ref<'email' | 'reset'>('email')
@@ -19,14 +21,14 @@ let countdownTimer: number | null = null
 
 async function handleSendCode() {
   if (!email.value) {
-    toast.error('请输入邮箱')
+    toast.error(t('auth.forgotPassword.emailRequired'))
     return
   }
 
   sendingCode.value = true
   try {
     await forgotPassword(email.value)
-    toast.success('验证码已发送到您的邮箱')
+    toast.success(t('auth.forgotPassword.codeSent'))
     step.value = 'reset'
 
     // 开始60秒倒计时
@@ -40,7 +42,7 @@ async function handleSendCode() {
     }, 1000) as unknown as number
   } catch (error: any) {
     console.error('找回密码错误:', error)
-    toast.error(error.message || '发送验证码失败')
+    toast.error(error.message || t('auth.forgotPassword.sendFailed'))
   } finally {
     sendingCode.value = false
   }
@@ -48,28 +50,28 @@ async function handleSendCode() {
 
 async function handleResetPassword() {
   if (!verificationCode.value) {
-    toast.error('请输入验证码')
+    toast.error(t('auth.forgotPassword.codeRequired'))
     return
   }
   if (!newPassword.value) {
-    toast.error('请输入新密码')
+    toast.error(t('auth.forgotPassword.newPasswordRequired'))
     return
   }
   if (newPassword.value.length < 6) {
-    toast.error('密码长度不能少于6个字符')
+    toast.error(t('auth.forgotPassword.passwordTooShort'))
     return
   }
   if (newPassword.value !== confirmPassword.value) {
-    toast.error('两次输入的密码不一致')
+    toast.error(t('auth.register.passwordMismatch'))
     return
   }
 
   try {
     await resetPassword(email.value, verificationCode.value, newPassword.value)
-    toast.success('密码重置成功，请使用新密码登录')
+    toast.success(t('auth.forgotPassword.resetSuccess'))
     router.push('/login')
   } catch (error: any) {
-    toast.error(error.message || '重置密码失败')
+    toast.error(error.message || t('auth.forgotPassword.resetFailed'))
   }
 }
 
@@ -83,46 +85,46 @@ function goBack() {
     <div class="bg-pattern"></div>
     <div class="forgot-password-container">
       <div class="header">
-        <h1>找回密码</h1>
+        <h1>{{ t('auth.forgotPassword.title') }}</h1>
         <button class="back-btn" @click="goBack">
           <i class="ri-arrow-left-line"></i>
-          返回登录
+          {{ t('auth.forgotPassword.backToLogin') }}
         </button>
       </div>
 
       <!-- 步骤1：输入邮箱 -->
       <div v-if="step === 'email'" class="step-email">
         <div class="form-group">
-          <label>邮箱地址</label>
+          <label>{{ t('auth.forgotPassword.emailLabel') }}</label>
           <input
             v-model="email"
             type="email"
-            placeholder="请输入注册时使用的邮箱"
+            :placeholder="t('auth.forgotPassword.emailPlaceholder')"
             @keyup.enter="handleSendCode"
             required
           />
         </div>
 
         <button class="btn-primary" @click="handleSendCode" :disabled="sendingCode">
-          {{ sendingCode ? '发送中...' : '发送验证码' }}
+          {{ sendingCode ? t('auth.register.sending') : t('auth.forgotPassword.sendCode') }}
         </button>
 
-        <p class="hint">我们将向您的邮箱发送一个6位验证码</p>
+        <p class="hint">{{ t('auth.forgotPassword.hint') }}</p>
       </div>
 
       <!-- 步骤2：重置密码 -->
       <div v-else class="step-reset">
         <div class="form-group">
-          <label>邮箱地址</label>
+          <label>{{ t('auth.forgotPassword.emailLabel') }}</label>
           <div class="email-display">{{ email }}</div>
         </div>
 
         <div class="form-group">
-          <label>验证码</label>
+          <label>{{ t('auth.forgotPassword.codeLabel') }}</label>
           <div class="verification-group">
             <input
               v-model="verificationCode"
-              placeholder="请输入6位验证码"
+              :placeholder="t('auth.forgotPassword.codePlaceholder')"
               maxlength="6"
               required
             />
@@ -132,39 +134,39 @@ function goBack() {
               :disabled="countdown > 0"
             >
               <span v-if="countdown > 0">{{ countdown }}s</span>
-              <span v-else>重新发送</span>
+              <span v-else>{{ t('auth.register.resend') }}</span>
             </button>
           </div>
         </div>
 
         <div class="form-group">
-          <label>新密码</label>
+          <label>{{ t('auth.forgotPassword.newPassword') }}</label>
           <input
             v-model="newPassword"
             type="password"
-            placeholder="请输入新密码（至少6个字符）"
+            :placeholder="t('auth.forgotPassword.newPasswordPlaceholder')"
             required
           />
         </div>
 
         <div class="form-group">
-          <label>确认密码</label>
+          <label>{{ t('auth.forgotPassword.confirmPassword') }}</label>
           <input
             v-model="confirmPassword"
             type="password"
-            placeholder="请再次输入新密码"
+            :placeholder="t('auth.forgotPassword.confirmPasswordPlaceholder')"
             @keyup.enter="handleResetPassword"
             required
           />
         </div>
 
         <button class="btn-primary" @click="handleResetPassword">
-          重置密码
+          {{ t('auth.forgotPassword.resetButton') }}
         </button>
 
         <button class="btn-secondary" @click="step = 'email'">
           <i class="ri-arrow-left-line"></i>
-          返回上一步
+          {{ t('auth.forgotPassword.backToPrevious') }}
         </button>
       </div>
     </div>
