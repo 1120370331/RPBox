@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { dialog } from '../composables/useDialog'
+
+const { t } = useI18n()
 
 const typeIcons = {
   info: 'ri-information-line',
@@ -27,7 +30,7 @@ const typeColors = {
               :class="typeIcons[dialog.state.value.options.type]"
               :style="{ color: typeColors[dialog.state.value.options.type] }"
             ></i>
-            <span class="r-dialog__title">{{ dialog.state.value.options.title || '提示' }}</span>
+            <span class="r-dialog__title">{{ dialog.state.value.options.title || t('common.status.loading').replace('...', '') }}</span>
           </div>
           <div class="r-dialog__body">
             {{ dialog.state.value.options.message }}
@@ -38,13 +41,13 @@ const typeColors = {
               class="r-dialog__btn r-dialog__btn--cancel"
               @click="dialog.close(false)"
             >
-              {{ dialog.state.value.options.cancelText || '取消' }}
+              {{ dialog.state.value.options.cancelText || t('common.button.cancel') }}
             </button>
             <button
               class="r-dialog__btn r-dialog__btn--confirm"
               @click="dialog.close(true)"
             >
-              {{ dialog.state.value.options.confirmText || '确定' }}
+              {{ dialog.state.value.options.confirmText || t('common.button.confirm') }}
             </button>
           </div>
         </div>

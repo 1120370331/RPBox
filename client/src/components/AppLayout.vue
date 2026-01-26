@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../stores/user'
 import { useNotificationStore } from '../stores/notification'
 import { useRouter, useRoute } from 'vue-router'
@@ -8,6 +9,7 @@ import RToast from './RToast.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const notificationStore = useNotificationStore()
 const router = useRouter()
@@ -80,20 +82,20 @@ function handleReturnToPost() {
   router.push(target)
 }
 
-const menuItems = [
-  { id: 'home', icon: 'ri-home-4-line', label: '首页', route: '/' },
-  { id: 'sync', icon: 'ri-user-star-line', label: '人物卡备份', route: '/sync' },
-  { id: 'archives', icon: 'ri-book-open-line', label: '剧情故事', route: '/archives' },
-  { id: 'market', icon: 'ri-sword-line', label: '创意市场', route: '/market' },
-  { id: 'community', icon: 'ri-chat-smile-2-line', label: '社区广场', route: '/community' },
-  { id: 'guild', icon: 'ri-shield-line', label: '公会', route: '/guild' },
-  { id: 'settings', icon: 'ri-settings-3-line', label: '系统设置', route: '/settings' },
-]
+const menuItems = computed(() => [
+  { id: 'home', icon: 'ri-home-4-line', label: t('nav.menu.home'), route: '/' },
+  { id: 'sync', icon: 'ri-user-star-line', label: t('nav.menu.sync'), route: '/sync' },
+  { id: 'archives', icon: 'ri-book-open-line', label: t('nav.menu.archives'), route: '/archives' },
+  { id: 'market', icon: 'ri-sword-line', label: t('nav.menu.market'), route: '/market' },
+  { id: 'community', icon: 'ri-chat-smile-2-line', label: t('nav.menu.community'), route: '/community' },
+  { id: 'guild', icon: 'ri-shield-line', label: t('nav.menu.guild'), route: '/guild' },
+  { id: 'settings', icon: 'ri-settings-3-line', label: t('nav.menu.settings'), route: '/settings' },
+])
 
 // 版主菜单项（仅版主可见）
 const moderatorMenuItem = computed(() => {
   if (userStore.isModerator) {
-    return { id: 'moderator', icon: 'ri-shield-star-line', label: '版主中心', route: '/moderator' }
+    return { id: 'moderator', icon: 'ri-shield-star-line', label: t('nav.menu.moderator'), route: '/moderator' }
   }
   return null
 })
@@ -178,16 +180,16 @@ const activeMenu = computed(() => {
             <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
               <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username }}</h4>
             </router-link>
-            <p class="logout-link" @click="handleLogout">退出登录</p>
+            <p class="logout-link" @click="handleLogout">{{ t('nav.user.logout') }}</p>
           </div>
-          <router-link to="/notifications" class="notification-btn" title="消息中心">
+          <router-link to="/notifications" class="notification-btn" :title="t('nav.user.notifications')">
             <i class="ri-notification-3-line"></i>
             <span v-if="notificationStore.unreadCount > 0" class="notification-badge">{{ notificationStore.unreadCount > 99 ? '99+' : notificationStore.unreadCount }}</span>
           </router-link>
         </template>
         <router-link v-else to="/login" class="login-btn">
           <i class="ri-login-box-line"></i>
-          <span>登录</span>
+          <span>{{ t('nav.user.login') }}</span>
         </router-link>
       </div>
     </aside>
@@ -197,7 +199,7 @@ const activeMenu = computed(() => {
       <div v-if="jumpReturn?.type === 'post'" class="jump-return-bar">
         <button class="jump-return-btn" type="button" @click="handleReturnToPost">
           <i class="ri-arrow-left-line"></i>
-          返回帖子
+          {{ t('nav.action.returnToPost') }}
         </button>
       </div>
       <router-view />
@@ -296,7 +298,7 @@ const activeMenu = computed(() => {
 .avatar {
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  background: linear-gradient(135deg, var(--color-accent, #D4A373), var(--color-text-secondary, #8C7B70));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -364,7 +366,7 @@ const activeMenu = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #4B3621;
+  border: 2px solid var(--color-sidebar-bg, #4B3621);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
