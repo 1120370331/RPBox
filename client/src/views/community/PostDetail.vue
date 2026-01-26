@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
 import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
 import EmojiPicker from '@/components/EmojiPicker.vue'
@@ -16,6 +17,7 @@ import { useEmoteStore } from '@/stores/emote'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const toast = useToast()
 const dialog = useDialog()
 const emoteStore = useEmoteStore()
@@ -145,8 +147,7 @@ const organizedComments = computed(() => {
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
   await emoteStore.loadPacks()
-  await loadPost()
-  await loadComments()
+  await refreshPostData()
 })
 
 async function setupArticleImagePreview() {
@@ -155,7 +156,7 @@ async function setupArticleImagePreview() {
     viewerImages.value = imageList
     viewerStartIndex.value = index
     showImageViewer.value = true
-  }, '查看图像')
+  }, t('community.detail.viewImage'))
   sanitizeJumpLinks(articleContentRef.value)
   hydrateJumpCardImages(articleContentRef.value)
 }
@@ -170,7 +171,7 @@ async function loadPost() {
   errorMessage.value = ''
   try {
     const id = Number(route.params.id)
-    if (isNaN(id)) throw new Error('无效的帖子ID')
+    if (isNaN(id)) throw new Error(t('community.detail.invalidPostId'))
     const res = await getPost(id)
     post.value = res.post
     post.value.author_name = res.author_name  // author_name 在响应顶层
@@ -181,7 +182,7 @@ async function loadPost() {
     favorited.value = res.favorited
   } catch (error: any) {
     console.error('加载帖子失败:', error)
-    errorMessage.value = error.response?.data?.error || error.message || '加载帖子失败'
+    errorMessage.value = error.response?.data?.error || error.message || t('community.detail.loadFailed')
     setTimeout(() => router.back(), 2000)
   } finally {
     loading.value = false
@@ -203,6 +204,16 @@ async function loadComments() {
   } catch (error: any) {
     console.error('加载评论失败:', error)
   }
+}
+
+async function refreshPostData() {
+  replyingTo.value = null
+  commentContent.value = ''
+  replyContent.value = ''
+  commentError.value = ''
+  commentPage.value = 1
+  await loadPost()
+  await loadComments()
 }
 
 async function handleLike() {
@@ -256,7 +267,7 @@ async function handleComment() {
     await loadComments()
     post.value.comment_count++
   } catch (error: any) {
-    commentError.value = error.response?.data?.error || '评论失败'
+    commentError.value = error.response?.data?.error || t('community.detail.commentFailed')
   } finally {
     submittingComment.value = false
   }
@@ -328,8 +339,8 @@ function renderCommentContent(content: string) {
 // 删除评论
 async function handleDeleteComment(comment: CommentWithAuthor) {
   const confirmed = await dialog.confirm({
-    title: '删除评论',
-    message: '确定要删除这条评论吗？',
+    title: t('community.detail.deleteCommentTitle'),
+    message: t('community.detail.deleteCommentMessage'),
     type: 'warning',
   })
   if (!confirmed) return
@@ -342,7 +353,7 @@ async function handleDeleteComment(comment: CommentWithAuthor) {
     }
   } catch (error: any) {
     console.error('删除评论失败:', error)
-    toast.error('删除失败：' + (error.response?.data?.error || error.message))
+    toast.error(t('community.detail.deleteCommentFailed') + (error.response?.data?.error || error.message))
   }
 }
 
@@ -362,7 +373,7 @@ async function handleCommentLike(comment: CommentWithAuthor) {
     }
   } catch (error: any) {
     console.error('点赞失败:', error)
-    toast.error(error?.message || '点赞失败')
+    toast.error(error?.message || t('community.detail.likeFailed'))
   }
 }
 
@@ -385,16 +396,16 @@ function formatCommentTime(dateStr: string) {
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   const hours = Math.floor(diff / (1000 * 60 * 60))
-  if (hours < 1) return '刚刚'
-  if (hours < 24) return `${hours}小时前`
+  if (hours < 1) return t('community.time.justNow')
+  if (hours < 24) return t('community.time.hoursAgo', { hours })
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}天前`
+  if (days < 7) return t('community.time.daysAgo', { days })
   return date.toLocaleDateString('zh-CN')
 }
 
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
-  return cat ? cat.label : '其他'
+  return cat ? cat.label : t('community.category.other')
 }
 
 function goBack() {
@@ -410,7 +421,7 @@ function handleArticleClick(event: MouseEvent) {
     returnTo: {
       type: 'post',
       path: route.fullPath,
-      title: post.value?.title || '帖子',
+      title: post.value?.title || t('community.post.title'),
     },
   })
 }
@@ -438,28 +449,33 @@ watch(() => route.query.comment, () => {
   scrollToCommentFromRoute()
 })
 
+watch(() => route.params.id, async (nextId, prevId) => {
+  if (!nextId || nextId === prevId) return
+  await refreshPostData()
+})
+
 async function handleDelete() {
   const confirmed = await dialog.confirm({
-    title: '删除帖子',
-    message: '确定要删除这篇帖子吗？此操作不可恢复。',
+    title: t('community.edit.deleteTitle'),
+    message: t('community.edit.deleteMessage'),
     type: 'warning',
   })
   if (!confirmed) return
 
   try {
     await deletePost(post.value.id)
-    toast.success('帖子已删除')
+    toast.success(t('community.edit.deleteSuccess'))
     router.push({ name: 'community' })
   } catch (error) {
     console.error('删除失败:', error)
-    toast.error('删除失败，请重试')
+    toast.error(t('community.edit.deleteFailed'))
   }
 }
 </script>
 
 <template>
   <div class="post-detail-page" :class="{ 'animate-in': mounted }">
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('community.loading') }}</div>
 
     <div v-else-if="errorMessage" class="error-message">
       <i class="ri-error-warning-line"></i>
@@ -475,7 +491,7 @@ async function handleDelete() {
             <div class="back-icon">
               <i class="ri-arrow-left-s-line"></i>
             </div>
-            <span>返回</span>
+            <span>{{ t('community.detail.back') }}</span>
           </button>
         </div>
 
@@ -529,10 +545,10 @@ async function handleDelete() {
           <!-- 作者操作 -->
           <div v-if="canManagePost" class="owner-actions">
             <button class="owner-btn" @click="goToEdit">
-              <i class="ri-edit-line"></i> 编辑
+              <i class="ri-edit-line"></i> {{ t('community.action.edit') }}
             </button>
             <button class="owner-btn delete" @click="handleDelete">
-              <i class="ri-delete-bin-line"></i> 删除
+              <i class="ri-delete-bin-line"></i> {{ t('community.action.delete') }}
             </button>
           </div>
         </article>
@@ -540,7 +556,7 @@ async function handleDelete() {
         <!-- 评论区 -->
         <section class="comments-section anim-item" style="--delay: 2">
           <h3 class="comments-title">
-            讨论 <span class="comment-badge">{{ post.comment_count }}</span>
+            {{ t('community.detail.discussion') }} <span class="comment-badge">{{ post.comment_count }}</span>
           </h3>
 
           <!-- 评论列表 -->
@@ -562,10 +578,10 @@ async function handleDelete() {
                 <div class="comment-text" v-html="renderCommentContent(comment.content)"></div>
                 <div class="comment-actions">
                   <button class="reply-btn" @click="startReply(comment)">
-                    <i class="ri-reply-line"></i> 回复
+                    <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
                   </button>
                   <button v-if="canDeleteComment(comment)" class="delete-btn" @click="handleDeleteComment(comment)">
-                    <i class="ri-delete-bin-line"></i> 删除
+                    <i class="ri-delete-bin-line"></i> {{ t('community.action.delete') }}
                   </button>
                 </div>
 
@@ -574,7 +590,7 @@ async function handleDelete() {
                   <EmoteEditor
                     ref="replyEditorRef"
                     v-model="replyContent"
-                    :placeholder="'回复 @' + comment.author_name"
+                    :placeholder="t('community.detail.replyTo', { name: comment.author_name })"
                     :disabled="submittingReply"
                   />
                   <div class="reply-actions">
@@ -582,8 +598,8 @@ async function handleDelete() {
                       <i class="ri-emotion-line"></i>
                     </button>
                     <div class="reply-actions-right">
-                      <button class="cancel-btn" @click="cancelReply">取消</button>
-                      <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                      <button class="cancel-btn" @click="cancelReply">{{ t('community.create.cancel') }}</button>
+                      <button class="submit-btn" :disabled="submittingReply" @click="submitReply">{{ t('community.action.reply') }}</button>
                     </div>
                   </div>
                 </div>
@@ -598,7 +614,7 @@ async function handleDelete() {
                       <div class="reply-meta">
                         <span class="reply-author" :style="buildNameStyle(reply.author_name_color, reply.author_name_bold)">{{ reply.author_name }}</span>
                         <span v-if="reply.replyToName" class="reply-to">
-                          回复 <span class="reply-to-name">@{{ reply.replyToName }}</span>
+                          {{ t('community.detail.replyToLabel') }} <span class="reply-to-name">@{{ reply.replyToName }}</span>
                         </span>
                         <span class="reply-time">{{ formatCommentTime(reply.created_at) }}</span>
                         <button class="like-btn-inline" :class="{ active: commentLikes.get(reply.id) }" type="button" @click.stop="handleCommentLike(reply)">
@@ -609,10 +625,10 @@ async function handleDelete() {
                       <div class="reply-text" v-html="renderCommentContent(reply.content)"></div>
                       <div class="comment-actions">
                         <button class="reply-btn" @click="startReply(reply)">
-                          <i class="ri-reply-line"></i> 回复
+                          <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
                         </button>
                         <button v-if="canDeleteComment(reply)" class="delete-btn" @click="handleDeleteComment(reply)">
-                          <i class="ri-delete-bin-line"></i> 删除
+                          <i class="ri-delete-bin-line"></i> {{ t('community.action.delete') }}
                         </button>
                       </div>
 
@@ -621,7 +637,7 @@ async function handleDelete() {
                         <EmoteEditor
                           ref="replyEditorRef"
                           v-model="replyContent"
-                          :placeholder="'回复 @' + reply.author_name"
+                          :placeholder="t('community.detail.replyTo', { name: reply.author_name })"
                           :disabled="submittingReply"
                         />
                         <div class="reply-actions">
@@ -629,8 +645,8 @@ async function handleDelete() {
                             <i class="ri-emotion-line"></i>
                           </button>
                           <div class="reply-actions-right">
-                            <button class="cancel-btn" @click="cancelReply">取消</button>
-                            <button class="submit-btn" :disabled="submittingReply" @click="submitReply">回复</button>
+                            <button class="cancel-btn" @click="cancelReply">{{ t('community.create.cancel') }}</button>
+                            <button class="submit-btn" :disabled="submittingReply" @click="submitReply">{{ t('community.action.reply') }}</button>
                           </div>
                         </div>
                       </div>
@@ -641,7 +657,7 @@ async function handleDelete() {
             </div>
 
             <div v-if="organizedComments.length === 0" class="empty-comments">
-              暂无评论，快来发表第一条评论吧
+              {{ t('community.detail.emptyComments') }}
             </div>
           </div>
 
@@ -651,13 +667,13 @@ async function handleDelete() {
               class="page-btn"
               :disabled="commentPage === 1"
               @click="goToCommentPage(commentPage - 1)"
-            >上一页</button>
+            >{{ t('community.pagination.prev') }}</button>
             <span class="page-info">{{ commentPage }} / {{ totalPages }}</span>
             <button
               class="page-btn"
               :disabled="commentPage === totalPages"
               @click="goToCommentPage(commentPage + 1)"
-            >下一页</button>
+            >{{ t('community.pagination.next') }}</button>
           </div>
 
           <!-- 评论输入（底部） -->
@@ -665,7 +681,7 @@ async function handleDelete() {
             <EmoteEditor
               ref="commentEditorRef"
               v-model="commentContent"
-              placeholder="分享你的想法..."
+              :placeholder="t('community.detail.commentPlaceholder')"
               :disabled="submittingComment"
             />
             <div class="input-footer">
@@ -673,7 +689,7 @@ async function handleDelete() {
                 <i class="ri-emotion-line"></i>
               </button>
               <button class="post-btn" :disabled="submittingComment" @click="handleComment">
-                发表评论
+                {{ t('community.detail.postComment') }}
               </button>
             </div>
           </div>

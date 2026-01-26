@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { getGuild, type Guild } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
@@ -8,6 +9,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const mounted = ref(false)
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
@@ -147,10 +149,10 @@ function formatDate(dateStr: string) {
   const diff = now.getTime() - date.getTime()
   const hours = Math.floor(diff / (1000 * 60 * 60))
 
-  if (hours < 1) return '刚刚'
-  if (hours < 24) return `${hours}小时前`
+  if (hours < 1) return t('community.time.justNow')
+  if (hours < 24) return t('community.time.hoursAgo', { hours })
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}天前`
+  if (days < 7) return t('community.time.daysAgo', { days })
   return date.toLocaleDateString('zh-CN')
 }
 
@@ -171,7 +173,7 @@ function clearGuildFilter() {
 
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
-  return cat ? cat.label : '其他'
+  return cat ? cat.label : t('community.category.other')
 }
 
 function stripHtml(html: string) {
@@ -218,12 +220,12 @@ function getCategoryClass(category: string) {
 
 function getEventTypeLabel(event: EventItem) {
   const typeKey = event.event_type || 'other'
-  return eventTypeMeta[typeKey]?.label || eventTypeMeta.other.label
+  return eventTypeMeta.value[typeKey]?.label || eventTypeMeta.value.other.label
 }
 
 function resolveEventColor(event: EventItem) {
   const typeKey = event.event_type || 'other'
-  return event.event_color || eventTypeMeta[typeKey]?.color || eventTypeMeta.other.color
+  return event.event_color || eventTypeMeta.value[typeKey]?.color || eventTypeMeta.value.other.color
 }
 
 function getEventPillStyle(event: EventItem) {
@@ -263,13 +265,21 @@ const calendarView = ref(true) // true: 日历视图, false: 列表视图
 const eventFilter = ref<'all' | 'server' | 'guild'>('all')
 const expandedDays = ref<Record<string, boolean>>({})
 
-const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+const weekDays = computed(() => [
+  t('community.weekDays.sun'),
+  t('community.weekDays.mon'),
+  t('community.weekDays.tue'),
+  t('community.weekDays.wed'),
+  t('community.weekDays.thu'),
+  t('community.weekDays.fri'),
+  t('community.weekDays.sat'),
+])
 
-const eventTypeMeta: Record<string, { label: string; color: string }> = {
-  server: { label: '服务器活动', color: '#804030' },
-  guild: { label: '公会活动', color: '#B87333' },
-  other: { label: '活动', color: '#D97706' }
-}
+const eventTypeMeta = computed(() => ({
+  server: { label: t('community.eventType.server'), color: '#804030' },
+  guild: { label: t('community.eventType.guild'), color: '#B87333' },
+  other: { label: t('community.eventType.other'), color: '#D97706' }
+}))
 
 // 筛选后的活动
 const filteredEvents = computed(() => {
@@ -425,7 +435,7 @@ const calendarStats = computed(() => {
   typeMap.forEach((count, typeKey) => {
     if (count > focusCount) {
       focusCount = count
-      focusLabel = eventTypeMeta[typeKey]?.label || eventTypeMeta.other.label
+      focusLabel = eventTypeMeta.value[typeKey]?.label || eventTypeMeta.value.other.label
     }
   })
 
@@ -487,33 +497,33 @@ function getEventStyle(event: EventItem) {
     <!-- Header -->
     <header class="header anim-item" style="--delay: 0">
       <div class="header-left">
-        <h1 class="page-title">酒馆布告栏</h1>
-        <p class="page-subtitle">"这里汇聚了来自艾泽拉斯各地的故事与委托..."</p>
+        <h1 class="page-title">{{ t('community.pageTitle') }}</h1>
+        <p class="page-subtitle">{{ t('community.pageSubtitle') }}</p>
       </div>
       <div class="header-actions">
         <div class="search-box">
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
-          <input v-model="searchKeyword" type="text" placeholder="搜索帖子..." />
+          <input v-model="searchKeyword" type="text" :placeholder="t('community.filter.search')" />
         </div>
         <button class="favorites-btn" @click="goToFavorites">
           <i class="ri-bookmark-3-line"></i>
-          收藏夹
+          {{ t('community.action.favorites') }}
         </button>
         <button class="history-btn" @click="goToHistory">
           <i class="ri-history-line"></i>
-          历史记录
+          {{ t('community.action.history') }}
         </button>
         <button class="my-posts-btn" @click="goToMyPosts">
           <i class="ri-file-list-3-line"></i>
-          我的帖子
+          {{ t('community.action.myPosts') }}
         </button>
         <button class="create-btn" @click="goToCreatePost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
           </svg>
-          发布
+          {{ t('community.action.publish') }}
         </button>
       </div>
     </header>
@@ -522,11 +532,11 @@ function getEventStyle(event: EventItem) {
     <div v-if="currentGuild" class="guild-filter-banner anim-item" style="--delay: 1">
       <div class="banner-content">
         <i class="ri-shield-line"></i>
-        <span>正在查看「<strong>{{ currentGuild.name }}</strong>」的相关内容</span>
+        <span>{{ t('community.guild.filterBanner', { name: currentGuild.name }) }}</span>
       </div>
       <button class="clear-filter-btn" @click="clearGuildFilter">
         <i class="ri-close-line"></i>
-        清除筛选
+        {{ t('community.guild.clearFilter') }}
       </button>
     </div>
 
@@ -536,7 +546,7 @@ function getEventStyle(event: EventItem) {
         <button
           :class="{ active: filterCategory === '' }"
           @click="changeCategoryFilter('')"
-        >全部</button>
+        >{{ t('community.filter.all') }}</button>
         <button
           v-for="cat in POST_CATEGORIES"
           :key="cat.value"
@@ -545,24 +555,24 @@ function getEventStyle(event: EventItem) {
         >{{ cat.label }}</button>
       </div>
       <div class="sort-select">
-        <span class="sort-label">排序:</span>
+        <span class="sort-label">{{ t('community.filter.sortLabel') }}</span>
         <select v-model="sortBy" @change="loadPosts">
-          <option value="created_at">最新发布</option>
-          <option value="like_count">热门讨论</option>
-          <option value="view_count">最多浏览</option>
+          <option value="created_at">{{ t('community.filter.sortLatest') }}</option>
+          <option value="like_count">{{ t('community.filter.sortHot') }}</option>
+          <option value="view_count">{{ t('community.filter.sortViews') }}</option>
         </select>
       </div>
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="loading anim-item" style="--delay: 2">加载中...</div>
+    <div v-if="loading" class="loading anim-item" style="--delay: 2">{{ t('community.loading') }}</div>
 
     <template v-else>
       <!-- 置顶帖子区域 -->
       <div v-if="pinnedPosts.length > 0" class="pinned-section anim-item" style="--delay: 2">
         <div class="section-header">
           <i class="ri-pushpin-fill"></i>
-          <span>置顶公告</span>
+          <span>{{ t('community.pinned.title') }}</span>
         </div>
         <div class="pinned-list">
           <div
@@ -571,7 +581,7 @@ function getEventStyle(event: EventItem) {
             class="pinned-item"
             @click="goToPost(post.id)"
           >
-            <span class="pinned-tag">置顶</span>
+            <span class="pinned-tag">{{ t('community.pinned.tag') }}</span>
             <span class="pinned-title">{{ post.title }}</span>
             <span class="pinned-time">{{ formatDate(post.created_at) }}</span>
           </div>
@@ -583,35 +593,35 @@ function getEventStyle(event: EventItem) {
         <div class="events-header" @click="eventsExpanded = !eventsExpanded">
           <div class="events-title">
             <i class="ri-calendar-event-line"></i>
-            <span>近期活动</span>
+            <span>{{ t('community.events.title') }}</span>
             <span class="events-count">{{ filteredEvents.length }}</span>
           </div>
           <div class="events-header-actions">
-            <button class="view-toggle-btn" @click.stop="toggleCalendarView" :title="calendarView ? '切换到列表视图' : '切换到日历视图'">
+            <button class="view-toggle-btn" @click.stop="toggleCalendarView" :title="calendarView ? t('community.events.switchToList') : t('community.events.switchToCalendar')">
               <i :class="calendarView ? 'ri-list-check' : 'ri-calendar-line'"></i>
             </button>
             <i :class="eventsExpanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'" class="expand-icon"></i>
           </div>
         </div>
         <div v-show="eventsExpanded" class="events-body">
-          <div v-if="eventsLoading" class="events-loading">加载中...</div>
-          <div v-else-if="events.length === 0" class="events-empty">暂无近期活动</div>
+          <div v-if="eventsLoading" class="events-loading">{{ t('community.loading') }}</div>
+          <div v-else-if="events.length === 0" class="events-empty">{{ t('community.events.empty') }}</div>
 
           <!-- 日历视图 -->
           <div v-else-if="calendarView" class="calendar-shell">
             <div class="calendar-head">
               <div class="calendar-head-left">
-                <span class="calendar-kicker">活动日历</span>
+                <span class="calendar-kicker">{{ t('community.events.calendarTitle') }}</span>
                 <div class="calendar-title-row">
                   <h2 class="calendar-title">{{ monthTitle }}</h2>
-                  <span class="calendar-count">{{ calendarStats.total }} 场</span>
+                  <span class="calendar-count">{{ t('community.calendar.sessions', { count: calendarStats.total }) }}</span>
                 </div>
-                <p class="calendar-subtitle">点击活动查看详情。</p>
+                <p class="calendar-subtitle">{{ t('community.events.clickToView') }}</p>
               </div>
               <div class="calendar-head-right">
                 <div class="calendar-sync">
                   <span class="sync-dot"></span>
-                  已同步
+                  {{ t('community.events.synced') }}
                 </div>
                 <div class="calendar-controls">
                   <button class="calendar-nav-btn" type="button" @click="prevMonth">
@@ -621,35 +631,35 @@ function getEventStyle(event: EventItem) {
                   <button class="calendar-nav-btn" type="button" @click="nextMonth">
                     <i class="ri-arrow-right-s-line"></i>
                   </button>
-                  <button class="today-btn" type="button" @click="goToToday">今天</button>
+                  <button class="today-btn" type="button" @click="goToToday">{{ t('community.events.today') }}</button>
                 </div>
               </div>
             </div>
 
             <div class="calendar-stats">
               <div class="stat-card">
-                <div class="stat-label">本月活动</div>
+                <div class="stat-label">{{ t('community.calendar.monthEvents') }}</div>
                 <div class="stat-value">{{ calendarStats.total }}</div>
-                <div class="stat-foot">覆盖 {{ calendarStats.activeDays }} 天</div>
+                <div class="stat-foot">{{ t('community.calendar.coverDays', { days: calendarStats.activeDays }) }}</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label">高峰日期</div>
+                <div class="stat-label">{{ t('community.calendar.peakDate') }}</div>
                 <div class="stat-value">{{ calendarStats.peakLabel }}</div>
-                <div class="stat-foot">{{ calendarStats.peakCount || 0 }} 场</div>
+                <div class="stat-foot">{{ t('community.calendar.sessions', { count: calendarStats.peakCount || 0 }) }}</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label">主要类型</div>
+                <div class="stat-label">{{ t('community.calendar.mainType') }}</div>
                 <div class="stat-value">{{ calendarStats.focusLabel }}</div>
-                <div class="stat-foot">{{ calendarStats.focusCount || 0 }} 场</div>
+                <div class="stat-foot">{{ t('community.calendar.sessions', { count: calendarStats.focusCount || 0 }) }}</div>
               </div>
             </div>
 
             <div class="calendar-filters">
-              <span class="filter-label">类型筛选</span>
+              <span class="filter-label">{{ t('community.calendar.typeFilter') }}</span>
               <div class="filter-chips">
-                <button class="filter-chip" :class="{ active: eventFilter === 'all' }" type="button" @click="setEventFilter('all')">全部</button>
-                <button class="filter-chip" :class="{ active: eventFilter === 'server' }" type="button" @click="setEventFilter('server')">服务器活动</button>
-                <button class="filter-chip" :class="{ active: eventFilter === 'guild' }" type="button" @click="setEventFilter('guild')">公会活动</button>
+                <button class="filter-chip" :class="{ active: eventFilter === 'all' }" type="button" @click="setEventFilter('all')">{{ t('community.eventType.all') }}</button>
+                <button class="filter-chip" :class="{ active: eventFilter === 'server' }" type="button" @click="setEventFilter('server')">{{ t('community.eventType.server') }}</button>
+                <button class="filter-chip" :class="{ active: eventFilter === 'guild' }" type="button" @click="setEventFilter('guild')">{{ t('community.eventType.guild') }}</button>
               </div>
             </div>
 
@@ -670,7 +680,7 @@ function getEventStyle(event: EventItem) {
                 >
                   <div class="day-header">
                     <span class="day-number">{{ day.date.getDate() }}</span>
-                    <span v-if="day.events.length > 0" class="day-count">{{ day.events.length }}场</span>
+                    <span v-if="day.events.length > 0" class="day-count">{{ t('community.calendar.dayCount', { count: day.events.length }) }}</span>
                   </div>
                   <div class="day-events">
                     <button
@@ -690,7 +700,7 @@ function getEventStyle(event: EventItem) {
                       type="button"
                       @click="toggleDayExpanded(day.key)"
                     >
-                      {{ isDayExpanded(day.key) ? '收起' : `+${day.events.length - 2}` }}
+                      {{ isDayExpanded(day.key) ? t('community.events.collapse') : `+${day.events.length - 2}` }}
                     </button>
                   </div>
                 </div>
@@ -737,7 +747,7 @@ function getEventStyle(event: EventItem) {
               </span>
               <span v-if="post.is_featured" class="featured-tag">
                 <i class="ri-star-fill"></i>
-                精华
+                {{ t('community.post.featured') }}
               </span>
             </div>
             <h3 class="post-title">{{ post.title }}</h3>
@@ -765,10 +775,10 @@ function getEventStyle(event: EventItem) {
         <!-- Empty State -->
         <div v-if="posts.length === 0 && pinnedPosts.length === 0" class="empty-state">
           <i class="ri-article-line"></i>
-          <p>暂无帖子</p>
+          <p>{{ t('community.empty') }}</p>
           <button class="create-btn" @click="goToCreatePost">
             <i class="ri-add-line"></i>
-            发布第一篇帖子
+            {{ t('community.emptyAction') }}
           </button>
         </div>
       </div>
@@ -781,17 +791,17 @@ function getEventStyle(event: EventItem) {
         :disabled="currentPage === 1"
         @click="changePage(currentPage - 1)"
       >
-        上一页
+        {{ t('community.pagination.prev') }}
       </button>
       <span class="page-info">
-        第 {{ currentPage }} / {{ Math.ceil(total / 12) }} 页
+        {{ t('community.pagination.pageInfo', { current: currentPage, total: Math.ceil(total / 12) }) }}
       </span>
       <button
         class="page-btn"
         :disabled="currentPage >= Math.ceil(total / 12)"
         @click="changePage(currentPage + 1)"
       >
-        下一页
+        {{ t('community.pagination.next') }}
       </button>
     </div>
   </div>
@@ -817,7 +827,7 @@ function getEventStyle(event: EventItem) {
   font-family: 'Cinzel', serif;
   font-size: 30px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0 0 4px 0;
 }
 
@@ -825,7 +835,7 @@ function getEventStyle(event: EventItem) {
   font-family: 'Merriweather', serif;
   font-style: italic;
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin: 0;
 }
 
@@ -836,9 +846,9 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   padding: 16px 20px;
   margin-bottom: 24px;
-  background: linear-gradient(135deg, #FFF5E6, #FFF9F0);
-  border: 1px solid #E5D4C1;
-  border-left: 4px solid #B87333;
+  background: linear-gradient(135deg, var(--color-card-bg-hover, #FFF5E6), var(--color-card-bg, #FFF9F0));
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-left: 4px solid var(--color-accent, #B87333);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(184, 115, 51, 0.08);
 }
@@ -848,16 +858,16 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 12px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .banner-content i {
   font-size: 20px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .banner-content strong {
-  color: #804030;
+  color: var(--color-secondary, #804030);
   font-weight: 600;
 }
 
@@ -866,19 +876,19 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 6px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .clear-filter-btn:hover {
-  background: #FFF5E6;
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--color-card-bg-hover, #FFF5E6);
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .clear-filter-btn i {
@@ -903,24 +913,24 @@ function getEventStyle(event: EventItem) {
   transform: translateY(-50%);
   width: 16px;
   height: 16px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .search-box input {
   padding: 8px 16px 8px 36px;
   width: 256px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 6px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   outline: none;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
   transition: all 0.2s;
 }
 
 .search-box input:focus {
-  border-color: #B87333;
+  border-color: var(--color-accent, #B87333);
   box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.1);
 }
 
@@ -931,10 +941,10 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 6px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -944,7 +954,7 @@ function getEventStyle(event: EventItem) {
 .my-posts-btn:hover,
 .favorites-btn:hover,
 .history-btn:hover {
-  border-color: #B87333;
+  border-color: var(--color-accent, #B87333);
 }
 
 .create-btn {
@@ -952,8 +962,8 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 8px;
   padding: 8px 20px;
-  background: #804030;
-  color: #fff;
+  background: var(--color-secondary, #804030);
+  color: var(--color-text-light, #fff);
   border: none;
   border-radius: 6px;
   font-size: 14px;
@@ -969,7 +979,7 @@ function getEventStyle(event: EventItem) {
 }
 
 .create-btn:hover {
-  background: #6B3528;
+  background: var(--color-secondary-hover, #6B3528);
 }
 
 /* ========== Filter Section ========== */
@@ -990,10 +1000,10 @@ function getEventStyle(event: EventItem) {
 
 .category-filter button {
   padding: 8px 18px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -1003,14 +1013,14 @@ function getEventStyle(event: EventItem) {
 }
 
 .category-filter button:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .category-filter button.active {
-  background: #2C1810;
-  border-color: #2C1810;
-  color: #fff;
+  background: var(--color-text-main, #2C1810);
+  border-color: var(--color-text-main, #2C1810);
+  color: var(--color-text-light, #fff);
   box-shadow: 0 2px 6px rgba(44, 24, 16, 0.2);
 }
 
@@ -1019,13 +1029,13 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .sort-select select {
   background: transparent;
   border: none;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-weight: 500;
   cursor: pointer;
   outline: none;
@@ -1033,8 +1043,8 @@ function getEventStyle(event: EventItem) {
 
 /* ========== Pinned Section ========== */
 .pinned-section {
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 24px;
@@ -1046,7 +1056,7 @@ function getEventStyle(event: EventItem) {
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   margin-bottom: 12px;
 }
 
@@ -1061,21 +1071,21 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  background: #F5EFE7;
+  background: var(--color-card-bg, #F5EFE7);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .pinned-item:hover {
-  background: #E5D4C1;
+  background: var(--color-border, #E5D4C1);
 }
 
 .pinned-tag {
   flex-shrink: 0;
   padding: 2px 6px;
-  background: #804030;
-  color: #fff;
+  background: var(--color-secondary, #804030);
+  color: var(--color-text-light, #fff);
   font-size: 10px;
   font-weight: 600;
   border-radius: 3px;
@@ -1083,12 +1093,12 @@ function getEventStyle(event: EventItem) {
 
 /* ========== Events Section ========== */
 .events-section {
-  background: linear-gradient(135deg, #FFFDF9, #F8EFE6);
-  border: 1px solid #E5D4C1;
+  background: linear-gradient(135deg, var(--color-panel-bg, #FFFDF9), var(--color-card-bg, #F8EFE6));
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 16px;
   margin-bottom: 24px;
   overflow: hidden;
-  box-shadow: 0 16px 40px rgba(75, 54, 33, 0.08);
+  box-shadow: var(--shadow-lg, 0 16px 40px rgba(75, 54, 33, 0.08));
 }
 
 .events-header {
@@ -1102,7 +1112,7 @@ function getEventStyle(event: EventItem) {
 }
 
 .events-header:hover {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
 }
 
 .events-title {
@@ -1111,7 +1121,7 @@ function getEventStyle(event: EventItem) {
   gap: 10px;
   font-size: 16px;
   font-weight: 600;
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .events-title i {
@@ -1121,8 +1131,8 @@ function getEventStyle(event: EventItem) {
 .events-count {
   font-size: 12px;
   font-weight: 600;
-  color: #8D7B68;
-  background: rgba(184, 115, 51, 0.15);
+  color: var(--color-text-secondary, #8D7B68);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.15));
   padding: 2px 10px;
   border-radius: 999px;
 }
@@ -1135,10 +1145,10 @@ function getEventStyle(event: EventItem) {
 
 .view-toggle-btn {
   padding: 6px 10px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -1147,9 +1157,9 @@ function getEventStyle(event: EventItem) {
 }
 
 .view-toggle-btn:hover {
-  background: rgba(184, 115, 51, 0.12);
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.12));
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .view-toggle-btn i {
@@ -1158,12 +1168,12 @@ function getEventStyle(event: EventItem) {
 
 .expand-icon {
   font-size: 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   transition: transform 0.3s;
 }
 
 .events-body {
-  border-top: 1px solid #F3E7DA;
+  border-top: 1px solid var(--color-border-light, #F3E7DA);
   padding: 20px 24px 24px;
   background: rgba(255, 255, 255, 0.6);
 }
@@ -1172,7 +1182,7 @@ function getEventStyle(event: EventItem) {
 .events-empty {
   text-align: center;
   padding: 24px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 14px;
 }
 
@@ -1198,7 +1208,7 @@ function getEventStyle(event: EventItem) {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-weight: 600;
 }
 
@@ -1214,15 +1224,15 @@ function getEventStyle(event: EventItem) {
   font-family: 'Cinzel', serif;
   font-size: 24px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0;
 }
 
 .calendar-count {
   font-size: 12px;
   font-weight: 600;
-  color: #804030;
-  background: rgba(128, 64, 48, 0.12);
+  color: var(--color-secondary, #804030);
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.12));
   padding: 4px 10px;
   border-radius: 999px;
 }
@@ -1230,7 +1240,7 @@ function getEventStyle(event: EventItem) {
 .calendar-subtitle {
   margin: 6px 0 0;
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .calendar-head-right {
@@ -1246,8 +1256,8 @@ function getEventStyle(event: EventItem) {
   gap: 8px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(91, 140, 90, 0.15);
-  color: #5B8C5A;
+  background: var(--color-success-light, rgba(91, 140, 90, 0.15));
+  color: var(--color-success, #5B8C5A);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1256,8 +1266,8 @@ function getEventStyle(event: EventItem) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5B8C5A;
-  box-shadow: 0 0 0 4px rgba(91, 140, 90, 0.2);
+  background: var(--color-success, #5B8C5A);
+  box-shadow: 0 0 0 4px var(--color-success-light, rgba(91, 140, 90, 0.2));
 }
 
 .calendar-controls {
@@ -1265,18 +1275,18 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
 }
 
 .calendar-nav-btn {
   width: 32px;
   height: 32px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
-  background: #fff;
-  color: #8D7B68;
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-text-secondary, #8D7B68);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1285,9 +1295,9 @@ function getEventStyle(event: EventItem) {
 }
 
 .calendar-nav-btn:hover {
-  background: rgba(184, 115, 51, 0.12);
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.12));
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .calendar-nav-btn i {
@@ -1297,17 +1307,17 @@ function getEventStyle(event: EventItem) {
 .calendar-month-title {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   min-width: 120px;
   text-align: center;
 }
 
 .today-btn {
   padding: 6px 12px;
-  border: 1px solid #B87333;
+  border: 1px solid var(--color-accent, #B87333);
   border-radius: 8px;
-  background: #B87333;
-  color: #fff;
+  background: var(--color-accent, #B87333);
+  color: var(--color-text-light, #fff);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -1315,8 +1325,8 @@ function getEventStyle(event: EventItem) {
 }
 
 .today-btn:hover {
-  background: #A66629;
-  border-color: #A66629;
+  background: var(--color-accent-hover, #A66629);
+  border-color: var(--color-accent-hover, #A66629);
 }
 
 .calendar-stats {
@@ -1326,8 +1336,8 @@ function getEventStyle(event: EventItem) {
 }
 
 .stat-card {
-  background: #fff;
-  border: 1px solid #F1E4D7;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border-light, #F1E4D7);
   border-radius: 14px;
   padding: 14px 16px;
   box-shadow: 0 10px 24px rgba(75, 54, 33, 0.08);
@@ -1337,7 +1347,7 @@ function getEventStyle(event: EventItem) {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin-bottom: 6px;
   font-weight: 600;
 }
@@ -1345,12 +1355,12 @@ function getEventStyle(event: EventItem) {
 .stat-value {
   font-size: 20px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .stat-foot {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin-top: 6px;
 }
 
@@ -1360,7 +1370,7 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  border: 1px solid #F1E4D7;
+  border: 1px solid var(--color-border-light, #F1E4D7);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.7);
 }
@@ -1369,7 +1379,7 @@ function getEventStyle(event: EventItem) {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-weight: 600;
 }
 
@@ -1382,9 +1392,9 @@ function getEventStyle(event: EventItem) {
 .filter-chip {
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid #E5D4C1;
-  background: #fff;
-  color: #4B3621;
+  border: 1px solid var(--color-border, #E5D4C1);
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-primary, #4B3621);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -1392,19 +1402,19 @@ function getEventStyle(event: EventItem) {
 }
 
 .filter-chip:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .filter-chip.active {
-  background: #2C1810;
-  border-color: #2C1810;
-  color: #fff;
+  background: var(--color-text-main, #2C1810);
+  border-color: var(--color-text-main, #2C1810);
+  color: var(--color-text-light, #fff);
 }
 
 .calendar-board {
-  background: #fff;
-  border: 1px solid #F1E4D7;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border-light, #F1E4D7);
   border-radius: 16px;
   padding: 14px;
   box-shadow: 0 12px 28px rgba(75, 54, 33, 0.08);
@@ -1416,7 +1426,7 @@ function getEventStyle(event: EventItem) {
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   text-transform: uppercase;
   letter-spacing: 0.2em;
   text-align: center;
@@ -1436,9 +1446,9 @@ function getEventStyle(event: EventItem) {
 .calendar-day {
   min-height: 120px;
   padding: 8px;
-  border: 1px solid #F1E4D7;
+  border: 1px solid var(--color-border-light, #F1E4D7);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   transition: all 0.2s;
   display: flex;
   flex-direction: column;
@@ -1446,21 +1456,21 @@ function getEventStyle(event: EventItem) {
 }
 
 .calendar-day.other-month {
-  background: #FAF7F2;
+  background: var(--color-card-bg, #FAF7F2);
   opacity: 0.4;
 }
 
 .calendar-day.today {
-  border-color: #B87333;
+  border-color: var(--color-accent, #B87333);
   box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.15);
 }
 
 .calendar-day.has-events {
-  background: #FFF6EC;
+  background: var(--color-card-bg-hover, #FFF6EC);
 }
 
 .calendar-day.has-events:hover {
-  border-color: #B87333;
+  border-color: var(--color-accent, #B87333);
 }
 
 .day-header {
@@ -1472,12 +1482,12 @@ function getEventStyle(event: EventItem) {
 .day-number {
   font-size: 13px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .day-count {
   font-size: 10px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .day-events {
@@ -1489,7 +1499,7 @@ function getEventStyle(event: EventItem) {
 
 .day-pill {
   border: 1px solid rgba(128, 64, 48, 0.08);
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-left: 3px solid var(--pill-color, #D97706);
   border-radius: 8px;
   padding: 4px 6px;
@@ -1502,14 +1512,14 @@ function getEventStyle(event: EventItem) {
 }
 
 .day-pill:hover {
-  background: #FDF3E6;
+  background: var(--color-card-bg-hover, #FDF3E6);
 }
 
 .pill-title {
   flex: 1;
   min-width: 0;
   font-weight: 600;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1517,14 +1527,14 @@ function getEventStyle(event: EventItem) {
 
 .pill-time {
   font-size: 10px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin-left: 6px;
 }
 
 .day-more {
   align-self: flex-start;
   font-size: 10px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-weight: 600;
   text-align: left;
   background: none;
@@ -1534,7 +1544,7 @@ function getEventStyle(event: EventItem) {
 }
 
 .day-more:hover {
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .events-list {
@@ -1547,16 +1557,16 @@ function getEventStyle(event: EventItem) {
   display: flex;
   gap: 16px;
   padding: 14px;
-  background: #fff;
-  border: 1px solid #F1E4D7;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border-light, #F1E4D7);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .event-item:hover {
-  border-color: #B87333;
-  background: #FFF3E4;
+  border-color: var(--color-accent, #B87333);
+  background: var(--color-card-bg-hover, #FFF3E4);
 }
 
 .event-date {
@@ -1567,7 +1577,7 @@ function getEventStyle(event: EventItem) {
   min-width: 56px;
   padding: 8px;
   border-radius: 10px;
-  color: #fff;
+  color: var(--color-text-light, #fff);
 }
 
 .event-month {
@@ -1590,7 +1600,7 @@ function getEventStyle(event: EventItem) {
 .event-title {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0 0 6px 0;
 }
 
@@ -1608,7 +1618,7 @@ function getEventStyle(event: EventItem) {
 }
 
 .event-time {
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 @media (max-width: 1100px) {
@@ -1639,14 +1649,14 @@ function getEventStyle(event: EventItem) {
 .pinned-title {
   flex: 1;
   font-size: 14px;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-weight: 500;
 }
 
 .pinned-time {
   flex-shrink: 0;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 /* ========== Posts Grid (Masonry) ========== */
@@ -1664,8 +1674,8 @@ function getEventStyle(event: EventItem) {
 
 /* ========== Post Card Base ========== */
 .post-card {
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s;
@@ -1693,8 +1703,8 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  background: linear-gradient(135deg, #E6A23C, #D97706);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-warning, #E6A23C), var(--color-warning-dark, #D97706));
+  color: var(--color-text-light, #fff);
   font-size: 11px;
   font-weight: 600;
   border-radius: 4px;
@@ -1734,48 +1744,48 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   flex-shrink: 0;
   padding: 3px 8px;
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--color-card-bg, #F5EFE7);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
 }
 
 /* Category Colors */
-.cat-guild { background: #EBF5FF; color: #1D4ED8; border-color: #BFDBFE; }
-.cat-report { background: #F5EFE7; color: #B87333; border-color: #E5D4C1; }
-.cat-event { background: #FEF3C7; color: #D97706; border-color: #FDE68A; }
-.cat-profile { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
-.cat-novel { background: #FDF4FF; color: #A855F7; border-color: #E9D5FF; }
-.cat-item { background: #FFF7ED; color: #EA580C; border-color: #FED7AA; }
-.cat-other { background: #F3F4F6; color: #6B7280; border-color: #E5E7EB; }
+.cat-guild { background: var(--cat-guild-bg, #EBF5FF); color: var(--cat-guild-color, #1D4ED8); border-color: var(--cat-guild-border, #BFDBFE); }
+.cat-report { background: var(--cat-report-bg, #F5EFE7); color: var(--cat-report-color, #B87333); border-color: var(--cat-report-border, #E5D4C1); }
+.cat-event { background: var(--cat-event-bg, #FEF3C7); color: var(--cat-event-color, #D97706); border-color: var(--cat-event-border, #FDE68A); }
+.cat-profile { background: var(--cat-profile-bg, #F0FDF4); color: var(--cat-profile-color, #16A34A); border-color: var(--cat-profile-border, #BBF7D0); }
+.cat-novel { background: var(--cat-novel-bg, #FDF4FF); color: var(--cat-novel-color, #A855F7); border-color: var(--cat-novel-border, #E9D5FF); }
+.cat-item { background: var(--cat-item-bg, #FFF7ED); color: var(--cat-item-color, #EA580C); border-color: var(--cat-item-border, #FED7AA); }
+.cat-other { background: var(--cat-other-bg, #F3F4F6); color: var(--cat-other-color, #6B7280); border-color: var(--cat-other-border, #E5E7EB); }
 
 .post-time {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .post-card.featured .post-title {
   font-family: 'Merriweather', serif;
   font-size: 18px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin-bottom: 8px;
   line-height: 1.4;
   transition: color 0.3s;
 }
 
 .post-card.featured:hover .post-title {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .post-card.featured .post-excerpt {
   font-size: 13px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   line-height: 1.6;
   margin-bottom: 12px;
   display: -webkit-box;
@@ -1839,13 +1849,13 @@ function getEventStyle(event: EventItem) {
   width: 100px;
   height: 100px;
   border-radius: 10px;
-  background: #F5EFE7;
+  background: var(--color-card-bg, #F5EFE7);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
   font-weight: 600;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   flex-shrink: 0;
 }
 
@@ -1867,7 +1877,7 @@ function getEventStyle(event: EventItem) {
 
 .post-card.featured .card-footer {
   padding-top: 12px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-card-bg, #F5EFE7);
 }
 
 .card-footer {
@@ -1875,7 +1885,7 @@ function getEventStyle(event: EventItem) {
   justify-content: space-between;
   align-items: center;
   padding-top: 16px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-card-bg, #F5EFE7);
   margin-top: auto;
 }
 
@@ -1893,12 +1903,12 @@ function getEventStyle(event: EventItem) {
   min-height: 32px;
   max-height: 32px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #B87333, #804030);
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-secondary, #804030));
   border-radius: 6px;
   display: block;
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-light, #fff);
   overflow: hidden;
   text-align: center;
   line-height: 32px;
@@ -1931,7 +1941,7 @@ function getEventStyle(event: EventItem) {
 .author-name {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 
@@ -1945,7 +1955,7 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .stat-item svg {
@@ -1993,9 +2003,9 @@ function getEventStyle(event: EventItem) {
   gap: 4px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(230, 162, 60, 0.15);
-  border: 1px solid rgba(217, 119, 6, 0.35);
-  color: #B45309;
+  background: var(--color-warning-light, rgba(230, 162, 60, 0.15));
+  border: 1px solid var(--color-warning-border, rgba(217, 119, 6, 0.35));
+  color: var(--color-warning, #B45309);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
@@ -2009,7 +2019,7 @@ function getEventStyle(event: EventItem) {
   font-family: 'Merriweather', serif;
   font-size: 14px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 6px 0;
   line-height: 1.4;
   display: -webkit-box;
@@ -2020,12 +2030,12 @@ function getEventStyle(event: EventItem) {
 }
 
 .post-card.standard:hover .post-title {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .post-card.standard .post-excerpt {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   line-height: 1.5;
   margin-bottom: 10px;
   display: -webkit-box;
@@ -2036,12 +2046,12 @@ function getEventStyle(event: EventItem) {
 
 .post-card.standard .card-footer {
   padding-top: 10px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light, #F5EFE7);
 }
 
 .post-card.standard .author-name {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .comment-count {
@@ -2049,7 +2059,7 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 /* ========== Empty State ========== */
@@ -2060,7 +2070,7 @@ function getEventStyle(event: EventItem) {
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .empty-state i {
@@ -2084,23 +2094,23 @@ function getEventStyle(event: EventItem) {
 
 .page-btn {
   padding: 8px 16px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 6px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .page-btn:hover:not(:disabled) {
-  border-color: #B87333;
+  border-color: var(--color-accent, #B87333);
 }
 
 .page-btn.active {
-  background: #2C1810;
-  border-color: #2C1810;
-  color: #fff;
+  background: var(--color-text-main, #2C1810);
+  border-color: var(--color-text-main, #2C1810);
+  color: var(--color-text-light, #fff);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
@@ -2114,7 +2124,7 @@ function getEventStyle(event: EventItem) {
   column-span: all;
   text-align: center;
   padding: 60px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 16px;
 }
 

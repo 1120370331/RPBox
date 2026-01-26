@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { POST_CATEGORIES } from '@/api/post'
 import { useUserStore } from '@/stores/user'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 
 const router = useRouter()
+const { t } = useI18n()
 const userStore = useUserStore()
 const mounted = ref(false)
 
@@ -64,7 +66,7 @@ function formatDate(dateStr?: string) {
 
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
-  return cat ? cat.label : '其他'
+  return cat ? cat.label : t('community.category.other')
 }
 
 function handlePreviewContentClick(event: MouseEvent) {
@@ -72,7 +74,7 @@ function handlePreviewContentClick(event: MouseEvent) {
     returnTo: {
       type: 'post',
       path: router.currentRoute.value.fullPath,
-      title: previewData.value?.title || '帖子',
+      title: previewData.value?.title || t('community.post.title'),
     },
   })
 }
@@ -80,7 +82,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 <template>
   <div class="post-preview-page" :class="{ 'animate-in': mounted }">
-    <div v-if="!previewData" class="loading">加载中...</div>
+    <div v-if="!previewData" class="loading">{{ t('community.loading') }}</div>
 
     <div v-else class="content-layout">
       <!-- 主内容区 -->
@@ -91,11 +93,11 @@ function handlePreviewContentClick(event: MouseEvent) {
             <div class="back-icon">
               <i class="ri-arrow-left-s-line"></i>
             </div>
-            <span>返回编辑</span>
+            <span>{{ t('community.preview.backToEdit') }}</span>
           </button>
           <div class="preview-badge">
             <i class="ri-eye-line"></i>
-            预览模式
+            {{ t('community.preview.previewMode') }}
           </div>
         </div>
 
@@ -111,7 +113,7 @@ function handlePreviewContentClick(event: MouseEvent) {
                 <span v-else>{{ userStore.user?.username?.charAt(0) || 'U' }}</span>
               </div>
               <div class="author-info">
-                <h4 class="author-name" :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || '未知用户' }}</h4>
+                <h4 class="author-name" :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || t('community.preview.unknownUser') }}</h4>
                 <span class="post-date">{{ formatDate() }}</span>
               </div>
             </div>
@@ -138,7 +140,7 @@ function handlePreviewContentClick(event: MouseEvent) {
                 <span class="badge-dot"></span>
                 <span>{{ getCategoryLabel(previewData.category) }}</span>
               </div>
-              <h1 class="article-title">{{ previewData.title || '无标题' }}</h1>
+              <h1 class="article-title">{{ previewData.title || t('community.preview.noTitle') }}</h1>
               <!-- 标签 -->
               <div v-if="previewData.selectedTagNames?.length" class="tags-row">
                 <span v-for="tag in previewData.selectedTagNames" :key="tag" class="tag-item">
@@ -149,17 +151,17 @@ function handlePreviewContentClick(event: MouseEvent) {
 
             <div class="zen-divider"></div>
 
-            <div ref="articleContentRef" class="article-content" v-html="previewData.content || '<p>无内容</p>'" @click="handlePreviewContentClick"></div>
+            <div ref="articleContentRef" class="article-content" v-html="previewData.content || `<p>${t('community.preview.noContent')}</p>`" @click="handlePreviewContentClick"></div>
           </div>
         </article>
 
         <!-- 评论区预览 -->
         <section class="comments-section anim-item" style="--delay: 2">
           <h3 class="comments-title">
-            讨论 <span class="comment-badge">0</span>
+            {{ t('community.detail.discussion') }} <span class="comment-badge">0</span>
           </h3>
           <div class="empty-comments">
-            发布后将显示评论区
+            {{ t('community.preview.commentsAfterPublish') }}
           </div>
         </section>
       </main>
