@@ -15,6 +15,23 @@ const props = withDefaults(defineProps<Props>(), {
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
 
+function normalizeIconName(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  const textureMatch = trimmed.match(/\|T([^:|]+)(?::\d+)?\|t/i)
+  const source = textureMatch ? textureMatch[1] : trimmed
+  let name = source.replace(/\\/g, '/')
+  const lower = name.toLowerCase()
+  if (lower.startsWith('interface/icons/')) {
+    name = name.slice('interface/icons/'.length)
+  }
+  name = name.split('/').pop() || name
+  name = name.replace(/\.(blp|tga|png|jpg|jpeg)$/i, '')
+  name = name.toLowerCase().trim()
+  if (!/^[a-z0-9_-]+$/.test(name)) return ''
+  return name
+}
+
 const isImageUrl = computed(() => {
   if (!props.icon) return false
   return (
@@ -26,10 +43,16 @@ const isImageUrl = computed(() => {
   )
 })
 
+const normalizedIconName = computed(() => {
+  if (!props.icon || isImageUrl.value) return ''
+  return normalizeIconName(props.icon)
+})
+
 const iconUrl = computed(() => {
   if (!props.icon) return ''
   if (isImageUrl.value) return props.icon
-  return `${API_BASE}/icons/${props.icon.toLowerCase()}`
+  if (!normalizedIconName.value) return ''
+  return `${API_BASE}/icons/${normalizedIconName.value}`
 })
 
 const sizeStyle = computed(() => {
@@ -38,7 +61,7 @@ const sizeStyle = computed(() => {
 })
 
 const loadFailed = ref(false)
-const showFallback = computed(() => !props.icon || loadFailed.value)
+const showFallback = computed(() => !iconUrl.value || loadFailed.value)
 
 function handleError() {
   loadFailed.value = true

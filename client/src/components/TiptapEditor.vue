@@ -4,9 +4,10 @@ import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Image from '@tiptap/extension-image'
+import Link from '@tiptap/extension-link'
 import Mention from '@tiptap/extension-mention'
 import { mergeAttributes, Node } from '@tiptap/core'
-import { uploadImage } from '@/api/item'
+import { uploadAttachment, uploadImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import { searchUsers, type UserMentionItem } from '@/api/user'
 
@@ -20,9 +21,11 @@ const emit = defineEmits<{
 }>()
 
 const imageInputRef = ref<HTMLInputElement | null>(null)
+const attachmentInputRef = ref<HTMLInputElement | null>(null)
 const toast = useToast()
 const uploadCacheKey = 'tiptap_image_upload_cache'
 const uploadCache = new Map<string, string>()
+const maxAttachmentBytes = 25 * 1024 * 1024
 
 function loadUploadCache() {
   try {
@@ -446,6 +449,15 @@ const editor = useEditor({
       inline: true,
       allowBase64: true,
     }),
+    Link.configure({
+      openOnClick: false,
+      autolink: true,
+      linkOnPaste: true,
+      HTMLAttributes: {
+        rel: 'noopener noreferrer',
+        target: '_blank',
+      },
+    }),
     JumpLinkExtension,
     MentionExtension.configure({
       HTMLAttributes: {
@@ -660,6 +672,60 @@ function insertImageByUrl() {
   }
 }
 
+function insertAttachmentLink(url: string, name: string) {
+  if (!url) return
+  const label = name.trim() || url
+  editor.value?.chain().focus().insertContent([
+    {
+      type: 'text',
+      text: label,
+      marks: [
+        {
+          type: 'link',
+          attrs: {
+            href: url,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+          },
+        },
+      ],
+    },
+    { type: 'text', text: ' ' },
+  ]).run()
+}
+
+function triggerAttachmentUpload() {
+  attachmentInputRef.value?.click()
+}
+
+async function handleAttachmentUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  if (files.length === 0) return
+
+  for (const file of files) {
+    if (file.size > maxAttachmentBytes) {
+      toast.info(`附件 ${file.name} 不能超过25MB`)
+      continue
+    }
+
+    try {
+      const res: any = await uploadAttachment(file)
+      const url = res?.data?.url || res?.url
+      if (!url) {
+        throw new Error('未获取到附件地址')
+      }
+      const name = res?.data?.name || file.name
+      insertAttachmentLink(url, name)
+    } catch (error: any) {
+      console.error('附件上传失败:', error)
+      toast.error(error.message || '附件上传失败')
+    }
+  }
+
+  input.value = ''
+}
+
 function insertContent(html: string) {
   if (!html) return
   editor.value?.chain().focus().insertContent(html).run()
@@ -788,6 +854,13 @@ defineExpose({
       >
         <i class="ri-link"></i>
       </button>
+      <button
+        type="button"
+        @click="triggerAttachmentUpload"
+        title="上传附件"
+      >
+        <i class="ri-attachment-2"></i>
+      </button>
       <template v-if="$slots.toolbar">
         <span class="divider"></span>
         <slot name="toolbar" />
@@ -800,6 +873,13 @@ defineExpose({
       multiple
       style="display: none"
       @change="handleImageUpload"
+    />
+    <input
+      ref="attachmentInputRef"
+      type="file"
+      multiple
+      style="display: none"
+      @change="handleAttachmentUpload"
     />
     <EditorContent :editor="editor" class="editor-content" />
   </div>
