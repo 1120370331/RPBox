@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { Item } from '@/api/item'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 
 const router = useRouter()
+const { t } = useI18n()
 const item = ref<Item | null>(null)
 const previewFrom = ref('')
 const detailContentRef = ref<HTMLElement | null>(null)
@@ -56,10 +58,10 @@ function handlePreviewContentClick(event: MouseEvent) {
     <div class="preview-banner">
       <div class="preview-info">
         <i class="ri-eye-line"></i>
-        <span>预览模式 - 这是道具发布后的效果预览</span>
+        <span>{{ t('market.detail.preview.banner') }}</span>
       </div>
       <button class="back-edit-btn" @click="backToEdit">
-        <i class="ri-arrow-left-line"></i> 返回编辑
+        <i class="ri-arrow-left-line"></i> {{ t('market.detail.preview.backToEdit') }}
       </button>
     </div>
 
@@ -68,65 +70,65 @@ function handlePreviewContentClick(event: MouseEvent) {
       <div class="item-info">
         <!-- 预览图 -->
         <div v-if="item.preview_image" class="item-preview">
-          <img :src="item.preview_image" alt="预览图" />
+          <img :src="item.preview_image" :alt="t('market.detail.previewImage')" />
         </div>
 
         <div class="item-header">
           <h1>{{ item.name }}</h1>
           <div class="item-meta">
-            <span class="type-badge">{{ item.type === 'item' ? '道具' : '剧本' }}</span>
-            <span class="author">作者: 我</span>
+            <span class="type-badge">{{ t(`market.types.${item.type}`) }}</span>
+            <span class="author">{{ t('market.detail.author') }}: {{ t('market.preview.me') }}</span>
           </div>
         </div>
 
         <div class="item-stats">
           <div class="stat-item">
             <i class="ri-download-line"></i>
-            <span>0 下载</span>
+            <span>0 {{ t('market.detail.stats.downloads') }}</span>
           </div>
           <div class="stat-item">
             <i class="ri-star-fill"></i>
-            <span>0.0 (0 评价)</span>
+            <span>0.0 (0 {{ t('market.detail.stats.rating') }})</span>
           </div>
           <div class="stat-item">
             <i class="ri-heart-fill"></i>
-            <span>0 点赞</span>
+            <span>0 {{ t('market.detail.stats.likes') }}</span>
           </div>
           <div class="stat-item">
             <i class="ri-bookmark-fill"></i>
-            <span>0 收藏</span>
+            <span>0 {{ t('market.detail.stats.favorites') }}</span>
           </div>
         </div>
 
         <div class="item-description">
-          <h3>描述</h3>
-          <p>{{ item.description || '暂无描述' }}</p>
+          <h3>{{ t('market.detail.description') }}</h3>
+          <p>{{ item.description || t('market.item.noDescription') }}</p>
         </div>
 
         <!-- 详细介绍 -->
         <div v-if="item.detail_content" class="item-detail-content">
-          <h3>详细介绍</h3>
+          <h3>{{ t('market.detail.detailContent') }}</h3>
           <div ref="detailContentRef" class="rich-content" v-html="item.detail_content" @click="handlePreviewContentClick"></div>
         </div>
 
         <div class="action-buttons">
           <button class="copy-code-btn" @click="copyImportCode">
-            <i class="ri-file-copy-line"></i> 一键复制导入代码
+            <i class="ri-file-copy-line"></i> {{ t('market.detail.actions.copyImportCode') }}
           </button>
           <button class="like-btn">
-            <i class="ri-heart-line"></i> 点赞
+            <i class="ri-heart-line"></i> {{ t('market.detail.actions.like') }}
           </button>
           <button class="favorite-btn">
-            <i class="ri-bookmark-line"></i> 收藏
+            <i class="ri-bookmark-line"></i> {{ t('market.detail.actions.favorite') }}
           </button>
         </div>
       </div>
 
       <!-- 评价区域 -->
       <div class="comments-section">
-        <h3>评价 (0)</h3>
+        <h3>{{ t('market.detail.comments.title') }} (0)</h3>
         <div class="empty-comments">
-          暂无评价，快来抢沙发吧！
+          {{ t('market.detail.comments.empty') }}
         </div>
       </div>
     </div>

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listItems, deleteItem, type Item } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToast()
 const dialog = useDialog()
 const mounted = ref(false)
@@ -80,12 +82,18 @@ const emptyMessage = computed(() => {
   const hasKeyword = searchKeyword.value.trim().length > 0
   const hasTypeFilter = typeFilter.value !== 'all'
   if (hasKeyword || hasTypeFilter) {
-    return '没有匹配的作品'
+    return t('market.myItems.empty.noMatch')
   }
   if (filterStatus.value === 'all') {
-    return '还没有上传任何作品'
+    return t('market.myItems.empty.noItems')
   }
-  return `没有${filterStatus.value === 'draft' ? '草稿' : filterStatus.value === 'pending' ? '待审核' : '已发布'}的作品`
+  if (filterStatus.value === 'draft') {
+    return t('market.myItems.empty.noDraft')
+  }
+  if (filterStatus.value === 'pending') {
+    return t('market.myItems.empty.noPending')
+  }
+  return t('market.myItems.empty.noPublished')
 })
 
 onMounted(async () => {
@@ -115,10 +123,10 @@ function goToEdit(id: number) {
 
 async function handleDelete(item: Item) {
   const confirmed = await dialog.confirm({
-    title: '确认删除',
-    message: `确定要删除作品"${item.name}"吗？此操作不可恢复。`,
-    confirmText: '删除',
-    cancelText: '取消',
+    title: t('market.myItems.deleteConfirm.title'),
+    message: t('market.myItems.deleteConfirm.message', { name: item.name }),
+    confirmText: t('market.myItems.deleteConfirm.confirm'),
+    cancelText: t('market.myItems.deleteConfirm.cancel'),
     type: 'danger'
   })
 
@@ -126,11 +134,11 @@ async function handleDelete(item: Item) {
 
   try {
     await deleteItem(item.id)
-    toast.success('删除成功')
+    toast.success(t('market.myItems.messages.deleteSuccess'))
     await loadMyItems()
   } catch (error: any) {
     console.error('删除失败:', error)
-    toast.error(error.message || '删除失败，请重试')
+    toast.error(error.message || t('market.myItems.messages.deleteFailed'))
   }
 }
 
@@ -152,25 +160,20 @@ function getStatusInfo(item: Item) {
   const displayStatus = getItemDisplayStatus(item)
   switch (displayStatus) {
     case 'rejected':
-      return { text: '审核拒绝', class: 'rejected' }
+      return { text: t('market.myItems.status.rejected'), class: 'rejected' }
     case 'pending':
-      return { text: '待审核', class: 'pending' }
+      return { text: t('market.myItems.status.pending'), class: 'pending' }
     case 'published':
-      return { text: '已发布', class: 'published' }
+      return { text: t('market.myItems.status.published'), class: 'published' }
     case 'draft':
     default:
-      return { text: '草稿', class: 'draft' }
+      return { text: t('market.myItems.status.draft'), class: 'draft' }
   }
 }
 
 // 获取类型显示
 function getTypeText(type: string) {
-  const typeMap: Record<string, string> = {
-    'item': '道具',
-    'campaign': '剧本',
-    'artwork': '画作'
-  }
-  return typeMap[type] || type
+  return t(`market.types.${type}`)
 }
 </script>
 
@@ -180,32 +183,32 @@ function getTypeText(type: string) {
       <div class="header-left">
         <button class="back-btn" @click="goBack">
           <i class="ri-arrow-left-line"></i>
-          返回
+          {{ t('market.myItems.back') }}
         </button>
-        <h1 class="page-title">我的作品</h1>
+        <h1 class="page-title">{{ t('market.myItems.title') }}</h1>
       </div>
       <button class="create-btn" @click="goToUpload">
         <i class="ri-add-line"></i>
-        上传作品
+        {{ t('market.myItems.uploadItem') }}
       </button>
     </div>
 
     <div class="stats anim-item" style="--delay: 1">
       <div class="stat-item">
         <div class="stat-value">{{ stats.total }}</div>
-        <div class="stat-label">全部</div>
+        <div class="stat-label">{{ t('market.myItems.stats.total') }}</div>
       </div>
       <div class="stat-item">
         <div class="stat-value">{{ stats.published }}</div>
-        <div class="stat-label">已发布</div>
+        <div class="stat-label">{{ t('market.myItems.stats.published') }}</div>
       </div>
       <div class="stat-item">
         <div class="stat-value">{{ stats.pending }}</div>
-        <div class="stat-label">待审核</div>
+        <div class="stat-label">{{ t('market.myItems.stats.pending') }}</div>
       </div>
       <div class="stat-item">
         <div class="stat-value">{{ stats.draft }}</div>
-        <div class="stat-label">草稿</div>
+        <div class="stat-label">{{ t('market.myItems.stats.draft') }}</div>
       </div>
     </div>
 
@@ -216,28 +219,28 @@ function getTypeText(type: string) {
           :class="{ active: filterStatus === 'all' }"
           @click="filterStatus = 'all'"
         >
-          全部
+          {{ t('market.myItems.filter.all') }}
         </button>
         <button
           class="filter-btn"
           :class="{ active: filterStatus === 'published' }"
           @click="filterStatus = 'published'"
         >
-          已发布
+          {{ t('market.myItems.filter.published') }}
         </button>
         <button
           class="filter-btn"
           :class="{ active: filterStatus === 'pending' }"
           @click="filterStatus = 'pending'"
         >
-          待审核
+          {{ t('market.myItems.filter.pending') }}
         </button>
         <button
           class="filter-btn"
           :class="{ active: filterStatus === 'draft' }"
           @click="filterStatus = 'draft'"
         >
-          草稿
+          {{ t('market.myItems.filter.draft') }}
         </button>
       </div>
       <div class="filter-search">
@@ -245,25 +248,25 @@ function getTypeText(type: string) {
         <input
           v-model="searchKeyword"
           type="text"
-          placeholder="搜索作品名称或描述..."
+          :placeholder="t('market.myItems.filter.searchPlaceholder')"
         />
       </div>
       <select v-model="typeFilter" class="type-select">
-        <option value="all">全部类型</option>
-        <option value="item">道具</option>
-        <option value="campaign">剧本</option>
-        <option value="artwork">画作</option>
+        <option value="all">{{ t('market.myItems.filter.allTypes') }}</option>
+        <option value="item">{{ t('market.types.item') }}</option>
+        <option value="campaign">{{ t('market.types.campaign') }}</option>
+        <option value="artwork">{{ t('market.types.artwork') }}</option>
       </select>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('market.myItems.loading') }}</div>
 
     <div v-else-if="filteredItems.length === 0" class="empty anim-item" style="--delay: 3">
       <i class="ri-box-3-line"></i>
       <p>{{ emptyMessage }}</p>
       <button class="create-btn-large" @click="goToUpload">
         <i class="ri-add-line"></i>
-        上传第一个作品
+        {{ t('market.myItems.uploadFirst') }}
       </button>
     </div>
 
@@ -286,10 +289,10 @@ function getTypeText(type: string) {
         <!-- 审核拒绝原因 -->
         <div v-if="item.review_status === 'rejected' && item.review_comment" class="reject-reason">
           <i class="ri-error-warning-line"></i>
-          拒绝原因：{{ item.review_comment }}
+          {{ t('market.myItems.rejectReason') }}{{ item.review_comment }}
         </div>
 
-        <div class="item-content">{{ item.description || '暂无描述' }}</div>
+        <div class="item-content">{{ item.description || t('market.item.noDescription') }}</div>
 
         <div class="item-footer">
           <div class="item-meta">
@@ -314,11 +317,11 @@ function getTypeText(type: string) {
           <div class="item-actions">
             <button class="action-btn edit" @click="goToEdit(item.id)">
               <i class="ri-edit-line"></i>
-              编辑
+              {{ t('market.myItems.actions.edit') }}
             </button>
             <button class="action-btn delete" @click="handleDelete(item)">
               <i class="ri-delete-bin-line"></i>
-              删除
+              {{ t('market.myItems.actions.delete') }}
             </button>
           </div>
         </div>

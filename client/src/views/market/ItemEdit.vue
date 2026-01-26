@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getItem, updateItem, getItemTags, addItemTag, removeItemTag, getItemImages, uploadItemImages, deleteItemImage, type Item, type UpdateItemRequest, type ItemImage } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
@@ -9,6 +10,7 @@ import TiptapEditor from '@/components/TiptapEditor.vue'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const toast = useToast()
 const userStore = useUserStore()
 const mounted = ref(false)
@@ -45,7 +47,7 @@ const hasPendingEdit = ref(false)
 onMounted(async () => {
   // 检查登录状态
   if (!userStore.user || !userStore.token) {
-    toast.info('请先登录后再编辑作品')
+    toast.info(t('market.edit.loginRequired'))
     router.push('/login')
     return
   }
@@ -78,11 +80,11 @@ async function loadItem() {
         await loadArtworkImages(id)
       }
     } else {
-      throw new Error('作品不存在')
+      throw new Error(t('market.edit.itemNotFound'))
     }
   } catch (error) {
     console.error('加载作品失败:', error)
-    toast.error('作品不存在')
+    toast.error(t('market.edit.itemNotFound'))
     router.back()
   } finally {
     loading.value = false
@@ -144,7 +146,7 @@ function handleArtworkImagesSelect(event: Event) {
   const remainingSlots = maxImages - currentCount
 
   if (remainingSlots <= 0) {
-    toast.info('最多只能上传20张图片')
+    toast.info(t('market.upload.form.maxImagesReached'))
     return
   }
 
@@ -152,12 +154,12 @@ function handleArtworkImagesSelect(event: Event) {
 
   for (const file of filesToAdd) {
     if (file.size > 10 * 1024 * 1024) {
-      toast.info(`图片 ${file.name} 超过10MB，已跳过`)
+      toast.info(t('market.upload.form.imageTooLarge', { name: file.name }))
       continue
     }
 
     if (!file.type.startsWith('image/')) {
-      toast.info(`文件 ${file.name} 不是图片，已跳过`)
+      toast.info(t('market.upload.form.notAnImage', { name: file.name }))
       continue
     }
 
@@ -202,13 +204,13 @@ function getTotalImageCount() {
 
 async function handleSubmit(status: 'draft' | 'published') {
   if (!form.value.name?.trim()) {
-    toast.info('请输入作品名称')
+    toast.info(t('market.edit.form.nameRequired'))
     return
   }
 
   // 画作类型需要至少保留一张图片
   if (isArtwork.value && getTotalImageCount() === 0) {
-    toast.info('画作类型至少需要一张图片')
+    toast.info(t('market.edit.form.artworkRequired'))
     return
   }
 
@@ -247,20 +249,20 @@ async function handleSubmit(status: 'draft' | 'published') {
           await uploadItemImages(id, files)
         } catch (err) {
           console.error('上传图片失败:', err)
-          toast.info('部分图片上传失败')
+          toast.info(t('market.edit.messages.imageUploadPartialFailed'))
         }
       }
     }
 
     if (item.value?.status === 'published' && status === 'published') {
-      toast.success('编辑已提交，等待审核')
+      toast.success(t('market.edit.messages.editPending'))
     } else {
-      toast.success('更新成功')
+      toast.success(t('market.edit.messages.updateSuccess'))
     }
     router.push({ name: 'item-detail', params: { id } })
   } catch (error: any) {
     console.error('更新失败:', error)
-    toast.error(error.message || '更新失败，请重试')
+    toast.error(error.message || t('market.edit.messages.updateFailed'))
   } finally {
     loading.value = false
   }
@@ -291,31 +293,26 @@ function handlePreview() {
 }
 
 function getTypeText(type: string) {
-  const typeMap: Record<string, string> = {
-    'item': '道具',
-    'campaign': '剧本',
-    'artwork': '画作'
-  }
-  return typeMap[type] || type
+  return t(`market.types.${type}`)
 }
 </script>
 
 <template>
   <div class="item-edit-page" :class="{ 'animate-in': mounted }">
     <div class="header anim-item" style="--delay: 0">
-      <h1 class="page-title">编辑作品</h1>
+      <h1 class="page-title">{{ t('market.edit.title') }}</h1>
       <div class="actions">
-        <button class="cancel-btn" @click="handleCancel">取消</button>
+        <button class="cancel-btn" @click="handleCancel">{{ t('market.edit.actions.cancel') }}</button>
         <button class="preview-btn" @click="handlePreview" :disabled="loading">
           <i class="ri-eye-line"></i>
-          预览
+          {{ t('market.edit.actions.preview') }}
         </button>
         <button class="draft-btn" @click="handleSubmit('draft')" :disabled="loading">
-          保存草稿
+          {{ t('market.edit.actions.saveDraft') }}
         </button>
         <button class="publish-btn" @click="handleSubmit('published')" :disabled="loading">
           <i class="ri-save-line"></i>
-          保存
+          {{ t('market.edit.actions.save') }}
         </button>
       </div>
     </div>
@@ -323,35 +320,35 @@ function getTypeText(type: string) {
     <!-- 待审核提示 -->
     <div v-if="hasPendingEdit" class="pending-notice anim-item" style="--delay: 1">
       <i class="ri-time-line"></i>
-      <span>您有一个编辑正在等待审核，再次提交将覆盖之前的编辑</span>
+      <span>{{ t('market.edit.pendingNotice') }}</span>
     </div>
 
-    <div v-if="loading && !item" class="loading">加载中...</div>
+    <div v-if="loading && !item" class="loading">{{ t('market.edit.loading') }}</div>
 
     <div v-else-if="item" class="form-container anim-item" style="--delay: 2">
       <!-- 作品类型（只读） -->
       <div class="form-group">
-        <label>作品类型</label>
+        <label>{{ t('market.edit.form.type') }}</label>
         <div class="type-badge">{{ getTypeText(item.type) }}</div>
       </div>
 
       <!-- 作品名称 -->
       <div class="form-group">
-        <label>作品名称 <span class="required">*</span></label>
+        <label>{{ t('market.upload.form.name') }} <span class="required">*</span></label>
         <input
           v-model="form.name"
           type="text"
-          placeholder="请输入作品名称"
+          :placeholder="t('market.upload.form.namePlaceholder')"
           class="title-input"
         />
       </div>
 
       <!-- 描述 -->
       <div class="form-group">
-        <label>描述</label>
+        <label>{{ t('market.upload.form.description') }}</label>
         <textarea
           v-model="form.description"
-          placeholder="请描述这个作品的功能和特点..."
+          :placeholder="t('market.upload.form.descriptionPlaceholder')"
           rows="4"
           class="content-textarea"
         ></textarea>
@@ -359,17 +356,17 @@ function getTypeText(type: string) {
 
       <!-- 详细介绍（富文本） -->
       <div class="form-group">
-        <label>详细介绍</label>
+        <label>{{ t('market.upload.form.detailContent') }}</label>
         <TiptapEditor
           v-model="form.detail_content"
-          placeholder="可以添加图片、详细说明作品的使用方法..."
+          :placeholder="t('market.upload.form.detailContentPlaceholder')"
         />
-        <p class="hint">支持插入图片，可以展示作品的详细效果</p>
+        <p class="hint">{{ t('market.upload.form.detailContentHint') }}</p>
       </div>
 
       <!-- 标签选择 -->
       <div class="form-group" v-if="itemTags.length > 0">
-        <label>作品分类标签</label>
+        <label>{{ t('market.upload.form.tags') }}</label>
         <div class="tag-list">
           <div
             v-for="tag in itemTags"
@@ -385,7 +382,7 @@ function getTypeText(type: string) {
 
       <!-- 画作图片管理（仅画作类型） -->
       <div class="form-group" v-if="isArtwork">
-        <label>画作图片 <span class="required">*</span></label>
+        <label>{{ t('market.upload.form.artworkImages') }} <span class="required">*</span></label>
         <div class="artwork-images">
           <div class="image-grid">
             <!-- 已有的图片 -->
@@ -395,13 +392,13 @@ function getTypeText(type: string) {
               class="image-item"
               :class="{ 'marked-delete': imagesToDelete.includes(img.id) }"
             >
-              <img :src="img.image_url" alt="画作图片" />
+              <img :src="img.image_url" :alt="t('market.upload.form.artworkImageAlt')" />
               <button
                 v-if="!imagesToDelete.includes(img.id)"
                 type="button"
                 class="remove-btn"
                 @click="markImageForDeletion(img.id)"
-                title="删除图片"
+                :title="t('market.edit.form.deleteImage')"
               >
                 <i class="ri-close-line"></i>
               </button>
@@ -410,12 +407,12 @@ function getTypeText(type: string) {
                 type="button"
                 class="undo-btn"
                 @click="unmarkImageForDeletion(img.id)"
-                title="撤销删除"
+                :title="t('market.edit.form.undoDelete')"
               >
                 <i class="ri-arrow-go-back-line"></i>
               </button>
               <span v-if="imagesToDelete.includes(img.id)" class="delete-overlay">
-                将被删除
+                {{ t('market.edit.form.willBeDeleted') }}
               </span>
             </div>
 
@@ -425,16 +422,16 @@ function getTypeText(type: string) {
               :key="'new-' + index"
               class="image-item new-image"
             >
-              <img :src="img.preview" alt="新图片" />
+              <img :src="img.preview" :alt="t('market.edit.form.newImage')" />
               <button
                 type="button"
                 class="remove-btn"
                 @click="removeNewImage(index)"
-                title="移除图片"
+                :title="t('market.edit.form.removeImage')"
               >
                 <i class="ri-close-line"></i>
               </button>
-              <span class="new-badge">新</span>
+              <span class="new-badge">{{ t('market.edit.form.newBadge') }}</span>
             </div>
 
             <!-- 添加更多按钮 -->
@@ -444,7 +441,7 @@ function getTypeText(type: string) {
               @click="artworkImagesInput?.click()"
             >
               <i class="ri-add-line"></i>
-              <span>添加图片</span>
+              <span>{{ t('market.edit.form.addImage') }}</span>
             </div>
           </div>
           <input
@@ -456,32 +453,32 @@ function getTypeText(type: string) {
             @change="handleArtworkImagesSelect"
           />
         </div>
-        <p class="hint">支持 JPG、PNG 格式，单张最大 10MB，最多上传 20 张</p>
+        <p class="hint">{{ t('market.upload.form.artworkImagesHint') }}</p>
       </div>
 
       <!-- 水印设置（仅画作类型） -->
       <div class="form-group" v-if="isArtwork">
-        <label>水印设置</label>
+        <label>{{ t('market.upload.form.watermarkSettings') }}</label>
         <div class="watermark-toggle">
           <label class="toggle-switch">
             <input type="checkbox" v-model="form.enable_watermark" />
             <span class="slider"></span>
           </label>
-          <span class="toggle-label">下载时添加水印（用户名）</span>
+          <span class="toggle-label">{{ t('market.upload.form.watermarkLabel') }}</span>
         </div>
-        <p class="hint">开启后，其他用户下载图片时会自动在右下角添加你的用户名作为水印</p>
+        <p class="hint">{{ t('market.upload.form.watermarkHint') }}</p>
       </div>
 
       <!-- 导入代码（非画作类型可编辑） -->
       <div class="form-group" v-if="item.type !== 'artwork'">
-        <label>TRP3 导入代码</label>
+        <label>{{ t('market.upload.form.importCode') }}</label>
         <textarea
           v-model="form.import_code"
-          placeholder="粘贴 TRP3 导入代码..."
+          :placeholder="t('market.edit.form.importCodePlaceholder')"
           rows="6"
           class="code-textarea"
         ></textarea>
-        <p class="hint">更新导入代码用于版本迭代，留空则保持原有代码不变</p>
+        <p class="hint">{{ t('market.edit.form.importCodeHint') }}</p>
       </div>
     </div>
   </div>

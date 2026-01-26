@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import ImageViewer from '@/components/ImageViewer.vue'
@@ -14,6 +15,7 @@ import { useEmoteStore } from '@/stores/emote'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToast()
 const emoteStore = useEmoteStore()
 const loading = ref(false)
@@ -50,12 +52,7 @@ const isArtwork = computed(() => item.value?.type === 'artwork')
 
 // 获取类型显示文本
 function getTypeText(type: string) {
-  const typeMap: Record<string, string> = {
-    'item': '道具',
-    'campaign': '剧本',
-    'artwork': '画作'
-  }
-  return typeMap[type] || type
+  return t(`market.types.${type}`)
 }
 
 function openArtworkViewer(index: number) {
@@ -154,7 +151,7 @@ async function setupDetailContentPreview() {
   await nextTick()
   attachImagePreview(detailContentRef.value, (imageList, index) => {
     openContentViewer(imageList, index)
-  }, '查看图像')
+  }, t('market.detail.viewImage'))
   sanitizeJumpLinks(detailContentRef.value)
   hydrateJumpCardImages(detailContentRef.value)
 }
@@ -198,9 +195,9 @@ async function handleDownload() {
 async function handleAddComment() {
   if (!canSubmit.value) {
     if (newRating.value > 0 && commentLength.value < 10) {
-      toast.error('带评分的评价至少需要10个字符')
+      toast.error(t('market.detail.messages.ratingMinChars'))
     } else {
-      toast.error('请输入评论内容')
+      toast.error(t('market.detail.messages.commentRequired'))
     }
     return
   }
@@ -213,10 +210,10 @@ async function handleAddComment() {
     newRating.value = 0
     loadComments()
     loadItemDetail()
-    toast.success('评价发表成功')
+    toast.success(t('market.detail.messages.commentSuccess'))
   } catch (error: any) {
     console.error('添加评论失败:', error)
-    toast.error(error.message || '添加评论失败')
+    toast.error(error.message || t('market.detail.messages.commentFailed'))
   } finally {
     submitting.value = false
   }
@@ -230,16 +227,16 @@ async function handleLike() {
       await unlikeItem(id)
       isLiked.value = false
       if (item.value) item.value.like_count--
-      toast.success('已取消点赞')
+      toast.success(t('market.detail.messages.unliked'))
     } else {
       await likeItem(id)
       isLiked.value = true
       if (item.value) item.value.like_count++
-      toast.success('点赞成功')
+      toast.success(t('market.detail.messages.liked'))
     }
   } catch (error) {
     console.error('点赞操作失败:', error)
-    toast.error('操作失败，请重试')
+    toast.error(t('market.detail.messages.operationFailed'))
   }
 }
 
@@ -251,16 +248,16 @@ async function handleFavorite() {
       await unfavoriteItem(id)
       isFavorited.value = false
       if (item.value) item.value.favorite_count--
-      toast.success('已取消收藏')
+      toast.success(t('market.detail.messages.unfavorited'))
     } else {
       await favoriteItem(id)
       isFavorited.value = true
       if (item.value) item.value.favorite_count++
-      toast.success('收藏成功')
+      toast.success(t('market.detail.messages.favorited'))
     }
   } catch (error) {
     console.error('收藏操作失败:', error)
-    toast.error('操作失败，请重试')
+    toast.error(t('market.detail.messages.operationFailed'))
   }
 }
 
@@ -275,7 +272,7 @@ async function copyImportCode() {
 
     // 复制到剪贴板
     navigator.clipboard.writeText(item.value.import_code)
-    toast.success('导入代码已复制到剪贴板')
+    toast.success(t('market.detail.messages.codeCopied'))
 
     // 更新本地下载数（如果是首次下载，后端会+1）
     loadItemDetail()
@@ -283,7 +280,7 @@ async function copyImportCode() {
     console.error('复制失败:', error)
     // 即使API调用失败，仍然复制到剪贴板
     navigator.clipboard.writeText(item.value.import_code)
-    toast.success('导入代码已复制到剪贴板')
+    toast.success(t('market.detail.messages.codeCopied'))
   }
 }
 
@@ -335,7 +332,7 @@ function handleViewerDownload(index: number) {
   if (!img) return
   const url = getItemImageDownloadUrl(item.value.id, img.id, true)
   window.open(url, '_blank')
-  toast.success('开始下载图片')
+  toast.success(t('market.detail.messages.downloadStarted'))
 }
 
 // 下载所有图片
@@ -345,27 +342,27 @@ function downloadAllImages() {
     const url = getItemImageDownloadUrl(item.value.id, img.id, true)
     window.open(url, '_blank')
   }
-  toast.success(`开始下载 ${images.value.length} 张图片`)
+  toast.success(t('market.detail.messages.downloadAllStarted', { count: images.value.length }))
 }
 </script>
 
 <template>
   <div class="item-detail-page">
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('market.detail.loading') }}</div>
     <div v-else-if="item" class="detail-container">
       <!-- 返回按钮 -->
       <button class="back-btn" @click="goBack" v-if="!isPreview">
-        <i class="ri-arrow-left-line"></i> 返回列表
+        <i class="ri-arrow-left-line"></i> {{ t('market.detail.backToList') }}
       </button>
 
       <!-- 预览模式横幅 -->
       <div v-if="isPreview" class="preview-banner">
         <div class="preview-info">
           <i class="ri-eye-line"></i>
-          <span>预览模式 - 这是道具发布后的效果预览</span>
+          <span>{{ t('market.detail.preview.banner') }}</span>
         </div>
         <button class="back-edit-btn" @click="backToEdit">
-          <i class="ri-arrow-left-line"></i> 返回编辑
+          <i class="ri-arrow-left-line"></i> {{ t('market.detail.preview.backToEdit') }}
         </button>
       </div>
 
@@ -377,9 +374,9 @@ function downloadAllImages() {
             <div class="image-preview" @click="openArtworkViewer(selectedImageIndex)">
               <img
                 :src="images[selectedImageIndex]?.image_url"
-                alt="画作"
+                :alt="t('market.detail.artwork')"
               />
-              <span class="image-preview-overlay">查看图像</span>
+              <span class="image-preview-overlay">{{ t('market.detail.viewImage') }}</span>
             </div>
             <div class="gallery-nav" v-if="images.length > 1">
               <button class="nav-btn prev" @click.stop="prevImage">
@@ -406,19 +403,19 @@ function downloadAllImages() {
 
         <!-- 预览图（非画作类型） -->
         <div v-else-if="item.preview_image" class="item-preview">
-          <img :src="item.preview_image" alt="预览图" />
+          <img :src="item.preview_image" :alt="t('market.detail.previewImage')" />
         </div>
 
         <div class="item-header">
           <h1>{{ item.name }}</h1>
           <div class="item-meta">
             <span class="type-badge">{{ getTypeText(item.type) }}</span>
-            <span class="author" :style="buildNameStyle(author?.name_color, author?.name_bold)">作者: {{ author?.username || '未知' }}</span>
+            <span class="author" :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ t('market.detail.author') }}: {{ author?.username || t('market.detail.unknown') }}</span>
             <span class="permission-badge" v-if="item.requires_permission && !isArtwork">
-              <i class="ri-shield-keyhole-line"></i> 需要权限
+              <i class="ri-shield-keyhole-line"></i> {{ t('market.detail.permission.badge') }}
               <div class="permission-tooltip">
-                <p><strong>道具作者：</strong><span :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || '未知' }}</span></p>
-                <p>这个道具需要你在游戏内对道具 <strong>Shift+右键点击</strong> 来调整安全性设置后才能正常使用。</p>
+                <p><strong>{{ t('market.detail.permission.itemAuthor') }}</strong><span :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || t('market.detail.unknown') }}</span></p>
+                <p>{{ t('market.detail.permission.tooltip') }}</p>
               </div>
             </span>
           </div>
@@ -427,30 +424,30 @@ function downloadAllImages() {
         <div class="item-stats">
           <div class="stat-item">
             <i class="ri-download-line"></i>
-            <span>{{ item.downloads }} 下载</span>
+            <span>{{ item.downloads }} {{ t('market.detail.stats.downloads') }}</span>
           </div>
           <div class="stat-item">
             <i class="ri-star-fill"></i>
-            <span>{{ item.rating.toFixed(1) }} ({{ item.rating_count }} 评价)</span>
+            <span>{{ item.rating.toFixed(1) }} ({{ item.rating_count }} {{ t('market.detail.stats.rating') }})</span>
           </div>
           <div class="stat-item">
             <i class="ri-heart-fill"></i>
-            <span>{{ item.like_count || 0 }} 点赞</span>
+            <span>{{ item.like_count || 0 }} {{ t('market.detail.stats.likes') }}</span>
           </div>
           <div class="stat-item">
             <i class="ri-bookmark-fill"></i>
-            <span>{{ item.favorite_count || 0 }} 收藏</span>
+            <span>{{ item.favorite_count || 0 }} {{ t('market.detail.stats.favorites') }}</span>
           </div>
         </div>
 
         <div class="item-description">
-          <h3>描述</h3>
-          <p>{{ item.description || '暂无描述' }}</p>
+          <h3>{{ t('market.detail.description') }}</h3>
+          <p>{{ item.description || t('market.item.noDescription') }}</p>
         </div>
 
         <!-- 详细介绍 -->
         <div v-if="item.detail_content" class="item-detail-content">
-          <h3>详细介绍</h3>
+          <h3>{{ t('market.detail.detailContent') }}</h3>
           <div ref="detailContentRef" class="rich-content" v-html="item.detail_content" @click="handleDetailContentClick"></div>
         </div>
 
@@ -462,37 +459,37 @@ function downloadAllImages() {
           <!-- 画作类型：下载图片按钮 -->
           <template v-if="isArtwork">
             <button class="download-images-btn" @click="downloadAllImages">
-              <i class="ri-download-line"></i> 下载全部图片 ({{ images.length }})
+              <i class="ri-download-line"></i> {{ t('market.detail.actions.downloadAllImages') }} ({{ images.length }})
             </button>
           </template>
           <!-- 非画作类型：复制导入代码按钮 -->
           <template v-else>
             <button class="copy-code-btn" @click="copyImportCode">
-              <i class="ri-file-copy-line"></i> 一键复制导入代码
+              <i class="ri-file-copy-line"></i> {{ t('market.detail.actions.copyImportCode') }}
             </button>
           </template>
           <button class="like-btn" :class="{ active: isLiked }" @click="handleLike">
             <i :class="isLiked ? 'ri-heart-fill' : 'ri-heart-line'"></i>
-            {{ isLiked ? '已点赞' : '点赞' }}
+            {{ isLiked ? t('market.detail.actions.liked') : t('market.detail.actions.like') }}
           </button>
           <button class="favorite-btn" :class="{ active: isFavorited }" @click="handleFavorite">
             <i :class="isFavorited ? 'ri-bookmark-fill' : 'ri-bookmark-line'"></i>
-            {{ isFavorited ? '已收藏' : '收藏' }}
+            {{ isFavorited ? t('market.detail.actions.favorited') : t('market.detail.actions.favorite') }}
           </button>
         </div>
 
         <div class="secondary-actions" v-if="!isArtwork">
           <button class="download-btn" @click="handleDownload">
-            <i class="ri-eye-line"></i> 查看导入代码
+            <i class="ri-eye-line"></i> {{ t('market.detail.actions.viewImportCode') }}
           </button>
         </div>
 
         <!-- 导入代码显示区域（非画作类型） -->
         <div v-if="showImportCode && !isArtwork" class="import-code-section">
           <div class="import-code-header">
-            <h3>导入代码</h3>
+            <h3>{{ t('market.detail.importCode.title') }}</h3>
             <button class="copy-btn" @click="copyImportCode">
-              <i class="ri-file-copy-line"></i> 复制代码
+              <i class="ri-file-copy-line"></i> {{ t('market.detail.importCode.copy') }}
             </button>
           </div>
           <textarea
@@ -502,19 +499,19 @@ function downloadAllImages() {
             rows="8"
           ></textarea>
           <p class="import-hint">
-            在游戏中打开 TRP3 Extended，点击导入按钮，粘贴上面的代码即可
+            {{ t('market.detail.importCode.hint') }}
           </p>
         </div>
       </div>
 
       <!-- 评价区域（评分+评论合并） -->
       <div class="comments-section">
-        <h3>评价 ({{ comments.length }})</h3>
+        <h3>{{ t('market.detail.comments.title') }} ({{ comments.length }})</h3>
 
         <!-- 评价输入框 -->
         <div class="review-input-box">
           <div class="rating-input">
-            <span class="rating-label">评分：</span>
+            <span class="rating-label">{{ t('market.detail.comments.ratingLabel') }}</span>
             <div class="rating-stars">
               <i
                 v-for="star in 5"
@@ -526,7 +523,7 @@ function downloadAllImages() {
                 @mouseleave="hoverRating = 0"
               ></i>
             </div>
-            <span class="rating-value" v-if="newRating">{{ newRating }} 星</span>
+            <span class="rating-value" v-if="newRating">{{ newRating }} {{ t('market.detail.comments.star') }}</span>
             <button v-if="newRating" class="clear-rating-btn" @click="newRating = 0" type="button">
               <i class="ri-close-line"></i>
             </button>
@@ -534,21 +531,21 @@ function downloadAllImages() {
           <EmoteEditor
             ref="commentEditorRef"
             v-model="newComment"
-            placeholder="写下你的评价...（带评分需至少10字）"
+            :placeholder="t('market.detail.comments.placeholder')"
           />
           <div class="review-footer">
             <button ref="emojiButtonRef" class="emoji-btn" @click="showEmojiPicker = true" type="button">
               <i class="ri-emotion-line"></i>
             </button>
             <span class="char-count" :class="{ warning: newRating > 0 && commentLength < 10 }">
-              {{ commentLength }}{{ newRating > 0 ? '/10' : '' }} 字
+              {{ commentLength }}{{ newRating > 0 ? '/10' : '' }} {{ t('market.detail.comments.charCount') }}
             </span>
             <button
               class="submit-review-btn"
               @click="handleAddComment"
               :disabled="!canSubmit || submitting"
             >
-              {{ submitting ? '提交中...' : '发表评价' }}
+              {{ submitting ? t('market.detail.comments.submitting') : t('market.detail.comments.submit') }}
             </button>
           </div>
         </div>
@@ -556,7 +553,7 @@ function downloadAllImages() {
         <!-- 评论列表 -->
         <div class="comments-list">
           <div v-if="comments.length === 0" class="empty-comments">
-            暂无评价，快来抢沙发吧！
+            {{ t('market.detail.comments.empty') }}
           </div>
           <div v-else v-for="comment in comments" :key="comment.id" class="comment-item">
             <div class="comment-avatar">
@@ -566,7 +563,7 @@ function downloadAllImages() {
             <div class="comment-body">
               <div class="comment-header">
                 <div class="comment-user-info">
-                  <span class="comment-author" :style="buildNameStyle(comment.name_color, comment.name_bold)">{{ comment.username || '匿名用户' }}</span>
+                  <span class="comment-author" :style="buildNameStyle(comment.name_color, comment.name_bold)">{{ comment.username || t('market.detail.comments.anonymous') }}</span>
                   <div v-if="comment.rating > 0" class="comment-rating">
                     <i v-for="star in 5" :key="star" class="ri-star-fill" :class="{ active: star <= comment.rating }"></i>
                   </div>
@@ -587,7 +584,7 @@ function downloadAllImages() {
       :images="viewerImages"
       :start-index="viewerStartIndex"
       :show-download="viewerMode === 'artwork'"
-      download-label="下载此图"
+      :download-label="t('market.detail.imageViewer.download')"
       @download="handleViewerDownload"
     />
   </div>
