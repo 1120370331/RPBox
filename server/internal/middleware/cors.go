@@ -18,12 +18,19 @@ func CORS(cfg *config.Config) gin.HandlerFunc {
 			allowedOrigins[origin] = struct{}{}
 		}
 	}
+	// 如果没有配置任何 Origin，允许所有（向后兼容）
+	allowAll := len(allowedOrigins) == 0
 
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		allowed := false
 		if origin != "" {
-			if _, ok := allowedOrigins[origin]; ok {
+			if allowAll {
+				allowed = true
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Access-Control-Allow-Credentials", "true")
+				c.Header("Vary", "Origin")
+			} else if _, ok := allowedOrigins[origin]; ok {
 				allowed = true
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Access-Control-Allow-Credentials", "true")
