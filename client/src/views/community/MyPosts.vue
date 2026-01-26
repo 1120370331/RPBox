@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listPosts, deletePost, POST_CATEGORIES, type PostWithAuthor, type PostCategory } from '@/api/post'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToast()
 const dialog = useDialog()
 const mounted = ref(false)
@@ -96,15 +98,15 @@ const emptyMessage = computed(() => {
   const hasKeyword = searchKeyword.value.trim().length > 0
   const hasCategory = categoryFilter.value !== 'all'
   if (hasKeyword || hasCategory) {
-    return '没有匹配的帖子'
+    return t('community.myPosts.noMatchingPosts')
   }
   if (filterStatus.value === 'draft') {
-    return '没有草稿'
+    return t('community.myPosts.noDrafts')
   }
   if (filterStatus.value === 'pending') {
-    return '没有审核中的帖子'
+    return t('community.myPosts.noPendingPosts')
   }
-  return '没有已发布的帖子'
+  return t('community.myPosts.noPublishedPosts')
 })
 
 onMounted(async () => {
@@ -135,19 +137,19 @@ function goToEdit(id: number) {
 
 async function handleDelete(post: PostWithAuthor) {
   const confirmed = await dialog.confirm({
-    title: '删除帖子',
-    message: `确定要删除帖子“${post.title}”吗？此操作不可恢复。`,
+    title: t('community.myPosts.deleteTitle'),
+    message: t('community.myPosts.deleteMessage', { title: post.title }),
     type: 'warning',
   })
   if (!confirmed) return
 
   try {
     await deletePost(post.id)
-    toast.success('删除成功')
+    toast.success(t('community.myPosts.deleteSuccess'))
     await loadMyPosts()
   } catch (error) {
     console.error('删除失败:', error)
-    toast.error('删除失败，请重试')
+    toast.error(t('community.myPosts.deleteFailed'))
   }
 }
 
@@ -178,28 +180,28 @@ function stripHtml(html: string) {
       <div class="header-left">
         <button class="back-btn" @click="goBack">
           <i class="ri-arrow-left-line"></i>
-          返回
+          {{ t('community.myPosts.back') }}
         </button>
-        <h1 class="page-title">我的帖子</h1>
+        <h1 class="page-title">{{ t('community.myPosts.pageTitle') }}</h1>
       </div>
       <button class="create-btn" @click="goToCreate">
         <i class="ri-add-line"></i>
-        创建帖子
+        {{ t('community.myPosts.createPost') }}
       </button>
     </div>
 
     <div class="stats anim-item" style="--delay: 1">
       <div class="stat-item">
         <div class="stat-value">{{ stats.published }}</div>
-        <div class="stat-label">已发布</div>
+        <div class="stat-label">{{ t('community.myPosts.published') }}</div>
       </div>
       <div class="stat-item">
         <div class="stat-value">{{ stats.pending }}</div>
-        <div class="stat-label">审核中</div>
+        <div class="stat-label">{{ t('community.myPosts.pending') }}</div>
       </div>
       <div class="stat-item">
         <div class="stat-value">{{ stats.draft }}</div>
-        <div class="stat-label">草稿</div>
+        <div class="stat-label">{{ t('community.myPosts.draft') }}</div>
       </div>
     </div>
 
@@ -210,21 +212,21 @@ function stripHtml(html: string) {
           :class="{ active: filterStatus === 'published' }"
           @click="filterStatus = 'published'"
         >
-          我发布的
+          {{ t('community.myPosts.myPublished') }}
         </button>
         <button
           class="filter-btn"
           :class="{ active: filterStatus === 'pending' }"
           @click="filterStatus = 'pending'"
         >
-          审核中
+          {{ t('community.myPosts.pending') }}
         </button>
         <button
           class="filter-btn"
           :class="{ active: filterStatus === 'draft' }"
           @click="filterStatus = 'draft'"
         >
-          草稿箱
+          {{ t('community.myPosts.draftBox') }}
         </button>
       </div>
       <div class="filter-search">
@@ -232,11 +234,11 @@ function stripHtml(html: string) {
         <input
           v-model="searchKeyword"
           type="text"
-          placeholder="搜索标题或内容..."
+          :placeholder="t('community.myPosts.searchPlaceholder')"
         />
       </div>
       <select v-model="categoryFilter" class="category-select">
-        <option value="all">全部分区</option>
+        <option value="all">{{ t('community.myPosts.allCategories') }}</option>
         <option
           v-for="category in POST_CATEGORIES"
           :key="category.value"
@@ -247,14 +249,14 @@ function stripHtml(html: string) {
       </select>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading">{{ t('community.loading') }}</div>
 
     <div v-else-if="filteredPosts.length === 0" class="empty anim-item" style="--delay: 3">
       <i class="ri-file-list-3-line"></i>
       <p>{{ emptyMessage }}</p>
       <button class="create-btn-large" @click="goToCreate">
         <i class="ri-add-line"></i>
-        创建第一篇帖子
+        {{ t('community.myPosts.createFirstPost') }}
       </button>
     </div>
 
@@ -267,8 +269,8 @@ function stripHtml(html: string) {
       >
         <div class="post-header">
           <h2 class="post-title" @click="goToDetail(post.id)">{{ post.title }}</h2>
-          <span v-if="post.status === 'draft'" class="draft-badge">草稿</span>
-          <span v-else-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">审核中</span>
+          <span v-if="post.status === 'draft'" class="draft-badge">{{ t('community.myPosts.draft') }}</span>
+          <span v-else-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">{{ t('community.myPosts.pending') }}</span>
         </div>
 
         <div class="post-content">{{ getPostPreview(post) }}</div>
@@ -296,11 +298,11 @@ function stripHtml(html: string) {
           <div class="post-actions">
             <button class="action-btn edit" @click="goToEdit(post.id)">
               <i class="ri-edit-line"></i>
-              编辑
+              {{ t('community.action.edit') }}
             </button>
             <button class="action-btn delete" @click="handleDelete(post)">
               <i class="ri-delete-bin-line"></i>
-              删除
+              {{ t('community.action.delete') }}
             </button>
           </div>
         </div>

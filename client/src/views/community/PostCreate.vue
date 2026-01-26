@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { createPost, type CreatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { uploadImage } from '@/api/item'
 import { listTags, type Tag } from '@/api/tag'
@@ -13,6 +14,7 @@ import PostQuickJump from '@/components/PostQuickJump.vue'
 const DRAFT_KEY = 'post_create_draft'
 
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToastStore()
 const userStore = useUserStore()
 const mounted = ref(false)
@@ -111,7 +113,7 @@ function clearDraft() {
 onMounted(async () => {
   // 检查登录状态
   if (!userStore.user || !userStore.token) {
-    toast.warning('请先登录后再发帖')
+    toast.warning(t('community.create.loginRequired'))
     router.push('/login')
     return
   }
@@ -167,27 +169,27 @@ function toggleTag(tagId: number) {
 
 async function handleSubmit(status: 'draft' | 'published') {
   if (!form.value.title.trim()) {
-    toast.warning('请输入标题')
+    toast.warning(t('community.create.titleRequired'))
     return
   }
   if (!form.value.content.trim()) {
-    toast.warning('请输入内容')
+    toast.warning(t('community.create.contentRequired'))
     return
   }
 
   // 活动分区权限验证
   if (form.value.category === 'event') {
     if (form.value.event_type === 'server' && !canPostServerEvent.value) {
-      toast.error('你没有发布服务器活动的权限')
+      toast.error(t('community.create.noServerEventPermission'))
       return
     }
     if (form.value.event_type === 'guild') {
       if (!canPostGuildEvent.value) {
-        toast.error('你没有发布公会活动的权限')
+        toast.error(t('community.create.noGuildEventPermission'))
         return
       }
       if (!form.value.guild_id) {
-        toast.warning('请选择要发布活动的公会')
+        toast.warning(t('community.create.selectGuildForEvent'))
         return
       }
     }
@@ -208,11 +210,11 @@ async function handleSubmit(status: 'draft' | 'published') {
 
     await createPost(form.value)
     clearDraft() // 发布成功后清除草稿
-    toast.success(status === 'published' ? '发布成功，等待审核' : '保存草稿成功')
+    toast.success(status === 'published' ? t('community.create.publishSuccess') : t('community.create.draftSuccess'))
     router.push({ name: 'my-posts' })
   } catch (error: any) {
     console.error('提交失败:', error)
-    const msg = error?.message || '提交失败，请重试'
+    const msg = error?.message || t('community.create.submitFailed')
     toast.error(msg)
   } finally {
     loading.value = false
@@ -309,7 +311,7 @@ async function handleCoverImageUpload(event: Event) {
   if (!file) return
 
   if (!file.type.startsWith('image/')) {
-    toast.error('请选择图片文件')
+    toast.error(t('community.create.selectImageFile'))
     return
   }
 
@@ -319,14 +321,14 @@ async function handleCoverImageUpload(event: Event) {
     const res: any = await uploadImage(compressed)
     const url = res?.data?.url || res?.url
     if (!url) {
-      throw new Error('未获取到图片地址')
+      throw new Error(t('community.create.noImageUrl'))
     }
     coverImagePreview.value = url
     form.value.cover_image = url
-    toast.success('封面图上传成功')
+    toast.success(t('community.create.coverUploadSuccess'))
   } catch (error: any) {
     console.error('封面图上传失败:', error)
-    toast.error(error?.message || '封面图上传失败')
+    toast.error(error?.message || t('community.create.coverUploadFailed'))
   } finally {
     coverImageLoading.value = false
     input.value = ''
@@ -353,7 +355,7 @@ function toggleQuickJump() {
   <div class="post-create-page" :class="{ 'animate-in': mounted }">
     <!-- 头部 -->
     <div class="page-header anim-item" style="--delay: 0">
-      <h1 class="page-title">发布新卷轴</h1>
+      <h1 class="page-title">{{ t('community.create.pageTitle') }}</h1>
     </div>
 
     <!-- 编辑区域 -->
@@ -363,25 +365,25 @@ function toggleQuickJump() {
         <input
           v-model="form.title"
           type="text"
-          placeholder="输入一个吸引人的标题..."
+          :placeholder="t('community.create.titlePlaceholder')"
           class="title-input"
         />
       </div>
 
       <!-- 封面图上传 -->
       <div class="cover-image-group">
-        <label class="cover-label">封面图（可选）</label>
+        <label class="cover-label">{{ t('community.create.coverLabel') }}</label>
         <div class="cover-upload-area">
           <div v-if="coverImagePreview" class="cover-preview">
-            <img :src="coverImagePreview" alt="封面预览" />
+            <img :src="coverImagePreview" :alt="t('community.create.coverPreview')" />
             <button class="remove-cover-btn" @click="removeCoverImage">
               <i class="ri-close-line"></i>
             </button>
           </div>
           <div v-else class="cover-placeholder" @click="coverImageInput?.click()">
             <i class="ri-image-add-line"></i>
-            <span>{{ coverImageLoading ? '处理中...' : '点击上传封面图' }}</span>
-            <span class="cover-hint">建议尺寸 16:9，自动压缩到 1MB 以内</span>
+            <span>{{ coverImageLoading ? t('community.create.coverProcessing') : t('community.create.coverUpload') }}</span>
+            <span class="cover-hint">{{ t('community.create.coverHint') }}</span>
           </div>
           <input
             ref="coverImageInput"
@@ -398,14 +400,14 @@ function toggleQuickJump() {
         <TiptapEditor
           ref="editorRef"
           v-model="form.content"
-          placeholder="开始书写你的传奇..."
+          :placeholder="t('community.create.contentPlaceholder')"
         >
           <template #toolbar>
             <button
               type="button"
               class="toolbar-slot"
               :class="{ active: quickJumpOpen }"
-              title="快速跳转"
+              :title="t('community.create.quickJump')"
               @mousedown.prevent
               @click="toggleQuickJump"
             >
@@ -422,7 +424,7 @@ function toggleQuickJump() {
     <div class="settings-bar anim-item" style="--delay: 2">
       <!-- 分区选择 -->
       <div class="setting-item">
-        <label class="setting-label">分区</label>
+        <label class="setting-label">{{ t('community.create.category') }}</label>
         <div class="category-select">
           <select v-model="form.category">
             <option v-for="cat in POST_CATEGORIES" :key="cat.value" :value="cat.value">
@@ -434,24 +436,24 @@ function toggleQuickJump() {
 
       <!-- 活动设置 -->
       <div v-if="isEventCategory" class="setting-item setting-vertical">
-        <label class="setting-label">活动类型</label>
+        <label class="setting-label">{{ t('community.create.eventType') }}</label>
         <div class="event-type-toggle">
           <button
             :class="{ active: form.event_type === 'server' }"
             :disabled="!canPostServerEvent"
             @click="form.event_type = 'server'"
-          >服务器</button>
+          >{{ t('community.create.eventTypeServer') }}</button>
           <button
             :class="{ active: form.event_type === 'guild' }"
             :disabled="!canPostGuildEvent"
             @click="form.event_type = 'guild'"
-          >公会</button>
+          >{{ t('community.create.eventTypeGuild') }}</button>
         </div>
       </div>
 
       <!-- 标签 -->
       <div class="setting-item tags-setting">
-        <label class="setting-label">标签</label>
+        <label class="setting-label">{{ t('community.create.tags') }}</label>
         <div class="tags-list">
           <span
             v-for="tag in tags"
@@ -465,45 +467,45 @@ function toggleQuickJump() {
 
       <!-- 关联公会 -->
       <div v-if="!isEventCategory" class="setting-item setting-vertical">
-        <label class="setting-label">公会</label>
+        <label class="setting-label">{{ t('community.create.guild') }}</label>
         <select v-model="form.guild_id" class="guild-select">
-          <option :value="undefined">不关联</option>
+          <option :value="undefined">{{ t('community.create.guildNone') }}</option>
           <option v-for="g in guilds" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
       </div>
 
       <!-- 公会外可见开关（当关联公会时显示） -->
       <div v-if="!isEventCategory && form.guild_id" class="setting-item setting-vertical visibility-setting">
-        <label class="setting-label">公会外可见</label>
+        <label class="setting-label">{{ t('community.create.visibility') }}</label>
         <div class="visibility-toggle">
           <label class="switch">
             <input type="checkbox" v-model="form.is_public" />
             <span class="slider"></span>
           </label>
-          <span class="visibility-hint">{{ form.is_public ? '帖子将同时显示在社区广场' : '仅公会成员可见' }}</span>
+          <span class="visibility-hint">{{ form.is_public ? t('community.create.visibilityPublic') : t('community.create.visibilityPrivate') }}</span>
         </div>
       </div>
 
       <div v-if="isEventCategory && form.event_type === 'guild'" class="setting-item setting-vertical">
-        <label class="setting-label">公会</label>
+        <label class="setting-label">{{ t('community.create.guild') }}</label>
         <select v-model="form.guild_id" class="guild-select">
-          <option :value="undefined">请选择</option>
+          <option :value="undefined">{{ t('community.create.guildSelect') }}</option>
           <option v-for="g in adminGuilds" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
       </div>
 
       <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical event-time-group">
-        <label class="setting-label">活动时间</label>
+        <label class="setting-label">{{ t('community.create.eventTime') }}</label>
         <div class="time-inputs-row">
           <div class="time-input-wrapper">
-            <label class="time-sub-label">开始时间</label>
+            <label class="time-sub-label">{{ t('community.create.eventStartTime') }}</label>
             <input type="datetime-local" v-model="form.event_start_time" class="time-input" />
           </div>
           <div class="time-separator">
             <i class="ri-arrow-right-line"></i>
           </div>
           <div class="time-input-wrapper">
-            <label class="time-sub-label">结束时间</label>
+            <label class="time-sub-label">{{ t('community.create.eventEndTime') }}</label>
             <input type="datetime-local" v-model="form.event_end_time" class="time-input" />
           </div>
         </div>
@@ -511,7 +513,7 @@ function toggleQuickJump() {
 
       <!-- 活动颜色选择 -->
       <div v-if="isEventCategory && form.event_type" class="setting-item setting-vertical event-color-group">
-        <label class="setting-label">活动标记颜色</label>
+        <label class="setting-label">{{ t('community.create.eventColor') }}</label>
         <div class="color-picker-wrapper">
           <div class="custom-color-input">
             <input type="color" v-model="form.event_color" class="color-input" />
@@ -524,13 +526,13 @@ function toggleQuickJump() {
       <div class="actions-group">
         <button class="action-btn preview" @click="handlePreview">
           <i class="ri-eye-line"></i>
-          预览
+          {{ t('community.create.preview') }}
         </button>
         <button class="action-btn cancel" @click="handleCancel">
-          取消
+          {{ t('community.create.cancel') }}
         </button>
         <button class="action-btn publish" @click="handleSubmit('published')" :disabled="loading">
-          发布
+          {{ t('community.create.publish') }}
         </button>
       </div>
     </div>
