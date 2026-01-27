@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { listStories, deleteStory, deleteStories, moveStoriesToStory, updateStory, type Story, type StoryFilterParams } from '@/api/story'
+import { listStories, deleteStory, deleteStories, moveStoriesToStory, updateStory, updateStoriesBackgroundColor, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { useDialog } from '@/composables/useDialog'
@@ -47,6 +47,17 @@ const batchDeleting = ref(false)
 const showMoveModal = ref(false)
 const moveTargetId = ref<number | null>(null)
 const batchMoving = ref(false)
+
+// 编组/背景色
+const showColorModal = ref(false)
+const selectedColor = ref('')
+const batchUpdatingColor = ref(false)
+const defaultColors = [
+  '#E57373', '#F06292', '#BA68C8', '#9575CD', '#7986CB',
+  '#64B5F6', '#4FC3F7', '#4DD0E1', '#4DB6AC', '#81C784',
+  '#AED581', '#DCE775', '#FFF176', '#FFD54F', '#FFB74D',
+  '#FF8A65', '#A1887F', '#90A4AE'
+]
 
 function enterManageMode() {
   manageMode.value = true
@@ -130,6 +141,38 @@ async function handleBatchMove() {
     })
   } finally {
     batchMoving.value = false
+  }
+}
+
+function openColorModal() {
+  if (selectedIds.value.length === 0) return
+  selectedColor.value = ''
+  showColorModal.value = true
+}
+
+async function handleBatchUpdateColor() {
+  if (selectedIds.value.length === 0) return
+
+  batchUpdatingColor.value = true
+  try {
+    await updateStoriesBackgroundColor(selectedIds.value, selectedColor.value)
+    // 更新本地数据
+    stories.value = stories.value.map(s => {
+      if (selectedIds.value.includes(s.id)) {
+        return { ...s, background_color: selectedColor.value }
+      }
+      return s
+    })
+    showColorModal.value = false
+    exitManageMode()
+  } catch (e: any) {
+    await alert({
+      title: t('archives.batch.updateFailed'),
+      message: e.message || t('archives.batch.batchUpdateFailed'),
+      type: 'error'
+    })
+  } finally {
+    batchUpdatingColor.value = false
   }
 }
 
@@ -376,6 +419,7 @@ defineExpose({
           <div
             class="timeline-card"
             :class="{ 'manage-mode': manageMode }"
+            :style="story.background_color ? { backgroundColor: story.background_color + '20', borderLeft: `4px solid ${story.background_color}` } : {}"
             @click="manageMode ? toggleSelect(story.id) : $emit('view', story.id)"
           >
             <!-- 管理模式复选框 -->
@@ -423,6 +467,7 @@ defineExpose({
         :key="story.id"
         class="story-card"
         :class="{ selected: selectedIds.includes(story.id), 'manage-mode': manageMode }"
+        :style="story.background_color ? { backgroundColor: story.background_color + '20', borderLeft: `4px solid ${story.background_color}` } : {}"
         hoverable
         @click="manageMode ? toggleSelect(story.id) : undefined"
       >
@@ -480,6 +525,9 @@ defineExpose({
       <div v-if="manageMode && selectedIds.length > 0" class="batch-action-bar">
         <span class="selected-count">{{ t('archives.batch.selected', { count: selectedIds.length }) }}</span>
         <div class="batch-actions">
+          <RButton @click="openColorModal">
+            <i class="ri-palette-line"></i> {{ t('archives.action.setColor') }}
+          </RButton>
           <RButton :disabled="availableTargetStories.length === 0" @click="openMoveModal">
             <i class="ri-folder-transfer-line"></i> {{ t('archives.action.moveToStory') }}
           </RButton>
@@ -523,6 +571,40 @@ defineExpose({
         </RButton>
       </template>
     </RModal>
+
+    <!-- 设置背景色弹窗 -->
+    <RModal v-model="showColorModal" :title="t('archives.modal.colorTitle')" width="400px">
+      <div class="color-form">
+        <p class="color-tip">{{ t('archives.modal.colorTip', { count: selectedIds.length }) }}</p>
+        <div class="color-grid">
+          <button
+            v-for="color in defaultColors"
+            :key="color"
+            class="color-swatch"
+            :class="{ selected: selectedColor === color }"
+            :style="{ backgroundColor: color }"
+            @click="selectedColor = color"
+          />
+          <button
+            class="color-swatch clear-color"
+            :class="{ selected: selectedColor === '' }"
+            @click="selectedColor = ''"
+          >
+            <i class="ri-close-line"></i>
+          </button>
+        </div>
+        <div class="custom-color">
+          <label>{{ t('archives.modal.customColor') }}</label>
+          <input type="color" v-model="selectedColor" class="color-input" />
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showColorModal = false">{{ t('archives.action.cancel') }}</RButton>
+        <RButton type="primary" :loading="batchUpdatingColor" @click="handleBatchUpdateColor">
+          {{ t('archives.action.confirm') }}
+        </RButton>
+      </template>
+    </RModal>
   </div>
 </template>
 
@@ -538,6 +620,12 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--color-bg, #faf6f1);
+  padding: 12px 0;
+  margin: -12px 0 0 0;
 }
 
 .view-toggle {
@@ -1084,5 +1172,82 @@ defineExpose({
   text-align: center;
   color: var(--color-text-secondary, #856a52);
   font-size: 14px;
+}
+
+/* 颜色选择弹窗样式 */
+.color-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.color-tip {
+  font-size: 14px;
+  color: var(--color-text-secondary, #856a52);
+  margin: 0;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.color-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+
+.color-swatch.selected {
+  border-color: var(--color-primary, #4B3621);
+  box-shadow: 0 0 0 2px var(--color-panel-bg, #fff), 0 0 0 4px var(--color-primary, #4B3621);
+}
+
+.color-swatch.clear-color {
+  background: var(--color-card-bg, #f5f0eb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary, #856a52);
+  font-size: 18px;
+}
+
+.custom-color {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-light, #f0e6dc);
+}
+
+.custom-color label {
+  font-size: 14px;
+  color: var(--color-text-secondary, #856a52);
+}
+
+.color-input {
+  width: 48px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-input::-webkit-color-swatch {
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-radius: 6px;
 }
 </style>

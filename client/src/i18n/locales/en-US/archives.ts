@@ -46,6 +46,8 @@ export default {
     confirmMove: 'Confirm Move',
     cancel: 'Cancel',
     append: 'Append',
+    setColor: 'Set Color',
+    confirm: 'Confirm',
   },
   empty: {
     all: 'No stories yet',
@@ -77,6 +79,8 @@ export default {
     batchDeleteFailed: 'Batch delete failed',
     moveFailed: 'Move Failed',
     batchMoveFailed: 'Batch move failed',
+    updateFailed: 'Update Failed',
+    batchUpdateFailed: 'Batch update failed',
   },
   modal: {
     createTitle: 'New Story',
@@ -96,6 +100,9 @@ export default {
     selectStory: 'Select Story',
     pendingRecords: 'Will archive {count} chat records',
     updatedAt: 'Updated on {date}',
+    colorTitle: 'Set Background Color',
+    colorTip: 'Set background color for {count} selected stories',
+    customColor: 'Custom Color',
   },
   confirm: {
     deleteTitle: 'Delete Story',
