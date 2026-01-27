@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
-import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry, deleteStoryEntry, type Story, type StoryEntry } from '@/api/story'
+import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry, deleteStoryEntry, updateEntriesBackgroundColor, batchDeleteEntries, archiveEntriesToStory, listStories, listBookmarks, createBookmark, updateBookmark, deleteBookmark, updateLastViewBookmark, type Story, type StoryEntry, type StoryBookmark } from '@/api/story'
 import { getCharacter, updateCharacter, listCharacters, type Character } from '@/api/character'
 import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
 import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
+import { useDialog } from '@/composables/useDialog'
 import { useUserStore } from '@/stores/user'
 import RButton from '@/components/RButton.vue'
 import RCard from '@/components/RCard.vue'
@@ -23,6 +24,7 @@ import ImageViewer from '@/components/ImageViewer.vue'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const { confirm } = useDialog()
 
 const loading = ref(true)
 const story = ref<Story | null>(null)
@@ -90,7 +92,105 @@ const editEntryTimestamp = ref('')
 const editEntryImageOffset = ref(0)
 const savingEntry = ref(false)
 
+// 条目管理模式
+const entryManageMode = ref(false)
+const selectedEntryIds = ref<number[]>([])
+const showEntryColorModal = ref(false)
+const selectedEntryColor = ref('')
+const updatingEntryColor = ref(false)
+const defaultColors = [
+  '#E57373', '#F06292', '#BA68C8', '#9575CD', '#7986CB',
+  '#64B5F6', '#4FC3F7', '#4DD0E1', '#4DB6AC', '#81C784',
+  '#AED581', '#DCE775', '#FFF176', '#FFD54F', '#FFB74D',
+  '#FF8A65', '#A1887F', '#90A4AE'
+]
+
+// 批量删除
+const deletingEntries = ref(false)
+
+// 归档到其他剧情
+const showArchiveModal = ref(false)
+const archiveMode = ref<'copy' | 'move'>('copy')
+const archiveTargetId = ref<number | null>(null)
+const archivingEntries = ref(false)
+const userStories = ref<Story[]>([])
+
+// 编组名称
+const selectedGroupName = ref('')
+
+// 书签功能
+const bookmarks = ref<StoryBookmark[]>([])
+const showAddBookmarkModal = ref(false)
+const newBookmarkName = ref('')
+const newBookmarkEntryId = ref<number | null>(null)
+const newBookmarkColor = ref('')
+const addingBookmark = ref(false)
+const bookmarkSidebarExpanded = ref(false)
+
+// 编辑书签
+const showEditBookmarkModal = ref(false)
+const editingBookmark = ref<StoryBookmark | null>(null)
+const editBookmarkName = ref('')
+const editBookmarkColor = ref('')
+const savingBookmark = ref(false)
+
+// 书签颜色预设
+const bookmarkColors = ['#E57373', '#F06292', '#BA68C8', '#64B5F6', '#4DB6AC', '#81C784', '#FFD54F', '#FFB74D']
+
 const storyId = computed(() => Number(route.params.id))
+
+// 按条目时间排序的书签（收藏优先）
+const sortedBookmarks = computed(() => {
+  const entryMap = new Map(entries.value.map(e => [e.id, e]))
+  return [...bookmarks.value].sort((a, b) => {
+    // 收藏优先
+    if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1
+    // 自动书签放最后
+    if (a.is_auto !== b.is_auto) return a.is_auto ? 1 : -1
+    // 按条目时间排序
+    const entryA = entryMap.get(a.entry_id)
+    const entryB = entryMap.get(b.entry_id)
+    if (!entryA || !entryB) return 0
+    return new Date(entryA.timestamp).getTime() - new Date(entryB.timestamp).getTime()
+  })
+})
+
+// 获取书签对应的条目预览
+function getBookmarkEntryPreview(entryId: number): string {
+  const entry = entries.value.find(e => e.id === entryId)
+  if (!entry) return ''
+  if (entry.type === 'image') return '[图片]'
+  const text = entry.content.replace(/<[^>]+>/g, '').trim()
+  return text.length > 30 ? text.slice(0, 30) + '...' : text
+}
+
+// 获取所有已使用的背景色分组
+const usedColorGroups = computed(() => {
+  const colorMap = new Map<string, number>()
+  for (const entry of entries.value) {
+    if (entry.background_color) {
+      colorMap.set(entry.background_color, (colorMap.get(entry.background_color) || 0) + 1)
+    }
+  }
+  return Array.from(colorMap.entries()).map(([color, count]) => ({ color, count }))
+})
+
+// 按背景色选择条目
+function selectByColor(color: string) {
+  const ids = entries.value
+    .filter(e => e.background_color === color)
+    .map(e => e.id)
+
+  // 检查是否已全部选中，如果是则取消选中
+  const allSelected = ids.every(id => selectedEntryIds.value.includes(id))
+  if (allSelected) {
+    selectedEntryIds.value = selectedEntryIds.value.filter(id => !ids.includes(id))
+  } else {
+    // 添加未选中的
+    const newIds = ids.filter(id => !selectedEntryIds.value.includes(id))
+    selectedEntryIds.value = [...selectedEntryIds.value, ...newIds]
+  }
+}
 
 const showImageViewer = ref(false)
 const viewerImages = ref<string[]>([])
@@ -859,6 +959,130 @@ async function handleDeleteEntry(entry: StoryEntry) {
   }
 }
 
+// 条目管理模式函数
+function enterEntryManageMode() {
+  entryManageMode.value = true
+  selectedEntryIds.value = []
+}
+
+function exitEntryManageMode() {
+  entryManageMode.value = false
+  selectedEntryIds.value = []
+}
+
+function toggleEntrySelect(id: number) {
+  const index = selectedEntryIds.value.indexOf(id)
+  if (index === -1) {
+    selectedEntryIds.value.push(id)
+  } else {
+    selectedEntryIds.value.splice(index, 1)
+  }
+}
+
+function selectAllEntries() {
+  if (selectedEntryIds.value.length === entries.value.length) {
+    selectedEntryIds.value = []
+  } else {
+    selectedEntryIds.value = entries.value.map(e => e.id)
+  }
+}
+
+function openEntryColorModal() {
+  if (selectedEntryIds.value.length === 0) return
+  selectedEntryColor.value = ''
+  selectedGroupName.value = ''
+  showEntryColorModal.value = true
+}
+
+async function handleBatchUpdateEntryColor() {
+  if (selectedEntryIds.value.length === 0) return
+
+  updatingEntryColor.value = true
+  try {
+    await updateEntriesBackgroundColor(storyId.value, selectedEntryIds.value, selectedEntryColor.value, selectedGroupName.value)
+    // 更新本地数据
+    entries.value = entries.value.map(e => {
+      if (selectedEntryIds.value.includes(e.id)) {
+        return { ...e, background_color: selectedEntryColor.value, group_name: selectedGroupName.value }
+      }
+      return e
+    })
+    showEntryColorModal.value = false
+    exitEntryManageMode()
+  } catch (e) {
+    console.error('更新失败:', e)
+    alert('更新失败')
+  } finally {
+    updatingEntryColor.value = false
+  }
+}
+
+// 批量删除条目
+async function handleBatchDeleteEntries() {
+  if (selectedEntryIds.value.length === 0) return
+
+  if (!confirm(`确定要删除选中的 ${selectedEntryIds.value.length} 条记录吗？此操作不可恢复。`)) {
+    return
+  }
+
+  deletingEntries.value = true
+  try {
+    await batchDeleteEntries(storyId.value, selectedEntryIds.value)
+    // 从本地数据中移除
+    entries.value = entries.value.filter(e => !selectedEntryIds.value.includes(e.id))
+    exitEntryManageMode()
+  } catch (e) {
+    console.error('删除失败:', e)
+    alert('删除失败')
+  } finally {
+    deletingEntries.value = false
+  }
+}
+
+// 打开归档弹窗
+async function openArchiveModal() {
+  if (selectedEntryIds.value.length === 0) return
+
+  // 加载用户的剧情列表
+  try {
+    const res = await listStories()
+    // 过滤掉当前剧情
+    userStories.value = res.stories.filter(s => s.id !== storyId.value)
+  } catch (e) {
+    console.error('加载剧情列表失败:', e)
+    alert('加载剧情列表失败')
+    return
+  }
+
+  archiveMode.value = 'copy'
+  archiveTargetId.value = null
+  showArchiveModal.value = true
+}
+
+// 执行归档
+async function handleArchiveEntries() {
+  if (selectedEntryIds.value.length === 0 || !archiveTargetId.value) return
+
+  archivingEntries.value = true
+  try {
+    await archiveEntriesToStory(storyId.value, selectedEntryIds.value, archiveTargetId.value, archiveMode.value)
+
+    // 如果是移动模式，从本地数据中移除
+    if (archiveMode.value === 'move') {
+      entries.value = entries.value.filter(e => !selectedEntryIds.value.includes(e.id))
+    }
+
+    showArchiveModal.value = false
+    exitEntryManageMode()
+    alert(archiveMode.value === 'copy' ? '复制成功' : '移动成功')
+  } catch (e) {
+    console.error('归档失败:', e)
+    alert('归档失败')
+  } finally {
+    archivingEntries.value = false
+  }
+}
+
 // 在指定条目之前插入
 function insertEntryBefore(entry: StoryEntry) {
   // 计算插入时间：当前条目时间减去1秒
@@ -895,11 +1119,145 @@ function insertEntryAfter(entry: StoryEntry) {
   showAddModal.value = true
 }
 
+// ========== 书签功能 ==========
+async function loadBookmarks() {
+  try {
+    const res = await listBookmarks(storyId.value)
+    bookmarks.value = res.bookmarks || []
+  } catch (e) {
+    console.error('加载书签失败:', e)
+  }
+}
+
+function openAddBookmarkModal(entryId: number) {
+  newBookmarkEntryId.value = entryId
+  newBookmarkName.value = ''
+  newBookmarkColor.value = ''
+  showAddBookmarkModal.value = true
+}
+
+async function handleCreateBookmark() {
+  if (!newBookmarkEntryId.value || !newBookmarkName.value.trim()) return
+
+  addingBookmark.value = true
+  try {
+    await createBookmark(storyId.value, newBookmarkEntryId.value, newBookmarkName.value.trim(), newBookmarkColor.value || undefined)
+    await loadBookmarks()
+    showAddBookmarkModal.value = false
+  } catch (e) {
+    console.error('创建书签失败:', e)
+  } finally {
+    addingBookmark.value = false
+  }
+}
+
+async function toggleBookmarkFavorite(bookmark: StoryBookmark) {
+  try {
+    await updateBookmark(storyId.value, bookmark.id, { is_favorite: !bookmark.is_favorite })
+    await loadBookmarks()
+  } catch (e) {
+    console.error('更新书签失败:', e)
+  }
+}
+
+async function updateBookmarkColor(bookmark: StoryBookmark, color: string) {
+  try {
+    await updateBookmark(storyId.value, bookmark.id, { color })
+    await loadBookmarks()
+  } catch (e) {
+    console.error('更新书签颜色失败:', e)
+  }
+}
+
+function openEditBookmarkModal(bookmark: StoryBookmark) {
+  editingBookmark.value = bookmark
+  editBookmarkName.value = bookmark.name
+  editBookmarkColor.value = bookmark.color || ''
+  showEditBookmarkModal.value = true
+}
+
+async function handleSaveBookmark() {
+  if (!editingBookmark.value || !editBookmarkName.value.trim()) return
+
+  savingBookmark.value = true
+  try {
+    await updateBookmark(storyId.value, editingBookmark.value.id, {
+      name: editBookmarkName.value.trim(),
+      color: editBookmarkColor.value
+    })
+    await loadBookmarks()
+    showEditBookmarkModal.value = false
+  } catch (e) {
+    console.error('保存书签失败:', e)
+  } finally {
+    savingBookmark.value = false
+  }
+}
+
+async function handleDeleteBookmark(bookmarkId: number) {
+  const confirmed = await confirm({
+    title: '删除书签',
+    message: '确定要删除这个书签吗？',
+    type: 'warning'
+  })
+  if (!confirmed) return
+
+  try {
+    await deleteBookmark(storyId.value, bookmarkId)
+    await loadBookmarks()
+  } catch (e) {
+    console.error('删除书签失败:', e)
+  }
+}
+
+function scrollToEntry(entryId: number) {
+  const entryEl = document.querySelector(`[data-entry-id="${entryId}"]`)
+  if (entryEl) {
+    entryEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+// 获取当前可见的最后一个条目ID
+function getLastVisibleEntryId(): number | null {
+  const entriesEl = document.querySelectorAll('.entry-item[data-entry-id]')
+  if (!entriesEl.length) return null
+
+  const viewportBottom = window.innerHeight
+  let lastVisibleId: number | null = null
+
+  for (const el of entriesEl) {
+    const rect = el.getBoundingClientRect()
+    if (rect.top < viewportBottom && rect.bottom > 0) {
+      lastVisibleId = Number((el as HTMLElement).dataset.entryId)
+    }
+  }
+
+  return lastVisibleId
+}
+
+// 保存"上次浏览"位置
+async function saveLastViewPosition() {
+  const entryId = getLastVisibleEntryId()
+  if (entryId && storyId.value) {
+    try {
+      await updateLastViewBookmark(storyId.value, entryId)
+    } catch (e) {
+      console.error('保存浏览位置失败:', e)
+    }
+  }
+}
+
 onMounted(() => {
   loadStory()
   loadTags()
   loadGuilds()
   loadAvailableCharacters()
+  loadBookmarks()
+})
+
+onBeforeUnmount(() => {
+  // 离开页面时保存浏览位置
+  saveLastViewPosition()
 })
 </script>
 
@@ -1026,17 +1384,50 @@ onMounted(() => {
 
       <!-- 剧情条目列表 -->
       <div class="entries-section">
-        <h2>剧情内容 ({{ entries.length }} 条)</h2>
+        <div class="entries-main">
+          <div class="entries-header">
+            <h2>剧情内容 ({{ entries.length }} 条)</h2>
+            <div v-if="canEdit && entries.length > 0" class="entries-header-actions">
+              <template v-if="!entryManageMode">
+                <RButton @click="enterEntryManageMode">
+                  <i class="ri-checkbox-multiple-line"></i>
+                  管理条目
+                </RButton>
+              </template>
+              <template v-else>
+                <RButton size="small" @click="selectAllEntries">
+                  {{ selectedEntryIds.length === entries.length ? '取消全选' : '全选' }}
+                </RButton>
+                <RButton size="small" @click="exitEntryManageMode">退出管理</RButton>
+              </template>
+            </div>
+          </div>
         <div v-if="entries.length === 0" class="empty-entries">
           <p>暂无内容，点击上方"添加条目"开始记录</p>
         </div>
         <div v-else class="entries-list">
-          <div v-for="entry in entries" :key="entry.id" class="entry-item" :class="entry.type">
+          <div
+            v-for="entry in entries"
+            :key="entry.id"
+            :data-entry-id="entry.id"
+            class="entry-item"
+            :class="[entry.type, { 'entry-selected': entryManageMode && selectedEntryIds.includes(entry.id) }]"
+            :style="entry.background_color ? { backgroundColor: entry.background_color } : {}"
+            @click="entryManageMode ? toggleEntrySelect(entry.id) : null"
+          >
+            <!-- 管理模式下的复选框 -->
+            <div v-if="entryManageMode" class="entry-checkbox">
+              <input
+                type="checkbox"
+                :checked="selectedEntryIds.includes(entry.id)"
+                @click.stop="toggleEntrySelect(entry.id)"
+              />
+            </div>
             <div
               v-if="entry.type !== 'image'"
               class="entry-avatar"
-              :class="{ clickable: entry.type !== 'narration' }"
-              @click="showCharacterInfo(entry, $event)"
+              :class="{ clickable: entry.type !== 'narration' && !entryManageMode }"
+              @click.stop="!entryManageMode && showCharacterInfo(entry, $event)"
             >
               <span v-if="isNpcEntry(entry)" class="avatar-npc">NPC</span>
               <span v-else-if="isNarrationEntry(entry)" class="avatar-narration">旁白</span>
@@ -1070,6 +1461,9 @@ onMounted(() => {
               </div>
             </div>
             <div v-if="canEdit" class="entry-actions">
+              <button class="entry-action-btn" @click="openAddBookmarkModal(entry.id)" title="添加书签">
+                <i class="ri-bookmark-line"></i>
+              </button>
               <button class="entry-action-btn" @click="insertEntryBefore(entry)" title="在此之前插入">
                 <i class="ri-arrow-up-line"></i>
               </button>
@@ -1085,6 +1479,162 @@ onMounted(() => {
             </div>
           </div>
         </div>
+
+        <!-- 条目管理模式下的批量操作栏 -->
+        <div v-if="entryManageMode" class="entry-batch-bar">
+          <div class="batch-left">
+            <span class="batch-info">已选择 {{ selectedEntryIds.length }} 条</span>
+            <!-- 按组快速选择 -->
+            <div v-if="usedColorGroups.length > 0" class="color-groups">
+              <span class="groups-label">按组选择:</span>
+              <div
+                v-for="group in usedColorGroups"
+                :key="group.color"
+                class="color-group-btn"
+                :style="{ backgroundColor: group.color }"
+                :title="`选择此组 (${group.count} 条)`"
+                @click="selectByColor(group.color)"
+              >
+                {{ group.count }}
+              </div>
+            </div>
+          </div>
+          <div class="batch-actions">
+            <RButton :disabled="selectedEntryIds.length === 0" @click="openEntryColorModal">
+              <i class="ri-group-line"></i>
+              编组
+            </RButton>
+            <RButton :disabled="selectedEntryIds.length === 0" @click="openArchiveModal">
+              <i class="ri-archive-line"></i>
+              归档到其他剧情
+            </RButton>
+            <RButton type="danger" :disabled="selectedEntryIds.length === 0" :loading="deletingEntries" @click="handleBatchDeleteEntries">
+              <i class="ri-delete-bin-line"></i>
+              删除
+            </RButton>
+          </div>
+        </div>
+        </div>
+
+        <!-- 书签侧边栏 - 桌面端 -->
+        <div class="bookmarks-sidebar desktop-only">
+          <div class="bookmarks-header">
+            <h3><i class="ri-bookmark-line"></i> 书签</h3>
+          </div>
+          <div class="bookmarks-list">
+            <div
+              v-for="bookmark in sortedBookmarks"
+              :key="bookmark.id"
+              class="bookmark-item"
+              :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite }"
+              :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}"
+              @click="scrollToEntry(bookmark.entry_id)"
+            >
+              <div class="bookmark-content">
+                <div class="bookmark-title">
+                  <button
+                    v-if="!bookmark.is_auto"
+                    class="bookmark-star"
+                    :class="{ active: bookmark.is_favorite }"
+                    @click.stop="toggleBookmarkFavorite(bookmark)"
+                    title="收藏"
+                  >
+                    <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'"></i>
+                  </button>
+                  <span class="bookmark-name">{{ bookmark.name }}</span>
+                </div>
+                <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
+              </div>
+              <div class="bookmark-actions">
+                <button
+                  v-if="!bookmark.is_auto"
+                  class="bookmark-edit"
+                  @click.stop="openEditBookmarkModal(bookmark)"
+                  title="编辑书签"
+                >
+                  <i class="ri-edit-line"></i>
+                </button>
+                <button
+                  v-if="!bookmark.is_auto"
+                  class="bookmark-delete"
+                  @click.stop="handleDeleteBookmark(bookmark.id)"
+                  title="删除书签"
+                >
+                  <i class="ri-close-line"></i>
+                </button>
+              </div>
+            </div>
+            <div v-if="bookmarks.length === 0" class="bookmarks-empty">
+              暂无书签
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 书签悬浮按钮 - 移动端 -->
+      <div class="bookmarks-floating mobile-only">
+        <button
+          class="bookmarks-fab"
+          :class="{ 'has-bookmarks': bookmarks.length > 0 }"
+          @click="bookmarkSidebarExpanded = !bookmarkSidebarExpanded"
+        >
+          <i :class="bookmarkSidebarExpanded ? 'ri-close-line' : 'ri-bookmark-line'"></i>
+          <span v-if="bookmarks.length > 0" class="bookmark-count">{{ bookmarks.length }}</span>
+        </button>
+        <Transition name="bookmarks-panel">
+          <div v-if="bookmarkSidebarExpanded" class="bookmarks-panel">
+            <div class="bookmarks-panel-header">
+              <h3><i class="ri-bookmark-line"></i> 书签</h3>
+            </div>
+            <div class="bookmarks-panel-list">
+              <div
+                v-for="bookmark in sortedBookmarks"
+                :key="bookmark.id"
+                class="bookmark-item"
+                :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite }"
+                :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}"
+                @click="scrollToEntry(bookmark.entry_id); bookmarkSidebarExpanded = false"
+              >
+                <div class="bookmark-content">
+                  <div class="bookmark-title">
+                    <button
+                      v-if="!bookmark.is_auto"
+                      class="bookmark-star"
+                      :class="{ active: bookmark.is_favorite }"
+                      @click.stop="toggleBookmarkFavorite(bookmark)"
+                      title="收藏"
+                    >
+                      <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'"></i>
+                    </button>
+                    <span class="bookmark-name">{{ bookmark.name }}</span>
+                  </div>
+                  <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
+                </div>
+                <div class="bookmark-actions">
+                  <button
+                    v-if="!bookmark.is_auto"
+                    class="bookmark-edit"
+                    @click.stop="openEditBookmarkModal(bookmark)"
+                    title="编辑书签"
+                  >
+                    <i class="ri-edit-line"></i>
+                  </button>
+                  <button
+                    v-if="!bookmark.is_auto"
+                    class="bookmark-delete"
+                    @click.stop="handleDeleteBookmark(bookmark.id)"
+                    title="删除书签"
+                  >
+                    <i class="ri-close-line"></i>
+                  </button>
+                </div>
+              </div>
+              <div v-if="bookmarks.length === 0" class="bookmarks-empty">
+                暂无书签
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
     </template>
 
@@ -1459,11 +2009,157 @@ onMounted(() => {
       </template>
     </RModal>
 
+    <!-- 条目背景色选择弹窗 -->
+    <RModal v-model="showEntryColorModal" title="编组 - 选择标记颜色" width="400px">
+      <div class="color-picker-content">
+        <div class="form-field">
+          <label>编组名称</label>
+          <RInput v-model="selectedGroupName" placeholder="输入编组名称（可选）" />
+          <span class="field-hint">为这组条目命名，方便识别</span>
+        </div>
+        <div class="form-field">
+          <label>标记颜色</label>
+          <div class="color-presets">
+            <div
+              v-for="color in defaultColors"
+              :key="color"
+              class="color-preset"
+              :class="{ active: selectedEntryColor === color }"
+              :style="{ backgroundColor: color }"
+              @click="selectedEntryColor = color"
+            />
+            <div
+              class="color-preset clear-color"
+              :class="{ active: selectedEntryColor === '' }"
+              @click="selectedEntryColor = ''"
+              title="清除背景色"
+            >
+              <i class="ri-close-line"></i>
+            </div>
+          </div>
+        </div>
+        <div class="custom-color">
+          <label>自定义颜色</label>
+          <input type="color" v-model="selectedEntryColor" class="color-input" />
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showEntryColorModal = false">取消</RButton>
+        <RButton type="primary" :loading="updatingEntryColor" @click="handleBatchUpdateEntryColor">
+          应用
+        </RButton>
+      </template>
+    </RModal>
+
+    <!-- 归档条目到其他剧情弹窗 -->
+    <RModal v-model="showArchiveModal" title="归档到其他剧情" width="450px">
+      <div class="archive-form">
+        <div class="form-field">
+          <label>归档模式</label>
+          <div class="archive-mode-options">
+            <label class="radio-option">
+              <input type="radio" v-model="archiveMode" value="copy" />
+              <span>复制</span>
+              <span class="option-desc">保留原条目，复制到目标剧情</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" v-model="archiveMode" value="move" />
+              <span>移动</span>
+              <span class="option-desc">将条目移动到目标剧情</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-field">
+          <label>目标剧情</label>
+          <select v-model="archiveTargetId" class="target-select">
+            <option :value="null">-- 请选择目标剧情 --</option>
+            <option v-for="s in userStories" :key="s.id" :value="s.id">
+              {{ s.title }}
+            </option>
+          </select>
+          <span v-if="userStories.length === 0" class="field-hint">暂无其他剧情可选</span>
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showArchiveModal = false">取消</RButton>
+        <RButton
+          type="primary"
+          :loading="archivingEntries"
+          :disabled="!archiveTargetId"
+          @click="handleArchiveEntries"
+        >
+          {{ archiveMode === 'copy' ? '复制' : '移动' }}
+        </RButton>
+      </template>
+    </RModal>
+
     <ImageViewer
       v-model="showImageViewer"
       :images="viewerImages"
       :start-index="viewerStartIndex"
     />
+
+    <!-- 添加书签弹窗 -->
+    <RModal v-model="showAddBookmarkModal" title="添加书签" width="400px">
+      <div class="form-field">
+        <label>书签名称</label>
+        <RInput v-model="newBookmarkName" placeholder="输入书签名称" />
+      </div>
+      <div class="form-field">
+        <label>书签颜色（可选）</label>
+        <div class="bookmark-color-picker">
+          <button
+            v-for="color in bookmarkColors"
+            :key="color"
+            class="color-option"
+            :class="{ active: newBookmarkColor === color }"
+            :style="{ backgroundColor: color }"
+            @click="newBookmarkColor = newBookmarkColor === color ? '' : color"
+          ></button>
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showAddBookmarkModal = false">取消</RButton>
+        <RButton type="primary" :loading="addingBookmark" :disabled="!newBookmarkName.trim()" @click="handleCreateBookmark">
+          添加
+        </RButton>
+      </template>
+    </RModal>
+
+    <!-- 编辑书签弹窗 -->
+    <RModal v-model="showEditBookmarkModal" title="编辑书签" width="400px">
+      <div class="form-field">
+        <label>书签名称</label>
+        <RInput v-model="editBookmarkName" placeholder="输入书签名称" />
+      </div>
+      <div class="form-field">
+        <label>书签颜色</label>
+        <div class="bookmark-color-picker">
+          <button
+            class="color-option color-none"
+            :class="{ active: !editBookmarkColor }"
+            @click="editBookmarkColor = ''"
+            title="无颜色"
+          >
+            <i class="ri-close-line"></i>
+          </button>
+          <button
+            v-for="color in bookmarkColors"
+            :key="color"
+            class="color-option"
+            :class="{ active: editBookmarkColor === color }"
+            :style="{ backgroundColor: color }"
+            @click="editBookmarkColor = color"
+          ></button>
+        </div>
+      </div>
+      <template #footer>
+        <RButton @click="showEditBookmarkModal = false">取消</RButton>
+        <RButton type="primary" :loading="savingBookmark" :disabled="!editBookmarkName.trim()" @click="handleSaveBookmark">
+          保存
+        </RButton>
+      </template>
+    </RModal>
   </div>
 </template>
 
@@ -1801,6 +2497,8 @@ onMounted(() => {
 }
 
 .entries-section {
+  display: flex;
+  gap: 24px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -1809,6 +2507,11 @@ onMounted(() => {
   padding: 24px;
   box-shadow: 0 4px 20px rgba(44, 24, 16, 0.08);
   min-height: 400px;
+}
+
+.entries-main {
+  flex: 1;
+  min-width: 0;
 }
 
 @media (min-width: 1024px) {
@@ -1820,7 +2523,19 @@ onMounted(() => {
 .entries-section h2 {
   font-size: 18px;
   color: var(--color-primary);
-  margin: 0 0 20px 0;
+  margin: 0;
+}
+
+.entries-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.entries-header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .empty-entries {
@@ -1849,6 +2564,25 @@ onMounted(() => {
 .entry-item:hover {
   border-color: rgba(184, 115, 51, 0.3);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.entry-item.entry-selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.2);
+}
+
+.entry-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.entry-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
 }
 
 .entry-item.image {
@@ -2495,5 +3229,509 @@ onMounted(() => {
 .clear-image-btn:hover {
   background: #e74c3c;
   transform: scale(1.1);
+}
+
+/* 条目批量操作栏 */
+.entry-batch-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--color-border);
+  margin: 20px -24px -24px -24px;
+  border-radius: 0 0 16px 16px;
+}
+
+@media (min-width: 1024px) {
+  .entry-batch-bar {
+    margin: 20px -32px -32px -32px;
+  }
+}
+
+.batch-info {
+  color: var(--color-secondary);
+  font-size: 14px;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.batch-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.color-groups {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.groups-label {
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+
+.color-group-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.color-group-btn:hover {
+  transform: scale(1.15);
+  border-color: var(--color-primary);
+}
+
+/* 颜色选择器弹窗 */
+.color-picker-content {
+  padding: 8px 0;
+}
+
+.color-presets {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.color-preset {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.color-preset:hover {
+  transform: scale(1.1);
+}
+
+.color-preset.active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.3);
+}
+
+.color-preset.clear-color {
+  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-secondary);
+  font-size: 18px;
+}
+
+.custom-color {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.custom-color label {
+  font-size: 14px;
+  color: var(--color-secondary);
+}
+
+.custom-color .color-input {
+  width: 48px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* 归档弹窗样式 */
+.archive-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.archive-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.radio-option:hover {
+  border-color: var(--color-primary);
+}
+
+.radio-option input[type="radio"] {
+  accent-color: var(--color-primary);
+}
+
+.radio-option span:first-of-type {
+  font-weight: 500;
+}
+
+.option-desc {
+  font-size: 12px;
+  color: var(--color-secondary);
+  margin-left: auto;
+}
+
+.target-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.target-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* 响应式显示控制 */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 1200px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+}
+
+/* 书签侧边栏样式 - 桌面端 */
+.bookmarks-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: rgba(245, 239, 231, 0.8);
+  border-radius: 12px;
+  padding: 16px;
+  height: fit-content;
+  position: sticky;
+  top: 20px;
+}
+
+.bookmarks-header {
+  margin-bottom: 12px;
+}
+
+.bookmarks-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bookmarks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bookmark-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+}
+
+.bookmark-item:hover {
+  border-color: var(--color-accent);
+  border-left-color: var(--color-accent);
+  background: rgba(184, 115, 51, 0.05);
+}
+
+.bookmark-item.is-auto {
+  background: rgba(184, 115, 51, 0.08);
+  border-left-color: var(--color-accent);
+}
+
+.bookmark-item.is-favorite {
+  background: rgba(255, 193, 7, 0.1);
+}
+
+.bookmark-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.bookmark-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bookmark-star {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 12px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.bookmark-star:hover,
+.bookmark-star.active {
+  color: #f59e0b;
+}
+
+.bookmark-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-preview {
+  font-size: 11px;
+  color: var(--color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+  padding-left: 22px;
+}
+
+.bookmark-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.bookmark-item:hover .bookmark-actions {
+  opacity: 1;
+}
+
+.bookmark-edit,
+.bookmark-delete {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.bookmark-edit:hover {
+  background: rgba(184, 115, 51, 0.1);
+  color: var(--color-accent);
+}
+
+.bookmark-delete:hover {
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+}
+
+.bookmarks-empty {
+  font-size: 13px;
+  color: var(--color-secondary);
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* 书签颜色选择器 */
+.bookmark-color-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bookmark-color-picker .color-option {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bookmark-color-picker .color-option:hover {
+  transform: scale(1.1);
+}
+
+.bookmark-color-picker .color-option.active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(44, 24, 16, 0.2);
+}
+
+.bookmark-color-picker .color-option.color-none {
+  background: var(--color-bg-secondary);
+  border: 2px dashed var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-secondary);
+  font-size: 14px;
+}
+
+.bookmark-color-picker .color-option.color-none.active {
+  border-style: solid;
+  border-color: var(--color-primary);
+}
+
+/* 书签悬浮按钮 - 移动端 */
+.bookmarks-floating {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  z-index: 100;
+}
+
+.bookmarks-fab {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 4px 12px rgba(184, 115, 51, 0.4);
+  transition: all 0.3s;
+  position: relative;
+}
+
+.bookmarks-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(184, 115, 51, 0.5);
+}
+
+.bookmarks-fab:active {
+  transform: scale(0.95);
+}
+
+.bookmark-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.bookmarks-panel {
+  position: absolute;
+  right: 0;
+  bottom: 60px;
+  width: 260px;
+  max-height: 400px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(44, 24, 16, 0.2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.bookmarks-panel-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(229, 212, 193, 0.5);
+  background: rgba(245, 239, 231, 0.5);
+}
+
+.bookmarks-panel-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bookmarks-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 悬浮面板动画 */
+.bookmarks-panel-enter-active,
+.bookmarks-panel-leave-active {
+  transition: all 0.25s ease;
+}
+
+.bookmarks-panel-enter-from,
+.bookmarks-panel-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
 }
 </style>

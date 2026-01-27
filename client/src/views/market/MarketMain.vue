@@ -2,7 +2,7 @@
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { listItems, type Item, getImageUrl } from '@/api/item'
+import { listItems, type Item, getImageUrl, resolveApiUrl } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import LazyBgImage from '@/components/LazyBgImage.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -242,7 +242,7 @@ watch([sortBy], () => {
             <span class="type-badge">{{ typeMap[item.type as keyof typeof typeMap] || item.type }}</span>
             <div class="card-author">
               <span v-if="item.author_avatar" class="author-avatar">
-                <img :src="item.author_avatar" alt="" loading="lazy" />
+                <img :src="resolveApiUrl(item.author_avatar)" alt="" loading="lazy" />
               </span>
               <span v-else class="author-avatar placeholder">
                 {{ (item.author_username || 'U').charAt(0) }}

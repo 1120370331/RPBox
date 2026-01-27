@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -56,6 +58,12 @@ func NewServer(cfg *config.Config) *Server {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
+	// 验证 Redis 连接
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		log.Printf("[Cache] Redis connection failed: %v", err)
+	} else {
+		log.Printf("[Cache] Redis connected to %s:%s", cfg.Redis.Host, cfg.Redis.Port)
+	}
 	cacheClient := cache.NewRedisCache(redisClient, cache.Options{Jitter: 5 * time.Second})
 
 	// 初始化邮件客户端

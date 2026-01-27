@@ -36,6 +36,8 @@ export interface StoryEntry {
   channel: string
   timestamp: string
   sort_order: number
+  background_color?: string
+  group_name?: string  // 编组名称
 }
 
 export interface CreateStoryRequest {
@@ -117,6 +119,18 @@ export async function updateStoriesBackgroundColor(ids: number[], backgroundColo
   return request.post('/stories/batch-background', { ids, background_color: backgroundColor })
 }
 
+export async function updateEntriesBackgroundColor(storyId: number, entryIds: number[], backgroundColor: string, groupName?: string): Promise<void> {
+  return request.post(`/stories/${storyId}/entries/batch-background`, { entry_ids: entryIds, background_color: backgroundColor, group_name: groupName })
+}
+
+export async function batchDeleteEntries(storyId: number, entryIds: number[]): Promise<void> {
+  return request.post(`/stories/${storyId}/entries/batch-delete`, { entry_ids: entryIds })
+}
+
+export async function archiveEntriesToStory(storyId: number, entryIds: number[], targetId: number, mode: 'copy' | 'move'): Promise<void> {
+  return request.post(`/stories/${storyId}/entries/archive`, { entry_ids: entryIds, target_id: targetId, mode })
+}
+
 export async function addStoryEntries(id: number, entries: CreateStoryEntryRequest[]): Promise<void> {
   return request.post(`/stories/${id}/entries`, entries)
 }
@@ -151,4 +165,38 @@ export interface PublicStoryResponse {
 
 export async function getPublicStory(code: string): Promise<PublicStoryResponse> {
   return request.get(`/public/stories/${code}`)
+}
+
+// 书签相关
+export interface StoryBookmark {
+  id: number
+  story_id: number
+  user_id: number
+  entry_id: number
+  name: string
+  color?: string
+  is_favorite: boolean
+  is_auto: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function listBookmarks(storyId: number): Promise<{ bookmarks: StoryBookmark[] }> {
+  return request.get(`/stories/${storyId}/bookmarks`)
+}
+
+export async function createBookmark(storyId: number, entryId: number, name: string, color?: string): Promise<StoryBookmark> {
+  return request.post(`/stories/${storyId}/bookmarks`, { entry_id: entryId, name, color })
+}
+
+export async function updateBookmark(storyId: number, bookmarkId: number, data: { name?: string; color?: string; is_favorite?: boolean }): Promise<StoryBookmark> {
+  return request.put(`/stories/${storyId}/bookmarks/${bookmarkId}`, data)
+}
+
+export async function deleteBookmark(storyId: number, bookmarkId: number): Promise<void> {
+  return request.delete(`/stories/${storyId}/bookmarks/${bookmarkId}`)
+}
+
+export async function updateLastViewBookmark(storyId: number, entryId: number): Promise<StoryBookmark> {
+  return request.put(`/stories/${storyId}/bookmarks/last-view`, { entry_id: entryId })
 }

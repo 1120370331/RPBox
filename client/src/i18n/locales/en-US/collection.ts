@@ -33,6 +33,10 @@ export default {
   banner: {
     belongsTo: 'Part of Collection',
     totalCount: '{count} items',
+    edit: 'Edit Collection',
+    addToCollection: 'Add to Collection',
+    updateSuccess: 'Collection updated',
+    updateFailed: 'Failed to update collection',
   },
   favorite: {
     favorite: 'Favorite',

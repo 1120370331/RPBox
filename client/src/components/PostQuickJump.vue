@@ -5,7 +5,7 @@ import RButton from '@/components/RButton.vue'
 import type { Story } from '@/api/story'
 import { listGuilds, listGuildStories, type Guild, type GuildStoryWithUploader } from '@/api/guild'
 import { listPosts, type PostWithAuthor, POST_CATEGORIES } from '@/api/post'
-import { getImageUrl } from '@/api/item'
+import { getImageUrl, resolveApiUrl } from '@/api/item'
 
 const props = defineProps<{
   modelValue: boolean
@@ -272,7 +272,7 @@ function insertPost(post: PostWithAuthor) {
     type: 'post',
     variant: 'post-public',
     author: resolveAuthorName(post),
-    avatar: post.author_avatar || '',
+    avatar: resolveApiUrl(post.author_avatar),
     image: resolvePostCover(post),
   }))
   emit('update:modelValue', false)

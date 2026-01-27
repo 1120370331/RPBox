@@ -9,6 +9,7 @@ import EmoteEditor from '@/components/EmoteEditor.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { resolveApiUrl } from '@/api/item'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { useToast } from '@/composables/useToast'
@@ -178,7 +179,7 @@ async function loadPost() {
     post.value.author_name = res.author_name  // author_name 在响应顶层
     post.value.author_name_color = res.author_name_color
     post.value.author_name_bold = res.author_name_bold
-    authorAvatar.value = res.author_avatar || ''
+    authorAvatar.value = resolveApiUrl(res.author_avatar)
     liked.value = res.liked
     favorited.value = res.favorited
   } catch (error: any) {
@@ -505,6 +506,7 @@ async function handleDelete() {
             v-if="post"
             type="post"
             :content-id="post.id"
+            :is-author="currentUserId === post.author_id"
           />
 
           <!-- 文章头部：作者 + 操作 -->
@@ -571,7 +573,7 @@ async function handleDelete() {
           <div class="comments-list">
             <div v-for="comment in organizedComments" :key="comment.id" class="comment-item" :id="`comment-${comment.id}`">
               <div class="comment-avatar">
-                <img v-if="comment.author_avatar" :src="comment.author_avatar" alt="" />
+                <img v-if="comment.author_avatar" :src="resolveApiUrl(comment.author_avatar)" alt="" />
                 <span v-else>{{ comment.author_name.charAt(0) }}</span>
               </div>
               <div class="comment-body">
@@ -615,7 +617,7 @@ async function handleDelete() {
                 <div v-if="comment.replies && comment.replies.length > 0" class="replies-list">
                   <div v-for="reply in comment.replies" :key="reply.id" class="reply-item" :id="`comment-${reply.id}`">
                     <div class="reply-avatar">
-                      <img v-if="reply.author_avatar" :src="reply.author_avatar" alt="" />
+                      <img v-if="reply.author_avatar" :src="resolveApiUrl(reply.author_avatar)" alt="" />
                       <span v-else>{{ reply.author_name.charAt(0) }}</span>
                     </div>
                     <div class="reply-body">

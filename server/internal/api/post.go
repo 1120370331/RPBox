@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -128,6 +129,7 @@ func (s *Server) listPosts(c *gin.Context) {
 
 	isSelfView := authorID != "" && authorID == strconv.Itoa(int(userID))
 	if s.cache != nil && params.GuildID == "" && !isSelfView {
+		startTime := time.Now()
 		pinnedValue := "any"
 		if params.IsPinned != nil {
 			pinnedValue = strconv.FormatBool(*params.IsPinned)
@@ -135,12 +137,19 @@ func (s *Server) listPosts(c *gin.Context) {
 		filterKey := fmt.Sprintf("page=%d|size=%d|sort=%s|order=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
 			params.Page, params.PageSize, params.SortBy, params.Order, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
 		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
-		if err == nil {
+		if err != nil {
+			log.Printf("[Cache] Version error: %v", err)
+		} else {
 			cacheKey := cache.VersionedKey(postListCacheName, version, cache.HashKey(filterKey))
 			var cached postListResponse
+			cacheHit := true
 			if err := s.cache.Fetch(c.Request.Context(), cacheKey, cache.TTL["post:list"], &cached, func(ctx context.Context) (interface{}, error) {
+				cacheHit = false
 				return s.loadPostList(ctx, params)
-			}); err == nil {
+			}); err != nil {
+				log.Printf("[Cache] Fetch error for key %s: %v", cacheKey, err)
+			} else {
+				log.Printf("[Cache] %s posts=%d time=%v", map[bool]string{true: "HIT", false: "MISS"}[cacheHit], len(cached.Posts), time.Since(startTime))
 				c.JSON(http.StatusOK, cached)
 				return
 			}
@@ -295,10 +304,15 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 			t := p.UpdatedAt
 			p.CoverImageUpdatedAt = &t
 		}
+		// 使用头像 URL 而不是 base64 数据，减少缓存大小
+		avatarURL := ""
+		if author.Avatar != "" {
+			avatarURL = fmt.Sprintf("%s/api/v1/images/user-avatar/%d?w=80&q=80", s.cfg.Server.ApiHost, author.ID)
+		}
 		result[i] = postListItem{
 			Post:            p,
 			AuthorName:      author.Username,
-			AuthorAvatar:    author.Avatar,
+			AuthorAvatar:    avatarURL,
 			AuthorRole:      author.Role,
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,
@@ -896,17 +910,17 @@ func (s *Server) removePostTag(c *gin.Context) {
 
 // listMyFavorites 获取我的收藏列表
 func (s *Server) listMyFavorites(c *gin.Context) {
-	listUserPostsByRelation(c, "post_favorites", "created_at")
+	s.listUserPostsByRelation(c, "post_favorites", "created_at")
 }
 
 // listMyPostLikes 获取我点赞的帖子
 func (s *Server) listMyPostLikes(c *gin.Context) {
-	listUserPostsByRelation(c, "post_likes", "created_at")
+	s.listUserPostsByRelation(c, "post_likes", "created_at")
 }
 
 // listMyPostViews 获取我浏览的帖子
 func (s *Server) listMyPostViews(c *gin.Context) {
-	listUserPostsByRelation(c, "post_views", "updated_at")
+	s.listUserPostsByRelation(c, "post_views", "updated_at")
 }
 
 func canAccessPost(userID uint, post model.Post) bool {
@@ -926,7 +940,7 @@ func canAccessPost(userID uint, post model.Post) bool {
 	return false
 }
 
-func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
+func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 	userID := c.GetUint("userID")
 
 	var posts []model.Post
@@ -994,7 +1008,7 @@ func listUserPostsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		result = append(result, postListItem{
 			Post:            p,
 			AuthorName:      author.Username,
-			AuthorAvatar:    author.Avatar,
+			AuthorAvatar:    fmt.Sprintf("%s/api/v1/images/user-avatar/%d?w=80&q=80", s.cfg.Server.ApiHost, author.ID),
 			AuthorRole:      author.Role,
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,

@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { getGuild, type Guild } from '@/api/guild'
-import { getImageUrl } from '@/api/item'
+import { getImageUrl, resolveApiUrl } from '@/api/item'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
@@ -759,7 +759,7 @@ function getEventStyle(event: EventItem) {
             <div class="card-footer">
               <div class="author-info">
                 <div class="author-avatar small">
-                  <img v-if="post.author_avatar" :src="post.author_avatar" alt="" loading="lazy" />
+                  <img v-if="post.author_avatar" :src="resolveApiUrl(post.author_avatar)" alt="" loading="lazy" />
                   <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
                 </div>
                 <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>

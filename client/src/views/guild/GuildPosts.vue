@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listPosts, type PostWithAuthor, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { getGuild, type Guild } from '@/api/guild'
+import { resolveApiUrl } from '@/api/item'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -233,7 +234,7 @@ onMounted(async () => {
         <div class="post-footer">
           <div class="author-info">
             <div class="author-avatar">
-              <img v-if="post.author_avatar" :src="post.author_avatar" alt="" />
+              <img v-if="post.author_avatar" :src="resolveApiUrl(post.author_avatar)" alt="" />
               <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
             </div>
             <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
