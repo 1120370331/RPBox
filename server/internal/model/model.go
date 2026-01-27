@@ -105,22 +105,23 @@ type StoryTagInfo struct {
 }
 
 type Story struct {
-	ID           uint           `gorm:"primarykey" json:"id"`
-	UserID       uint           `gorm:"index;not null" json:"user_id"`
-	Title        string         `gorm:"size:256" json:"title"`
-	Description  string         `gorm:"type:text" json:"description"`
-	Participants string         `gorm:"type:text" json:"participants"` // JSON数组
-	Tags         string         `gorm:"size:512" json:"tags"`          // 逗号分隔
-	StartTime    time.Time      `json:"start_time"`
-	EndTime      time.Time      `json:"end_time"`
-	Status       string         `gorm:"size:20;default:draft" json:"status"` // draft, published
-	IsPublic     bool           `gorm:"default:false" json:"is_public"`      // 是否公开分享
-	ShareCode    string         `gorm:"size:16;index" json:"share_code"`     // 分享码
-	ViewCount    int            `gorm:"default:0" json:"view_count"`         // 浏览次数
-	EntryCount   int            `gorm:"-" json:"entry_count"`                // entry count for list views
-	TagList      []StoryTagInfo `gorm:"-" json:"tag_list"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID              uint           `gorm:"primarykey" json:"id"`
+	UserID          uint           `gorm:"index;not null" json:"user_id"`
+	Title           string         `gorm:"size:256" json:"title"`
+	Description     string         `gorm:"type:text" json:"description"`
+	Participants    string         `gorm:"type:text" json:"participants"` // JSON数组
+	Tags            string         `gorm:"size:512" json:"tags"`          // 逗号分隔
+	StartTime       time.Time      `json:"start_time"`
+	EndTime         time.Time      `json:"end_time"`
+	Status          string         `gorm:"size:20;default:draft" json:"status"` // draft, published
+	IsPublic        bool           `gorm:"default:false" json:"is_public"`      // 是否公开分享
+	ShareCode       string         `gorm:"size:16;index" json:"share_code"`     // 分享码
+	ViewCount       int            `gorm:"default:0" json:"view_count"`         // 浏览次数
+	BackgroundColor string         `gorm:"size:7" json:"background_color"`      // 背景色，如 #FF5733
+	EntryCount      int            `gorm:"-" json:"entry_count"`                // entry count for list views
+	TagList         []StoryTagInfo `gorm:"-" json:"tag_list"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
 }
 
 // StoryEntry 剧情条目

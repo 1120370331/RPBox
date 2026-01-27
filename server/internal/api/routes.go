@@ -82,6 +82,7 @@ func (s *Server) setupRoutes() {
 			auth.POST("/stories", s.createStory)
 			auth.POST("/stories/batch-delete", s.batchDeleteStories)
 			auth.POST("/stories/batch-move", s.batchMoveStories)
+			auth.POST("/stories/batch-background", s.batchUpdateBackgroundColor)
 			auth.GET("/stories/:id", s.getStory)
 			auth.PUT("/stories/:id", s.updateStory)
 			auth.DELETE("/stories/:id", s.deleteStory)

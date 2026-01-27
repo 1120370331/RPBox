@@ -46,6 +46,8 @@ export default {
     confirmMove: '确认移动',
     cancel: '取消',
     append: '追加',
+    setColor: '设置颜色',
+    confirm: '确认',
   },
   empty: {
     all: '暂无剧情故事',
@@ -77,6 +79,8 @@ export default {
     batchDeleteFailed: '批量删除失败',
     moveFailed: '移动失败',
     batchMoveFailed: '批量移动失败',
+    updateFailed: '更新失败',
+    batchUpdateFailed: '批量更新失败',
   },
   modal: {
     createTitle: '新建剧情',
@@ -96,6 +100,9 @@ export default {
     selectStory: '选择剧情',
     pendingRecords: '将归档 {count} 条对话记录',
     updatedAt: '更新于 {date}',
+    colorTitle: '设置背景色',
+    colorTip: '为选中的 {count} 个剧情设置背景色',
+    customColor: '自定义颜色',
   },
   confirm: {
     deleteTitle: '删除剧情',

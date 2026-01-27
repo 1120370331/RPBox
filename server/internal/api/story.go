@@ -528,6 +528,46 @@ func (s *Server) batchMoveStories(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "移动成功", "count": len(req.SourceIDs)})
 }
 
+// BatchUpdateBackgroundColorRequest 批量更新背景色请求
+type BatchUpdateBackgroundColorRequest struct {
+	IDs             []uint `json:"ids" binding:"required"`
+	BackgroundColor string `json:"background_color"` // 空字符串表示清除背景色
+}
+
+// batchUpdateBackgroundColor 批量更新剧情背景色
+func (s *Server) batchUpdateBackgroundColor(c *gin.Context) {
+	userID := c.GetUint("userID")
+
+	var req BatchUpdateBackgroundColorRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要更新的剧情"})
+		return
+	}
+
+	// 验证所有剧情都属于当前用户
+	var count int64
+	database.DB.Model(&model.Story{}).
+		Where("id IN ? AND user_id = ?", req.IDs, userID).
+		Count(&count)
+
+	if count != int64(len(req.IDs)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "部分剧情不存在或无权操作"})
+		return
+	}
+
+	// 更新背景色
+	database.DB.Model(&model.Story{}).
+		Where("id IN ? AND user_id = ?", req.IDs, userID).
+		Update("background_color", req.BackgroundColor)
+
+	c.JSON(http.StatusOK, gin.H{"message": "更新成功", "count": len(req.IDs)})
+}
+
 func (s *Server) addStoryEntries(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)

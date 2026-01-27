@@ -13,6 +13,7 @@ export interface Story {
   is_public: boolean
   share_code: string
   view_count: number
+  background_color?: string
   entry_count?: number
   tag_list?: { name: string; color?: string }[]
   added_by?: number
@@ -110,6 +111,10 @@ export async function deleteStories(ids: number[]): Promise<void> {
 
 export async function moveStoriesToStory(sourceIds: number[], targetId: number): Promise<void> {
   return request.post('/stories/batch-move', { source_ids: sourceIds, target_id: targetId })
+}
+
+export async function updateStoriesBackgroundColor(ids: number[], backgroundColor: string): Promise<void> {
+  return request.post('/stories/batch-background', { ids, background_color: backgroundColor })
 }
 
 export async function addStoryEntries(id: number, entries: CreateStoryEntryRequest[]): Promise<void> {
