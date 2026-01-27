@@ -568,6 +568,182 @@ func (s *Server) batchUpdateBackgroundColor(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "更新成功", "count": len(req.IDs)})
 }
 
+// BatchUpdateEntryGroupRequest 批量更新条目编组请求
+type BatchUpdateEntryGroupRequest struct {
+	EntryIDs        []uint `json:"entry_ids" binding:"required"`
+	BackgroundColor string `json:"background_color"`
+	GroupName       string `json:"group_name"`
+}
+
+// batchUpdateEntryBackgroundColor 批量更新剧情条目背景色
+func (s *Server) batchUpdateEntryBackgroundColor(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	// 验证剧情属于当前用户
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", storyID, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	var req BatchUpdateEntryGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	if len(req.EntryIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要更新的条目"})
+		return
+	}
+
+	// 更新编组信息（背景色和组名）
+	database.DB.Model(&model.StoryEntry{}).
+		Where("id IN ? AND story_id = ?", req.EntryIDs, storyID).
+		Updates(map[string]interface{}{
+			"background_color": req.BackgroundColor,
+			"group_name":       req.GroupName,
+		})
+
+	c.JSON(http.StatusOK, gin.H{"message": "更新成功", "count": len(req.EntryIDs)})
+}
+
+// BatchDeleteEntriesRequest 批量删除条目请求
+type BatchDeleteEntriesRequest struct {
+	EntryIDs []uint `json:"entry_ids" binding:"required"`
+}
+
+// batchDeleteEntries 批量删除剧情条目
+func (s *Server) batchDeleteEntries(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	// 验证剧情属于当前用户
+	var story model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", storyID, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	var req BatchDeleteEntriesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	if len(req.EntryIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要删除的条目"})
+		return
+	}
+
+	// 删除条目
+	result := database.DB.Where("id IN ? AND story_id = ?", req.EntryIDs, storyID).
+		Delete(&model.StoryEntry{})
+
+	// 更新剧情的更新时间
+	database.DB.Model(&story).Update("updated_at", time.Now())
+
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功", "count": result.RowsAffected})
+}
+
+// ArchiveEntriesRequest 归档条目请求
+type ArchiveEntriesRequest struct {
+	EntryIDs []uint `json:"entry_ids" binding:"required"`
+	TargetID uint   `json:"target_id" binding:"required"`
+	Mode     string `json:"mode" binding:"required"` // copy 或 move
+}
+
+// archiveEntriesToStory 归档条目到其他剧情
+func (s *Server) archiveEntriesToStory(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	// 验证源剧情属于当前用户
+	var sourceStory model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", storyID, userID).
+		First(&sourceStory).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	var req ArchiveEntriesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	if len(req.EntryIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要归档的条目"})
+		return
+	}
+
+	if req.Mode != "copy" && req.Mode != "move" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的归档模式"})
+		return
+	}
+
+	// 验证目标剧情属于当前用户
+	var targetStory model.Story
+	if err := database.DB.Where("id = ? AND user_id = ?", req.TargetID, userID).
+		First(&targetStory).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "目标剧情不存在"})
+		return
+	}
+
+	// 获取要归档的条目
+	var entries []model.StoryEntry
+	database.DB.Where("id IN ? AND story_id = ?", req.EntryIDs, storyID).Find(&entries)
+
+	if len(entries) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未找到要归档的条目"})
+		return
+	}
+
+	// 获取目标剧情当前最大排序号
+	var maxOrder int
+	database.DB.Model(&model.StoryEntry{}).
+		Where("story_id = ?", req.TargetID).
+		Select("COALESCE(MAX(sort_order), 0)").
+		Scan(&maxOrder)
+
+	if req.Mode == "copy" {
+		// 复制模式：创建新条目
+		for i, entry := range entries {
+			newEntry := model.StoryEntry{
+				StoryID:         req.TargetID,
+				SourceID:        entry.SourceID,
+				Type:            entry.Type,
+				CharacterID:     entry.CharacterID,
+				Speaker:         entry.Speaker,
+				Content:         entry.Content,
+				Channel:         entry.Channel,
+				Timestamp:       entry.Timestamp,
+				SortOrder:       maxOrder + i + 1,
+				BackgroundColor: entry.BackgroundColor,
+			}
+			database.DB.Create(&newEntry)
+		}
+	} else {
+		// 移动模式：更新条目的story_id
+		for i, entry := range entries {
+			database.DB.Model(&entry).Updates(map[string]interface{}{
+				"story_id":   req.TargetID,
+				"sort_order": maxOrder + i + 1,
+			})
+		}
+		// 更新源剧情的更新时间
+		database.DB.Model(&sourceStory).Update("updated_at", time.Now())
+	}
+
+	// 更新目标剧情的更新时间
+	database.DB.Model(&targetStory).Update("updated_at", time.Now())
+
+	c.JSON(http.StatusOK, gin.H{"message": "归档成功", "count": len(entries)})
+}
+
 func (s *Server) addStoryEntries(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -848,4 +1024,162 @@ func (s *Server) deleteStoryEntry(c *gin.Context) {
 	database.DB.Model(&story).Update("updated_at", time.Now())
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+// ========== 书签功能 ==========
+
+// listBookmarks 获取剧情书签列表
+func (s *Server) listBookmarks(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var bookmarks []model.StoryBookmark
+	database.DB.Where("story_id = ? AND user_id = ?", storyID, userID).
+		Order("created_at ASC").Find(&bookmarks)
+
+	c.JSON(http.StatusOK, gin.H{"bookmarks": bookmarks})
+}
+
+// CreateBookmarkRequest 创建书签请求
+type CreateBookmarkRequest struct {
+	EntryID uint   `json:"entry_id" binding:"required"`
+	Name    string `json:"name" binding:"required"`
+	Color   string `json:"color"`
+}
+
+// createBookmark 创建书签
+func (s *Server) createBookmark(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var req CreateBookmarkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	// 验证条目存在
+	var entry model.StoryEntry
+	if err := database.DB.Where("id = ? AND story_id = ?", req.EntryID, storyID).
+		First(&entry).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "条目不存在"})
+		return
+	}
+
+	bookmark := model.StoryBookmark{
+		StoryID: uint(storyID),
+		UserID:  userID,
+		EntryID: req.EntryID,
+		Name:    req.Name,
+		Color:   req.Color,
+		IsAuto:  false,
+	}
+
+	if err := database.DB.Create(&bookmark).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, bookmark)
+}
+
+// deleteBookmark 删除书签
+func (s *Server) deleteBookmark(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	bookmarkID, _ := strconv.ParseUint(c.Param("bookmarkId"), 10, 32)
+
+	result := database.DB.Where("id = ? AND story_id = ? AND user_id = ?", bookmarkID, storyID, userID).
+		Delete(&model.StoryBookmark{})
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "书签不存在"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+// updateLastViewBookmark 更新"上次浏览"书签
+func (s *Server) updateLastViewBookmark(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var req struct {
+		EntryID uint `json:"entry_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	// 查找或创建"上次浏览"书签
+	var bookmark model.StoryBookmark
+	err := database.DB.Where("story_id = ? AND user_id = ? AND is_auto = ?", storyID, userID, true).
+		First(&bookmark).Error
+
+	if err != nil {
+		// 创建新的自动书签
+		bookmark = model.StoryBookmark{
+			StoryID: uint(storyID),
+			UserID:  userID,
+			EntryID: req.EntryID,
+			Name:    "上次浏览",
+			IsAuto:  true,
+		}
+		database.DB.Create(&bookmark)
+	} else {
+		// 更新现有书签
+		database.DB.Model(&bookmark).Updates(map[string]interface{}{
+			"entry_id":   req.EntryID,
+			"updated_at": time.Now(),
+		})
+	}
+
+	c.JSON(http.StatusOK, bookmark)
+}
+
+// UpdateBookmarkRequest 更新书签请求
+type UpdateBookmarkRequest struct {
+	Name       string `json:"name"`
+	Color      string `json:"color"`
+	IsFavorite *bool  `json:"is_favorite"`
+}
+
+// updateBookmark 更新书签
+func (s *Server) updateBookmark(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+	bookmarkID, _ := strconv.ParseUint(c.Param("bookmarkId"), 10, 32)
+
+	var bookmark model.StoryBookmark
+	if err := database.DB.Where("id = ? AND story_id = ? AND user_id = ?", bookmarkID, storyID, userID).
+		First(&bookmark).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "书签不存在"})
+		return
+	}
+
+	var req UpdateBookmarkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	updates := map[string]interface{}{"updated_at": time.Now()}
+	if req.Name != "" {
+		updates["name"] = req.Name
+	}
+	if req.Color != "" {
+		updates["color"] = req.Color
+	} else if req.Color == "" && c.Request.ContentLength > 0 {
+		// 允许清空颜色
+		updates["color"] = ""
+	}
+	if req.IsFavorite != nil {
+		updates["is_favorite"] = *req.IsFavorite
+	}
+
+	database.DB.Model(&bookmark).Updates(updates)
+	database.DB.First(&bookmark, bookmarkID)
+
+	c.JSON(http.StatusOK, bookmark)
 }

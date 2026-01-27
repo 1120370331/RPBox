@@ -257,3 +257,17 @@ export function getImageUrl(type: string, id: number, options?: { w?: number; q?
   const queryString = params.toString()
   return `${API_HOST}/api/v1/images/${type}/${id}${queryString ? '?' + queryString : ''}`
 }
+
+// 处理相对 URL，转换为完整 URL
+export function resolveApiUrl(url: string | undefined | null): string {
+  if (!url) return ''
+  // 如果已经是完整 URL（http/https 或 data:），直接返回
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url
+  }
+  // 如果是相对路径，加上 API_HOST
+  if (url.startsWith('/api/')) {
+    return `${API_HOST}${url}`
+  }
+  return url
+}

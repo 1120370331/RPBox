@@ -33,6 +33,10 @@ export default {
   banner: {
     belongsTo: '属于合集',
     totalCount: '共{count}篇',
+    edit: '修改合集',
+    addToCollection: '添加到合集',
+    updateSuccess: '合集已更新',
+    updateFailed: '更新合集失败',
   },
   favorite: {
     favorite: '收藏',

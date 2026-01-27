@@ -79,6 +79,7 @@ type ServerConfig struct {
 	Port          string `mapstructure:"port"`
 	Mode          string `mapstructure:"mode"`
 	MaxBodySizeMB int    `mapstructure:"max_body_size_mb"`
+	ApiHost       string `mapstructure:"api_host"` // API 基础 URL，如 https://api.rpbox.app
 }
 
 type DatabaseConfig struct {

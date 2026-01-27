@@ -126,17 +126,33 @@ type Story struct {
 
 // StoryEntry 剧情条目
 type StoryEntry struct {
-	ID          uint      `gorm:"primarykey" json:"id"`
-	StoryID     uint      `gorm:"index;not null" json:"story_id"`
-	SourceID    string    `gorm:"size:64" json:"source_id"`             // 来源聊天记录ID
-	Type        string    `gorm:"size:20;default:dialogue" json:"type"` // dialogue, narration, image
-	CharacterID *uint     `gorm:"index" json:"character_id"`            // 关联角色ID（可空，旁白无角色）
-	Speaker     string    `gorm:"size:128" json:"speaker"`              // 说话者名字快照
-	Content     string    `gorm:"type:text" json:"content"`
-	Channel     string    `gorm:"size:32" json:"channel"`
-	Timestamp   time.Time `json:"timestamp"`
-	SortOrder   int       `gorm:"default:0" json:"sort_order"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID              uint      `gorm:"primarykey" json:"id"`
+	StoryID         uint      `gorm:"index;not null" json:"story_id"`
+	SourceID        string    `gorm:"size:64" json:"source_id"`             // 来源聊天记录ID
+	Type            string    `gorm:"size:20;default:dialogue" json:"type"` // dialogue, narration, image
+	CharacterID     *uint     `gorm:"index" json:"character_id"`            // 关联角色ID（可空，旁白无角色）
+	Speaker         string    `gorm:"size:128" json:"speaker"`              // 说话者名字快照
+	Content         string    `gorm:"type:text" json:"content"`
+	Channel         string    `gorm:"size:32" json:"channel"`
+	Timestamp       time.Time `json:"timestamp"`
+	SortOrder       int       `gorm:"default:0" json:"sort_order"`
+	BackgroundColor string    `gorm:"size:7" json:"background_color"`  // 背景色，如 #FF5733
+	GroupName       string    `gorm:"size:64" json:"group_name"`       // 编组名称
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// StoryBookmark 剧情书签
+type StoryBookmark struct {
+	ID         uint      `gorm:"primarykey" json:"id"`
+	StoryID    uint      `gorm:"index;not null" json:"story_id"`
+	UserID     uint      `gorm:"index;not null" json:"user_id"`
+	EntryID    uint      `gorm:"index;not null" json:"entry_id"`   // 关联的条目ID
+	Name       string    `gorm:"size:64;not null" json:"name"`     // 书签名称
+	Color      string    `gorm:"size:16" json:"color"`             // 书签颜色
+	IsFavorite bool      `gorm:"default:false" json:"is_favorite"` // 是否收藏
+	IsAuto     bool      `gorm:"default:false" json:"is_auto"`     // 是否自动书签
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // Character 全局人物卡模型 (与TRP3 characteristics 1:1对应)

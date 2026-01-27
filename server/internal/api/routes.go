@@ -87,9 +87,19 @@ func (s *Server) setupRoutes() {
 			auth.PUT("/stories/:id", s.updateStory)
 			auth.DELETE("/stories/:id", s.deleteStory)
 			auth.POST("/stories/:id/entries", s.addStoryEntries)
+			auth.POST("/stories/:id/entries/batch-background", s.batchUpdateEntryBackgroundColor)
+			auth.POST("/stories/:id/entries/batch-delete", s.batchDeleteEntries)
+			auth.POST("/stories/:id/entries/archive", s.archiveEntriesToStory)
 			auth.PUT("/stories/:id/entries/:entryId", s.updateStoryEntry)
 			auth.DELETE("/stories/:id/entries/:entryId", s.deleteStoryEntry)
 			auth.POST("/stories/:id/publish", s.publishStory)
+
+			// 剧情书签
+			auth.GET("/stories/:id/bookmarks", s.listBookmarks)
+			auth.POST("/stories/:id/bookmarks", s.createBookmark)
+			auth.PUT("/stories/:id/bookmarks/:bookmarkId", s.updateBookmark)
+			auth.DELETE("/stories/:id/bookmarks/:bookmarkId", s.deleteBookmark)
+			auth.PUT("/stories/:id/bookmarks/last-view", s.updateLastViewBookmark)
 
 			// 角色管理
 			auth.GET("/characters", s.listCharacters)

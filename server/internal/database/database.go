@@ -72,6 +72,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.CollectionPost{},
 		&model.CollectionItem{},
 		&model.CollectionFavorite{},
+		&model.StoryBookmark{},
 	); err != nil {
 		return err
 	}
