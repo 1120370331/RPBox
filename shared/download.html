@@ -364,6 +364,8 @@
             };
 
             var hasDownload = !!els.button;
+            var fallbackVersion = '0.2.9';
+            var fallbackBase = 'https://ksxvodevhonx.sealosbja.site/releases';
 
             function isLocalHost(hostname) {
                 return hostname === 'localhost' || hostname === '127.0.0.1';
@@ -454,6 +456,20 @@
                     return url.toString();
                 } catch (err) {
                     return '';
+                }
+            }
+
+            function applyDownloadLink(downloadUrl) {
+                if (!downloadUrl || !els.button) return;
+                var filename = downloadUrl.split('/').pop() || 'RPBox-setup.exe';
+                els.button.href = downloadUrl;
+                els.button.setAttribute('download', filename);
+
+                if (els.backup) {
+                    els.backup.href = downloadUrl;
+                    els.backup.setAttribute('download', filename);
+                    els.backup.setAttribute('rel', 'nofollow noopener noreferrer');
+                    els.backup.setAttribute('referrerpolicy', 'no-referrer');
                 }
             }
 
@@ -605,17 +621,7 @@
                     if (!downloadUrl) {
                         throw new Error('Invalid download URL');
                     }
-
-                    var filename = downloadUrl.split('/').pop() || 'RPBox-setup.exe';
-                    els.button.href = downloadUrl;
-                    els.button.setAttribute('download', filename);
-
-                    if (els.backup) {
-                        els.backup.href = downloadUrl;
-                        els.backup.setAttribute('download', filename);
-                        els.backup.setAttribute('rel', 'nofollow noopener noreferrer');
-                        els.backup.setAttribute('referrerpolicy', 'no-referrer');
-                    }
+                    applyDownloadLink(downloadUrl);
 
                     if (data.version) {
                         var versionText = 'v' + data.version;
@@ -627,6 +633,18 @@
                     setLoading(false);
                     updateSize(downloadUrl);
                 } catch (err) {
+                    var fallbackUrl = sanitizeDownloadUrl(fallbackBase + '/' + fallbackVersion + '/RPBox_' + fallbackVersion + '_x64-setup.exe', fallbackBase);
+                    if (fallbackUrl) {
+                        applyDownloadLink(fallbackUrl);
+                        if (els.badge) {
+                            els.badge.textContent = 'v' + fallbackVersion + ' Windows 版现已发布';
+                        }
+                        setStatus('已切换到稳定下载地址', false);
+                        setDisabled(false);
+                        setLoading(false);
+                        updateSize(fallbackUrl);
+                        return;
+                    }
                     setStatus('下载链接暂不可用，请稍后再试', true);
                     setDisabled(true);
                     setLoading(false);
