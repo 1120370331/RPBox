@@ -24,7 +24,7 @@ import ImageViewer from '@/components/ImageViewer.vue'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const { confirm } = useDialog()
+const { confirm, alert } = useDialog()
 
 const loading = ref(true)
 const story = ref<Story | null>(null)
@@ -162,6 +162,14 @@ function getBookmarkEntryPreview(entryId: number): string {
   if (entry.type === 'image') return '[图片]'
   const text = entry.content.replace(/<[^>]+>/g, '').trim()
   return text.length > 30 ? text.slice(0, 30) + '...' : text
+}
+
+// 获取书签对应的条目时间
+function getBookmarkEntryTime(entryId: number): string {
+  const entry = entries.value.find(e => e.id === entryId)
+  if (!entry || !entry.timestamp) return ''
+  const date = new Date(entry.timestamp)
+  return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 }
 
 // 获取所有已使用的背景色分组
@@ -554,12 +562,13 @@ async function handleArchiveToGuild(guildId: number) {
     await loadGuilds()
     showGuildModal.value = false
   } catch (e: any) {
-    alert(e.message || '归档失败')
+    await alert(e.message || '归档失败')
   }
 }
 
 async function handleRemoveFromGuild(guildId: number) {
-  if (!confirm('确定要从该公会移除归档吗？')) return
+  const confirmed = await confirm('确定要从该公会移除归档吗？')
+  if (!confirmed) return
   try {
     await removeStoryFromGuild(guildId, storyId.value)
     await loadGuilds()
@@ -950,7 +959,8 @@ function handleEditCharacterSelect(characterId: number | null) {
 }
 
 async function handleDeleteEntry(entry: StoryEntry) {
-  if (!confirm('确定要删除这条记录吗？')) return
+  const confirmed = await confirm('确定要删除这条记录吗？')
+  if (!confirmed) return
   try {
     await deleteStoryEntry(storyId.value, entry.id)
     await loadStory()
@@ -1021,9 +1031,8 @@ async function handleBatchUpdateEntryColor() {
 async function handleBatchDeleteEntries() {
   if (selectedEntryIds.value.length === 0) return
 
-  if (!confirm(`确定要删除选中的 ${selectedEntryIds.value.length} 条记录吗？此操作不可恢复。`)) {
-    return
-  }
+  const confirmed = await confirm(`确定要删除选中的 ${selectedEntryIds.value.length} 条记录吗？此操作不可恢复。`)
+  if (!confirmed) return
 
   deletingEntries.value = true
   try {
@@ -1033,7 +1042,7 @@ async function handleBatchDeleteEntries() {
     exitEntryManageMode()
   } catch (e) {
     console.error('删除失败:', e)
-    alert('删除失败')
+    await alert('删除失败')
   } finally {
     deletingEntries.value = false
   }
@@ -1074,10 +1083,13 @@ async function handleArchiveEntries() {
 
     showArchiveModal.value = false
     exitEntryManageMode()
-    alert(archiveMode.value === 'copy' ? '复制成功' : '移动成功')
+    await alert({
+      message: archiveMode.value === 'copy' ? '复制成功' : '移动成功',
+      type: 'success'
+    })
   } catch (e) {
     console.error('归档失败:', e)
-    alert('归档失败')
+    await alert('归档失败')
   } finally {
     archivingEntries.value = false
   }
@@ -1542,6 +1554,7 @@ onBeforeUnmount(() => {
                     <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'"></i>
                   </button>
                   <span class="bookmark-name">{{ bookmark.name }}</span>
+                  <span class="bookmark-time">{{ getBookmarkEntryTime(bookmark.entry_id) }}</span>
                 </div>
                 <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
               </div>
@@ -1607,6 +1620,7 @@ onBeforeUnmount(() => {
                       <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'"></i>
                     </button>
                     <span class="bookmark-name">{{ bookmark.name }}</span>
+                    <span class="bookmark-time">{{ getBookmarkEntryTime(bookmark.entry_id) }}</span>
                   </div>
                   <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
                 </div>
@@ -3483,6 +3497,14 @@ onBeforeUnmount(() => {
   border-left: 3px solid transparent;
 }
 
+.bookmark-time {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--color-secondary);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
 .bookmark-item:hover {
   border-color: var(--color-accent);
   border-left-color: var(--color-accent);
@@ -3507,6 +3529,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  width: 100%;
 }
 
 .bookmark-star {

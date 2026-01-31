@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -702,16 +703,13 @@ func (s *Server) archiveEntriesToStory(c *gin.Context) {
 		return
 	}
 
-	// 获取目标剧情当前最大排序号
-	var maxOrder int
-	database.DB.Model(&model.StoryEntry{}).
-		Where("story_id = ?", req.TargetID).
-		Select("COALESCE(MAX(sort_order), 0)").
-		Scan(&maxOrder)
+	// 获取目标剧情的所有条目，按时间排序
+	var targetEntries []model.StoryEntry
+	database.DB.Where("story_id = ?", req.TargetID).Order("timestamp ASC").Find(&targetEntries)
 
 	if req.Mode == "copy" {
 		// 复制模式：创建新条目
-		for i, entry := range entries {
+		for _, entry := range entries {
 			newEntry := model.StoryEntry{
 				StoryID:         req.TargetID,
 				SourceID:        entry.SourceID,
@@ -721,21 +719,30 @@ func (s *Server) archiveEntriesToStory(c *gin.Context) {
 				Content:         entry.Content,
 				Channel:         entry.Channel,
 				Timestamp:       entry.Timestamp,
-				SortOrder:       maxOrder + i + 1,
 				BackgroundColor: entry.BackgroundColor,
 			}
 			database.DB.Create(&newEntry)
+			targetEntries = append(targetEntries, newEntry)
 		}
 	} else {
 		// 移动模式：更新条目的story_id
-		for i, entry := range entries {
-			database.DB.Model(&entry).Updates(map[string]interface{}{
-				"story_id":   req.TargetID,
-				"sort_order": maxOrder + i + 1,
-			})
+		for _, entry := range entries {
+			database.DB.Model(&entry).Update("story_id", req.TargetID)
+			entry.StoryID = req.TargetID
+			targetEntries = append(targetEntries, entry)
 		}
 		// 更新源剧情的更新时间
 		database.DB.Model(&sourceStory).Update("updated_at", time.Now())
+	}
+
+	// 按时间重新排序所有条目
+	sort.Slice(targetEntries, func(i, j int) bool {
+		return targetEntries[i].Timestamp.Before(targetEntries[j].Timestamp)
+	})
+
+	// 更新所有条目的 sort_order
+	for i, entry := range targetEntries {
+		database.DB.Model(&model.StoryEntry{}).Where("id = ?", entry.ID).Update("sort_order", i+1)
 	}
 
 	// 更新目标剧情的更新时间
