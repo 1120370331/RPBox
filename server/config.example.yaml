@@ -7,6 +7,8 @@ cors:
   allowed_origins:
     - "https://totalrpbox.com"
     - "https://www.totalrpbox.com"
+    - "https://rpbox.com"
+    - "https://www.rpbox.com"
     - "https://ksxvodevhonx.sealosbja.site"
     - "tauri://localhost"
     - "https://tauri.localhost"
