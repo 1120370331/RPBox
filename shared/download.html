@@ -144,7 +144,6 @@
                 <a href="#top" class="nav-link hover:text-primary transition-colors" data-scroll="top">首页</a>
                 <a href="#comparison" class="nav-link hover:text-primary transition-colors" data-scroll="comparison">功能对比</a>
                 <a href="#steps" class="nav-link hover:text-primary transition-colors" data-scroll="steps">安装步骤</a>
-                <a href="#changelog" class="nav-link hover:text-primary transition-colors" data-scroll="changelog">更新日志</a>
                 <a href="#faq" class="nav-link hover:text-primary transition-colors" data-scroll="faq">常见问题</a>
                 <a href="#download-btn" class="nav-link nav-cta">下载客户端</a>
             </div>
@@ -338,99 +337,49 @@
         </div>
     </section>
 
-    <!-- Split Section: Changelog & FAQ -->
-    <section class="max-w-7xl mx-auto px-6 mb-32 grid lg:grid-cols-12 gap-12">
+    <!-- FAQ -->
+    <section id="faq" class="max-w-7xl mx-auto px-6 mb-32 scroll-anchor">
+        <h2 class="text-2xl font-bold text-primary mb-8">常见问题</h2>
         
-        <!-- Changelog (Left 7 cols) -->
-        <div id="changelog" class="lg:col-span-7 space-y-6 scroll-anchor">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-bold text-primary">更新日志</h2>
-                <a href="#" class="text-sm text-accent hover:text-primary transition-colors">查看全部历史 &rarr;</a>
-            </div>
-
-            <!-- Version Card 1 -->
-            <div class="bg-white p-6 border-l-4 border-accent shadow-sharp rounded-r-lg group hover:shadow-soft transition-all">
-                <div class="flex justify-between items-start mb-3">
-                    <div>
-                        <span id="release-version" class="text-lg font-bold text-primary">v1.2.0</span>
-                        <span class="ml-2 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">最新</span>
-                    </div>
-                    <span id="release-date" class="text-sm text-secondary">2023-10-24</span>
+        <div class="grid lg:grid-cols-2 gap-6">
+            <!-- FAQ Item 1 -->
+            <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
+                <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
+                    <span>安装失败或报错怎么办？</span>
+                    <span class="transition-transform group-open:rotate-180 text-accent">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </summary>
+                <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
+                    请确保您已关闭杀毒软件或将安装包添加至白名单。如果是网络问题，请尝试<a id="download-backup-link" href="#" class="text-accent underline">备用下载链接</a>。
                 </div>
-                <ul id="release-notes" class="space-y-2 text-sm text-secondary">
-                    <li class="flex gap-2"><span class="text-success">●</span> 新增：公会日程表功能，支持拖拽排期</li>
-                    <li class="flex gap-2"><span class="text-success">●</span> 新增：本地草稿箱自动保存</li>
-                    <li class="flex gap-2"><span class="text-blue-500">●</span> 优化：图片上传压缩算法，速度提升 50%</li>
-                </ul>
-            </div>
+            </details>
 
-            <!-- Version Card 2 -->
-            <div class="bg-white/60 p-6 border-l-4 border-gray-300 shadow-sharp rounded-r-lg group hover:bg-white transition-all">
-                <div class="flex justify-between items-start mb-3">
-                    <span class="text-lg font-bold text-primary opacity-80">v1.1.5</span>
-                    <span class="text-sm text-secondary opacity-80">2023-10-10</span>
+            <!-- FAQ Item 2 -->
+            <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
+                <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
+                    <span>支持 Mac 或 Linux 吗？</span>
+                    <span class="transition-transform group-open:rotate-180 text-accent">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </summary>
+                <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
+                    目前仅支持 Windows 10/11。Mac 版本正在开发中，预计将于 Q4 发布测试版，敬请期待。
                 </div>
-                <ul class="space-y-2 text-sm text-secondary opacity-80">
-                    <li class="flex gap-2"><span class="text-blue-500">●</span> 修复：部分用户登录状态丢失的问题</li>
-                    <li class="flex gap-2"><span class="text-blue-500">●</span> 优化：深色模式下的文字对比度</li>
-                </ul>
-            </div>
-             <!-- Version Card 3 -->
-             <div class="bg-white/40 p-6 border-l-4 border-gray-300 shadow-sharp rounded-r-lg group hover:bg-white transition-all">
-                <div class="flex justify-between items-start mb-3">
-                    <span class="text-lg font-bold text-primary opacity-60">v1.1.0</span>
-                    <span class="text-sm text-secondary opacity-60">2023-09-28</span>
+            </details>
+
+            <!-- FAQ Item 3 -->
+            <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
+                <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
+                    <span>客户端占用多少空间？</span>
+                    <span class="transition-transform group-open:rotate-180 text-accent">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </summary>
+                <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
+                    当前安装包大小约 <span id="download-size-faq">145MB</span>，安装后占用空间约 400MB（含缓存）。
                 </div>
-                <p class="text-sm text-secondary opacity-60">
-                    客户端首次公测发布，包含基础人物卡管理功能。
-                </p>
-            </div>
-        </div>
-
-        <!-- FAQ (Right 5 cols) -->
-        <div id="faq" class="lg:col-span-5 scroll-anchor">
-            <h2 class="text-2xl font-bold text-primary mb-8">常见问题</h2>
-            
-            <div class="space-y-4">
-                <!-- FAQ Item 1 -->
-                <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
-                    <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
-                        <span>安装失败或报错怎么办？</span>
-                        <span class="transition-transform group-open:rotate-180 text-accent">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </span>
-                    </summary>
-                    <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
-                        请确保您已关闭杀毒软件或将安装包添加至白名单。如果是网络问题，请尝试<a id="download-backup-link" href="#" class="text-accent underline">备用下载链接</a>。
-                    </div>
-                </details>
-
-                <!-- FAQ Item 2 -->
-                <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
-                    <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
-                        <span>支持 Mac 或 Linux 吗？</span>
-                        <span class="transition-transform group-open:rotate-180 text-accent">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </span>
-                    </summary>
-                    <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
-                        目前仅支持 Windows 10/11。Mac 版本正在开发中，预计将于 Q4 发布测试版，敬请期待。
-                    </div>
-                </details>
-
-                <!-- FAQ Item 3 -->
-                <details class="group bg-white rounded-lg shadow-sharp overflow-hidden">
-                    <summary class="flex justify-between items-center p-5 cursor-pointer list-none text-primary font-medium hover:bg-gray-50 transition-colors">
-                        <span>客户端占用多少空间？</span>
-                        <span class="transition-transform group-open:rotate-180 text-accent">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </span>
-                    </summary>
-                    <div class="px-5 pb-5 text-sm text-secondary leading-relaxed border-t border-gray-100 pt-3">
-                        当前安装包大小约 <span id="download-size-faq">145MB</span>，安装后占用空间约 400MB（含缓存）。
-                    </div>
-                </details>
-            </div>
+            </details>
         </div>
     </section>
 
@@ -443,9 +392,6 @@
                 size: document.getElementById('download-size'),
                 sizeFaq: document.getElementById('download-size-faq'),
                 status: document.getElementById('download-status'),
-                version: document.getElementById('release-version'),
-                date: document.getElementById('release-date'),
-                notes: document.getElementById('release-notes'),
                 backup: document.getElementById('download-backup-link'),
                 support: document.getElementById('download-support')
             };
@@ -706,31 +652,7 @@
 
                     if (data.version) {
                         var versionText = 'v' + data.version;
-                        if (els.version) els.version.textContent = versionText;
                         if (els.badge) els.badge.textContent = versionText + ' ' + platform.label + ' 版现已发布';
-                    }
-                    if (data.pub_date && els.date) {
-                        var formatted = formatDate(data.pub_date);
-                        if (formatted) els.date.textContent = formatted;
-                    }
-
-                    if (els.notes && typeof data.notes === 'string' && data.notes.trim()) {
-                        var lines = data.notes.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
-                        if (lines.length) {
-                            els.notes.innerHTML = '';
-                            lines.slice(0, 6).forEach(function (line, index) {
-                                var li = document.createElement('li');
-                                li.className = 'flex gap-2';
-                                var dot = document.createElement('span');
-                                dot.className = index === 0 ? 'text-success' : 'text-blue-500';
-                                dot.textContent = '●';
-                                var text = document.createElement('span');
-                                text.textContent = line;
-                                li.appendChild(dot);
-                                li.appendChild(text);
-                                els.notes.appendChild(li);
-                            });
-                        }
                     }
 
                     setStatus('下载地址已准备，点击开始下载');
