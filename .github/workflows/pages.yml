@@ -36,7 +36,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p dist
-          cp shared/download.html shared/mainpic.webp shared/.nojekyll shared/CNAME dist/
+          cp shared/download.html shared/mainpic.webp shared/.nojekyll shared/CNAME shared/index.html dist/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
