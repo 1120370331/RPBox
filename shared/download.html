@@ -187,7 +187,6 @@
                         </span>
                     </a>
                     <div class="flex flex-col justify-center text-xs text-white/60 pl-2">
-                        <span id="download-size">大小: 获取中</span>
                         <span id="download-support">支持 Win10/11</span>
                         <span id="download-status" class="text-white/40">正在获取下载地址...</span>
                     </div>
@@ -349,8 +348,6 @@
                 button: document.getElementById('download-btn'),
                 label: document.getElementById('download-label'),
                 badge: document.getElementById('release-badge'),
-                size: document.getElementById('download-size'),
-                sizeFaq: document.getElementById('download-size-faq'),
                 status: document.getElementById('download-status'),
                 backup: document.getElementById('download-backup-link'),
                 support: document.getElementById('download-support')
@@ -429,14 +426,6 @@
                 var month = String(date.getMonth() + 1).padStart(2, '0');
                 var day = String(date.getDate()).padStart(2, '0');
                 return year + '-' + month + '-' + day;
-            }
-
-            function formatBytes(bytes) {
-                if (!bytes || !isFinite(bytes)) return '';
-                var mb = bytes / (1024 * 1024);
-                if (mb < 1024) return mb.toFixed(1) + 'MB';
-                var gb = mb / 1024;
-                return gb.toFixed(2) + 'GB';
             }
 
             function sanitizeDownloadUrl(value, base) {
@@ -563,26 +552,6 @@
                 return { target: target, arch: arch, label: label, archLabel: archLabel };
             }
 
-            async function updateSize(downloadUrl) {
-                if (!downloadUrl) return;
-                try {
-                    var res = await fetch(downloadUrl, { method: 'HEAD', mode: 'cors', credentials: 'omit' });
-                    if (!res.ok) return;
-                    var length = res.headers.get('content-length');
-                    if (!length) return;
-                    var sizeText = formatBytes(parseInt(length, 10));
-                    if (!sizeText) return;
-                    if (els.size) {
-                        els.size.textContent = '大小: ' + sizeText;
-                    }
-                    if (els.sizeFaq) {
-                        els.sizeFaq.textContent = sizeText;
-                    }
-                } catch (err) {
-                    // Ignore size fetch errors
-                }
-            }
-
             async function initDownload() {
                 if (!hasDownload) return;
                 setStatus('正在获取下载地址...');
@@ -624,7 +593,6 @@
                     setStatus('下载地址已准备，点击开始下载');
                     setDisabled(false);
                     setLoading(false);
-                    updateSize(downloadUrl);
                 } catch (err) {
                     var fallbackUrl = sanitizeDownloadUrl(fallbackBase + '/' + fallbackVersion + '/RPBox_' + fallbackVersion + '_x64-setup.exe', fallbackBase);
                     if (fallbackUrl) {
@@ -635,7 +603,6 @@
                         setStatus('已切换到稳定下载地址', false);
                         setDisabled(false);
                         setLoading(false);
-                        updateSize(fallbackUrl);
                         return;
                     }
                     setStatus('下载链接暂不可用，请稍后再试', true);
