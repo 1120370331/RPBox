@@ -9,6 +9,7 @@ export interface Collection {
   content_type: 'post' | 'item' | 'mixed'
   item_count: number
   is_public: boolean
+  allow_reorder: boolean
   created_at: string
   updated_at: string
 }
@@ -40,6 +41,7 @@ export interface CreateCollectionRequest {
   description?: string
   content_type?: 'post' | 'item' | 'mixed'
   is_public?: boolean
+  allow_reorder?: boolean
 }
 
 export interface UpdateCollectionRequest {
@@ -47,6 +49,7 @@ export interface UpdateCollectionRequest {
   description?: string
   content_type?: 'post' | 'item' | 'mixed'
   is_public?: boolean
+  allow_reorder?: boolean
 }
 
 export interface CollectionInfo {
@@ -134,4 +137,14 @@ export async function unfavoriteCollection(id: number): Promise<void> {
 
 export async function listMyCollectionFavorites(): Promise<{ collections: CollectionWithAuthor[] }> {
   return request.get('/user/favorite-collections')
+}
+
+// ========== 合集排序 ==========
+
+export async function reorderCollectionPosts(collectionId: number, postIds: number[]): Promise<void> {
+  return request.put(`/collections/${collectionId}/posts/reorder`, { ids: postIds })
+}
+
+export async function reorderCollectionItems(collectionId: number, itemIds: number[]): Promise<void> {
+  return request.put(`/collections/${collectionId}/items/reorder`, { ids: itemIds })
 }

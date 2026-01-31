@@ -564,16 +564,17 @@ type Notification struct {
 
 // Collection 合集
 type Collection struct {
-	ID          uint      `gorm:"primarykey" json:"id"`
-	AuthorID    uint      `gorm:"index;not null" json:"author_id"`
-	Name        string    `gorm:"size:128;not null" json:"name"`
-	Description string    `gorm:"type:text" json:"description"`
-	CoverImage  string    `gorm:"type:text" json:"cover_image"`
-	ContentType string    `gorm:"size:20;default:mixed" json:"content_type"` // post|item|mixed
-	ItemCount   int       `gorm:"default:0" json:"item_count"`
-	IsPublic    bool      `gorm:"default:true" json:"is_public"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           uint      `gorm:"primarykey" json:"id"`
+	AuthorID     uint      `gorm:"index;not null" json:"author_id"`
+	Name         string    `gorm:"size:128;not null" json:"name"`
+	Description  string    `gorm:"type:text" json:"description"`
+	CoverImage   string    `gorm:"type:text" json:"cover_image"`
+	ContentType  string    `gorm:"size:20;default:mixed" json:"content_type"` // post|item|mixed
+	ItemCount    int       `gorm:"default:0" json:"item_count"`
+	IsPublic     bool      `gorm:"default:true" json:"is_public"`
+	AllowReorder bool      `gorm:"default:false" json:"allow_reorder"` // 允许调整内部顺序
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // CollectionPost 合集-帖子关联
