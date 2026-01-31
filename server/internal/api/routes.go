@@ -247,6 +247,8 @@ func (s *Server) setupRoutes() {
 			auth.GET("/collections/:id/items", s.getCollectionItems)
 			auth.POST("/collections/:id/items", s.addItemToCollection)
 			auth.DELETE("/collections/:id/items/:itemId", s.removeItemFromCollection)
+			auth.PUT("/collections/:id/posts/reorder", s.reorderCollectionPosts)
+			auth.PUT("/collections/:id/items/reorder", s.reorderCollectionItems)
 			auth.GET("/user/collections", s.listUserCollections)
 			auth.GET("/posts/:id/collection", s.getPostCollection)
 			auth.GET("/items/:id/collection", s.getItemCollection)

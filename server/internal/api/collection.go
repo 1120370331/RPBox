@@ -11,18 +11,20 @@ import (
 
 // CreateCollectionRequest 创建合集请求
 type CreateCollectionRequest struct {
-	Name        string `json:"name" binding:"required,max=128"`
-	Description string `json:"description"`
-	ContentType string `json:"content_type"` // post|item|mixed
-	IsPublic    bool   `json:"is_public"`
+	Name         string `json:"name" binding:"required,max=128"`
+	Description  string `json:"description"`
+	ContentType  string `json:"content_type"` // post|item|mixed
+	IsPublic     bool   `json:"is_public"`
+	AllowReorder bool   `json:"allow_reorder"`
 }
 
 // UpdateCollectionRequest 更新合集请求
 type UpdateCollectionRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	ContentType string `json:"content_type"`
-	IsPublic    *bool  `json:"is_public"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	ContentType  string `json:"content_type"`
+	IsPublic     *bool  `json:"is_public"`
+	AllowReorder *bool  `json:"allow_reorder"`
 }
 
 // AddToCollectionRequest 添加内容到合集请求
@@ -143,11 +145,12 @@ func (s *Server) createCollection(c *gin.Context) {
 	}
 
 	collection := model.Collection{
-		AuthorID:    userID,
-		Name:        req.Name,
-		Description: req.Description,
-		ContentType: req.ContentType,
-		IsPublic:    req.IsPublic,
+		AuthorID:     userID,
+		Name:         req.Name,
+		Description:  req.Description,
+		ContentType:  req.ContentType,
+		IsPublic:     req.IsPublic,
+		AllowReorder: req.AllowReorder,
 	}
 
 	if err := database.DB.Create(&collection).Error; err != nil {
@@ -263,6 +266,9 @@ func (s *Server) updateCollection(c *gin.Context) {
 	}
 	if req.IsPublic != nil {
 		updates["is_public"] = *req.IsPublic
+	}
+	if req.AllowReorder != nil {
+		updates["allow_reorder"] = *req.AllowReorder
 	}
 
 	if len(updates) > 0 {
@@ -776,4 +782,95 @@ func (s *Server) listMyCollectionFavorites(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"collections": result})
+}
+
+// ReorderRequest 排序请求
+type ReorderRequest struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+// reorderCollectionPosts 调整合集内帖子顺序
+func (s *Server) reorderCollectionPosts(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的合集ID"})
+		return
+	}
+
+	var collection model.Collection
+	if err := database.DB.First(&collection, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "合集不存在"})
+		return
+	}
+
+	// 检查权限：只有作者可以调整顺序
+	if collection.AuthorID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权调整此合集顺序"})
+		return
+	}
+
+	// 检查是否允许调整顺序
+	if !collection.AllowReorder {
+		c.JSON(http.StatusForbidden, gin.H{"error": "此合集不允许调整顺序"})
+		return
+	}
+
+	var req ReorderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
+
+	// 更新排序
+	for i, postID := range req.IDs {
+		database.DB.Model(&model.CollectionPost{}).
+			Where("collection_id = ? AND post_id = ?", id, postID).
+			Update("sort_order", i+1)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "排序更新成功"})
+}
+
+// reorderCollectionItems 调整合集内作品顺序
+func (s *Server) reorderCollectionItems(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的合集ID"})
+		return
+	}
+
+	var collection model.Collection
+	if err := database.DB.First(&collection, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "合集不存在"})
+		return
+	}
+
+	// 检查权限：只有作者可以调整顺序
+	if collection.AuthorID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权调整此合集顺序"})
+		return
+	}
+
+	// 检查是否允许调整顺序
+	if !collection.AllowReorder {
+		c.JSON(http.StatusForbidden, gin.H{"error": "此合集不允许调整顺序"})
+		return
+	}
+
+	var req ReorderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		return
+	}
+
+	// 更新排序
+	for i, itemID := range req.IDs {
+		database.DB.Model(&model.CollectionItem{}).
+			Where("collection_id = ? AND item_id = ?", id, itemID).
+			Update("sort_order", i+1)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "排序更新成功"})
 }
