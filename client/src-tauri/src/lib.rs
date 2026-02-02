@@ -243,7 +243,8 @@ pub fn run() {
             install_addon,
             uninstall_addon,
             scan_chat_logs,
-            save_text_file
+            save_text_file,
+            save_binary_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -420,5 +421,11 @@ async fn scan_chat_logs(wow_path: String) -> Result<Vec<chat_log::AccountChatLog
 #[tauri::command]
 async fn save_text_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content)
+        .map_err(|e| format!("保存文件失败: {}", e))
+}
+
+#[tauri::command]
+async fn save_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
+    std::fs::write(&path, data)
         .map_err(|e| format!("保存文件失败: {}", e))
 }

@@ -22,7 +22,6 @@ const loading = ref(false)
 const showCreateModal = ref(false)
 const newName = ref('')
 const newDesc = ref('')
-const newAllowReorder = ref(false)
 const creating = ref(false)
 
 async function loadCollections() {
@@ -49,7 +48,6 @@ async function handleCreate() {
       description: newDesc.value.trim(),
       content_type: props.contentType || 'mixed',
       is_public: true,
-      allow_reorder: newAllowReorder.value,
     })
     collections.value.unshift(col)
     selectedId.value = col.id
@@ -57,7 +55,6 @@ async function handleCreate() {
     showCreateModal.value = false
     newName.value = ''
     newDesc.value = ''
-    newAllowReorder.value = false
     toast.success(t('collection.create.success'))
   } catch (e) {
     toast.error(t('collection.create.failed'))
@@ -123,13 +120,6 @@ onMounted(loadCollections)
                   :placeholder="$t('collection.create.descPlaceholder')"
                   rows="3"
                 ></textarea>
-              </div>
-              <div class="form-group form-checkbox">
-                <label class="checkbox-label">
-                  <input type="checkbox" v-model="newAllowReorder" />
-                  <span>{{ $t('collection.create.allowReorder') }}</span>
-                </label>
-                <p class="checkbox-tip">{{ $t('collection.create.allowReorderTip') }}</p>
               </div>
             </div>
             <div class="modal-footer">

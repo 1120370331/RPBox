@@ -11,20 +11,18 @@ import (
 
 // CreateCollectionRequest 创建合集请求
 type CreateCollectionRequest struct {
-	Name         string `json:"name" binding:"required,max=128"`
-	Description  string `json:"description"`
-	ContentType  string `json:"content_type"` // post|item|mixed
-	IsPublic     bool   `json:"is_public"`
-	AllowReorder bool   `json:"allow_reorder"`
+	Name        string `json:"name" binding:"required,max=128"`
+	Description string `json:"description"`
+	ContentType string `json:"content_type"` // post|item|mixed
+	IsPublic    bool   `json:"is_public"`
 }
 
 // UpdateCollectionRequest 更新合集请求
 type UpdateCollectionRequest struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	ContentType  string `json:"content_type"`
-	IsPublic     *bool  `json:"is_public"`
-	AllowReorder *bool  `json:"allow_reorder"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	ContentType string `json:"content_type"`
+	IsPublic    *bool  `json:"is_public"`
 }
 
 // AddToCollectionRequest 添加内容到合集请求
@@ -145,12 +143,11 @@ func (s *Server) createCollection(c *gin.Context) {
 	}
 
 	collection := model.Collection{
-		AuthorID:     userID,
-		Name:         req.Name,
-		Description:  req.Description,
-		ContentType:  req.ContentType,
-		IsPublic:     req.IsPublic,
-		AllowReorder: req.AllowReorder,
+		AuthorID:    userID,
+		Name:        req.Name,
+		Description: req.Description,
+		ContentType: req.ContentType,
+		IsPublic:    req.IsPublic,
 	}
 
 	if err := database.DB.Create(&collection).Error; err != nil {
@@ -266,9 +263,6 @@ func (s *Server) updateCollection(c *gin.Context) {
 	}
 	if req.IsPublic != nil {
 		updates["is_public"] = *req.IsPublic
-	}
-	if req.AllowReorder != nil {
-		updates["allow_reorder"] = *req.AllowReorder
 	}
 
 	if len(updates) > 0 {
@@ -810,12 +804,6 @@ func (s *Server) reorderCollectionPosts(c *gin.Context) {
 		return
 	}
 
-	// 检查是否允许调整顺序
-	if !collection.AllowReorder {
-		c.JSON(http.StatusForbidden, gin.H{"error": "此合集不允许调整顺序"})
-		return
-	}
-
 	var req ReorderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
@@ -850,12 +838,6 @@ func (s *Server) reorderCollectionItems(c *gin.Context) {
 	// 检查权限：只有作者可以调整顺序
 	if collection.AuthorID != userID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权调整此合集顺序"})
-		return
-	}
-
-	// 检查是否允许调整顺序
-	if !collection.AllowReorder {
-		c.JSON(http.StatusForbidden, gin.H{"error": "此合集不允许调整顺序"})
 		return
 	}
 

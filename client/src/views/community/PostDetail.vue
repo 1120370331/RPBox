@@ -12,6 +12,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 import { resolveApiUrl } from '@/api/item'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
+import { handleAttachmentClick } from '@/utils/download'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import { useEmoteStore } from '@/stores/emote'
@@ -419,6 +420,9 @@ function goToEdit() {
 }
 
 function handleArticleClick(event: MouseEvent) {
+  // 先处理附件下载
+  if (handleAttachmentClick(event)) return
+
   handleJumpLinkClick(event, router, {
     returnTo: {
       type: 'post',
@@ -1082,6 +1086,86 @@ async function handleDelete() {
   color: var(--color-secondary);
   font-weight: 600;
   margin: 0 2px;
+}
+
+/* ========== 附件卡片 ========== */
+.article-content :deep(.attachment-card) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+
+.article-content :deep(.attachment-card:hover) {
+  border-color: var(--color-secondary);
+  box-shadow: 0 2px 8px rgba(var(--shadow-base), 0.08);
+}
+
+.article-content :deep(.attachment-card__icon) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-primary-light);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.article-content :deep(.attachment-card__icon i) {
+  font-size: 20px;
+  color: var(--color-secondary);
+}
+
+.article-content :deep(.attachment-card__info) {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.article-content :deep(.attachment-card__name) {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.article-content :deep(.attachment-card__size) {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.article-content :deep(.attachment-card__download) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: var(--color-secondary);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.article-content :deep(.attachment-card__download:hover) {
+  background: var(--color-secondary-dark, #6B3528);
+  transform: translateY(-1px);
+}
+
+.article-content :deep(.attachment-card__download i) {
+  font-size: 16px;
 }
 
 /* ========== 作者操作 ========== */
