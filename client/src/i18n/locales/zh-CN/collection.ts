@@ -10,8 +10,6 @@ export default {
     description: '合集简介',
     descPlaceholder: '简单描述这个合集的内容（可选）',
     nameRequired: '请输入合集名称',
-    allowReorder: '允许调整顺序',
-    allowReorderTip: '开启后可以拖拽调整合集内内容的顺序',
     success: '合集创建成功',
     failed: '创建合集失败',
   },

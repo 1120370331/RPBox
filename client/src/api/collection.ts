@@ -9,7 +9,6 @@ export interface Collection {
   content_type: 'post' | 'item' | 'mixed'
   item_count: number
   is_public: boolean
-  allow_reorder: boolean
   created_at: string
   updated_at: string
 }
@@ -41,7 +40,6 @@ export interface CreateCollectionRequest {
   description?: string
   content_type?: 'post' | 'item' | 'mixed'
   is_public?: boolean
-  allow_reorder?: boolean
 }
 
 export interface UpdateCollectionRequest {
@@ -49,7 +47,6 @@ export interface UpdateCollectionRequest {
   description?: string
   content_type?: 'post' | 'item' | 'mixed'
   is_public?: boolean
-  allow_reorder?: boolean
 }
 
 export interface CollectionInfo {

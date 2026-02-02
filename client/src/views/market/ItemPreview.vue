@@ -295,6 +295,86 @@ function handlePreviewContentClick(event: MouseEvent) {
   margin: 0 2px;
 }
 
+/* 附件卡片 */
+.rich-content :deep(.attachment-card) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: #FDFBF9;
+  border: 1px solid #E5D4C1;
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+
+.rich-content :deep(.attachment-card:hover) {
+  border-color: #804030;
+  box-shadow: 0 2px 8px rgba(75, 54, 33, 0.08);
+}
+
+.rich-content :deep(.attachment-card__icon) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(128, 64, 48, 0.08);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.rich-content :deep(.attachment-card__icon i) {
+  font-size: 20px;
+  color: #804030;
+}
+
+.rich-content :deep(.attachment-card__info) {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rich-content :deep(.attachment-card__name) {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2C1810;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rich-content :deep(.attachment-card__size) {
+  font-size: 12px;
+  color: #8D7B68;
+}
+
+.rich-content :deep(.attachment-card__download) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: #804030;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.rich-content :deep(.attachment-card__download:hover) {
+  background: #6B3528;
+  transform: translateY(-1px);
+}
+
+.rich-content :deep(.attachment-card__download i) {
+  font-size: 16px;
+}
+
 .action-buttons {
   display: flex;
   gap: 12px;

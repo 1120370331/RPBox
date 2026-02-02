@@ -29,7 +29,7 @@ const isOwner = computed(() => {
 })
 
 const canReorder = computed(() => {
-  return isOwner.value && collection.value?.allow_reorder
+  return isOwner.value
 })
 
 async function loadCollection() {

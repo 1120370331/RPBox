@@ -10,8 +10,6 @@ export default {
     description: 'Description',
     descPlaceholder: 'Briefly describe this collection (optional)',
     nameRequired: 'Please enter collection name',
-    allowReorder: 'Allow Reordering',
-    allowReorderTip: 'Enable to drag and drop items to reorder',
     success: 'Collection created',
     failed: 'Failed to create collection',
   },
