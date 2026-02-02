@@ -38,11 +38,18 @@ func (s *Server) getUserInfo(c *gin.Context) {
 
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
+
+	// 返回头像 URL 而不是 base64 数据
+	avatarURL := ""
+	if user.Avatar != "" {
+		avatarURL = fmt.Sprintf("%s/api/v1/images/user-avatar/%d?w=80&q=80", s.cfg.Server.ApiHost, user.ID)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":            user.ID,
 		"username":      user.Username,
 		"email":         user.Email,
-		"avatar":        user.Avatar,
+		"avatar":        avatarURL,
 		"role":          user.Role,
 		"is_sponsor":    level > sponsorLevelNone,
 		"sponsor_level": level,
