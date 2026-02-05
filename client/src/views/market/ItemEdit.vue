@@ -27,7 +27,8 @@ const form = ref<UpdateItemRequest>({
   import_code: '',
   requires_permission: false,
   enable_watermark: true,
-  status: 'published'
+  status: 'published',
+  is_public: true
 })
 
 // 画作图片管理
@@ -80,6 +81,7 @@ async function loadItem() {
       form.value.requires_permission = res.data.item.requires_permission || false
       form.value.enable_watermark = res.data.item.enable_watermark ?? true
       form.value.status = res.data.item.status
+      form.value.is_public = res.data.item.is_public ?? true
       hasPendingEdit.value = !!res.data.pending_edit
 
       // 如果是画作类型，加载图片
@@ -503,6 +505,18 @@ function getTypeText(type: string) {
           <span class="toggle-label">{{ t('market.upload.form.watermarkLabel') }}</span>
         </div>
         <p class="hint">{{ t('market.upload.form.watermarkHint') }}</p>
+      </div>
+
+      <!-- 公开可见设置 -->
+      <div class="form-group">
+        <label>{{ t('market.upload.form.visibility') }}</label>
+        <div class="watermark-toggle">
+          <label class="toggle-switch">
+            <input type="checkbox" v-model="form.is_public" />
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label">{{ form.is_public ? t('market.upload.form.visibilityPublic') : t('market.upload.form.visibilityPrivate') }}</span>
+        </div>
       </div>
 
       <!-- 导入代码（非画作类型可编辑） -->

@@ -177,6 +177,7 @@ export interface StoryBookmark {
   color?: string
   is_favorite: boolean
   is_auto: boolean
+  is_public: boolean  // 是否公共书签（作者/管理员创建）
   created_at: string
   updated_at: string
 }
@@ -185,8 +186,8 @@ export async function listBookmarks(storyId: number): Promise<{ bookmarks: Story
   return request.get(`/stories/${storyId}/bookmarks`)
 }
 
-export async function createBookmark(storyId: number, entryId: number, name: string, color?: string): Promise<StoryBookmark> {
-  return request.post(`/stories/${storyId}/bookmarks`, { entry_id: entryId, name, color })
+export async function createBookmark(storyId: number, entryId: number, name: string, color?: string, isPublic?: boolean): Promise<StoryBookmark> {
+  return request.post(`/stories/${storyId}/bookmarks`, { entry_id: entryId, name, color, is_public: isPublic })
 }
 
 export async function updateBookmark(storyId: number, bookmarkId: number, data: { name?: string; color?: string; is_favorite?: boolean }): Promise<StoryBookmark> {
