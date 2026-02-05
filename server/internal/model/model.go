@@ -151,6 +151,7 @@ type StoryBookmark struct {
 	Color      string    `gorm:"size:16" json:"color"`             // 书签颜色
 	IsFavorite bool      `gorm:"default:false" json:"is_favorite"` // 是否收藏
 	IsAuto     bool      `gorm:"default:false" json:"is_auto"`     // 是否自动书签
+	IsPublic   bool      `gorm:"default:false" json:"is_public"`   // 是否公共书签（作者/管理员创建，所有人可见）
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
@@ -308,6 +309,7 @@ type Item struct {
 	LikeCount             int        `gorm:"default:0" json:"like_count"`         // 点赞数
 	FavoriteCount         int        `gorm:"default:0" json:"favorite_count"`     // 收藏数
 	Status                string     `gorm:"size:20;default:draft" json:"status"` // draft|pending|published|removed
+	IsPublic              bool       `gorm:"default:true" json:"is_public"`       // 是否公开可见
 	// 审核相关字段
 	ReviewStatus  string     `gorm:"size:20;default:pending;index" json:"review_status"` // pending|approved|rejected
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`                           // 审核人ID

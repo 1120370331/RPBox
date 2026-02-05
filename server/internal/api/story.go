@@ -1041,17 +1041,19 @@ func (s *Server) listBookmarks(c *gin.Context) {
 	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
 	var bookmarks []model.StoryBookmark
-	database.DB.Where("story_id = ? AND user_id = ?", storyID, userID).
-		Order("created_at ASC").Find(&bookmarks)
+	// 返回：用户自己的书签 + 公共书签（作者/管理员创建的）
+	database.DB.Where("story_id = ? AND (user_id = ? OR is_public = ?)", storyID, userID, true).
+		Order("is_public DESC, created_at ASC").Find(&bookmarks)
 
 	c.JSON(http.StatusOK, gin.H{"bookmarks": bookmarks})
 }
 
 // CreateBookmarkRequest 创建书签请求
 type CreateBookmarkRequest struct {
-	EntryID uint   `json:"entry_id" binding:"required"`
-	Name    string `json:"name" binding:"required"`
-	Color   string `json:"color"`
+	EntryID  uint   `json:"entry_id" binding:"required"`
+	Name     string `json:"name" binding:"required"`
+	Color    string `json:"color"`
+	IsPublic bool   `json:"is_public"` // 是否公共书签（需要作者/管理员权限）
 }
 
 // createBookmark 创建书签
@@ -1073,13 +1075,30 @@ func (s *Server) createBookmark(c *gin.Context) {
 		return
 	}
 
+	// 如果要创建公共书签，检查权限（必须是作者或管理员）
+	isPublic := false
+	if req.IsPublic {
+		var story model.Story
+		if err := database.DB.First(&story, storyID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+			return
+		}
+		isModerator := checkModerator(userID)
+		if story.UserID != userID && !isModerator {
+			c.JSON(http.StatusForbidden, gin.H{"error": "只有作者或管理员可以创建公共书签"})
+			return
+		}
+		isPublic = true
+	}
+
 	bookmark := model.StoryBookmark{
-		StoryID: uint(storyID),
-		UserID:  userID,
-		EntryID: req.EntryID,
-		Name:    req.Name,
-		Color:   req.Color,
-		IsAuto:  false,
+		StoryID:  uint(storyID),
+		UserID:   userID,
+		EntryID:  req.EntryID,
+		Name:     req.Name,
+		Color:    req.Color,
+		IsAuto:   false,
+		IsPublic: isPublic,
 	}
 
 	if err := database.DB.Create(&bookmark).Error; err != nil {
@@ -1096,13 +1115,32 @@ func (s *Server) deleteBookmark(c *gin.Context) {
 	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	bookmarkID, _ := strconv.ParseUint(c.Param("bookmarkId"), 10, 32)
 
-	result := database.DB.Where("id = ? AND story_id = ? AND user_id = ?", bookmarkID, storyID, userID).
-		Delete(&model.StoryBookmark{})
-	if result.RowsAffected == 0 {
+	// 先查询书签
+	var bookmark model.StoryBookmark
+	if err := database.DB.Where("id = ? AND story_id = ?", bookmarkID, storyID).First(&bookmark).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "书签不存在"})
 		return
 	}
 
+	// 权限检查
+	if bookmark.IsPublic {
+		// 公共书签只有作者或管理员可以删除
+		var story model.Story
+		database.DB.First(&story, storyID)
+		isModerator := checkModerator(userID)
+		if story.UserID != userID && !isModerator {
+			c.JSON(http.StatusForbidden, gin.H{"error": "只有作者或管理员可以删除公共书签"})
+			return
+		}
+	} else {
+		// 私人书签只有创建者可以删除
+		if bookmark.UserID != userID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "无权删除此书签"})
+			return
+		}
+	}
+
+	database.DB.Delete(&bookmark)
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 

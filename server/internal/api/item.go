@@ -37,9 +37,10 @@ func (s *Server) listItems(c *gin.Context) {
 			query = query.Where("status = ?", status)
 		}
 	} else {
-		// 查看他人道具：只能看到已发布且审核通过的
+		// 查看他人道具：只能看到已发布且审核通过且公开的
 		query = query.Where("status = ?", "published")
 		query = query.Where("review_status = ?", "approved")
+		query = query.Where("is_public = ?", true)
 		if authorID != "" {
 			query = query.Where("author_id = ?", authorID)
 		}
@@ -300,6 +301,7 @@ func (s *Server) createItem(c *gin.Context) {
 		EnableWatermark    bool   `json:"enable_watermark"`
 		TagIDs             []uint `json:"tag_ids"`
 		Status             string `json:"status"`
+		IsPublic           *bool  `json:"is_public"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -344,6 +346,10 @@ func (s *Server) createItem(c *gin.Context) {
 		RequiresPermission: req.RequiresPermission,
 		EnableWatermark:    req.EnableWatermark,
 		Status:             req.Status,
+		IsPublic:           true, // 默认公开
+	}
+	if req.IsPublic != nil {
+		item.IsPublic = *req.IsPublic
 	}
 	if req.PreviewImage != "" {
 		now := time.Now()
@@ -521,6 +527,7 @@ func (s *Server) updateItem(c *gin.Context) {
 		RequiresPermission *bool  `json:"requires_permission"`
 		TagIDs             []uint `json:"tag_ids"`
 		Status             string `json:"status"`
+		IsPublic           *bool  `json:"is_public"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -614,6 +621,9 @@ func (s *Server) updateItem(c *gin.Context) {
 	}
 	if req.RequiresPermission != nil {
 		item.RequiresPermission = *req.RequiresPermission
+	}
+	if req.IsPublic != nil {
+		item.IsPublic = *req.IsPublic
 	}
 
 	// 处理标签更新

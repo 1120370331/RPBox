@@ -34,6 +34,7 @@ const form = ref({
   import_code: '',
   raw_data: '',
   enable_watermark: true,  // 画作水印开关，默认开启
+  is_public: true,  // 公开可见，默认开启
   tag_ids: [] as number[],
   status: 'draft' as 'draft' | 'published'
 })
@@ -415,6 +416,18 @@ loadTags()
             <span class="toggle-label">{{ t('market.upload.form.watermarkLabel') }}</span>
           </div>
           <p class="hint">{{ t('market.upload.form.watermarkHint') }}</p>
+        </div>
+
+        <!-- 公开可见设置 -->
+        <div class="form-group">
+          <label>{{ t('market.upload.form.visibility') }}</label>
+          <div class="watermark-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="form.is_public" />
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label">{{ form.is_public ? t('market.upload.form.visibilityPublic') : t('market.upload.form.visibilityPrivate') }}</span>
+          </div>
         </div>
 
         <!-- 导入代码（非画作类型） -->

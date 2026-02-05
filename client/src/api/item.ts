@@ -31,6 +31,7 @@ export interface Item {
   like_count: number
   favorite_count: number
   status: 'draft' | 'pending' | 'published' | 'removed'
+  is_public: boolean
   review_status: 'pending' | 'approved' | 'rejected' | ''
   review_comment?: string
   created_at: string
@@ -70,6 +71,7 @@ export interface CreateItemRequest {
   enable_watermark?: boolean  // 画作水印开关
   tag_ids?: number[]
   status?: 'draft' | 'published'
+  is_public?: boolean
 }
 
 export interface UpdateItemRequest {
@@ -84,6 +86,7 @@ export interface UpdateItemRequest {
   enable_watermark?: boolean  // 画作水印开关
   tag_ids?: number[]
   status?: 'draft' | 'published'
+  is_public?: boolean
 }
 
 export interface ListItemsParams {

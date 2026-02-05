@@ -124,6 +124,7 @@ const showAddBookmarkModal = ref(false)
 const newBookmarkName = ref('')
 const newBookmarkEntryId = ref<number | null>(null)
 const newBookmarkColor = ref('')
+const newBookmarkIsPublic = ref(false)  // 是否创建公共书签
 const addingBookmark = ref(false)
 const bookmarkSidebarExpanded = ref(false)
 
@@ -153,6 +154,16 @@ const sortedBookmarks = computed(() => {
     if (!entryA || !entryB) return 0
     return new Date(entryA.timestamp).getTime() - new Date(entryB.timestamp).getTime()
   })
+})
+
+// 作者书签（公共书签）
+const publicBookmarks = computed(() => {
+  return sortedBookmarks.value.filter(b => b.is_public)
+})
+
+// 我的书签（私人书签）
+const myBookmarks = computed(() => {
+  return sortedBookmarks.value.filter(b => !b.is_public)
 })
 
 // 获取书签对应的条目预览
@@ -1145,6 +1156,7 @@ function openAddBookmarkModal(entryId: number) {
   newBookmarkEntryId.value = entryId
   newBookmarkName.value = ''
   newBookmarkColor.value = ''
+  newBookmarkIsPublic.value = false
   showAddBookmarkModal.value = true
 }
 
@@ -1153,7 +1165,13 @@ async function handleCreateBookmark() {
 
   addingBookmark.value = true
   try {
-    await createBookmark(storyId.value, newBookmarkEntryId.value, newBookmarkName.value.trim(), newBookmarkColor.value || undefined)
+    await createBookmark(
+      storyId.value,
+      newBookmarkEntryId.value,
+      newBookmarkName.value.trim(),
+      newBookmarkColor.value || undefined,
+      newBookmarkIsPublic.value || undefined
+    )
     await loadBookmarks()
     showAddBookmarkModal.value = false
   } catch (e) {
@@ -1527,65 +1545,10 @@ onBeforeUnmount(() => {
           </div>
         </div>
         </div>
-
-        <!-- 书签侧边栏 - 桌面端 -->
-        <div class="bookmarks-sidebar desktop-only">
-          <div class="bookmarks-header">
-            <h3><i class="ri-bookmark-line"></i> 书签</h3>
-          </div>
-          <div class="bookmarks-list">
-            <div
-              v-for="bookmark in sortedBookmarks"
-              :key="bookmark.id"
-              class="bookmark-item"
-              :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite }"
-              :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}"
-              @click="scrollToEntry(bookmark.entry_id)"
-            >
-              <div class="bookmark-content">
-                <div class="bookmark-title">
-                  <button
-                    v-if="!bookmark.is_auto"
-                    class="bookmark-star"
-                    :class="{ active: bookmark.is_favorite }"
-                    @click.stop="toggleBookmarkFavorite(bookmark)"
-                    title="收藏"
-                  >
-                    <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'"></i>
-                  </button>
-                  <span class="bookmark-name">{{ bookmark.name }}</span>
-                  <span class="bookmark-time">{{ getBookmarkEntryTime(bookmark.entry_id) }}</span>
-                </div>
-                <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
-              </div>
-              <div class="bookmark-actions">
-                <button
-                  v-if="!bookmark.is_auto"
-                  class="bookmark-edit"
-                  @click.stop="openEditBookmarkModal(bookmark)"
-                  title="编辑书签"
-                >
-                  <i class="ri-edit-line"></i>
-                </button>
-                <button
-                  v-if="!bookmark.is_auto"
-                  class="bookmark-delete"
-                  @click.stop="handleDeleteBookmark(bookmark.id)"
-                  title="删除书签"
-                >
-                  <i class="ri-close-line"></i>
-                </button>
-              </div>
-            </div>
-            <div v-if="bookmarks.length === 0" class="bookmarks-empty">
-              暂无书签
-            </div>
-          </div>
-        </div>
       </div>
 
-      <!-- 书签悬浮按钮 - 移动端 -->
-      <div class="bookmarks-floating mobile-only">
+      <!-- 书签悬浮按钮 -->
+      <div class="bookmarks-floating">
         <button
           class="bookmarks-fab"
           :class="{ 'has-bookmarks': bookmarks.length > 0 }"
@@ -1600,49 +1563,87 @@ onBeforeUnmount(() => {
               <h3><i class="ri-bookmark-line"></i> 书签</h3>
             </div>
             <div class="bookmarks-panel-list">
-              <div
-                v-for="bookmark in sortedBookmarks"
-                :key="bookmark.id"
-                class="bookmark-item"
-                :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite }"
-                :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}"
-                @click="scrollToEntry(bookmark.entry_id); bookmarkSidebarExpanded = false"
-              >
-                <div class="bookmark-content">
-                  <div class="bookmark-title">
+              <!-- 作者书签 -->
+              <template v-if="publicBookmarks.length > 0">
+                <div class="bookmark-group-title">
+                  <i class="ri-user-star-line"></i> 作者书签
+                </div>
+                <div
+                  v-for="bookmark in publicBookmarks"
+                  :key="bookmark.id"
+                  class="bookmark-item is-public"
+                  :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite }"
+                  :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}"
+                  @click="scrollToEntry(bookmark.entry_id); bookmarkSidebarExpanded = false"
+                >
+                  <div class="bookmark-content">
+                    <div class="bookmark-title">
+                      <span class="bookmark-name">{{ bookmark.name }}</span>
+                      <span class="bookmark-time">{{ getBookmarkEntryTime(bookmark.entry_id) }}</span>
+                    </div>
+                    <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
+                  </div>
+                  <div v-if="canEdit" class="bookmark-actions">
+                    <button class="bookmark-edit" @click.stop="openEditBookmarkModal(bookmark)" title="编辑书签">
+                      <i class="ri-edit-line"></i>
+                    </button>
+                    <button class="bookmark-delete" @click.stop="handleDeleteBookmark(bookmark.id)" title="删除书签">
+                      <i class="ri-close-line"></i>
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 我的书签 -->
+              <template v-if="myBookmarks.length > 0">
+                <div class="bookmark-group-title">
+                  <i class="ri-bookmark-line"></i> 我的书签
+                </div>
+                <div
+                  v-for="bookmark in myBookmarks"
+                  :key="bookmark.id"
+                  class="bookmark-item"
+                  :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite }"
+                  :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}"
+                  @click="scrollToEntry(bookmark.entry_id); bookmarkSidebarExpanded = false"
+                >
+                  <div class="bookmark-content">
+                    <div class="bookmark-title">
+                      <button
+                        v-if="!bookmark.is_auto"
+                        class="bookmark-star"
+                        :class="{ active: bookmark.is_favorite }"
+                        @click.stop="toggleBookmarkFavorite(bookmark)"
+                        title="收藏"
+                      >
+                        <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'"></i>
+                      </button>
+                      <span class="bookmark-name">{{ bookmark.name }}</span>
+                      <span class="bookmark-time">{{ getBookmarkEntryTime(bookmark.entry_id) }}</span>
+                    </div>
+                    <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
+                  </div>
+                  <div class="bookmark-actions">
                     <button
                       v-if="!bookmark.is_auto"
-                      class="bookmark-star"
-                      :class="{ active: bookmark.is_favorite }"
-                      @click.stop="toggleBookmarkFavorite(bookmark)"
-                      title="收藏"
+                      class="bookmark-edit"
+                      @click.stop="openEditBookmarkModal(bookmark)"
+                      title="编辑书签"
                     >
-                      <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'"></i>
+                      <i class="ri-edit-line"></i>
                     </button>
-                    <span class="bookmark-name">{{ bookmark.name }}</span>
-                    <span class="bookmark-time">{{ getBookmarkEntryTime(bookmark.entry_id) }}</span>
+                    <button
+                      v-if="!bookmark.is_auto"
+                      class="bookmark-delete"
+                      @click.stop="handleDeleteBookmark(bookmark.id)"
+                      title="删除书签"
+                    >
+                      <i class="ri-close-line"></i>
+                    </button>
                   </div>
-                  <div class="bookmark-preview">{{ getBookmarkEntryPreview(bookmark.entry_id) }}</div>
                 </div>
-                <div class="bookmark-actions">
-                  <button
-                    v-if="!bookmark.is_auto"
-                    class="bookmark-edit"
-                    @click.stop="openEditBookmarkModal(bookmark)"
-                    title="编辑书签"
-                  >
-                    <i class="ri-edit-line"></i>
-                  </button>
-                  <button
-                    v-if="!bookmark.is_auto"
-                    class="bookmark-delete"
-                    @click.stop="handleDeleteBookmark(bookmark.id)"
-                    title="删除书签"
-                  >
-                    <i class="ri-close-line"></i>
-                  </button>
-                </div>
-              </div>
+              </template>
+
               <div v-if="bookmarks.length === 0" class="bookmarks-empty">
                 暂无书签
               </div>
@@ -2132,6 +2133,12 @@ onBeforeUnmount(() => {
           ></button>
         </div>
       </div>
+      <div v-if="canEdit" class="form-field">
+        <label class="checkbox-label">
+          <input type="checkbox" v-model="newBookmarkIsPublic" />
+          <span>设为作者书签（所有读者可见）</span>
+        </label>
+      </div>
       <template #footer>
         <RButton @click="showAddBookmarkModal = false">取消</RButton>
         <RButton type="primary" :loading="addingBookmark" :disabled="!newBookmarkName.trim()" @click="handleCreateBookmark">
@@ -2462,6 +2469,26 @@ onBeforeUnmount(() => {
 .form-field select:focus {
   outline: none;
   border-color: var(--color-accent);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.checkbox-label span {
+  user-select: none;
 }
 
 .datetime-input {
@@ -3520,6 +3547,15 @@ onBeforeUnmount(() => {
   background: rgba(255, 193, 7, 0.1);
 }
 
+.bookmark-item.is-public {
+  border-left-color: #9b59b6;
+}
+
+.bookmark-item.is-public:hover {
+  border-color: #9b59b6;
+  border-left-color: #9b59b6;
+}
+
 .bookmark-content {
   flex: 1;
   min-width: 0;
@@ -3656,7 +3692,7 @@ onBeforeUnmount(() => {
   border-color: var(--color-primary);
 }
 
-/* 书签悬浮按钮 - 移动端 */
+/* 书签悬浮按钮 */
 .bookmarks-floating {
   position: fixed;
   right: 20px;
@@ -3744,6 +3780,28 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.bookmark-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  padding: 8px 8px 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bookmark-group-title:not(:first-child) {
+  margin-top: 8px;
+  border-top: 1px solid rgba(229, 212, 193, 0.5);
+  padding-top: 12px;
+}
+
+.bookmark-group-title i {
+  font-size: 12px;
 }
 
 /* 悬浮面板动画 */

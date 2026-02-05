@@ -91,6 +91,9 @@ export default {
       watermarkSettings: 'Watermark Settings',
       watermarkLabel: 'Add watermark (username) on download',
       watermarkHint: 'When enabled, your username will be added as watermark when others download',
+      visibility: 'Visibility',
+      visibilityPublic: 'Visible to everyone',
+      visibilityPrivate: 'Only visible to yourself',
       importCode: 'TRP3 Import Code',
       importCodePlaceholder: 'Paste the code exported from TRP3 Extended...',
       importCodeHint: 'Export from TRP3 Extended and paste the code here',
@@ -183,6 +186,8 @@ export default {
     actions: {
       edit: 'Edit',
       delete: 'Delete',
+      setPublic: 'Set Public',
+      setPrivate: 'Set Private',
     },
     deleteConfirm: {
       title: 'Confirm Delete',
@@ -193,6 +198,8 @@ export default {
     messages: {
       deleteSuccess: 'Deleted successfully',
       deleteFailed: 'Delete failed, please try again',
+      visibilityChanged: 'Visibility updated',
+      visibilityChangeFailed: 'Failed to update visibility',
     },
   },
   detail: {

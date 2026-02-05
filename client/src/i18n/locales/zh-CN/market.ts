@@ -91,6 +91,9 @@ export default {
       watermarkSettings: '水印设置',
       watermarkLabel: '下载时添加水印（用户名）',
       watermarkHint: '开启后，其他用户下载图片时会自动在右下角添加你的用户名作为水印',
+      visibility: '公开可见',
+      visibilityPublic: '所有人可见',
+      visibilityPrivate: '仅自己可见',
       importCode: 'TRP3 导入代码',
       importCodePlaceholder: '请粘贴从 TRP3 Extended 导出的代码...',
       importCodeHint: '从 TRP3 Extended 中导出作品，然后将代码粘贴到这里',
@@ -183,6 +186,8 @@ export default {
     actions: {
       edit: '编辑',
       delete: '删除',
+      setPublic: '设为公开',
+      setPrivate: '设为私密',
     },
     deleteConfirm: {
       title: '确认删除',
@@ -193,6 +198,8 @@ export default {
     messages: {
       deleteSuccess: '删除成功',
       deleteFailed: '删除失败，请重试',
+      visibilityChanged: '可见性已更新',
+      visibilityChangeFailed: '更新可见性失败',
     },
   },
   detail: {

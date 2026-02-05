@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { listItems, deleteItem, type Item } from '@/api/item'
+import { listItems, deleteItem, updateItem, type Item } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 
@@ -139,6 +139,17 @@ async function handleDelete(item: Item) {
   } catch (error: any) {
     console.error('删除失败:', error)
     toast.error(error.message || t('market.myItems.messages.deleteFailed'))
+  }
+}
+
+async function toggleVisibility(item: Item) {
+  try {
+    await updateItem(item.id, { is_public: !item.is_public })
+    item.is_public = !item.is_public
+    toast.success(t('market.myItems.messages.visibilityChanged'))
+  } catch (error) {
+    console.error('更新可见性失败:', error)
+    toast.error(t('market.myItems.messages.visibilityChangeFailed'))
   }
 }
 
@@ -315,6 +326,14 @@ function getTypeText(type: string) {
           </div>
 
           <div class="item-actions">
+            <button
+              class="action-btn visibility"
+              :class="{ 'is-private': !item.is_public }"
+              @click="toggleVisibility(item)"
+            >
+              <i :class="item.is_public ? 'ri-eye-line' : 'ri-eye-off-line'"></i>
+              {{ item.is_public ? t('market.myItems.actions.setPrivate') : t('market.myItems.actions.setPublic') }}
+            </button>
             <button class="action-btn edit" @click="goToEdit(item.id)">
               <i class="ri-edit-line"></i>
               {{ t('market.myItems.actions.edit') }}
@@ -714,6 +733,25 @@ function getTypeText(type: string) {
 
 .action-btn.delete:hover {
   background: #C44536;
+  color: #fff;
+}
+
+.action-btn.visibility {
+  background: #fff;
+  color: #4B3621;
+}
+
+.action-btn.visibility:hover {
+  background: #F5EFE7;
+}
+
+.action-btn.visibility.is-private {
+  border-color: #909399;
+  color: #909399;
+}
+
+.action-btn.visibility.is-private:hover {
+  background: #909399;
   color: #fff;
 }
 
