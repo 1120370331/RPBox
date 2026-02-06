@@ -68,7 +68,8 @@ func (s *Server) listItems(c *gin.Context) {
 	order := c.DefaultQuery("order", "desc")
 	switch sortBy {
 	case "downloads":
-		query = query.Order("items.downloads " + order)
+		// 最热：2 * 评论数 + 1 * 下载量
+		query = query.Order("(COALESCE((SELECT COUNT(*) FROM item_comments WHERE item_comments.item_id = items.id), 0) * 2 + items.downloads) " + order)
 	case "rating":
 		query = query.Order("items.rating " + order)
 	case "created_at":

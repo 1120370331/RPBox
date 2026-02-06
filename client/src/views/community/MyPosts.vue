@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { listPosts, deletePost, POST_CATEGORIES, type PostWithAuthor, type PostCategory } from '@/api/post'
+import { listPosts, deletePost, updatePost, POST_CATEGORIES, type PostWithAuthor, type PostCategory } from '@/api/post'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 
@@ -153,6 +153,17 @@ async function handleDelete(post: PostWithAuthor) {
   }
 }
 
+async function toggleVisibility(post: PostWithAuthor) {
+  try {
+    await updatePost(post.id, { is_public: !post.is_public })
+    post.is_public = !post.is_public
+    toast.success(t('community.myPosts.visibilityChanged'))
+  } catch (error) {
+    console.error('更新可见性失败:', error)
+    toast.error(t('community.myPosts.visibilityChangeFailed'))
+  }
+}
+
 function goToCreate() {
   router.push({ name: 'post-create' })
 }
@@ -269,6 +280,9 @@ function stripHtml(html: string) {
       >
         <div class="post-header">
           <h2 class="post-title" @click="goToDetail(post.id)">{{ post.title }}</h2>
+          <span v-if="!post.is_public" class="private-badge">
+            <i class="ri-eye-off-line"></i>
+          </span>
           <span v-if="post.status === 'draft'" class="draft-badge">{{ t('community.myPosts.draft') }}</span>
           <span v-else-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">{{ t('community.myPosts.pending') }}</span>
         </div>
@@ -296,6 +310,15 @@ function stripHtml(html: string) {
           </div>
 
           <div class="post-actions">
+            <button
+              class="action-btn visibility"
+              :class="{ 'is-private': !post.is_public }"
+              @click="toggleVisibility(post)"
+              :title="post.is_public ? t('community.myPosts.setPrivate') : t('community.myPosts.setPublic')"
+            >
+              <i :class="post.is_public ? 'ri-eye-line' : 'ri-eye-off-line'"></i>
+              {{ post.is_public ? t('community.myPosts.setPrivate') : t('community.myPosts.setPublic') }}
+            </button>
             <button class="action-btn edit" @click="goToEdit(post.id)">
               <i class="ri-edit-line"></i>
               {{ t('community.action.edit') }}
@@ -588,6 +611,16 @@ function stripHtml(html: string) {
   font-weight: 600;
 }
 
+.private-badge {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: #F0F0F0;
+  color: #909399;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
 .post-content {
   font-size: 15px;
   line-height: 1.6;
@@ -655,6 +688,25 @@ function stripHtml(html: string) {
 
 .action-btn.delete:hover {
   background: #C44536;
+  color: #fff;
+}
+
+.action-btn.visibility {
+  background: #fff;
+  color: #4B3621;
+}
+
+.action-btn.visibility:hover {
+  background: #F5EFE7;
+}
+
+.action-btn.visibility.is-private {
+  border-color: #909399;
+  color: #909399;
+}
+
+.action-btn.visibility.is-private:hover {
+  background: #909399;
   color: #fff;
 }
 

@@ -266,6 +266,16 @@ export default {
       downloadStarted: 'Download started',
       downloadAllStarted: 'Downloading {count} images',
     },
+    importTutorial: {
+      title: 'How to Import In-Game',
+      copied: 'Import code copied to clipboard!',
+      step1: 'If you cannot see the TRP3 toolbar, go to TRP3 Settings, select the "Toolbar" tab, and switch the display mode to "Always show"',
+      step2: 'Find and click the "Extended Object Database" button on the toolbar',
+      step3: 'Click "Quick Item Import" at the bottom right, paste the copied code and confirm the import',
+      step4: 'Search by name in the database to find the imported item (for campaigns, click the + icon on the left to expand all items), right-click to add it to your bag, then open TRP3 bag to use it',
+      dontShowAgain: 'Don\'t show again',
+      ok: 'Got it',
+    },
     imageViewer: {
       download: 'Download Image',
     },
