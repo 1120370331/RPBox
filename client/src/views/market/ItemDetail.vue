@@ -37,6 +37,8 @@ const isLiked = ref(false)
 const isFavorited = ref(false)
 const submitting = ref(false)
 const detailContentRef = ref<HTMLElement | null>(null)
+const showImportTutorial = ref(false)
+const dontShowTutorialAgain = ref(false)
 
 // 画作图片查看
 const selectedImageIndex = ref(0)
@@ -287,6 +289,20 @@ async function copyImportCode() {
     navigator.clipboard.writeText(item.value.import_code)
     toast.success(t('market.detail.messages.codeCopied'))
   }
+
+  // 显示导入教程弹窗（如果用户没有选择不再提示）
+  const hidden = localStorage.getItem('rpbox_hide_import_tutorial')
+  if (!hidden) {
+    showImportTutorial.value = true
+  }
+}
+
+// 关闭导入教程弹窗
+function closeImportTutorial() {
+  if (dontShowTutorialAgain.value) {
+    localStorage.setItem('rpbox_hide_import_tutorial', '1')
+  }
+  showImportTutorial.value = false
 }
 
 // 返回列表
@@ -588,6 +604,41 @@ function downloadAllImages() {
         </div>
       </div>
     </div>
+
+    <!-- 导入教程弹窗 -->
+    <Teleport to="body">
+      <Transition name="r-dialog">
+        <div v-if="showImportTutorial" class="import-tutorial-mask" @click.self="closeImportTutorial">
+          <div class="import-tutorial-dialog">
+            <div class="import-tutorial-header">
+              <i class="ri-lightbulb-line"></i>
+              <span>{{ t('market.detail.importTutorial.title') }}</span>
+            </div>
+            <div class="import-tutorial-body">
+              <div class="tutorial-success">
+                <i class="ri-checkbox-circle-fill"></i>
+                {{ t('market.detail.importTutorial.copied') }}
+              </div>
+              <ol class="tutorial-steps">
+                <li>{{ t('market.detail.importTutorial.step1') }}</li>
+                <li>{{ t('market.detail.importTutorial.step2') }}</li>
+                <li>{{ t('market.detail.importTutorial.step3') }}</li>
+                <li>{{ t('market.detail.importTutorial.step4') }}</li>
+              </ol>
+            </div>
+            <div class="import-tutorial-footer">
+              <label class="dont-show-again">
+                <input type="checkbox" v-model="dontShowTutorialAgain" />
+                {{ t('market.detail.importTutorial.dontShowAgain') }}
+              </label>
+              <button class="tutorial-ok-btn" @click="closeImportTutorial">
+                {{ t('market.detail.importTutorial.ok') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <EmojiPicker :show="showEmojiPicker" :trigger-element="emojiButtonRef" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
 
@@ -1642,5 +1693,112 @@ function downloadAllImages() {
 
 .viewer-download:hover {
   background: var(--color-secondary);
+}
+
+/* 导入教程弹窗 */
+.import-tutorial-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.import-tutorial-dialog {
+  background: var(--color-panel-bg, #fff);
+  border-radius: 16px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+}
+
+.import-tutorial-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px 0;
+}
+
+.import-tutorial-header i {
+  font-size: 24px;
+  color: #FFB300;
+}
+
+.import-tutorial-header span {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.import-tutorial-body {
+  padding: 16px 24px 20px;
+}
+
+.tutorial-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #E8F5E9;
+  border-radius: 8px;
+  color: #2E7D32;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.tutorial-success i {
+  font-size: 18px;
+}
+
+.tutorial-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--color-text-secondary);
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+.tutorial-steps li {
+  margin-bottom: 6px;
+}
+
+.import-tutorial-footer {
+  padding: 0 24px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dont-show-again {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.dont-show-again input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+
+.tutorial-ok-btn {
+  padding: 10px 24px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  transition: all 0.2s;
+}
+
+.tutorial-ok-btn:hover {
+  opacity: 0.9;
 }
 </style>

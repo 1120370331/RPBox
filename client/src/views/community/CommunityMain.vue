@@ -281,10 +281,29 @@ const eventTypeMeta = computed(() => ({
   other: { label: t('community.eventType.other'), color: '#D97706' }
 }))
 
-// 筛选后的活动
+// 判断活动是否已结束
+function isEventEnded(event: EventItem) {
+  const now = new Date()
+  if (event.event_end_time) {
+    return new Date(event.event_end_time) <= now
+  }
+  if (event.event_start_time) {
+    const startDay = new Date(event.event_start_time)
+    startDay.setHours(23, 59, 59, 999)
+    return startDay < now
+  }
+  return false
+}
+
+// 筛选后的活动（包含已结束，用于日历视图）
 const filteredEvents = computed(() => {
   if (eventFilter.value === 'all') return events.value
   return events.value.filter(event => event.event_type === eventFilter.value)
+})
+
+// 未结束的活动（用于列表视图和标题计数）
+const activeEvents = computed(() => {
+  return filteredEvents.value.filter(event => !isEventEnded(event))
 })
 
 function getDateKey(date: Date) {
@@ -594,7 +613,7 @@ function getEventStyle(event: EventItem) {
           <div class="events-title">
             <i class="ri-calendar-event-line"></i>
             <span>{{ t('community.events.title') }}</span>
-            <span class="events-count">{{ filteredEvents.length }}</span>
+            <span class="events-count">{{ activeEvents.length }}</span>
           </div>
           <div class="events-header-actions">
             <button class="view-toggle-btn" @click.stop="toggleCalendarView" :title="calendarView ? t('community.events.switchToList') : t('community.events.switchToCalendar')">
@@ -711,7 +730,7 @@ function getEventStyle(event: EventItem) {
           <!-- 列表视图 -->
           <div v-else class="events-list">
             <div
-              v-for="event in filteredEvents"
+              v-for="event in activeEvents"
               :key="event.id"
               class="event-item"
               @click="goToPost(event.id)"

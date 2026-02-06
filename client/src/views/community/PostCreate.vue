@@ -483,15 +483,17 @@ function toggleQuickJump() {
         </select>
       </div>
 
-      <!-- 公会外可见开关（当关联公会时显示） -->
-      <div v-if="!isEventCategory && form.guild_id" class="setting-item setting-vertical visibility-setting">
+      <!-- 公开可见开关 -->
+      <div v-if="!isEventCategory" class="setting-item setting-vertical visibility-setting">
         <label class="setting-label">{{ t('community.create.visibility') }}</label>
         <div class="visibility-toggle">
           <label class="switch">
             <input type="checkbox" v-model="form.is_public" />
             <span class="slider"></span>
           </label>
-          <span class="visibility-hint">{{ form.is_public ? t('community.create.visibilityPublic') : t('community.create.visibilityPrivate') }}</span>
+          <span class="visibility-hint">{{ form.guild_id
+            ? (form.is_public ? t('community.create.visibilityGuildPublic') : t('community.create.visibilityGuildPrivate'))
+            : (form.is_public ? t('community.create.visibilityPublic') : t('community.create.visibilityPrivate')) }}</span>
         </div>
       </div>
 

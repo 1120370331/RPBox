@@ -913,17 +913,18 @@ onMounted(loadGuild)
 
 .btn-outline {
   padding: 10px 20px;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.4);
   color: #fff;
   border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .btn-outline:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.65);
 }
 
 .btn-danger {

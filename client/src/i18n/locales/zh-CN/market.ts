@@ -266,6 +266,16 @@ export default {
       downloadStarted: '开始下载图片',
       downloadAllStarted: '开始下载 {count} 张图片',
     },
+    importTutorial: {
+      title: '如何在游戏中导入',
+      copied: '导入代码已复制到剪贴板！',
+      step1: '如果看不到 TRP3 工具条，进入 TRP3 设置，选择"工具条"标签，将显示模式切换为"一直显示"',
+      step2: '在工具条上找到"扩展对象数据库"按钮并点击进入',
+      step3: '点击右下角"快速物品导入"，将复制的代码串粘贴后点击确认导入',
+      step4: '在数据库中搜索名字找到刚导入的道具（如果是剧本，需点击左侧 + 号展开所有道具来选择），右键添加到背包，然后打开 TRP3 背包即可使用',
+      dontShowAgain: '不再提示',
+      ok: '知道了',
+    },
     imageViewer: {
       download: '下载此图',
     },
