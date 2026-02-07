@@ -139,3 +139,35 @@ jobs:
           scp -P 2233 -C "$SIG_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
           scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
           scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.RELEASE_PATH }}/latest.json
+
+  update-pages:
+    name: Update GitHub Pages
+    runs-on: ubuntu-latest
+    needs: deploy
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update fallback version in download.html
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/var fallbackVersion = '.*'/var fallbackVersion = '${VERSION}'/" shared/download.html
+          echo "Updated fallbackVersion to ${VERSION}"
+          grep fallbackVersion shared/download.html
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add shared/download.html
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update download page fallback version to v${{ steps.version.outputs.VERSION }}"
+          git push origin main
