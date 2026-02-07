@@ -130,6 +130,23 @@ export default {
   status: {
     loading: '加载中...',
   },
+  aiPack: {
+    title: 'AI 剧情文本包',
+    copied: '已复制 AI 文本包到剪贴板',
+    copyBtn: '复制AI文本包',
+    guideTitle: 'AI 剧情文本包',
+    guideCopied: '已复制到剪贴板！',
+    guideDesc: '将剧情数据打包为 AI 友好的精简 Markdown 格式，可直接粘贴到任意 AI 对话中使用。',
+    guideScenes: '使用场景：',
+    scene1: '让 AI 总结剧情梗概',
+    scene2: '生成战报或剧情回顾',
+    scene3: '分析角色关系和性格发展',
+    scene4: '续写或扩展剧情内容',
+    scene5: '翻译剧情为其他语言',
+    guideUsage: '复制后粘贴到 ChatGPT、Claude 等 AI 的聊天框中，附上你的需求即可。',
+    dontShowAgain: '不再显示',
+    ok: '知道了',
+  },
   staging: {
     title: '待归档池',
     titleWithCount: '待归档池 ({count}条)',

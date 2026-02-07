@@ -276,6 +276,9 @@ server/storage/backups/
 server/storage/**/*.dump
 server/storage/addons/RPBox_Addon/manifest.json
 
+# Icon cache (fetched from Blizzard CDN at runtime)
+server/data/icons/
+
 # Temp files
 .tmp_server_pid
 *.bak

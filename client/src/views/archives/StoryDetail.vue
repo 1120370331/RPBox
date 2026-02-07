@@ -8,6 +8,8 @@ import { getCharacter, updateCharacter, listCharacters, type Character } from '@
 import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
 import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
 import { useDialog } from '@/composables/useDialog'
+import { useToast } from '@/composables/useToast'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import RButton from '@/components/RButton.vue'
 import RCard from '@/components/RCard.vue'
@@ -25,6 +27,8 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const { confirm, alert } = useDialog()
+const toast = useToast()
+const { t } = useI18n()
 
 const loading = ref(true)
 const story = ref<Story | null>(null)
@@ -74,6 +78,10 @@ const showTagModal = ref(false)
 const storyGuilds = ref<Guild[]>([])
 const myGuilds = ref<Guild[]>([])
 const showGuildModal = ref(false)
+
+// AI 文本包引导弹窗
+const showAIPackGuide = ref(false)
+const dontShowAIPackGuide = ref(false)
 
 // 导入导出
 const showImportModal = ref(false)
@@ -849,6 +857,211 @@ async function exportStory() {
   }
 }
 
+// ========== AI 文本包功能 ==========
+
+function stripTRP3Markup(text: string): string {
+  return text
+    .replace(/\{icon:[^}]*\}/g, '')
+    .replace(/\{col:[^}]*\}/g, '')
+    .replace(/\{\/col\}/g, '')
+    .replace(/\{link\*[^}]*\}/g, '')
+    .replace(/\{\/link\}/g, '')
+    .replace(/\{img:[^}]*\}/g, '')
+    .replace(/\{p:[^}]*\}/g, '')
+    .replace(/\{h\d:[^}]*\}/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function parseAboutText(raw: string): string {
+  if (!raw) return ''
+  try {
+    const data = JSON.parse(raw)
+    if (typeof data === 'string') return stripTRP3Markup(data)
+    if (data && data.BK && Array.isArray(data.BK)) {
+      return data.BK
+        .map((block: any) => block.TX || '')
+        .filter(Boolean)
+        .map((tx: string) => stripTRP3Markup(tx))
+        .join('\n\n')
+    }
+    return ''
+  } catch {
+    return stripTRP3Markup(raw)
+  }
+}
+
+function generateAITextPack(): string {
+  if (!story.value) return ''
+
+  const lines: string[] = []
+
+  // 标题和描述
+  lines.push(`# ${story.value.title}`)
+  if (story.value.description) {
+    lines.push(story.value.description)
+  }
+
+  // 时间和标签
+  const meta: string[] = []
+  if (entries.value.length > 0) {
+    const timestamps = entries.value
+      .filter(e => e.timestamp)
+      .map(e => new Date(e.timestamp).getTime())
+    if (timestamps.length > 0) {
+      const start = new Date(Math.min(...timestamps))
+      const end = new Date(Math.max(...timestamps))
+      const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      meta.push(`时间：${fmt(start)} ~ ${fmt(end)}`)
+    }
+  }
+  if (storyTags.value.length > 0) {
+    meta.push(`标签：${storyTags.value.map(tag => tag.name).join('、')}`)
+  }
+  if (meta.length > 0) {
+    lines.push(meta.join(' | '))
+  }
+
+  // 人物卡
+  const usedCharacterIds = new Set<number>()
+  for (const entry of entries.value) {
+    if (entry.character_id) usedCharacterIds.add(entry.character_id)
+  }
+
+  if (usedCharacterIds.size > 0) {
+    lines.push('')
+    lines.push('## 人物卡')
+    let isFirst = true
+    for (const charId of usedCharacterIds) {
+      const char = charactersMap.value.get(charId)
+      if (!char) continue
+      if (!isFirst) lines.push('---')
+      isFirst = false
+
+      const displayName = getCharacterDisplayName(char)
+      lines.push(`### ${displayName}`)
+
+      // 称号行
+      const titleParts: string[] = []
+      if (char.title) titleParts.push(char.title)
+      if (char.full_title) titleParts.push(char.full_title)
+      if (titleParts.length > 0) lines.push(titleParts.join(' | '))
+
+      // 基本信息行
+      const info: string[] = []
+      if (char.race) info.push(`种族：${char.race}`)
+      if (char.class) info.push(`职业：${char.class}`)
+      if (char.age) info.push(`年龄：${char.age}`)
+      if (char.height) info.push(`身高：${char.height}`)
+      if (char.eye_color) info.push(`瞳色：${char.eye_color}`)
+      if (char.residence) info.push(`居住地：${char.residence}`)
+      if (char.birthplace) info.push(`出生地：${char.birthplace}`)
+      if (info.length > 0) lines.push(info.join(' | '))
+
+      // 第一印象（Glance/PE）
+      if (char.misc_info) {
+        try {
+          const misc = JSON.parse(char.misc_info)
+          const pe = misc?.misc?.PE || misc?.PE
+          if (pe) {
+            const glances: string[] = []
+            for (let i = 1; i <= 5; i++) {
+              const slot = pe[String(i)]
+              if (slot && slot.AC && slot.TI) {
+                glances.push(`- ${slot.TI}${slot.TX ? '：' + slot.TX : ''}`)
+              }
+            }
+            if (glances.length > 0) {
+              lines.push('')
+              lines.push('**第一印象：**')
+              lines.push(...glances)
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      // 性格特征（Psycho）
+      if (char.psycho) {
+        try {
+          const psychoData = JSON.parse(char.psycho)
+          if (Array.isArray(psychoData) && psychoData.length > 0) {
+            const traits: string[] = []
+            for (const p of psychoData) {
+              if (p.LT && p.RT && p.VA !== undefined) {
+                const va = Number(p.VA)
+                const direction = va < 10 ? p.LT : va > 10 ? p.RT : '中立'
+                traits.push(`- ${p.LT} ←→ ${p.RT}（偏向${direction}）`)
+              }
+            }
+            if (traits.length > 0) {
+              lines.push('')
+              lines.push('**性格特征：**')
+              lines.push(...traits)
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      // 关于（About）
+      const aboutText = parseAboutText(char.about_text)
+      if (aboutText) {
+        lines.push('')
+        lines.push('**关于：**')
+        lines.push(aboutText)
+      }
+    }
+  }
+
+  // 剧情记录
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## 剧情记录')
+
+  for (const entry of entries.value) {
+    if (entry.type === 'image') continue
+
+    const time = entry.timestamp
+      ? new Date(entry.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : ''
+
+    const speaker = entry.type === 'narration'
+      ? '*旁白*'
+      : getEntrySpeakerName(entry)
+
+    const channel = entry.channel
+    const isDefaultChannel = !channel || channel === 'SAY' || channel === 'CHAT_MSG_SAY'
+    const channelTag = isDefaultChannel ? '' : `[${getChannelLabel(channel)}]`
+
+    const content = entry.content.replace(/<[^>]+>/g, '').trim()
+    if (!content) continue
+
+    lines.push(`${time} ${speaker}${channelTag}: ${content}`)
+  }
+
+  return lines.join('\n')
+}
+
+async function copyAITextPack() {
+  if (!story.value || entries.value.length === 0) return
+
+  const text = generateAITextPack()
+  await navigator.clipboard.writeText(text)
+  toast.success(t('archives.aiPack.copied'))
+
+  const hidden = localStorage.getItem('rpbox_hide_ai_pack_guide')
+  if (!hidden) {
+    showAIPackGuide.value = true
+  }
+}
+
+function closeAIPackGuide() {
+  if (dontShowAIPackGuide.value) {
+    localStorage.setItem('rpbox_hide_ai_pack_guide', '1')
+  }
+  showAIPackGuide.value = false
+}
+
 function handleImportFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   if (input.files && input.files.length > 0) {
@@ -1376,6 +1589,9 @@ onBeforeUnmount(() => {
 
               <!-- Icon button group -->
               <div class="icon-button-group">
+                <button class="icon-btn" @click="copyAITextPack" :title="t('archives.aiPack.copyBtn')">
+                  <i class="ri-robot-line"></i>
+                </button>
                 <button v-if="canEdit" class="icon-btn" @click="showAddModal = true" title="添加条目">
                   <i class="ri-chat-new-line"></i>
                 </button>
@@ -2181,6 +2397,45 @@ onBeforeUnmount(() => {
         </RButton>
       </template>
     </RModal>
+
+    <!-- AI 文本包引导弹窗 -->
+    <Teleport to="body">
+      <Transition name="r-dialog">
+        <div v-if="showAIPackGuide" class="ai-pack-guide-mask" @click.self="closeAIPackGuide">
+          <div class="ai-pack-guide-dialog">
+            <div class="ai-pack-guide-header">
+              <i class="ri-robot-line"></i>
+              <span>{{ t('archives.aiPack.guideTitle') }}</span>
+            </div>
+            <div class="ai-pack-guide-body">
+              <div class="ai-pack-guide-success">
+                <i class="ri-checkbox-circle-fill"></i>
+                {{ t('archives.aiPack.guideCopied') }}
+              </div>
+              <p class="ai-pack-guide-desc">{{ t('archives.aiPack.guideDesc') }}</p>
+              <p class="ai-pack-guide-scenes-title">{{ t('archives.aiPack.guideScenes') }}</p>
+              <ol class="ai-pack-guide-scenes">
+                <li>{{ t('archives.aiPack.scene1') }}</li>
+                <li>{{ t('archives.aiPack.scene2') }}</li>
+                <li>{{ t('archives.aiPack.scene3') }}</li>
+                <li>{{ t('archives.aiPack.scene4') }}</li>
+                <li>{{ t('archives.aiPack.scene5') }}</li>
+              </ol>
+              <p class="ai-pack-guide-usage">{{ t('archives.aiPack.guideUsage') }}</p>
+            </div>
+            <div class="ai-pack-guide-footer">
+              <label class="dont-show-again">
+                <input type="checkbox" v-model="dontShowAIPackGuide" />
+                {{ t('archives.aiPack.dontShowAgain') }}
+              </label>
+              <button class="ai-pack-guide-ok-btn" @click="closeAIPackGuide">
+                {{ t('archives.aiPack.ok') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -3814,5 +4069,133 @@ onBeforeUnmount(() => {
 .bookmarks-panel-leave-to {
   opacity: 0;
   transform: translateY(10px) scale(0.95);
+}
+
+/* AI 文本包引导弹窗 */
+.ai-pack-guide-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.ai-pack-guide-dialog {
+  background: var(--color-panel-bg, #fff);
+  border-radius: 16px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+}
+
+.ai-pack-guide-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px 0;
+}
+
+.ai-pack-guide-header i {
+  font-size: 24px;
+  color: #7C4DFF;
+}
+
+.ai-pack-guide-header span {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.ai-pack-guide-body {
+  padding: 16px 24px 20px;
+}
+
+.ai-pack-guide-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #E8F5E9;
+  border-radius: 8px;
+  color: #2E7D32;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.ai-pack-guide-success i {
+  font-size: 18px;
+}
+
+.ai-pack-guide-desc {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+
+.ai-pack-guide-scenes-title {
+  color: var(--color-text-main);
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+
+.ai-pack-guide-scenes {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  color: var(--color-text-secondary);
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+.ai-pack-guide-scenes li {
+  margin-bottom: 4px;
+}
+
+.ai-pack-guide-usage {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.ai-pack-guide-footer {
+  padding: 0 24px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ai-pack-guide-footer .dont-show-again {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ai-pack-guide-footer .dont-show-again input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+
+.ai-pack-guide-ok-btn {
+  padding: 10px 24px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  transition: all 0.2s;
+}
+
+.ai-pack-guide-ok-btn:hover {
+  opacity: 0.9;
 }
 </style>

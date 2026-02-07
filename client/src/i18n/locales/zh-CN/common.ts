@@ -32,6 +32,7 @@ export default {
     error: '发生错误',
     empty: '暂无数据',
     noMore: '没有更多了',
+    offline: '网络已断开，请检查网络连接后重新登录',
   },
   time: {
     justNow: '刚刚',

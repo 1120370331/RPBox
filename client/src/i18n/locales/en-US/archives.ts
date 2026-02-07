@@ -130,6 +130,23 @@ export default {
   status: {
     loading: 'Loading...',
   },
+  aiPack: {
+    title: 'AI Story Text Pack',
+    copied: 'AI text pack copied to clipboard',
+    copyBtn: 'Copy AI Text Pack',
+    guideTitle: 'AI Story Text Pack',
+    guideCopied: 'Copied to clipboard!',
+    guideDesc: 'Packs story data into a concise AI-friendly Markdown format that can be pasted directly into any AI chat.',
+    guideScenes: 'Use cases:',
+    scene1: 'Ask AI to summarize the story',
+    scene2: 'Generate battle reports or story recaps',
+    scene3: 'Analyze character relationships and development',
+    scene4: 'Continue or expand the storyline',
+    scene5: 'Translate the story into other languages',
+    guideUsage: 'After copying, paste into ChatGPT, Claude, or any AI chat along with your request.',
+    dontShowAgain: 'Don\'t show again',
+    ok: 'Got it',
+  },
   staging: {
     title: 'Staging Pool',
     titleWithCount: 'Staging Pool ({count})',

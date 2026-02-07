@@ -32,6 +32,7 @@ export default {
     error: 'Error occurred',
     empty: 'No data',
     noMore: 'No more data',
+    offline: 'Network disconnected. Please check your connection and log in again.',
   },
   time: {
     justNow: 'Just now',

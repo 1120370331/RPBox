@@ -1,15 +1,38 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@/stores/theme'
+import { useUserStore } from '@/stores/user'
+import { useToast } from '@/composables/useToast'
 import UpdateNotification from '@/components/UpdateNotification.vue'
 import ChangelogDialog from '@/components/ChangelogDialog.vue'
 import RDialog from '@/components/RDialog.vue'
 import RToast from '@/components/RToast.vue'
 
 const themeStore = useThemeStore()
+const userStore = useUserStore()
+const router = useRouter()
+const { t } = useI18n()
+const toast = useToast()
+
+function handleOffline() {
+  if (!userStore.token) return
+  toast.error(t('common.status.offline'))
+  userStore.logout()
+  router.replace({ name: 'login' })
+}
 
 onMounted(() => {
   themeStore.initTheme()
+  if (!navigator.onLine && userStore.token) {
+    handleOffline()
+  }
+  window.addEventListener('offline', handleOffline)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('offline', handleOffline)
 })
 </script>
 
