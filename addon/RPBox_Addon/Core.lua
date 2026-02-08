@@ -4,7 +4,7 @@
 local ADDON_NAME, ns = ...
 
 -- 版本信息
-ns.VERSION = "1.0.2"
+ns.VERSION = "1.0.9"
 
 -- 公开 API
 RPBox_API = ns
@@ -21,8 +21,8 @@ local DEFAULT_CONFIG = {
     whitelist = {},
     blacklist = {},
     warnedThisSession = false,
-    maxRecords = 10000,
     warnThreshold = 9000,
+    logViewWindowSize = 120,
     -- 监听的频道配置
     channels = {
         SAY = true,

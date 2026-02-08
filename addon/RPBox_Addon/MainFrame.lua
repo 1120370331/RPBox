@@ -243,6 +243,9 @@ local currentFilter = {
     search = "",
 }
 
+local LOG_RECENT_LIMIT = 3000
+local LOG_VIEW_WINDOW_SIZE = 120
+
 -- 获取可用的日期列表
 local function GetAvailableDates()
     local dates = {}
@@ -379,7 +382,307 @@ local function GetFilteredRecords()
         local tb = b.t or b.timestamp or 0
         return ta > tb  -- 降序：最新的在前
     end)
-    return records
+
+    if #records > LOG_RECENT_LIMIT then
+        local limitedRecords = {}
+        for i = 1, LOG_RECENT_LIMIT do
+            limitedRecords[i] = records[i]
+        end
+        return limitedRecords, #records
+    end
+
+    return records, #records
+end
+
+local function InvalidateLogRender()
+    if not MainFrame then return end
+    MainFrame.logRenderToken = (MainFrame.logRenderToken or 0) + 1
+    MainFrame.logState = nil
+end
+
+local function EnsureLogRow(content, index)
+    content.rows = content.rows or {}
+
+    local row = content.rows[index]
+    if not row then
+        row = CreateFrame("Frame", nil, content)
+        row:SetHeight(20)
+        content.rows[index] = row
+
+        row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        row.text:SetPoint("TOPLEFT", 0, 0)
+        row.text:SetWidth(500)
+        row.text:SetJustifyH("LEFT")
+        row.text:SetWordWrap(false)
+    end
+
+    return row
+end
+
+local function BuildLogLineTexts(record)
+    local timestamp = record.t or record.timestamp or 0
+    local channel = record.c or record.channel or ""
+    local msgContent = record.m or record.content or ""
+
+    if msgContent:match("^|[^c]") then
+        msgContent = msgContent:sub(2):match("^%s*(.*)") or msgContent
+    end
+
+    local timeStr = date("[%H:%M:%S]", timestamp)
+    local displayName, _, colorCode = GetDisplayName(record)
+    local channelColor = CHANNEL_COLORS[channel] or CHANNEL_COLORS["CHAT_MSG_" .. channel] or "FFFFFF"
+
+    local nameColor = nil
+    if colorCode then
+        nameColor = colorCode:gsub("^#", "")
+    end
+    if not nameColor then
+        nameColor = GetClassColor(record.cls)
+    end
+    if not nameColor then
+        nameColor = "FFFFFF"
+    end
+
+    local npcData = nil
+    local mk = record.mk
+
+    if mk == "N" then
+        local npcColor = NPC_SAY_COLOR
+        local npcSpeechType = record.nt or "say"
+        if npcSpeechType == "whisper" then
+            npcColor = NPC_WHISPER_COLOR
+        elseif npcSpeechType == "yell" then
+            npcColor = NPC_YELL_COLOR
+        end
+        local cleanNpcName = record.npc
+        if cleanNpcName then
+            cleanNpcName = cleanNpcName:gsub("^|%s*", "")
+        end
+        local cleanMsg = msgContent
+        cleanMsg = cleanMsg:gsub("|T.-|t", "")
+        cleanMsg = cleanMsg:gsub("^%s+", "")
+        if msgContent:match("^|[^c]") then
+            local parsed = ParseNPCMessage(msgContent)
+            if parsed then cleanMsg = parsed.message end
+        end
+        if npcSpeechType == "whisper" then
+            cleanMsg = StripInvalidLeadingBytes(cleanMsg)
+        end
+        npcData = { name = cleanNpcName, type = npcSpeechType, message = cleanMsg, color = npcColor }
+    elseif mk == "B" then
+        local cleanMsg = msgContent
+        if msgContent:match("^|[^c]") then
+            local parsed = ParseNPCMessage(msgContent)
+            if parsed then cleanMsg = parsed.message end
+        end
+        npcData = { name = nil, type = "emote", message = cleanMsg, color = NPC_EMOTE_COLOR }
+    elseif not mk then
+        npcData = ParseNPCMessage(msgContent)
+    end
+
+    local lineText, plainText
+    local icon = GetInlineIcon(record)
+    local senderTag = format("|cFF666666[来自%s]|r", displayName)
+    local plainSenderTag = format("[来自%s]", displayName)
+
+    if npcData then
+        if npcData.name and npcData.name ~= "" then
+            local npcColor = "|cFF" .. npcData.color
+            if npcData.type == "whisper" then
+                lineText = format("|cFF888888%s|r %s[%s]|r %s悄悄说：%s|r %s",
+                    timeStr, npcColor, npcData.name, npcColor, npcData.message, senderTag)
+                plainText = format("%s [%s] 悄悄说：%s %s",
+                    timeStr, npcData.name, npcData.message, plainSenderTag)
+            elseif npcData.type == "yell" then
+                lineText = format("|cFF888888%s|r %s[%s]|r 大喊：%s %s",
+                    timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                plainText = format("%s [%s] 大喊：%s %s",
+                    timeStr, npcData.name, npcData.message, plainSenderTag)
+            elseif npcData.type == "say" then
+                lineText = format("|cFF888888%s|r %s[%s]|r 说：%s %s",
+                    timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                plainText = format("%s [%s] 说：%s %s",
+                    timeStr, npcData.name, npcData.message, plainSenderTag)
+            else
+                lineText = format("|cFF888888%s|r %s[%s] %s|r %s",
+                    timeStr, npcColor, npcData.name, npcData.message, senderTag)
+                plainText = format("%s [%s] %s %s",
+                    timeStr, npcData.name, npcData.message, plainSenderTag)
+            end
+        else
+            local npcColor = "|cFF" .. npcData.color
+            lineText = format("|cFF888888%s|r %s%s|r %s",
+                timeStr, npcColor, npcData.message, senderTag)
+            plainText = format("%s %s %s", timeStr, npcData.message, plainSenderTag)
+        end
+    elseif channel == "CHAT_MSG_EMOTE" or channel == "EMOTE" then
+        lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
+            timeStr, nameColor, displayName, icon, channelColor, msgContent)
+        plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
+    elseif channel == "TEXT_EMOTE" or channel == "CHAT_MSG_TEXT_EMOTE" then
+        lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
+            timeStr, nameColor, displayName, icon, channelColor, msgContent)
+        plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
+    elseif channel == "CHAT_MSG_YELL" or channel == "YELL" then
+        lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 大喊：|cFF%s%s|r",
+            timeStr, nameColor, displayName, icon, channelColor, msgContent)
+        plainText = format("%s [%s] 大喊：%s", timeStr, displayName, msgContent)
+    elseif channel == "WHISPER_IN" or channel == "CHAT_MSG_WHISPER" then
+        lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 悄悄地说：|cFF%s%s|r",
+            timeStr, nameColor, displayName, icon, channelColor, msgContent)
+        plainText = format("%s [%s] 悄悄地说：%s", timeStr, displayName, msgContent)
+    elseif channel == "WHISPER_OUT" or channel == "CHAT_MSG_WHISPER_INFORM" then
+        lineText = format("|cFF888888%s|r 你悄悄地对 |cFF%s[%s]|r%s 说：|cFF%s%s|r",
+            timeStr, nameColor, displayName, icon, channelColor, msgContent)
+        plainText = format("%s 你悄悄地对 [%s] 说：%s", timeStr, displayName, msgContent)
+    elseif channel == "GUILD" or channel == "CHAT_MSG_GUILD" then
+        lineText = format("|cFF888888%s|r |cFF40FF40[公会]|r|cFF%s[%s]|r%s 说：|cFF40FF40%s|r",
+            timeStr, nameColor, displayName, icon, msgContent)
+        plainText = format("%s [公会][%s] 说：%s", timeStr, displayName, msgContent)
+    else
+        lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 说：|cFF%s%s|r",
+            timeStr, nameColor, displayName, icon, channelColor, msgContent)
+        plainText = format("%s [%s] 说：%s", timeStr, displayName, msgContent)
+    end
+
+    return lineText, plainText
+end
+
+local function RenderLogRow(row, record)
+    local lineText, plainText = BuildLogLineTexts(record)
+    row.text:SetText(lineText)
+
+    local textHeight = row.text:GetStringHeight() or 16
+    row:SetHeight(textHeight + 4)
+    return textHeight, plainText
+end
+
+local function UpdateLogStatus(totalMatched, displayCount, loadedCount, hiddenCount)
+    if not MainFrame or not MainFrame.statusText then return end
+
+    local baseText
+    if hiddenCount and hiddenCount > 0 then
+        baseText = format("共 %d 条记录（页面仅展示最近 %d 条）", totalMatched, LOG_RECENT_LIMIT)
+    else
+        baseText = format("共 %d 条记录", totalMatched)
+    end
+
+    if loadedCount and loadedCount < displayCount then
+        MainFrame.statusText:SetText(baseText .. format("，已加载 %d/%d", loadedCount, displayCount))
+        return
+    end
+
+    MainFrame.statusText:SetText(baseText)
+end
+
+local function GetLogPageSize()
+    local size = tonumber(RPBox_Config.logViewWindowSize) or LOG_VIEW_WINDOW_SIZE
+    if size < 80 then size = 80 end
+    if size > 240 then size = 240 end
+    return floor(size)
+end
+
+local function HideAllLogRows()
+    if not MainFrame or not MainFrame.logContent then return end
+    local rows = MainFrame.logContent.rows or {}
+    for i = 1, #rows do
+        if rows[i] then
+            rows[i]:Hide()
+        end
+    end
+    MainFrame.logShownRowCount = 0
+end
+
+local function UpdateLogFooterNotice(state)
+    if not MainFrame or not MainFrame.logContent then return end
+
+    if not MainFrame.logFooterNotice then
+        local notice = MainFrame.logContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        notice:SetJustifyH("CENTER")
+        notice:SetJustifyV("TOP")
+        notice:SetWordWrap(true)
+        MainFrame.logFooterNotice = notice
+    end
+
+    local notice = MainFrame.logFooterNotice
+    if state and state.hiddenCount and state.hiddenCount > 0 and state.loadedCount >= state.displayCount then
+        notice:ClearAllPoints()
+        notice:SetPoint("TOPLEFT", MainFrame.logContent, "TOPLEFT", 0, -(state.yOffset + 8))
+        notice:SetPoint("TOPRIGHT", MainFrame.logContent, "TOPRIGHT", 0, -(state.yOffset + 8))
+        notice:SetText(format("还有 %d 条更早记录未显示，请导出后前往客户端查看", state.hiddenCount))
+        notice:Show()
+    else
+        notice:Hide()
+    end
+end
+
+local TryLoadMoreLogRows
+TryLoadMoreLogRows = function(force)
+    if not MainFrame or not MainFrame.logState or not MainFrame.logContent then return end
+    if currentTab ~= "log" then return end
+
+    local state = MainFrame.logState
+    if state.renderToken ~= MainFrame.logRenderToken then return end
+    if state.loading then return end
+
+    if not force then
+        local scrollFrame = MainFrame.logScroll
+        if not scrollFrame then return end
+        local scrollRange = scrollFrame:GetVerticalScrollRange() or 0
+        local currentScroll = scrollFrame:GetVerticalScroll() or 0
+        if scrollRange > 0 and currentScroll < (scrollRange - 160) then
+            return
+        end
+    end
+
+    if state.loadedCount >= state.displayCount then
+        UpdateLogFooterNotice(state)
+        return
+    end
+
+    state.loading = true
+
+    local startIndex = state.loadedCount + 1
+    local endIndex = min(startIndex + state.pageSize - 1, state.displayCount)
+    local yOffset = state.yOffset or 0
+
+    for i = startIndex, endIndex do
+        local row = EnsureLogRow(MainFrame.logContent, i)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -yOffset)
+        row:SetPoint("TOPRIGHT", 0, -yOffset)
+
+        local textHeight = select(1, RenderLogRow(row, state.records[i]))
+        row:Show()
+        yOffset = yOffset + textHeight + 6
+    end
+
+    state.yOffset = yOffset
+    state.loadedCount = endIndex
+    MainFrame.logShownRowCount = endIndex
+
+    UpdateLogFooterNotice(state)
+    local extraFooterHeight = (state.hiddenCount and state.hiddenCount > 0 and state.loadedCount >= state.displayCount) and 26 or 0
+    MainFrame.logContent:SetHeight(max(yOffset + extraFooterHeight, 1))
+
+    if MainFrame.logScroll then
+        MainFrame.logScroll:UpdateScrollChildRect()
+    end
+
+    state.loading = false
+    UpdateLogStatus(state.totalMatched, state.displayCount, state.loadedCount, state.hiddenCount)
+
+    if force and state.loadedCount < state.displayCount and MainFrame.logScroll then
+        local scrollRange = MainFrame.logScroll:GetVerticalScrollRange() or 0
+        if scrollRange <= 0 then
+            local token = state.renderToken
+            C_Timer.After(0, function()
+                if not MainFrame or not MainFrame.logState then return end
+                if token ~= MainFrame.logRenderToken then return end
+                TryLoadMoreLogRows(true)
+            end)
+        end
+    end
 end
 
 -- 创建标签按钮
@@ -396,189 +699,49 @@ end
 local function RefreshLogContent()
     if not MainFrame or not MainFrame.logContent then return end
 
+    InvalidateLogRender()
+    local renderToken = MainFrame.logRenderToken
+
+    local records, totalMatched = GetFilteredRecords()
+    local totalRecords = #records
+    local displayCount = totalRecords
+    local hiddenCount = max(totalMatched - totalRecords, 0)
+
     local content = MainFrame.logContent
-    -- 清空
-    for _, child in pairs({content:GetChildren()}) do
-        child:Hide()
-    end
-
-    local records = GetFilteredRecords()
-    local yOffset = 0
     content.rows = content.rows or {}
+    MainFrame.logPlainText = nil
 
-    -- 保存纯文本用于复制
-    MainFrame.logPlainText = {}
+    HideAllLogRows()
+    UpdateLogFooterNotice(nil)
+    content:SetHeight(1)
+    MainFrame.logShownRowCount = 0
 
-    for i, record in ipairs(records) do
-        if i > (RPBox_Config.maxRecords or 10000) then break end
-
-        local row = content.rows[i]
-        if not row then
-            row = CreateFrame("Frame", nil, content)
-            row:SetHeight(20)
-            content.rows[i] = row
-
-            row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            row.text:SetPoint("TOPLEFT", 0, 0)
-            row.text:SetWidth(500)
-            row.text:SetJustifyH("LEFT")
-            row.text:SetWordWrap(true)
-        end
-
-        row:SetPoint("TOPLEFT", 0, -yOffset)
-        row:SetPoint("TOPRIGHT", 0, -yOffset)
-
-        -- 兼容新旧字段
-        local timestamp = record.t or record.timestamp or 0
-        local channel = record.c or record.channel or ""
-        local msgContent = record.m or record.content or ""
-
-        -- 清理开头的 | 标记和空格
-        if msgContent:match("^|[^c]") then
-            msgContent = msgContent:sub(2):match("^%s*(.*)") or msgContent
-        end
-
-        local timeStr = date("[%H:%M:%S]", timestamp)
-        local displayName, gameID, colorCode = GetDisplayName(record)
-        local channelColor = CHANNEL_COLORS[channel] or CHANNEL_COLORS["CHAT_MSG_" .. channel] or "FFFFFF"
-
-        -- 名字颜色优先级：TRP3自定义颜色 > 职业色 > 默认白色
-        local nameColor = nil
-        if colorCode then
-            nameColor = colorCode:gsub("^#", "")
-        end
-        if not nameColor then
-            nameColor = GetClassColor(record.cls)
-        end
-        if not nameColor then
-            nameColor = "FFFFFF"  -- 默认白色
-        end
-
-        -- 检测 NPC 对话
-        local npcData = nil
-        local mk = record.mk
-
-        if mk == "N" then
-            local npcColor = NPC_SAY_COLOR
-            local npcSpeechType = record.nt or "say"
-            if npcSpeechType == "whisper" then
-                npcColor = NPC_WHISPER_COLOR
-            elseif npcSpeechType == "yell" then
-                npcColor = NPC_YELL_COLOR
-            end
-            local cleanNpcName = record.npc
-            if cleanNpcName then
-                cleanNpcName = cleanNpcName:gsub("^|%s*", "")
-            end
-            local cleanMsg = msgContent
-            -- 清理消息中的纹理代码 |Txxx|t
-            cleanMsg = cleanMsg:gsub("|T.-|t", "")
-            -- 清理开头的空格
-            cleanMsg = cleanMsg:gsub("^%s+", "")
-            if msgContent:match("^|[^c]") then
-                local parsed = ParseNPCMessage(msgContent)
-                if parsed then cleanMsg = parsed.message end
-            end
-            if npcSpeechType == "whisper" then
-                cleanMsg = StripInvalidLeadingBytes(cleanMsg)
-            end
-            npcData = { name = cleanNpcName, type = npcSpeechType, message = cleanMsg, color = npcColor }
-        elseif mk == "B" then
-            local cleanMsg = msgContent
-            if msgContent:match("^|[^c]") then
-                local parsed = ParseNPCMessage(msgContent)
-                if parsed then cleanMsg = parsed.message end
-            end
-            npcData = { name = nil, type = "emote", message = cleanMsg, color = NPC_EMOTE_COLOR }
-        elseif not mk then
-            npcData = ParseNPCMessage(msgContent)
-        end
-
-        -- 构建显示文本（带颜色）和纯文本（用于复制）
-        local lineText, plainText
-        local icon = GetInlineIcon(record)
-        local senderTag = format("|cFF666666[来自%s]|r", displayName)
-        local plainSenderTag = format("[来自%s]", displayName)
-
-        if npcData then
-            if npcData.name and npcData.name ~= "" then
-                local npcColor = "|cFF" .. npcData.color
-                if npcData.type == "whisper" then
-                    lineText = format("|cFF888888%s|r %s[%s]|r %s悄悄说：%s|r %s",
-                        timeStr, npcColor, npcData.name, npcColor, npcData.message, senderTag)
-                    plainText = format("%s [%s] 悄悄说：%s %s",
-                        timeStr, npcData.name, npcData.message, plainSenderTag)
-                elseif npcData.type == "yell" then
-                    lineText = format("|cFF888888%s|r %s[%s]|r 大喊：%s %s",
-                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
-                    plainText = format("%s [%s] 大喊：%s %s",
-                        timeStr, npcData.name, npcData.message, plainSenderTag)
-                elseif npcData.type == "say" then
-                    lineText = format("|cFF888888%s|r %s[%s]|r 说：%s %s",
-                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
-                    plainText = format("%s [%s] 说：%s %s",
-                        timeStr, npcData.name, npcData.message, plainSenderTag)
-                else
-                    lineText = format("|cFF888888%s|r %s[%s] %s|r %s",
-                        timeStr, npcColor, npcData.name, npcData.message, senderTag)
-                    plainText = format("%s [%s] %s %s",
-                        timeStr, npcData.name, npcData.message, plainSenderTag)
-                end
-            else
-                local npcColor = "|cFF" .. npcData.color
-                lineText = format("|cFF888888%s|r %s%s|r %s",
-                    timeStr, npcColor, npcData.message, senderTag)
-                plainText = format("%s %s %s", timeStr, npcData.message, plainSenderTag)
-            end
-        elseif channel == "CHAT_MSG_EMOTE" or channel == "EMOTE" then
-            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
-                timeStr, nameColor, displayName, icon, channelColor, msgContent)
-            plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
-        elseif channel == "TEXT_EMOTE" or channel == "CHAT_MSG_TEXT_EMOTE" then
-            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
-                timeStr, nameColor, displayName, icon, channelColor, msgContent)
-            plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
-        elseif channel == "CHAT_MSG_YELL" or channel == "YELL" then
-            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 大喊：|cFF%s%s|r",
-                timeStr, nameColor, displayName, icon, channelColor, msgContent)
-            plainText = format("%s [%s] 大喊：%s", timeStr, displayName, msgContent)
-        elseif channel == "WHISPER_IN" or channel == "CHAT_MSG_WHISPER" then
-            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 悄悄地说：|cFF%s%s|r",
-                timeStr, nameColor, displayName, icon, channelColor, msgContent)
-            plainText = format("%s [%s] 悄悄地说：%s", timeStr, displayName, msgContent)
-        elseif channel == "WHISPER_OUT" or channel == "CHAT_MSG_WHISPER_INFORM" then
-            lineText = format("|cFF888888%s|r 你悄悄地对 |cFF%s[%s]|r%s 说：|cFF%s%s|r",
-                timeStr, nameColor, displayName, icon, channelColor, msgContent)
-            plainText = format("%s 你悄悄地对 [%s] 说：%s", timeStr, displayName, msgContent)
-        elseif channel == "GUILD" or channel == "CHAT_MSG_GUILD" then
-            lineText = format("|cFF888888%s|r |cFF40FF40[公会]|r|cFF%s[%s]|r%s 说：|cFF40FF40%s|r",
-                timeStr, nameColor, displayName, icon, msgContent)
-            plainText = format("%s [公会][%s] 说：%s", timeStr, displayName, msgContent)
-        else
-            lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 说：|cFF%s%s|r",
-                timeStr, nameColor, displayName, icon, channelColor, msgContent)
-            plainText = format("%s [%s] 说：%s", timeStr, displayName, msgContent)
-        end
-
-        row.text:SetText(lineText)
-        -- Keep copy order oldest -> newest.
-        table.insert(MainFrame.logPlainText, 1, plainText)
-
-        local textHeight = row.text:GetStringHeight() or 16
-        row:SetHeight(textHeight + 4)
-        row:Show()
-        yOffset = yOffset + textHeight + 6
+    if MainFrame.logScroll then
+        MainFrame.logScroll:SetVerticalScroll(0)
+        MainFrame.logScroll:UpdateScrollChildRect()
     end
 
-    content:SetHeight(math.max(yOffset, 1))
-    MainFrame.statusText:SetText(format("共 %d 条记录", #records))
-
-    -- 强制刷新 ScrollFrame 显示
-    if MainFrame.logScrollFrame then
-        MainFrame.logScrollFrame:UpdateScrollChildRect()
-        -- 重置滚动位置到顶部
-        MainFrame.logScrollFrame:SetVerticalScroll(0)
+    if displayCount <= 0 then
+        MainFrame.logState = nil
+        UpdateLogStatus(totalMatched, displayCount, displayCount, hiddenCount)
+        return
     end
+
+    MainFrame.logState = {
+        records = records,
+        totalRecords = totalRecords,
+        totalMatched = totalMatched,
+        hiddenCount = hiddenCount,
+        displayCount = displayCount,
+        loadedCount = 0,
+        yOffset = 0,
+        pageSize = GetLogPageSize(),
+        renderToken = renderToken,
+        loading = false,
+    }
+
+    UpdateLogStatus(totalMatched, displayCount, 0, hiddenCount)
+    TryLoadMoreLogRows(true)
 end
 
 -- 刷新名单内容
@@ -675,7 +838,7 @@ local function RefreshDebugContent()
 
     -- 最近5条记录的详细信息
     table.insert(lines, "--- 最近5条记录详情 ---")
-    local records = GetFilteredRecords()
+    local records = select(1, GetFilteredRecords())
     for i = 1, math.min(5, #records) do
         local record = records[i]
         table.insert(lines, "")
@@ -878,6 +1041,53 @@ local function RefreshSettingsContent()
     content.showIconCb:Show()
     yOffset = yOffset + 26
 
+    -- 懒加载设置（每次追加加载条数）
+    yOffset = yOffset + 15
+    if not content.viewWindowSizeTitle then
+        content.viewWindowSizeTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    end
+    content.viewWindowSizeTitle:SetPoint("TOPLEFT", 10, -yOffset)
+    content.viewWindowSizeTitle:SetText("每批加载条数:")
+    content.viewWindowSizeTitle:Show()
+
+    if not content.viewWindowSizeBox then
+        local eb = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+        eb:SetSize(56, 20)
+        eb:SetAutoFocus(false)
+        eb:SetNumeric(true)
+        content.viewWindowSizeBox = eb
+    end
+
+    local viewWindowSizeBox = content.viewWindowSizeBox
+    viewWindowSizeBox:SetPoint("LEFT", content.viewWindowSizeTitle, "RIGHT", 6, 0)
+    viewWindowSizeBox:SetText(tostring(GetLogPageSize()))
+    viewWindowSizeBox:SetScript("OnEnterPressed", function(self)
+        local value = tonumber(self:GetText()) or LOG_VIEW_WINDOW_SIZE
+        if value < 80 then value = 80 end
+        if value > 240 then value = 240 end
+        RPBox_Config.logViewWindowSize = floor(value)
+        self:SetText(tostring(RPBox_Config.logViewWindowSize))
+
+        if MainFrame and MainFrame:IsShown() and currentTab == "log" then
+            RefreshLogContent()
+        end
+
+        self:ClearFocus()
+    end)
+    viewWindowSizeBox:SetScript("OnEscapePressed", function(self)
+        self:SetText(tostring(GetLogPageSize()))
+        self:ClearFocus()
+    end)
+    viewWindowSizeBox:Show()
+
+    if not content.viewWindowSizeHint then
+        content.viewWindowSizeHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    end
+    content.viewWindowSizeHint:SetPoint("LEFT", viewWindowSizeBox, "RIGHT", 8, 0)
+    content.viewWindowSizeHint:SetText("建议 120（范围 80-240）")
+    content.viewWindowSizeHint:Show()
+    yOffset = yOffset + 26
+
     content:SetHeight(yOffset + 20)
     MainFrame.statusText:SetText("设置")
 end
@@ -936,6 +1146,9 @@ local function CreateMainFrame()
     MainFrame:SetScript("OnDragStart", MainFrame.StartMoving)
     MainFrame:SetScript("OnDragStop", MainFrame.StopMovingOrSizing)
     MainFrame:Hide()
+    MainFrame:HookScript("OnHide", function()
+        InvalidateLogRender()
+    end)
 
     -- 启用调整大小
     MainFrame:SetResizable(true)
@@ -1035,6 +1248,26 @@ local function CreateMainFrame()
     local logScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
     logScroll:SetPoint("TOPLEFT", 12, -88)
     logScroll:SetPoint("BOTTOMRIGHT", -30, 40)
+    logScroll:SetScript("OnVerticalScroll", function(self, offset)
+        if self._rpboxAdjustingScroll then return end
+
+        local range = self:GetVerticalScrollRange() or 0
+        local clamped = offset
+        if offset < 0 then
+            clamped = 0
+        elseif offset > range then
+            clamped = range
+        end
+
+        local current = self:GetVerticalScroll() or 0
+        if abs(current - clamped) > 0.1 then
+            self._rpboxAdjustingScroll = true
+            self:SetVerticalScroll(clamped)
+            self._rpboxAdjustingScroll = nil
+        end
+
+        TryLoadMoreLogRows(false)
+    end)
 
     local logContent = CreateFrame("Frame", nil, logScroll)
     logContent:SetSize(480, 1)
@@ -1107,9 +1340,13 @@ local function CreateMainFrame()
     copyBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
     copyBtn:SetText("复制")
     copyBtn:SetScript("OnClick", function()
-        if not MainFrame.logPlainText or #MainFrame.logPlainText == 0 then
+        if not MainFrame.logState or not MainFrame.logState.records or MainFrame.logState.displayCount <= 0 then
             print("|cFFFF0000[RPBox]|r 没有可复制的记录，请先筛选或刷新日志")
             return
+        end
+
+        if MainFrame.logState.displayCount > 2000 then
+            print(format("|cFFFFAA00[RPBox]|r 当前窗口内共有 %d 条可复制记录，复制可能卡顿，请耐心等待。", MainFrame.logState.displayCount))
         end
 
         -- 创建对话框（如果不存在）
@@ -1160,7 +1397,13 @@ local function CreateMainFrame()
             MainFrame.copyDialog:Hide()
         else
             -- 更新内容并显示
-            local text = table.concat(MainFrame.logPlainText, "\n")
+            local copyLines = {}
+            local state = MainFrame.logState
+            for i = state.displayCount, 1, -1 do
+                local _, plainText = BuildLogLineTexts(state.records[i])
+                copyLines[#copyLines + 1] = plainText
+            end
+            local text = table.concat(copyLines, "\n")
             MainFrame.copyDialog.editBox:SetText(text)
             MainFrame.copyDialog.editBox:SetHeight(300)
             MainFrame.copyDialog:Show()
@@ -1221,6 +1464,7 @@ end
 -- 关闭主界面
 function ns.CloseMainFrame()
     if MainFrame then
+        InvalidateLogRender()
         MainFrame:Hide()
     end
 end
