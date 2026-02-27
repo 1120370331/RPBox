@@ -812,18 +812,17 @@ defineExpose({
   margin-bottom: 40px;
 }
 
-/* 左侧卡片 */
+/* 左侧卡片 - 使用相对定位，让内容撑开父容器高度 */
 .timeline-item.left .timeline-card {
-  position: absolute;
-  right: calc(50% + 40px);
+  position: relative;
   width: calc(50% - 60px);
 }
 
 /* 右侧卡片 */
 .timeline-item.right .timeline-card {
-  position: absolute;
-  left: calc(50% + 40px);
+  position: relative;
   width: calc(50% - 60px);
+  margin-left: calc(50% + 40px);
 }
 
 .timeline-dot {

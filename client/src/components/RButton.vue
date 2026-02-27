@@ -1,7 +1,7 @@
 <script setup lang="ts">
 interface Props {
   type?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'small' | 'md' | 'lg'
   loading?: boolean
   disabled?: boolean
   block?: boolean
@@ -61,19 +61,19 @@ function handleClick(e: MouseEvent) {
 }
 
 /* 尺寸 */
-.r-button--sm { padding: 8px 16px; font-size: 12px; }
-.r-button--md { padding: 12px 24px; font-size: 14px; }
-.r-button--lg { padding: 16px 32px; font-size: 16px; }
+.r-button--sm, .r-button--small { padding: 6px 12px; font-size: 12px; }
+.r-button--md { padding: 10px 20px; font-size: 13px; }
+.r-button--lg { padding: 14px 28px; font-size: 15px; }
 
 /* 类型 */
 .r-button--primary {
-  background: #2C1810;
-  border-color: #2C1810;
+  background: #4B3621;
+  border-color: #4B3621;
   color: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .r-button--primary:hover {
-  background: #1a0e09;
+  background: #3a2a18;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
 }
 
