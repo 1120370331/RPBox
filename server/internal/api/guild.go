@@ -10,12 +10,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 )
 
 // CreateGuildRequest 创建公会请求
@@ -75,6 +77,76 @@ func generateInviteCode() string {
 	bytes := make([]byte, 8)
 	rand.Read(bytes)
 	return hex.EncodeToString(bytes)
+}
+
+func trimGuildRequestFields(name, description, icon, color, slogan, faction *string) {
+	*name = strings.TrimSpace(*name)
+	*description = strings.TrimSpace(*description)
+	*icon = strings.TrimSpace(*icon)
+	*color = strings.TrimSpace(*color)
+	*slogan = strings.TrimSpace(*slogan)
+	*faction = strings.TrimSpace(*faction)
+}
+
+func validateGuildCommonFields(nameRequired bool, name, description, icon, color, slogan, lore, faction string) error {
+	if nameRequired && name == "" {
+		return fmt.Errorf("公会名称不能为空")
+	}
+	if name != "" && utf8.RuneCountInString(name) > 128 {
+		return fmt.Errorf("公会名称不能超过128个字符")
+	}
+	if description != "" && utf8.RuneCountInString(description) > 2000 {
+		return fmt.Errorf("公会描述不能超过2000个字符")
+	}
+	if icon != "" && utf8.RuneCountInString(icon) > 128 {
+		return fmt.Errorf("公会图标不能超过128个字符")
+	}
+	if color != "" && utf8.RuneCountInString(color) > 8 {
+		return fmt.Errorf("公会颜色不能超过8个字符")
+	}
+	if slogan != "" && utf8.RuneCountInString(slogan) > 256 {
+		return fmt.Errorf("公会标语不能超过256个字符")
+	}
+	if lore != "" && utf8.RuneCountInString(lore) > 20000 {
+		return fmt.Errorf("公会设定不能超过20000个字符")
+	}
+	if faction != "" {
+		switch faction {
+		case "alliance", "horde", "neutral":
+		default:
+			return fmt.Errorf("无效阵营")
+		}
+	}
+
+	return nil
+}
+
+func normalizeCreateGuildRequest(req *CreateGuildRequest) error {
+	trimGuildRequestFields(&req.Name, &req.Description, &req.Icon, &req.Color, &req.Slogan, &req.Faction)
+
+	if err := validateGuildCommonFields(true, req.Name, req.Description, req.Icon, req.Color, req.Slogan, req.Lore, req.Faction); err != nil {
+		return err
+	}
+
+	if req.Layout < 1 || req.Layout > 4 {
+		req.Layout = 3
+	}
+
+	return nil
+}
+
+func normalizeUpdateGuildRequest(req *UpdateGuildRequest) error {
+	trimGuildRequestFields(&req.Name, &req.Description, &req.Icon, &req.Color, &req.Slogan, &req.Faction)
+
+	if err := validateGuildCommonFields(false, req.Name, req.Description, req.Icon, req.Color, req.Slogan, req.Lore, req.Faction); err != nil {
+		return err
+	}
+
+	if req.Layout != 0 && (req.Layout < 1 || req.Layout > 4) {
+		return fmt.Errorf("无效布局")
+	}
+
+	return nil
 }
 
 // listGuilds 获取我的公会列表
@@ -166,9 +238,28 @@ func (s *Server) createGuild(c *gin.Context) {
 		return
 	}
 
-	layout := req.Layout
-	if layout < 1 || layout > 4 {
-		layout = 3 // 默认布局3
+	if err := normalizeCreateGuildRequest(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var user model.User
+	if err := database.DB.Select("id, email_verified").First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
+		return
+	}
+	if !user.EmailVerified {
+		c.JSON(http.StatusForbidden, gin.H{"error": "请先完成邮箱验证后再创建公会"})
+		return
+	}
+
+	var pendingCount int64
+	database.DB.Model(&model.Guild{}).
+		Where("owner_id = ? AND status = ?", userID, "pending").
+		Count(&pendingCount)
+	if pendingCount >= 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "你已有待审核中的公会，请等待审核完成后再创建"})
+		return
 	}
 
 	guild := model.Guild{
@@ -180,7 +271,7 @@ func (s *Server) createGuild(c *gin.Context) {
 		Slogan:      req.Slogan,
 		Lore:        req.Lore,
 		Faction:     req.Faction,
-		Layout:      layout,
+		Layout:      req.Layout,
 		OwnerID:     userID,
 		InviteCode:  generateInviteCode(),
 		MemberCount: 1,
@@ -191,19 +282,26 @@ func (s *Server) createGuild(c *gin.Context) {
 		guild.BannerUpdatedAt = &now
 	}
 
-	if err := database.DB.Create(&guild).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&guild).Error; err != nil {
+			return err
+		}
+
+		member := model.GuildMember{
+			GuildID:  guild.ID,
+			UserID:   userID,
+			Role:     "owner",
+			JoinedAt: time.Now(),
+		}
+		if err := tx.Create(&member).Error; err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 		return
 	}
-
-	// 创建会长成员记录
-	member := model.GuildMember{
-		GuildID:  guild.ID,
-		UserID:   userID,
-		Role:     "owner",
-		JoinedAt: time.Now(),
-	}
-	database.DB.Create(&member)
 
 	c.JSON(http.StatusCreated, guild)
 }
@@ -249,6 +347,11 @@ func (s *Server) updateGuild(c *gin.Context) {
 	var req UpdateGuildRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	if err := normalizeUpdateGuildRequest(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

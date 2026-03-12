@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -18,7 +19,7 @@ type RegisterRequest struct {
 	Username         string `json:"username" binding:"required,min=3,max=50"`
 	Email            string `json:"email" binding:"required,email"`
 	Password         string `json:"password" binding:"required,min=6"`
-	VerificationCode string `json:"verification_code"` // 可选，向后兼容
+	VerificationCode string `json:"verification_code" binding:"required,len=6"`
 }
 
 type LoginRequest struct {
@@ -105,18 +106,15 @@ func (s *Server) register(c *gin.Context) {
 		return
 	}
 
-	// 如果提供了验证码，则验证
-	if req.VerificationCode != "" {
-		ctx := context.Background()
-		valid, err := s.verificationService.VerifyCode(ctx, req.Email, req.VerificationCode)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "验证码校验失败"})
-			return
-		}
-		if !valid {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已过期"})
-			return
-		}
+	ctx := context.Background()
+	valid, err := s.verificationService.VerifyCode(ctx, req.Email, req.VerificationCode)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "验证码校验失败"})
+		return
+	}
+	if !valid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已过期"})
+		return
 	}
 
 	// 检查用户名是否存在
@@ -143,13 +141,15 @@ func (s *Server) register(c *gin.Context) {
 		Username:      req.Username,
 		Email:         req.Email,
 		PassHash:      hash,
-		EmailVerified: req.VerificationCode != "", // 如果提供了验证码则标记为已验证
+		EmailVerified: true,
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建用户失败"})
 		return
 	}
+
+	log.Printf("[Auth] register success user_id=%d username=%s ip=%s", user.ID, user.Username, c.ClientIP())
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "注册成功",
@@ -164,14 +164,17 @@ func (s *Server) login(c *gin.Context) {
 		return
 	}
 
+	ip := c.ClientIP()
 	var user model.User
 	// 支持用户名或邮箱登录
 	if err := database.DB.Where("username = ? OR email = ?", req.Username, req.Username).First(&user).Error; err != nil {
+		log.Printf("[Auth] login failed user=%s ip=%s reason=user_not_found", req.Username, ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
 	if !auth.CheckPassword(req.Password, user.PassHash) {
+		log.Printf("[Auth] login failed user=%s ip=%s reason=bad_password", req.Username, ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
@@ -187,6 +190,7 @@ func (s *Server) login(c *gin.Context) {
 			database.DB.Save(&user)
 		} else {
 			// 仍在封禁中
+			log.Printf("[Auth] login blocked user_id=%d username=%s ip=%s reason=banned", user.ID, user.Username, ip)
 			msg := "账号已被封禁"
 			if user.BanReason != "" {
 				msg += "，原因：" + user.BanReason
@@ -208,6 +212,8 @@ func (s *Server) login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
 		return
 	}
+
+	log.Printf("[Auth] login success user_id=%d username=%s ip=%s verified=%t", user.ID, user.Username, ip, user.EmailVerified)
 
 	// 返回头像 URL 而不是 base64 数据，避免 localStorage 配额超限
 	avatarURL := ""

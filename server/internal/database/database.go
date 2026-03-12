@@ -101,11 +101,53 @@ func Init(cfg *config.DatabaseConfig) error {
 		"CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status)",
 		// posts 表添加 is_public 索引
 		"CREATE INDEX IF NOT EXISTS idx_posts_is_public ON posts(is_public)",
+		// guilds 表限制同一 owner 只能存在一个待审核公会
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_guilds_owner_pending_unique ON guilds(owner_id) WHERE status = 'pending'",
 	}
 	for _, sql := range indexMigrations {
 		if err := db.Exec(sql).Error; err != nil {
 			// 索引可能已存在，忽略错误
 			log.Printf("[DB Index] %s - %v", sql, err)
+		}
+	}
+
+	securityMigrations := []string{
+		// 只允许已验证邮箱的用户成为公会 owner。
+		`CREATE OR REPLACE FUNCTION enforce_verified_guild_owner()
+RETURNS trigger AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM users
+    WHERE id = NEW.owner_id AND email_verified = TRUE
+  ) THEN
+    RAISE EXCEPTION 'guild owner email must be verified';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;`,
+		`DROP TRIGGER IF EXISTS guild_owner_email_verified ON guilds`,
+		`CREATE TRIGGER guild_owner_email_verified
+BEFORE INSERT OR UPDATE OF owner_id ON guilds
+FOR EACH ROW
+EXECUTE FUNCTION enforce_verified_guild_owner()`,
+		`DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'guilds_faction_allowed'
+      AND conrelid = 'guilds'::regclass
+  ) THEN
+    ALTER TABLE guilds
+    ADD CONSTRAINT guilds_faction_allowed
+    CHECK (faction IS NULL OR faction IN ('', 'alliance', 'horde', 'neutral'));
+  END IF;
+END $$;`,
+	}
+	for _, sql := range securityMigrations {
+		if err := db.Exec(sql).Error; err != nil {
+			log.Printf("[DB Security Migration] %v", err)
 		}
 	}
 
