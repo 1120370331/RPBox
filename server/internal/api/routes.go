@@ -157,7 +157,7 @@ func (s *Server) setupRoutes() {
 
 			// 公会管理
 			auth.GET("/guilds", s.listGuilds)
-			auth.POST("/guilds", s.createGuild)
+			auth.POST("/guilds", middleware.StrictRateLimit(0.2, 2), s.createGuild)
 			auth.GET("/guilds/:id", s.getGuild)
 			auth.PUT("/guilds/:id", s.updateGuild)
 			auth.DELETE("/guilds/:id", s.deleteGuild)

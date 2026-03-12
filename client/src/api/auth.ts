@@ -24,7 +24,7 @@ export function login(username: string, password: string) {
   })
 }
 
-export function register(username: string, email: string, password: string, verificationCode?: string) {
+export function register(username: string, email: string, password: string, verificationCode: string) {
   return request<{ message: string }>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ username, email, password, verification_code: verificationCode }),
