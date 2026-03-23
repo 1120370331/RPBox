@@ -119,7 +119,7 @@ export async function checkMobileUpdate(options: CheckMobileUpdateOptions = {}):
   // Prefer stable latest endpoint, then fallback to legacy updater endpoint.
   try {
     const latest = await request.get<MobileUpdateInfo>(latestPath)
-    const resolvedVersion = normalizeVersion(latest.version || latest.latest_version || '')
+    const resolvedVersion = normalizeVersion(latest.latest_version || latest.version || '')
     if (resolvedVersion && isNewerVersion(resolvedVersion, currentVersion)) {
       return {
         ...latest,

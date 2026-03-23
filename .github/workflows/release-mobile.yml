@@ -190,6 +190,7 @@ jobs:
 
           data = {
             "latest_version": version,
+            "version": version,
             "notes": notes,
             "pub_date": pub_date,
             "url": f"{release_base_url}/{version}/RPBox_{version}_android.apk",
@@ -312,6 +313,7 @@ jobs:
 
           data = {
             "latest_version": version,
+            "version": version,
             "notes": notes,
             "pub_date": pub_date,
             "url": app_store_url,
