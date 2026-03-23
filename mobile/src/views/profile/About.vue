@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@shared/stores/toast'
 import { useMobileUpdater } from '@/composables/useMobileUpdater'
+import { clearImageCache } from '@/utils/imageCache'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -51,6 +52,15 @@ function handleOpenUpdate() {
     return
   }
   toast.error(t('profile.about.update.checkManually'))
+}
+
+async function handleClearCache() {
+  const ok = await clearImageCache()
+  if (ok) {
+    toast.success(t('profile.about.cache.cleared'))
+    return
+  }
+  toast.info(t('profile.about.cache.empty'))
 }
 
 onMounted(async () => {
@@ -122,6 +132,16 @@ onMounted(async () => {
         </div>
         <div class="about-row">
           <span>{{ $t('profile.about.features.market') }}</span>
+        </div>
+      </div>
+
+      <div class="about-card">
+        <h3 class="section-title">{{ $t('profile.about.cache.title') }}</h3>
+        <p class="update-hint">{{ $t('profile.about.cache.desc') }}</p>
+        <div class="update-actions">
+          <button class="action-btn secondary" @click="handleClearCache">
+            {{ $t('profile.about.cache.clear') }}
+          </button>
         </div>
       </div>
     </div>

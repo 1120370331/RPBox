@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { listItems, type Item, type ListItemsParams } from '@/api/item'
 import { resolveApiUrl } from '@/api/image'
+import CachedImage from '@/components/CachedImage.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -13,6 +14,8 @@ const loading = ref(false)
 const currentPage = ref(1)
 const total = ref(0)
 const pageSize = 12
+const requestSerial = ref(0)
+const switchingPage = ref(false)
 
 const activeType = ref('')
 const searchText = ref('')
@@ -32,7 +35,11 @@ const sortOptions = computed(() => [
 ])
 
 async function loadItems() {
+  const serial = ++requestSerial.value
   loading.value = true
+  if (switchingPage.value) {
+    items.value = []
+  }
   try {
     const params: ListItemsParams = {
       page: currentPage.value,
@@ -43,12 +50,16 @@ async function loadItems() {
     if (activeType.value) params.type = activeType.value
     if (searchText.value.trim()) params.search = searchText.value.trim()
     const res = await listItems(params)
+    if (serial !== requestSerial.value) return
     items.value = res.items || []
     total.value = res.total || 0
   } catch (e) {
     console.error('Failed to load items', e)
   } finally {
-    loading.value = false
+    if (serial === requestSerial.value) {
+      loading.value = false
+      switchingPage.value = false
+    }
   }
 }
 
@@ -72,10 +83,16 @@ function onSearchInput() {
 }
 
 function prevPage() {
-  if (currentPage.value > 1) currentPage.value--
+  if (currentPage.value <= 1) return
+  switchingPage.value = true
+  currentPage.value--
+  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 function nextPage() {
-  if (currentPage.value * pageSize < total.value) currentPage.value++
+  if (currentPage.value * pageSize >= total.value) return
+  switchingPage.value = true
+  currentPage.value++
+  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
 
@@ -118,7 +135,17 @@ onMounted(loadItems)
     </div>
 
     <div class="page-body">
-      <div v-if="loading && items.length === 0" class="loading-hint">{{ $t('common.status.loading') }}</div>
+      <div v-if="loading && items.length === 0" class="item-grid skeleton-grid">
+        <div v-for="i in 6" :key="`skeleton-${i}`" class="item-card skeleton-card">
+          <div class="item-preview skeleton-block" />
+          <div class="item-info">
+            <div class="skeleton-line w-70" />
+            <div class="skeleton-line w-45" />
+            <div class="skeleton-line w-85" />
+            <div class="skeleton-line w-55" />
+          </div>
+        </div>
+      </div>
       <div v-else-if="items.length === 0" class="empty-hint">{{ $t('market.empty') }}</div>
 
       <div v-else class="item-grid">
@@ -129,7 +156,7 @@ onMounted(loadItems)
           @click="router.push({ name: 'item-detail', params: { id: item.id } })"
         >
           <div class="item-preview">
-            <img
+            <CachedImage
               v-if="item.preview_image_url"
               :src="resolveApiUrl(item.preview_image_url)"
               alt="" loading="lazy"
@@ -249,4 +276,31 @@ onMounted(loadItems)
 }
 .pagination button:disabled { opacity: 0.4; cursor: default; }
 .pagination span { font-size: 13px; color: var(--color-text-secondary); }
+
+.skeleton-card {
+  pointer-events: none;
+}
+
+.skeleton-block,
+.skeleton-line {
+  background: linear-gradient(90deg, #f2ece6 0%, #ffffff 50%, #f2ece6 100%);
+  background-size: 220% 100%;
+  animation: skeletonShimmer 1.1s linear infinite;
+}
+
+.skeleton-line {
+  height: 11px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.skeleton-line.w-45 { width: 45%; }
+.skeleton-line.w-55 { width: 55%; }
+.skeleton-line.w-70 { width: 70%; }
+.skeleton-line.w-85 { width: 85%; }
+
+@keyframes skeletonShimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -20% 0; }
+}
 </style>
