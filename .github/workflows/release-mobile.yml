@@ -174,7 +174,6 @@ jobs:
   deploy-ios-metadata:
     name: Deploy iOS Metadata
     runs-on: ubuntu-latest
-    if: ${{ secrets.IOS_APP_STORE_URL != '' }}
 
     steps:
       - name: Checkout code
@@ -185,11 +184,21 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/mobile-v}" >> $GITHUB_OUTPUT
 
       - name: Prepare iOS metadata
+        id: iosmeta
+        env:
+          IOS_APP_STORE_URL: ${{ secrets.IOS_APP_STORE_URL }}
         run: |
+          if [ -z "$IOS_APP_STORE_URL" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "IOS_APP_STORE_URL is empty, skip iOS metadata deploy"
+            exit 0
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
+
           VERSION="${{ steps.version.outputs.VERSION }}"
           NOTES_FILE="mobile/release-notes/${VERSION}.txt"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          APP_STORE_URL="${{ secrets.IOS_APP_STORE_URL }}"
+          APP_STORE_URL="$IOS_APP_STORE_URL"
           export VERSION NOTES_FILE PUB_DATE APP_STORE_URL
           python3 - <<'PY'
           import json
@@ -219,14 +228,17 @@ jobs:
           PY
 
       - name: Setup SSH
+        if: ${{ steps.iosmeta.outputs.skip != 'true' }}
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
+        if: ${{ steps.iosmeta.outputs.skip != 'true' }}
         run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Upload iOS metadata
+        if: ${{ steps.iosmeta.outputs.skip != 'true' }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           REMOTE_BASE="${{ secrets.MOBILE_RELEASE_PATH }}"
