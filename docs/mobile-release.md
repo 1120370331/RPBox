@@ -85,6 +85,9 @@ iOS (`latest-ios.json`)：
 - `ANDROID_KEY_PASSWORD`
 - `IOS_APP_STORE_URL`（用于生成 iOS updater 元数据）
 
+说明：
+- 如果 Android 签名 Secrets 缺失，workflow 会自动回退构建 `debug APK` 并上传，保证下载链路可用（仅用于内测分发）。
+
 ## 6. 服务端 updater 行为
 
 统一入口仍为：
@@ -122,4 +125,3 @@ GET /api/v1/updater/:target/:arch/:current_version
 4. 有新版本时点击「立即更新」
    - Android：打开 APK 下载链接
    - iOS：跳转 App Store 链接
-
