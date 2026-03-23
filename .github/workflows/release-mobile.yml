@@ -131,11 +131,28 @@ jobs:
           print(f"synced native version: versionName={version}, versionCode={version_code}, file={target}")
           PY
 
-      - name: Build debug APK
+      - name: Build signed release APK
+        env:
+          ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
+          if [ -z "$ANDROID_SIGNING_KEYSTORE_BASE64" ] || [ -z "$ANDROID_SIGNING_STORE_PASSWORD" ] || [ -z "$ANDROID_SIGNING_KEY_ALIAS" ] || [ -z "$ANDROID_SIGNING_KEY_PASSWORD" ]; then
+            echo "ERROR: Android signing secrets are missing."
+            exit 1
+          fi
+
+          KEYSTORE_PATH="mobile/android/app/rpbox-upload-release.jks"
+          echo "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
           cd mobile/android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file="$(pwd)/app/rpbox-upload-release.jks" \
+            -Pandroid.injected.signing.store.password="$ANDROID_SIGNING_STORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_SIGNING_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_SIGNING_KEY_PASSWORD"
 
       - name: Prepare artifacts and metadata
         run: |
@@ -152,7 +169,7 @@ jobs:
 
           mkdir -p artifacts
 
-          APK_PATH=$(find mobile/android/app/build/outputs/apk/debug -name "*debug.apk" -type f | head -n1)
+          APK_PATH=$(find mobile/android/app/build/outputs/apk/release -name "*release*.apk" -type f | head -n1)
           [ -z "$APK_PATH" ] && { echo "ERROR: apk artifact not found"; exit 1; }
           cp "$APK_PATH" "artifacts/RPBox_${VERSION}_android.apk"
 
