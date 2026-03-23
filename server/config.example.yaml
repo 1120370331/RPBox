@@ -92,3 +92,16 @@ updater:
   release_notes: "版本更新说明"
   pub_date: "2026-01-17T12:00:00Z"
   signature_dir: ""
+  mobile:
+    android:
+      latest_version: "0.1.0"
+      url: "https://api.rpbox.app/releases/mobile/0.1.0/RPBox_0.1.0_android.apk"
+      release_notes: "移动端版本更新说明"
+      pub_date: "2026-03-22T12:00:00Z"
+      mandatory: false
+    ios:
+      latest_version: "0.1.0"
+      url: "https://apps.apple.com/app/rpbox/id1234567890"
+      release_notes: "移动端版本更新说明"
+      pub_date: "2026-03-22T12:00:00Z"
+      mandatory: false

@@ -1,0 +1,58 @@
+export default {
+  title: '公会',
+  detailTitle: '公会详情',
+  loading: '加载中...',
+  empty: '暂无公会',
+  emptyMy: '你还没有加入公会',
+  searchPlaceholder: '搜索公会名称...',
+  allFactions: '全部阵营',
+  tabs: {
+    public: '公会广场',
+    my: '我的公会',
+  },
+  actions: {
+    search: '搜索',
+    joinByCode: '邀请码加入',
+    join: '申请加入',
+    cancelApplication: '取消申请',
+    leave: '退出公会',
+    viewDetail: '查看详情',
+    cancel: '取消',
+    confirm: '确认',
+  },
+  info: {
+    members: '成员',
+    stories: '剧情',
+    noDescription: '暂无公会介绍',
+    inviteCode: '邀请码',
+    myRole: '我的身份',
+  },
+  role: {
+    owner: '会长',
+    admin: '管理员',
+    member: '成员',
+  },
+  faction: {
+    alliance: '联盟',
+    horde: '部落',
+    neutral: '中立',
+  },
+  joinByCode: {
+    placeholder: '输入邀请码',
+    success: '加入公会成功',
+    failed: '加入公会失败',
+  },
+  apply: {
+    success: '申请已提交',
+    autoApproved: '已自动加入公会',
+    failed: '申请失败',
+    canceled: '申请已取消',
+    cancelFailed: '取消申请失败',
+  },
+  leave: {
+    title: '退出公会',
+    message: '确认退出该公会吗？',
+    success: '已退出公会',
+    failed: '退出公会失败',
+  },
+}

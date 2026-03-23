@@ -400,6 +400,36 @@ local function InvalidateLogRender()
     MainFrame.logState = nil
 end
 
+local function GetLogContentWidth()
+    if MainFrame and MainFrame.logScroll then
+        local width = MainFrame.logScroll:GetWidth() or 0
+        if width > 0 then
+            return max(width - 22, 320)
+        end
+    end
+    return 480
+end
+
+local function GetLogTextWidth()
+    return max(GetLogContentWidth() - 4, 300)
+end
+
+local function UpdateLogLayoutWidth()
+    if not MainFrame or not MainFrame.logContent then return end
+
+    local contentWidth = GetLogContentWidth()
+    MainFrame.logContent:SetWidth(contentWidth)
+
+    local rows = MainFrame.logContent.rows or {}
+    local textWidth = GetLogTextWidth()
+    for i = 1, #rows do
+        local row = rows[i]
+        if row and row.text then
+            row.text:SetWidth(textWidth)
+        end
+    end
+end
+
 local function EnsureLogRow(content, index)
     content.rows = content.rows or {}
 
@@ -411,9 +441,12 @@ local function EnsureLogRow(content, index)
 
         row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         row.text:SetPoint("TOPLEFT", 0, 0)
-        row.text:SetWidth(500)
+        row.text:SetWidth(GetLogTextWidth())
         row.text:SetJustifyH("LEFT")
-        row.text:SetWordWrap(false)
+        row.text:SetWordWrap(true)
+        if row.text.SetNonSpaceWrap then
+            row.text:SetNonSpaceWrap(true)
+        end
     end
 
     return row
@@ -550,6 +583,7 @@ end
 
 local function RenderLogRow(row, record)
     local lineText, plainText = BuildLogLineTexts(record)
+    row.text:SetWidth(GetLogTextWidth())
     row.text:SetText(lineText)
 
     local textHeight = row.text:GetStringHeight() or 16
@@ -593,7 +627,41 @@ local function HideAllLogRows()
     MainFrame.logShownRowCount = 0
 end
 
-local function UpdateLogFooterNotice(state)
+local UpdateLogFooterNotice
+
+local function RefreshVisibleLogRows()
+    if not MainFrame or not MainFrame.logState or not MainFrame.logContent then return end
+
+    local state = MainFrame.logState
+    UpdateLogLayoutWidth()
+
+    local rows = MainFrame.logContent.rows or {}
+    local yOffset = 0
+    for i = 1, state.loadedCount do
+        local row = rows[i]
+        if row then
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -yOffset)
+            row:SetPoint("TOPRIGHT", 0, -yOffset)
+
+            local textHeight = select(1, RenderLogRow(row, state.records[i]))
+            row:Show()
+            yOffset = yOffset + textHeight + 6
+        end
+    end
+
+    state.yOffset = yOffset
+    UpdateLogFooterNotice(state)
+
+    local extraFooterHeight = (state.hiddenCount and state.hiddenCount > 0 and state.loadedCount >= state.displayCount) and 26 or 0
+    MainFrame.logContent:SetHeight(max(yOffset + extraFooterHeight, 1))
+
+    if MainFrame.logScroll then
+        MainFrame.logScroll:UpdateScrollChildRect()
+    end
+end
+
+UpdateLogFooterNotice = function(state)
     if not MainFrame or not MainFrame.logContent then return end
 
     if not MainFrame.logFooterNotice then
@@ -701,6 +769,7 @@ local function RefreshLogContent()
 
     InvalidateLogRender()
     local renderToken = MainFrame.logRenderToken
+    UpdateLogLayoutWidth()
 
     local records, totalMatched = GetFilteredRecords()
     local totalRecords = #records
@@ -1149,6 +1218,12 @@ local function CreateMainFrame()
     MainFrame:HookScript("OnHide", function()
         InvalidateLogRender()
     end)
+    MainFrame:SetScript("OnSizeChanged", function()
+        UpdateLogLayoutWidth()
+        if MainFrame:IsShown() and currentTab == "log" and MainFrame.logState then
+            RefreshVisibleLogRows()
+        end
+    end)
 
     -- 启用调整大小
     MainFrame:SetResizable(true)
@@ -1275,6 +1350,7 @@ local function CreateMainFrame()
 
     MainFrame.logScroll = logScroll
     MainFrame.logContent = logContent
+    UpdateLogLayoutWidth()
 
     -- 名单滚动框架
     local listScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")

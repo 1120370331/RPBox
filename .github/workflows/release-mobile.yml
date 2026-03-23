@@ -1,0 +1,285 @@
+name: Release Mobile
+
+on:
+  push:
+    tags:
+      - 'mobile-v*'
+
+env:
+  NODE_VERSION: '20'
+  JAVA_VERSION: '17'
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/mobile-v}" >> $GITHUB_OUTPUT
+
+      - name: Sync mobile package version
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          export VERSION
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          package_path = Path("mobile/package.json")
+          package = json.loads(package_path.read_text(encoding="utf-8"))
+          package["version"] = version
+          package_path.write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Build mobile web assets
+        run: pnpm --filter rpbox-mobile build
+
+      - name: Prepare Android project
+        run: |
+          cd mobile
+          if [ ! -d android ]; then
+            pnpm exec cap add android
+          fi
+          pnpm exec cap sync android
+
+      - name: Build unsigned release APK
+        run: |
+          cd mobile/android
+          ./gradlew assembleRelease
+
+      - name: Sign Android release
+        id: sign
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: mobile/android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Prepare artifacts and metadata
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          NOTES_FILE="mobile/release-notes/${VERSION}.txt"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RELEASE_BASE_URL="${{ secrets.MOBILE_RELEASE_BASE_URL }}"
+          if [ -z "$RELEASE_BASE_URL" ]; then
+            RELEASE_BASE_URL="https://api.rpbox.app/releases/mobile"
+          fi
+
+          mkdir -p artifacts
+
+          SIGNED_APK="${{ steps.sign.outputs.signedReleaseFile }}"
+          SIGNED_APK=$(echo "$SIGNED_APK" | cut -d':' -f1)
+          if [ ! -f "$SIGNED_APK" ]; then
+            SIGNED_APK=$(find mobile/android/app/build/outputs/apk/release -name "*-signed.apk" -type f | head -n1)
+          fi
+          [ -z "$SIGNED_APK" ] && { echo "ERROR: signed apk not found"; exit 1; }
+
+          cp "$SIGNED_APK" "artifacts/RPBox_${VERSION}_android.apk"
+
+          export VERSION NOTES_FILE PUB_DATE RELEASE_BASE_URL
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          notes_file = Path(os.environ["NOTES_FILE"])
+          pub_date = os.environ["PUB_DATE"].strip()
+          release_base_url = os.environ["RELEASE_BASE_URL"].rstrip("/")
+
+          notes = ""
+          if notes_file.exists():
+            notes = notes_file.read_text(encoding="utf-8").strip().replace("\r\n", "\n").replace("\r", "\n")
+
+          data = {
+            "latest_version": version,
+            "notes": notes,
+            "pub_date": pub_date,
+            "url": f"{release_base_url}/{version}/RPBox_{version}_android.apk",
+            "mandatory": False,
+          }
+          Path("artifacts/latest-android.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+          )
+          PY
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-artifacts
+          path: artifacts/**
+          if-no-files-found: error
+
+  deploy-android:
+    name: Deploy Android Release
+    runs-on: ubuntu-latest
+    needs: build-android
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mobile-android-artifacts
+          path: artifacts
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload Android release and metadata
+        run: |
+          VERSION="${{ needs.build-android.outputs.version }}"
+          REMOTE_BASE="${{ secrets.MOBILE_RELEASE_PATH }}"
+          if [ -z "$REMOTE_BASE" ]; then
+            REMOTE_BASE="${{ secrets.RELEASE_PATH }}/mobile"
+          fi
+          REMOTE_DIR="$REMOTE_BASE/$VERSION"
+
+          APK_PATH="artifacts/RPBox_${VERSION}_android.apk"
+          META_PATH="artifacts/latest-android.json"
+          [ ! -f "$APK_PATH" ] && { echo "ERROR: apk artifact missing"; exit 1; }
+          [ ! -f "$META_PATH" ] && { echo "ERROR: latest-android.json missing"; exit 1; }
+
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
+          scp -P 2233 -C "$APK_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          scp -P 2233 -C "$META_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          scp -P 2233 -C "$META_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_BASE/latest-android.json
+
+  deploy-ios-metadata:
+    name: Deploy iOS Metadata
+    runs-on: ubuntu-latest
+    if: ${{ secrets.IOS_APP_STORE_URL != '' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/mobile-v}" >> $GITHUB_OUTPUT
+
+      - name: Prepare iOS metadata
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          NOTES_FILE="mobile/release-notes/${VERSION}.txt"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          APP_STORE_URL="${{ secrets.IOS_APP_STORE_URL }}"
+          export VERSION NOTES_FILE PUB_DATE APP_STORE_URL
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          notes_file = Path(os.environ["NOTES_FILE"])
+          pub_date = os.environ["PUB_DATE"].strip()
+          app_store_url = os.environ["APP_STORE_URL"].strip()
+
+          notes = ""
+          if notes_file.exists():
+            notes = notes_file.read_text(encoding="utf-8").strip().replace("\r\n", "\n").replace("\r", "\n")
+
+          data = {
+            "latest_version": version,
+            "notes": notes,
+            "pub_date": pub_date,
+            "url": app_store_url,
+            "mandatory": False,
+          }
+          Path("latest-ios.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+          )
+          PY
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload iOS metadata
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          REMOTE_BASE="${{ secrets.MOBILE_RELEASE_PATH }}"
+          if [ -z "$REMOTE_BASE" ]; then
+            REMOTE_BASE="${{ secrets.RELEASE_PATH }}/mobile"
+          fi
+          REMOTE_DIR="$REMOTE_BASE/$VERSION"
+
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
+          scp -P 2233 -C latest-ios.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
+          scp -P 2233 -C latest-ios.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_BASE/latest-ios.json
+
+  update-pages:
+    name: Update GitHub Pages
+    runs-on: ubuntu-latest
+    needs: deploy-android
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/mobile-v}" >> $GITHUB_OUTPUT
+
+      - name: Update fallback mobile version in download.html
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/var fallbackAndroidVersion = '.*'/var fallbackAndroidVersion = '${VERSION}'/" shared/download.html
+          echo "Updated fallbackAndroidVersion to ${VERSION}"
+          grep fallbackAndroidVersion shared/download.html
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add shared/download.html
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update download page fallback mobile version to mobile-v${{ steps.version.outputs.VERSION }}"
+          git push origin main

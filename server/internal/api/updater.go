@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/config"
@@ -20,6 +22,7 @@ type UpdateResponse struct {
 	// 单平台响应格式
 	URL       string `json:"url,omitempty"`
 	Signature string `json:"signature,omitempty"`
+	Mandatory bool   `json:"mandatory,omitempty"`
 }
 
 // Platform 平台信息
@@ -30,15 +33,30 @@ type Platform struct {
 
 type LatestRelease struct {
 	LatestVersion string `json:"latest_version"`
+	Version       string `json:"version"`
 	Notes         string `json:"notes"`
 	PubDate       string `json:"pub_date"`
 }
 
+type MobileLatestRelease struct {
+	LatestVersion string `json:"latest_version"`
+	Version       string `json:"version"`
+	Notes         string `json:"notes"`
+	PubDate       string `json:"pub_date"`
+	URL           string `json:"url"`
+	Mandatory     bool   `json:"mandatory"`
+}
+
 // checkUpdate 检查客户端更新
 func (s *Server) checkUpdate(c *gin.Context) {
-	target := c.Param("target")
+	target := strings.ToLower(c.Param("target"))
 	arch := c.Param("arch")
 	currentVersion := c.Param("current_version")
+
+	if target == "android" || target == "ios" {
+		s.checkMobileUpdate(c, target, currentVersion)
+		return
+	}
 
 	// 读取最新版本信息
 	latestVersion := config.Get().Updater.LatestVersion
@@ -64,8 +82,8 @@ func (s *Server) checkUpdate(c *gin.Context) {
 	// 调试日志
 	fmt.Printf("checkUpdate: current=%s latest=%s\n", currentVersion, latestVersion)
 
-	// 如果当前版本已是最新，返回 204 No Content
-	if currentVersion == latestVersion {
+	// 当前版本已是最新（或比服务端高），返回 204 No Content
+	if !isNewerVersion(latestVersion, currentVersion) {
 		c.Status(http.StatusNoContent)
 		return
 	}
@@ -114,6 +132,58 @@ func (s *Server) checkUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+func (s *Server) checkMobileUpdate(c *gin.Context, target, currentVersion string) {
+	var platformCfg config.MobilePlatformUpdaterConfig
+	switch target {
+	case "android":
+		platformCfg = config.Get().Updater.Mobile.Android
+	case "ios":
+		platformCfg = config.Get().Updater.Mobile.IOS
+	default:
+		c.Status(http.StatusNoContent)
+		return
+	}
+
+	latestVersion := platformCfg.LatestVersion
+	notes := platformCfg.ReleaseNotes
+	pubDate := platformCfg.PubDate
+	url := platformCfg.URL
+	mandatory := platformCfg.Mandatory
+
+	if latest, err := readMobileLatestRelease(target); err == nil {
+		if latest.LatestVersion != "" {
+			latestVersion = latest.LatestVersion
+		}
+		if latest.Notes != "" {
+			notes = latest.Notes
+		}
+		if latest.PubDate != "" {
+			pubDate = latest.PubDate
+		}
+		if latest.URL != "" {
+			url = latest.URL
+		}
+		mandatory = latest.Mandatory
+	} else if !os.IsNotExist(err) {
+		fmt.Printf("checkMobileUpdate: failed to read %s metadata: %v\n", target, err)
+	}
+
+	fmt.Printf("checkMobileUpdate: target=%s current=%s latest=%s\n", target, currentVersion, latestVersion)
+
+	if latestVersion == "" || url == "" || !isNewerVersion(latestVersion, currentVersion) {
+		c.Status(http.StatusNoContent)
+		return
+	}
+
+	c.JSON(http.StatusOK, UpdateResponse{
+		Version:   normalizeVersion(latestVersion),
+		Notes:     notes,
+		PubDate:   pubDate,
+		URL:       url,
+		Mandatory: mandatory,
+	})
+}
+
 // getSignature 获取签名文件内容
 func getSignature(version, sigFileName string) string {
 	// 默认从 releases 目录读取签名
@@ -136,8 +206,116 @@ func readLatestRelease() (*LatestRelease, error) {
 	if err := json.Unmarshal(data, &latest); err != nil {
 		return nil, err
 	}
+	if latest.LatestVersion == "" && latest.Version != "" {
+		latest.LatestVersion = latest.Version
+	}
 	if latest.LatestVersion == "" {
 		return nil, fmt.Errorf("latest.json missing latest_version")
 	}
 	return &latest, nil
+}
+
+func readMobileLatestRelease(target string) (*MobileLatestRelease, error) {
+	latestPath := filepath.Join("releases", "mobile", "latest-"+target+".json")
+	data, err := os.ReadFile(latestPath)
+	if err != nil {
+		return nil, err
+	}
+	var latest MobileLatestRelease
+	if err := json.Unmarshal(data, &latest); err != nil {
+		return nil, err
+	}
+	if latest.LatestVersion == "" && latest.Version != "" {
+		latest.LatestVersion = latest.Version
+	}
+	return &latest, nil
+}
+
+func isNewerVersion(latestVersion, currentVersion string) bool {
+	latest := normalizeVersion(latestVersion)
+	current := normalizeVersion(currentVersion)
+	if latest == "" {
+		return false
+	}
+	if current == "" {
+		return true
+	}
+
+	if cmp, ok := compareVersions(latest, current); ok {
+		return cmp > 0
+	}
+
+	return latest != current
+}
+
+func compareVersions(a, b string) (int, bool) {
+	pa, ok := parseVersionParts(a)
+	if !ok {
+		return 0, false
+	}
+	pb, ok := parseVersionParts(b)
+	if !ok {
+		return 0, false
+	}
+
+	maxLen := len(pa)
+	if len(pb) > maxLen {
+		maxLen = len(pb)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		ai := 0
+		bi := 0
+		if i < len(pa) {
+			ai = pa[i]
+		}
+		if i < len(pb) {
+			bi = pb[i]
+		}
+		if ai > bi {
+			return 1, true
+		}
+		if ai < bi {
+			return -1, true
+		}
+	}
+
+	return 0, true
+}
+
+func parseVersionParts(version string) ([]int, bool) {
+	normalized := normalizeVersion(version)
+	if normalized == "" {
+		return nil, false
+	}
+
+	// 忽略 pre-release/build 元数据，如 1.2.3-beta+001。
+	if idx := strings.IndexAny(normalized, "-+"); idx > 0 {
+		normalized = normalized[:idx]
+	}
+
+	parts := strings.Split(normalized, ".")
+	result := make([]int, len(parts))
+	for i, part := range parts {
+		if part == "" {
+			return nil, false
+		}
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, false
+		}
+		result[i] = n
+	}
+	return result, true
+}
+
+func normalizeVersion(version string) string {
+	v := strings.TrimSpace(version)
+	if v == "" {
+		return ""
+	}
+	if strings.HasPrefix(v, "v") || strings.HasPrefix(v, "V") {
+		v = v[1:]
+	}
+	return strings.TrimSpace(v)
 }

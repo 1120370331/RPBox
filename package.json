@@ -1,0 +1,9 @@
+{
+  "name": "rpbox",
+  "private": true,
+  "scripts": {
+    "dev:mobile": "pnpm --filter rpbox-mobile dev",
+    "dev:client": "pnpm --filter rpbox-client dev",
+    "build:mobile": "pnpm --filter rpbox-mobile build"
+  }
+}

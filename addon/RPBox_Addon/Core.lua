@@ -4,7 +4,7 @@
 local ADDON_NAME, ns = ...
 
 -- 版本信息
-ns.VERSION = "1.0.9"
+ns.VERSION = "1.0.11"
 
 -- 公开 API
 RPBox_API = ns

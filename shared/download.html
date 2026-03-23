@@ -355,7 +355,10 @@
 
             var hasDownload = !!els.button;
             var fallbackVersion = '0.2.11';
+            var fallbackAndroidVersion = '0.1.0';
             var fallbackBase = 'https://ksxvodevhonx.sealosbja.site/releases';
+            var fallbackMobileBase = 'https://ksxvodevhonx.sealosbja.site/releases/mobile';
+            var fallbackIosUrl = 'https://apps.apple.com/app/rpbox/id1234567890';
 
             function isLocalHost(hostname) {
                 return hostname === 'localhost' || hostname === '127.0.0.1';
@@ -520,7 +523,11 @@
                 var arch = 'x86_64';
                 var ua = navigator.userAgent || '';
 
-                if (/Macintosh|Mac OS X/i.test(ua)) {
+                if (/Android/i.test(ua)) {
+                    target = 'android';
+                } else if (/iPhone|iPad|iPod/i.test(ua)) {
+                    target = 'ios';
+                } else if (/Macintosh|Mac OS X/i.test(ua)) {
                     target = 'darwin';
                 } else if (/Linux/i.test(ua) && !/Android/i.test(ua)) {
                     target = 'linux';
@@ -535,6 +542,8 @@
                 if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
                     try {
                         var data = await navigator.userAgentData.getHighEntropyValues(['architecture', 'platform']);
+                        if (data.platform === 'Android') target = 'android';
+                        if (data.platform === 'iOS') target = 'ios';
                         if (data.platform === 'macOS') target = 'darwin';
                         if (data.platform === 'Windows') target = 'windows';
                         if (data.platform === 'Linux') target = 'linux';
@@ -547,8 +556,12 @@
                     }
                 }
 
-                var label = target === 'darwin' ? 'macOS' : target === 'linux' ? 'Linux' : 'Windows';
-                var archLabel = arch === 'aarch64' ? 'ARM64' : 'x64';
+                var label = target === 'darwin' ? 'macOS'
+                    : target === 'linux' ? 'Linux'
+                    : target === 'android' ? 'Android'
+                    : target === 'ios' ? 'iOS'
+                    : 'Windows';
+                var archLabel = (target === 'android' || target === 'ios') ? '' : (arch === 'aarch64' ? 'ARM64' : 'x64');
                 return { target: target, arch: arch, label: label, archLabel: archLabel };
             }
 
@@ -559,11 +572,20 @@
                 setLoading(true);
 
                 var platform = await detectPlatform();
+                var labelSuffix = platform.archLabel ? (' ' + platform.archLabel) : '';
                 if (els.label) {
-                    els.label.textContent = '下载 ' + platform.label + ' ' + platform.archLabel + ' 版';
+                    els.label.textContent = '下载 ' + platform.label + labelSuffix + ' 版';
                 }
                 if (els.support) {
-                    els.support.textContent = platform.label === 'Windows' ? '支持 Win10/11' : '支持 ' + platform.label;
+                    if (platform.target === 'windows') {
+                        els.support.textContent = '支持 Win10/11';
+                    } else if (platform.target === 'android') {
+                        els.support.textContent = '支持 Android 8.0+';
+                    } else if (platform.target === 'ios') {
+                        els.support.textContent = '通过 App Store 安装';
+                    } else {
+                        els.support.textContent = '支持 ' + platform.label;
+                    }
                 }
 
                 var apiBase = getApiBase();
@@ -594,11 +616,30 @@
                     setDisabled(false);
                     setLoading(false);
                 } catch (err) {
-                    var fallbackUrl = sanitizeDownloadUrl(fallbackBase + '/' + fallbackVersion + '/RPBox_' + fallbackVersion + '_x64-setup.exe', fallbackBase);
+                    var fallbackUrl = '';
+                    if (platform.target === 'android') {
+                        fallbackUrl = sanitizeDownloadUrl(
+                            fallbackMobileBase + '/' + fallbackAndroidVersion + '/RPBox_' + fallbackAndroidVersion + '_android.apk',
+                            fallbackMobileBase
+                        );
+                    } else if (platform.target === 'ios') {
+                        fallbackUrl = sanitizeDownloadUrl(fallbackIosUrl, fallbackMobileBase);
+                    } else {
+                        fallbackUrl = sanitizeDownloadUrl(
+                            fallbackBase + '/' + fallbackVersion + '/RPBox_' + fallbackVersion + '_x64-setup.exe',
+                            fallbackBase
+                        );
+                    }
                     if (fallbackUrl) {
                         applyDownloadLink(fallbackUrl);
                         if (els.badge) {
-                            els.badge.textContent = 'v' + fallbackVersion + ' Windows 版现已发布';
+                            if (platform.target === 'android') {
+                                els.badge.textContent = 'v' + fallbackAndroidVersion + ' Android 版现已发布';
+                            } else if (platform.target === 'ios') {
+                                els.badge.textContent = 'iOS 版可通过 App Store 下载';
+                            } else {
+                                els.badge.textContent = 'v' + fallbackVersion + ' Windows 版现已发布';
+                            }
                         }
                         setStatus('已切换到稳定下载地址', false);
                         setDisabled(false);

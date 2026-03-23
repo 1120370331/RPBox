@@ -9,25 +9,39 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	Storage  StorageConfig  `mapstructure:"storage"`
-	OSS      OSSConfig      `mapstructure:"oss"`
-	Backup   BackupConfig   `mapstructure:"backup"`
-	Updater  UpdaterConfig  `mapstructure:"updater"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	SMTP     SMTPConfig     `mapstructure:"smtp"`
-	CORS     CORSConfig     `mapstructure:"cors"`
+	Server    ServerConfig    `mapstructure:"server"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
+	Storage   StorageConfig   `mapstructure:"storage"`
+	OSS       OSSConfig       `mapstructure:"oss"`
+	Backup    BackupConfig    `mapstructure:"backup"`
+	Updater   UpdaterConfig   `mapstructure:"updater"`
+	Redis     RedisConfig     `mapstructure:"redis"`
+	SMTP      SMTPConfig      `mapstructure:"smtp"`
+	CORS      CORSConfig      `mapstructure:"cors"`
 	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
 }
 
 type UpdaterConfig struct {
+	LatestVersion string              `mapstructure:"latest_version"`
+	BaseURL       string              `mapstructure:"base_url"`
+	ReleaseNotes  string              `mapstructure:"release_notes"`
+	PubDate       string              `mapstructure:"pub_date"`
+	SignatureDir  string              `mapstructure:"signature_dir"`
+	Mobile        MobileUpdaterConfig `mapstructure:"mobile"`
+}
+
+type MobileUpdaterConfig struct {
+	Android MobilePlatformUpdaterConfig `mapstructure:"android"`
+	IOS     MobilePlatformUpdaterConfig `mapstructure:"ios"`
+}
+
+type MobilePlatformUpdaterConfig struct {
 	LatestVersion string `mapstructure:"latest_version"`
-	BaseURL       string `mapstructure:"base_url"`
+	URL           string `mapstructure:"url"`
 	ReleaseNotes  string `mapstructure:"release_notes"`
 	PubDate       string `mapstructure:"pub_date"`
-	SignatureDir  string `mapstructure:"signature_dir"`
+	Mandatory     bool   `mapstructure:"mandatory"`
 }
 
 var globalConfig *Config
