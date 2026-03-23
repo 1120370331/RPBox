@@ -58,13 +58,16 @@ func NewServer(cfg *config.Config) *Server {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
+	var cacheClient cache.Cache
+
 	// 验证 Redis 连接
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
-		log.Printf("[Cache] Redis connection failed: %v", err)
+		log.Printf("[Cache] Redis connection failed: %v; fallback to no-cache mode", err)
+		cacheClient = nil
 	} else {
 		log.Printf("[Cache] Redis connected to %s:%s", cfg.Redis.Host, cfg.Redis.Port)
+		cacheClient = cache.NewRedisCache(redisClient, cache.Options{Jitter: 5 * time.Second})
 	}
-	cacheClient := cache.NewRedisCache(redisClient, cache.Options{Jitter: 5 * time.Second})
 
 	// 初始化邮件客户端
 	emailClient := email.NewSMTPClient(&email.SMTPConfig{

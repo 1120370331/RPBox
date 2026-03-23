@@ -300,39 +300,6 @@ onMounted(loadDetail)
           </div>
         </section>
 
-        <section class="bookmark-panel">
-          <button class="bookmark-toggle" @click="bookmarkPanelOpen = !bookmarkPanelOpen"><i class="ri-bookmark-line" /> {{ $t('stories.detail.bookmarks') }} ({{ sortedBookmarks.length }})</button>
-          <div v-if="bookmarkPanelOpen" class="bookmark-list">
-            <div v-if="publicBookmarks.length > 0" class="bookmark-group-title">{{ $t('stories.detail.publicBookmarks') }}</div>
-            <button v-for="bookmark in publicBookmarks" :key="`pub-${bookmark.id}`" class="bookmark-item" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="scrollToEntry(bookmark.entry_id)">
-              <div class="bookmark-main">
-                <strong>{{ bookmark.name }}</strong>
-                <p>{{ getBookmarkPreview(bookmark.entry_id) }}</p>
-              </div>
-              <div class="bookmark-actions">
-                <button class="icon-btn" @click.stop="openEditBookmark(bookmark)"><i class="ri-edit-line" /></button>
-                <button class="icon-btn danger" @click.stop="openDeleteBookmark(bookmark.id)"><i class="ri-delete-bin-line" /></button>
-              </div>
-            </button>
-
-            <div class="bookmark-group-title">{{ $t('stories.detail.myBookmarks') }}</div>
-            <button v-for="bookmark in myBookmarks" :key="`mine-${bookmark.id}`" class="bookmark-item" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="scrollToEntry(bookmark.entry_id)">
-              <div class="bookmark-main">
-                <strong>{{ bookmark.name }}</strong>
-                <p>{{ getBookmarkPreview(bookmark.entry_id) }}</p>
-              </div>
-              <div class="bookmark-actions">
-                <button v-if="!bookmark.is_auto" class="icon-btn" @click.stop="toggleBookmarkFavorite(bookmark)">
-                  <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'" />
-                </button>
-                <button v-if="!bookmark.is_auto" class="icon-btn" @click.stop="openEditBookmark(bookmark)"><i class="ri-edit-line" /></button>
-                <button v-if="!bookmark.is_auto" class="icon-btn danger" @click.stop="openDeleteBookmark(bookmark.id)"><i class="ri-delete-bin-line" /></button>
-              </div>
-            </button>
-            <div v-if="sortedBookmarks.length === 0" class="bookmark-empty">{{ $t('stories.detail.noBookmarks') }}</div>
-          </div>
-        </section>
-
         <section v-if="manageMode" class="batch-bar">
           <button class="batch-btn" @click="toggleSelectAll">{{ isAllSelected ? $t('stories.detail.unselectAll') : $t('stories.detail.selectAll') }}</button>
           <span class="batch-count">{{ $t('stories.detail.selectedCount', { n: selectedEntryIds.length }) }}</span>
@@ -383,6 +350,55 @@ onMounted(loadDetail)
       </template>
     </div>
 
+    <button
+      v-if="story"
+      class="bookmark-fab"
+      :class="{ active: bookmarkPanelOpen }"
+      @click="bookmarkPanelOpen = !bookmarkPanelOpen"
+    >
+      <i class="ri-bookmark-line" />
+      <span>{{ sortedBookmarks.length }}</span>
+    </button>
+
+    <div v-if="bookmarkPanelOpen" class="bookmark-popup-mask" @click="bookmarkPanelOpen = false">
+      <section class="bookmark-popup" @click.stop>
+        <header class="bookmark-popup-head">
+          <strong>{{ $t('stories.detail.bookmarks') }}</strong>
+          <button class="icon-btn" @click="bookmarkPanelOpen = false"><i class="ri-close-line" /></button>
+        </header>
+
+        <div class="bookmark-list">
+          <div v-if="publicBookmarks.length > 0" class="bookmark-group-title">{{ $t('stories.detail.publicBookmarks') }}</div>
+          <button v-for="bookmark in publicBookmarks" :key="`pub-${bookmark.id}`" class="bookmark-item" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="scrollToEntry(bookmark.entry_id)">
+            <div class="bookmark-main">
+              <strong>{{ bookmark.name }}</strong>
+              <p>{{ getBookmarkPreview(bookmark.entry_id) }}</p>
+            </div>
+            <div class="bookmark-actions">
+              <button class="icon-btn" @click.stop="openEditBookmark(bookmark)"><i class="ri-edit-line" /></button>
+              <button class="icon-btn danger" @click.stop="openDeleteBookmark(bookmark.id)"><i class="ri-delete-bin-line" /></button>
+            </div>
+          </button>
+
+          <div class="bookmark-group-title">{{ $t('stories.detail.myBookmarks') }}</div>
+          <button v-for="bookmark in myBookmarks" :key="`mine-${bookmark.id}`" class="bookmark-item" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="scrollToEntry(bookmark.entry_id)">
+            <div class="bookmark-main">
+              <strong>{{ bookmark.name }}</strong>
+              <p>{{ getBookmarkPreview(bookmark.entry_id) }}</p>
+            </div>
+            <div class="bookmark-actions">
+              <button v-if="!bookmark.is_auto" class="icon-btn" @click.stop="toggleBookmarkFavorite(bookmark)">
+                <i :class="bookmark.is_favorite ? 'ri-star-fill' : 'ri-star-line'" />
+              </button>
+              <button v-if="!bookmark.is_auto" class="icon-btn" @click.stop="openEditBookmark(bookmark)"><i class="ri-edit-line" /></button>
+              <button v-if="!bookmark.is_auto" class="icon-btn danger" @click.stop="openDeleteBookmark(bookmark.id)"><i class="ri-delete-bin-line" /></button>
+            </div>
+          </button>
+          <div v-if="sortedBookmarks.length === 0" class="bookmark-empty">{{ $t('stories.detail.noBookmarks') }}</div>
+        </div>
+      </section>
+    </div>
+
     <div v-if="showEditDialog" class="dialog-mask"><div class="dialog"><h3>{{ $t('stories.detail.editEntry') }}</h3><div class="form-grid">
       <label v-if="editType !== 'image'"><span>{{ $t('stories.detail.speaker') }}</span><input v-model="editSpeaker" /></label>
       <label v-if="editType !== 'image'"><span>{{ $t('stories.detail.channel') }}</span><select v-model="editChannel"><option value="SAY">{{ $t('stories.channel.say') }}</option><option value="YELL">{{ $t('stories.channel.yell') }}</option><option value="WHISPER">{{ $t('stories.channel.whisper') }}</option><option value="EMOTE">{{ $t('stories.channel.emote') }}</option><option value="PARTY">{{ $t('stories.channel.party') }}</option><option value="RAID">{{ $t('stories.channel.raid') }}</option></select></label>
@@ -407,12 +423,71 @@ onMounted(loadDetail)
 .sub-header { gap: 8px; }
 .sub-header h1 { flex: 1; }
 .manage-btn { border: 1px solid var(--color-border); background: var(--color-panel-bg); color: var(--text-dark); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
-.story-summary, .bookmark-panel, .batch-bar, .group-block { background: var(--color-card-bg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 12px; margin-bottom: 12px; }
+.story-summary, .batch-bar, .group-block { background: var(--color-card-bg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 12px; margin-bottom: 12px; }
 .story-summary h2 { font-size: 17px; margin-bottom: 8px; }
 .story-summary p { font-size: 14px; color: var(--color-text-secondary); line-height: 1.6; }
 .meta-row { margin-top: 10px; display: flex; gap: 12px; font-size: 12px; color: var(--color-text-secondary); }
-.bookmark-toggle { width: 100%; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; background: var(--color-panel-bg); text-align: left; font-size: 13px; }
-.bookmark-list { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.bookmark-fab {
+  position: fixed;
+  left: 14px;
+  bottom: calc(var(--tab-bar-height) + var(--safe-bottom, 0px) + 12px);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-primary);
+  color: var(--text-light);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  z-index: 900;
+}
+.bookmark-fab i { font-size: 20px; }
+.bookmark-fab span {
+  position: absolute;
+  right: -2px;
+  top: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.bookmark-fab.active {
+  background: var(--color-secondary);
+}
+.bookmark-popup-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  z-index: 920;
+}
+.bookmark-popup {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--tab-bar-height) + var(--safe-bottom, 0px) + 72px);
+  max-height: min(58vh, 480px);
+  overflow: auto;
+  background: var(--color-card-bg);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  padding: 10px;
+}
+.bookmark-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.bookmark-popup-head strong {
+  font-size: 14px;
+}
+.bookmark-list { display: flex; flex-direction: column; gap: 8px; }
 .bookmark-group-title { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; margin-bottom: 2px; }
 .bookmark-item { border: 1px solid var(--color-border-light); border-left: 4px solid var(--color-border); border-radius: 8px; background: var(--color-panel-bg); padding: 8px; display: flex; justify-content: space-between; gap: 8px; text-align: left; }
 .bookmark-main strong { font-size: 12px; }
