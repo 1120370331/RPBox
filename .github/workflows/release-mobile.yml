@@ -2,9 +2,6 @@ name: Release Mobile
 
 on:
   push:
-    branches:
-      - main
-      - master
     tags:
       - 'mobile-v*'
   workflow_dispatch:
@@ -97,7 +94,10 @@ jobs:
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           RELEASE_BASE_URL="${{ secrets.MOBILE_RELEASE_BASE_URL }}"
           if [ -z "$RELEASE_BASE_URL" ]; then
-            RELEASE_BASE_URL="https://api.rpbox.app/releases/mobile"
+            RELEASE_BASE_URL="${{ secrets.RELEASE_BASE_URL }}/mobile"
+          fi
+          if [ -z "$RELEASE_BASE_URL" ] || [ "$RELEASE_BASE_URL" = "/mobile" ]; then
+            RELEASE_BASE_URL="https://ksxvodevhonx.sealosbja.site/releases/mobile"
           fi
 
           mkdir -p artifacts
