@@ -469,12 +469,12 @@
                 }
             }
 
-            function applyFallbackDownload(platform) {
+            function applyFallbackDownload(platform, apiBase) {
                 var fallbackUrl = '';
                 if (platform.target === 'android') {
                     fallbackUrl = sanitizeDownloadUrl(
-                        fallbackMobileBase + '/' + fallbackAndroidVersion + '/RPBox_' + fallbackAndroidVersion + '_android.apk',
-                        fallbackMobileBase
+                        apiBase + '/mobile/android/latest/download',
+                        apiBase
                     );
                 } else if (platform.target === 'ios') {
                     fallbackUrl = sanitizeDownloadUrl(fallbackIosUrl, fallbackMobileBase);
@@ -492,7 +492,7 @@
                 applyDownloadLink(fallbackUrl);
                 if (els.badge) {
                     if (platform.target === 'android') {
-                        els.badge.textContent = 'v' + fallbackAndroidVersion + ' Android 版现已发布';
+                        els.badge.textContent = 'Android 最新版现已发布';
                     } else if (platform.target === 'ios') {
                         els.badge.textContent = 'iOS 版可通过 App Store 下载';
                     } else {
@@ -641,7 +641,7 @@
                 try {
                     var res = await fetch(updateUrl, { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store' });
                     if (res.status === 204) {
-                        if (!applyFallbackDownload(platform)) {
+                        if (!applyFallbackDownload(platform, apiBase)) {
                             setStatus('当前平台暂无可用下载', true);
                             setDisabled(true);
                             setLoading(false);
@@ -667,7 +667,7 @@
                     setDisabled(false);
                     setLoading(false);
                 } catch (err) {
-                    if (applyFallbackDownload(platform)) {
+                    if (applyFallbackDownload(platform, apiBase)) {
                         return;
                     }
                     setStatus('下载链接暂不可用，请稍后再试', true);

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -133,6 +134,63 @@ func (s *Server) checkUpdate(c *gin.Context) {
 }
 
 func (s *Server) checkMobileUpdate(c *gin.Context, target, currentVersion string) {
+	latest, ok := s.resolveMobileLatestRelease(target)
+	if !ok {
+		c.Status(http.StatusNoContent)
+		return
+	}
+
+	fmt.Printf("checkMobileUpdate: target=%s current=%s latest=%s\n", target, currentVersion, latest.LatestVersion)
+
+	if latest.LatestVersion == "" || latest.URL == "" || !isNewerVersion(latest.LatestVersion, currentVersion) {
+		c.Status(http.StatusNoContent)
+		return
+	}
+
+	c.JSON(http.StatusOK, UpdateResponse{
+		Version:   normalizeVersion(latest.LatestVersion),
+		Notes:     latest.Notes,
+		PubDate:   latest.PubDate,
+		URL:       latest.URL,
+		Mandatory: latest.Mandatory,
+	})
+}
+
+// getMobileLatest 返回移动端稳定 latest 元信息。
+func (s *Server) getMobileLatest(c *gin.Context) {
+	target := strings.ToLower(c.Param("target"))
+	latest, ok := s.resolveMobileLatestRelease(target)
+	if !ok || latest.LatestVersion == "" || latest.URL == "" {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "latest release not found",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, latest)
+}
+
+// downloadMobileLatest 稳定下载入口，始终重定向到当前 latest 包地址。
+func (s *Server) downloadMobileLatest(c *gin.Context) {
+	target := strings.ToLower(c.Param("target"))
+	latest, ok := s.resolveMobileLatestRelease(target)
+	if !ok || latest.URL == "" {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "latest release not found",
+		})
+		return
+	}
+	if _, err := url.ParseRequestURI(latest.URL); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "latest release url is invalid",
+		})
+		return
+	}
+
+	c.Redirect(http.StatusFound, latest.URL)
+}
+
+func (s *Server) resolveMobileLatestRelease(target string) (*MobileLatestRelease, bool) {
 	var platformCfg config.MobilePlatformUpdaterConfig
 	switch target {
 	case "android":
@@ -140,48 +198,47 @@ func (s *Server) checkMobileUpdate(c *gin.Context, target, currentVersion string
 	case "ios":
 		platformCfg = config.Get().Updater.Mobile.IOS
 	default:
-		c.Status(http.StatusNoContent)
-		return
+		return nil, false
 	}
 
-	latestVersion := platformCfg.LatestVersion
-	notes := platformCfg.ReleaseNotes
-	pubDate := platformCfg.PubDate
-	url := platformCfg.URL
-	mandatory := platformCfg.Mandatory
+	latest := &MobileLatestRelease{
+		LatestVersion: platformCfg.LatestVersion,
+		Notes:         platformCfg.ReleaseNotes,
+		PubDate:       platformCfg.PubDate,
+		URL:           platformCfg.URL,
+		Mandatory:     platformCfg.Mandatory,
+	}
+	latest.Version = latest.LatestVersion
 
-	if latest, err := readMobileLatestRelease(target); err == nil {
-		if latest.LatestVersion != "" {
-			latestVersion = latest.LatestVersion
+	if metadata, err := readMobileLatestRelease(target); err == nil {
+		if metadata.LatestVersion != "" {
+			latest.LatestVersion = metadata.LatestVersion
 		}
-		if latest.Notes != "" {
-			notes = latest.Notes
+		if metadata.Version != "" {
+			latest.Version = metadata.Version
 		}
-		if latest.PubDate != "" {
-			pubDate = latest.PubDate
+		if metadata.Notes != "" {
+			latest.Notes = metadata.Notes
 		}
-		if latest.URL != "" {
-			url = latest.URL
+		if metadata.PubDate != "" {
+			latest.PubDate = metadata.PubDate
 		}
-		mandatory = latest.Mandatory
+		if metadata.URL != "" {
+			latest.URL = metadata.URL
+		}
+		latest.Mandatory = metadata.Mandatory
 	} else if !os.IsNotExist(err) {
-		fmt.Printf("checkMobileUpdate: failed to read %s metadata: %v\n", target, err)
+		fmt.Printf("resolveMobileLatestRelease: failed to read %s metadata: %v\n", target, err)
 	}
 
-	fmt.Printf("checkMobileUpdate: target=%s current=%s latest=%s\n", target, currentVersion, latestVersion)
-
-	if latestVersion == "" || url == "" || !isNewerVersion(latestVersion, currentVersion) {
-		c.Status(http.StatusNoContent)
-		return
+	if latest.LatestVersion == "" && latest.Version != "" {
+		latest.LatestVersion = latest.Version
+	}
+	if latest.Version == "" {
+		latest.Version = latest.LatestVersion
 	}
 
-	c.JSON(http.StatusOK, UpdateResponse{
-		Version:   normalizeVersion(latestVersion),
-		Notes:     notes,
-		PubDate:   pubDate,
-		URL:       url,
-		Mandatory: mandatory,
-	})
+	return latest, true
 }
 
 // getSignature 获取签名文件内容
