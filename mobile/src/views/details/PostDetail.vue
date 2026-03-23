@@ -308,26 +308,30 @@ onMounted(loadPostDetail)
 </template>
 
 <style scoped>
+.sub-body {
+  padding-bottom: calc(28px + var(--safe-bottom, 0px));
+}
+
 .post-main {
   background: var(--color-card-bg);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 14px;
-  margin-bottom: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
 }
 
 .cover {
   width: 100%;
-  height: 180px;
+  height: min(46vw, 220px);
   object-fit: cover;
   border-radius: var(--radius-sm);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .post-main h2 {
-  font-size: 18px;
-  line-height: 1.4;
-  margin-bottom: 8px;
+  font-size: 19px;
+  line-height: 1.5;
+  margin-bottom: 10px;
 }
 
 .author-row {
@@ -336,7 +340,7 @@ onMounted(loadPostDetail)
   gap: 6px;
   font-size: 12px;
   color: var(--color-text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .author-avatar {
@@ -355,14 +359,14 @@ onMounted(loadPostDetail)
 }
 
 .content {
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.78;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .content :deep(p) {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
 }
 
 .content :deep(a) {
@@ -380,15 +384,15 @@ onMounted(loadPostDetail)
 .action-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .action-row button {
   border: 1px solid var(--color-border);
   background: var(--color-card-bg);
   border-radius: var(--radius-sm);
-  padding: 10px 0;
+  padding: 11px 0;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -409,13 +413,13 @@ onMounted(loadPostDetail)
   background: var(--color-card-bg);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 14px;
-  margin-bottom: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
 }
 
 .comment-box h3 {
-  font-size: 14px;
-  margin-bottom: 8px;
+  font-size: 15px;
+  margin-bottom: 10px;
 }
 
 .comment-box textarea {
@@ -424,13 +428,13 @@ onMounted(loadPostDetail)
   border-radius: var(--radius-sm);
   padding: 10px;
   resize: vertical;
-  min-height: 84px;
+  min-height: 96px;
   background: var(--input-bg);
 }
 
 .comment-box button {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 10px;
   border: none;
   border-radius: var(--radius-sm);
   background: var(--color-secondary);
@@ -454,7 +458,7 @@ onMounted(loadPostDetail)
   background: var(--color-card-bg);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 10px 12px;
+  padding: 12px 14px;
 }
 
 .comment-item header {
@@ -468,8 +472,26 @@ onMounted(loadPostDetail)
 
 .comment-item p {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.68;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+@media (max-width: 380px) {
+  .post-main {
+    padding: 14px;
+  }
+
+  .post-main h2 {
+    font-size: 17px;
+  }
+
+  .content {
+    font-size: 14px;
+  }
+
+  .action-row {
+    gap: 8px;
+  }
 }
 </style>

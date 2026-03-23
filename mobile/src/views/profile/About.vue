@@ -129,9 +129,14 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.about-body { display: flex; flex-direction: column; gap: 12px; }
+.about-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: calc(20px + var(--safe-bottom, 0px));
+}
 .about-card {
-  background: var(--color-card-bg); border-radius: var(--radius-md); padding: 20px;
+  background: var(--color-card-bg); border-radius: var(--radius-md); padding: 20px 18px;
   box-shadow: var(--shadow-sm); text-align: center;
 }
 .app-icon { font-size: 48px; color: var(--color-accent); margin-bottom: 8px; }
@@ -183,5 +188,15 @@ onMounted(async () => {
 .action-btn.secondary {
   background: var(--color-primary-light);
   color: var(--text-dark);
+}
+
+@media (max-width: 380px) {
+  .about-card {
+    padding: 16px 14px;
+  }
+
+  .about-row {
+    font-size: 13px;
+  }
 }
 </style>

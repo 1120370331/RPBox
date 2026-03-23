@@ -85,19 +85,19 @@ async function handleLogin() {
 
 <style scoped>
 .login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  height: 100%;
+  min-height: 100dvh;
+  overflow-y: auto;
+  padding: clamp(16px, 4.5vh, 40px) 16px calc(clamp(16px, 3vh, 24px) + var(--safe-bottom, 0px));
 }
 
 .login-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
+  margin: max(8px, 3vh) auto;
   background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
-  padding: 32px 24px;
+  padding: clamp(20px, 3.2vh, 30px) clamp(16px, 4.2vw, 24px);
   box-shadow: var(--shadow-md);
   opacity: 0;
   transform: translateY(20px);
@@ -109,18 +109,18 @@ async function handleLogin() {
   transform: translateY(0);
 }
 
-.login-header { text-align: center; margin-bottom: 28px; }
-.logo { font-size: 28px; font-weight: 700; color: var(--color-primary); margin-bottom: 6px; }
-.subtitle { font-size: 13px; color: var(--color-secondary); }
+.login-header { text-align: center; margin-bottom: clamp(16px, 2.6vh, 26px); }
+.logo { font-size: clamp(24px, 4.8vw, 30px); font-weight: 700; color: var(--color-primary); margin-bottom: 6px; }
+.subtitle { font-size: 13px; color: var(--color-secondary); line-height: 1.45; }
 
-.login-form { display: flex; flex-direction: column; gap: 14px; }
+.login-form { display: flex; flex-direction: column; gap: clamp(10px, 1.9vh, 14px); }
 
 .form-group .input {
   width: 100%;
-  padding: 14px 16px;
+  padding: clamp(12px, 1.9vh, 14px) 14px;
   border: 1px solid var(--input-border);
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 15px;
   background: var(--input-bg);
   color: var(--color-text-main);
 }
@@ -137,12 +137,12 @@ async function handleLogin() {
 
 .btn-login {
   width: 100%;
-  padding: 14px;
+  padding: clamp(12px, 1.9vh, 14px);
   background: var(--color-secondary);
   color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   margin-top: 4px;
 }
@@ -152,4 +152,27 @@ async function handleLogin() {
 
 .login-footer { text-align: center; margin-top: 20px; font-size: 14px; }
 .login-footer a { color: var(--color-accent); text-decoration: none; }
+
+@media (max-height: 700px) {
+  .login-page {
+    padding-top: 12px;
+  }
+
+  .login-card {
+    margin: 8px auto;
+    border-radius: var(--radius-md);
+  }
+
+  .login-header {
+    margin-bottom: 14px;
+  }
+
+  .login-form {
+    gap: 9px;
+  }
+
+  .login-footer {
+    margin-top: 14px;
+  }
+}
 </style>
