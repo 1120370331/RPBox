@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { getGuild, type Guild } from '@/api/guild'
 import { listPosts, POST_CATEGORIES, type ListPostsParams, type PostWithAuthor } from '@/api/post'
 import { resolveApiUrl } from '@/api/image'
+import CachedImage from '@/components/CachedImage.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,6 +20,8 @@ const posts = ref<PostWithAuthor[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = 12
+const requestSerial = ref(0)
+const switchingPage = ref(false)
 
 const searchKeyword = ref('')
 const filterCategory = ref('')
@@ -48,9 +51,13 @@ async function loadGuild() {
 }
 
 async function loadPosts() {
+  const serial = ++requestSerial.value
   if (!guildId.value) return
   loading.value = true
   noPermission.value = false
+  if (switchingPage.value) {
+    posts.value = []
+  }
   try {
     const params: ListPostsParams = {
       page: currentPage.value,
@@ -62,6 +69,7 @@ async function loadPosts() {
     }
     if (filterCategory.value) params.category = filterCategory.value
     const res = await listPosts(params)
+    if (serial !== requestSerial.value) return
     posts.value = res.posts || []
     total.value = res.total || 0
   } catch (error: any) {
@@ -73,7 +81,10 @@ async function loadPosts() {
       noPermission.value = true
     }
   } finally {
-    loading.value = false
+    if (serial === requestSerial.value) {
+      loading.value = false
+      switchingPage.value = false
+    }
   }
 }
 
@@ -109,12 +120,16 @@ function formatDate(dateStr: string) {
 
 function prevPage() {
   if (currentPage.value <= 1) return
+  switchingPage.value = true
   currentPage.value -= 1
+  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function nextPage() {
   if (currentPage.value >= totalPages.value) return
+  switchingPage.value = true
   currentPage.value += 1
+  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 watch([currentPage, sortBy, filterCategory], loadPosts)
@@ -159,7 +174,14 @@ onMounted(async () => {
         <p class="count-text">{{ $t('guild.posts.postCount', { n: filteredPosts.length }) }}</p>
       </div>
 
-      <div v-if="loading" class="hint">{{ $t('guild.posts.loading') }}</div>
+      <div v-if="loading && posts.length === 0" class="post-list">
+        <div v-for="i in 4" :key="`skeleton-${i}`" class="post-card skeleton-card">
+          <div class="skeleton-line w-30" />
+          <div class="skeleton-line w-85" />
+          <div class="skeleton-line w-65" />
+          <div class="skeleton-line w-55" />
+        </div>
+      </div>
       <div v-else-if="noPermission" class="hint">{{ $t('guild.posts.noPermission') }}</div>
       <div v-else-if="posts.length === 0" class="hint">{{ $t('guild.posts.empty') }}</div>
 
@@ -178,7 +200,7 @@ onMounted(async () => {
           <p class="excerpt">{{ stripHtml(post.content).slice(0, 120) }}</p>
           <div class="foot">
             <div class="author">
-              <img v-if="post.author_avatar" :src="resolveApiUrl(post.author_avatar)" alt="" loading="lazy" />
+              <CachedImage v-if="post.author_avatar" :src="resolveApiUrl(post.author_avatar)" alt="" class="author-image" />
               <i v-else class="ri-user-3-fill" />
               <span :style="{ color: post.author_name_color || undefined, fontWeight: post.author_name_bold ? '700' : undefined }">{{ post.author_name }}</span>
             </div>
@@ -352,7 +374,8 @@ onMounted(async () => {
   gap: 6px;
   min-width: 0;
 }
-.author img, .author i {
+.author :deep(.author-image),
+.author i {
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -391,5 +414,28 @@ onMounted(async () => {
 .pagination span {
   color: var(--color-text-secondary);
   font-size: 12px;
+}
+
+.skeleton-card {
+  pointer-events: none;
+}
+
+.skeleton-line {
+  height: 11px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: linear-gradient(90deg, #f2ece6 0%, #ffffff 50%, #f2ece6 100%);
+  background-size: 220% 100%;
+  animation: skeletonShimmer 1.1s linear infinite;
+}
+
+.skeleton-line.w-30 { width: 30%; }
+.skeleton-line.w-55 { width: 55%; }
+.skeleton-line.w-65 { width: 65%; }
+.skeleton-line.w-85 { width: 85%; }
+
+@keyframes skeletonShimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -20% 0; }
 }
 </style>

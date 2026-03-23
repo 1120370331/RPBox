@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
+import CachedImage from '@/components/CachedImage.vue'
 import { useToastStore } from '@shared/stores/toast'
 import {
   createPostComment,
@@ -257,7 +258,7 @@ onMounted(loadPostDetail)
 
       <template v-else>
         <article class="post-main">
-          <img v-if="postCoverUrl" :src="postCoverUrl" class="cover" alt="" />
+          <CachedImage v-if="postCoverUrl" :src="postCoverUrl" class="cover" alt="" />
           <h2>{{ post.title }}</h2>
           <div class="author-row">
             <img v-if="authorAvatar" :src="resolveApiUrl(authorAvatar)" class="author-avatar" alt="" />

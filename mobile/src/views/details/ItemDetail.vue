@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
+import CachedImage from '@/components/CachedImage.vue'
 import {
   createItemComment,
   favoriteItem,
@@ -123,7 +124,7 @@ onMounted(loadItemDetail)
 
       <template v-else>
         <article class="item-main">
-          <img :src="previewUrl" class="preview" alt="" />
+          <CachedImage :src="previewUrl" class="preview" alt="" />
           <h2>{{ item.name }}</h2>
           <div v-if="author" class="author-row">
             <span :style="{ color: author.name_color || undefined, fontWeight: author.name_bold ? 'bold' : undefined }">

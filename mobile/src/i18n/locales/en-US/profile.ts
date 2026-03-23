@@ -57,5 +57,12 @@ export default {
       community: 'Community Sharing',
       market: 'TRP3 Item Market',
     },
+    cache: {
+      title: 'Image Cache',
+      desc: 'Clear cached images on mobile to free storage. Images will be loaded again when needed.',
+      clear: 'Clear Cache',
+      cleared: 'Cache cleared',
+      empty: 'No cache to clear',
+    },
   },
 }

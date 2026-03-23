@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@shared/stores/user'
 import { listPosts, type PostWithAuthor, type ListPostsParams } from '@/api/post'
 import { resolveApiUrl } from '@/api/image'
+import CachedImage from '@/components/CachedImage.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -12,9 +13,15 @@ const loading = ref(false)
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = 12
+const requestSerial = ref(0)
+const switchingPage = ref(false)
 
 async function loadMyPosts() {
+  const serial = ++requestSerial.value
   loading.value = true
+  if (switchingPage.value) {
+    posts.value = []
+  }
   try {
     const params: ListPostsParams & { author_id?: number } = {
       page: currentPage.value,
@@ -24,12 +31,16 @@ async function loadMyPosts() {
     }
     if (userStore.user?.id) (params as any).author_id = userStore.user.id
     const res = await listPosts(params as any)
+    if (serial !== requestSerial.value) return
     posts.value = res.posts || []
     total.value = res.total || 0
   } catch (e) {
     console.error('Failed to load my posts', e)
   } finally {
-    loading.value = false
+    if (serial === requestSerial.value) {
+      loading.value = false
+      switchingPage.value = false
+    }
   }
 }
 
@@ -39,6 +50,14 @@ function formatDate(dateStr: string) {
 }
 
 const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
+
+function goToPage(page: number) {
+  if (page < 1 || page > totalPages() || page === currentPage.value) return
+  switchingPage.value = true
+  currentPage.value = page
+  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
+  loadMyPosts()
+}
 
 onMounted(loadMyPosts)
 </script>
@@ -50,7 +69,16 @@ onMounted(loadMyPosts)
       <h1>{{ $t('profile.myPosts.title') }}</h1>
     </header>
     <div class="sub-body">
-      <div v-if="loading" class="hint">{{ $t('common.status.loading') }}</div>
+      <div v-if="loading && posts.length === 0" class="post-list">
+        <div v-for="i in 4" :key="`skeleton-${i}`" class="post-card skeleton-card">
+          <div class="post-cover skeleton-block" />
+          <div class="post-info">
+            <div class="skeleton-line w-30" />
+            <div class="skeleton-line w-85" />
+            <div class="skeleton-line w-65" />
+          </div>
+        </div>
+      </div>
       <div v-else-if="posts.length === 0" class="hint">{{ $t('profile.myPosts.empty') }}</div>
       <div v-else class="post-list">
         <button
@@ -60,7 +88,7 @@ onMounted(loadMyPosts)
           @click="router.push({ name: 'post-detail', params: { id: post.id } })"
         >
           <div v-if="post.cover_image_url" class="post-cover">
-            <img :src="resolveApiUrl(post.cover_image_url)" alt="" loading="lazy" />
+            <CachedImage :src="resolveApiUrl(post.cover_image_url)" alt="" />
           </div>
           <div class="post-info">
             <span v-if="post.category" class="cat">{{ post.category }}</span>
@@ -74,10 +102,38 @@ onMounted(loadMyPosts)
         </button>
       </div>
       <div v-if="total > pageSize" class="pagination">
-        <button :disabled="currentPage <= 1" @click="currentPage--; loadMyPosts()">{{ $t('common.pagination.prev') }}</button>
+        <button :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">{{ $t('common.pagination.prev') }}</button>
         <span>{{ $t('common.pagination.pageInfo', { current: currentPage, total: totalPages() }) }}</span>
-        <button :disabled="currentPage >= totalPages()" @click="currentPage++; loadMyPosts()">{{ $t('common.pagination.next') }}</button>
+        <button :disabled="currentPage >= totalPages()" @click="goToPage(currentPage + 1)">{{ $t('common.pagination.next') }}</button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.skeleton-card {
+  pointer-events: none;
+}
+
+.skeleton-block,
+.skeleton-line {
+  background: linear-gradient(90deg, #f2ece6 0%, #ffffff 50%, #f2ece6 100%);
+  background-size: 220% 100%;
+  animation: skeletonShimmer 1.1s linear infinite;
+}
+
+.skeleton-line {
+  height: 11px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.skeleton-line.w-30 { width: 30%; }
+.skeleton-line.w-65 { width: 65%; }
+.skeleton-line.w-85 { width: 85%; }
+
+@keyframes skeletonShimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -20% 0; }
+}
+</style>

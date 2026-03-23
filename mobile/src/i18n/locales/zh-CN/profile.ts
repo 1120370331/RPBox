@@ -57,5 +57,12 @@ export default {
       community: '社区分享交流',
       market: 'TRP3 道具市场',
     },
+    cache: {
+      title: '图片缓存',
+      desc: '可清理手机端图片缓存以释放空间，后续将按需重新加载。',
+      clear: '清理缓存',
+      cleared: '缓存已清理',
+      empty: '当前没有可清理缓存',
+    },
   },
 }
