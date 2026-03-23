@@ -1,0 +1,58 @@
+export default {
+  title: 'Guild',
+  detailTitle: 'Guild Detail',
+  loading: 'Loading...',
+  empty: 'No guilds',
+  emptyMy: 'You have not joined any guild yet',
+  searchPlaceholder: 'Search guild name...',
+  allFactions: 'All Factions',
+  tabs: {
+    public: 'Guild Plaza',
+    my: 'My Guilds',
+  },
+  actions: {
+    search: 'Search',
+    joinByCode: 'Join by Code',
+    join: 'Apply',
+    cancelApplication: 'Cancel Application',
+    leave: 'Leave Guild',
+    viewDetail: 'View Detail',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+  },
+  info: {
+    members: 'Members',
+    stories: 'Stories',
+    noDescription: 'No guild description',
+    inviteCode: 'Invite Code',
+    myRole: 'My Role',
+  },
+  role: {
+    owner: 'Owner',
+    admin: 'Admin',
+    member: 'Member',
+  },
+  faction: {
+    alliance: 'Alliance',
+    horde: 'Horde',
+    neutral: 'Neutral',
+  },
+  joinByCode: {
+    placeholder: 'Enter invite code',
+    success: 'Joined guild successfully',
+    failed: 'Failed to join guild',
+  },
+  apply: {
+    success: 'Application submitted',
+    autoApproved: 'Joined guild automatically',
+    failed: 'Failed to apply',
+    canceled: 'Application canceled',
+    cancelFailed: 'Failed to cancel application',
+  },
+  leave: {
+    title: 'Leave Guild',
+    message: 'Are you sure you want to leave this guild?',
+    success: 'Left guild successfully',
+    failed: 'Failed to leave guild',
+  },
+}
