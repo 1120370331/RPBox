@@ -1,5 +1,5 @@
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,9 +13,9 @@ def create_icon_canvas(size: int = 1024) -> Image.Image:
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
 
-    margin = int(size * 0.10)
+    margin = int(size * 0.07)
     rect = [margin, margin, size - margin, size - margin]
-    radius = int(size * 0.22)
+    radius = int(size * 0.20)
 
     # Ancient-scroll-like warm white rounded background
     draw.rounded_rectangle(
@@ -26,27 +26,19 @@ def create_icon_canvas(size: int = 1024) -> Image.Image:
         width=max(3, size // 256),
     )
 
-    # Soft center highlight + edge shade to avoid flat background
-    glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    gdraw = ImageDraw.Draw(glow)
-    gdraw.ellipse(
-        [margin + size * 0.08, margin + size * 0.04, size - margin - size * 0.08, size - margin - size * 0.16],
-        fill=(255, 255, 255, 60),
-    )
-    gdraw.rounded_rectangle(
-        rect,
-        radius=radius,
-        outline=(145, 110, 70, 50),
-        width=max(2, size // 300),
-    )
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=max(8, size // 128)))
-    canvas.alpha_composite(glow)
-
     return canvas
 
 
-def place_logo(base: Image.Image, logo: Image.Image, ratio: float = 0.58) -> Image.Image:
-    logo = logo.convert("RGBA")
+def trim_logo(logo: Image.Image) -> Image.Image:
+    rgba = logo.convert("RGBA")
+    bbox = rgba.getbbox()
+    if not bbox:
+        return rgba
+    return rgba.crop(bbox)
+
+
+def place_logo(base: Image.Image, logo: Image.Image, ratio: float = 0.78) -> Image.Image:
+    logo = trim_logo(logo)
     target = int(base.width * ratio)
     logo.thumbnail((target, target), Image.Resampling.LANCZOS)
     x = (base.width - logo.width) // 2
@@ -63,10 +55,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     logo = Image.open(SRC_ICON)
 
-    icon = place_logo(create_icon_canvas(1024), logo, ratio=0.56)
+    icon = place_logo(create_icon_canvas(1024), logo, ratio=0.80)
     icon.save(OUT_ICON)
 
-    splash = place_logo(create_icon_canvas(2732), logo, ratio=0.36)
+    splash = place_logo(create_icon_canvas(2732), logo, ratio=0.50)
     splash.save(OUT_SPLASH)
 
     print(f"generated: {OUT_ICON}")
