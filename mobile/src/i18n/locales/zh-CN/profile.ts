@@ -1,0 +1,61 @@
+export default {
+  title: '我的',
+  role: {
+    admin: '管理员',
+    moderator: '版主',
+    user: '普通用户',
+  },
+  sponsor: '赞助者',
+  menu: {
+    cloudProfiles: '云端人物卡',
+    favorites: '我的收藏',
+    posts: '我的帖子',
+    items: '我的道具',
+    about: '关于 RPBox',
+  },
+  logout: '退出登录',
+  myFavorites: {
+    title: '我的收藏',
+    empty: '暂无收藏',
+  },
+  myPosts: {
+    title: '我的帖子',
+    empty: '暂无帖子',
+  },
+  myItems: {
+    title: '我的道具',
+    empty: '暂无收藏道具',
+  },
+  about: {
+    title: '关于 RPBox',
+    version: '版本 {v}',
+    description: 'RPBox 是一个服务于魔兽世界 RP 玩家的工具箱，连接游戏内外，让数据自由流动，让创作不再孤立。',
+    update: {
+      title: '应用更新',
+      platformLabel: '当前平台',
+      currentVersion: '当前版本',
+      latestVersion: '最新版本',
+      checkUpdate: '检查更新',
+      checking: '检查中...',
+      noUpdate: '当前已是最新版本',
+      noNotes: '暂无更新说明',
+      available: '发现新版本 v{v}',
+      availableToast: '发现新版本 v{v}，可在关于页更新',
+      checkFailed: '检查更新失败',
+      openUpdate: '立即更新',
+      redirecting: '正在跳转到更新页面',
+      checkManually: '请先检查更新',
+      platform: {
+        android: 'Android',
+        ios: 'iOS',
+        unsupported: '非移动端',
+      },
+    },
+    features: {
+      sync: '云端人物卡查看',
+      stories: 'RP 剧情记录归档',
+      community: '社区分享交流',
+      market: 'TRP3 道具市场',
+    },
+  },
+}

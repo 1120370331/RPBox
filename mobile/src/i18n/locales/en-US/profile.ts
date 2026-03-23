@@ -1,0 +1,61 @@
+export default {
+  title: 'Profile',
+  role: {
+    admin: 'Admin',
+    moderator: 'Moderator',
+    user: 'User',
+  },
+  sponsor: 'Sponsor',
+  menu: {
+    cloudProfiles: 'Cloud Profiles',
+    favorites: 'My Favorites',
+    posts: 'My Posts',
+    items: 'My Items',
+    about: 'About RPBox',
+  },
+  logout: 'Logout',
+  myFavorites: {
+    title: 'My Favorites',
+    empty: 'No favorites yet',
+  },
+  myPosts: {
+    title: 'My Posts',
+    empty: 'No posts yet',
+  },
+  myItems: {
+    title: 'My Items',
+    empty: 'No saved items',
+  },
+  about: {
+    title: 'About RPBox',
+    version: 'Version {v}',
+    description: 'RPBox is a toolbox for WoW RP players, connecting in-game and out-of-game experiences, enabling free data flow and collaborative creation.',
+    update: {
+      title: 'App Update',
+      platformLabel: 'Platform',
+      currentVersion: 'Current Version',
+      latestVersion: 'Latest Version',
+      checkUpdate: 'Check Update',
+      checking: 'Checking...',
+      noUpdate: 'You are on the latest version',
+      noNotes: 'No release notes',
+      available: 'New version found: v{v}',
+      availableToast: 'New version v{v} is available in About',
+      checkFailed: 'Failed to check update',
+      openUpdate: 'Update Now',
+      redirecting: 'Redirecting to update page',
+      checkManually: 'Please check for updates first',
+      platform: {
+        android: 'Android',
+        ios: 'iOS',
+        unsupported: 'Non-mobile',
+      },
+    },
+    features: {
+      sync: 'Cloud Profile Viewing',
+      stories: 'RP Story Archives',
+      community: 'Community Sharing',
+      market: 'TRP3 Item Market',
+    },
+  },
+}

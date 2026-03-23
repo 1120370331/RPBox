@@ -39,6 +39,25 @@ jobs:
             exit 1
           fi
 
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Download current addon manifest
+        run: |
+          set -e
+          REMOTE_PATH="${{ secrets.ADDON_PATH }}"
+          LOCAL_PATH="server/storage/addons/RPBox_Addon/manifest.json"
+          mkdir -p "$(dirname "$LOCAL_PATH")"
+
+          if ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "test -f $REMOTE_PATH/manifest.json"; then
+            scp -P 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/manifest.json "$LOCAL_PATH"
+          fi
+
       - name: Prepare addon changelog
         id: changelog
         run: |
@@ -103,14 +122,6 @@ jobs:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
             f.write("\n")
           PY
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known_hosts
-        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy addon
         run: |
