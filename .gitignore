@@ -258,6 +258,11 @@ config.local.yaml
 server/config.yaml
 nul
 
+# Procurement CSVs (keep local, don't track)
+/采购单_Sealos云服务器.csv
+/阿里云采购清单-基础版.csv
+/阿里云采购清单-标准版.csv
+
 # CI/CD
 coverage.out
 *.coverprofile
