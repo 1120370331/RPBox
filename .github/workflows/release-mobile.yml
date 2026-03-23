@@ -2,6 +2,9 @@ name: Release Mobile
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'mobile-v*'
   workflow_dispatch:
@@ -46,7 +49,14 @@ jobs:
 
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/mobile-v}" >> $GITHUB_OUTPUT
+        run: |
+          REF="${GITHUB_REF#refs/*/}"
+          if [[ "$GITHUB_REF" == refs/tags/mobile-v* ]]; then
+            VERSION="${REF#mobile-v}"
+          else
+            VERSION=$(node -p "require('./mobile/package.json').version")
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Sync mobile package version
         run: |
@@ -181,7 +191,14 @@ jobs:
 
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/mobile-v}" >> $GITHUB_OUTPUT
+        run: |
+          REF="${GITHUB_REF#refs/*/}"
+          if [[ "$GITHUB_REF" == refs/tags/mobile-v* ]]; then
+            VERSION="${REF#mobile-v}"
+          else
+            VERSION=$(node -p "require('./mobile/package.json').version")
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Prepare iOS metadata
         id: iosmeta
@@ -265,7 +282,14 @@ jobs:
 
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/mobile-v}" >> $GITHUB_OUTPUT
+        run: |
+          REF="${GITHUB_REF#refs/*/}"
+          if [[ "$GITHUB_REF" == refs/tags/mobile-v* ]]; then
+            VERSION="${REF#mobile-v}"
+          else
+            VERSION=$(node -p "require('./mobile/package.json').version")
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Update fallback mobile version in download.html
         run: |
