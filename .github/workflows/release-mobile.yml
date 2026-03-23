@@ -242,10 +242,23 @@ jobs:
           [ ! -f "$APK_PATH" ] && { echo "ERROR: apk artifact missing"; exit 1; }
           [ ! -f "$META_PATH" ] && { echo "ERROR: latest-android.json missing"; exit 1; }
 
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
-          scp -P 2233 -C "$APK_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
-          scp -P 2233 -C "$META_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
-          scp -P 2233 -C "$META_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_BASE/latest-android.json
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR $REMOTE_BASE"
+
+          REMOTE_APK_FINAL="$REMOTE_DIR/RPBox_${VERSION}_android.apk"
+          REMOTE_APK_TMP="$REMOTE_APK_FINAL.part"
+          REMOTE_META_VER_FINAL="$REMOTE_DIR/latest-android.json"
+          REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
+          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/latest-android.json"
+          REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
+
+          scp -P 2233 -C "$APK_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:"$REMOTE_APK_TMP"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mv -f '$REMOTE_APK_TMP' '$REMOTE_APK_FINAL'"
+
+          scp -P 2233 -C "$META_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:"$REMOTE_META_VER_TMP"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
+
+          scp -P 2233 -C "$META_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:"$REMOTE_META_LATEST_TMP"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
 
   deploy-ios-metadata:
     name: Deploy iOS Metadata
