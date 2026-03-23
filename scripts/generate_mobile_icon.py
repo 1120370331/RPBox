@@ -37,8 +37,21 @@ def trim_logo(logo: Image.Image) -> Image.Image:
     return rgba.crop(bbox)
 
 
-def place_logo(base: Image.Image, logo: Image.Image, ratio: float = 0.78) -> Image.Image:
+def zoom_center(logo: Image.Image, factor: float = 1.5) -> Image.Image:
+    if factor <= 1:
+        return logo
+    w, h = logo.size
+    crop_w = max(1, int(w / factor))
+    crop_h = max(1, int(h / factor))
+    left = (w - crop_w) // 2
+    top = (h - crop_h) // 2
+    cropped = logo.crop((left, top, left + crop_w, top + crop_h))
+    return cropped.resize((w, h), Image.Resampling.LANCZOS)
+
+
+def place_logo(base: Image.Image, logo: Image.Image, ratio: float = 0.86) -> Image.Image:
     logo = trim_logo(logo)
+    logo = zoom_center(logo, factor=1.5)
     target = int(base.width * ratio)
     logo.thumbnail((target, target), Image.Resampling.LANCZOS)
     x = (base.width - logo.width) // 2
@@ -55,10 +68,10 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     logo = Image.open(SRC_ICON)
 
-    icon = place_logo(create_icon_canvas(1024), logo, ratio=0.80)
+    icon = place_logo(create_icon_canvas(1024), logo, ratio=0.90)
     icon.save(OUT_ICON)
 
-    splash = place_logo(create_icon_canvas(2732), logo, ratio=0.50)
+    splash = place_logo(create_icon_canvas(2732), logo, ratio=0.58)
     splash.save(OUT_SPLASH)
 
     print(f"generated: {OUT_ICON}")
