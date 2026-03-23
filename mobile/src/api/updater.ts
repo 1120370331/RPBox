@@ -6,6 +6,7 @@ export type MobileTarget = 'android' | 'ios'
 
 export interface MobileUpdateInfo {
   version: string
+  latest_version?: string
   notes?: string
   pub_date?: string
   url: string
@@ -25,6 +26,44 @@ export function normalizeVersion(version: string): string {
     return trimmed.slice(1).trim()
   }
   return trimmed
+}
+
+function parseVersionParts(version: string): number[] | null {
+  const normalized = normalizeVersion(version)
+  if (!normalized) return null
+
+  const core = normalized.split(/[+-]/)[0]
+  const parts = core.split('.')
+  const parsed: number[] = []
+  for (const part of parts) {
+    if (!part) return null
+    const num = Number.parseInt(part, 10)
+    if (!Number.isFinite(num)) return null
+    parsed.push(num)
+  }
+  return parsed
+}
+
+export function isNewerVersion(latestVersion: string, currentVersion: string): boolean {
+  const latest = normalizeVersion(latestVersion)
+  const current = normalizeVersion(currentVersion)
+  if (!latest) return false
+  if (!current) return true
+
+  const latestParts = parseVersionParts(latest)
+  const currentParts = parseVersionParts(current)
+  if (!latestParts || !currentParts) {
+    return latest !== current
+  }
+
+  const maxLen = Math.max(latestParts.length, currentParts.length)
+  for (let i = 0; i < maxLen; i += 1) {
+    const a = latestParts[i] ?? 0
+    const b = currentParts[i] ?? 0
+    if (a > b) return true
+    if (a < b) return false
+  }
+  return false
 }
 
 export function detectMobileTarget(): MobileTarget | null {
@@ -74,9 +113,24 @@ export async function checkMobileUpdate(options: CheckMobileUpdateOptions = {}):
 
   const arch = options.arch ?? detectArch()
   const currentVersion = normalizeVersion(options.currentVersion ?? await getCurrentAppVersion()) || '0.0.0'
-  const path = `/updater/${target}/${arch}/${currentVersion}`
+  const latestPath = `/mobile/${target}/latest`
+  const updaterPath = `/updater/${target}/${arch}/${currentVersion}`
 
-  return request.get<MobileUpdateInfo | null>(path)
+  // Prefer stable latest endpoint, then fallback to legacy updater endpoint.
+  try {
+    const latest = await request.get<MobileUpdateInfo>(latestPath)
+    const resolvedVersion = normalizeVersion(latest.version || latest.latest_version || '')
+    if (resolvedVersion && isNewerVersion(resolvedVersion, currentVersion)) {
+      return {
+        ...latest,
+        version: resolvedVersion,
+      }
+    }
+  } catch {
+    // Ignore and fallback to legacy endpoint.
+  }
+
+  return request.get<MobileUpdateInfo | null>(updaterPath)
 }
 
 export function openUpdateUrl(url: string) {
@@ -86,4 +140,3 @@ export function openUpdateUrl(url: string) {
     window.location.href = url
   }
 }
-
