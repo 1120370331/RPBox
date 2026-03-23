@@ -90,6 +90,47 @@ jobs:
           pnpm dlx @capacitor/assets generate --android
           pnpm exec cap sync android
 
+      - name: Sync Android native version
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          export VERSION
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          parts = [int(x) for x in version.split(".") if x.isdigit()]
+          while len(parts) < 3:
+            parts.append(0)
+          # Keep within int32 and monotonic for normal semver: major.minor.patch
+          version_code = parts[0] * 1000000 + parts[1] * 1000 + parts[2]
+
+          gradle_files = [
+            Path("mobile/android/app/build.gradle"),
+            Path("mobile/android/app/build.gradle.kts"),
+          ]
+          target = None
+          for path in gradle_files:
+            if path.exists():
+              target = path
+              break
+          if target is None:
+            raise FileNotFoundError("android app gradle file not found")
+
+          text = target.read_text(encoding="utf-8")
+
+          if target.suffix == ".kts":
+            text = re.sub(r'versionCode\s*=\s*\d+', f'versionCode = {version_code}', text)
+            text = re.sub(r'versionName\s*=\s*"[^"]*"', f'versionName = "{version}"', text)
+          else:
+            text = re.sub(r'versionCode\s+\d+', f'versionCode {version_code}', text)
+            text = re.sub(r'versionName\s+"[^"]*"', f'versionName "{version}"', text)
+
+          target.write_text(text, encoding="utf-8")
+          print(f"synced native version: versionName={version}, versionCode={version_code}, file={target}")
+          PY
+
       - name: Build debug APK
         run: |
           cd mobile/android
