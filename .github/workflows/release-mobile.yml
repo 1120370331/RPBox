@@ -71,7 +71,15 @@ jobs:
           PY
 
       - name: Build mobile web assets
-        run: pnpm --filter rpbox-mobile build
+        env:
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+        run: |
+          if [ -z "$VITE_API_BASE" ]; then
+            VITE_API_BASE="https://ksxvodevhonx.sealosbja.site/api/v1"
+          fi
+          export VITE_API_BASE
+          echo "Build with VITE_API_BASE=$VITE_API_BASE"
+          pnpm --filter rpbox-mobile build
 
       - name: Prepare Android project
         run: |
@@ -79,6 +87,7 @@ jobs:
           if [ ! -d android ]; then
             pnpm exec cap add android
           fi
+          pnpm dlx @capacitor/assets generate --android
           pnpm exec cap sync android
 
       - name: Build debug APK
