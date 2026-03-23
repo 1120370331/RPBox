@@ -48,7 +48,7 @@ async function loadItemDetail() {
     author.value = itemRes.author
     liked.value = itemRes.liked
     favorited.value = itemRes.favorited
-    comments.value = commentRes || []
+    comments.value = Array.isArray(commentRes) ? commentRes : ((commentRes as any)?.comments || [])
   } catch (error) {
     console.error('Failed to load item detail', error)
   } finally {
@@ -149,7 +149,10 @@ onMounted(loadItemDetail)
         </section>
 
         <section class="comment-box">
-          <h3>{{ $t('market.comments') }} ({{ comments.length }})</h3>
+          <h3 class="comment-title">
+            <span><i class="ri-message-3-line" /> {{ $t('market.comments') }}</span>
+            <em>{{ comments.length }}</em>
+          </h3>
           <select v-model.number="rating">
             <option :value="0">{{ $t('market.ratingOptional') }}</option>
             <option :value="5">5</option>
@@ -182,25 +185,29 @@ onMounted(loadItemDetail)
 </template>
 
 <style scoped>
+.sub-body {
+  padding-bottom: calc(28px + var(--safe-bottom, 0px));
+}
+
 .item-main {
   background: var(--color-card-bg);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 14px;
-  margin-bottom: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
 }
 
 .preview {
   width: 100%;
-  height: 180px;
+  height: min(46vw, 220px);
   border-radius: var(--radius-sm);
   object-fit: cover;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .item-main h2 {
-  font-size: 18px;
-  margin-bottom: 8px;
+  font-size: 19px;
+  margin-bottom: 10px;
 }
 
 .author-row {
@@ -219,10 +226,10 @@ onMounted(loadItemDetail)
 }
 
 .item-main p {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.68;
   color: var(--color-text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .stat-row {
@@ -235,8 +242,8 @@ onMounted(loadItemDetail)
 .action-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .action-row button {
@@ -252,13 +259,41 @@ onMounted(loadItemDetail)
   background: var(--color-card-bg);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 14px;
-  margin-bottom: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
 }
 
 .comment-box h3 {
   font-size: 14px;
   margin-bottom: 8px;
+}
+.comment-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.comment-title span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.comment-title i {
+  font-size: 15px;
+  color: var(--color-secondary);
+}
+.comment-title em {
+  font-style: normal;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
 }
 
 .comment-box select,
@@ -296,7 +331,7 @@ onMounted(loadItemDetail)
   background: var(--color-card-bg);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 10px 12px;
+  padding: 12px 14px;
 }
 
 .comment-item header {
@@ -310,12 +345,26 @@ onMounted(loadItemDetail)
 
 .comment-item p {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.66;
 }
 
 .rate {
   margin-top: 6px;
   color: var(--color-accent);
   font-size: 12px;
+}
+
+@media (max-width: 380px) {
+  .item-main {
+    padding: 14px;
+  }
+
+  .item-main h2 {
+    font-size: 17px;
+  }
+
+  .item-main p {
+    font-size: 14px;
+  }
 }
 </style>

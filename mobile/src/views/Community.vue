@@ -168,11 +168,11 @@ onMounted(loadPosts)
 </template>
 
 <style scoped>
-.page { padding: 0 16px 16px; }
-.page-header { padding: 12px 0 8px; display: flex; align-items: center; justify-content: space-between; }
-.page-header h1 { font-size: 22px; }
+.page { padding: 0 16px calc(20px + var(--safe-bottom, 0px)); }
+.page-header { padding: 14px 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.page-header h1 { font-size: 22px; flex-shrink: 0; }
 
-.sort-row { display: flex; gap: 6px; }
+.sort-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .sort-btn {
   padding: 4px 10px; border: none; border-radius: 12px;
   background: transparent; color: var(--text-dark); font-size: 12px; cursor: pointer;
@@ -208,7 +208,7 @@ onMounted(loadPosts)
 .post-cover { width: 100%; height: 160px; overflow: hidden; }
 .post-cover img { width: 100%; height: 100%; object-fit: cover; }
 
-.post-content { padding: 12px 14px; }
+.post-content { padding: 14px 14px; }
 .post-meta-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .category-tag {
   font-size: 11px; padding: 2px 8px; border-radius: 8px;
