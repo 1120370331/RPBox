@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'mobile-v*'
+  workflow_dispatch:
 
 env:
   NODE_VERSION: '20'
@@ -74,27 +75,10 @@ jobs:
           fi
           pnpm exec cap sync android
 
-      - name: Build unsigned release APK
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+      - name: Build debug APK
         run: |
           cd mobile/android
-          ./gradlew assembleRelease
-
-      - name: Sign Android release
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
-        id: sign
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: mobile/android/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
-      - name: Build debug APK fallback
-        if: ${{ !(secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_PASSWORD != '') }}
-        run: |
-          cd mobile/android
+          chmod +x gradlew
           ./gradlew assembleDebug
 
       - name: Prepare artifacts and metadata
@@ -109,18 +93,7 @@ jobs:
 
           mkdir -p artifacts
 
-          APK_PATH=""
-          if [ "${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_PASSWORD != '' }}" = "true" ]; then
-            SIGNED_APK="${{ steps.sign.outputs.signedReleaseFile }}"
-            SIGNED_APK=$(echo "$SIGNED_APK" | cut -d':' -f1)
-            if [ -f "$SIGNED_APK" ]; then
-              APK_PATH="$SIGNED_APK"
-            else
-              APK_PATH=$(find mobile/android/app/build/outputs/apk/release -name "*-signed.apk" -type f | head -n1)
-            fi
-          else
-            APK_PATH=$(find mobile/android/app/build/outputs/apk/debug -name "*debug.apk" -type f | head -n1)
-          fi
+          APK_PATH=$(find mobile/android/app/build/outputs/apk/debug -name "*debug.apk" -type f | head -n1)
           [ -z "$APK_PATH" ] && { echo "ERROR: apk artifact not found"; exit 1; }
           cp "$APK_PATH" "artifacts/RPBox_${VERSION}_android.apk"
 

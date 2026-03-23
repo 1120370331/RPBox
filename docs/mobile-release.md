@@ -86,7 +86,8 @@ iOS (`latest-ios.json`)：
 - `IOS_APP_STORE_URL`（用于生成 iOS updater 元数据）
 
 说明：
-- 如果 Android 签名 Secrets 缺失，workflow 会自动回退构建 `debug APK` 并上传，保证下载链路可用（仅用于内测分发）。
+- 当前 workflow 默认构建并上传 `debug APK`，优先保证下载链路可用（内测分发）。
+- 后续如需正式签名包，可在此基础上再接入签名步骤与密钥。
 
 ## 6. 服务端 updater 行为
 
