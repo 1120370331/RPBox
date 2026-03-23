@@ -45,6 +45,21 @@ const router = createRouter({
           component: () => import('./views/Guild.vue'),
         },
         {
+          path: 'guild/:id',
+          name: 'guild-detail',
+          component: () => import('./views/details/GuildDetail.vue'),
+        },
+        {
+          path: 'guild/:id/posts',
+          name: 'guild-posts',
+          component: () => import('./views/guild/GuildPosts.vue'),
+        },
+        {
+          path: 'guild/:id/stories',
+          name: 'guild-stories',
+          component: () => import('./views/guild/GuildStories.vue'),
+        },
+        {
           path: 'profiles',
           name: 'profiles',
           component: () => import('./views/Profiles.vue'),
@@ -55,11 +70,6 @@ const router = createRouter({
           component: () => import('./views/Profile.vue'),
         },
       ],
-    },
-    {
-      path: '/guild/:id',
-      name: 'guild-detail',
-      component: () => import('./views/details/GuildDetail.vue'),
     },
     {
       path: '/posts/:id',

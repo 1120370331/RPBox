@@ -45,6 +45,25 @@ export interface GuildApplication {
   status: 'pending' | 'approved' | 'rejected'
 }
 
+export interface GuildStoryWithUploader {
+  id: number
+  title: string
+  description: string
+  start_time: string
+  end_time: string
+  status: string
+  tags?: string
+  entry_count?: number
+  created_at: string
+  updated_at: string
+  added_by: number
+  added_by_username: string
+  added_by_avatar?: string
+  added_by_name_color?: string
+  added_by_name_bold?: boolean
+  tag_list?: { name: string; color?: string }[]
+}
+
 export function listGuilds() {
   return request.get<{ guilds: Guild[] }>('/guilds')
 }
@@ -83,4 +102,13 @@ export function listMyApplications() {
 
 export function cancelApplication(guildId: number, appId: number) {
   return request.delete<void>(`/guilds/${guildId}/applications/${appId}`)
+}
+
+export function listGuildStories(guildId: number, addedBy?: number) {
+  const params = addedBy ? { added_by: addedBy } : {}
+  return request.get<{ stories: GuildStoryWithUploader[] }>(`/guilds/${guildId}/stories`, { params })
+}
+
+export function removeStoryFromGuild(guildId: number, storyId: number) {
+  return request.delete<void>(`/guilds/${guildId}/stories/${storyId}`)
 }

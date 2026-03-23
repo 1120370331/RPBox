@@ -84,13 +84,17 @@ async function confirmLeave() {
   }
 }
 
+function goGuildHome() {
+  router.push({ name: 'guild' })
+}
+
 onMounted(loadDetail)
 </script>
 
 <template>
   <div class="sub-page">
     <header class="sub-header">
-      <button class="back-btn" @click="router.back()"><i class="ri-arrow-left-line" /></button>
+      <button class="back-btn" @click="goGuildHome"><i class="ri-arrow-left-line" /></button>
       <h1>{{ $t('guild.detailTitle') }}</h1>
     </header>
 
@@ -137,6 +141,25 @@ onMounted(loadDetail)
             <span class="label">{{ $t('guild.info.inviteCode') }}</span>
             <span class="value code">{{ guild.invite_code || '-' }}</span>
           </div>
+        </section>
+
+        <section class="nav-card">
+          <button class="nav-action" @click="router.push({ name: 'guild-posts', params: { id: guild.id } })">
+            <i class="ri-article-line" />
+            <div>
+              <strong>{{ $t('guild.posts.guildPosts') }}</strong>
+              <span>{{ $t('guild.detailNav.postsDesc') }}</span>
+            </div>
+            <i class="ri-arrow-right-s-line arrow" />
+          </button>
+          <button class="nav-action" @click="router.push({ name: 'guild-stories', params: { id: guild.id } })">
+            <i class="ri-book-2-line" />
+            <div>
+              <strong>{{ $t('guild.stories.guildStories') }}</strong>
+              <span>{{ $t('guild.detailNav.storiesDesc') }}</span>
+            </div>
+            <i class="ri-arrow-right-s-line arrow" />
+          </button>
         </section>
 
         <section v-if="members.length" class="members-card">
@@ -311,6 +334,54 @@ onMounted(loadDetail)
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   padding: 12px;
+}
+
+.nav-card {
+  background: var(--color-card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 8px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-action {
+  border: 1px solid var(--color-border-light);
+  background: var(--color-panel-bg);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-action > i:first-child {
+  font-size: 18px;
+  color: var(--color-primary);
+}
+
+.nav-action div {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-action strong {
+  display: block;
+  font-size: 13px;
+}
+
+.nav-action span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.nav-action .arrow {
+  color: var(--color-text-secondary);
 }
 
 .members-card h3 {

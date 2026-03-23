@@ -26,12 +26,26 @@ export interface PostWithAuthor extends Post {
   cover_image_url?: string
 }
 
+export const POST_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'profile', label: '人物卡' },
+  { value: 'guild', label: '公会卡' },
+  { value: 'report', label: '战报' },
+  { value: 'novel', label: '小说' },
+  { value: 'item', label: 'TRP3道具' },
+  { value: 'event', label: '活动' },
+  { value: 'other', label: '其他' },
+]
+
 export interface ListPostsParams {
   page?: number
   page_size?: number
   sort?: 'created_at' | 'view_count' | 'like_count'
   order?: 'asc' | 'desc'
   category?: string
+  guild_id?: number
+  author_id?: number
+  status?: 'draft' | 'published' | 'all'
+  is_pinned?: boolean
 }
 
 export interface PostComment {
