@@ -234,9 +234,8 @@ func (s *Server) resolveMobileLatestRelease(target string) (*MobileLatestRelease
 	if latest.LatestVersion == "" && latest.Version != "" {
 		latest.LatestVersion = latest.Version
 	}
-	if latest.Version == "" {
-		latest.Version = latest.LatestVersion
-	}
+	// Keep legacy "version" field consistent with latest_version to avoid client misread.
+	latest.Version = latest.LatestVersion
 
 	return latest, true
 }
