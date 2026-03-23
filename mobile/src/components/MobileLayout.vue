@@ -44,16 +44,22 @@ const currentTab = computed(() => route.name as string)
 
 <style scoped>
 .mobile-layout {
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .mobile-content {
   flex: 1;
   overflow-y: auto;
   padding-bottom: calc(var(--tab-bar-height) + var(--safe-bottom, 0px));
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab-bar {
@@ -69,6 +75,8 @@ const currentTab = computed(() => route.name as string)
   align-items: center;
   justify-content: space-around;
   z-index: 100;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .tab-item {
