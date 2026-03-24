@@ -6,6 +6,7 @@ import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
 import { resolveApiUrl } from '@/api/image'
 import { getCharacter, type Character } from '@/api/character'
+import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import {
   createBookmark,
   deleteBookmark,
@@ -64,6 +65,7 @@ const bookmarkName = ref('')
 const bookmarkColor = ref('')
 const bookmarkIsPublic = ref(false)
 const bookmarkColors = ['#E57373', '#F06292', '#BA68C8', '#64B5F6', '#4DB6AC', '#81C784', '#FFD54F', '#FFB74D']
+const emoteVersion = ref(0)
 
 const storyId = computed(() => Number(route.params.id))
 const canManage = computed(() => !!story.value && !!userStore.user && (story.value.user_id === userStore.user.id || userStore.isAdmin || userStore.isModerator))
@@ -275,7 +277,16 @@ function getBookmarkPreview(entryId: number) {
   return text.length > 22 ? `${text.slice(0, 22)}...` : text
 }
 
-onMounted(loadDetail)
+function renderEntryTextHtml(content: string) {
+  void emoteVersion.value
+  return renderTextWithEmotes(content || '')
+}
+
+onMounted(async () => {
+  await loadDetail()
+  await ensureEmoteMapLoaded()
+  emoteVersion.value += 1
+})
 </script>
 
 <template>
@@ -336,7 +347,7 @@ onMounted(loadDetail)
                   <time>{{ formatTime(entry.timestamp || entry.created_at || '') }}</time>
                 </header>
                 <div v-if="entry.imageUrl" class="entry-media"><img :src="entry.imageUrl" :alt="entry.imageDescription || 'story image'" loading="lazy" /><p v-if="entry.imageDescription" class="entry-image-desc">{{ entry.imageDescription }}</p></div>
-                <p v-else class="entry-text" :style="entry.channelTextColor ? { color: entry.channelTextColor } : undefined">{{ entry.content }}</p>
+                <p v-else class="entry-text" :style="entry.channelTextColor ? { color: entry.channelTextColor } : undefined" v-html="renderEntryTextHtml(entry.content)" />
               </div>
               <div v-if="manageMode" class="entry-checkbox"><input type="checkbox" :checked="selectedEntryIds.includes(entry.id)" @click.stop @change="toggleEntrySelection(entry.id)" /></div>
               <div v-else-if="canManage" class="entry-actions">
@@ -509,6 +520,8 @@ onMounted(loadDetail)
 .channel-tag { font-size: 11px; color: var(--color-text-secondary); }
 .entry-head time { font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; }
 .entry-text { margin-top: 6px; font-size: 14px; line-height: 1.65; color: var(--text-dark); white-space: pre-wrap; word-break: break-word; }
+.entry-text :deep(.inline-emote) { width: 26px; height: 26px; vertical-align: text-bottom; margin: 0 2px; }
+.entry-text :deep(.inline-mention) { display: inline-block; padding: 0 6px; border-radius: 999px; background: var(--color-primary-light); color: var(--color-secondary); font-size: 12px; }
 .entry-media { margin-top: 8px; }
 .entry-media img { width: 100%; max-height: 360px; object-fit: contain; border-radius: var(--radius-sm); background: var(--input-bg); }
 .entry-image-desc { margin-top: 8px; font-size: 12px; color: var(--color-text-secondary); }

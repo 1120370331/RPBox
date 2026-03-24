@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
+import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import { useToastStore } from '@shared/stores/toast'
 import {
   createPostComment,
@@ -38,6 +39,7 @@ const authorNameColor = ref('')
 const authorNameBold = ref(false)
 const imagePreviewOpen = ref(false)
 const imagePreviewSrc = ref('')
+const emoteVersion = ref(0)
 
 const postId = computed(() => Number(route.params.id))
 const postCoverUrl = computed(() => {
@@ -140,6 +142,7 @@ function formatTime(value: string) {
 }
 
 function normalizePostContentHtml(raw: string) {
+  void emoteVersion.value
   let html = raw.trim()
   if (!html) return ''
 
@@ -150,7 +153,7 @@ function normalizePostContentHtml(raw: string) {
   }
 
   if (!/<[a-z][\s\S]*>/i.test(html)) {
-    return html
+    return renderTextWithEmotes(html)
   }
 
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -174,6 +177,11 @@ function normalizePostContentHtml(raw: string) {
   })
 
   return doc.body.innerHTML
+}
+
+function renderCommentHtml(content: string) {
+  void emoteVersion.value
+  return renderTextWithEmotes(content || '')
 }
 
 function mapContentUrl(url: string) {
@@ -257,7 +265,11 @@ watch(postId, () => {
   loadPostDetail()
 })
 
-onMounted(loadPostDetail)
+onMounted(async () => {
+  await loadPostDetail()
+  await ensureEmoteMapLoaded()
+  emoteVersion.value += 1
+})
 </script>
 
 <template>
@@ -316,7 +328,7 @@ onMounted(loadPostDetail)
               >{{ comment.author_name }}</span>
               <time>{{ formatTime(comment.created_at) }}</time>
             </header>
-            <p>{{ comment.content }}</p>
+            <p v-html="renderCommentHtml(comment.content)" />
           </article>
         </section>
       </template>
@@ -502,6 +514,24 @@ onMounted(loadPostDetail)
   line-height: 1.68;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.comment-item p :deep(.inline-emote),
+.content :deep(.inline-emote) {
+  width: 26px;
+  height: 26px;
+  vertical-align: text-bottom;
+  margin: 0 2px;
+}
+
+.comment-item p :deep(.inline-mention),
+.content :deep(.inline-mention) {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
+  font-size: 12px;
 }
 
 @media (max-width: 380px) {
