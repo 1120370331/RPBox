@@ -190,6 +190,33 @@ func (s *Server) downloadMobileLatest(c *gin.Context) {
 	c.Redirect(http.StatusFound, latest.URL)
 }
 
+// getIOSUpdateLink 返回 iOS 的稳定更新跳转信息（用于 TestFlight / App Store）。
+func (s *Server) getIOSUpdateLink(c *gin.Context) {
+	latest, ok := s.resolveMobileLatestRelease("ios")
+	if !ok || latest.URL == "" || latest.LatestVersion == "" {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "ios latest release not found",
+		})
+		return
+	}
+	if _, err := url.ParseRequestURI(latest.URL); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "ios update url is invalid",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"target":         "ios",
+		"latest_version": latest.LatestVersion,
+		"version":        latest.LatestVersion,
+		"url":            latest.URL,
+		"notes":          latest.Notes,
+		"pub_date":       latest.PubDate,
+		"mandatory":      latest.Mandatory,
+	})
+}
+
 func (s *Server) resolveMobileLatestRelease(target string) (*MobileLatestRelease, bool) {
 	var platformCfg config.MobilePlatformUpdaterConfig
 	switch target {
