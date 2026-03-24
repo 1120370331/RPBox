@@ -54,6 +54,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/updater/:target/:arch/:current_version", s.checkUpdate)
 		v1.GET("/mobile/:target/latest", s.getMobileLatest)
 		v1.GET("/mobile/:target/latest/download", s.downloadMobileLatest)
+		v1.GET("/mobile/ios/update-link", s.getIOSUpdateLink)
 
 		// 公开公会列表（社区广场）
 		v1.GET("/public/guilds", s.listPublicGuilds)
@@ -218,6 +219,7 @@ func (s *Server) setupRoutes() {
 			auth.PUT("/user/info", s.updateUserInfo)
 			auth.POST("/user/avatar", s.updateAvatar)
 			auth.POST("/user/bind-email", s.bindEmail)
+			auth.GET("/sponsors", s.listSponsors)
 			auth.GET("/users/search", s.searchUsers)
 			auth.GET("/users/:id", s.getUserProfile)
 			auth.GET("/users/:id/guilds", s.getUserGuilds)
