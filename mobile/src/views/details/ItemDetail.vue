@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
+import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import {
   createItemComment,
   favoriteItem,
@@ -31,14 +32,22 @@ const commentText = ref('')
 const rating = ref(0)
 const imagePreviewOpen = ref(false)
 const imagePreviewSrc = ref('')
+const emoteVersion = ref(0)
 
 const itemId = computed(() => Number(route.params.id))
 const previewUrl = computed(() => {
   if (!item.value) return ''
   if (item.value.preview_image_url) return resolveApiUrl(item.value.preview_image_url)
-  if (item.value.type === 'artwork') return `/api/v1/images/item-preview/${item.value.id}?w=900&q=80`
-  return `/api/v1/images/item-preview/${item.value.id}?w=900&q=80`
+  return resolveApiUrl(`/api/v1/images/item-preview/${item.value.id}?w=900&q=80`)
 })
+const itemDescriptionHtml = computed(() => {
+  void emoteVersion.value
+  return renderTextWithEmotes(item.value?.description || '')
+})
+function renderCommentHtml(content: string) {
+  void emoteVersion.value
+  return renderTextWithEmotes(content || '')
+}
 
 async function loadItemDetail() {
   if (!itemId.value) return
@@ -118,7 +127,11 @@ function openImagePreview(src: string) {
   imagePreviewOpen.value = true
 }
 
-onMounted(loadItemDetail)
+onMounted(async () => {
+  await loadItemDetail()
+  await ensureEmoteMapLoaded()
+  emoteVersion.value += 1
+})
 </script>
 
 <template>
@@ -143,7 +156,7 @@ onMounted(loadItemDetail)
             </span>
             <span class="type-tag">{{ $t('market.typeBadge.' + item.type) }}</span>
           </div>
-          <p>{{ item.description }}</p>
+          <p v-html="itemDescriptionHtml"></p>
           <div class="stat-row">
             <span><i class="ri-download-line" /> {{ item.downloads }}</span>
             <span>★ {{ item.rating.toFixed(1) }} ({{ item.rating_count }})</span>
@@ -187,7 +200,7 @@ onMounted(loadItemDetail)
               </span>
               <time>{{ formatTime(comment.created_at) }}</time>
             </header>
-            <p>{{ comment.content }}</p>
+            <p v-html="renderCommentHtml(comment.content)" />
             <div class="rate" v-if="comment.rating > 0">★ {{ comment.rating }}</div>
           </article>
         </section>
@@ -367,6 +380,26 @@ onMounted(loadItemDetail)
 .comment-item p {
   font-size: 14px;
   line-height: 1.66;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-item p :deep(.inline-emote),
+.item-main p :deep(.inline-emote) {
+  width: 26px;
+  height: 26px;
+  vertical-align: text-bottom;
+  margin: 0 2px;
+}
+
+.comment-item p :deep(.inline-mention),
+.item-main p :deep(.inline-mention) {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
+  font-size: 12px;
 }
 
 .rate {
