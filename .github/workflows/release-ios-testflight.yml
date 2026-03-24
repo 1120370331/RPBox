@@ -1,0 +1,294 @@
+name: Release iOS TestFlight
+
+on:
+  push:
+    tags:
+      - 'ios-v*'
+      - 'mobile-ios-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Override app version (semver, e.g. 1.0.10)'
+        required: false
+      release_notes:
+        description: 'Override release notes (optional)'
+        required: false
+      groups:
+        description: 'Comma separated TestFlight groups (optional)'
+        required: false
+
+env:
+  NODE_VERSION: '20'
+  XCODE_WORKSPACE: 'mobile/ios/App/App.xcworkspace'
+  XCODE_SCHEME: 'App'
+
+jobs:
+  build-and-upload:
+    name: Build and Upload to TestFlight
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          elif [[ "${GITHUB_REF:-}" == refs/tags/ios-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/ios-v}"
+          elif [[ "${GITHUB_REF:-}" == refs/tags/mobile-ios-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/mobile-ios-v}"
+          else
+            VERSION="$(node -p "require('./mobile/package.json').version")"
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $VERSION"
+            exit 1
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          BUILD_NUMBER=$((MAJOR * 1000000 + MINOR * 1000 + PATCH))
+
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_NOTES="${{ github.event.inputs.release_notes }}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          NOTES_FILE="mobile/release-notes/${VERSION}.txt"
+
+          if [ -n "${INPUT_NOTES:-}" ]; then
+            NOTES="$INPUT_NOTES"
+          elif [ -f "$NOTES_FILE" ]; then
+            NOTES="$(cat "$NOTES_FILE")"
+          else
+            NOTES="iOS build ${VERSION}"
+          fi
+
+          {
+            echo "NOTES<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build mobile web assets
+        shell: bash
+        env:
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VITE_API_BASE:-}" ]; then
+            VITE_API_BASE="https://ksxvodevhonx.sealosbja.site/api/v1"
+          fi
+          export VITE_API_BASE
+          pnpm --filter rpbox-mobile build
+
+      - name: Prepare iOS project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          if [ ! -d ios/App ]; then
+            pnpm exec cap add ios
+          fi
+          pnpm exec cap sync ios
+
+      - name: Sync iOS native version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          BUILD_NUMBER="${{ steps.version.outputs.BUILD_NUMBER }}"
+          PBXPROJ="mobile/ios/App/App.xcodeproj/project.pbxproj"
+
+          perl -0777 -i -pe "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${VERSION};/g" "$PBXPROJ"
+          perl -0777 -i -pe "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" "$PBXPROJ"
+
+      - name: Install signing assets
+        shell: bash
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${IOS_P12_BASE64:-}" ] || [ -z "${IOS_P12_PASSWORD:-}" ] || [ -z "${IOS_PROVISION_PROFILE_BASE64:-}" ]; then
+            echo "Missing iOS signing secrets."
+            exit 1
+          fi
+
+          KEYCHAIN_PASSWORD="${IOS_KEYCHAIN_PASSWORD:-temp-keychain-password}"
+          KEYCHAIN_NAME="build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+
+          echo "$IOS_P12_BASE64" | base64 --decode > "$CERT_PATH"
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security default-keychain -s "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+          security import "$CERT_PATH" -k "$KEYCHAIN_NAME" -P "$IOS_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
+      - name: Create export options plist
+        shell: bash
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${IOS_TEAM_ID:-}" ] || [ -z "${IOS_BUNDLE_ID:-}" ] || [ -z "${IOS_PROVISION_PROFILE_NAME:-}" ]; then
+            echo "Missing IOS_TEAM_ID / IOS_BUNDLE_ID / IOS_PROVISION_PROFILE_NAME"
+            exit 1
+          fi
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+            <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>${IOS_TEAM_ID}</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                <key>${IOS_BUNDLE_ID}</key>
+                <string>${IOS_PROVISION_PROFILE_NAME}</string>
+              </dict>
+            </dict>
+          </plist>
+          EOF
+
+      - name: Build archive
+        shell: bash
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace "${{ env.XCODE_WORKSPACE }}" \
+            -scheme "${{ env.XCODE_SCHEME }}" \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
+            clean archive
+
+      - name: Export IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/export"
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: Install fastlane
+        run: gem install fastlane -NV
+
+      - name: Upload to TestFlight
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+          IOS_TESTFLIGHT_GROUPS: ${{ github.event.inputs.groups || secrets.IOS_TESTFLIGHT_GROUPS }}
+          KEY_P8_PATH: ${{ runner.temp }}/AuthKey.p8
+          API_KEY_JSON: ${{ runner.temp }}/asc-api-key.json
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ASC_ISSUER_ID:-}" ] || [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_API_KEY_BASE64:-}" ]; then
+            echo "Missing App Store Connect API key secrets."
+            exit 1
+          fi
+
+          IPA_PATH="$(find "$RUNNER_TEMP/export" -name "*.ipa" | head -n 1)"
+          if [ -z "$IPA_PATH" ]; then
+            echo "IPA not found."
+            exit 1
+          fi
+
+          KEY_P8_PATH="$RUNNER_TEMP/AuthKey.p8"
+          API_KEY_JSON="$RUNNER_TEMP/asc-api-key.json"
+          echo "$ASC_API_KEY_BASE64" | base64 --decode > "$KEY_P8_PATH"
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          key_p8 = Path(os.environ["KEY_P8_PATH"]).read_text(encoding="utf-8")
+          payload = {
+              "key_id": os.environ["ASC_KEY_ID"],
+              "issuer_id": os.environ["ASC_ISSUER_ID"],
+              "key": key_p8,
+              "in_house": False
+          }
+          Path(os.environ["API_KEY_JSON"]).write_text(json.dumps(payload), encoding="utf-8")
+          PY
+
+          if [ -n "${IOS_TESTFLIGHT_GROUPS:-}" ]; then
+            fastlane pilot upload \
+              --ipa "$IPA_PATH" \
+              --api_key_path "$API_KEY_JSON" \
+              --skip_waiting_for_build_processing true \
+              --distribute_external false \
+              --groups "$IOS_TESTFLIGHT_GROUPS" \
+              --changelog "${{ steps.notes.outputs.NOTES }}"
+          else
+            fastlane pilot upload \
+              --ipa "$IPA_PATH" \
+              --api_key_path "$API_KEY_JSON" \
+              --skip_waiting_for_build_processing true \
+              --distribute_external false \
+              --changelog "${{ steps.notes.outputs.NOTES }}"
+          fi
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-testflight-artifacts
+          path: |
+            ${{ runner.temp }}/RPBox.xcarchive
+            ${{ runner.temp }}/export
+            ${{ runner.temp }}/ExportOptions.plist
+          if-no-files-found: warn
