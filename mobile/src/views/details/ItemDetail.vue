@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
+import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import {
   createItemComment,
   favoriteItem,
@@ -28,6 +29,8 @@ const liked = ref(false)
 const favorited = ref(false)
 const commentText = ref('')
 const rating = ref(0)
+const imagePreviewOpen = ref(false)
+const imagePreviewSrc = ref('')
 
 const itemId = computed(() => Number(route.params.id))
 const previewUrl = computed(() => {
@@ -109,6 +112,12 @@ function formatTime(value: string) {
   return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+function openImagePreview(src: string) {
+  if (!src) return
+  imagePreviewSrc.value = src
+  imagePreviewOpen.value = true
+}
+
 onMounted(loadItemDetail)
 </script>
 
@@ -124,7 +133,9 @@ onMounted(loadItemDetail)
 
       <template v-else>
         <article class="item-main">
-          <CachedImage :src="previewUrl" class="preview" alt="" />
+          <button class="preview-btn" @click="openImagePreview(previewUrl)">
+            <CachedImage :src="previewUrl" class="preview" alt="" :auth-fetch="true" />
+          </button>
           <h2>{{ item.name }}</h2>
           <div v-if="author" class="author-row">
             <span :style="{ color: author.name_color || undefined, fontWeight: author.name_bold ? 'bold' : undefined }">
@@ -182,6 +193,8 @@ onMounted(loadItemDetail)
         </section>
       </template>
     </div>
+
+    <ImagePreviewDialog :open="imagePreviewOpen" :src="imagePreviewSrc" @close="imagePreviewOpen = false" />
   </div>
 </template>
 
@@ -204,6 +217,13 @@ onMounted(loadItemDetail)
   border-radius: var(--radius-sm);
   object-fit: cover;
   margin-bottom: 12px;
+}
+
+.preview-btn {
+  width: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
 }
 
 .item-main h2 {

@@ -152,7 +152,7 @@ onMounted(loadPosts)
           @click="router.push({ name: 'post-detail', params: { id: post.id } })"
         >
           <div v-if="post.cover_image_url" class="post-cover">
-            <CachedImage :src="post.cover_image_url" alt="" />
+            <CachedImage :src="resolveApiUrl(post.cover_image_url)" alt="" />
           </div>
           <div class="post-content">
             <div class="post-meta-top">

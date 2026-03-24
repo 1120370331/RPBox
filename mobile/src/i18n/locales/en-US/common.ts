@@ -8,6 +8,7 @@ export default {
     loading: 'Loading...',
     loadFailed: 'Failed to load data',
     networkOffline: 'Network disconnected, please check connection',
+    pressAgainExit: 'Press back again to exit',
   },
   time: {
     justNow: 'Just now',

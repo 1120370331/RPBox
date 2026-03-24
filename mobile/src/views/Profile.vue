@@ -119,64 +119,96 @@ onMounted(loadProfile)
 </template>
 
 <style scoped>
-.page { padding: 0 16px 16px; }
+.page { padding: 0 14px calc(20px + var(--safe-bottom, 0px)); }
 .page-header { padding: 12px 0 8px; }
 .page-header h1 { font-size: 22px; }
 
 .profile-card {
   display: flex; align-items: center; gap: 16px;
-  padding: 20px; background: var(--color-card-bg); border-radius: var(--radius-md);
-  margin-bottom: 16px; box-shadow: var(--shadow-sm);
+  padding: 18px 16px; background: var(--color-card-bg); border-radius: var(--radius-md);
+  margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
 
 .avatar-wrap { flex-shrink: 0; }
-.avatar-img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.avatar-img { width: 58px; height: 58px; border-radius: 50%; object-fit: cover; }
 .avatar-placeholder {
-  width: 64px; height: 64px; border-radius: 50%;
+  width: 58px; height: 58px; border-radius: 50%;
   background: var(--icon-bg); display: flex;
   align-items: center; justify-content: center;
 }
-.avatar-placeholder i { font-size: 32px; color: var(--icon-color); }
+.avatar-placeholder i { font-size: 29px; color: var(--icon-color); }
 
-.user-main { display: flex; flex-direction: column; gap: 6px; }
-.username { font-size: 18px; font-weight: 600; }
-.badges { display: flex; gap: 6px; }
+.user-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.username { font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; }
 .role-badge {
-  font-size: 11px; padding: 2px 8px; border-radius: 8px;
+  font-size: 11px; padding: 2px 7px; border-radius: 8px;
   background: var(--color-primary-light); color: var(--color-text-secondary);
 }
 .sponsor-badge {
-  font-size: 11px; padding: 2px 8px; border-radius: 8px;
+  font-size: 11px; padding: 2px 7px; border-radius: 8px;
   background: var(--tag-bg); color: var(--color-accent);
 }
 .sponsor-badge i { margin-right: 2px; }
 
 .info-section {
-  background: var(--color-card-bg); border-radius: var(--radius-md); padding: 14px;
-  margin-bottom: 16px; box-shadow: var(--shadow-sm);
+  background: var(--color-card-bg); border-radius: var(--radius-md); padding: 13px 14px;
+  margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
-.info-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--color-text-secondary); }
+.info-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary); min-width: 0; }
+.info-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .info-row i { font-size: 18px; color: var(--icon-color); }
 
 .menu-section {
   background: var(--color-card-bg); border-radius: var(--radius-md); overflow: hidden;
-  margin-bottom: 16px; box-shadow: var(--shadow-sm);
+  margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
 .menu-item {
-  display: flex; align-items: center; gap: 12px; padding: 14px 16px;
-  font-size: 14px; color: var(--text-dark); cursor: pointer;
+  display: flex; align-items: center; gap: 10px; padding: 13px 14px;
+  font-size: 13px; color: var(--text-dark); cursor: pointer;
   background: none; border: none; width: 100%; text-align: left;
   border-bottom: 1px solid var(--color-border-light);
 }
 .menu-item:last-child { border-bottom: none; }
-.menu-item i { font-size: 18px; color: var(--icon-color); }
-.menu-item span { flex: 1; }
+.menu-item i { font-size: 17px; color: var(--icon-color); }
+.menu-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-item .arrow { color: var(--color-text-muted); font-size: 16px; }
 
 .logout-btn {
-  width: 100%; padding: 14px; border: none; border-radius: var(--radius-sm);
-  background: var(--btn-danger-bg); color: var(--btn-primary-text); font-size: 15px; font-weight: 500;
+  width: 100%; padding: 13px; border: none; border-radius: var(--radius-sm);
+  background: var(--btn-danger-bg); color: var(--btn-primary-text); font-size: 14px; font-weight: 500;
   cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
   margin-top: 8px;
+}
+
+@media (max-width: 380px) {
+  .page {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .profile-card {
+    padding: 14px 12px;
+    gap: 12px;
+  }
+
+  .avatar-img,
+  .avatar-placeholder {
+    width: 50px;
+    height: 50px;
+  }
+
+  .avatar-placeholder i {
+    font-size: 24px;
+  }
+
+  .username {
+    font-size: 15px;
+  }
+
+  .menu-item {
+    padding: 11px 12px;
+    font-size: 12px;
+  }
 }
 </style>
