@@ -8,7 +8,9 @@ function isCacheableUrl(raw: string) {
   if (!raw || raw.startsWith('data:')) return false
   try {
     const url = new URL(raw, window.location.href)
-    return url.protocol === 'http:' || url.protocol === 'https:'
+    if (!(url.protocol === 'http:' || url.protocol === 'https:')) return false
+    if (url.origin !== window.location.origin) return false
+    return url.pathname.includes('/api/v1/images') || url.pathname.includes('/uploads/')
   } catch {
     return false
   }
@@ -36,6 +38,38 @@ export async function getCachedImageObjectUrl(rawUrl: string) {
     if (cached) {
       return responseToObjectUrl(cached)
     }
+    return ''
+  } catch {
+    return ''
+  }
+}
+
+export async function warmImageCache(rawUrl: string) {
+  if (!canUseCacheApi() || !isCacheableUrl(rawUrl)) return false
+  try {
+    const cache = await caches.open(IMAGE_CACHE_NAME)
+    const request = buildImageRequest(rawUrl)
+    const cached = await cache.match(request)
+    if (cached) return true
+
+    const network = await fetch(request)
+    if (!network.ok) return false
+    await cache.put(request, network.clone())
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function fetchImageObjectUrlWithAuth(rawUrl: string) {
+  if (!canUseCacheApi() || !isCacheableUrl(rawUrl)) return ''
+  try {
+    const cache = await caches.open(IMAGE_CACHE_NAME)
+    const request = buildImageRequest(rawUrl)
+    const cached = await cache.match(request)
+    if (cached) {
+      return responseToObjectUrl(cached)
+    }
 
     const network = await fetch(request)
     if (!network.ok) return ''
@@ -54,4 +88,3 @@ export async function clearImageCache() {
     return false
   }
 }
-

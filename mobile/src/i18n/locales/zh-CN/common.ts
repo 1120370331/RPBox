@@ -8,6 +8,7 @@ export default {
     loading: '加载中...',
     loadFailed: '加载失败',
     networkOffline: '网络已断开，请检查连接',
+    pressAgainExit: '再按一次退出应用',
   },
   time: {
     justNow: '刚刚',

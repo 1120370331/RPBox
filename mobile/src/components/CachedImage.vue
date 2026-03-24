@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { getCachedImageObjectUrl } from '@/utils/imageCache'
+import { fetchImageObjectUrlWithAuth, getCachedImageObjectUrl, warmImageCache } from '@/utils/imageCache'
 
 const props = withDefaults(
   defineProps<{
@@ -8,6 +8,7 @@ const props = withDefaults(
     alt?: string
     fit?: 'cover' | 'contain'
     useCache?: boolean
+    authFetch?: boolean
     loading?: 'lazy' | 'eager'
   }>(),
   {
@@ -15,6 +16,7 @@ const props = withDefaults(
     alt: '',
     fit: 'cover',
     useCache: true,
+    authFetch: false,
     loading: 'lazy',
   },
 )
@@ -23,6 +25,7 @@ const resolvedSrc = ref('')
 const loaded = ref(false)
 const failed = ref(false)
 let objectUrl = ''
+let resolveToken = 0
 
 function revokeObjectUrl() {
   if (objectUrl) {
@@ -32,6 +35,7 @@ function revokeObjectUrl() {
 }
 
 async function resolveSource() {
+  const token = ++resolveToken
   loaded.value = false
   failed.value = false
   revokeObjectUrl()
@@ -46,14 +50,29 @@ async function resolveSource() {
     return
   }
 
-  const cached = await getCachedImageObjectUrl(source)
-  if (cached) {
-    objectUrl = cached
-    resolvedSrc.value = cached
+  if (props.authFetch) {
+    const fetched = await fetchImageObjectUrlWithAuth(source)
+    if (token !== resolveToken) return
+    if (fetched) {
+      objectUrl = fetched
+      resolvedSrc.value = fetched
+      return
+    }
+    resolvedSrc.value = source
     return
   }
 
+  // First paint with original URL, then try cache in background.
   resolvedSrc.value = source
+
+  const cached = await getCachedImageObjectUrl(source)
+  if (token !== resolveToken) return
+  if (cached && cached !== resolvedSrc.value) {
+    objectUrl = cached
+    resolvedSrc.value = cached
+  }
+
+  void warmImageCache(source)
 }
 
 function handleLoad() {
@@ -140,4 +159,3 @@ img {
   }
 }
 </style>
-

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
+import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import { useToastStore } from '@shared/stores/toast'
 import {
   createPostComment,
@@ -35,6 +36,8 @@ const authorName = ref('')
 const authorAvatar = ref('')
 const authorNameColor = ref('')
 const authorNameBold = ref(false)
+const imagePreviewOpen = ref(false)
+const imagePreviewSrc = ref('')
 
 const postId = computed(() => Number(route.params.id))
 const postCoverUrl = computed(() => {
@@ -193,6 +196,17 @@ function mapContentUrl(url: string) {
 
 function handleContentClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
+  const image = target?.closest('img')
+  if (image) {
+    const src = (image as HTMLImageElement).currentSrc || image.getAttribute('src') || ''
+    if (src) {
+      event.preventDefault()
+      imagePreviewSrc.value = src
+      imagePreviewOpen.value = true
+      return
+    }
+  }
+
   const link = target?.closest('a')
   if (!link) return
   const rawHref = link.getAttribute('href') || ''
@@ -258,7 +272,9 @@ onMounted(loadPostDetail)
 
       <template v-else>
         <article class="post-main">
-          <CachedImage v-if="postCoverUrl" :src="postCoverUrl" class="cover" alt="" />
+          <button v-if="postCoverUrl" class="cover-btn" @click="imagePreviewSrc = postCoverUrl; imagePreviewOpen = true">
+            <CachedImage :src="postCoverUrl" class="cover" alt="" />
+          </button>
           <h2>{{ post.title }}</h2>
           <div class="author-row">
             <img v-if="authorAvatar" :src="resolveApiUrl(authorAvatar)" class="author-avatar" alt="" />
@@ -305,6 +321,8 @@ onMounted(loadPostDetail)
         </section>
       </template>
     </div>
+
+    <ImagePreviewDialog :open="imagePreviewOpen" :src="imagePreviewSrc" @close="imagePreviewOpen = false" />
   </div>
 </template>
 
@@ -327,6 +345,13 @@ onMounted(loadPostDetail)
   object-fit: cover;
   border-radius: var(--radius-sm);
   margin-bottom: 12px;
+}
+
+.cover-btn {
+  width: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
 }
 
 .post-main h2 {
@@ -380,6 +405,7 @@ onMounted(loadPostDetail)
   max-width: 100%;
   height: auto;
   border-radius: var(--radius-sm);
+  cursor: zoom-in;
 }
 
 .action-row {
