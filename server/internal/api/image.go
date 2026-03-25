@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nfnt/resize"
@@ -75,6 +77,10 @@ func (s *Server) getImage(c *gin.Context) {
 	if originalValue == "" {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Image data is empty"})
 		return
+	}
+
+	if imageType == "post-cover" {
+		originalValue = s.migrateLegacyPostCoverIfNeeded(c, id, originalValue)
 	}
 
 	imgData, contentType, err := s.loadImageBytes(c, originalValue)
@@ -155,6 +161,36 @@ func (s *Server) getImage(c *gin.Context) {
 	c.Header("Cache-Control", cacheControl)
 	c.Header("ETag", etag)
 	c.Data(http.StatusOK, "image/jpeg", result)
+}
+
+// migrateLegacyPostCoverIfNeeded migrates legacy base64 cover image values to uploaded URLs.
+func (s *Server) migrateLegacyPostCoverIfNeeded(c *gin.Context, id string, raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || isImageURL(value) {
+		return value
+	}
+
+	normalized, err := s.normalizeAndStoreImageValue(c, value, fmt.Sprintf("posts/%s/cover", id))
+	if err != nil {
+		return value
+	}
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" || normalized == value || !isImageURL(normalized) {
+		return value
+	}
+
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return normalized
+	}
+
+	now := time.Now()
+	_ = database.DB.Model(&model.Post{}).Where("id = ?", idNum).Updates(map[string]interface{}{
+		"cover_image":            normalized,
+		"cover_image_updated_at": now,
+	}).Error
+
+	return normalized
 }
 
 // getOriginalImageValue 从数据库获取原图值（URL或Base64）
