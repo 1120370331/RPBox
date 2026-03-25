@@ -239,9 +239,10 @@ jobs:
           IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
         run: |
           set -euo pipefail
+          SCHEME="${RESOLVED_XCODE_SCHEME:-${{ env.XCODE_SCHEME }}}"
           xcodebuild \
             -workspace "${{ env.XCODE_WORKSPACE }}" \
-            -scheme "${{ env.RESOLVED_XCODE_SCHEME }}" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
