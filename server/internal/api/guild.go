@@ -147,6 +147,41 @@ func normalizeUpdateGuildRequest(req *UpdateGuildRequest) error {
 	return nil
 }
 
+func (s *Server) loadGuildDirectMediaURLMap(guildIDs []uint) (map[uint]string, map[uint]string) {
+	bannerURLMap := make(map[uint]string)
+	avatarURLMap := make(map[uint]string)
+	if len(guildIDs) == 0 {
+		return bannerURLMap, avatarURLMap
+	}
+
+	var rows []struct {
+		ID     uint
+		Banner string
+		Avatar string
+	}
+	database.DB.Model(&model.Guild{}).
+		Select("id, banner, avatar").
+		Where("id IN ?", guildIDs).
+		Where(`(
+			banner LIKE ? OR banner LIKE ? OR banner LIKE ? OR banner LIKE ? OR
+			avatar LIKE ? OR avatar LIKE ? OR avatar LIKE ? OR avatar LIKE ?
+		)`, "http://%", "https://%", "/uploads/%", "uploads/%", "http://%", "https://%", "/uploads/%", "uploads/%").
+		Find(&rows)
+
+	for _, row := range rows {
+		banner := strings.TrimSpace(row.Banner)
+		if banner != "" && isImageURL(banner) {
+			bannerURLMap[row.ID] = buildAPIURL(s.cfg.Server.ApiHost, banner)
+		}
+		avatar := strings.TrimSpace(row.Avatar)
+		if avatar != "" && isImageURL(avatar) {
+			avatarURLMap[row.ID] = buildAPIURL(s.cfg.Server.ApiHost, avatar)
+		}
+	}
+
+	return bannerURLMap, avatarURLMap
+}
+
 // listGuilds 获取我的公会列表
 func (s *Server) listGuilds(c *gin.Context) {
 	userID := c.GetUint("userID")
@@ -193,6 +228,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 	for _, id := range guildsWithAvatar {
 		hasAvatarMap[id] = true
 	}
+	directBannerURLMap, directAvatarURLMap := s.loadGuildDirectMediaURLMap(guildIDs)
 
 	// 添加用户角色信息和 banner/avatar URL
 	type GuildWithRole struct {
@@ -205,19 +241,21 @@ func (s *Server) listGuilds(c *gin.Context) {
 	for i, g := range guilds {
 		bannerURL := ""
 		if hasBannerMap[g.ID] {
-			bannerURL = guildBannerURL(g)
-		}
-		if g.BannerUpdatedAt == nil && hasBannerMap[g.ID] {
-			t := g.UpdatedAt
-			g.BannerUpdatedAt = &t
+			if directURL := directBannerURLMap[g.ID]; directURL != "" {
+				bannerURL = directURL
+			} else {
+				ensureGuildBannerUpdatedAt(&g)
+				bannerURL = guildBannerURLFromMeta(g.ID, g.UpdatedAt, g.BannerUpdatedAt)
+			}
 		}
 		avatarURL := ""
 		if hasAvatarMap[g.ID] {
-			avatarURL = guildAvatarURL(g)
-		}
-		if g.AvatarUpdatedAt == nil && hasAvatarMap[g.ID] {
-			t := g.UpdatedAt
-			g.AvatarUpdatedAt = &t
+			if directURL := directAvatarURLMap[g.ID]; directURL != "" {
+				avatarURL = directURL
+			} else {
+				ensureGuildAvatarUpdatedAt(&g)
+				avatarURL = guildAvatarURLFromMeta(g.ID, g.UpdatedAt, g.AvatarUpdatedAt)
+			}
 		}
 		result[i] = GuildWithRole{Guild: g, MyRole: roleMap[g.ID], BannerURL: bannerURL, AvatarURL: avatarURL}
 	}
@@ -333,8 +371,8 @@ func (s *Server) getGuild(c *gin.Context) {
 	}
 	ensureGuildBannerUpdatedAt(&guild)
 	ensureGuildAvatarUpdatedAt(&guild)
-	guild.Banner = guildBannerURL(guild)
-	guild.Avatar = guildAvatarURL(guild)
+	guild.Banner = buildAPIURL(s.cfg.Server.ApiHost, guildBannerURL(guild))
+	guild.Avatar = buildAPIURL(s.cfg.Server.ApiHost, guildAvatarURL(guild))
 
 	c.JSON(http.StatusOK, gin.H{"guild": guild, "my_role": myRole})
 }
@@ -911,6 +949,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 	for _, id := range guildsWithAvatar {
 		hasAvatarMap[id] = true
 	}
+	directBannerURLMap, directAvatarURLMap := s.loadGuildDirectMediaURLMap(guildIDs)
 
 	// 添加 banner/avatar URL
 	type GuildWithBanner struct {
@@ -922,19 +961,21 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 	for i, g := range guilds {
 		bannerURL := ""
 		if hasBannerMap[g.ID] {
-			bannerURL = guildBannerURL(g)
-		}
-		if g.BannerUpdatedAt == nil && hasBannerMap[g.ID] {
-			t := g.UpdatedAt
-			g.BannerUpdatedAt = &t
+			if directURL := directBannerURLMap[g.ID]; directURL != "" {
+				bannerURL = directURL
+			} else {
+				ensureGuildBannerUpdatedAt(&g)
+				bannerURL = guildBannerURLFromMeta(g.ID, g.UpdatedAt, g.BannerUpdatedAt)
+			}
 		}
 		avatarURL := ""
 		if hasAvatarMap[g.ID] {
-			avatarURL = guildAvatarURL(g)
-		}
-		if g.AvatarUpdatedAt == nil && hasAvatarMap[g.ID] {
-			t := g.UpdatedAt
-			g.AvatarUpdatedAt = &t
+			if directURL := directAvatarURLMap[g.ID]; directURL != "" {
+				avatarURL = directURL
+			} else {
+				ensureGuildAvatarUpdatedAt(&g)
+				avatarURL = guildAvatarURLFromMeta(g.ID, g.UpdatedAt, g.AvatarUpdatedAt)
+			}
 		}
 		result[i] = GuildWithBanner{Guild: g, BannerURL: bannerURL, AvatarURL: avatarURL}
 	}
