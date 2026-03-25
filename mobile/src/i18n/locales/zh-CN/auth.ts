@@ -2,7 +2,7 @@ export default {
   login: {
     title: 'RPBox',
     subtitle: '魔兽世界 RP 工具箱',
-    usernamePlaceholder: '用户名',
+    usernamePlaceholder: '用户名或邮箱',
     passwordPlaceholder: '密码',
     forgotPassword: '忘记密码?',
     submit: '登录',

@@ -796,10 +796,10 @@ function handleViewStory(id: number) {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
-  border: 1px solid var(--color-accent-border, rgba(184, 115, 51, 0.2));
+  background: linear-gradient(135deg, var(--color-primary-light, rgba(184, 115, 51, 0.12)) 0%, var(--color-card-bg, #f5efe7) 100%);
+  border: 1px solid var(--color-border-light, rgba(184, 115, 51, 0.35));
   border-radius: 8px;
-  color: var(--color-secondary, #804030);
+  color: var(--color-text-main, #2c1e12);
   font-size: 14px;
 }
 
@@ -823,7 +823,7 @@ function handleViewStory(id: number) {
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-secondary, #804030);
+  color: var(--color-text-main, #2c1e12);
 }
 
 /* 使用提示横幅 */

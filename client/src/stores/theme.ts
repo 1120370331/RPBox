@@ -431,12 +431,16 @@ export const useThemeStore = defineStore('theme', () => {
     root.style.setProperty('--color-main-bg', c.background)
     root.style.setProperty('--color-card-bg', c.cardBg)
     root.style.setProperty('--color-card-bg-hover', c.cardBgHover)
+    // 兼容旧变量命名（部分页面仍在使用）
+    root.style.setProperty('--color-bg', c.background)
+    root.style.setProperty('--color-bg-secondary', c.cardBg)
 
     // 文字
     root.style.setProperty('--color-text-main', c.textMain)
     root.style.setProperty('--color-text-light', c.textLight)
     root.style.setProperty('--color-text-secondary', c.textSecondary)
     root.style.setProperty('--color-text-muted', c.textMuted)
+    root.style.setProperty('--color-text', c.textMain)
     root.style.setProperty('--text-light', c.textLight)
     root.style.setProperty('--text-dark', c.textMain)
 
