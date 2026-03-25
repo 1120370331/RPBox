@@ -236,7 +236,6 @@ jobs:
         shell: bash
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
         run: |
           set -euo pipefail
           SCHEME="$(xcodebuild -list -json -workspace "${{ env.XCODE_WORKSPACE }}" | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
@@ -252,7 +251,6 @@ jobs:
             -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
             clean archive
 
       - name: Export IPA
