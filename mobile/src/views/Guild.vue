@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useToastStore } from '@shared/stores/toast'
@@ -76,18 +76,7 @@ async function loadMyApplications() {
   myApplications.value = res.applications || []
 }
 
-async function loadData() {
-  loading.value = true
-  try {
-    await Promise.all([loadMyGuilds(), loadPublicGuilds(), loadMyApplications()])
-  } catch (error) {
-    toast.error((error as Error)?.message || t('common.status.loadFailed'))
-  } finally {
-    loading.value = false
-  }
-}
-
-async function handleSearch() {
+async function loadPublicTabData() {
   loading.value = true
   try {
     await loadPublicGuilds()
@@ -96,6 +85,26 @@ async function handleSearch() {
   } finally {
     loading.value = false
   }
+
+  // 这些数据用于按钮状态，放到后台加载，避免阻塞公会广场列表渲染
+  void Promise.all([loadMyGuilds(), loadMyApplications()]).catch(() => {
+    // ignore: 不影响公共列表展示
+  })
+}
+
+async function loadMyTabData() {
+  loading.value = true
+  try {
+    await Promise.all([loadMyGuilds(), loadMyApplications()])
+  } catch (error) {
+    toast.error((error as Error)?.message || t('common.status.loadFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleSearch() {
+  await loadPublicTabData()
 }
 
 async function handleJoinByCode() {
@@ -105,8 +114,8 @@ async function handleJoinByCode() {
     await joinGuild(inviteCode.value.trim())
     inviteCode.value = ''
     toast.success(t('guild.joinByCode.success'))
-    await loadData()
     activeTab.value = 'my'
+    await loadMyTabData()
   } catch (error) {
     toast.error((error as Error)?.message || t('guild.joinByCode.failed'))
   } finally {
@@ -136,7 +145,24 @@ async function handleCancelApplication(guildId: number) {
   }
 }
 
-onMounted(loadData)
+watch(activeTab, async (tab) => {
+  if (tab === 'public') {
+    if (publicGuilds.value.length === 0) {
+      await loadPublicTabData()
+    } else if (myApplications.value.length === 0 || myGuilds.value.length === 0) {
+      void Promise.all([loadMyGuilds(), loadMyApplications()])
+    }
+    return
+  }
+
+  if (myGuilds.value.length === 0) {
+    await loadMyTabData()
+  } else if (myApplications.value.length === 0) {
+    void loadMyApplications()
+  }
+})
+
+onMounted(loadPublicTabData)
 </script>
 
 <template>

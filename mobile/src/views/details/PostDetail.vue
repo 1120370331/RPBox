@@ -8,6 +8,7 @@ import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import { useToastStore } from '@shared/stores/toast'
+import { useUserStore } from '@shared/stores/user'
 import {
   createPostComment,
   favoritePost,
@@ -24,6 +25,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToastStore()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -53,6 +55,12 @@ const postCoverUrl = computed(() => {
 const postContentHtml = computed(() => {
   if (!post.value?.content) return ''
   return normalizePostContentHtml(post.value.content)
+})
+const canEdit = computed(() => {
+  const currentUserId = userStore.user?.id
+  if (!currentUserId || !post.value) return false
+  if (post.value.author_id === currentUserId) return true
+  return userStore.isModerator
 })
 const commentPreviewHtml = computed(() => {
   void emoteVersion.value
@@ -342,13 +350,16 @@ onMounted(async () => {
           <div class="content" v-html="postContentHtml" @click="handleContentClick" />
         </article>
 
-        <section class="action-row">
+        <section class="action-row" :class="{ 'with-edit': canEdit }">
           <button :class="{ active: liked }" :disabled="liking" @click="toggleLike">
             <i :class="liked ? 'ri-heart-fill' : 'ri-heart-line'" /> {{ post.like_count }}
           </button>
           <button :class="{ active: favorited }" :disabled="favoriting" @click="toggleFavorite">
             <i :class="favorited ? 'ri-star-fill' : 'ri-star-line'" />
             {{ favorited ? $t('common.action.favorited') : $t('common.action.favorite') }}
+          </button>
+          <button v-if="canEdit" @click="router.push({ name: 'post-edit', params: { id: post.id } })">
+            <i class="ri-edit-line" /> {{ $t('community.editPost') }}
           </button>
         </section>
 
@@ -498,6 +509,10 @@ onMounted(async () => {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.action-row.with-edit {
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
 .action-row button {

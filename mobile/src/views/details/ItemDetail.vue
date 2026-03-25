@@ -6,6 +6,7 @@ import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
+import { useUserStore } from '@shared/stores/user'
 import {
   createItemComment,
   favoriteItem,
@@ -21,6 +22,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -46,6 +48,12 @@ const previewUrl = computed(() => {
 const itemDescriptionHtml = computed(() => {
   void emoteVersion.value
   return renderTextWithEmotes(item.value?.description || '')
+})
+const canEdit = computed(() => {
+  const currentUserId = userStore.user?.id
+  if (!currentUserId || !item.value) return false
+  if (item.value.author_id === currentUserId) return true
+  return userStore.isModerator
 })
 const commentPreviewHtml = computed(() => {
   void emoteVersion.value
@@ -205,13 +213,16 @@ onMounted(async () => {
           </div>
         </article>
 
-        <section class="action-row">
+        <section class="action-row" :class="{ 'with-edit': canEdit }">
           <button @click="toggleLike">
             <i :class="liked ? 'ri-heart-fill' : 'ri-heart-line'" /> {{ item.like_count }}
           </button>
           <button @click="toggleFavorite">
             <i :class="favorited ? 'ri-star-fill' : 'ri-star-line'" />
             {{ favorited ? $t('common.action.favorited') : $t('common.action.favorite') }}
+          </button>
+          <button v-if="canEdit" @click="router.push({ name: 'item-edit', params: { id: item.id } })">
+            <i class="ri-edit-line" /> {{ $t('market.editItem') }}
           </button>
         </section>
 
@@ -345,6 +356,10 @@ onMounted(async () => {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.action-row.with-edit {
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
 .action-row button {

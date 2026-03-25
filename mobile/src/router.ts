@@ -82,9 +82,29 @@ const router = createRouter({
       ],
     },
     {
+      path: '/posts/create',
+      name: 'post-create',
+      component: () => import('./views/editor/PostEditor.vue'),
+    },
+    {
+      path: '/posts/:id/edit',
+      name: 'post-edit',
+      component: () => import('./views/editor/PostEditor.vue'),
+    },
+    {
       path: '/posts/:id',
       name: 'post-detail',
       component: () => import('./views/details/PostDetail.vue'),
+    },
+    {
+      path: '/items/create',
+      name: 'item-create',
+      component: () => import('./views/editor/ItemEditor.vue'),
+    },
+    {
+      path: '/items/:id/edit',
+      name: 'item-edit',
+      component: () => import('./views/editor/ItemEditor.vue'),
     },
     {
       path: '/stories/:id',
@@ -115,6 +135,11 @@ const router = createRouter({
       path: '/my-items',
       name: 'my-items',
       component: () => import('./views/profile/MyItems.vue'),
+    },
+    {
+      path: '/my-collections',
+      name: 'my-collections',
+      component: () => import('./views/profile/MyCollections.vue'),
     },
     {
       path: '/about',

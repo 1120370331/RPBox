@@ -623,7 +623,8 @@ defineExpose({
   position: sticky;
   top: 0;
   z-index: 50;
-  background: var(--color-bg, #faf6f1);
+  background: var(--color-panel-bg, #fff);
+  border-bottom: 1px solid var(--color-border-light, #eee4d8);
   padding: 12px 0;
   margin: -12px 0 0 0;
 }
@@ -665,6 +666,10 @@ defineExpose({
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
+  background: linear-gradient(135deg, var(--color-card-bg, #f5f0eb) 0%, var(--color-main-bg, #ebe4dc) 100%);
+  border: 1px solid var(--color-border, #e2d4c4);
+  border-radius: 16px;
+  padding: 16px;
 }
 
 .story-card {
@@ -690,8 +695,8 @@ defineExpose({
 }
 
 .story-status.draft {
-  background: var(--color-bg-secondary);
-  color: var(--color-secondary);
+  background: var(--color-card-bg, #f1e8dc);
+  color: var(--color-text-secondary, #856a52);
 }
 
 .story-status.published {
@@ -769,7 +774,8 @@ defineExpose({
   padding: 40px 20px;
   min-height: 200px;
   width: 100%;
-  background: linear-gradient(135deg, var(--color-card-bg, #f5f0eb) 0%, var(--color-background, #ebe4dc) 100%);
+  background: linear-gradient(135deg, var(--color-card-bg, #f5f0eb) 0%, var(--color-main-bg, #ebe4dc) 100%);
+  border: 1px solid var(--color-border, #e2d4c4);
   border-radius: 16px;
 }
 
