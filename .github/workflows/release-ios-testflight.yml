@@ -31,6 +31,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Verify Xcode and iOS SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcodebuild -showsdks | grep -E "iphoneos|iOS"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
