@@ -9,7 +9,6 @@ import (
 	_ "image/png"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -192,61 +191,6 @@ func (s *Server) migrateLegacyPostCoverIfNeeded(c *gin.Context, id string, raw s
 	}).Error
 
 	return normalized
-}
-
-func (s *Server) normalizeAndStoreImageValue(c *gin.Context, raw string, subdir string) (string, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" || isImageURL(value) {
-		return value, nil
-	}
-
-	data, contentType, err := s.loadImageBytes(c, value)
-	if err != nil {
-		return "", err
-	}
-	if contentType == "" || contentType == "application/octet-stream" {
-		contentType = http.DetectContentType(data)
-	}
-	if !strings.HasPrefix(contentType, "image/") {
-		return "", fmt.Errorf("unsupported image content type")
-	}
-
-	ext := imageExtension(contentType, "")
-	if ext == "" {
-		return "", fmt.Errorf("unsupported image format")
-	}
-
-	cleanSubdir := cleanUploadSubdir(subdir)
-	name, err := randomHex(16)
-	if err != nil {
-		return "", err
-	}
-	filename := name + ext
-	relativePath := path.Join(cleanSubdir, filename)
-
-	if s.ossEnabled() {
-		objectKey := s.buildOSSKey(cleanSubdir, filename)
-		if err := s.uploadToOSS(objectKey, data, contentType); err != nil {
-			return "", err
-		}
-		return buildPublicURL(c, path.Join("/", uploadDirName, relativePath)), nil
-	}
-
-	baseDir := filepath.Join(s.cfg.Storage.Path, uploadDirName)
-	targetDir := baseDir
-	if cleanSubdir != "" {
-		targetDir = filepath.Join(baseDir, filepath.FromSlash(cleanSubdir))
-	}
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return "", err
-	}
-
-	targetPath := filepath.Join(targetDir, filename)
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
-		return "", err
-	}
-
-	return buildPublicURL(c, path.Join("/", uploadDirName, relativePath)), nil
 }
 
 // getOriginalImageValue 从数据库获取原图值（URL或Base64）
