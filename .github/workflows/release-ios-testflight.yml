@@ -159,7 +159,8 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
 
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
 
       - name: Create export options plist
         shell: bash
@@ -200,6 +201,7 @@ jobs:
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
           IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
         run: |
           set -euo pipefail
           xcodebuild \
@@ -207,8 +209,11 @@ jobs:
             -scheme "${{ env.XCODE_SCHEME }}" \
             -configuration Release \
             -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROVISION_PROFILE_NAME" \
             clean archive
 
       - name: Export IPA
