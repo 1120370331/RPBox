@@ -105,7 +105,13 @@ onMounted(loadItems)
 <template>
   <div class="page market-page">
     <header class="page-header">
-      <h1>{{ $t('market.title') }}</h1>
+      <div class="title-row">
+        <h1>{{ $t('market.title') }}</h1>
+        <button class="create-btn" @click="router.push({ name: 'item-create' })">
+          <i class="ri-upload-2-line" />
+          <span>{{ $t('market.createItem') }}</span>
+        </button>
+      </div>
     </header>
 
     <div class="search-bar">
@@ -200,7 +206,20 @@ onMounted(loadItems)
   gap: 12px;
 }
 .page-header { padding: 6px 0 0; }
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; }
+
+.create-btn {
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--text-light);
+  padding: 6px 12px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 .search-bar {
   display: flex; align-items: center; gap: 8px;

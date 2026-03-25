@@ -2,7 +2,7 @@ export default {
   login: {
     title: 'RPBox',
     subtitle: 'WoW RP Toolbox',
-    usernamePlaceholder: 'Username',
+    usernamePlaceholder: 'Username or Email',
     passwordPlaceholder: 'Password',
     forgotPassword: 'Forgot password?',
     submit: 'Login',

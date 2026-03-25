@@ -101,6 +101,11 @@ onMounted(loadProfile)
           <span>{{ $t('profile.menu.items') }}</span>
           <i class="ri-arrow-right-s-line arrow" />
         </button>
+        <button class="menu-item" @click="router.push('/my-collections')">
+          <i class="ri-folder-line" />
+          <span>{{ $t('profile.menu.collections') }}</span>
+          <i class="ri-arrow-right-s-line arrow" />
+        </button>
       </div>
 
       <div class="menu-section">

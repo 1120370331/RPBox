@@ -23,13 +23,24 @@ const sortBy = ref<'created_at' | 'like_count' | 'view_count'>('created_at')
 
 const categories = computed(() => [
   { key: '', label: t('community.categories.all') },
-  { key: 'discussion', label: t('community.categories.discussion') },
-  { key: 'story', label: t('community.categories.story') },
-  { key: 'guide', label: t('community.categories.guide') },
-  { key: 'showcase', label: t('community.categories.showcase') },
-  { key: 'question', label: t('community.categories.question') },
+  { key: 'profile', label: t('community.categories.profile') },
+  { key: 'guild', label: t('community.categories.guild') },
+  { key: 'report', label: t('community.categories.report') },
+  { key: 'novel', label: t('community.categories.novel') },
+  { key: 'item', label: t('community.categories.item') },
+  { key: 'event', label: t('community.categories.event') },
   { key: 'other', label: t('community.categories.other') },
 ])
+
+const categoryLabelMap = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  for (const category of categories.value) {
+    if (category.key) {
+      map[category.key] = category.label
+    }
+  }
+  return map
+})
 
 const sortOptions = computed(() => [
   { key: 'created_at', label: t('community.sort.latest') },
@@ -96,6 +107,15 @@ function formatDate(dateStr: string) {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
+function postCoverUrl(post: PostWithAuthor) {
+  return resolveApiUrl(post.cover_image_url || '')
+}
+
+function categoryLabel(category?: string) {
+  if (!category) return ''
+  return categoryLabelMap.value[category] || category
+}
+
 const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
 
 watch([activeCategory, sortBy, currentPage], loadPosts)
@@ -105,7 +125,13 @@ onMounted(loadPosts)
 <template>
   <div class="page community-page">
     <header class="page-header">
-      <h1>{{ $t('community.title') }}</h1>
+      <div class="title-row">
+        <h1>{{ $t('community.title') }}</h1>
+        <button class="create-btn" @click="router.push({ name: 'post-create' })">
+          <i class="ri-quill-pen-line" />
+          <span>{{ $t('community.createPost') }}</span>
+        </button>
+      </div>
       <div class="sort-row">
         <button
           v-for="opt in sortOptions" :key="opt.key"
@@ -145,12 +171,12 @@ onMounted(loadPosts)
           class="post-card"
           @click="router.push({ name: 'post-detail', params: { id: post.id } })"
         >
-          <div v-if="post.cover_image_url" class="post-cover">
-            <CachedImage :src="resolveApiUrl(post.cover_image_url)" alt="" />
+          <div v-if="postCoverUrl(post)" class="post-cover">
+            <CachedImage :src="postCoverUrl(post)" alt="" />
           </div>
           <div class="post-content">
             <div class="post-meta-top">
-              <span v-if="post.category" class="category-tag">{{ post.category }}</span>
+              <span v-if="post.category" class="category-tag">{{ categoryLabel(post.category) }}</span>
               <span class="post-time">{{ formatDate(post.created_at) }}</span>
             </div>
             <h3 class="post-title">{{ post.title }}</h3>
@@ -197,8 +223,21 @@ onMounted(loadPosts)
   flex-direction: column;
   gap: 12px;
 }
-.page-header { padding: 6px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.page-header { padding: 6px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; flex-shrink: 0; }
+
+.create-btn {
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--text-light);
+  padding: 6px 12px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 .sort-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .sort-btn {
@@ -215,12 +254,15 @@ onMounted(loadPosts)
 .category-bar {
   display: flex; gap: 10px; overflow-x: auto; padding: 2px 0;
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x !important;
 }
 .category-bar::-webkit-scrollbar { display: none; }
 .cat-btn {
   flex-shrink: 0; padding: 7px 14px; border: 1px solid var(--color-border);
   border-radius: 16px; background: transparent; color: var(--text-dark);
   font-size: 13px; cursor: pointer; white-space: nowrap;
+  touch-action: pan-x !important;
 }
 .cat-btn.active { background: var(--color-primary); color: var(--text-light); border-color: var(--color-primary); }
 

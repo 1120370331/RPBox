@@ -7,6 +7,7 @@ import market from './market'
 import guild from './guild'
 import profile from './profile'
 import profiles from './profiles'
+import collection from './collection'
 
 export default {
   common,
@@ -18,4 +19,5 @@ export default {
   guild,
   profile,
   profiles,
+  collection,
 }

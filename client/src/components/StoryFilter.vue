@@ -97,7 +97,7 @@ function resetFilter() {
           :key="tag.id"
           class="filter-tag"
           :class="{ active: selectedTags.includes(tag.id) }"
-          :style="selectedTags.includes(tag.id) ? { background: `#${tag.color}`, color: '#fff' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+          :style="selectedTags.includes(tag.id) ? { background: `#${tag.color}`, color: 'var(--color-text-light)' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
           @click="toggleTag(tag.id)"
         >
           {{ tag.name }}
@@ -154,9 +154,10 @@ function resetFilter() {
   flex-direction: column;
   gap: 20px;
   padding: 20px;
-  background: linear-gradient(135deg, #f5f0eb 0%, #ebe4dc 100%);
+  background: linear-gradient(135deg, var(--color-card-bg, #f5f0eb) 0%, var(--color-panel-bg, #ebe4dc) 100%);
+  border: 1px solid var(--color-border, #d1bfa8);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04));
 }
 
 .filter-section {
@@ -201,14 +202,19 @@ function resetFilter() {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 14px;
-  background: #fff;
-  color: var(--color-primary);
+  background: var(--input-bg, #fff);
+  color: var(--color-text-main, #2c1e12);
   cursor: pointer;
 }
 
 .filter-select:focus {
   outline: none;
   border-color: var(--color-accent);
+}
+
+.filter-select option {
+  background: var(--input-bg, #fff);
+  color: var(--color-text-main, #2c1e12);
 }
 
 .date-range {
@@ -223,7 +229,8 @@ function resetFilter() {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 14px;
-  color: var(--color-primary);
+  background: var(--input-bg, #fff);
+  color: var(--color-text-main, #2c1e12);
 }
 
 .date-input:focus {
@@ -249,8 +256,8 @@ function resetFilter() {
   padding: 10px 16px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: #fff;
-  color: var(--color-primary);
+  background: var(--input-bg, #fff);
+  color: var(--color-text-main, #2c1e12);
   cursor: pointer;
   transition: all 0.2s;
 }
