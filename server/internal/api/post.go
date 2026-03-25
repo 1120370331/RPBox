@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -274,6 +275,27 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 		hasCoverMap[id] = true
 	}
 
+	// 优先返回已落盘(URL)的封面地址，避免额外图片代理开销
+	directCoverURLMap := make(map[uint]string)
+	if len(postIDs) > 0 {
+		var coverLinks []struct {
+			ID         uint
+			CoverImage string
+		}
+		db.Model(&model.Post{}).
+			Select("id, cover_image").
+			Where("id IN ?", postIDs).
+			Where("(cover_image LIKE ? OR cover_image LIKE ? OR cover_image LIKE ? OR cover_image LIKE ?)",
+				"http://%", "https://%", "/uploads/%", "uploads/%").
+			Find(&coverLinks)
+		for _, row := range coverLinks {
+			url := strings.TrimSpace(row.CoverImage)
+			if url != "" {
+				directCoverURLMap[row.ID] = buildAPIURL(s.cfg.Server.ApiHost, url)
+			}
+		}
+	}
+
 	// 获取作者信息
 	authorIDs := make([]uint, len(posts))
 	for i, p := range posts {
@@ -296,11 +318,12 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 		nameColor, nameBold := userDisplayStyle(author)
 		coverURL := ""
 		if hasCoverMap[p.ID] {
-			coverURL = postCoverURL(p)
-		}
-		if p.CoverImageUpdatedAt == nil && hasCoverMap[p.ID] {
-			t := p.UpdatedAt
-			p.CoverImageUpdatedAt = &t
+			if directURL := directCoverURLMap[p.ID]; directURL != "" {
+				coverURL = directURL
+			} else {
+				ensurePostCoverUpdatedAt(&p)
+				coverURL = postCoverURLFromMeta(p.ID, p.UpdatedAt, p.CoverImageUpdatedAt)
+			}
 		}
 		result[i] = postListItem{
 			Post:            p,
@@ -996,6 +1019,27 @@ func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn 
 		hasCoverMap[id] = true
 	}
 
+	// 优先返回已落盘(URL)的封面地址，避免额外图片代理开销
+	directCoverURLMap := make(map[uint]string)
+	if len(postIDs) > 0 {
+		var coverLinks []struct {
+			ID         uint
+			CoverImage string
+		}
+		database.DB.Model(&model.Post{}).
+			Select("id, cover_image").
+			Where("id IN ?", postIDs).
+			Where("(cover_image LIKE ? OR cover_image LIKE ? OR cover_image LIKE ? OR cover_image LIKE ?)",
+				"http://%", "https://%", "/uploads/%", "uploads/%").
+			Find(&coverLinks)
+		for _, row := range coverLinks {
+			url := strings.TrimSpace(row.CoverImage)
+			if url != "" {
+				directCoverURLMap[row.ID] = buildAPIURL(s.cfg.Server.ApiHost, url)
+			}
+		}
+	}
+
 	// 获取作者信息
 	authorIDs := make([]uint, len(filtered))
 	for i, p := range filtered {
@@ -1017,11 +1061,12 @@ func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn 
 		nameColor, nameBold := userDisplayStyle(author)
 		coverURL := ""
 		if hasCoverMap[p.ID] {
-			coverURL = postCoverURL(p)
-		}
-		if p.CoverImageUpdatedAt == nil && hasCoverMap[p.ID] {
-			t := p.UpdatedAt
-			p.CoverImageUpdatedAt = &t
+			if directURL := directCoverURLMap[p.ID]; directURL != "" {
+				coverURL = directURL
+			} else {
+				ensurePostCoverUpdatedAt(&p)
+				coverURL = postCoverURLFromMeta(p.ID, p.UpdatedAt, p.CoverImageUpdatedAt)
+			}
 		}
 		result = append(result, postListItem{
 			Post:            p,
