@@ -119,14 +119,31 @@ jobs:
 
       - name: Sync iOS native version
         shell: bash
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.VERSION }}"
           BUILD_NUMBER="${{ steps.version.outputs.BUILD_NUMBER }}"
           PBXPROJ="mobile/ios/App/App.xcodeproj/project.pbxproj"
 
+          if [ -z "${IOS_TEAM_ID:-}" ] || [ -z "${IOS_BUNDLE_ID:-}" ] || [ -z "${IOS_PROVISION_PROFILE_NAME:-}" ]; then
+            echo "Missing IOS_TEAM_ID / IOS_BUNDLE_ID / IOS_PROVISION_PROFILE_NAME"
+            exit 1
+          fi
+
           perl -0777 -i -pe "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${VERSION};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" "$PBXPROJ"
+          perl -0777 -i -pe "s/DEVELOPMENT_TEAM = [^;]+;/DEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
+          perl -0777 -i -pe "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};/g" "$PBXPROJ"
+          perl -0777 -i -pe "s/CODE_SIGN_STYLE = [^;]+;/CODE_SIGN_STYLE = Manual;/g" "$PBXPROJ"
+          if grep -q "PROVISIONING_PROFILE_SPECIFIER =" "$PBXPROJ"; then
+            perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = [^;]+;/PROVISIONING_PROFILE_SPECIFIER = ${IOS_PROVISION_PROFILE_NAME};/g" "$PBXPROJ"
+          else
+            perl -0777 -i -pe "s/(PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};)/\\1\\n\\t\\t\\t\\tPROVISIONING_PROFILE_SPECIFIER = ${IOS_PROVISION_PROFILE_NAME};/g" "$PBXPROJ"
+          fi
 
       - name: Install signing assets
         shell: bash
@@ -208,9 +225,8 @@ jobs:
             -scheme "${{ env.XCODE_SCHEME }}" \
             -configuration Release \
             -destination "generic/platform=iOS" \
-            -allowProvisioningUpdates \
             -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
             clean archive
