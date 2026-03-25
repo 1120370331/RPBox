@@ -197,6 +197,7 @@ jobs:
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")"
           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
+          echo "IOS_PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
 
       - name: Create export options plist
         shell: bash
@@ -226,7 +227,7 @@ jobs:
               <key>provisioningProfiles</key>
               <dict>
                 <key>${IOS_BUNDLE_ID}</key>
-                <string>${IOS_PROVISION_PROFILE_NAME}</string>
+                <string>${IOS_PROFILE_UUID}</string>
               </dict>
             </dict>
           </plist>
