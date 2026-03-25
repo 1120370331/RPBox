@@ -156,7 +156,6 @@ jobs:
           perl -0777 -i -pe "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${VERSION};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/DEVELOPMENT_TEAM = [^;]+;/DEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
-          perl -0777 -i -pe "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CODE_SIGN_STYLE = [^;]+;/CODE_SIGN_STYLE = Manual;/g" "$PBXPROJ"
           if grep -q "PROVISIONING_PROFILE_SPECIFIER =" "$PBXPROJ"; then
             perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = [^;]+;/PROVISIONING_PROFILE_SPECIFIER = \"${IOS_PROVISION_PROFILE_NAME}\";/g" "$PBXPROJ"
