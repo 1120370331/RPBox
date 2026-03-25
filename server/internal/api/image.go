@@ -81,6 +81,8 @@ func (s *Server) getImage(c *gin.Context) {
 
 	if imageType == "post-cover" {
 		originalValue = s.migrateLegacyPostCoverIfNeeded(c, id, originalValue)
+	} else if imageType == "guild-banner" {
+		originalValue = s.migrateLegacyGuildBannerIfNeeded(c, id, originalValue)
 	}
 
 	imgData, contentType, err := s.loadImageBytes(c, originalValue)
@@ -188,6 +190,36 @@ func (s *Server) migrateLegacyPostCoverIfNeeded(c *gin.Context, id string, raw s
 	_ = database.DB.Model(&model.Post{}).Where("id = ?", idNum).Updates(map[string]interface{}{
 		"cover_image":            normalized,
 		"cover_image_updated_at": now,
+	}).Error
+
+	return normalized
+}
+
+// migrateLegacyGuildBannerIfNeeded migrates legacy base64 guild banner values to uploaded URLs.
+func (s *Server) migrateLegacyGuildBannerIfNeeded(c *gin.Context, id string, raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || isImageURL(value) {
+		return value
+	}
+
+	normalized, err := s.normalizeAndStoreImageValue(c, value, fmt.Sprintf("guilds/%s/banner", id))
+	if err != nil {
+		return value
+	}
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" || normalized == value || !isImageURL(normalized) {
+		return value
+	}
+
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return normalized
+	}
+
+	now := time.Now()
+	_ = database.DB.Model(&model.Guild{}).Where("id = ?", idNum).Updates(map[string]interface{}{
+		"banner":            normalized,
+		"banner_updated_at": now,
 	}).Error
 
 	return normalized

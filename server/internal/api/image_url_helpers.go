@@ -33,25 +33,41 @@ func userAvatarURL(apiHost string, user model.User) string {
 }
 
 func guildBannerURL(guild model.Guild) string {
-	if strings.TrimSpace(guild.Banner) == "" {
+	raw := strings.TrimSpace(guild.Banner)
+	if raw == "" {
 		return ""
 	}
-	version := guild.UpdatedAt.Unix()
-	if guild.BannerUpdatedAt != nil {
-		version = guild.BannerUpdatedAt.Unix()
+	if isImageURL(raw) {
+		return raw
 	}
-	return fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80&v=%d", guild.ID, version)
+	return guildBannerURLFromMeta(guild.ID, guild.UpdatedAt, guild.BannerUpdatedAt)
 }
 
 func guildAvatarURL(guild model.Guild) string {
-	if strings.TrimSpace(guild.Avatar) == "" {
+	raw := strings.TrimSpace(guild.Avatar)
+	if raw == "" {
 		return ""
 	}
-	version := guild.UpdatedAt.Unix()
-	if guild.AvatarUpdatedAt != nil {
-		version = guild.AvatarUpdatedAt.Unix()
+	if isImageURL(raw) {
+		return raw
 	}
-	return fmt.Sprintf("/api/v1/images/guild-avatar/%d?w=200&q=80&v=%d", guild.ID, version)
+	return guildAvatarURLFromMeta(guild.ID, guild.UpdatedAt, guild.AvatarUpdatedAt)
+}
+
+func guildBannerURLFromMeta(guildID uint, updatedAt time.Time, bannerUpdatedAt *time.Time) string {
+	version := updatedAt.Unix()
+	if bannerUpdatedAt != nil {
+		version = bannerUpdatedAt.Unix()
+	}
+	return fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80&v=%d", guildID, version)
+}
+
+func guildAvatarURLFromMeta(guildID uint, updatedAt time.Time, avatarUpdatedAt *time.Time) string {
+	version := updatedAt.Unix()
+	if avatarUpdatedAt != nil {
+		version = avatarUpdatedAt.Unix()
+	}
+	return fmt.Sprintf("/api/v1/images/guild-avatar/%d?w=200&q=80&v=%d", guildID, version)
 }
 
 func postCoverURL(post model.Post) string {
