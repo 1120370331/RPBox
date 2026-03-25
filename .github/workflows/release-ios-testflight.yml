@@ -218,16 +218,11 @@ jobs:
           <plist version="1.0">
             <dict>
               <key>method</key>
-              <string>app-store</string>
+              <string>app-store-connect</string>
               <key>teamID</key>
               <string>${IOS_TEAM_ID}</string>
               <key>signingStyle</key>
-              <string>manual</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                <key>${IOS_BUNDLE_ID}</key>
-                <string>${IOS_PROVISION_PROFILE_NAME}</string>
-              </dict>
+              <string>automatic</string>
             </dict>
           </plist>
           EOF
