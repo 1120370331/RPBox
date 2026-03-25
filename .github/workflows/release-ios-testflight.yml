@@ -117,6 +117,25 @@ jobs:
           fi
           pnpm exec cap sync ios
 
+      - name: Resolve iOS scheme
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCHEME="${{ env.XCODE_SCHEME }}"
+          if xcodebuild -list -workspace "${{ env.XCODE_WORKSPACE }}" | grep -q " $SCHEME$"; then
+            echo "Using configured scheme: $SCHEME"
+            echo "RESOLVED_XCODE_SCHEME=$SCHEME" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          RESOLVED_SCHEME="$(xcodebuild -list -json -workspace "${{ env.XCODE_WORKSPACE }}" | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
+          if [ -z "$RESOLVED_SCHEME" ]; then
+            echo "No iOS scheme found in workspace."
+            exit 1
+          fi
+          echo "Using detected scheme: $RESOLVED_SCHEME"
+          echo "RESOLVED_XCODE_SCHEME=$RESOLVED_SCHEME" >> "$GITHUB_ENV"
+
       - name: Sync iOS native version
         shell: bash
         env:
@@ -222,7 +241,7 @@ jobs:
           set -euo pipefail
           xcodebuild \
             -workspace "${{ env.XCODE_WORKSPACE }}" \
-            -scheme "${{ env.XCODE_SCHEME }}" \
+            -scheme "${{ env.RESOLVED_XCODE_SCHEME }}" \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
