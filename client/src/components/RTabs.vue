@@ -60,15 +60,15 @@ provide('tabs', { activeTab, setActive, registerTab })
 
 <style scoped>
 .r-tabs {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(75, 54, 33, 0.06);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
 .r-tabs__header {
   display: flex;
-  border-bottom: 2px solid rgba(75, 54, 33, 0.08);
+  border-bottom: 2px solid var(--color-border-light);
 }
 
 .r-tabs__tab {
@@ -76,7 +76,7 @@ provide('tabs', { activeTab, setActive, registerTab })
   border: none;
   background: transparent;
   font-size: 15px;
-  color: var(--color-secondary, #856a52);
+  color: var(--color-secondary);
   cursor: pointer;
   position: relative;
   transition: all 0.2s;
@@ -85,11 +85,11 @@ provide('tabs', { activeTab, setActive, registerTab })
 }
 
 .r-tabs__tab:hover {
-  color: var(--color-primary, #4B3621);
+  color: var(--color-primary);
 }
 
 .r-tabs__tab--active {
-  color: var(--color-accent, #B87333);
+  color: var(--color-accent);
   font-weight: 600;
 }
 
@@ -100,7 +100,7 @@ provide('tabs', { activeTab, setActive, registerTab })
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--color-accent, #B87333);
+  background: var(--color-accent);
   border-radius: 3px 3px 0 0;
 }
 

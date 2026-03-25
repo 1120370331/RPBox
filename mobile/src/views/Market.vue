@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { listItems, type Item, type ListItemsParams } from '@/api/item'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
+import MobilePagination from '@/components/MobilePagination.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -19,7 +20,7 @@ const switchingPage = ref(false)
 
 const activeType = ref('')
 const searchText = ref('')
-const sortBy = ref<'created_at' | 'downloads' | 'rating'>('created_at')
+const sortBy = ref<'created_at' | 'downloads' | 'rating'>('downloads')
 
 const typeOptions = computed(() => [
   { key: '', label: t('market.types.all') },
@@ -82,16 +83,10 @@ function onSearchInput() {
   }, 400)
 }
 
-function prevPage() {
-  if (currentPage.value <= 1) return
+function onPageChange(page: number) {
+  if (page === currentPage.value) return
   switchingPage.value = true
-  currentPage.value--
-  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
-}
-function nextPage() {
-  if (currentPage.value * pageSize >= total.value) return
-  switchingPage.value = true
-  currentPage.value++
+  currentPage.value = page
   document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
@@ -186,23 +181,33 @@ onMounted(loadItems)
         </button>
       </div>
 
-      <div v-if="total > pageSize" class="pagination">
-        <button :disabled="currentPage <= 1" @click="prevPage">{{ $t('common.pagination.prev') }}</button>
-        <span>{{ $t('common.pagination.pageInfo', { current: currentPage, total: totalPages() }) }}</span>
-        <button :disabled="currentPage >= totalPages()" @click="nextPage">{{ $t('common.pagination.next') }}</button>
-      </div>
+      <MobilePagination
+        v-if="total > pageSize"
+        :model-value="currentPage"
+        :total-pages="totalPages()"
+        :disabled="loading || switchingPage"
+        @change="onPageChange"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-.page { padding: 0 16px 16px; }
-.page-header { padding: 12px 0 8px; }
-.page-header h1 { font-size: 22px; }
+.page {
+  padding: calc(var(--safe-top, 0px) + 2px) var(--page-gutter) calc(26px + var(--safe-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.page-header { padding: 6px 0 0; }
+.page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; }
 
 .search-bar {
   display: flex; align-items: center; gap: 8px;
-  background: var(--input-bg); border-radius: 20px; padding: 8px 14px; margin-bottom: 10px;
+  background: var(--input-bg);
+  border: 1px solid rgba(75, 54, 33, 0.12);
+  border-radius: 20px;
+  padding: 9px 14px;
 }
 .search-bar i { color: var(--input-placeholder); font-size: 16px; }
 .search-bar input {
@@ -210,33 +215,56 @@ onMounted(loadItems)
   font-size: 14px; color: var(--text-dark);
 }
 
-.type-bar { display: flex; gap: 8px; margin-bottom: 8px; }
+.type-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.type-bar::-webkit-scrollbar { display: none; }
 .type-btn {
-  flex: 1; padding: 6px 0; border: 1px solid var(--color-border);
-  border-radius: 16px; background: transparent; color: var(--text-dark);
-  font-size: 13px; cursor: pointer; text-align: center;
+  flex-shrink: 0;
+  min-width: 72px;
+  padding: 7px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-dark);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
 }
 .type-btn.active { background: var(--color-primary); color: var(--text-light); border-color: var(--color-primary); }
 
-.sort-row { display: flex; gap: 6px; margin-bottom: 12px; }
+.sort-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .sort-btn {
-  padding: 4px 10px; border: none; border-radius: 12px;
-  background: transparent; color: var(--text-dark); font-size: 12px; cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.08);
+  color: var(--text-dark);
+  font-size: 12px;
+  cursor: pointer;
 }
-.sort-btn.active { background: var(--color-primary); color: var(--text-light); }
+.sort-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: var(--text-light); }
 
 .loading-hint, .empty-hint {
   text-align: center; padding: 60px 0; color: var(--color-accent); font-size: 14px;
 }
 
-.item-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.item-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .item-card {
   width: 100%;
   border: none;
   text-align: left;
   cursor: pointer;
-  background: var(--color-card-bg); border-radius: var(--radius-md); overflow: hidden;
+  background: var(--color-card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(75, 54, 33, 0.08);
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 
@@ -267,16 +295,6 @@ onMounted(loadItems)
 .rating { color: var(--color-accent); }
 .rating em { font-style: normal; color: var(--color-text-secondary); }
 
-.pagination {
-  display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px 0;
-}
-.pagination button {
-  padding: 8px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-  background: transparent; color: var(--text-dark); font-size: 13px; cursor: pointer;
-}
-.pagination button:disabled { opacity: 0.4; cursor: default; }
-.pagination span { font-size: 13px; color: var(--color-text-secondary); }
-
 .skeleton-card {
   pointer-events: none;
 }
@@ -302,5 +320,10 @@ onMounted(loadItems)
 @keyframes skeletonShimmer {
   from { background-position: 200% 0; }
   to { background-position: -20% 0; }
+}
+
+@media (max-width: 360px) {
+  .page-header h1 { font-size: 22px; }
+  .item-grid { grid-template-columns: 1fr; }
 }
 </style>

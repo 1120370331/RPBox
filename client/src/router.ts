@@ -51,6 +51,8 @@ const router = createRouter({
     { path: '/login', name: 'login', component: () => import('./views/Login.vue') },
     { path: '/register', name: 'register', component: () => import('./views/Register.vue') },
     { path: '/forgot-password', name: 'forgot-password', component: () => import('./views/ForgotPassword.vue') },
+    { path: '/legal/terms', name: 'terms-of-service', component: () => import('./views/legal/TermsOfService.vue') },
+    { path: '/legal/privacy', name: 'privacy-policy', component: () => import('./views/legal/PrivacyPolicy.vue') },
     { path: '/story/:code', name: 'story-playback', component: () => import('./views/archives/StoryPlayback.vue') },
   ],
 })
@@ -60,6 +62,8 @@ const publicRoutes = new Set([
   'register',
   'forgot-password',
   'story-playback',
+  'terms-of-service',
+  'privacy-policy',
 ])
 
 function parseJwt(token: string): { exp?: number } | null {

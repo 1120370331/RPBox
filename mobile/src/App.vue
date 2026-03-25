@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Capacitor } from '@capacitor/core'
-import { App as CapacitorApp, type PluginListenerHandle } from '@capacitor/app'
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
+import { App as CapacitorApp } from '@capacitor/app'
 import { useThemeStore } from '@shared/stores/theme'
 import { useUserStore } from '@shared/stores/user'
 import { useToastStore } from '@shared/stores/toast'
@@ -18,6 +18,7 @@ const toast = useToastStore()
 const mobileUpdater = useMobileUpdater()
 let backButtonHandle: PluginListenerHandle | null = null
 let lastBackPressAt = 0
+let viewportHandler: (() => void) | null = null
 
 function handleOffline() {
   if (!userStore.token) return
@@ -28,6 +29,17 @@ function handleOffline() {
 
 function isHomeRoute(path: string) {
   return ['/community', '/stories', '/market', '/guild', '/profile'].includes(path)
+}
+
+function updateViewportVariables() {
+  const viewport = window.visualViewport
+  const baseWidth = viewport?.width && viewport.width > 200 ? viewport.width : window.innerWidth
+  const baseHeight = viewport?.height && viewport.height > 300 ? viewport.height : window.innerHeight
+  const width = Math.max(240, Math.round(baseWidth))
+  const height = Math.max(320, Math.round(baseHeight))
+  const root = document.documentElement
+  root.style.setProperty('--app-width', `${width}px`)
+  root.style.setProperty('--app-height', `${height}px`)
 }
 
 async function bindNativeBackButton() {
@@ -56,6 +68,12 @@ async function bindNativeBackButton() {
 
 onMounted(() => {
   themeStore.initTheme()
+  updateViewportVariables()
+  viewportHandler = () => updateViewportVariables()
+  window.addEventListener('resize', viewportHandler)
+  window.addEventListener('orientationchange', viewportHandler)
+  window.visualViewport?.addEventListener('resize', viewportHandler)
+
   if (!navigator.onLine && userStore.token) {
     handleOffline()
   }
@@ -71,6 +89,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('offline', handleOffline)
+  if (viewportHandler) {
+    window.removeEventListener('resize', viewportHandler)
+    window.removeEventListener('orientationchange', viewportHandler)
+    window.visualViewport?.removeEventListener('resize', viewportHandler)
+    viewportHandler = null
+  }
   backButtonHandle?.remove()
   backButtonHandle = null
 })

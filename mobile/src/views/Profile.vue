@@ -119,14 +119,22 @@ onMounted(loadProfile)
 </template>
 
 <style scoped>
-.page { padding: 0 14px calc(20px + var(--safe-bottom, 0px)); }
-.page-header { padding: 12px 0 8px; }
-.page-header h1 { font-size: 22px; }
+.page {
+  padding: calc(var(--safe-top, 0px) + 2px) var(--page-gutter) calc(26px + var(--safe-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.page-header { padding: 6px 0 0; }
+.page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; }
 
 .profile-card {
   display: flex; align-items: center; gap: 16px;
-  padding: 18px 16px; background: var(--color-card-bg); border-radius: var(--radius-md);
-  margin-bottom: 14px; box-shadow: var(--shadow-sm);
+  padding: 18px 16px;
+  background: var(--color-card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(75, 54, 33, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .avatar-wrap { flex-shrink: 0; }
@@ -152,16 +160,22 @@ onMounted(loadProfile)
 .sponsor-badge i { margin-right: 2px; }
 
 .info-section {
-  background: var(--color-card-bg); border-radius: var(--radius-md); padding: 13px 14px;
-  margin-bottom: 14px; box-shadow: var(--shadow-sm);
+  background: var(--color-card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(75, 54, 33, 0.08);
+  padding: 13px 14px;
+  box-shadow: var(--shadow-sm);
 }
 .info-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary); min-width: 0; }
 .info-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .info-row i { font-size: 18px; color: var(--icon-color); }
 
 .menu-section {
-  background: var(--color-card-bg); border-radius: var(--radius-md); overflow: hidden;
-  margin-bottom: 14px; box-shadow: var(--shadow-sm);
+  background: var(--color-card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(75, 54, 33, 0.08);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 .menu-item {
   display: flex; align-items: center; gap: 10px; padding: 13px 14px;
@@ -178,15 +192,11 @@ onMounted(loadProfile)
   width: 100%; padding: 13px; border: none; border-radius: var(--radius-sm);
   background: var(--btn-danger-bg); color: var(--btn-primary-text); font-size: 14px; font-weight: 500;
   cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 @media (max-width: 380px) {
-  .page {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
+  .page-header h1 { font-size: 22px; }
   .profile-card {
     padding: 14px 12px;
     gap: 12px;

@@ -17,6 +17,12 @@ export interface LoginResponse {
   }
 }
 
+export interface RegisterAgreementPayload {
+  acceptTerms?: boolean
+  acceptPrivacy?: boolean
+  agreementVersion?: string
+}
+
 export function login(username: string, password: string) {
   return request<LoginResponse>('/auth/login', {
     method: 'POST',
@@ -24,10 +30,24 @@ export function login(username: string, password: string) {
   })
 }
 
-export function register(username: string, email: string, password: string, verificationCode: string) {
+export function register(
+  username: string,
+  email: string,
+  password: string,
+  verificationCode: string,
+  agreement: RegisterAgreementPayload = {},
+) {
   return request<{ message: string }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, email, password, verification_code: verificationCode }),
+    body: JSON.stringify({
+      username,
+      email,
+      password,
+      verification_code: verificationCode,
+      accept_terms: agreement.acceptTerms ?? false,
+      accept_privacy: agreement.acceptPrivacy ?? false,
+      agreement_version: agreement.agreementVersion || '',
+    }),
   })
 }
 

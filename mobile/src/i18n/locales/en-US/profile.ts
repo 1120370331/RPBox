@@ -64,5 +64,15 @@ export default {
       cleared: 'Cache cleared',
       empty: 'No cache to clear',
     },
+    legal: {
+      title: 'Terms & Privacy',
+      desc: 'You can review the latest Terms of Service and Privacy Policy at any time.',
+    },
+    sponsors: {
+      title: 'Sponsors',
+      desc: 'Thanks to everyone who supports RPBox.',
+      view: 'View List',
+      empty: 'No sponsor data',
+    },
   },
 }

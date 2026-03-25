@@ -78,18 +78,23 @@ onMounted(loadProfiles)
 </template>
 
 <style scoped>
-.page { padding: 0 16px 16px; }
-.page-header { padding: 12px 0 8px; }
-.page-header h1 { font-size: 22px; }
+.page {
+  padding: calc(var(--safe-top, 0px) + 2px) var(--page-gutter) calc(26px + var(--safe-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.page-header { padding: 6px 0 0; }
+.page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; }
 
 .search-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   background: var(--input-bg);
+  border: 1px solid rgba(75, 54, 33, 0.12);
   border-radius: 20px;
-  padding: 8px 14px;
-  margin-bottom: 10px;
+  padding: 9px 14px;
 }
 .search-bar i { color: var(--input-placeholder); font-size: 16px; }
 .search-bar input {
@@ -115,6 +120,7 @@ onMounted(loadProfiles)
   border: none;
   border-radius: var(--radius-md);
   background: var(--color-card-bg);
+  border: 1px solid rgba(75, 54, 33, 0.08);
   box-shadow: var(--shadow-sm);
   padding: 14px;
   text-align: left;
@@ -140,5 +146,9 @@ onMounted(loadProfiles)
   justify-content: space-between;
   font-size: 12px;
   color: var(--color-text-secondary);
+}
+
+@media (max-width: 360px) {
+  .page-header h1 { font-size: 22px; }
 }
 </style>

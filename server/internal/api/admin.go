@@ -80,7 +80,7 @@ func (s *Server) listUsers(c *gin.Context) {
 			ID:           u.ID,
 			Username:     u.Username,
 			Email:        u.Email,
-			Avatar:       u.Avatar,
+			Avatar:       userAvatarURL(s.cfg.Server.ApiHost, u),
 			Role:         u.Role,
 			IsSponsor:    level > sponsorLevelNone,
 			SponsorLevel: level,

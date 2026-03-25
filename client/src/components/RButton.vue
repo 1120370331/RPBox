@@ -67,54 +67,54 @@ function handleClick(e: MouseEvent) {
 
 /* 类型 */
 .r-button--primary {
-  background: #4B3621;
-  border-color: #4B3621;
-  color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  box-shadow: 0 1px 3px rgba(var(--shadow-base), 0.2);
 }
 .r-button--primary:hover {
-  background: #3a2a18;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+  background: var(--btn-primary-hover);
+  box-shadow: 0 4px 6px rgba(var(--shadow-base), 0.24);
 }
 
 .r-button--secondary {
-  background: #F5EFE7;
-  border-color: #E5D4C1;
-  color: #2C1810;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  background: var(--btn-secondary-bg);
+  border-color: var(--btn-outline-border);
+  color: var(--btn-secondary-text);
+  box-shadow: 0 1px 2px rgba(var(--shadow-base), 0.12);
 }
 .r-button--secondary:hover {
-  background: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  background: var(--btn-secondary-hover);
+  box-shadow: 0 2px 4px rgba(var(--shadow-base), 0.16);
 }
 
 .r-button--outline {
   background: transparent;
-  border-color: #E5D4C1;
-  color: #2C1810;
+  border-color: var(--btn-outline-border);
+  color: var(--btn-outline-text);
 }
 .r-button--outline:hover {
-  background: #F5EFE7;
+  background: var(--btn-outline-hover);
 }
 
 .r-button--ghost {
   background: transparent;
   border-color: transparent;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 .r-button--ghost:hover {
-  background: rgba(44, 24, 16, 0.05);
+  background: var(--btn-outline-hover);
 }
 
 .r-button--danger {
-  background: #c41e3a;
-  border-color: #c41e3a;
-  color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  background: var(--btn-danger-bg);
+  border-color: var(--btn-danger-bg);
+  color: var(--color-text-light);
+  box-shadow: 0 1px 3px rgba(var(--shadow-base), 0.2);
 }
 .r-button--danger:hover {
-  background: #a01828;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+  background: var(--btn-danger-hover);
+  box-shadow: 0 4px 6px rgba(var(--shadow-base), 0.24);
 }
 
 /* 状态 */

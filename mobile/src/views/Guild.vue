@@ -225,9 +225,14 @@ onMounted(loadData)
 </template>
 
 <style scoped>
-.page { padding: 0 16px 16px; }
-.page-header { padding: 12px 0 8px; }
-.page-header h1 { font-size: 22px; }
+.page {
+  padding: calc(var(--safe-top, 0px) + 2px) var(--page-gutter) calc(26px + var(--safe-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.page-header { padding: 6px 0 0; }
+.page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; }
 
 .tab-row {
   display: grid;
@@ -238,9 +243,9 @@ onMounted(loadData)
 
 .tab-btn {
   border: 1px solid var(--color-border);
-  background: var(--color-panel-bg);
-  border-radius: 12px;
-  padding: 8px 10px;
+  background: rgba(128, 64, 48, 0.06);
+  border-radius: 14px;
+  padding: 9px 10px;
   font-size: 13px;
   color: var(--color-text-secondary);
 }
@@ -254,9 +259,9 @@ onMounted(loadData)
 .search-area {
   background: var(--color-card-bg);
   box-shadow: var(--shadow-sm);
+  border: 1px solid rgba(75, 54, 33, 0.08);
   border-radius: var(--radius-md);
   padding: 12px;
-  margin-bottom: 10px;
 }
 
 .search-bar {
@@ -297,9 +302,9 @@ onMounted(loadData)
 .join-card {
   background: var(--color-card-bg);
   box-shadow: var(--shadow-sm);
+  border: 1px solid rgba(75, 54, 33, 0.08);
   border-radius: var(--radius-md);
   padding: 12px;
-  margin-bottom: 10px;
 }
 
 .join-label {
@@ -351,13 +356,14 @@ onMounted(loadData)
 .guild-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .guild-card {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--color-card-bg);
+  border: 1px solid rgba(75, 54, 33, 0.08);
   box-shadow: var(--shadow-sm);
 }
 
@@ -456,5 +462,11 @@ onMounted(loadData)
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+@media (max-width: 360px) {
+  .page-header h1 { font-size: 22px; }
+  .tab-btn { font-size: 12px; }
+  .meta-row { flex-wrap: wrap; gap: 8px; }
 }
 </style>

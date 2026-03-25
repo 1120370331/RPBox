@@ -1037,9 +1037,9 @@ function getEventStyle(event: EventItem) {
 }
 
 .category-filter button.active {
-  background: var(--color-text-main, #2C1810);
-  border-color: var(--color-text-main, #2C1810);
-  color: var(--color-text-light, #fff);
+  background: var(--color-accent, #B87333);
+  border-color: var(--color-accent, #B87333);
+  color: var(--btn-primary-text, #fff);
   box-shadow: 0 2px 6px rgba(44, 24, 16, 0.2);
 }
 
@@ -1426,9 +1426,15 @@ function getEventStyle(event: EventItem) {
 }
 
 .filter-chip.active {
-  background: var(--color-text-main, #2C1810);
-  border-color: var(--color-text-main, #2C1810);
-  color: var(--color-text-light, #fff);
+  background: var(--color-accent, #B87333);
+  border-color: var(--color-accent, #B87333);
+  color: var(--btn-primary-text, #fff);
+}
+
+.filter-chip.active:hover {
+  background: var(--color-accent-hover, #A66629);
+  border-color: var(--color-accent-hover, #A66629);
+  color: var(--btn-primary-text, #fff);
 }
 
 .calendar-board {

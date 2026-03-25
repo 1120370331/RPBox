@@ -64,5 +64,15 @@ export default {
       cleared: '缓存已清理',
       empty: '当前没有可清理缓存',
     },
+    legal: {
+      title: '协议与隐私',
+      desc: '你可以随时查看最新服务条款与隐私政策。',
+    },
+    sponsors: {
+      title: '赞助者名单',
+      desc: '感谢所有支持 RPBox 项目的赞助者。',
+      view: '查看名单',
+      empty: '暂无赞助者数据',
+    },
   },
 }

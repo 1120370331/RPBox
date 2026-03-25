@@ -502,7 +502,7 @@ function handleViewStory(id: number) {
                 :key="tag.id"
                 class="tag-option"
                 :class="{ selected: selectedTagIds.includes(tag.id) }"
-                :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: '#fff' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+                :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: 'var(--color-text-light)' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
                 @click="selectedTagIds.includes(tag.id) ? selectedTagIds = selectedTagIds.filter(id => id !== tag.id) : selectedTagIds.push(tag.id)"
               >
                 {{ tag.name }}
@@ -575,7 +575,7 @@ function handleViewStory(id: number) {
 }
 
 .top-toolbar {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 24px 32px;
   display: flex;
@@ -616,10 +616,10 @@ function handleViewStory(id: number) {
 }
 
 .filter-item {
-  background: rgba(255,255,255,0.6);
+  background: var(--color-card-bg, rgba(255,255,255,0.6));
   padding: 10px 16px;
   border-radius: 20px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--color-border, #d1bfa8);
   font-size: 14px;
   display: flex;
   align-items: center;

@@ -45,7 +45,7 @@ func (s *Server) searchUsers(c *gin.Context) {
 		result[i] = UserSummary{
 			ID:        user.ID,
 			Username:  user.Username,
-			Avatar:    user.Avatar,
+			Avatar:    userAvatarURL(s.cfg.Server.ApiHost, user),
 			NameColor: nameColor,
 			NameBold:  nameBold,
 		}

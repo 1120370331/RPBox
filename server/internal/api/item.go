@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +14,17 @@ import (
 	"github.com/rpbox/server/pkg/validator"
 	"gorm.io/gorm/clause"
 )
+
+func buildItemPreviewURL(item model.Item, hasPreview bool) string {
+	if !hasPreview && item.Type != "artwork" {
+		return ""
+	}
+	version := item.UpdatedAt.Unix()
+	if item.PreviewImageUpdatedAt != nil {
+		version = item.PreviewImageUpdatedAt.Unix()
+	}
+	return fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80&v=%d", item.ID, version)
+}
 
 // listItems 获取道具列表
 func (s *Server) listItems(c *gin.Context) {
@@ -142,12 +154,7 @@ func (s *Server) listItems(c *gin.Context) {
 	for _, item := range items {
 		author := authorMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
-		// 构造缩略图 URL：宽度 400，质量 80
-		// 只有确认有预览图或是画作类型才返回 URL
-		previewURL := ""
-		if hasPreviewMap[item.ID] || item.Type == "artwork" {
-			previewURL = fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80", item.ID)
-		}
+		previewURL := buildItemPreviewURL(item, hasPreviewMap[item.ID])
 		if item.PreviewImageUpdatedAt == nil && hasPreviewMap[item.ID] {
 			t := item.UpdatedAt
 			item.PreviewImageUpdatedAt = &t
@@ -155,7 +162,7 @@ func (s *Server) listItems(c *gin.Context) {
 		result = append(result, ItemWithAuthor{
 			Item:            item,
 			AuthorUsername:  author.Username,
-			AuthorAvatar:    author.Avatar,
+			AuthorAvatar:    userAvatarURL("", author),
 			AuthorRole:      author.Role,
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,
@@ -242,10 +249,7 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 	for _, item := range filtered {
 		author := authorMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
-		previewURL := ""
-		if hasPreviewMap[item.ID] || item.Type == "artwork" {
-			previewURL = fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80", item.ID)
-		}
+		previewURL := buildItemPreviewURL(item, hasPreviewMap[item.ID])
 		if item.PreviewImageUpdatedAt == nil && hasPreviewMap[item.ID] {
 			t := item.UpdatedAt
 			item.PreviewImageUpdatedAt = &t
@@ -253,7 +257,7 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 		result = append(result, ItemWithAuthor{
 			Item:            item,
 			AuthorUsername:  author.Username,
-			AuthorAvatar:    author.Avatar,
+			AuthorAvatar:    userAvatarURL("", author),
 			AuthorRole:      author.Role,
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,
@@ -333,6 +337,14 @@ func (s *Server) createItem(c *gin.Context) {
 	if req.Status == "" {
 		req.Status = "draft"
 	}
+	if req.PreviewImage != "" {
+		normalizedPreview, err := s.normalizeAndStoreImageValue(c, req.PreviewImage, fmt.Sprintf("items/%d/preview", userID))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "预览图格式无效"})
+			return
+		}
+		req.PreviewImage = normalizedPreview
+	}
 
 	item := model.Item{
 		AuthorID:           userID,
@@ -377,6 +389,8 @@ func (s *Server) createItem(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	ensureItemPreviewUpdatedAt(&item)
+	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 
 	// 添加标签
 	for _, tagID := range req.TagIDs {
@@ -409,6 +423,8 @@ func (s *Server) getItem(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
 		return
 	}
+	ensureItemPreviewUpdatedAt(&item)
+	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 
 	// 获取作者信息
 	var author model.User
@@ -535,6 +551,14 @@ func (s *Server) updateItem(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
+	if req.PreviewImage != "" {
+		normalizedPreview, err := s.normalizeAndStoreImageValue(c, req.PreviewImage, fmt.Sprintf("items/%d/preview", userID))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "预览图格式无效"})
+			return
+		}
+		req.PreviewImage = normalizedPreview
+	}
 
 	// 验证 ImportCode 大小（最大 10MB）
 	if len(req.ImportCode) > 10<<20 {
@@ -590,7 +614,12 @@ func (s *Server) updateItem(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
 			"message": "编辑已提交审核，原道具保持不变",
-			"data":    item,
+			"data": func() model.Item {
+				cloned := item
+				ensureItemPreviewUpdatedAt(&cloned)
+				cloned.PreviewImage = buildItemPreviewURL(cloned, strings.TrimSpace(cloned.PreviewImage) != "")
+				return cloned
+			}(),
 			"pending": pendingEdit,
 		})
 		return
@@ -660,6 +689,8 @@ func (s *Server) updateItem(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	ensureItemPreviewUpdatedAt(&item)
+	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 
 	if item.Status != "draft" {
 		mentionMessage := "在作品《" + item.Name + "》中提到了你"
@@ -832,7 +863,7 @@ func (s *Server) getItemComments(c *gin.Context) {
 		result = append(result, CommentWithUser{
 			ItemComment: comment,
 			Username:    user.Username,
-			Avatar:      user.Avatar,
+			Avatar:      userAvatarURL(s.cfg.Server.ApiHost, user),
 			NameColor:   nameColor,
 			NameBold:    nameBold,
 		})

@@ -20,6 +20,9 @@ type RegisterRequest struct {
 	Email            string `json:"email" binding:"required,email"`
 	Password         string `json:"password" binding:"required,min=6"`
 	VerificationCode string `json:"verification_code" binding:"required,len=6"`
+	AcceptTerms      bool   `json:"accept_terms"`
+	AcceptPrivacy    bool   `json:"accept_privacy"`
+	AgreementVersion string `json:"agreement_version"`
 }
 
 type LoginRequest struct {
@@ -106,6 +109,11 @@ func (s *Server) register(c *gin.Context) {
 		return
 	}
 
+	if !req.AcceptTerms || !req.AcceptPrivacy {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请先阅读并同意服务条款和隐私政策"})
+		return
+	}
+
 	ctx := context.Background()
 	valid, err := s.verificationService.VerifyCode(ctx, req.Email, req.VerificationCode)
 	if err != nil {
@@ -130,6 +138,12 @@ func (s *Server) register(c *gin.Context) {
 		return
 	}
 
+	agreementVersion := req.AgreementVersion
+	if agreementVersion == "" {
+		agreementVersion = time.Now().Format("2006-01-02")
+	}
+	acceptedAt := time.Now()
+
 	// 哈希密码
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
@@ -138,10 +152,13 @@ func (s *Server) register(c *gin.Context) {
 	}
 
 	user := model.User{
-		Username:      req.Username,
-		Email:         req.Email,
-		PassHash:      hash,
-		EmailVerified: true,
+		Username:          req.Username,
+		Email:             req.Email,
+		PassHash:          hash,
+		EmailVerified:     true,
+		TermsAcceptedAt:   &acceptedAt,
+		PrivacyAcceptedAt: &acceptedAt,
+		AgreementVersion:  agreementVersion,
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {

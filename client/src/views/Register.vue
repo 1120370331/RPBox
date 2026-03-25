@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { register, sendVerificationCode } from '../api/auth'
@@ -16,10 +16,19 @@ const loading = ref(false)
 const sendingCode = ref(false)
 const codeSent = ref(false)
 const countdown = ref(0)
+const agreedToPolicies = ref(false)
 const mounted = ref(false)
+const AGREEMENT_VERSION = '2026-03-25'
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 100)
+})
+
+onUnmounted(() => {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
 })
 
 const canSendCode = computed(() => {
@@ -74,6 +83,11 @@ async function handleSendCode() {
 async function handleRegister() {
   error.value = ''
 
+  if (!agreedToPolicies.value) {
+    error.value = t('auth.register.mustAcceptAgreement')
+    return
+  }
+
   if (password.value !== confirmPassword.value) {
     error.value = t('auth.register.passwordMismatch')
     return
@@ -86,7 +100,11 @@ async function handleRegister() {
 
   loading.value = true
   try {
-    await register(username.value, email.value, password.value, verificationCode.value)
+    await register(username.value, email.value, password.value, verificationCode.value, {
+      acceptTerms: true,
+      acceptPrivacy: true,
+      agreementVersion: AGREEMENT_VERSION,
+    })
     router.push('/login')
   } catch (e: any) {
     error.value = e.message
@@ -161,14 +179,24 @@ async function handleRegister() {
           />
         </div>
 
+        <label class="agreement-row anim-item" style="--delay: 6">
+          <input v-model="agreedToPolicies" type="checkbox" class="agreement-checkbox" />
+          <span>
+            {{ t('auth.register.agreement') }}
+            <router-link class="agreement-link" to="/legal/terms" @click.stop>{{ t('auth.register.terms') }}</router-link>
+            {{ t('auth.register.and') }}
+            <router-link class="agreement-link" to="/legal/privacy" @click.stop>{{ t('auth.register.privacy') }}</router-link>
+          </span>
+        </label>
+
         <p v-if="error" class="error-msg">{{ error }}</p>
 
-        <button type="submit" class="btn-primary register-btn anim-item" style="--delay: 6" :disabled="loading">
+        <button type="submit" class="btn-primary register-btn anim-item" style="--delay: 7" :disabled="loading">
           {{ loading ? t('auth.register.submitting') : t('auth.register.submit') }}
         </button>
       </form>
 
-      <div class="register-footer anim-item" style="--delay: 7">
+      <div class="register-footer anim-item" style="--delay: 8">
         <router-link to="/login">{{ t('auth.register.hasAccount') }} {{ t('auth.register.login') }}</router-link>
       </div>
     </div>
@@ -279,6 +307,27 @@ async function handleRegister() {
   color: #c41e3a;
   font-size: 13px;
   text-align: center;
+}
+
+.agreement-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: #8C7B70;
+}
+
+.agreement-checkbox {
+  margin-top: 2px;
+}
+
+.agreement-link {
+  color: #B87333;
+  text-decoration: none;
+}
+
+.agreement-link:hover {
+  text-decoration: underline;
 }
 
 .register-btn {

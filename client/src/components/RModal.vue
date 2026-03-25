@@ -49,7 +49,7 @@ function onMaskClick() {
 .r-modal__mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--shadow-base), 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,12 +57,12 @@ function onMaskClick() {
 }
 
 .r-modal {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-lg);
 }
 
 .r-modal__header {
@@ -70,7 +70,7 @@ function onMaskClick() {
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 1px solid rgba(75, 54, 33, 0.1);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .r-modal__title {
@@ -90,7 +90,7 @@ function onMaskClick() {
   border-radius: 50%;
   transition: all 0.2s;
 }
-.r-modal__close:hover { background: rgba(75, 54, 33, 0.1); }
+.r-modal__close:hover { background: var(--btn-outline-hover); }
 
 .r-modal__body {
   padding: 24px;
@@ -99,7 +99,7 @@ function onMaskClick() {
 
 .r-modal__footer {
   padding: 16px 24px;
-  border-top: 1px solid rgba(75, 54, 33, 0.1);
+  border-top: 1px solid var(--color-border-light);
   display: flex;
   justify-content: flex-end;
   gap: 12px;

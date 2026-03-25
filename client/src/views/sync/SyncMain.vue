@@ -1178,7 +1178,7 @@ const workflowSteps = computed(() => [
 }
 
 .topbar {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 12px 16px;
   display: flex;
@@ -1218,8 +1218,8 @@ const workflowSteps = computed(() => [
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  border: 1px solid rgba(75, 54, 33, 0.2);
-  background: #fff;
+  border: 1px solid var(--color-border, rgba(75, 54, 33, 0.2));
+  background: var(--color-panel-bg, #fff);
   cursor: pointer;
   font-size: 18px;
 }
@@ -1272,9 +1272,10 @@ const workflowSteps = computed(() => [
 
 .account-select {
   padding: 10px 12px;
-  border: 1px solid rgba(75, 54, 33, 0.2);
+  border: 1px solid var(--input-border, rgba(75, 54, 33, 0.2));
   border-radius: 10px;
-  background: #fff;
+  background: var(--input-bg, #fff);
+  color: var(--color-text-main, #2c1810);
   font-size: 14px;
 }
 
@@ -1316,7 +1317,7 @@ const workflowSteps = computed(() => [
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--color-border, #E8DCCF);
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   cursor: pointer;
   color: var(--color-text-main);
   display: inline-flex;
@@ -1334,8 +1335,8 @@ const workflowSteps = computed(() => [
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #fff3e0;
-  color: #ed6c02;
+  background: var(--color-warning-light, #fff3e0);
+  color: var(--color-warning-dark, #ed6c02);
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(237, 108, 2, 0.2);
@@ -1364,7 +1365,7 @@ const workflowSteps = computed(() => [
 }
 
 .overview-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 16px;
   border: 1px solid var(--color-border, #E8DCCF);
@@ -1417,17 +1418,17 @@ const workflowSteps = computed(() => [
 }
 
 .pill.danger {
-  background: #ffebee;
+  background: rgba(211, 47, 47, 0.12);
   color: #d32f2f;
 }
 
 .pill.warning {
-  background: #fff3e0;
-  color: #e65100;
+  background: var(--color-warning-light, #fff3e0);
+  color: var(--color-warning-dark, #e65100);
 }
 
 .stat-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 16px;
   text-align: center;
@@ -1454,7 +1455,7 @@ const workflowSteps = computed(() => [
 }
 
 .panel {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   box-shadow: var(--shadow-md, 0 4px 20px rgba(75, 54, 33, 0.05));
   display: flex;
@@ -1492,7 +1493,7 @@ const workflowSteps = computed(() => [
   padding: 10px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 10px;
-  background: #fffdfb;
+  background: var(--color-card-bg, #fffdfb);
   align-items: center;
 }
 
@@ -1586,7 +1587,7 @@ const workflowSteps = computed(() => [
   padding: 8px 10px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 8px;
-  background: #fffdfb;
+  background: var(--color-card-bg, #fffdfb);
   font-size: 12px;
 }
 
@@ -1606,7 +1607,7 @@ const workflowSteps = computed(() => [
   padding: 8px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 10px;
-  background: #fffdfb;
+  background: var(--color-card-bg, #fffdfb);
 }
 
 .runtime-stat {
@@ -1704,7 +1705,8 @@ const workflowSteps = computed(() => [
   padding: 12px 12px 12px 34px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 10px;
-  background: #fffcf9;
+  background: var(--input-bg, #fffcf9);
+  color: var(--color-text-main, #2c1810);
 }
 
 .task-list {
@@ -1723,7 +1725,7 @@ const workflowSteps = computed(() => [
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
-  background: #fffdfb;
+  background: var(--color-card-bg, #fffdfb);
 }
 
 .task-card:hover {
@@ -1732,8 +1734,8 @@ const workflowSteps = computed(() => [
 }
 
 .task-card.pending { border-color: rgba(237, 108, 2, 0.4); }
-.task-card.conflict { border-color: #d32f2f; background: #fff2f2; }
-.task-card.synced { border-color: #2e7d32; background: #f4faf4; }
+.task-card.conflict { border-color: #d32f2f; background: rgba(211, 47, 47, 0.12); }
+.task-card.synced { border-color: #2e7d32; background: rgba(46, 125, 50, 0.12); }
 
 .avatar {
   width: 44px;
@@ -1774,10 +1776,10 @@ const workflowSteps = computed(() => [
   margin-top: 6px;
   padding: 4px 8px;
   border-radius: 8px;
-  background: #fffaf5;
+  background: var(--color-card-bg-hover, #fffaf5);
   border: 1px solid var(--color-border, #E8DCCF);
   font-size: 11px;
-  color: #6f5b4b;
+  color: var(--color-text-secondary, #6f5b4b);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1803,13 +1805,13 @@ const workflowSteps = computed(() => [
   font-weight: 700;
 }
 
-.status.pending { background: #fff3e0; color: #ed6c02; }
-.status.synced { background: #e8f5e9; color: #2e7d32; }
-.status.conflict { background: #ffebee; color: #d32f2f; }
+.status.pending { background: var(--color-warning-light, #fff3e0); color: var(--color-warning-dark, #ed6c02); }
+.status.synced { background: var(--color-success-light, #e8f5e9); color: var(--color-success, #2e7d32); }
+.status.conflict { background: rgba(211, 47, 47, 0.12); color: #d32f2f; }
 
 .hint {
   font-size: 11px;
-  color: #8c7b70;
+  color: var(--color-text-secondary, #8c7b70);
 }
 
 .arrow {
@@ -1832,7 +1834,7 @@ const workflowSteps = computed(() => [
 }
 
 .card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 14px;
   padding: 14px;
@@ -1867,12 +1869,12 @@ const workflowSteps = computed(() => [
   padding: 12px;
   border-radius: 12px;
   border: 1px dashed var(--color-border, #E8DCCF);
-  background: #fffcf9;
+  background: var(--color-card-bg, #fffcf9);
 }
 
-.step-item.done { border-color: #2e7d32; background: #f4faf4; }
-.step-item.active { border-color: var(--color-primary); background: #fff5ed; }
-.step-item.conflict { border-color: #d32f2f; background: #fff2f2; }
+.step-item.done { border-color: #2e7d32; background: rgba(46, 125, 50, 0.12); }
+.step-item.active { border-color: var(--color-primary); background: var(--color-primary-light, #fff5ed); }
+.step-item.conflict { border-color: #d32f2f; background: rgba(211, 47, 47, 0.12); }
 
 .step-icon {
   width: 36px;
@@ -1924,7 +1926,7 @@ const workflowSteps = computed(() => [
   padding: 12px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   align-items: flex-start;
 }
 
@@ -2023,7 +2025,7 @@ const workflowSteps = computed(() => [
 
 .modal {
   width: 720px;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 20px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.12);
@@ -2054,7 +2056,7 @@ const workflowSteps = computed(() => [
   padding: 10px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 10px;
-  background: #fffdfb;
+  background: var(--color-card-bg, #fffdfb);
 }
 
 .confirm-row .name { display: flex; flex-direction: column; }
@@ -2083,9 +2085,9 @@ const workflowSteps = computed(() => [
   font-weight: 700;
 }
 
-.confirm-row .status.pending { background: #fff3e0; color: #ed6c02; }
-.confirm-row .status.synced { background: #e8f5e9; color: #2e7d32; }
-.confirm-row .status.conflict { background: #ffebee; color: #d32f2f; }
+.confirm-row .status.pending { background: var(--color-warning-light, #fff3e0); color: var(--color-warning-dark, #ed6c02); }
+.confirm-row .status.synced { background: var(--color-success-light, #e8f5e9); color: var(--color-success, #2e7d32); }
+.confirm-row .status.conflict { background: rgba(211, 47, 47, 0.12); color: #d32f2f; }
 
 .modal-actions {
   display: flex;
@@ -2139,7 +2141,7 @@ const workflowSteps = computed(() => [
   align-items: center;
   gap: 12px;
   padding: 14px;
-  background: #fffdfb;
+  background: var(--color-card-bg, #fffdfb);
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 12px;
 }
@@ -2188,8 +2190,8 @@ const workflowSteps = computed(() => [
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background: #f4faf4;
-  border: 1px solid #c8e6c9;
+  background: var(--color-success-light, #f4faf4);
+  border: 1px solid rgba(46, 125, 50, 0.3);
   border-radius: 8px;
   font-size: 12px;
   color: #2e7d32;
@@ -2244,7 +2246,8 @@ const workflowSteps = computed(() => [
   padding: 12px 12px 12px 38px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 10px;
-  background: #fffcf9;
+  background: var(--input-bg, #fffcf9);
+  color: var(--color-text-main, #2c1810);
   font-size: 14px;
 }
 
@@ -2263,13 +2266,13 @@ const workflowSteps = computed(() => [
   padding: 12px;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 12px;
-  background: #fffdfb;
+  background: var(--color-card-bg, #fffdfb);
   transition: all 0.2s;
 }
 
 .cloud-card:hover {
   border-color: var(--color-primary);
-  box-shadow: 0 2px 8px rgba(128, 64, 48, 0.1);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(128, 64, 48, 0.1));
 }
 
 .cloud-card-main {
@@ -2311,8 +2314,8 @@ const workflowSteps = computed(() => [
 
 .version-tag {
   padding: 2px 8px;
-  background: #e3f2fd;
-  color: #1976d2;
+  background: var(--tag-bg, #e3f2fd);
+  color: var(--tag-text, #1976d2);
   border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
@@ -2350,7 +2353,7 @@ const workflowSteps = computed(() => [
 }
 
 .btn-icon.danger:hover {
-  background: #ffebee;
+  background: rgba(211, 47, 47, 0.12);
   border-color: #d32f2f;
 }
 
@@ -2362,7 +2365,7 @@ const workflowSteps = computed(() => [
 .delete-info {
   margin: 16px 0;
   padding: 12px;
-  background: #fafafa;
+  background: var(--color-card-bg, #fafafa);
   border-radius: 10px;
 }
 
@@ -2386,7 +2389,7 @@ const workflowSteps = computed(() => [
 .confirm-info {
   margin: 16px 0;
   padding: 12px;
-  background: #fafafa;
+  background: var(--color-card-bg, #fafafa);
   border-radius: 10px;
 }
 
@@ -2438,8 +2441,8 @@ const workflowSteps = computed(() => [
 .data-loss-warning {
   margin: 12px 0;
   padding: 12px;
-  background: #fff8e6;
-  border: 1px solid #ffcc00;
+  background: var(--color-warning-light, #fff8e6);
+  border: 1px solid var(--color-warning-border, #ffcc00);
   border-radius: 10px;
 }
 

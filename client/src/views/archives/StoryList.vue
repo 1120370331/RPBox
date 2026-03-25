@@ -695,8 +695,8 @@ defineExpose({
 }
 
 .story-status.published {
-  background: rgba(40, 167, 69, 0.1);
-  color: #28a745;
+  background: var(--color-success-light, rgba(40, 167, 69, 0.1));
+  color: var(--color-success, #28a745);
 }
 
 .story-title {
@@ -725,7 +725,7 @@ defineExpose({
   border-radius: 10px;
   font-size: 12px;
   background: rgba(184, 115, 51, 0.1);
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .story-footer {
@@ -744,7 +744,7 @@ defineExpose({
   height: 28px;
   border-radius: 50%;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-light, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -985,12 +985,12 @@ defineExpose({
 }
 
 .action-btn.danger {
-  color: #d32f2f;
+  color: var(--btn-danger-bg, #d32f2f);
 }
 
 .action-btn.danger:hover {
-  background: #ffebee;
-  color: #c62828;
+  background: rgba(211, 47, 47, 0.12);
+  color: var(--btn-danger-hover, #c62828);
 }
 
 /* 工具栏操作区 */

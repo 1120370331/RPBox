@@ -5,6 +5,7 @@ import { useUserStore } from '@shared/stores/user'
 import { listPosts, type PostWithAuthor, type ListPostsParams } from '@/api/post'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
+import MobilePagination from '@/components/MobilePagination.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -101,11 +102,13 @@ onMounted(loadMyPosts)
           </div>
         </button>
       </div>
-      <div v-if="total > pageSize" class="pagination">
-        <button :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">{{ $t('common.pagination.prev') }}</button>
-        <span>{{ $t('common.pagination.pageInfo', { current: currentPage, total: totalPages() }) }}</span>
-        <button :disabled="currentPage >= totalPages()" @click="goToPage(currentPage + 1)">{{ $t('common.pagination.next') }}</button>
-      </div>
+      <MobilePagination
+        v-if="total > pageSize"
+        :model-value="currentPage"
+        :total-pages="totalPages()"
+        :disabled="loading || switchingPage"
+        @change="goToPage"
+      />
     </div>
   </div>
 </template>

@@ -86,9 +86,10 @@ async function handleLogin() {
 <style scoped>
 .login-page {
   height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   overflow-y: auto;
-  padding: clamp(16px, 4.5vh, 40px) 16px calc(clamp(16px, 3vh, 24px) + var(--safe-bottom, 0px));
+  padding: calc(var(--safe-top, 0px) + clamp(12px, 2.6vh, 22px)) 16px calc(clamp(16px, 3vh, 24px) + var(--safe-bottom, 0px));
 }
 
 .login-card {
@@ -98,6 +99,7 @@ async function handleLogin() {
   background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
   padding: clamp(20px, 3.2vh, 30px) clamp(16px, 4.2vw, 24px);
+  border: 1px solid rgba(75, 54, 33, 0.08);
   box-shadow: var(--shadow-md);
   opacity: 0;
   transform: translateY(20px);

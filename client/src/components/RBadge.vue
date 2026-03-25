@@ -47,7 +47,7 @@ const displayValue = typeof props.value === 'number' && props.value > props.max
   border-radius: 10px;
   min-width: 18px;
   text-align: center;
-  color: #fff;
+  color: var(--color-text-light);
 }
 
 .r-badge--dot {
@@ -59,8 +59,8 @@ const displayValue = typeof props.value === 'number' && props.value > props.max
 }
 
 .r-badge--primary { background: var(--color-accent); }
-.r-badge--success { background: #2e7d32; }
-.r-badge--warning { background: #e65100; }
-.r-badge--danger { background: #c41e3a; }
-.r-badge--info { background: #1565c0; }
+.r-badge--success { background: var(--color-success); }
+.r-badge--warning { background: var(--color-warning-dark); }
+.r-badge--danger { background: var(--btn-danger-bg); }
+.r-badge--info { background: var(--link-color); }
 </style>

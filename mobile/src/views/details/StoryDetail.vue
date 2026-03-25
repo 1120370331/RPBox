@@ -13,6 +13,7 @@ import {
   deleteStoryEntry,
   getStory,
   listBookmarks,
+  updateEntriesBackgroundColor,
   updateBookmark,
   updateStoryEntry,
   type Story,
@@ -42,6 +43,7 @@ const showDeleteDialog = ref(false)
 const showBatchDeleteDialog = ref(false)
 const showBookmarkDialog = ref(false)
 const showDeleteBookmarkDialog = ref(false)
+const showGroupDialog = ref(false)
 
 const editingEntry = ref<StoryEntry | null>(null)
 const deletingEntryId = ref<number | null>(null)
@@ -52,6 +54,7 @@ const bookmarkTargetEntryId = ref<number | null>(null)
 const saving = ref(false)
 const deleting = ref(false)
 const batchDeleting = ref(false)
+const updatingGroup = ref(false)
 const bookmarkSaving = ref(false)
 const bookmarkDeleting = ref(false)
 
@@ -65,6 +68,14 @@ const bookmarkName = ref('')
 const bookmarkColor = ref('')
 const bookmarkIsPublic = ref(false)
 const bookmarkColors = ['#E57373', '#F06292', '#BA68C8', '#64B5F6', '#4DB6AC', '#81C784', '#FFD54F', '#FFB74D']
+const defaultColors = [
+  '#E57373', '#F06292', '#BA68C8', '#9575CD', '#7986CB',
+  '#64B5F6', '#4FC3F7', '#4DD0E1', '#4DB6AC', '#81C784',
+  '#AED581', '#DCE775', '#FFF176', '#FFD54F', '#FFB74D',
+  '#FF8A65', '#A1887F', '#90A4AE',
+]
+const selectedEntryColor = ref('')
+const selectedGroupName = ref('')
 const emoteVersion = ref(0)
 
 const storyId = computed(() => Number(route.params.id))
@@ -73,6 +84,17 @@ const isAllSelected = computed(() => entries.value.length > 0 && selectedEntryId
 const sortedBookmarks = computed(() => [...bookmarks.value].sort((a, b) => Number(b.is_favorite) - Number(a.is_favorite) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime()))
 const publicBookmarks = computed(() => sortedBookmarks.value.filter((b) => b.is_public))
 const myBookmarks = computed(() => sortedBookmarks.value.filter((b) => !b.is_public))
+const usedColorGroups = computed(() => {
+  const colorMap = new Map<string, number>()
+  for (const entry of entries.value) {
+    const color = String(entry.background_color || '').trim()
+    if (!color) continue
+    colorMap.set(color, (colorMap.get(color) || 0) + 1)
+  }
+  return Array.from(colorMap.entries())
+    .map(([color, count]) => ({ color, count }))
+    .sort((a, b) => b.count - a.count)
+})
 
 const normalizedEntries = computed(() => entries.value.map((entry) => {
   const imageEntry = parseImageEntry(entry)
@@ -177,9 +199,63 @@ function parseImageEntry(entry: StoryEntry) {
 }
 function formatTime(value: string) { if (!value) return '--'; const d = new Date(value); return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 function formatDateTimeLocal(value: string) { if (!value) return ''; const d = new Date(value); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
-function toggleManageMode() { manageMode.value = !manageMode.value; selectedEntryIds.value = [] }
+function toggleManageMode() { manageMode.value = !manageMode.value; selectedEntryIds.value = []; showGroupDialog.value = false }
 function toggleEntrySelection(id: number) { const i = selectedEntryIds.value.indexOf(id); if (i === -1) selectedEntryIds.value.push(id); else selectedEntryIds.value.splice(i, 1) }
 function toggleSelectAll() { selectedEntryIds.value = isAllSelected.value ? [] : entries.value.map((e) => e.id) }
+
+function selectByColor(color: string) {
+  const ids = entries.value
+    .filter(e => String(e.background_color || '').trim() === color)
+    .map(e => e.id)
+  if (ids.length === 0) return
+
+  const allSelected = ids.every(id => selectedEntryIds.value.includes(id))
+  if (allSelected) {
+    selectedEntryIds.value = selectedEntryIds.value.filter(id => !ids.includes(id))
+    return
+  }
+
+  selectedEntryIds.value = Array.from(new Set([...selectedEntryIds.value, ...ids]))
+}
+
+function openGroupDialog() {
+  if (!selectedEntryIds.value.length) return
+  selectedEntryColor.value = ''
+  selectedGroupName.value = ''
+  showGroupDialog.value = true
+}
+
+async function applyGroupSettings() {
+  if (!selectedEntryIds.value.length || updatingGroup.value) return
+  updatingGroup.value = true
+  try {
+    await updateEntriesBackgroundColor(
+      storyId.value,
+      selectedEntryIds.value,
+      selectedEntryColor.value,
+      selectedGroupName.value.trim(),
+    )
+
+    entries.value = entries.value.map((entry) => {
+      if (!selectedEntryIds.value.includes(entry.id)) return entry
+      return {
+        ...entry,
+        background_color: selectedEntryColor.value,
+        group_name: selectedGroupName.value.trim(),
+      }
+    })
+
+    selectedEntryIds.value = []
+    manageMode.value = false
+    showGroupDialog.value = false
+    toast.success(t('stories.detail.groupApplySuccess'))
+  } catch (error) {
+    toast.error((error as Error)?.message || t('stories.detail.groupApplyFailed'))
+  } finally {
+    updatingGroup.value = false
+  }
+}
+
 function openEditDialog(entry: StoryEntry) { editingEntry.value = entry; editType.value = entry.type; editSpeaker.value = entry.speaker || ''; editContent.value = entry.content || ''; editChannel.value = entry.channel || 'SAY'; editTimestamp.value = formatDateTimeLocal(entry.timestamp || entry.created_at || ''); showEditDialog.value = true }
 
 async function submitEntryEdit() {
@@ -312,9 +388,25 @@ onMounted(async () => {
         </section>
 
         <section v-if="manageMode" class="batch-bar">
-          <button class="batch-btn" @click="toggleSelectAll">{{ isAllSelected ? $t('stories.detail.unselectAll') : $t('stories.detail.selectAll') }}</button>
-          <span class="batch-count">{{ $t('stories.detail.selectedCount', { n: selectedEntryIds.length }) }}</span>
-          <button class="batch-btn danger" :disabled="selectedEntryIds.length === 0" @click="showBatchDeleteDialog = true">{{ $t('stories.detail.batchDelete') }}</button>
+          <div class="batch-top">
+            <button class="batch-btn" @click="toggleSelectAll">{{ isAllSelected ? $t('stories.detail.unselectAll') : $t('stories.detail.selectAll') }}</button>
+            <span class="batch-count">{{ $t('stories.detail.selectedCount', { n: selectedEntryIds.length }) }}</span>
+            <button class="batch-btn" :disabled="selectedEntryIds.length === 0" @click="openGroupDialog">{{ $t('stories.detail.groupAction') }}</button>
+            <button class="batch-btn danger" :disabled="selectedEntryIds.length === 0" @click="showBatchDeleteDialog = true">{{ $t('stories.detail.batchDelete') }}</button>
+          </div>
+          <div v-if="usedColorGroups.length > 0" class="color-groups">
+            <span class="groups-label">{{ $t('stories.detail.selectByGroup') }}</span>
+            <button
+              v-for="group in usedColorGroups"
+              :key="group.color"
+              class="color-group-btn"
+              :style="{ backgroundColor: group.color }"
+              :title="`${group.count}`"
+              @click="selectByColor(group.color)"
+            >
+              {{ group.count }}
+            </button>
+          </div>
         </section>
 
         <section v-for="group in groupedEntries" :key="group.key" class="group-block">
@@ -428,6 +520,37 @@ onMounted(async () => {
     </div><div class="dialog-actions"><button class="action-btn" @click="showBookmarkDialog = false">{{ $t('stories.detail.cancel') }}</button><button class="action-btn primary" :disabled="bookmarkSaving" @click="saveBookmark">{{ $t('stories.detail.save') }}</button></div></div></div>
 
     <div v-if="showDeleteBookmarkDialog" class="dialog-mask"><div class="dialog"><h3>{{ $t('stories.detail.deleteBookmark') }}</h3><p>{{ $t('stories.detail.deleteBookmarkMessage') }}</p><div class="dialog-actions"><button class="action-btn" @click="showDeleteBookmarkDialog = false">{{ $t('stories.detail.cancel') }}</button><button class="action-btn danger" :disabled="bookmarkDeleting" @click="confirmDeleteBookmark">{{ $t('stories.detail.confirm') }}</button></div></div></div>
+
+    <div v-if="showGroupDialog" class="dialog-mask">
+      <div class="dialog">
+        <h3>{{ $t('stories.detail.groupDialogTitle') }}</h3>
+        <div class="form-grid">
+          <label class="full">
+            <span>{{ $t('stories.detail.groupName') }}</span>
+            <input v-model="selectedGroupName" :placeholder="$t('stories.detail.groupNamePlaceholder')" />
+          </label>
+          <label class="full">
+            <span>{{ $t('stories.detail.groupColor') }}</span>
+            <div class="bookmark-color-row">
+              <button
+                v-for="color in defaultColors"
+                :key="color"
+                class="bookmark-color group-color"
+                :style="{ backgroundColor: color }"
+                :class="{ active: selectedEntryColor === color }"
+                @click.prevent="selectedEntryColor = color"
+              />
+              <button class="bookmark-color none group-color" :class="{ active: !selectedEntryColor }" @click.prevent="selectedEntryColor = ''">-</button>
+            </div>
+            <small class="group-hint">{{ $t('stories.detail.groupNameHint') }}</small>
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="action-btn" @click="showGroupDialog = false">{{ $t('stories.detail.cancel') }}</button>
+          <button class="action-btn primary" :disabled="updatingGroup" @click="applyGroupSettings">{{ $t('stories.detail.apply') }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 <style scoped>
@@ -504,10 +627,14 @@ onMounted(async () => {
 .bookmark-main strong { font-size: 12px; }
 .bookmark-main p { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; }
 .bookmark-empty { font-size: 12px; color: var(--color-text-secondary); text-align: center; padding: 8px; }
-.batch-bar { display: flex; align-items: center; gap: 8px; }
+.batch-bar { display: flex; flex-direction: column; gap: 8px; }
+.batch-top { display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: wrap; }
 .batch-btn { border: 1px solid var(--color-border); background: var(--color-panel-bg); border-radius: 8px; padding: 6px 8px; font-size: 12px; color: var(--text-dark); }
 .batch-btn.danger { border-color: var(--btn-danger-bg); color: var(--btn-danger-bg); }
 .batch-count { margin-left: auto; font-size: 12px; color: var(--color-text-secondary); }
+.color-groups { width: 100%; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.groups-label { font-size: 12px; color: var(--color-text-secondary); }
+.color-group-btn { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(0,0,0,0.08); color: #fff; font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .group-title { font-size: 12px; color: var(--color-text-secondary); border-left: 3px solid var(--color-border); padding-left: 8px; margin-bottom: 10px; }
 .entry-list { display: flex; flex-direction: column; gap: 10px; }
 .entry-item { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: start; background: rgba(255,255,255,0.65); border-radius: var(--radius-md); padding: 10px; }
@@ -544,6 +671,8 @@ onMounted(async () => {
 .bookmark-color { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.12); }
 .bookmark-color.active { box-shadow: 0 0 0 2px var(--color-primary-light); }
 .bookmark-color.none { display: inline-flex; align-items: center; justify-content: center; font-size: 12px; background: #f3f3f3; }
+.group-color { width: 24px; height: 24px; }
+.group-hint { margin-top: 4px; font-size: 11px; color: var(--color-text-secondary); }
 .dialog-actions { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
 .action-btn { border: 1px solid var(--color-border); background: var(--color-panel-bg); color: var(--text-dark); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 .action-btn.primary { border-color: var(--color-primary); background: var(--color-primary); color: var(--text-light); }

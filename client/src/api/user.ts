@@ -22,6 +22,17 @@ export interface UserMentionItem {
   name_bold?: boolean
 }
 
+export interface SponsorUser {
+  id: number
+  username: string
+  avatar?: string
+  role?: string
+  is_sponsor?: boolean
+  sponsor_level?: number
+  name_color?: string
+  name_bold?: boolean
+}
+
 // 获取当前用户信息
 export async function getUserInfo(): Promise<UserInfo> {
   return request.get('/user/info')
@@ -74,4 +85,8 @@ export async function searchUsers(keyword: string, limit: number = 10): Promise<
   return request.get('/users/search', {
     params: { q: keyword, limit },
   })
+}
+
+export async function listSponsors(): Promise<{ users: SponsorUser[] }> {
+  return request.get('/sponsors')
 }

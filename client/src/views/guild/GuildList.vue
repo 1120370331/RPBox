@@ -303,16 +303,17 @@ onMounted(loadData)
 .tabs {
   display: flex;
   gap: 4px;
-  background: #f0e6dc;
+  background: var(--color-card-bg, #f0e6dc);
+  border: 1px solid var(--color-border, #e5d4c1);
   padding: 4px;
   border-radius: 10px;
 }
 
 .tabs button {
   padding: 8px 20px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
   font-size: 14px;
   border-radius: 8px;
   cursor: pointer;
@@ -320,8 +321,9 @@ onMounted(loadData)
 }
 
 .tabs button.active {
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-accent, #B87333);
+  border-color: var(--color-accent, #B87333);
+  color: var(--btn-primary-text, #fff);
   font-weight: 600;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
@@ -343,13 +345,62 @@ onMounted(loadData)
   max-width: 300px;
 }
 
+.filter-bar :deep(.search-input .r-input) {
+  background: var(--input-bg, #fff);
+  border-color: var(--input-border, #d1bfa8);
+}
+
+.filter-bar :deep(.search-input .r-input:focus-within) {
+  border-color: var(--input-focus, #B87333);
+  box-shadow: 0 0 0 3px rgba(var(--shadow-base, 75, 54, 33), 0.12);
+}
+
+.filter-bar :deep(.search-input .r-input__inner) {
+  color: var(--color-text-main, #4B3621);
+}
+
+.filter-bar :deep(.search-input .r-input__inner::placeholder) {
+  color: var(--input-placeholder, rgba(75, 54, 33, 0.45));
+}
+
 .filter-bar select {
   padding: 8px 12px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--input-border, #d1bfa8);
   border-radius: 8px;
-  background: #fff;
-  color: #4B3621;
+  background: var(--input-bg, #fff);
+  color: var(--color-text-main, #4B3621);
   font-size: 14px;
+}
+
+.header-actions :deep(.r-button),
+.filter-bar :deep(.r-button) {
+  border-radius: 8px;
+}
+
+.header-actions :deep(.r-button--primary),
+.filter-bar :deep(.r-button--primary) {
+  background: var(--btn-primary-bg, #4B3621);
+  border-color: var(--btn-primary-bg, #4B3621);
+  color: var(--btn-primary-text, #fff);
+}
+
+.header-actions :deep(.r-button--primary:hover),
+.filter-bar :deep(.r-button--primary:hover) {
+  background: var(--btn-primary-hover, #3a2a18);
+  border-color: var(--btn-primary-hover, #3a2a18);
+}
+
+.header-actions :deep(.r-button--secondary),
+.filter-bar :deep(.r-button--secondary) {
+  background: var(--btn-secondary-bg, #F5EFE7);
+  border-color: var(--btn-outline-border, #E5D4C1);
+  color: var(--btn-secondary-text, #2C1810);
+}
+
+.header-actions :deep(.r-button--secondary:hover),
+.filter-bar :deep(.r-button--secondary:hover) {
+  background: var(--btn-secondary-hover, #fff);
+  border-color: var(--color-border-hover, #B87333);
 }
 
 .loading {
@@ -365,17 +416,19 @@ onMounted(loadData)
 }
 
 .guild-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #e8dccf);
   border-radius: 16px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.3s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.08));
 }
 
 .guild-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  border-color: var(--color-border-hover, #d4a373);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.12));
 }
 
 .card-banner {
@@ -426,7 +479,7 @@ onMounted(loadData)
   margin-top: -32px;
   position: relative;
   z-index: 10;
-  border: 3px solid #fff;
+  border: 3px solid var(--color-panel-bg, #fff);
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   overflow: hidden;
 }
@@ -445,14 +498,14 @@ onMounted(loadData)
 
 .guild-info h3 {
   font-size: 16px;
-  color: #4B3621;
+  color: var(--color-text-main, #4B3621);
   margin: 0 0 4px 0;
   font-weight: 600;
 }
 
 .guild-info .slogan {
   font-size: 13px;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
   margin: 0 0 8px 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -464,7 +517,7 @@ onMounted(loadData)
   flex-wrap: wrap;
   gap: 12px;
   font-size: 12px;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
 }
 
 .guild-meta i {
@@ -473,8 +526,8 @@ onMounted(loadData)
 
 .role-badge {
   display: inline-block;
-  background: rgba(184, 115, 51, 0.15);
-  color: #B87333;
+  background: var(--tag-bg, rgba(184, 115, 51, 0.15));
+  color: var(--tag-text, #B87333);
   padding: 2px 10px;
   border-radius: 10px;
   font-size: 12px;
@@ -490,7 +543,7 @@ onMounted(loadData)
 
 .apply-hint {
   font-size: 13px;
-  color: #856a52;
+  color: var(--color-text-secondary, #856a52);
   margin: 0;
   line-height: 1.5;
 }
@@ -498,10 +551,11 @@ onMounted(loadData)
 .apply-textarea {
   width: 100%;
   padding: 12px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--input-border, #d1bfa8);
   border-radius: 8px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main, #4B3621);
+  background: var(--input-bg, #fff);
   font-family: inherit;
   resize: vertical;
   transition: border-color 0.2s;
@@ -509,14 +563,14 @@ onMounted(loadData)
 
 .apply-textarea:focus {
   outline: none;
-  border-color: #B87333;
+  border-color: var(--input-focus, #B87333);
 }
 
 /* 公会卡片操作区域 */
 .guild-actions {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f0e6dc;
+  border-top: 1px solid var(--color-border-light, #f0e6dc);
 }
 
 .apply-btn {
@@ -526,8 +580,8 @@ onMounted(loadData)
   gap: 6px;
   width: 100%;
   padding: 8px 16px;
-  background: linear-gradient(135deg, #B87333, #D4A373);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-highlight, #D4A373));
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 8px;
   font-size: 13px;
@@ -537,7 +591,7 @@ onMounted(loadData)
 }
 
 .apply-btn:hover {
-  background: linear-gradient(135deg, #4B3621, #856a52);
+  background: linear-gradient(135deg, var(--color-secondary, #4B3621), var(--color-secondary-hover, #856a52));
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(184, 115, 51, 0.3);
 }
@@ -553,9 +607,9 @@ onMounted(loadData)
   gap: 6px;
   width: 100%;
   padding: 8px 16px;
-  background: rgba(255, 152, 0, 0.1);
-  color: #FF9800;
-  border: 1px solid rgba(255, 152, 0, 0.3);
+  background: var(--color-warning-light, rgba(255, 152, 0, 0.1));
+  color: var(--color-warning-dark, #FF9800);
+  border: 1px solid var(--color-warning-border, rgba(255, 152, 0, 0.3));
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
@@ -564,8 +618,8 @@ onMounted(loadData)
 }
 
 .cancel-btn:hover {
-  background: rgba(255, 152, 0, 0.2);
-  border-color: #FF9800;
+  background: var(--color-warning-light, rgba(255, 152, 0, 0.15));
+  border-color: var(--color-warning-dark, #FF9800);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
 }
@@ -580,9 +634,9 @@ onMounted(loadData)
   justify-content: center;
   gap: 6px;
   padding: 8px 16px;
-  background: rgba(255, 152, 0, 0.1);
-  color: #FF9800;
-  border: 1px solid rgba(255, 152, 0, 0.3);
+  background: var(--color-warning-light, rgba(255, 152, 0, 0.1));
+  color: var(--color-warning-dark, #FF9800);
+  border: 1px solid var(--color-warning-border, rgba(255, 152, 0, 0.3));
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;

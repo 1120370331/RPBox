@@ -25,7 +25,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .r-loading__spinner {
-  border: 3px solid rgba(75, 54, 33, 0.1);
+  border: 3px solid var(--btn-secondary-bg);
   border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

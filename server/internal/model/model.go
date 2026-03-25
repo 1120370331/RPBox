@@ -7,14 +7,18 @@ type User struct {
 	Username      string `gorm:"uniqueIndex;size:50" json:"username"`
 	Email         string `gorm:"uniqueIndex;size:100" json:"-"`
 	EmailVerified bool   `gorm:"default:false" json:"email_verified"` // 邮箱是否已验证
-	Avatar        string `gorm:"type:text" json:"avatar"`             // 头像(base64)
-	Role          string `gorm:"size:20;default:user" json:"role"`    // user|moderator|admin
-	IsSponsor     bool   `gorm:"default:false" json:"is_sponsor"`     // 赞助者权限
-	SponsorLevel  int    `gorm:"default:0" json:"sponsor_level"`      // 赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
-	SponsorColor  string `gorm:"size:6" json:"sponsor_color"`         // 赞助者自定义颜色(HEX, 无#)
-	SponsorBold   bool   `gorm:"default:false" json:"sponsor_bold"`   // 赞助者名称加粗
-	Password      string `gorm:"-" json:"-"`
-	PassHash      string `json:"-"`
+	// 注册协议同意记录
+	TermsAcceptedAt   *time.Time `json:"-"`
+	PrivacyAcceptedAt *time.Time `json:"-"`
+	AgreementVersion  string     `gorm:"size:32" json:"-"`
+	Avatar            string     `gorm:"type:text" json:"avatar"`           // 头像(base64)
+	Role              string     `gorm:"size:20;default:user" json:"role"`  // user|moderator|admin
+	IsSponsor         bool       `gorm:"default:false" json:"is_sponsor"`   // 赞助者权限
+	SponsorLevel      int        `gorm:"default:0" json:"sponsor_level"`    // 赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
+	SponsorColor      string     `gorm:"size:6" json:"sponsor_color"`       // 赞助者自定义颜色(HEX, 无#)
+	SponsorBold       bool       `gorm:"default:false" json:"sponsor_bold"` // 赞助者名称加粗
+	Password          string     `gorm:"-" json:"-"`
+	PassHash          string     `json:"-"`
 	// 个人资料字段
 	Bio      string `gorm:"size:500" json:"bio"`      // 个人简介
 	Location string `gorm:"size:100" json:"location"` // 地区
@@ -136,8 +140,8 @@ type StoryEntry struct {
 	Channel         string    `gorm:"size:32" json:"channel"`
 	Timestamp       time.Time `json:"timestamp"`
 	SortOrder       int       `gorm:"default:0" json:"sort_order"`
-	BackgroundColor string    `gorm:"size:7" json:"background_color"`  // 背景色，如 #FF5733
-	GroupName       string    `gorm:"size:64" json:"group_name"`       // 编组名称
+	BackgroundColor string    `gorm:"size:7" json:"background_color"` // 背景色，如 #FF5733
+	GroupName       string    `gorm:"size:64" json:"group_name"`      // 编组名称
 	CreatedAt       time.Time `json:"created_at"`
 }
 

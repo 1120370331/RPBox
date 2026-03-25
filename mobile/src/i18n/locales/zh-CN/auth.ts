@@ -27,6 +27,11 @@ export default {
     sendCodeFailed: '发送验证码失败',
     passwordMismatch: '两次输入的密码不一致',
     codeRequired: '请输入验证码',
+    agreement: '我已阅读并同意',
+    terms: '服务条款',
+    and: '和',
+    privacy: '隐私政策',
+    mustAcceptAgreement: '请先阅读并同意服务条款和隐私政策',
   },
   forgotPassword: {
     title: '找回密码',

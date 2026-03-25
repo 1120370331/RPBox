@@ -95,6 +95,89 @@ func (s *Server) saveUploadedImage(c *gin.Context, header *multipart.FileHeader,
 	return buildPublicURL(c, urlPath), nil
 }
 
+func (s *Server) saveImageBytes(c *gin.Context, data []byte, contentType, subdir string) (string, error) {
+	if contentType != "" {
+		contentType = strings.TrimSpace(strings.Split(contentType, ";")[0])
+	}
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		return "", fmt.Errorf("unsupported image content type")
+	}
+
+	ext := imageExtension(contentType, "")
+	if ext == "" {
+		return "", fmt.Errorf("unsupported image format")
+	}
+
+	cleanSubdir := cleanUploadSubdir(subdir)
+	name, err := randomHex(16)
+	if err != nil {
+		return "", err
+	}
+	filename := name + ext
+	relativePath := path.Join(cleanSubdir, filename)
+
+	if s.ossEnabled() {
+		objectKey := s.buildOSSKey(cleanSubdir, filename)
+		if err := s.uploadToOSS(objectKey, data, contentType); err != nil {
+			return "", err
+		}
+		urlPath := path.Join("/", uploadDirName, relativePath)
+		return buildPublicURL(c, urlPath), nil
+	}
+
+	baseDir := filepath.Join(s.cfg.Storage.Path, uploadDirName)
+	targetDir := baseDir
+	if cleanSubdir != "" {
+		targetDir = filepath.Join(baseDir, filepath.FromSlash(cleanSubdir))
+	}
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return "", err
+	}
+
+	targetPath := filepath.Join(targetDir, filename)
+	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+		return "", err
+	}
+
+	urlPath := path.Join("/", uploadDirName, relativePath)
+	return buildPublicURL(c, urlPath), nil
+}
+
+// normalizeAndStoreImageValue converts inline/base64 image value into uploaded URL path.
+func (s *Server) normalizeAndStoreImageValue(c *gin.Context, raw, subdir string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "/uploads/") || strings.HasPrefix(value, "uploads/") {
+		return value, nil
+	}
+
+	if strings.HasPrefix(value, "data:") {
+		data, contentType, err := decodeDataURI(value)
+		if err != nil {
+			return "", err
+		}
+		if !strings.HasPrefix(contentType, "image/") {
+			return "", fmt.Errorf("unsupported image format")
+		}
+		return s.saveImageBytes(c, data, contentType, subdir)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err == nil {
+		contentType := http.DetectContentType(decoded)
+		if strings.HasPrefix(contentType, "image/") {
+			return s.saveImageBytes(c, decoded, contentType, subdir)
+		}
+	}
+
+	return value, nil
+}
+
 func buildPublicURL(c *gin.Context, urlPath string) string {
 	if urlPath == "" {
 		return urlPath

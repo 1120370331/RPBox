@@ -1,19 +1,13 @@
 import { resolveApiUrl } from '@/api/image'
-import { request } from '@shared/api/request'
+import { listEmotePacks } from '@/api/emote'
 
 const TOKEN_RE = /\[\[(emote|mention):([^\]]+)\]\]/gi
 const EMOTE_SIZE = 34
 let emoteUrlMap = new Map<string, string>()
 let loadingPromise: Promise<void> | null = null
 
-interface EmoteItem {
-  id: string
-  url: string
-}
-
-interface EmotePack {
-  id: string
-  items: EmoteItem[]
+export function buildEmoteToken(packId: string, itemId: string) {
+  return `[[emote:${packId}:${itemId}]]`
 }
 
 export async function ensureEmoteMapLoaded() {
@@ -21,8 +15,7 @@ export async function ensureEmoteMapLoaded() {
   if (loadingPromise) return loadingPromise
   loadingPromise = (async () => {
     try {
-      const res = await request.get<{ packs?: EmotePack[] }>('/emotes')
-      const packs = Array.isArray(res?.packs) ? res.packs : []
+      const packs = await listEmotePacks()
       const map = new Map<string, string>()
       for (const pack of packs) {
         const packId = String(pack?.id || '')

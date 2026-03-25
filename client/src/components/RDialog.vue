@@ -12,10 +12,10 @@ const typeIcons = {
 }
 
 const typeColors = {
-  info: '#1565c0',
-  success: '#2e7d32',
-  warning: '#e65100',
-  error: '#c62828',
+  info: 'var(--link-color)',
+  success: 'var(--color-success)',
+  warning: 'var(--color-warning-dark)',
+  error: 'var(--btn-danger-bg)',
 }
 </script>
 
@@ -60,7 +60,7 @@ const typeColors = {
 .r-dialog__mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(var(--shadow-base), 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -68,11 +68,11 @@ const typeColors = {
 }
 
 .r-dialog {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   width: 400px;
   max-width: 90vw;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-lg);
 }
 
 .r-dialog__header {
@@ -117,19 +117,19 @@ const typeColors = {
 }
 
 .r-dialog__btn--cancel {
-  background: rgba(128, 64, 48, 0.08);
+  background: var(--btn-secondary-bg);
   color: var(--color-text-main);
 }
 .r-dialog__btn--cancel:hover {
-  background: rgba(128, 64, 48, 0.15);
+  background: var(--btn-secondary-hover);
 }
 
 .r-dialog__btn--confirm {
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 .r-dialog__btn--confirm:hover {
-  opacity: 0.9;
+  background: var(--btn-primary-hover);
 }
 
 .r-dialog-enter-active, .r-dialog-leave-active { transition: all 0.2s; }

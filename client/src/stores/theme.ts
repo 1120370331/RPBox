@@ -286,8 +286,103 @@ const tealTheme: Theme = {
   },
 }
 
+// 奢华黑金主题
+// 配色: #000000(纯黑) #1A1A1A(深黑) #333333(石墨黑) #D4AF37(金) #E5C158(亮金)
+const blackGoldTheme: Theme = {
+  id: 'black-gold',
+  name: '奢华黑金',
+  colors: {
+    // 主色调
+    primary: '#D4AF37',
+    primaryHover: '#E5C158',
+    primaryLight: 'rgba(212, 175, 55, 0.16)',
+    secondary: '#2A2A2A',
+    secondaryHover: '#333333',
+    accent: '#E5C158',
+    accentHover: '#E5C158',
+    background: '#0F0F0F',
+    highlight: '#E5C158',
+
+    // 侧边栏
+    sidebarBg: '#000000',
+    sidebarText: '#E5C158',
+    sidebarTextMuted: 'rgba(229, 193, 88, 0.7)',
+    sidebarHover: 'rgba(212, 175, 55, 0.14)',
+
+    // 面板/卡片
+    panelBg: '#181818',
+    cardBg: '#202020',
+    cardBgHover: 'rgba(212, 175, 55, 0.1)',
+
+    // 文字
+    textMain: '#E8C96A',
+    textLight: '#FFF4CC',
+    textSecondary: '#C9A94A',
+    textMuted: 'rgba(229, 193, 88, 0.6)',
+
+    // 边框
+    border: '#333333',
+    borderLight: 'rgba(212, 175, 55, 0.25)',
+    borderHover: '#D4AF37',
+
+    // 按钮
+    btnPrimaryBg: '#D4AF37',
+    btnPrimaryText: '#000000',
+    btnPrimaryHover: '#E5C158',
+    btnSecondaryBg: 'rgba(212, 175, 55, 0.12)',
+    btnSecondaryText: '#E5C158',
+    btnSecondaryHover: 'rgba(212, 175, 55, 0.2)',
+    btnOutlineBorder: '#D4AF37',
+    btnOutlineText: '#E5C158',
+    btnOutlineHover: 'rgba(212, 175, 55, 0.1)',
+    btnDangerBg: '#DC3545',
+    btnDangerHover: '#C82333',
+
+    // 输入框
+    inputBg: '#1A1A1A',
+    inputBorder: '#333333',
+    inputFocus: '#D4AF37',
+    inputPlaceholder: 'rgba(229, 193, 88, 0.45)',
+
+    // 开关/选中状态
+    switchActive: '#D4AF37',
+    switchInactive: '#4A4A4A',
+    checkboxActive: '#D4AF37',
+
+    // 标签/徽章
+    tagBg: 'rgba(212, 175, 55, 0.15)',
+    tagText: '#E5C158',
+    badgeBg: '#D4AF37',
+
+    // 阴影基色
+    shadowBase: '0, 0, 0',
+
+    // 滚动条
+    scrollbarThumb: '#333333',
+    scrollbarThumbHover: '#D4AF37',
+
+    // 特殊元素
+    iconBg: 'rgba(212, 175, 55, 0.15)',
+    iconColor: '#D4AF37',
+    linkColor: '#D4AF37',
+    linkHover: '#E5C158',
+
+    // 渐变
+    gradientStart: '#333333',
+    gradientEnd: '#000000',
+
+    // 状态色
+    success: '#5B8C5A',
+    successLight: 'rgba(91, 140, 90, 0.15)',
+    warning: '#D4AF37',
+    warningLight: 'rgba(212, 175, 55, 0.15)',
+    warningBorder: 'rgba(212, 175, 55, 0.35)',
+    warningDark: '#B28228',
+  },
+}
+
 // 所有可用主题
-export const themes: Theme[] = [classicTheme, tealTheme]
+export const themes: Theme[] = [classicTheme, tealTheme, blackGoldTheme]
 
 // 获取主题 by ID
 export function getThemeById(id: string): Theme {

@@ -1,0 +1,47 @@
+name: Upload Sponsors
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'server/storage/sponsors/**'
+      - '.github/workflows/upload-sponsors.yml'
+
+jobs:
+  deploy:
+    name: Deploy Sponsors
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify sponsor file
+        run: |
+          test -f server/storage/sponsors/extra_sponsors.json
+          jq . server/storage/sponsors/extra_sponsors.json > /dev/null
+
+      - name: Upload sponsor artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sponsors
+          path: server/storage/sponsors/extra_sponsors.json
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy sponsors file
+        env:
+          REMOTE_PATH: ${{ secrets.SPONSOR_PATH }}
+        run: |
+          if [ -z "$REMOTE_PATH" ]; then
+            echo "SPONSOR_PATH is not set."
+            exit 1
+          fi
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH"
+          scp -P 2233 -C server/storage/sponsors/extra_sponsors.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/extra_sponsors.json

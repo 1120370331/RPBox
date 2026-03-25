@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -93,6 +94,8 @@ func (s *Server) listPendingPosts(c *gin.Context) {
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		ensurePostCoverUpdatedAt(&p)
+		p.CoverImage = postCoverURL(p)
 		result[i] = PostWithAuthor{
 			Post:            p,
 			AuthorName:      author.Username,
@@ -145,6 +148,8 @@ func (s *Server) reviewPost(c *gin.Context) {
 		"comment": req.Comment,
 	})
 
+	ensurePostCoverUpdatedAt(&post)
+	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "post": post})
 }
 
@@ -229,6 +234,8 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 		// 删除待审核记录
 		database.DB.Delete(&edit)
 
+		ensurePostCoverUpdatedAt(&post)
+		post.CoverImage = postCoverURL(post)
 		c.JSON(http.StatusOK, gin.H{"message": "编辑已通过并应用", "post": post})
 	} else if req.Action == "reject" {
 		edit.Status = "rejected"
@@ -286,6 +293,8 @@ func (s *Server) listPendingItems(c *gin.Context) {
 	for i, item := range items {
 		author := userMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		ensureItemPreviewUpdatedAt(&item)
+		item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 		result[i] = ItemWithAuthor{
 			Item:            item,
 			AuthorName:      author.Username,
@@ -338,6 +347,8 @@ func (s *Server) reviewItem(c *gin.Context) {
 		"comment": req.Comment,
 	})
 
+	ensureItemPreviewUpdatedAt(&item)
+	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "item": item})
 }
 
@@ -423,6 +434,8 @@ func (s *Server) reviewItemEdit(c *gin.Context) {
 		// 删除待审核记录
 		database.DB.Delete(&edit)
 
+		ensureItemPreviewUpdatedAt(&item)
+		item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 		c.JSON(http.StatusOK, gin.H{"message": "编辑已通过并应用", "item": item})
 	} else if req.Action == "reject" {
 		edit.ReviewStatus = "rejected"
@@ -509,6 +522,8 @@ func (s *Server) listAllPosts(c *gin.Context) {
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		ensurePostCoverUpdatedAt(&p)
+		p.CoverImage = postCoverURL(p)
 		result[i] = PostWithAuthor{
 			Post:            p,
 			AuthorName:      author.Username,
@@ -673,6 +688,8 @@ func (s *Server) listAllItems(c *gin.Context) {
 	for i, item := range items {
 		author := userMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		ensureItemPreviewUpdatedAt(&item)
+		item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 		result[i] = ItemWithAuthor{
 			Item:            item,
 			AuthorName:      author.Username,
@@ -815,6 +832,10 @@ func (s *Server) listPendingGuilds(c *gin.Context) {
 	for i, g := range guilds {
 		owner := userMap[g.OwnerID]
 		nameColor, nameBold := userDisplayStyle(owner)
+		ensureGuildBannerUpdatedAt(&g)
+		ensureGuildAvatarUpdatedAt(&g)
+		g.Banner = guildBannerURL(g)
+		g.Avatar = guildAvatarURL(g)
 		result[i] = GuildWithOwner{
 			Guild:          g,
 			OwnerName:      owner.Username,
@@ -865,6 +886,10 @@ func (s *Server) reviewGuild(c *gin.Context) {
 		"comment": req.Comment,
 	})
 
+	ensureGuildBannerUpdatedAt(&guild)
+	ensureGuildAvatarUpdatedAt(&guild)
+	guild.Banner = guildBannerURL(guild)
+	guild.Avatar = guildAvatarURL(guild)
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "guild": guild})
 }
 
@@ -916,6 +941,10 @@ func (s *Server) listAllGuilds(c *gin.Context) {
 	for i, g := range guilds {
 		owner := userMap[g.OwnerID]
 		nameColor, nameBold := userDisplayStyle(owner)
+		ensureGuildBannerUpdatedAt(&g)
+		ensureGuildAvatarUpdatedAt(&g)
+		g.Banner = guildBannerURL(g)
+		g.Avatar = guildAvatarURL(g)
 		result[i] = GuildWithOwner{
 			Guild:          g,
 			OwnerName:      owner.Username,
@@ -999,6 +1028,10 @@ func (s *Server) changeGuildOwner(c *gin.Context) {
 		"new_owner_name": newOwner.Username,
 	})
 
+	ensureGuildBannerUpdatedAt(&guild)
+	ensureGuildAvatarUpdatedAt(&guild)
+	guild.Banner = guildBannerURL(guild)
+	guild.Avatar = guildAvatarURL(guild)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "会长已更换",
 		"guild":   guild,

@@ -76,7 +76,7 @@ func (s *Server) listComments(c *gin.Context) {
 		result[i] = CommentWithAuthor{
 			Comment:         comment,
 			AuthorName:      author.Username,
-			AuthorAvatar:    author.Avatar,
+			AuthorAvatar:    userAvatarURL(s.cfg.Server.ApiHost, author),
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,
 			Liked:           likedMap[comment.ID],

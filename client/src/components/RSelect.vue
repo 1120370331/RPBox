@@ -59,13 +59,13 @@ function select(opt: Option) {
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: #fff;
-  border: 2px solid rgba(75,54,33,0.2);
+  background: var(--input-bg);
+  border: 2px solid var(--input-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
 }
-.r-select__placeholder { color: rgba(75,54,33,0.4); }
+.r-select__placeholder { color: var(--input-placeholder); }
 .r-select__arrow { font-size: 10px; color: var(--color-secondary); }
 .r-select__dropdown {
   position: absolute;
@@ -73,10 +73,10 @@ function select(opt: Option) {
   left: 0;
   right: 0;
   margin-top: 4px;
-  background: #fff;
-  border: 1px solid rgba(75,54,33,0.1);
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 16px rgba(var(--shadow-base), 0.2);
   z-index: 100;
   max-height: 200px;
   overflow-y: auto;
@@ -86,8 +86,8 @@ function select(opt: Option) {
   cursor: pointer;
   font-size: 14px;
 }
-.r-select__option:hover { background: rgba(75,54,33,0.05); }
-.r-select__option--active { color: var(--color-accent); background: rgba(184,115,51,0.1); }
+.r-select__option:hover { background: var(--btn-outline-hover); }
+.r-select__option--active { color: var(--color-accent); background: var(--color-primary-light); }
 .r-select--disabled { opacity: 0.5; pointer-events: none; }
 .r-select-enter-active, .r-select-leave-active { transition: all 0.2s; }
 .r-select-enter-from, .r-select-leave-to { opacity: 0; transform: translateY(-8px); }

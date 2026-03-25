@@ -284,8 +284,8 @@ const activeMenu = computed(() => {
 }
 
 .menu-item.active {
-  background-color: var(--color-main-bg, #EED9C4);
-  color: var(--color-sidebar-bg, #4B3621);
+  background-color: var(--color-primary-light, rgba(75, 54, 33, 0.12));
+  color: var(--color-text-main, #2C1810);
   font-weight: bold;
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
