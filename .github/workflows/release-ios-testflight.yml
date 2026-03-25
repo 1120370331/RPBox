@@ -159,9 +159,9 @@ jobs:
           perl -0777 -i -pe "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CODE_SIGN_STYLE = [^;]+;/CODE_SIGN_STYLE = Manual;/g" "$PBXPROJ"
           if grep -q "PROVISIONING_PROFILE_SPECIFIER =" "$PBXPROJ"; then
-            perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = [^;]+;/PROVISIONING_PROFILE_SPECIFIER = ${IOS_PROVISION_PROFILE_NAME};/g" "$PBXPROJ"
+            perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = [^;]+;/PROVISIONING_PROFILE_SPECIFIER = \"${IOS_PROVISION_PROFILE_NAME}\";/g" "$PBXPROJ"
           else
-            perl -0777 -i -pe "s/(PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};)/\\1\\n\\t\\t\\t\\tPROVISIONING_PROFILE_SPECIFIER = ${IOS_PROVISION_PROFILE_NAME};/g" "$PBXPROJ"
+            perl -0777 -i -pe "s/(PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};)/\\1\\n\\t\\t\\t\\tPROVISIONING_PROFILE_SPECIFIER = \"${IOS_PROVISION_PROFILE_NAME}\";/g" "$PBXPROJ"
           fi
 
       - name: Install signing assets
@@ -239,7 +239,11 @@ jobs:
           IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
         run: |
           set -euo pipefail
-          SCHEME="${RESOLVED_XCODE_SCHEME:-${{ env.XCODE_SCHEME }}}"
+          SCHEME="$(xcodebuild -list -json -workspace "${{ env.XCODE_WORKSPACE }}" | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
+          if [ -z "$SCHEME" ]; then
+            echo "No iOS scheme found in workspace after sync."
+            exit 1
+          fi
           xcodebuild \
             -workspace "${{ env.XCODE_WORKSPACE }}" \
             -scheme "$SCHEME" \
