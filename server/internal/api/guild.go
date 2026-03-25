@@ -165,7 +165,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 	if len(guildIDs) > 0 {
 		// 列表查询排除大字段（banner）以提高性能
 		// banner 通过独立的图片 API 访问
-		database.DB.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
+		database.DB.Select("id, name, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
 	}
 
 	// 获取有 banner 的公会 ID 列表
@@ -879,7 +879,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 
 	// 列表查询排除大字段（banner）以提高性能
 	// banner 通过独立的图片 API 访问
-	query.Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+	query.Select("id, name, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
 
 	// 获取有 banner 的公会 ID 列表
 	guildIDs := make([]uint, len(guilds))
