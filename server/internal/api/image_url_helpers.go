@@ -58,11 +58,15 @@ func postCoverURL(post model.Post) string {
 	if strings.TrimSpace(post.CoverImage) == "" {
 		return ""
 	}
-	version := post.UpdatedAt.Unix()
-	if post.CoverImageUpdatedAt != nil {
-		version = post.CoverImageUpdatedAt.Unix()
+	return postCoverURLFromMeta(post.ID, post.UpdatedAt, post.CoverImageUpdatedAt)
+}
+
+func postCoverURLFromMeta(postID uint, updatedAt time.Time, coverUpdatedAt *time.Time) string {
+	version := updatedAt.Unix()
+	if coverUpdatedAt != nil {
+		version = coverUpdatedAt.Unix()
 	}
-	return fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80&v=%d", post.ID, version)
+	return fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80&v=%d", postID, version)
 }
 
 func ensureItemPreviewUpdatedAt(item *model.Item) {
