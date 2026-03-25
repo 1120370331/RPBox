@@ -275,10 +275,10 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--input-border, var(--color-border));
   border-radius: 8px;
   cursor: pointer;
-  background: #fff;
+  background: var(--input-bg, var(--color-panel-bg));
 }
 
 .color-input-wrapper:hover {
@@ -289,7 +289,7 @@ onMounted(() => {
   width: 24px;
   height: 24px;
   border-radius: 4px;
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 1px solid var(--color-border-light, var(--color-border));
   flex-shrink: 0;
 }
 
@@ -299,7 +299,7 @@ onMounted(() => {
   font-size: 14px;
   font-family: monospace;
   width: 70px;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   background: transparent;
 }
 
@@ -308,9 +308,10 @@ onMounted(() => {
   top: 100%;
   left: 0;
   margin-top: 4px;
-  background: #fff;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border-light, var(--color-border));
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  box-shadow: var(--shadow-md, 0 4px 20px rgba(var(--shadow-base), 0.2));
   padding: 12px;
   z-index: 100;
   width: 240px;
@@ -344,9 +345,9 @@ onMounted(() => {
   position: absolute;
   width: 14px;
   height: 14px;
-  border: 2px solid #fff;
+  border: 2px solid var(--color-panel-bg);
   border-radius: 50%;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 4px rgba(var(--shadow-base), 0.3);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -375,9 +376,9 @@ onMounted(() => {
   top: 50%;
   width: 6px;
   height: 18px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 3px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 4px rgba(var(--shadow-base), 0.3);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -396,7 +397,7 @@ onMounted(() => {
   width: 36px;
   height: 36px;
   border-radius: 6px;
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 1px solid var(--color-border-light, var(--color-border));
 }
 
 .result-hex {

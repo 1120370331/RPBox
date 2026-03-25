@@ -32,11 +32,11 @@ const emit = defineEmits<{ close: [] }>()
 .r-tag--sm { padding: 2px 8px; font-size: 11px; }
 .r-tag--md { padding: 4px 10px; font-size: 12px; }
 
-.r-tag--default { background: rgba(75,54,33,0.1); color: var(--color-primary); }
-.r-tag--primary { background: rgba(184,115,51,0.15); color: var(--color-accent); }
-.r-tag--success { background: rgba(46,125,50,0.15); color: #2e7d32; }
-.r-tag--warning { background: rgba(230,81,0,0.15); color: #e65100; }
-.r-tag--danger { background: rgba(196,30,58,0.15); color: #c41e3a; }
+.r-tag--default { background: var(--btn-secondary-bg); color: var(--color-text-main); }
+.r-tag--primary { background: var(--tag-bg); color: var(--tag-text); }
+.r-tag--success { background: var(--color-success-light); color: var(--color-success); }
+.r-tag--warning { background: var(--color-warning-light); color: var(--color-warning-dark); }
+.r-tag--danger { background: var(--btn-secondary-bg); color: var(--btn-danger-bg); }
 
 .r-tag__close {
   cursor: pointer;

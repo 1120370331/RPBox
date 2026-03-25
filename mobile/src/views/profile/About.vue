@@ -144,6 +144,29 @@ onMounted(async () => {
           </button>
         </div>
       </div>
+
+      <div class="about-card">
+        <h3 class="section-title">{{ $t('profile.about.legal.title') }}</h3>
+        <p class="update-hint">{{ $t('profile.about.legal.desc') }}</p>
+        <div class="update-actions">
+          <button class="action-btn secondary" @click="router.push('/legal/terms')">
+            {{ $t('auth.register.terms') }}
+          </button>
+          <button class="action-btn secondary" @click="router.push('/legal/privacy')">
+            {{ $t('auth.register.privacy') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="about-card">
+        <h3 class="section-title">{{ $t('profile.about.sponsors.title') }}</h3>
+        <p class="update-hint">{{ $t('profile.about.sponsors.desc') }}</p>
+        <div class="update-actions">
+          <button class="action-btn secondary" @click="router.push('/about/sponsors')">
+            {{ $t('profile.about.sponsors.view') }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

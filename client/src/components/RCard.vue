@@ -43,21 +43,21 @@ withDefaults(defineProps<Props>(), {
 
 <style scoped>
 .r-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: var(--radius-md);
   overflow: hidden;
   transition: all 0.2s;
 }
 
-.r-card--bordered { border: 1px solid rgba(75, 54, 33, 0.1); }
+.r-card--bordered { border: 1px solid var(--color-border); }
 .r-card--hoverable:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(75, 54, 33, 0.12);
+  box-shadow: var(--shadow-lg);
 }
 
-.r-card--shadow-sm { box-shadow: 0 2px 8px rgba(75, 54, 33, 0.08); }
-.r-card--shadow-md { box-shadow: 0 4px 16px rgba(75, 54, 33, 0.1); }
-.r-card--shadow-lg { box-shadow: 0 8px 32px rgba(75, 54, 33, 0.12); }
+.r-card--shadow-sm { box-shadow: var(--shadow-sm); }
+.r-card--shadow-md { box-shadow: var(--shadow-md); }
+.r-card--shadow-lg { box-shadow: var(--shadow-lg); }
 
 .r-card--padding-none .r-card__body { padding: 0; }
 .r-card--padding-sm .r-card__body { padding: 12px; }
@@ -66,7 +66,7 @@ withDefaults(defineProps<Props>(), {
 
 .r-card__header {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(75, 54, 33, 0.08);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .r-card__title {
@@ -83,7 +83,7 @@ withDefaults(defineProps<Props>(), {
 
 .r-card__footer {
   padding: 12px 20px;
-  border-top: 1px solid rgba(75, 54, 33, 0.08);
-  background: rgba(75, 54, 33, 0.02);
+  border-top: 1px solid var(--color-border-light);
+  background: var(--color-card-bg-hover);
 }
 </style>

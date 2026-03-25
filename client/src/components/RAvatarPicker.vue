@@ -200,8 +200,8 @@ function clearAvatar() {
   height: 24px;
   border-radius: 50%;
   border: none;
-  background: #e74c3c;
-  color: #fff;
+  background: var(--btn-danger-bg);
+  color: var(--color-text-light);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -218,7 +218,7 @@ function clearAvatar() {
   flex: 1;
   padding: 8px 12px;
   border: 1px solid var(--color-border);
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
@@ -237,7 +237,7 @@ function clearAvatar() {
 .mode-tabs button.active {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-light);
 }
 
 .input-section {

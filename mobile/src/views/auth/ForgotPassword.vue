@@ -121,18 +121,20 @@ async function handleResetPassword() {
 <style scoped>
 .forgot-page {
   min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: calc(var(--safe-top, 0px) + 16px) 16px calc(20px + var(--safe-bottom, 0px));
 }
 
 .forgot-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
-  padding: 32px 24px;
+  padding: clamp(20px, 3.2vh, 30px) clamp(16px, 4.2vw, 24px);
+  border: 1px solid rgba(75, 54, 33, 0.08);
   box-shadow: var(--shadow-md);
 }
 
@@ -144,7 +146,7 @@ async function handleResetPassword() {
 }
 
 .forgot-header h1 {
-  font-size: 20px;
+  font-size: clamp(18px, 4.5vw, 20px);
   font-weight: 700;
   color: var(--color-primary);
 }
@@ -169,10 +171,10 @@ async function handleResetPassword() {
 
 .form-group input {
   width: 100%;
-  padding: 14px 16px;
+  padding: clamp(12px, 1.9vh, 14px) 14px;
   border: 1px solid var(--input-border);
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 15px;
   background: var(--input-bg);
   color: var(--color-primary);
 }
@@ -180,7 +182,7 @@ async function handleResetPassword() {
 .form-group input:focus { outline: none; border-color: var(--color-accent); }
 
 .email-display {
-  padding: 14px 16px;
+  padding: 12px 14px;
   background: var(--color-primary-light);
   border-radius: var(--radius-sm);
   font-size: 14px;
@@ -191,7 +193,7 @@ async function handleResetPassword() {
 .verification-group input { flex: 1; }
 
 .btn-resend {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
   background: var(--color-panel-bg);
@@ -205,12 +207,12 @@ async function handleResetPassword() {
 
 .btn-primary {
   width: 100%;
-  padding: 14px;
+  padding: clamp(12px, 1.9vh, 14px);
   background: var(--color-secondary);
   color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -232,4 +234,14 @@ async function handleResetPassword() {
 }
 
 .hint { font-size: 12px; color: var(--color-text-secondary); text-align: center; }
+
+@media (max-width: 360px) {
+  .verification-group {
+    flex-direction: column;
+  }
+
+  .btn-resend {
+    width: 100%;
+  }
+}
 </style>

@@ -41,10 +41,10 @@ function hide() { visible.value = false }
   left: 0;
   margin-top: 4px;
   min-width: 120px;
-  background: #fff;
-  border: 1px solid rgba(75,54,33,0.1);
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 16px rgba(var(--shadow-base), 0.2);
   z-index: 100;
   padding: 4px 0;
 }

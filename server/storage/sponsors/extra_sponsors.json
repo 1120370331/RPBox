@@ -1,0 +1,26 @@
+[
+  {
+    "username": "里米特·绿宝石",
+    "role": "特别赞助",
+    "is_sponsor": true,
+    "sponsor_level": 3
+  },
+  {
+    "username": "摩迪斯特雷德",
+    "role": "宣发支持",
+    "is_sponsor": true,
+    "sponsor_level": 1
+  },
+  {
+    "username": "海人",
+    "role": "赞助支持",
+    "is_sponsor": true,
+    "sponsor_level": 1
+  },
+  {
+    "username": "pigtal（斯卡尔）",
+    "role": "特别鸣谢",
+    "is_sponsor": true,
+    "sponsor_level": 1
+  }
+]

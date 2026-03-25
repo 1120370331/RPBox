@@ -24,10 +24,12 @@ const currentTab = computed(() => route.name as string)
 <template>
   <div class="mobile-layout">
     <main class="mobile-content scroll-container">
-      <router-view />
+      <div class="mobile-content-inner">
+        <router-view />
+      </div>
     </main>
 
-    <nav class="tab-bar">
+    <nav class="tab-bar" aria-label="Main navigation">
       <router-link
         v-for="tab in tabs"
         :key="tab.name"
@@ -44,37 +46,46 @@ const currentTab = computed(() => route.name as string)
 
 <style scoped>
 .mobile-layout {
-  position: fixed;
-  inset: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
+  width: 100%;
+  min-height: var(--app-height, 100dvh);
+  height: var(--app-height, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
 }
 
 .mobile-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding-bottom: calc(var(--tab-bar-height) + var(--safe-bottom, 0px));
+  padding-top: var(--content-top-gap);
+  padding-bottom: calc(var(--tab-bar-height) + var(--safe-bottom, 0px) + 18px);
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
 
+.mobile-content-inner {
+  min-height: 100%;
+}
+
 .tab-bar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: calc(var(--tab-bar-height) + var(--safe-bottom, 0px));
-  padding-bottom: var(--safe-bottom, 0px);
-  background: var(--color-panel-bg);
-  border-top: 1px solid var(--color-border);
+  left: calc(var(--safe-left, 0px) + 10px);
+  right: calc(var(--safe-right, 0px) + 10px);
+  bottom: calc(var(--safe-bottom, 0px) + 8px);
+  height: var(--tab-bar-height);
+  padding: 4px 8px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(75, 54, 33, 0.14);
+  box-shadow: 0 10px 24px rgba(44, 24, 16, 0.16);
+  backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: space-around;
-  z-index: 100;
+  z-index: 120;
   transform: translateZ(0);
   will-change: transform;
 }
@@ -83,19 +94,41 @@ const currentTab = computed(() => route.name as string)
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+  height: 100%;
+  border-radius: 12px;
   font-size: 10px;
+  font-weight: 600;
   color: var(--color-text-muted);
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
 }
 
 .tab-item i {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .tab-item.active {
   color: var(--color-secondary);
+  background: rgba(75, 54, 33, 0.08);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 360px) {
+  .tab-bar {
+    left: calc(var(--safe-left, 0px) + 8px);
+    right: calc(var(--safe-right, 0px) + 8px);
+  }
+
+  .tab-item {
+    font-size: 9px;
+  }
+
+  .tab-item i {
+    font-size: 19px;
+  }
 }
 </style>

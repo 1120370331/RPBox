@@ -2,10 +2,8 @@ package api
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -205,10 +203,9 @@ func (s *Server) listGuilds(c *gin.Context) {
 	}
 	result := make([]GuildWithRole, len(guilds))
 	for i, g := range guilds {
-		// 构造 banner URL：宽度 600，质量 80
 		bannerURL := ""
 		if hasBannerMap[g.ID] {
-			bannerURL = fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80", g.ID)
+			bannerURL = guildBannerURL(g)
 		}
 		if g.BannerUpdatedAt == nil && hasBannerMap[g.ID] {
 			t := g.UpdatedAt
@@ -216,7 +213,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 		}
 		avatarURL := ""
 		if hasAvatarMap[g.ID] {
-			avatarURL = fmt.Sprintf("/api/v1/images/guild-avatar/%d?w=200&q=80", g.ID)
+			avatarURL = guildAvatarURL(g)
 		}
 		if g.AvatarUpdatedAt == nil && hasAvatarMap[g.ID] {
 			t := g.UpdatedAt
@@ -241,6 +238,14 @@ func (s *Server) createGuild(c *gin.Context) {
 	if err := normalizeCreateGuildRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if req.Banner != "" {
+		normalizedBanner, err := s.normalizeAndStoreImageValue(c, req.Banner, fmt.Sprintf("guilds/%d/banner", userID))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "头图格式无效"})
+			return
+		}
+		req.Banner = normalizedBanner
 	}
 
 	var user model.User
@@ -302,6 +307,9 @@ func (s *Server) createGuild(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 		return
 	}
+	ensureGuildBannerUpdatedAt(&guild)
+	guild.Banner = guildBannerURL(guild)
+	guild.Avatar = guildAvatarURL(guild)
 
 	c.JSON(http.StatusCreated, guild)
 }
@@ -323,6 +331,10 @@ func (s *Server) getGuild(c *gin.Context) {
 	if err := database.DB.Where("guild_id = ? AND user_id = ?", id, userID).First(&member).Error; err == nil {
 		myRole = member.Role
 	}
+	ensureGuildBannerUpdatedAt(&guild)
+	ensureGuildAvatarUpdatedAt(&guild)
+	guild.Banner = guildBannerURL(guild)
+	guild.Avatar = guildAvatarURL(guild)
 
 	c.JSON(http.StatusOK, gin.H{"guild": guild, "my_role": myRole})
 }
@@ -353,6 +365,14 @@ func (s *Server) updateGuild(c *gin.Context) {
 	if err := normalizeUpdateGuildRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if req.Banner != "" {
+		normalizedBanner, err := s.normalizeAndStoreImageValue(c, req.Banner, fmt.Sprintf("guilds/%d/banner", id))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "头图格式无效"})
+			return
+		}
+		req.Banner = normalizedBanner
 	}
 
 	if req.Name != "" {
@@ -401,6 +421,10 @@ func (s *Server) updateGuild(c *gin.Context) {
 	}
 
 	database.DB.Save(&guild)
+	ensureGuildBannerUpdatedAt(&guild)
+	ensureGuildAvatarUpdatedAt(&guild)
+	guild.Banner = guildBannerURL(guild)
+	guild.Avatar = guildAvatarURL(guild)
 	c.JSON(http.StatusOK, guild)
 }
 
@@ -512,6 +536,10 @@ func (s *Server) joinGuild(c *gin.Context) {
 
 	// 更新成员数
 	database.DB.Model(&guild).Update("member_count", guild.MemberCount+1)
+	ensureGuildBannerUpdatedAt(&guild)
+	ensureGuildAvatarUpdatedAt(&guild)
+	guild.Banner = guildBannerURL(guild)
+	guild.Avatar = guildAvatarURL(guild)
 
 	c.JSON(http.StatusOK, gin.H{"message": "加入成功", "guild": guild})
 }
@@ -580,7 +608,7 @@ func (s *Server) listGuildMembers(c *gin.Context) {
 		result[i] = MemberInfo{
 			GuildMember: m,
 			Username:    user.Username,
-			Avatar:      user.Avatar,
+			Avatar:      userAvatarURL(s.cfg.Server.ApiHost, user),
 			NameColor:   nameColor,
 			NameBold:    nameBold,
 		}
@@ -791,7 +819,7 @@ func (s *Server) listGuildStories(c *gin.Context) {
 			Story:           story,
 			AddedBy:         addedBy,
 			AddedByUsername: uploader.Username,
-			AddedByAvatar:   uploader.Avatar,
+			AddedByAvatar:   userAvatarURL(s.cfg.Server.ApiHost, uploader),
 		}
 	}
 
@@ -822,6 +850,12 @@ func (s *Server) getStoryGuilds(c *gin.Context) {
 	var guilds []model.Guild
 	if len(guildIDs) > 0 {
 		database.DB.Where("id IN ?", guildIDs).Find(&guilds)
+	}
+	for i := range guilds {
+		ensureGuildBannerUpdatedAt(&guilds[i])
+		ensureGuildAvatarUpdatedAt(&guilds[i])
+		guilds[i].Banner = guildBannerURL(guilds[i])
+		guilds[i].Avatar = guildAvatarURL(guilds[i])
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
@@ -886,10 +920,9 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 	}
 	result := make([]GuildWithBanner, len(guilds))
 	for i, g := range guilds {
-		// 构造 banner URL：宽度 600，质量 80
 		bannerURL := ""
 		if hasBannerMap[g.ID] {
-			bannerURL = fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80", g.ID)
+			bannerURL = guildBannerURL(g)
 		}
 		if g.BannerUpdatedAt == nil && hasBannerMap[g.ID] {
 			t := g.UpdatedAt
@@ -897,7 +930,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 		}
 		avatarURL := ""
 		if hasAvatarMap[g.ID] {
-			avatarURL = fmt.Sprintf("/api/v1/images/guild-avatar/%d?w=200&q=80", g.ID)
+			avatarURL = guildAvatarURL(g)
 		}
 		if g.AvatarUpdatedAt == nil && hasAvatarMap[g.ID] {
 			t := g.UpdatedAt
@@ -920,12 +953,11 @@ func (s *Server) uploadGuildBanner(c *gin.Context) {
 		return
 	}
 
-	file, header, err := c.Request.FormFile("banner")
+	header, err := c.FormFile("banner")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择头图文件"})
 		return
 	}
-	defer file.Close()
 
 	// 检查文件大小 (最大 20MB)
 	if header.Size > 20*1024*1024 {
@@ -933,23 +965,11 @@ func (s *Server) uploadGuildBanner(c *gin.Context) {
 		return
 	}
 
-	// 检查文件类型
-	contentType := header.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "只支持图片格式"})
-		return
-	}
-
-	// 读取文件内容
-	data, err := io.ReadAll(file)
+	bannerURL, err := s.saveUploadedImage(c, header, fmt.Sprintf("guilds/%d/banner", guildID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存头图失败"})
 		return
 	}
-
-	// 转换为 base64
-	base64Data := base64.StdEncoding.EncodeToString(data)
-	bannerURL := "data:" + contentType + ";base64," + base64Data
 
 	// 更新数据库
 	if err := database.DB.Model(&model.Guild{}).Where("id = ?", guildID).Updates(map[string]interface{}{
@@ -962,7 +982,7 @@ func (s *Server) uploadGuildBanner(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "头图更新成功",
-		"banner":  bannerURL,
+		"banner":  buildAPIURL(s.cfg.Server.ApiHost, fmt.Sprintf("/api/v1/images/guild-banner/%d?w=600&q=80&v=%d", guildID, time.Now().Unix())),
 	})
 }
 
@@ -1147,7 +1167,7 @@ func (s *Server) listGuildApplications(c *gin.Context) {
 		result[i] = ApplicationInfo{
 			GuildApplication: app,
 			Username:         user.Username,
-			Avatar:           user.Avatar,
+			Avatar:           userAvatarURL(s.cfg.Server.ApiHost, user),
 			NameColor:        nameColor,
 			NameBold:         nameBold,
 		}

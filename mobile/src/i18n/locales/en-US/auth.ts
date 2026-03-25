@@ -27,6 +27,11 @@ export default {
     sendCodeFailed: 'Failed to send code',
     passwordMismatch: 'Passwords do not match',
     codeRequired: 'Please enter verification code',
+    agreement: 'I have read and agree to the',
+    terms: 'Terms of Service',
+    and: 'and',
+    privacy: 'Privacy Policy',
+    mustAcceptAgreement: 'Please read and accept the Terms of Service and Privacy Policy first',
   },
   forgotPassword: {
     title: 'Reset Password',

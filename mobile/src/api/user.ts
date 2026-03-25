@@ -12,8 +12,23 @@ export interface UserInfo {
   name_bold?: boolean
 }
 
+export interface SponsorUser {
+  id: number
+  username: string
+  avatar?: string
+  role?: string
+  is_sponsor?: boolean
+  sponsor_level?: number
+  name_color?: string
+  name_bold?: boolean
+}
+
 export function getUserInfo() {
   return request.get<UserInfo>('/user/info')
+}
+
+export function listSponsors() {
+  return request.get<{ users: SponsorUser[] }>('/sponsors')
 }
 
 export function uploadAvatar(file: File) {

@@ -72,15 +72,18 @@ function handleClear() {
 .r-input {
   display: flex;
   align-items: center;
-  background: #fff;
-  border: 2px solid rgba(75, 54, 33, 0.2);
+  background: var(--input-bg);
+  border: 2px solid var(--input-border);
   border-radius: var(--radius-sm);
   transition: border-color 0.2s;
 }
 
-.r-input:focus-within { border-color: var(--color-accent); }
-.r-input--error { border-color: #c41e3a; }
-.r-input--disabled { opacity: 0.6; background: #f5f5f5; }
+.r-input:focus-within {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(var(--shadow-base), 0.12);
+}
+.r-input--error { border-color: var(--btn-danger-bg); }
+.r-input--disabled { opacity: 0.6; background: var(--color-card-bg); }
 
 .r-input--sm { padding: 6px 12px; font-size: 12px; }
 .r-input--md { padding: 10px 14px; font-size: 14px; }
@@ -96,7 +99,7 @@ function handleClear() {
   font-family: inherit;
 }
 
-.r-input__inner::placeholder { color: rgba(75, 54, 33, 0.4); }
+.r-input__inner::placeholder { color: var(--input-placeholder); }
 .r-input__textarea { resize: vertical; min-height: 80px; }
 
 .r-input__prefix, .r-input__suffix {
@@ -115,7 +118,7 @@ function handleClear() {
 .r-input__clear:hover { color: var(--color-primary); }
 
 .r-input__error {
-  color: #c41e3a;
+  color: var(--btn-danger-bg);
   font-size: 12px;
   margin-top: 4px;
 }

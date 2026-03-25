@@ -40,7 +40,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 .r-checkbox__box {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(75,54,33,0.3);
+  border: 2px solid var(--input-border);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -52,7 +52,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 .r-checkbox__check,
 .r-checkbox__indeterminate {
   position: absolute;
-  color: #fff;
+  color: var(--color-text-light);
   opacity: 0;
   transform: scale(0);
   transition: all 0.2s;
@@ -68,8 +68,8 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 }
 
 .r-checkbox input:checked + .r-checkbox__box {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--checkbox-active);
+  border-color: var(--checkbox-active);
 }
 
 .r-checkbox input:checked + .r-checkbox__box .r-checkbox__check {
@@ -79,8 +79,8 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 /* Indeterminate 状态 */
 .r-checkbox--indeterminate .r-checkbox__box {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--checkbox-active);
+  border-color: var(--checkbox-active);
 }
 
 .r-checkbox--indeterminate .r-checkbox__box .r-checkbox__check {

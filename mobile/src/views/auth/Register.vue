@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { register, sendVerificationCode } from '@shared/api/auth'
@@ -16,12 +16,21 @@ const loading = ref(false)
 const sendingCode = ref(false)
 const codeSent = ref(false)
 const countdown = ref(0)
+const agreedToPolicies = ref(false)
+const AGREEMENT_VERSION = '2026-03-25'
 
 const canSendCode = computed(() => {
   return email.value.includes('@') && !sendingCode.value && countdown.value === 0
 })
 
 let countdownTimer: number | null = null
+
+onUnmounted(() => {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+})
 
 async function handleSendCode() {
   if (!email.value || !email.value.includes('@')) {
@@ -50,6 +59,10 @@ async function handleSendCode() {
 
 async function handleRegister() {
   error.value = ''
+  if (!agreedToPolicies.value) {
+    error.value = t('auth.register.mustAcceptAgreement')
+    return
+  }
   if (password.value !== confirmPassword.value) {
     error.value = t('auth.register.passwordMismatch')
     return
@@ -60,7 +73,11 @@ async function handleRegister() {
   }
   loading.value = true
   try {
-    await register(username.value, email.value, password.value, verificationCode.value)
+    await register(username.value, email.value, password.value, verificationCode.value, {
+      acceptTerms: true,
+      acceptPrivacy: true,
+      agreementVersion: AGREEMENT_VERSION,
+    })
     router.push('/login')
   } catch (e: any) {
     error.value = e.message
@@ -101,6 +118,16 @@ async function handleRegister() {
           <input v-model="confirmPassword" type="password" class="input" :placeholder="$t('auth.register.confirmPasswordPlaceholder')" autocomplete="new-password" required />
         </div>
 
+        <label class="agreement-row">
+          <input v-model="agreedToPolicies" type="checkbox" class="agreement-checkbox" />
+          <span>
+            {{ $t('auth.register.agreement') }}
+            <router-link class="agreement-link" to="/legal/terms" @click.stop>{{ $t('auth.register.terms') }}</router-link>
+            {{ $t('auth.register.and') }}
+            <router-link class="agreement-link" to="/legal/privacy" @click.stop>{{ $t('auth.register.privacy') }}</router-link>
+          </span>
+        </label>
+
         <p v-if="error" class="error-msg">{{ error }}</p>
 
         <button type="submit" class="btn-register" :disabled="loading">
@@ -118,33 +145,35 @@ async function handleRegister() {
 <style scoped>
 .register-page {
   min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: calc(var(--safe-top, 0px) + 16px) 16px calc(20px + var(--safe-bottom, 0px));
 }
 
 .register-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
-  padding: 32px 24px;
+  padding: clamp(20px, 3.2vh, 30px) clamp(16px, 4.2vw, 24px);
+  border: 1px solid rgba(75, 54, 33, 0.08);
   box-shadow: var(--shadow-md);
 }
 
-.register-header { text-align: center; margin-bottom: 24px; }
-.logo { font-size: 28px; font-weight: 700; color: var(--color-primary); margin-bottom: 6px; }
+.register-header { text-align: center; margin-bottom: clamp(16px, 2.6vh, 24px); }
+.logo { font-size: clamp(24px, 4.8vw, 30px); font-weight: 700; color: var(--color-primary); margin-bottom: 6px; }
 .subtitle { font-size: 13px; color: var(--color-text-secondary); }
 
-.register-form { display: flex; flex-direction: column; gap: 14px; }
+.register-form { display: flex; flex-direction: column; gap: clamp(10px, 1.9vh, 14px); }
 
 .form-group .input {
   width: 100%;
-  padding: 14px 16px;
+  padding: clamp(12px, 1.9vh, 14px) 14px;
   border: 1px solid var(--input-border);
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 15px;
   background: var(--input-bg);
   color: var(--color-text-main);
 }
@@ -158,7 +187,7 @@ async function handleRegister() {
 .verification-input { flex: 1; }
 
 .btn-send-code {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
   background: var(--color-panel-bg);
@@ -172,14 +201,35 @@ async function handleRegister() {
 
 .error-msg { color: var(--btn-danger-bg); font-size: 13px; text-align: center; }
 
+.agreement-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.agreement-checkbox {
+  margin-top: 2px;
+}
+
+.agreement-link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.agreement-link:active {
+  opacity: 0.85;
+}
+
 .btn-register {
   width: 100%;
-  padding: 14px;
+  padding: clamp(12px, 1.9vh, 14px);
   background: var(--color-secondary);
   color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   margin-top: 4px;
 }
@@ -189,4 +239,14 @@ async function handleRegister() {
 
 .register-footer { text-align: center; margin-top: 20px; font-size: 14px; }
 .register-footer a { color: var(--color-accent); text-decoration: none; }
+
+@media (max-width: 360px) {
+  .verification-group {
+    flex-direction: column;
+  }
+
+  .btn-send-code {
+    width: 100%;
+  }
+}
 </style>

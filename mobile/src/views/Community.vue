@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { listPosts, type PostWithAuthor, type ListPostsParams } from '@/api/post'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
+import MobilePagination from '@/components/MobilePagination.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -74,17 +75,10 @@ function changeSort(key: string) {
   currentPage.value = 1
 }
 
-function prevPage() {
-  if (currentPage.value <= 1) return
+function onPageChange(page: number) {
+  if (page === currentPage.value) return
   switchingPage.value = true
-  currentPage.value--
-  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-function nextPage() {
-  if (currentPage.value * pageSize >= total.value) return
-  switchingPage.value = true
-  currentPage.value++
+  currentPage.value = page
   document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -185,34 +179,46 @@ onMounted(loadPosts)
         </button>
       </div>
 
-      <div v-if="total > pageSize" class="pagination">
-        <button :disabled="currentPage <= 1" @click="prevPage">{{ $t('common.pagination.prev') }}</button>
-        <span>{{ $t('common.pagination.pageInfo', { current: currentPage, total: totalPages() }) }}</span>
-        <button :disabled="currentPage >= totalPages()" @click="nextPage">{{ $t('common.pagination.next') }}</button>
-      </div>
+      <MobilePagination
+        v-if="total > pageSize"
+        :model-value="currentPage"
+        :total-pages="totalPages()"
+        :disabled="loading || switchingPage"
+        @change="onPageChange"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-.page { padding: 0 16px calc(20px + var(--safe-bottom, 0px)); }
-.page-header { padding: 14px 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.page-header h1 { font-size: 22px; flex-shrink: 0; }
-
-.sort-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.sort-btn {
-  padding: 4px 10px; border: none; border-radius: 12px;
-  background: transparent; color: var(--text-dark); font-size: 12px; cursor: pointer;
+.page {
+  padding: calc(var(--safe-top, 0px) + 2px) var(--page-gutter) calc(26px + var(--safe-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.sort-btn.active { background: var(--color-primary); color: var(--text-light); }
+.page-header { padding: 6px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; flex-shrink: 0; }
+
+.sort-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sort-btn {
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.08);
+  color: var(--text-dark);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sort-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: var(--text-light); }
 
 .category-bar {
-  display: flex; gap: 8px; overflow-x: auto; padding: 0 0 10px;
+  display: flex; gap: 10px; overflow-x: auto; padding: 2px 0;
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
 }
 .category-bar::-webkit-scrollbar { display: none; }
 .cat-btn {
-  flex-shrink: 0; padding: 6px 14px; border: 1px solid var(--color-border);
+  flex-shrink: 0; padding: 7px 14px; border: 1px solid var(--color-border);
   border-radius: 16px; background: transparent; color: var(--text-dark);
   font-size: 13px; cursor: pointer; white-space: nowrap;
 }
@@ -222,20 +228,23 @@ onMounted(loadPosts)
   text-align: center; padding: 60px 0; color: var(--color-accent); font-size: 14px;
 }
 
-.post-list { display: flex; flex-direction: column; gap: 12px; }
+.post-list { display: flex; flex-direction: column; gap: 14px; }
 
 .post-card {
   width: 100%;
   border: none;
   text-align: left;
   cursor: pointer;
-  background: var(--color-card-bg); border-radius: var(--radius-md); overflow: hidden;
+  background: var(--color-card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(75, 54, 33, 0.08);
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 .post-cover { width: 100%; height: 160px; overflow: hidden; }
 .post-cover img { width: 100%; height: 100%; object-fit: cover; }
 
-.post-content { padding: 14px 14px; }
+.post-content { padding: 14px 14px 15px; }
 .post-meta-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .category-tag {
   font-size: 11px; padding: 2px 8px; border-radius: 8px;
@@ -243,7 +252,16 @@ onMounted(loadPosts)
 }
 .post-time { font-size: 11px; color: var(--color-text-secondary); }
 
-.post-title { font-size: 15px; font-weight: 600; line-height: 1.4; margin-bottom: 8px; }
+.post-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 .post-author { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .author-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
@@ -253,16 +271,11 @@ onMounted(loadPosts)
 .post-stats { display: flex; gap: 14px; font-size: 12px; color: var(--color-text-secondary); }
 .post-stats i { margin-right: 2px; }
 
-.pagination {
-  display: flex; align-items: center; justify-content: center; gap: 16px;
-  padding: 16px 0;
+@media (max-width: 360px) {
+  .page-header h1 { font-size: 22px; }
+  .sort-row { gap: 6px; }
+  .sort-btn { padding: 5px 10px; }
 }
-.pagination button {
-  padding: 8px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-  background: transparent; color: var(--text-dark); font-size: 13px; cursor: pointer;
-}
-.pagination button:disabled { opacity: 0.4; cursor: default; }
-.pagination span { font-size: 13px; color: var(--color-text-secondary); }
 
 .skeleton-card {
   pointer-events: none;

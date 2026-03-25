@@ -112,13 +112,21 @@ onMounted(loadStories)
 </template>
 
 <style scoped>
-.page { padding: 0 16px 16px; }
-.page-header { padding: 12px 0 8px; }
-.page-header h1 { font-size: 22px; }
+.page {
+  padding: calc(var(--safe-top, 0px) + 2px) var(--page-gutter) calc(26px + var(--safe-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.page-header { padding: 6px 0 0; }
+.page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; }
 
 .search-bar {
   display: flex; align-items: center; gap: 8px;
-  background: var(--input-bg); border-radius: 20px; padding: 8px 14px; margin-bottom: 10px;
+  background: var(--input-bg);
+  border: 1px solid rgba(75, 54, 33, 0.12);
+  border-radius: 20px;
+  padding: 9px 14px;
 }
 .search-bar i { color: var(--input-placeholder); font-size: 16px; }
 .search-bar input {
@@ -126,25 +134,33 @@ onMounted(loadStories)
   font-size: 14px; color: var(--text-dark);
 }
 
-.sort-row { display: flex; gap: 6px; margin-bottom: 12px; }
+.sort-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .sort-btn {
-  padding: 4px 10px; border: none; border-radius: 12px;
-  background: transparent; color: var(--text-dark); font-size: 12px; cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(128, 64, 48, 0.08);
+  color: var(--text-dark);
+  font-size: 12px;
+  cursor: pointer;
 }
-.sort-btn.active { background: var(--color-primary); color: var(--text-light); }
+.sort-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: var(--text-light); }
 
 .loading-hint, .empty-hint {
   text-align: center; padding: 60px 0; color: var(--color-accent); font-size: 14px;
 }
 
-.story-list { display: flex; flex-direction: column; gap: 12px; }
+.story-list { display: flex; flex-direction: column; gap: 14px; }
 
 .story-card {
   width: 100%;
   border: none;
   text-align: left;
   cursor: pointer;
-  background: var(--color-card-bg); border-radius: var(--radius-md); padding: 14px;
+  background: var(--color-card-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(75, 54, 33, 0.08);
+  padding: 14px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -170,4 +186,9 @@ onMounted(loadStories)
 .story-meta { display: flex; gap: 14px; font-size: 12px; color: var(--color-text-secondary); align-items: center; }
 .story-meta i { margin-right: 2px; }
 .story-date { margin-left: auto; }
+
+@media (max-width: 360px) {
+  .page-header h1 { font-size: 22px; }
+  .story-title { font-size: 14px; }
+}
 </style>

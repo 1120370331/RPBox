@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
+import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import {
   createItemComment,
@@ -29,6 +30,8 @@ const comments = ref<ItemComment[]>([])
 const liked = ref(false)
 const favorited = ref(false)
 const commentText = ref('')
+const commentInputRef = ref<HTMLTextAreaElement | null>(null)
+const emojiPickerOpen = ref(false)
 const rating = ref(0)
 const imagePreviewOpen = ref(false)
 const imagePreviewSrc = ref('')
@@ -43,6 +46,10 @@ const previewUrl = computed(() => {
 const itemDescriptionHtml = computed(() => {
   void emoteVersion.value
   return renderTextWithEmotes(item.value?.description || '')
+})
+const commentPreviewHtml = computed(() => {
+  void emoteVersion.value
+  return renderTextWithEmotes(commentText.value || '')
 })
 function renderCommentHtml(content: string) {
   void emoteVersion.value
@@ -116,6 +123,41 @@ async function submitComment() {
   }
 }
 
+function appendEmoteToken(target: { value: string }, token: string) {
+  const trimmed = target.value.trimEnd()
+  const spacer = trimmed.length > 0 ? ' ' : ''
+  target.value = `${trimmed}${spacer}${token} `
+}
+
+function insertEmoteToken(token: string) {
+  const input = commentInputRef.value
+  if (!input) {
+    appendEmoteToken(commentText, token)
+    return
+  }
+
+  const current = commentText.value
+  const start = input.selectionStart ?? current.length
+  const end = input.selectionEnd ?? start
+  const before = current.slice(0, start)
+  const after = current.slice(end)
+
+  const needsHeadSpace = before.length > 0 && !/\s$/.test(before)
+  const needsTailSpace = after.length > 0 && !/^\s/.test(after)
+  const insert = `${needsHeadSpace ? ' ' : ''}${token}${needsTailSpace ? ' ' : ''}`
+  const cursor = before.length + insert.length
+
+  commentText.value = `${before}${insert}${after}`
+  void nextTick(() => {
+    input.focus()
+    input.setSelectionRange(cursor, cursor)
+  })
+}
+
+function handleEmojiSelect(token: string) {
+  insertEmoteToken(token)
+}
+
 function formatTime(value: string) {
   const date = new Date(value)
   return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
@@ -186,8 +228,19 @@ onMounted(async () => {
             <option :value="2">2</option>
             <option :value="1">1</option>
           </select>
-          <textarea v-model="commentText" :placeholder="$t('market.commentPlaceholder')" rows="3" />
-          <button :disabled="submitting || !commentText.trim()" @click="submitComment">
+          <div class="comment-input-wrap">
+            <textarea
+              ref="commentInputRef"
+              v-model="commentText"
+              :placeholder="$t('market.commentPlaceholder')"
+              rows="3"
+            />
+            <button class="emoji-trigger" type="button" @click="emojiPickerOpen = true">
+              <i class="ri-emotion-line" />
+            </button>
+          </div>
+          <div v-if="commentText.trim()" class="comment-preview" v-html="commentPreviewHtml" />
+          <button class="comment-submit" :disabled="submitting || !commentText.trim()" @click="submitComment">
             {{ submitting ? $t('common.action.submitting') : $t('market.submitComment') }}
           </button>
         </section>
@@ -195,9 +248,18 @@ onMounted(async () => {
         <section v-if="comments.length" class="comment-list">
           <article v-for="comment in comments" :key="comment.id" class="comment-item">
             <header>
-              <span :style="{ color: comment.name_color || undefined, fontWeight: comment.name_bold ? 'bold' : undefined }">
-                {{ comment.username }}
-              </span>
+              <div class="comment-author">
+                <img
+                  v-if="comment.avatar"
+                  :src="resolveApiUrl(comment.avatar)"
+                  class="comment-avatar"
+                  alt=""
+                >
+                <i v-else class="ri-user-3-fill comment-avatar-fallback" />
+                <span :style="{ color: comment.name_color || undefined, fontWeight: comment.name_bold ? 'bold' : undefined }">
+                  {{ comment.username }}
+                </span>
+              </div>
               <time>{{ formatTime(comment.created_at) }}</time>
             </header>
             <p v-html="renderCommentHtml(comment.content)" />
@@ -208,6 +270,11 @@ onMounted(async () => {
     </div>
 
     <ImagePreviewDialog :open="imagePreviewOpen" :src="imagePreviewSrc" @close="imagePreviewOpen = false" />
+    <MobileEmojiPicker
+      :open="emojiPickerOpen"
+      @close="emojiPickerOpen = false"
+      @select="handleEmojiSelect"
+    />
   </div>
 </template>
 
@@ -340,7 +407,33 @@ onMounted(async () => {
   background: var(--input-bg);
 }
 
-.comment-box button {
+.comment-input-wrap {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.comment-input-wrap textarea {
+  margin-bottom: 0;
+  padding-right: 44px;
+}
+
+.emoji-trigger {
+  position: absolute;
+  right: 8px;
+  bottom: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.comment-box .comment-submit {
   width: 100%;
   border: none;
   border-radius: var(--radius-sm);
@@ -350,9 +443,21 @@ onMounted(async () => {
   cursor: pointer;
 }
 
-.comment-box button:disabled {
+.comment-box .comment-submit:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.comment-preview {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--color-border);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 .comment-list {
@@ -371,10 +476,39 @@ onMounted(async () => {
 .comment-item header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
   font-size: 12px;
   color: var(--color-text-secondary);
   margin-bottom: 6px;
+}
+
+.comment-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.comment-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.comment-avatar-fallback {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
 .comment-item p {
@@ -385,6 +519,13 @@ onMounted(async () => {
 }
 
 .comment-item p :deep(.inline-emote),
+.comment-preview :deep(.inline-emote) {
+  width: 52px;
+  height: 52px;
+  vertical-align: text-bottom;
+  margin: 0 2px;
+}
+
 .item-main p :deep(.inline-emote) {
   width: 26px;
   height: 26px;

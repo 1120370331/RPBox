@@ -73,6 +73,19 @@ export function deleteStoryEntry(storyId: number, entryId: number) {
   return request.delete<void>(`/stories/${storyId}/entries/${entryId}`)
 }
 
+export function updateEntriesBackgroundColor(
+  storyId: number,
+  entryIds: number[],
+  backgroundColor: string,
+  groupName?: string,
+) {
+  return request.post<void>(`/stories/${storyId}/entries/batch-background`, {
+    entry_ids: entryIds,
+    background_color: backgroundColor,
+    group_name: groupName,
+  })
+}
+
 export function listBookmarks(storyId: number) {
   return request.get<{ bookmarks: StoryBookmark[] }>(`/stories/${storyId}/bookmarks`)
 }

@@ -611,6 +611,14 @@ watch(() => localeStore.currentLocale, (newLocale) => {
       <!-- 其他信息 -->
       <div class="setting-card anim-item" style="--delay: 5.5">
         <div class="action-buttons extra-actions">
+          <button class="btn btn-outline" @click="router.push('/legal/terms')">
+            <i class="ri-file-text-line"></i>
+            {{ $t('auth.register.terms') }}
+          </button>
+          <button class="btn btn-outline" @click="router.push('/legal/privacy')">
+            <i class="ri-shield-check-line"></i>
+            {{ $t('auth.register.privacy') }}
+          </button>
           <button class="btn btn-outline" @click="showChangelogModal = true">
             <i class="ri-file-list-3-line"></i>
             {{ $t('settings.about.viewChangelog') }}

@@ -294,25 +294,18 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
-		// 构造封面图 URL：宽度 600，质量 80
-		// 只有确认有封面图才返回 URL
 		coverURL := ""
 		if hasCoverMap[p.ID] {
-			coverURL = fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80", p.ID)
+			coverURL = postCoverURL(p)
 		}
 		if p.CoverImageUpdatedAt == nil && hasCoverMap[p.ID] {
 			t := p.UpdatedAt
 			p.CoverImageUpdatedAt = &t
 		}
-		// 使用头像 URL 而不是 base64 数据，减少缓存大小
-		avatarURL := ""
-		if author.Avatar != "" {
-			avatarURL = fmt.Sprintf("%s/api/v1/images/user-avatar/%d?w=80&q=80", s.cfg.Server.ApiHost, author.ID)
-		}
 		result[i] = postListItem{
 			Post:            p,
 			AuthorName:      author.Username,
-			AuthorAvatar:    avatarURL,
+			AuthorAvatar:    userAvatarURL(s.cfg.Server.ApiHost, author),
 			AuthorRole:      author.Role,
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,
@@ -342,6 +335,14 @@ func (s *Server) createPost(c *gin.Context) {
 	}
 	if req.Category == "" {
 		req.Category = "other"
+	}
+	if req.CoverImage != "" {
+		normalizedCover, err := s.normalizeAndStoreImageValue(c, req.CoverImage, fmt.Sprintf("posts/%d/cover", userID))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "封面图格式无效"})
+			return
+		}
+		req.CoverImage = normalizedCover
 	}
 
 	// 活动分区权限验证
@@ -421,6 +422,8 @@ func (s *Server) createPost(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 		return
 	}
+	ensurePostCoverUpdatedAt(&post)
+	post.CoverImage = postCoverURL(post)
 
 	// 添加标签
 	if len(req.TagIDs) > 0 {
@@ -443,6 +446,8 @@ func (s *Server) createPost(c *gin.Context) {
 	}
 	s.bumpPostListCache(c.Request.Context())
 
+	ensurePostCoverUpdatedAt(&post)
+	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusCreated, post)
 }
 
@@ -517,10 +522,13 @@ func (s *Server) getPost(c *gin.Context) {
 		favorited = true
 	}
 
+	ensurePostCoverUpdatedAt(&post)
+	post.CoverImage = postCoverURL(post)
+
 	c.JSON(http.StatusOK, gin.H{
 		"post":              post,
 		"author_name":       author.Username,
-		"author_avatar":     author.Avatar,
+		"author_avatar":     userAvatarURL(s.cfg.Server.ApiHost, author),
 		"author_name_color": nameColor,
 		"author_name_bold":  nameBold,
 		"tags":              tags,
@@ -551,6 +559,14 @@ func (s *Server) updatePost(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
+	}
+	if req.CoverImage != "" {
+		normalizedCover, err := s.normalizeAndStoreImageValue(c, req.CoverImage, fmt.Sprintf("posts/%d/cover", userID))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "封面图格式无效"})
+			return
+		}
+		req.CoverImage = normalizedCover
 	}
 
 	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
@@ -656,6 +672,8 @@ func (s *Server) updatePost(c *gin.Context) {
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
 	s.bumpPostListCache(c.Request.Context())
+	ensurePostCoverUpdatedAt(&post)
+	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": post})
 }
 
@@ -999,7 +1017,7 @@ func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn 
 		nameColor, nameBold := userDisplayStyle(author)
 		coverURL := ""
 		if hasCoverMap[p.ID] {
-			coverURL = fmt.Sprintf("/api/v1/images/post-cover/%d?w=600&q=80", p.ID)
+			coverURL = postCoverURL(p)
 		}
 		if p.CoverImageUpdatedAt == nil && hasCoverMap[p.ID] {
 			t := p.UpdatedAt
@@ -1008,7 +1026,7 @@ func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn 
 		result = append(result, postListItem{
 			Post:            p,
 			AuthorName:      author.Username,
-			AuthorAvatar:    fmt.Sprintf("%s/api/v1/images/user-avatar/%d?w=80&q=80", s.cfg.Server.ApiHost, author.ID),
+			AuthorAvatar:    userAvatarURL(s.cfg.Server.ApiHost, author),
 			AuthorRole:      author.Role,
 			AuthorNameColor: nameColor,
 			AuthorNameBold:  nameBold,

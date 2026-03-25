@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { listSponsors, type SponsorUser } from '@/api/user'
 
 const router = useRouter()
 const mounted = ref(false)
@@ -13,22 +14,9 @@ const featuredSponsor = {
   link: '',
 }
 
-const sponsors = [
-  {
-    name: '摩迪斯特雷德',
-    level: '宣发支持',
-    desc: '在初期给予大力宣发支持。',
-    date: '',
-    link: '',
-  },
-  {
-    name: '海人',
-    level: '赞助支持',
-    desc: '赞助（1月18日）。',
-    date: '1月18日',
-    link: '',
-  },
-]
+const sponsors = ref<SponsorUser[]>([])
+const loadingSponsors = ref(false)
+const visibleSponsors = computed(() => sponsors.value.filter((s) => s.username !== featuredSponsor.name))
 
 const openSourceThanks = [
   {
@@ -43,7 +31,18 @@ function getInitial(name: string) {
   return trimmed ? trimmed.charAt(0) : '?'
 }
 
+async function loadSponsors() {
+  loadingSponsors.value = true
+  try {
+    const res = await listSponsors()
+    sponsors.value = Array.isArray(res.users) ? res.users : []
+  } finally {
+    loadingSponsors.value = false
+  }
+}
+
 onMounted(() => {
+  loadSponsors()
   setTimeout(() => mounted.value = true, 50)
 })
 </script>
@@ -108,28 +107,21 @@ onMounted(() => {
       <section class="thanks-section anim-item" style="--delay: 2">
         <div class="section-header">
           <h2 class="section-title">赞助支持</h2>
-          <span class="section-note">按时间排序</span>
+          <span class="section-note">来自云端名单</span>
         </div>
-        <div class="sponsor-grid">
-          <div v-for="sponsor in sponsors" :key="sponsor.name" class="sponsor-card">
-            <div class="sponsor-avatar">{{ getInitial(sponsor.name) }}</div>
+        <div v-if="loadingSponsors" class="section-note">加载中...</div>
+        <div v-else-if="visibleSponsors.length === 0" class="section-note">暂无赞助者数据</div>
+        <div v-else class="sponsor-grid">
+          <div v-for="sponsor in visibleSponsors" :key="sponsor.id" class="sponsor-card">
+            <div class="sponsor-avatar">{{ getInitial(sponsor.username) }}</div>
             <div class="sponsor-body">
               <div class="sponsor-title">
-                <h4>{{ sponsor.name }}</h4>
-                <span class="sponsor-level">{{ sponsor.level }}</span>
+                <h4 :style="{ color: sponsor.name_color || undefined, fontWeight: sponsor.name_bold ? '700' : '600' }">
+                  {{ sponsor.username }}
+                </h4>
+                <span class="sponsor-level">Lv{{ sponsor.sponsor_level || 1 }}</span>
               </div>
-              <p class="sponsor-desc">{{ sponsor.desc }}</p>
-              <div v-if="sponsor.date || sponsor.link" class="sponsor-meta">
-                <span v-if="sponsor.date">{{ sponsor.date }}</span>
-                <a
-                  v-if="sponsor.link"
-                  :href="sponsor.link"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  {{ sponsor.link }}
-                </a>
-              </div>
+              <p class="sponsor-desc">{{ sponsor.role || '社区支持' }}</p>
             </div>
           </div>
         </div>

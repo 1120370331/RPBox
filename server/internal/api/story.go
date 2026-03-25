@@ -253,7 +253,7 @@ func (s *Server) listStories(c *gin.Context) {
 				Story:            story,
 				AddedBy:          addedBy,
 				AddedByUsername:  uploader.Username,
-				AddedByAvatar:    uploader.Avatar,
+				AddedByAvatar:    userAvatarURL(s.cfg.Server.ApiHost, uploader),
 				AddedByNameColor: nameColor,
 				AddedByNameBold:  nameBold,
 			}

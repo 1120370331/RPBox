@@ -86,7 +86,7 @@ func (s *Server) listNotifications(c *gin.Context) {
 			if actor, ok := userMap[*notif.ActorID]; ok {
 				nameColor, nameBold := userDisplayStyle(actor)
 				item.ActorName = actor.Username
-				item.ActorAvatar = actor.Avatar
+				item.ActorAvatar = userAvatarURL(s.cfg.Server.ApiHost, actor)
 				item.ActorNameColor = nameColor
 				item.ActorNameBold = nameBold
 			}

@@ -2,10 +2,10 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -40,10 +40,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	level := resolveSponsorLevel(user)
 
 	// 返回头像 URL 而不是 base64 数据
-	avatarURL := ""
-	if user.Avatar != "" {
-		avatarURL = fmt.Sprintf("%s/api/v1/images/user-avatar/%d?w=80&q=80", s.cfg.Server.ApiHost, user.ID)
-	}
+	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
 
 	c.JSON(http.StatusOK, gin.H{
 		"id":            user.ID,
@@ -71,12 +68,11 @@ func (s *Server) getUserInfo(c *gin.Context) {
 func (s *Server) updateAvatar(c *gin.Context) {
 	userID := c.GetUint("userID")
 
-	file, header, err := c.Request.FormFile("avatar")
+	header, err := c.FormFile("avatar")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择头像文件"})
 		return
 	}
-	defer file.Close()
 
 	// 检查文件大小 (最大 20MB)
 	if header.Size > 20*1024*1024 {
@@ -84,23 +80,11 @@ func (s *Server) updateAvatar(c *gin.Context) {
 		return
 	}
 
-	// 检查文件类型
-	contentType := header.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "只支持图片格式"})
-		return
-	}
-
-	// 读取文件内容
-	data, err := io.ReadAll(file)
+	avatarURL, err := s.saveUploadedImage(c, header, fmt.Sprintf("users/%d/avatar", userID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存头像失败"})
 		return
 	}
-
-	// 转换为 base64
-	base64Data := base64.StdEncoding.EncodeToString(data)
-	avatarURL := "data:" + contentType + ";base64," + base64Data
 
 	// 更新数据库
 	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Update("avatar", avatarURL).Error; err != nil {
@@ -277,13 +261,13 @@ func fetchUserProfileData(ctx context.Context, userID string) (model.User, userP
 	return user, counts, nil
 }
 
-func buildPublicUserProfile(user model.User, counts userProfileCounts) userProfileResponse {
+func buildPublicUserProfile(apiHost string, user model.User, counts userProfileCounts) userProfileResponse {
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
 	response := userProfileResponse{
 		ID:           user.ID,
 		Username:     user.Username,
-		Avatar:       user.Avatar,
+		Avatar:       userAvatarURL(apiHost, user),
 		Role:         user.Role,
 		IsSponsor:    level > sponsorLevelNone,
 		SponsorLevel: level,
@@ -319,7 +303,7 @@ func (s *Server) getUserProfile(c *gin.Context) {
 			if err != nil {
 				return nil, err
 			}
-			return buildPublicUserProfile(user, counts), nil
+			return buildPublicUserProfile(s.cfg.Server.ApiHost, user, counts), nil
 		})
 		if err == nil {
 			c.JSON(http.StatusOK, cached)
@@ -333,7 +317,7 @@ func (s *Server) getUserProfile(c *gin.Context) {
 		return
 	}
 
-	publicProfile := buildPublicUserProfile(user, counts)
+	publicProfile := buildPublicUserProfile(s.cfg.Server.ApiHost, user, counts)
 
 	// 如果是查看自己的资料，返回敏感信息
 	if isOwnProfile {
@@ -399,6 +383,103 @@ func (s *Server) getUserGuilds(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
+}
+
+// listSponsors 获取赞助者名单
+func (s *Server) listSponsors(c *gin.Context) {
+	var users []model.User
+	if err := database.DB.
+		Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "created_at").
+		Where("sponsor_level > ? OR is_sponsor = ?", 0, true).
+		Order("sponsor_level DESC, created_at ASC").
+		Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	type SponsorUser struct {
+		ID           uint   `json:"id"`
+		Username     string `json:"username"`
+		Avatar       string `json:"avatar"`
+		Role         string `json:"role"`
+		IsSponsor    bool   `json:"is_sponsor"`
+		SponsorLevel int    `json:"sponsor_level"`
+		NameColor    string `json:"name_color"`
+		NameBold     bool   `json:"name_bold"`
+	}
+
+	result := make([]SponsorUser, 0, len(users))
+	nameSet := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		nameColor, nameBold := userDisplayStyle(user)
+		level := resolveSponsorLevel(user)
+		username := strings.TrimSpace(user.Username)
+		if username != "" {
+			nameSet[username] = struct{}{}
+		}
+
+		result = append(result, SponsorUser{
+			ID:           user.ID,
+			Username:     user.Username,
+			Avatar:       userAvatarURL(s.cfg.Server.ApiHost, user),
+			Role:         user.Role,
+			IsSponsor:    level > sponsorLevelNone,
+			SponsorLevel: level,
+			NameColor:    nameColor,
+			NameBold:     nameBold,
+		})
+	}
+
+	// 合并额外鸣谢名单（文件维护，便于 CI 上传）
+	extraSponsors := loadExtraSponsors()
+	for _, sp := range extraSponsors {
+		name := strings.TrimSpace(sp.Username)
+		if name == "" {
+			continue
+		}
+		if _, exists := nameSet[name]; exists {
+			continue
+		}
+		if sp.SponsorLevel <= 0 {
+			sp.SponsorLevel = 1
+		}
+		sp.ID = 900000 + uint(len(result)+1)
+		result = append(result, sp)
+		nameSet[name] = struct{}{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": result})
+}
+
+func loadExtraSponsors() []struct {
+	ID           uint   `json:"id"`
+	Username     string `json:"username"`
+	Avatar       string `json:"avatar"`
+	Role         string `json:"role"`
+	IsSponsor    bool   `json:"is_sponsor"`
+	SponsorLevel int    `json:"sponsor_level"`
+	NameColor    string `json:"name_color"`
+	NameBold     bool   `json:"name_bold"`
+} {
+	path := "storage/sponsors/extra_sponsors.json"
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var sponsors []struct {
+		ID           uint   `json:"id"`
+		Username     string `json:"username"`
+		Avatar       string `json:"avatar"`
+		Role         string `json:"role"`
+		IsSponsor    bool   `json:"is_sponsor"`
+		SponsorLevel int    `json:"sponsor_level"`
+		NameColor    string `json:"name_color"`
+		NameBold     bool   `json:"name_bold"`
+	}
+	if err := json.Unmarshal(raw, &sponsors); err != nil {
+		return nil
+	}
+	return sponsors
 }
 
 // uploadImage 通用图片上传（返回URL）

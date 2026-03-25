@@ -20,6 +20,16 @@ const router = createRouter({
       component: () => import('./views/auth/ForgotPassword.vue'),
     },
     {
+      path: '/legal/terms',
+      name: 'legal-terms',
+      component: () => import('./views/legal/TermsOfService.vue'),
+    },
+    {
+      path: '/legal/privacy',
+      name: 'legal-privacy',
+      component: () => import('./views/legal/PrivacyPolicy.vue'),
+    },
+    {
       path: '/',
       component: () => import('./components/MobileLayout.vue'),
       children: [
@@ -116,7 +126,7 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const userStore = useUserStore()
-  const publicPages = ['login', 'register', 'forgot-password']
+  const publicPages = ['login', 'register', 'forgot-password', 'legal-terms', 'legal-privacy']
   if (!publicPages.includes(to.name as string) && !userStore.token) {
     return { name: 'login' }
   }

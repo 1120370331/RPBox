@@ -43,9 +43,15 @@
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 20px;
+  --app-width: 100vw;
+  --app-height: 100dvh;
+  --page-gutter: clamp(14px, 4.2vw, 20px);
+  --content-top-gap: clamp(6px, 1.6vh, 14px);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --tab-bar-height: 56px;
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --tab-bar-height: 60px;
   font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
   font-weight: 500;
 }
@@ -61,13 +67,19 @@ body {
   background-color: var(--color-background);
   color: var(--text-dark);
   min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   overscroll-behavior: none;
+  background-image:
+    radial-gradient(120% 70% at 50% -10%, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(90% 60% at 50% 110%, rgba(184, 115, 51, 0.08) 0%, rgba(184, 115, 51, 0) 70%);
 }
 
 html, body, #app {
   width: 100%;
+  min-height: 100%;
   height: 100%;
   overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* 禁止长按选中 */
@@ -79,7 +91,8 @@ input, textarea {
 .scroll-container {
   -webkit-overflow-scrolling: touch;
   overflow-y: auto;
-  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
   overscroll-behavior-y: contain;
   touch-action: pan-y;
 }
@@ -101,11 +114,16 @@ input, textarea {
 .sub-page {
   min-height: 100%;
   background: var(--color-background);
+  padding-bottom: calc(14px + var(--safe-bottom, 0px));
 }
 .sub-header {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px; position: sticky; top: 0;
-  background: var(--color-background); z-index: 10;
+  padding: calc(var(--safe-top, 0px) + 10px) var(--page-gutter) 12px;
+  position: sticky;
+  top: 0;
+  background: rgba(238, 217, 196, 0.92);
+  backdrop-filter: blur(6px);
+  z-index: 10;
 }
 .sub-header h1 { font-size: 18px; }
 .back-btn {
@@ -114,7 +132,7 @@ input, textarea {
   align-items: center; justify-content: center; cursor: pointer;
   font-size: 18px; color: var(--text-dark);
 }
-.sub-body { padding: 0 16px 24px; }
+.sub-body { padding: 0 var(--page-gutter) calc(24px + var(--safe-bottom, 0px)); }
 .sub-body .hint {
   text-align: center; padding: 60px 0;
   color: var(--color-accent); font-size: 14px;
@@ -178,3 +196,10 @@ input, textarea {
 }
 .sub-body .pagination button:disabled { opacity: 0.4; }
 .sub-body .pagination span { font-size: 13px; color: var(--color-text-secondary); }
+
+@media (max-width: 360px) {
+  :root {
+    --tab-bar-height: 58px;
+    --page-gutter: 12px;
+  }
+}

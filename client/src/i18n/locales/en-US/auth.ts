@@ -46,6 +46,7 @@ export default {
     terms: 'Terms of Service',
     and: 'and',
     privacy: 'Privacy Policy',
+    mustAcceptAgreement: 'Please read and accept the Terms of Service and Privacy Policy first',
   },
   forgotPassword: {
     title: 'Forgot Password',

@@ -6,6 +6,7 @@ import { getGuild, type Guild } from '@/api/guild'
 import { listPosts, POST_CATEGORIES, type ListPostsParams, type PostWithAuthor } from '@/api/post'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
+import MobilePagination from '@/components/MobilePagination.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -118,17 +119,10 @@ function formatDate(dateStr: string) {
   return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
-function prevPage() {
-  if (currentPage.value <= 1) return
+function onPageChange(page: number) {
+  if (page === currentPage.value) return
   switchingPage.value = true
-  currentPage.value -= 1
-  document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-function nextPage() {
-  if (currentPage.value >= totalPages.value) return
-  switchingPage.value = true
-  currentPage.value += 1
+  currentPage.value = page
   document.querySelector('.mobile-content')?.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -214,11 +208,13 @@ onMounted(async () => {
         <div v-if="filteredPosts.length === 0" class="hint in-list">{{ $t('guild.posts.noMatch') }}</div>
       </div>
 
-      <div v-if="posts.length > 0 && !searchKeyword.trim()" class="pagination">
-        <button :disabled="currentPage <= 1" @click="prevPage">{{ $t('common.pagination.prev') }}</button>
-        <span>{{ $t('guild.posts.pageInfo', { current: currentPage, total: totalPages }) }}</span>
-        <button :disabled="currentPage >= totalPages" @click="nextPage">{{ $t('common.pagination.next') }}</button>
-      </div>
+      <MobilePagination
+        v-if="posts.length > 0 && !searchKeyword.trim()"
+        :model-value="currentPage"
+        :total-pages="totalPages"
+        :disabled="loading || switchingPage"
+        @change="onPageChange"
+      />
     </div>
   </div>
 </template>
@@ -395,27 +391,6 @@ onMounted(async () => {
   gap: 10px;
   flex-shrink: 0;
 }
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 12px;
-}
-.pagination button {
-  border: 1px solid var(--color-border);
-  background: var(--color-panel-bg);
-  border-radius: 8px;
-  padding: 6px 10px;
-}
-.pagination button:disabled {
-  opacity: 0.4;
-}
-.pagination span {
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
 .skeleton-card {
   pointer-events: none;
 }
