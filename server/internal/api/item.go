@@ -19,11 +19,42 @@ func buildItemPreviewURL(item model.Item, hasPreview bool) string {
 	if !hasPreview && item.Type != "artwork" {
 		return ""
 	}
+	preview := strings.TrimSpace(item.PreviewImage)
+	if preview != "" && isImageURL(preview) {
+		return preview
+	}
 	version := item.UpdatedAt.Unix()
 	if item.PreviewImageUpdatedAt != nil {
 		version = item.PreviewImageUpdatedAt.Unix()
 	}
 	return fmt.Sprintf("/api/v1/images/item-preview/%d?w=400&q=80&v=%d", item.ID, version)
+}
+
+func (s *Server) loadItemDirectPreviewURLMap(itemIDs []uint) map[uint]string {
+	previewURLMap := make(map[uint]string)
+	if len(itemIDs) == 0 {
+		return previewURLMap
+	}
+
+	var rows []struct {
+		ID           uint
+		PreviewImage string
+	}
+	database.DB.Model(&model.Item{}).
+		Select("id, preview_image").
+		Where("id IN ?", itemIDs).
+		Where("(preview_image LIKE ? OR preview_image LIKE ? OR preview_image LIKE ? OR preview_image LIKE ?)",
+			"http://%", "https://%", "/uploads/%", "uploads/%").
+		Find(&rows)
+
+	for _, row := range rows {
+		preview := strings.TrimSpace(row.PreviewImage)
+		if preview != "" && isImageURL(preview) {
+			previewURLMap[row.ID] = buildAPIURL(s.cfg.Server.ApiHost, preview)
+		}
+	}
+
+	return previewURLMap
 }
 
 // listItems 获取道具列表
@@ -121,6 +152,7 @@ func (s *Server) listItems(c *gin.Context) {
 	for _, id := range itemsWithPreview {
 		hasPreviewMap[id] = true
 	}
+	directPreviewURLMap := s.loadItemDirectPreviewURLMap(itemIDs)
 
 	// 批量获取作者信息
 	var authorIDs []uint
@@ -154,10 +186,16 @@ func (s *Server) listItems(c *gin.Context) {
 	for _, item := range items {
 		author := authorMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
-		previewURL := buildItemPreviewURL(item, hasPreviewMap[item.ID])
-		if item.PreviewImageUpdatedAt == nil && hasPreviewMap[item.ID] {
-			t := item.UpdatedAt
-			item.PreviewImageUpdatedAt = &t
+		previewURL := ""
+		if hasPreviewMap[item.ID] {
+			if directURL := directPreviewURLMap[item.ID]; directURL != "" {
+				previewURL = directURL
+			} else {
+				ensureItemPreviewUpdatedAt(&item)
+				previewURL = buildItemPreviewURL(item, true)
+			}
+		} else {
+			previewURL = buildItemPreviewURL(item, false)
 		}
 		result = append(result, ItemWithAuthor{
 			Item:            item,
@@ -180,7 +218,7 @@ func (s *Server) listItems(c *gin.Context) {
 	})
 }
 
-func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
+func (s *Server) listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 	userID := c.GetUint("user_id")
 	var items []model.Item
 
@@ -218,6 +256,7 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 	for _, id := range itemsWithPreview {
 		hasPreviewMap[id] = true
 	}
+	directPreviewURLMap := s.loadItemDirectPreviewURLMap(itemIDs)
 
 	// 批量获取作者信息
 	var authorIDs []uint
@@ -249,10 +288,16 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 	for _, item := range filtered {
 		author := authorMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
-		previewURL := buildItemPreviewURL(item, hasPreviewMap[item.ID])
-		if item.PreviewImageUpdatedAt == nil && hasPreviewMap[item.ID] {
-			t := item.UpdatedAt
-			item.PreviewImageUpdatedAt = &t
+		previewURL := ""
+		if hasPreviewMap[item.ID] {
+			if directURL := directPreviewURLMap[item.ID]; directURL != "" {
+				previewURL = directURL
+			} else {
+				ensureItemPreviewUpdatedAt(&item)
+				previewURL = buildItemPreviewURL(item, true)
+			}
+		} else {
+			previewURL = buildItemPreviewURL(item, false)
 		}
 		result = append(result, ItemWithAuthor{
 			Item:            item,
@@ -276,17 +321,17 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 
 // listMyItemFavorites 获取我收藏的道具
 func (s *Server) listMyItemFavorites(c *gin.Context) {
-	listUserItemsByRelation(c, "item_favorites", "created_at")
+	s.listUserItemsByRelation(c, "item_favorites", "created_at")
 }
 
 // listMyItemLikes 获取我点赞的道具
 func (s *Server) listMyItemLikes(c *gin.Context) {
-	listUserItemsByRelation(c, "item_likes", "created_at")
+	s.listUserItemsByRelation(c, "item_likes", "created_at")
 }
 
 // listMyItemViews 获取我浏览的道具
 func (s *Server) listMyItemViews(c *gin.Context) {
-	listUserItemsByRelation(c, "item_views", "updated_at")
+	s.listUserItemsByRelation(c, "item_views", "updated_at")
 }
 
 // createItem 创建道具
