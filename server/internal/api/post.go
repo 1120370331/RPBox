@@ -348,6 +348,12 @@ func (s *Server) createPost(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Content = strings.TrimSpace(req.Content)
+
+	if s.enforcePostCommentHardRules(c, userID, "post", nil, req.Title, req.Content) {
+		return
+	}
 
 	// 默认值
 	if req.ContentType == "" {
@@ -583,6 +589,21 @@ func (s *Server) updatePost(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Content = strings.TrimSpace(req.Content)
+
+	nextTitle := post.Title
+	if req.Title != "" {
+		nextTitle = req.Title
+	}
+	nextContent := post.Content
+	if req.Content != "" {
+		nextContent = req.Content
+	}
+	if s.enforcePostCommentHardRules(c, userID, "post", &post.ID, nextTitle, nextContent) {
+		return
+	}
+
 	if req.CoverImage != "" {
 		normalizedCover, err := s.normalizeAndStoreImageValue(c, req.CoverImage, fmt.Sprintf("posts/%d/cover", userID))
 		if err != nil {

@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
@@ -13,7 +14,8 @@ import (
 
 // CreateCommentRequest 创建评论请求
 type CreateCommentRequest struct {
-	Content  string `json:"content" binding:"required"`
+	Content  string `json:"content"`
+	ImageURL string `json:"image_url"`
 	ParentID *uint  `json:"parent_id"`
 }
 
@@ -71,6 +73,9 @@ func (s *Server) listComments(c *gin.Context) {
 	}
 	result := make([]CommentWithAuthor, len(comments))
 	for i, comment := range comments {
+		if comment.ImageURL != "" && comment.ImageReviewStatus != "approved" {
+			comment.ImageURL = ""
+		}
 		author := userMap[comment.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
 		result[i] = CommentWithAuthor{
@@ -103,6 +108,15 @@ func (s *Server) createComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
+	req.Content = strings.TrimSpace(req.Content)
+	req.ImageURL = strings.TrimSpace(req.ImageURL)
+	if req.Content == "" && req.ImageURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "评论内容和图片不能同时为空"})
+		return
+	}
+	if s.enforcePostCommentHardRules(c, userID, "comment", nil, req.Content) {
+		return
+	}
 
 	// 如果是回复评论，检查父评论是否存在
 	if req.ParentID != nil {
@@ -118,10 +132,15 @@ func (s *Server) createComment(c *gin.Context) {
 	}
 
 	comment := model.Comment{
-		PostID:   uint(postID),
-		AuthorID: userID,
-		Content:  req.Content,
-		ParentID: req.ParentID,
+		PostID:            uint(postID),
+		AuthorID:          userID,
+		Content:           req.Content,
+		ImageURL:          req.ImageURL,
+		ImageReviewStatus: "none",
+		ParentID:          req.ParentID,
+	}
+	if req.ImageURL != "" {
+		comment.ImageReviewStatus = "pending"
 	}
 
 	if err := database.DB.Create(&comment).Error; err != nil {
@@ -140,6 +159,9 @@ func (s *Server) createComment(c *gin.Context) {
 		if parent.AuthorID != userID {
 			// 构建通知内容：包含帖子标题和回复片段
 			replyPreview := req.Content
+			if replyPreview == "" {
+				replyPreview = "[图片评论]"
+			}
 			if len([]rune(replyPreview)) > 50 {
 				replyPreview = string([]rune(replyPreview)[:50]) + "..."
 			}
@@ -160,6 +182,9 @@ func (s *Server) createComment(c *gin.Context) {
 		if post.AuthorID != userID {
 			// 构建通知内容：包含帖子标题和评论片段
 			commentPreview := req.Content
+			if commentPreview == "" {
+				commentPreview = "[图片评论]"
+			}
 			if len([]rune(commentPreview)) > 50 {
 				commentPreview = string([]rune(commentPreview)[:50]) + "..."
 			}
@@ -178,12 +203,14 @@ func (s *Server) createComment(c *gin.Context) {
 	}
 
 	// @提及通知
-	mentionPreview := service.NormalizeMentionPreview(req.Content)
-	if len([]rune(mentionPreview)) > 50 {
-		mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+	if req.Content != "" {
+		mentionPreview := service.NormalizeMentionPreview(req.Content)
+		if len([]rune(mentionPreview)) > 50 {
+			mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+		}
+		mentionMessage := "在《" + post.Title + "》的评论中提到了你：" + mentionPreview
+		service.CreateMentionNotifications(userID, "comment", comment.ID, mentionMessage, req.Content)
 	}
-	mentionMessage := "在《" + post.Title + "》的评论中提到了你：" + mentionPreview
-	service.CreateMentionNotifications(userID, "comment", comment.ID, mentionMessage, req.Content)
 
 	c.JSON(http.StatusCreated, comment)
 }
