@@ -8,17 +8,21 @@ type User struct {
 	Email         string `gorm:"uniqueIndex;size:100" json:"-"`
 	EmailVerified bool   `gorm:"default:false" json:"email_verified"` // 邮箱是否已验证
 	// 注册协议同意记录
-	TermsAcceptedAt   *time.Time `json:"-"`
-	PrivacyAcceptedAt *time.Time `json:"-"`
-	AgreementVersion  string     `gorm:"size:32" json:"-"`
-	Avatar            string     `gorm:"type:text" json:"avatar"`           // 头像(base64)
-	Role              string     `gorm:"size:20;default:user" json:"role"`  // user|moderator|admin
-	IsSponsor         bool       `gorm:"default:false" json:"is_sponsor"`   // 赞助者权限
-	SponsorLevel      int        `gorm:"default:0" json:"sponsor_level"`    // 赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
-	SponsorColor      string     `gorm:"size:6" json:"sponsor_color"`       // 赞助者自定义颜色(HEX, 无#)
-	SponsorBold       bool       `gorm:"default:false" json:"sponsor_bold"` // 赞助者名称加粗
-	Password          string     `gorm:"-" json:"-"`
-	PassHash          string     `json:"-"`
+	TermsAcceptedAt     *time.Time `json:"-"`
+	PrivacyAcceptedAt   *time.Time `json:"-"`
+	AgreementVersion    string     `gorm:"size:32" json:"-"`
+	Avatar              string     `gorm:"type:text" json:"avatar"`                                // 头像(base64)
+	AvatarReviewStatus  string     `gorm:"size:20;default:none;index" json:"avatar_review_status"` // none|pending|approved|rejected
+	AvatarReviewerID    *uint      `gorm:"index" json:"avatar_reviewer_id"`
+	AvatarReviewedAt    *time.Time `json:"avatar_reviewed_at"`
+	AvatarReviewComment string     `gorm:"size:512" json:"avatar_review_comment"`
+	Role                string     `gorm:"size:20;default:user" json:"role"`  // user|moderator|admin
+	IsSponsor           bool       `gorm:"default:false" json:"is_sponsor"`   // 赞助者权限
+	SponsorLevel        int        `gorm:"default:0" json:"sponsor_level"`    // 赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
+	SponsorColor        string     `gorm:"size:6" json:"sponsor_color"`       // 赞助者自定义颜色(HEX, 无#)
+	SponsorBold         bool       `gorm:"default:false" json:"sponsor_bold"` // 赞助者名称加粗
+	Password            string     `gorm:"-" json:"-"`
+	PassHash            string     `json:"-"`
 	// 个人资料字段
 	Bio      string `gorm:"size:500" json:"bio"`      // 个人简介
 	Location string `gorm:"size:100" json:"location"` // 地区
@@ -36,8 +40,11 @@ type User struct {
 	BanReason   string     `gorm:"size:512" json:"ban_reason"`     // 禁止登录原因
 	BannedBy    *uint      `json:"banned_by"`                      // 执行封禁的版主ID
 	BannedAt    *time.Time `json:"banned_at"`                      // 封禁时间
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	// 敏感词违规累计
+	SensitiveViolationCount  int        `gorm:"default:0" json:"sensitive_violation_count"`
+	SensitiveLastViolationAt *time.Time `json:"sensitive_last_violation_at"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
 }
 
 type Profile struct {
@@ -344,13 +351,18 @@ type ItemRating struct {
 
 // ItemComment 道具评论（带评分）
 type ItemComment struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	ItemID    uint      `gorm:"index;not null" json:"item_id"`
-	UserID    uint      `gorm:"index;not null" json:"user_id"`
-	Rating    int       `gorm:"not null" json:"rating"` // 1-5星评分
-	Content   string    `gorm:"type:text;not null" json:"content"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                 uint       `gorm:"primarykey" json:"id"`
+	ItemID             uint       `gorm:"index;not null" json:"item_id"`
+	UserID             uint       `gorm:"index;not null" json:"user_id"`
+	Rating             int        `gorm:"not null" json:"rating"` // 1-5星评分
+	Content            string     `gorm:"type:text;not null" json:"content"`
+	ImageURL           string     `gorm:"type:text" json:"image_url"`
+	ImageReviewStatus  string     `gorm:"size:20;default:none;index" json:"image_review_status"` // none|pending|approved|rejected
+	ImageReviewerID    *uint      `gorm:"index" json:"image_reviewer_id"`
+	ImageReviewedAt    *time.Time `json:"image_reviewed_at"`
+	ImageReviewComment string     `gorm:"size:512" json:"image_review_comment"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // ItemLike 道具点赞
@@ -476,14 +488,19 @@ type PostTag struct {
 
 // Comment 评论
 type Comment struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	PostID    uint      `gorm:"index;not null" json:"post_id"`
-	AuthorID  uint      `gorm:"index;not null" json:"author_id"`
-	Content   string    `gorm:"type:text;not null" json:"content"`
-	ParentID  *uint     `gorm:"index" json:"parent_id"` // 父评论ID（支持回复）
-	LikeCount int       `gorm:"default:0" json:"like_count"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                 uint       `gorm:"primarykey" json:"id"`
+	PostID             uint       `gorm:"index;not null" json:"post_id"`
+	AuthorID           uint       `gorm:"index;not null" json:"author_id"`
+	Content            string     `gorm:"type:text;not null" json:"content"`
+	ImageURL           string     `gorm:"type:text" json:"image_url"`
+	ImageReviewStatus  string     `gorm:"size:20;default:none;index" json:"image_review_status"` // none|pending|approved|rejected
+	ImageReviewerID    *uint      `gorm:"index" json:"image_reviewer_id"`
+	ImageReviewedAt    *time.Time `json:"image_reviewed_at"`
+	ImageReviewComment string     `gorm:"size:512" json:"image_review_comment"`
+	ParentID           *uint      `gorm:"index" json:"parent_id"` // 父评论ID（支持回复）
+	LikeCount          int        `gorm:"default:0" json:"like_count"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // PostLike 帖子点赞
@@ -517,6 +534,18 @@ type CommentLike struct {
 	CommentID uint      `gorm:"uniqueIndex:idx_comment_user;not null" json:"comment_id"`
 	UserID    uint      `gorm:"uniqueIndex:idx_comment_user;not null" json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// ContentModerationViolation 敏感词违规记录
+type ContentModerationViolation struct {
+	ID             uint      `gorm:"primarykey" json:"id"`
+	UserID         uint      `gorm:"index;not null" json:"user_id"`
+	ContentType    string    `gorm:"size:32;index;not null" json:"content_type"` // post|comment|item_comment
+	ContentID      *uint     `gorm:"index" json:"content_id"`
+	HitKeywords    string    `gorm:"type:text;not null" json:"hit_keywords"` // 逗号分隔
+	Action         string    `gorm:"size:32;not null" json:"action"`         // warning|severe_warning|permanent_ban
+	ViolationCount int       `gorm:"not null" json:"violation_count"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // ========== 管理系统 ==========

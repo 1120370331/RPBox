@@ -29,6 +29,9 @@ func userAvatarURL(apiHost string, user model.User) string {
 	if strings.TrimSpace(user.Avatar) == "" {
 		return ""
 	}
+	if user.AvatarReviewStatus != "approved" {
+		return ""
+	}
 	return buildAPIURL(apiHost, fmt.Sprintf("/api/v1/images/user-avatar/%d?w=80&q=80", user.ID))
 }
 

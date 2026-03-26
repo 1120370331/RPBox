@@ -276,6 +276,14 @@ func (s *Server) setupRoutes() {
 				mod.GET("/review/post-edits", s.listPendingEdits)
 				mod.POST("/review/post-edits/:id", s.reviewPostEdit)
 
+				// 审核中心 - 评论图片
+				mod.GET("/review/post-comment-images", s.listPendingPostCommentImages)
+				mod.POST("/review/post-comment-images/:id", s.reviewPostCommentImage)
+				mod.GET("/review/item-comment-images", s.listPendingItemCommentImages)
+				mod.POST("/review/item-comment-images/:id", s.reviewItemCommentImage)
+				mod.GET("/review/user-avatars", s.listPendingUserAvatars)
+				mod.POST("/review/user-avatars/:id", s.reviewUserAvatar)
+
 				// 审核中心 - 道具
 				mod.GET("/review/items", s.listPendingItems)
 				mod.POST("/review/items/:id", s.reviewItem)
