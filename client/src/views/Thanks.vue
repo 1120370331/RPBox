@@ -6,17 +6,10 @@ import { listSponsors, type SponsorUser } from '@/api/user'
 const router = useRouter()
 const mounted = ref(false)
 
-const featuredSponsor = {
-  name: '里米特·绿宝石',
-  badge: '特别赞助',
-  desc: '对 RPBox 的赞助与宣发支持，特别感谢。',
-  date: '',
-  link: '',
-}
-
 const sponsors = ref<SponsorUser[]>([])
 const loadingSponsors = ref(false)
-const visibleSponsors = computed(() => sponsors.value.filter((s) => s.username !== featuredSponsor.name))
+const specialSponsors = computed(() => sponsors.value.filter((s) => String(s.role || '').trim() === '特别赞助'))
+const visibleSponsors = computed(() => sponsors.value.filter((s) => String(s.role || '').trim() !== '特别赞助'))
 
 const openSourceThanks = [
   {
@@ -71,33 +64,21 @@ onMounted(() => {
           </h2>
           <span class="section-pill">至尊合作伙伴</span>
         </div>
-        <div class="featured-card">
-          <div class="featured-decoration"></div>
-          <div class="featured-content">
-            <div class="featured-avatar" aria-hidden="true">
-              {{ getInitial(featuredSponsor.name) }}
-            </div>
-            <div class="featured-body">
-              <div class="featured-title">
-                <h3>{{ featuredSponsor.name }}</h3>
-                <span class="featured-badge">{{ featuredSponsor.badge }}</span>
+        <div v-if="loadingSponsors" class="section-note">加载中...</div>
+        <div v-else-if="specialSponsors.length === 0" class="section-note">暂无特别赞助数据</div>
+        <div v-else class="featured-grid">
+          <div v-for="sponsor in specialSponsors" :key="`special-${sponsor.id}`" class="featured-card">
+            <div class="featured-decoration"></div>
+            <div class="featured-content">
+              <div class="featured-avatar" aria-hidden="true">
+                {{ getInitial(sponsor.username) }}
               </div>
-              <p class="featured-desc">{{ featuredSponsor.desc }}</p>
-              <div v-if="featuredSponsor.date || featuredSponsor.link" class="featured-meta">
-                <span v-if="featuredSponsor.date" class="meta-item">
-                  <i class="ri-calendar-event-line"></i>
-                  {{ featuredSponsor.date }}
-                </span>
-                <a
-                  v-if="featuredSponsor.link"
-                  :href="featuredSponsor.link"
-                  target="_blank"
-                  rel="noopener"
-                  class="meta-link"
-                >
-                  访问主页
-                  <i class="ri-arrow-right-up-line"></i>
-                </a>
+              <div class="featured-body">
+                <div class="featured-title">
+                  <h3 :style="{ color: sponsor.name_color || undefined, fontWeight: sponsor.name_bold ? '700' : undefined }">{{ sponsor.username }}</h3>
+                  <span class="featured-badge">特别赞助</span>
+                </div>
+                <p class="featured-desc">对 RPBox 的赞助与宣发支持，特别感谢。</p>
               </div>
             </div>
           </div>
@@ -121,7 +102,7 @@ onMounted(() => {
                 </h4>
                 <span class="sponsor-level">Lv{{ sponsor.sponsor_level || 1 }}</span>
               </div>
-              <p class="sponsor-desc">{{ sponsor.role || '社区支持' }}</p>
+              <p class="sponsor-desc">{{ sponsor.role || '赞助支持' }}</p>
             </div>
           </div>
         </div>
