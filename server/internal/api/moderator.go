@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
 )
 
@@ -572,6 +573,130 @@ func (s *Server) reviewItemCommentImage(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "comment": comment})
+}
+
+// listPendingUserAvatars 获取待审核的用户头像
+func (s *Server) listPendingUserAvatars(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := strings.TrimSpace(c.DefaultQuery("status", "pending"))
+	if status != "pending" && status != "approved" && status != "rejected" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的status参数"})
+		return
+	}
+
+	query := database.DB.Model(&model.User{}).
+		Where("COALESCE(BTRIM(avatar), '') <> ''").
+		Where("avatar_review_status = ?", status)
+
+	var total int64
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	var users []model.User
+	query.Order("updated_at DESC").Offset(offset).Limit(pageSize).Find(&users)
+
+	type userAvatarReviewItem struct {
+		ID                  uint       `json:"id"`
+		Username            string     `json:"username"`
+		Role                string     `json:"role"`
+		AvatarReviewStatus  string     `json:"avatar_review_status"`
+		AvatarReviewComment string     `json:"avatar_review_comment"`
+		AvatarReviewedAt    *time.Time `json:"avatar_reviewed_at"`
+		AvatarURL           string     `json:"avatar_url"`
+		CreatedAt           time.Time  `json:"created_at"`
+		UpdatedAt           time.Time  `json:"updated_at"`
+	}
+
+	result := make([]userAvatarReviewItem, len(users))
+	for i, user := range users {
+		result[i] = userAvatarReviewItem{
+			ID:                  user.ID,
+			Username:            user.Username,
+			Role:                user.Role,
+			AvatarReviewStatus:  user.AvatarReviewStatus,
+			AvatarReviewComment: user.AvatarReviewComment,
+			AvatarReviewedAt:    user.AvatarReviewedAt,
+			AvatarURL:           buildAPIURL(s.cfg.Server.ApiHost, user.Avatar),
+			CreatedAt:           user.CreatedAt,
+			UpdatedAt:           user.UpdatedAt,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": result, "total": total})
+}
+
+// reviewUserAvatar 审核用户头像
+func (s *Server) reviewUserAvatar(c *gin.Context) {
+	modID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var user model.User
+	if err := database.DB.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+	if strings.TrimSpace(user.Avatar) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该用户没有待审核头像"})
+		return
+	}
+
+	var req ReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核操作"})
+		return
+	}
+
+	now := time.Now()
+	user.AvatarReviewerID = &modID
+	user.AvatarReviewedAt = &now
+	user.AvatarReviewComment = strings.TrimSpace(req.Comment)
+	if req.Action == "approve" {
+		user.AvatarReviewStatus = "approved"
+	} else {
+		user.AvatarReviewStatus = "rejected"
+	}
+
+	if err := database.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		return
+	}
+	s.invalidateUserProfileCache(c.Request.Context(), user.ID)
+
+	logAdminAction(c, "review_user_avatar", "user", user.ID, user.Username, map[string]interface{}{
+		"action":  req.Action,
+		"comment": req.Comment,
+	})
+
+	notifyMsg := "你的头像审核已通过。"
+	if req.Action == "reject" {
+		notifyMsg = "你的头像审核未通过。"
+		if strings.TrimSpace(req.Comment) != "" {
+			notifyMsg += " 原因：" + strings.TrimSpace(req.Comment)
+		}
+	}
+	_ = service.CreateNotification(&model.Notification{
+		UserID:     user.ID,
+		Type:       "system",
+		TargetType: "user",
+		TargetID:   user.ID,
+		Content:    notifyMsg,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "审核完成",
+		"user": gin.H{
+			"id":                    user.ID,
+			"username":              user.Username,
+			"avatar_review_status":  user.AvatarReviewStatus,
+			"avatar_reviewed_at":    user.AvatarReviewedAt,
+			"avatar_review_comment": user.AvatarReviewComment,
+		},
+	})
 }
 
 // listPendingItemEdits 获取待审核的道具编辑列表

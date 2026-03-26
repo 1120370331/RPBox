@@ -19,7 +19,7 @@ func (s *Server) searchUsers(c *gin.Context) {
 		limit = 10
 	}
 
-	query := database.DB.Model(&model.User{}).Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold")
+	query := database.DB.Model(&model.User{}).Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold")
 	if keyword != "" {
 		query = query.Where("username LIKE ?", "%"+keyword+"%")
 	}

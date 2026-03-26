@@ -43,24 +43,25 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":            user.ID,
-		"username":      user.Username,
-		"email":         user.Email,
-		"avatar":        avatarURL,
-		"role":          user.Role,
-		"is_sponsor":    level > sponsorLevelNone,
-		"sponsor_level": level,
-		"sponsor_color": user.SponsorColor,
-		"sponsor_bold":  user.SponsorBold,
-		"name_color":    nameColor,
-		"name_bold":     nameBold,
-		"bio":           user.Bio,
-		"location":      user.Location,
-		"website":       user.Website,
-		"post_count":    postCount,
-		"story_count":   storyCount,
-		"profile_count": profileCount,
-		"created_at":    user.CreatedAt,
+		"id":                   user.ID,
+		"username":             user.Username,
+		"email":                user.Email,
+		"avatar":               avatarURL,
+		"avatar_review_status": user.AvatarReviewStatus,
+		"role":                 user.Role,
+		"is_sponsor":           level > sponsorLevelNone,
+		"sponsor_level":        level,
+		"sponsor_color":        user.SponsorColor,
+		"sponsor_bold":         user.SponsorBold,
+		"name_color":           nameColor,
+		"name_bold":            nameBold,
+		"bio":                  user.Bio,
+		"location":             user.Location,
+		"website":              user.Website,
+		"post_count":           postCount,
+		"story_count":          storyCount,
+		"profile_count":        profileCount,
+		"created_at":           user.CreatedAt,
 	})
 }
 
@@ -87,15 +88,22 @@ func (s *Server) updateAvatar(c *gin.Context) {
 	}
 
 	// 更新数据库
-	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Update("avatar", avatarURL).Error; err != nil {
+	updates := map[string]interface{}{
+		"avatar":                avatarURL,
+		"avatar_review_status":  "pending",
+		"avatar_reviewer_id":    nil,
+		"avatar_reviewed_at":    nil,
+		"avatar_review_comment": "",
+	}
+	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新头像失败"})
 		return
 	}
 	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "头像更新成功",
-		"avatar":  avatarURL,
+		"message":              "头像已提交审核",
+		"avatar_review_status": "pending",
 	})
 }
 
@@ -389,7 +397,7 @@ func (s *Server) getUserGuilds(c *gin.Context) {
 func (s *Server) listSponsors(c *gin.Context) {
 	var users []model.User
 	if err := database.DB.
-		Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "created_at").
+		Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "created_at").
 		Where("sponsor_level > ? OR is_sponsor = ?", 0, true).
 		Order("sponsor_level DESC, created_at ASC").
 		Find(&users).Error; err != nil {

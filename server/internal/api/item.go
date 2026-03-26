@@ -130,7 +130,7 @@ func (s *Server) listItems(c *gin.Context) {
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	// 创建作者ID到用户信息的映射
@@ -227,7 +227,7 @@ func listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	authorMap := make(map[uint]model.User)
@@ -861,7 +861,7 @@ func (s *Server) getItemComments(c *gin.Context) {
 			comment.ImageURL = ""
 		}
 		var user model.User
-		database.DB.Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").First(&user, comment.UserID)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").First(&user, comment.UserID)
 		nameColor, nameBold := userDisplayStyle(user)
 		result = append(result, CommentWithUser{
 			ItemComment: comment,
