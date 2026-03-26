@@ -390,6 +390,9 @@ func (s *Server) createItem(c *gin.Context) {
 		}
 		req.PreviewImage = normalizedPreview
 	}
+	if req.DetailContent != "" {
+		req.DetailContent = s.normalizeAndStoreContentImages(c, req.DetailContent, fmt.Sprintf("items/%d/detail", userID))
+	}
 
 	item := model.Item{
 		AuthorID:           userID,
@@ -467,6 +470,10 @@ func (s *Server) getItem(c *gin.Context) {
 	if err := database.DB.First(&item, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
 		return
+	}
+	if normalizedContent := s.normalizeAndStoreContentImages(c, item.DetailContent, fmt.Sprintf("items/%d/detail", item.AuthorID)); normalizedContent != item.DetailContent {
+		item.DetailContent = normalizedContent
+		_ = database.DB.Model(&model.Item{}).Where("id = ?", item.ID).Update("detail_content", normalizedContent).Error
 	}
 	ensureItemPreviewUpdatedAt(&item)
 	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
@@ -603,6 +610,9 @@ func (s *Server) updateItem(c *gin.Context) {
 			return
 		}
 		req.PreviewImage = normalizedPreview
+	}
+	if req.DetailContent != "" {
+		req.DetailContent = s.normalizeAndStoreContentImages(c, req.DetailContent, fmt.Sprintf("items/%d/detail", userID))
 	}
 
 	// 验证 ImportCode 大小（最大 10MB）

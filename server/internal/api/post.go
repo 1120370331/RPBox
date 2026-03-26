@@ -367,6 +367,9 @@ func (s *Server) createPost(c *gin.Context) {
 		}
 		req.CoverImage = normalizedCover
 	}
+	if req.Content != "" {
+		req.Content = s.normalizeAndStoreContentImages(c, req.Content, fmt.Sprintf("posts/%d/content", userID))
+	}
 
 	// 活动分区权限验证
 	if req.Category == "event" && req.EventType != "" {
@@ -485,6 +488,10 @@ func (s *Server) getPost(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
 		return
 	}
+	if normalizedContent := s.normalizeAndStoreContentImages(c, post.Content, fmt.Sprintf("posts/%d/content", post.AuthorID)); normalizedContent != post.Content {
+		post.Content = normalizedContent
+		_ = database.DB.Model(&model.Post{}).Where("id = ?", post.ID).Update("content", normalizedContent).Error
+	}
 
 	// 权限检查：非公开帖子仅公会成员可见
 	if post.AuthorID != userID && !isModerator {
@@ -590,6 +597,9 @@ func (s *Server) updatePost(c *gin.Context) {
 			return
 		}
 		req.CoverImage = normalizedCover
+	}
+	if req.Content != "" {
+		req.Content = s.normalizeAndStoreContentImages(c, req.Content, fmt.Sprintf("posts/%d/content", userID))
 	}
 
 	// 已发布帖子的编辑：普通用户需要审核，版主直接生效

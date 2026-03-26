@@ -1,13 +1,39 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 )
+
+func (s *Server) migrateLegacyCollectionCoverIfNeeded(c *gin.Context, collection *model.Collection) {
+	if collection == nil {
+		return
+	}
+	value := strings.TrimSpace(collection.CoverImage)
+	if value == "" || isImageURL(value) {
+		return
+	}
+
+	normalized, err := s.normalizeAndStoreImageValue(c, value, fmt.Sprintf("collections/%d/cover", collection.ID))
+	if err != nil {
+		return
+	}
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" || normalized == value || !isImageURL(normalized) {
+		return
+	}
+
+	if err := database.DB.Model(&model.Collection{}).Where("id = ?", collection.ID).Update("cover_image", normalized).Error; err != nil {
+		return
+	}
+	collection.CoverImage = normalized
+}
 
 // CreateCollectionRequest 创建合集请求
 type CreateCollectionRequest struct {
@@ -97,6 +123,7 @@ func (s *Server) listCollections(c *gin.Context) {
 	// 获取作者信息
 	result := make([]collectionListItem, len(collections))
 	for i, col := range collections {
+		s.migrateLegacyCollectionCoverIfNeeded(c, &col)
 		result[i].Collection = col
 		var user model.User
 		if err := database.DB.Select("username").First(&user, col.AuthorID).Error; err == nil {
@@ -122,6 +149,9 @@ func (s *Server) listUserCollections(c *gin.Context) {
 	if err := query.Order("created_at DESC").Find(&collections).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取合集列表失败"})
 		return
+	}
+	for i := range collections {
+		s.migrateLegacyCollectionCoverIfNeeded(c, &collections[i])
 	}
 
 	c.JSON(http.StatusOK, gin.H{"collections": collections})
@@ -172,6 +202,7 @@ func (s *Server) getCollection(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "合集不存在"})
 		return
 	}
+	s.migrateLegacyCollectionCoverIfNeeded(c, &collection)
 
 	// 检查权限
 	if !collection.IsPublic && collection.AuthorID != userID {
@@ -341,6 +372,10 @@ func (s *Server) getCollectionPosts(c *gin.Context) {
 		Where("collection_posts.collection_id = ?", id).
 		Order("collection_posts.sort_order ASC").
 		Scan(&posts)
+	for i := range posts {
+		ensurePostCoverUpdatedAt(&posts[i].Post)
+		posts[i].Post.CoverImage = postCoverURL(posts[i].Post)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"posts": posts})
 }
