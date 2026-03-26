@@ -1,8 +1,10 @@
 package api
 
-import "strings"
+import (
+	"strings"
 
-import "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
+)
 
 // normalizeAndStoreContentImages converts inline/base64 images in rich text or markdown content into uploaded URLs.
 func (s *Server) normalizeAndStoreContentImages(c *gin.Context, content, subdir string) string {
