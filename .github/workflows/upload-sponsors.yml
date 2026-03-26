@@ -38,10 +38,16 @@ jobs:
       - name: Deploy sponsors file
         env:
           REMOTE_PATH: ${{ secrets.SPONSOR_PATH }}
+          RELEASE_PATH: ${{ secrets.RELEASE_PATH }}
         run: |
           if [ -z "$REMOTE_PATH" ]; then
-            echo "SPONSOR_PATH is not set."
-            exit 1
+            if [ -n "$RELEASE_PATH" ]; then
+              REMOTE_PATH="$(dirname "$RELEASE_PATH")/storage/sponsors"
+              echo "SPONSOR_PATH is not set, fallback to: $REMOTE_PATH"
+            else
+              echo "SPONSOR_PATH and RELEASE_PATH are not set."
+              exit 1
+            fi
           fi
           ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_PATH"
           scp -P 2233 -C server/storage/sponsors/extra_sponsors.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_PATH/extra_sponsors.json
