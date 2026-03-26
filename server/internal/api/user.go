@@ -385,8 +385,48 @@ func (s *Server) getUserGuilds(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
 }
 
+type extraSponsor struct {
+	ID           uint   `json:"id"`
+	Username     string `json:"username"`
+	Avatar       string `json:"avatar"`
+	Role         string `json:"role"`
+	IsSponsor    bool   `json:"is_sponsor"`
+	SponsorLevel int    `json:"sponsor_level"`
+	NameColor    string `json:"name_color"`
+	NameBold     bool   `json:"name_bold"`
+}
+
+const defaultSponsorRole = "赞助支持"
+
+func sponsorNameKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func normalizeSponsorDisplayRole(role string) string {
+	trimmed := strings.TrimSpace(role)
+	switch strings.ToLower(trimmed) {
+	case "", "user", "admin", "moderator":
+		return defaultSponsorRole
+	default:
+		return trimmed
+	}
+}
+
 // listSponsors 获取赞助者名单
 func (s *Server) listSponsors(c *gin.Context) {
+	// 先读取文件维护名单，支持按用户名覆盖默认文案，便于后续直接编辑 JSON。
+	extraSponsors := loadExtraSponsors()
+	extraRoleByName := make(map[string]string, len(extraSponsors))
+	for _, sp := range extraSponsors {
+		key := sponsorNameKey(sp.Username)
+		if key == "" {
+			continue
+		}
+		if role := strings.TrimSpace(sp.Role); role != "" {
+			extraRoleByName[key] = role
+		}
+	}
+
 	var users []model.User
 	if err := database.DB.
 		Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "created_at").
@@ -414,15 +454,20 @@ func (s *Server) listSponsors(c *gin.Context) {
 		nameColor, nameBold := userDisplayStyle(user)
 		level := resolveSponsorLevel(user)
 		username := strings.TrimSpace(user.Username)
-		if username != "" {
-			nameSet[username] = struct{}{}
+		nameKey := sponsorNameKey(username)
+		if nameKey != "" {
+			nameSet[nameKey] = struct{}{}
+		}
+		role := normalizeSponsorDisplayRole(user.Role)
+		if override, ok := extraRoleByName[nameKey]; ok {
+			role = normalizeSponsorDisplayRole(override)
 		}
 
 		result = append(result, SponsorUser{
 			ID:           user.ID,
 			Username:     user.Username,
 			Avatar:       userAvatarURL(s.cfg.Server.ApiHost, user),
-			Role:         user.Role,
+			Role:         role,
 			IsSponsor:    level > sponsorLevelNone,
 			SponsorLevel: level,
 			NameColor:    nameColor,
@@ -431,51 +476,42 @@ func (s *Server) listSponsors(c *gin.Context) {
 	}
 
 	// 合并额外鸣谢名单（文件维护，便于 CI 上传）
-	extraSponsors := loadExtraSponsors()
 	for _, sp := range extraSponsors {
-		name := strings.TrimSpace(sp.Username)
-		if name == "" {
+		nameKey := sponsorNameKey(sp.Username)
+		if nameKey == "" {
 			continue
 		}
-		if _, exists := nameSet[name]; exists {
+		if _, exists := nameSet[nameKey]; exists {
 			continue
 		}
 		if sp.SponsorLevel <= 0 {
 			sp.SponsorLevel = 1
 		}
+		sp.Role = normalizeSponsorDisplayRole(sp.Role)
 		sp.ID = 900000 + uint(len(result)+1)
-		result = append(result, sp)
-		nameSet[name] = struct{}{}
+		result = append(result, SponsorUser{
+			ID:           sp.ID,
+			Username:     sp.Username,
+			Avatar:       sp.Avatar,
+			Role:         sp.Role,
+			IsSponsor:    sp.IsSponsor,
+			SponsorLevel: sp.SponsorLevel,
+			NameColor:    sp.NameColor,
+			NameBold:     sp.NameBold,
+		})
+		nameSet[nameKey] = struct{}{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"users": result})
 }
 
-func loadExtraSponsors() []struct {
-	ID           uint   `json:"id"`
-	Username     string `json:"username"`
-	Avatar       string `json:"avatar"`
-	Role         string `json:"role"`
-	IsSponsor    bool   `json:"is_sponsor"`
-	SponsorLevel int    `json:"sponsor_level"`
-	NameColor    string `json:"name_color"`
-	NameBold     bool   `json:"name_bold"`
-} {
+func loadExtraSponsors() []extraSponsor {
 	path := "storage/sponsors/extra_sponsors.json"
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	var sponsors []struct {
-		ID           uint   `json:"id"`
-		Username     string `json:"username"`
-		Avatar       string `json:"avatar"`
-		Role         string `json:"role"`
-		IsSponsor    bool   `json:"is_sponsor"`
-		SponsorLevel int    `json:"sponsor_level"`
-		NameColor    string `json:"name_color"`
-		NameBold     bool   `json:"name_bold"`
-	}
+	var sponsors []extraSponsor
 	if err := json.Unmarshal(raw, &sponsors); err != nil {
 		return nil
 	}
