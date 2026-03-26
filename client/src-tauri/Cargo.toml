@@ -1,6 +1,6 @@
 [package]
 name = "rpbox"
-version = "0.2.11"
+version = "0.2.15"
 edition = "2021"
 
 [lib]
