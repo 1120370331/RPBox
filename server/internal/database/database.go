@@ -65,6 +65,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.PostFavorite{},
 		&model.PostView{},
 		&model.CommentLike{},
+		&model.ContentModerationViolation{},
 		&model.AdminActionLog{},
 		&model.DailyMetrics{},
 		&model.Notification{},
@@ -81,6 +82,10 @@ func Init(cfg *config.DatabaseConfig) error {
 	migrations := []string{
 		"ALTER TABLE account_backups ALTER COLUMN checksum TYPE text",
 		"ALTER TABLE account_backup_versions ALTER COLUMN checksum TYPE text",
+		"UPDATE comments SET image_review_status = 'approved' WHERE COALESCE(BTRIM(image_url), '') <> '' AND COALESCE(BTRIM(image_review_status), '') IN ('', 'none')",
+		"UPDATE comments SET image_review_status = 'none' WHERE COALESCE(BTRIM(image_url), '') = '' AND COALESCE(BTRIM(image_review_status), '') = ''",
+		"UPDATE item_comments SET image_review_status = 'approved' WHERE COALESCE(BTRIM(image_url), '') <> '' AND COALESCE(BTRIM(image_review_status), '') IN ('', 'none')",
+		"UPDATE item_comments SET image_review_status = 'none' WHERE COALESCE(BTRIM(image_url), '') = '' AND COALESCE(BTRIM(image_review_status), '') = ''",
 	}
 	for _, sql := range migrations {
 		if err := db.Exec(sql).Error; err != nil {

@@ -857,6 +857,9 @@ func (s *Server) getItemComments(c *gin.Context) {
 
 	var result []CommentWithUser
 	for _, comment := range comments {
+		if comment.ImageURL != "" && comment.ImageReviewStatus != "approved" {
+			comment.ImageURL = ""
+		}
 		var user model.User
 		database.DB.Select("id", "username", "avatar", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").First(&user, comment.UserID)
 		nameColor, nameBold := userDisplayStyle(user)
@@ -881,12 +884,22 @@ func (s *Server) addItemComment(c *gin.Context) {
 	id := c.Param("id")
 
 	var req struct {
-		Rating  int    `json:"rating" binding:"min=0,max=5"`
-		Content string `json:"content" binding:"required"`
+		Rating   int    `json:"rating" binding:"min=0,max=5"`
+		Content  string `json:"content"`
+		ImageURL string `json:"image_url"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	req.Content = strings.TrimSpace(req.Content)
+	req.ImageURL = strings.TrimSpace(req.ImageURL)
+	if req.Content == "" && req.ImageURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "评论内容和图片不能同时为空"})
+		return
+	}
+	if s.enforcePostCommentHardRules(c, userID, "item_comment", nil, req.Content) {
 		return
 	}
 
@@ -914,10 +927,15 @@ func (s *Server) addItemComment(c *gin.Context) {
 
 	itemID, _ := strconv.ParseUint(id, 10, 32)
 	comment := model.ItemComment{
-		ItemID:  uint(itemID),
-		UserID:  userID,
-		Rating:  req.Rating,
-		Content: req.Content,
+		ItemID:            uint(itemID),
+		UserID:            userID,
+		Rating:            req.Rating,
+		Content:           req.Content,
+		ImageURL:          req.ImageURL,
+		ImageReviewStatus: "none",
+	}
+	if req.ImageURL != "" {
+		comment.ImageReviewStatus = "pending"
 	}
 
 	if err := database.DB.Create(&comment).Error; err != nil {
@@ -940,6 +958,9 @@ func (s *Server) addItemComment(c *gin.Context) {
 	if item.AuthorID != userID {
 		// 构建通知内容：包含道具名称和评论片段
 		commentPreview := req.Content
+		if commentPreview == "" {
+			commentPreview = "[图片评论]"
+		}
 		if len([]rune(commentPreview)) > 50 {
 			commentPreview = string([]rune(commentPreview)[:50]) + "..."
 		}
@@ -957,12 +978,14 @@ func (s *Server) addItemComment(c *gin.Context) {
 	}
 
 	// @提及通知
-	mentionPreview := service.NormalizeMentionPreview(req.Content)
-	if len([]rune(mentionPreview)) > 50 {
-		mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+	if req.Content != "" {
+		mentionPreview := service.NormalizeMentionPreview(req.Content)
+		if len([]rune(mentionPreview)) > 50 {
+			mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+		}
+		mentionMessage := "在作品《" + item.Name + "》的评论中提到了你：" + mentionPreview
+		service.CreateMentionNotifications(userID, "item", uint(itemID), mentionMessage, req.Content)
 	}
-	mentionMessage := "在作品《" + item.Name + "》的评论中提到了你：" + mentionPreview
-	service.CreateMentionNotifications(userID, "item", uint(itemID), mentionMessage, req.Content)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"code": 0,
