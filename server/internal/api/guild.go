@@ -358,10 +358,29 @@ func (s *Server) getGuild(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
 	var guild model.Guild
-	if err := database.DB.First(&guild, id).Error; err != nil {
+	if err := database.DB.Model(&model.Guild{}).
+		Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, member_count, story_count, is_public, invite_code, status, reviewer_id, review_comment, reviewed_at, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").
+		First(&guild, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
 		return
 	}
+
+	hasBanner := false
+	if err := database.DB.Model(&model.Guild{}).
+		Select("id").
+		Where("id = ? AND TRIM(COALESCE(banner, '')) <> ''", id).
+		Take(&model.Guild{}).Error; err == nil {
+		hasBanner = true
+	}
+
+	hasAvatar := false
+	if err := database.DB.Model(&model.Guild{}).
+		Select("id").
+		Where("id = ? AND TRIM(COALESCE(avatar, '')) <> ''", id).
+		Take(&model.Guild{}).Error; err == nil {
+		hasAvatar = true
+	}
+	directBannerURLMap, directAvatarURLMap := s.loadGuildDirectMediaURLMap([]uint{uint(id)})
 
 	// 查询用户角色（如果是成员）
 	var member model.GuildMember
@@ -369,10 +388,22 @@ func (s *Server) getGuild(c *gin.Context) {
 	if err := database.DB.Where("guild_id = ? AND user_id = ?", id, userID).First(&member).Error; err == nil {
 		myRole = member.Role
 	}
-	ensureGuildBannerUpdatedAt(&guild)
-	ensureGuildAvatarUpdatedAt(&guild)
-	guild.Banner = buildAPIURL(s.cfg.Server.ApiHost, guildBannerURL(guild))
-	guild.Avatar = buildAPIURL(s.cfg.Server.ApiHost, guildAvatarURL(guild))
+	guild.Banner = ""
+	if hasBanner {
+		if directURL := directBannerURLMap[guild.ID]; directURL != "" {
+			guild.Banner = directURL
+		} else {
+			guild.Banner = buildAPIURL(s.cfg.Server.ApiHost, guildBannerURLFromMeta(guild.ID, guild.UpdatedAt, guild.BannerUpdatedAt))
+		}
+	}
+	guild.Avatar = ""
+	if hasAvatar {
+		if directURL := directAvatarURLMap[guild.ID]; directURL != "" {
+			guild.Avatar = directURL
+		} else {
+			guild.Avatar = buildAPIURL(s.cfg.Server.ApiHost, guildAvatarURLFromMeta(guild.ID, guild.UpdatedAt, guild.AvatarUpdatedAt))
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{"guild": guild, "my_role": myRole})
 }
@@ -626,10 +657,22 @@ func (s *Server) listGuildMembers(c *gin.Context) {
 	}
 
 	var users []model.User
-	database.DB.Where("id IN ?", userIDs).Find(&users)
+	database.DB.Select("id, username, role, is_sponsor, sponsor_level, sponsor_color, sponsor_bold, updated_at").Where("id IN ?", userIDs).Find(&users)
 	userMap := make(map[uint]model.User)
 	for _, u := range users {
 		userMap[u.ID] = u
+	}
+
+	var usersWithAvatar []uint
+	if len(userIDs) > 0 {
+		database.DB.Model(&model.User{}).
+			Select("id").
+			Where("id IN ? AND TRIM(COALESCE(avatar, '')) <> ''", userIDs).
+			Pluck("id", &usersWithAvatar)
+	}
+	hasAvatarMap := make(map[uint]bool, len(usersWithAvatar))
+	for _, uid := range usersWithAvatar {
+		hasAvatarMap[uid] = true
 	}
 
 	type MemberInfo struct {
@@ -643,10 +686,14 @@ func (s *Server) listGuildMembers(c *gin.Context) {
 	for i, m := range members {
 		user := userMap[m.UserID]
 		nameColor, nameBold := userDisplayStyle(user)
+		avatar := ""
+		if hasAvatarMap[m.UserID] {
+			avatar = buildAPIURL(s.cfg.Server.ApiHost, fmt.Sprintf("/api/v1/images/user-avatar/%d?w=80&q=80&v=%d", user.ID, user.UpdatedAt.Unix()))
+		}
 		result[i] = MemberInfo{
 			GuildMember: m,
 			Username:    user.Username,
-			Avatar:      userAvatarURL(s.cfg.Server.ApiHost, user),
+			Avatar:      avatar,
 			NameColor:   nameColor,
 			NameBold:    nameBold,
 		}

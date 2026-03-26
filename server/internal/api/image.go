@@ -83,8 +83,12 @@ func (s *Server) getImage(c *gin.Context) {
 		originalValue = s.migrateLegacyPostCoverIfNeeded(c, id, originalValue)
 	} else if imageType == "item-preview" {
 		originalValue = s.migrateLegacyItemPreviewIfNeeded(c, id, originalValue)
+	} else if imageType == "user-avatar" {
+		originalValue = s.migrateLegacyUserAvatarIfNeeded(c, id, originalValue)
 	} else if imageType == "guild-banner" {
 		originalValue = s.migrateLegacyGuildBannerIfNeeded(c, id, originalValue)
+	} else if imageType == "guild-avatar" {
+		originalValue = s.migrateLegacyGuildAvatarIfNeeded(c, id, originalValue)
 	}
 
 	imgData, contentType, err := s.loadImageBytes(c, originalValue)
@@ -227,6 +231,31 @@ func (s *Server) migrateLegacyItemPreviewIfNeeded(c *gin.Context, id string, raw
 	return normalized
 }
 
+// migrateLegacyUserAvatarIfNeeded migrates legacy base64 user avatar values to uploaded URLs.
+func (s *Server) migrateLegacyUserAvatarIfNeeded(c *gin.Context, id string, raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || isImageURL(value) {
+		return value
+	}
+
+	normalized, err := s.normalizeAndStoreImageValue(c, value, fmt.Sprintf("users/%s/avatar", id))
+	if err != nil {
+		return value
+	}
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" || normalized == value || !isImageURL(normalized) {
+		return value
+	}
+
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return normalized
+	}
+
+	_ = database.DB.Model(&model.User{}).Where("id = ?", idNum).Update("avatar", normalized).Error
+	return normalized
+}
+
 // migrateLegacyGuildBannerIfNeeded migrates legacy base64 guild banner values to uploaded URLs.
 func (s *Server) migrateLegacyGuildBannerIfNeeded(c *gin.Context, id string, raw string) string {
 	value := strings.TrimSpace(raw)
@@ -252,6 +281,36 @@ func (s *Server) migrateLegacyGuildBannerIfNeeded(c *gin.Context, id string, raw
 	_ = database.DB.Model(&model.Guild{}).Where("id = ?", idNum).Updates(map[string]interface{}{
 		"banner":            normalized,
 		"banner_updated_at": now,
+	}).Error
+
+	return normalized
+}
+
+// migrateLegacyGuildAvatarIfNeeded migrates legacy base64 guild avatar values to uploaded URLs.
+func (s *Server) migrateLegacyGuildAvatarIfNeeded(c *gin.Context, id string, raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" || isImageURL(value) {
+		return value
+	}
+
+	normalized, err := s.normalizeAndStoreImageValue(c, value, fmt.Sprintf("guilds/%s/avatar", id))
+	if err != nil {
+		return value
+	}
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" || normalized == value || !isImageURL(normalized) {
+		return value
+	}
+
+	idNum, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return normalized
+	}
+
+	now := time.Now()
+	_ = database.DB.Model(&model.Guild{}).Where("id = ?", idNum).Updates(map[string]interface{}{
+		"avatar":            normalized,
+		"avatar_updated_at": now,
 	}).Error
 
 	return normalized

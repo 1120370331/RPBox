@@ -12,6 +12,7 @@ const { t } = useI18n()
 const toast = useToastStore()
 
 const loading = ref(false)
+const membersLoading = ref(false)
 const applying = ref(false)
 const leaving = ref(false)
 const showLeaveConfirm = ref(false)
@@ -38,18 +39,29 @@ function factionLabel(name?: Guild['faction']) {
 async function loadDetail() {
   if (!guildId.value) return
   loading.value = true
+  membersLoading.value = false
   try {
     const res = await getGuild(guildId.value)
     guild.value = res.guild
     myRole.value = res.my_role || ''
+    members.value = []
     if (res.my_role) {
-      const membersRes = await listGuildMembers(guildId.value)
-      members.value = membersRes.members || []
-    } else {
-      members.value = []
+      membersLoading.value = true
+      void listGuildMembers(guildId.value)
+        .then((membersRes) => {
+          members.value = membersRes.members || []
+        })
+        .catch(() => {
+          members.value = []
+        })
+        .finally(() => {
+          membersLoading.value = false
+        })
     }
   } catch (error) {
     toast.error((error as Error)?.message || t('common.status.loadFailed'))
+    members.value = []
+    membersLoading.value = false
   } finally {
     loading.value = false
   }
@@ -162,9 +174,10 @@ onMounted(loadDetail)
           </button>
         </section>
 
-        <section v-if="members.length" class="members-card">
+        <section v-if="membersLoading || members.length" class="members-card">
           <h3>{{ $t('guild.info.members') }}</h3>
-          <ul>
+          <div v-if="membersLoading" class="hint">{{ $t('common.status.loading') }}</div>
+          <ul v-else>
             <li v-for="member in members" :key="member.id">
               <div class="member-main">
                 <img v-if="member.avatar" :src="resolveApiUrl(member.avatar)" alt="" loading="lazy" />
