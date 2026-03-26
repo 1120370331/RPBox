@@ -217,8 +217,11 @@ func (s *Server) getOriginalImageValue(imageType string, id string) (string, err
 
 	case "user-avatar":
 		var user model.User
-		if err := database.DB.Select("avatar").First(&user, idNum).Error; err != nil {
+		if err := database.DB.Select("avatar", "avatar_review_status").First(&user, idNum).Error; err != nil {
 			return "", err
+		}
+		if user.AvatarReviewStatus != "approved" {
+			return "", fmt.Errorf("avatar not approved")
 		}
 		return user.Avatar, nil
 
