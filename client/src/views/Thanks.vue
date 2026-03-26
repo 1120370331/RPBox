@@ -78,7 +78,7 @@ onMounted(() => {
                   <h3 :style="{ color: sponsor.name_color || undefined, fontWeight: sponsor.name_bold ? '700' : undefined }">{{ sponsor.username }}</h3>
                   <span class="featured-badge">特别赞助</span>
                 </div>
-                <p class="featured-desc">对 RPBox 的赞助与宣发支持，特别感谢。</p>
+                <p class="featured-desc">RPBox 赞助支持者</p>
               </div>
             </div>
           </div>
