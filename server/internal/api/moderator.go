@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
 )
 
@@ -350,6 +351,352 @@ func (s *Server) reviewItem(c *gin.Context) {
 	ensureItemPreviewUpdatedAt(&item)
 	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "item": item})
+}
+
+// listPendingPostCommentImages 获取待审核的帖子评论图片
+func (s *Server) listPendingPostCommentImages(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := strings.TrimSpace(c.DefaultQuery("status", "pending"))
+	if status != "pending" && status != "approved" && status != "rejected" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的status参数"})
+		return
+	}
+
+	query := database.DB.Model(&model.Comment{}).
+		Where("COALESCE(BTRIM(image_url), '') <> ''").
+		Where("image_review_status = ?", status)
+
+	var total int64
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	var comments []model.Comment
+	query.Order("created_at ASC").Offset(offset).Limit(pageSize).Find(&comments)
+
+	authorIDs := make([]uint, 0, len(comments))
+	postIDs := make([]uint, 0, len(comments))
+	for _, comment := range comments {
+		authorIDs = append(authorIDs, comment.AuthorID)
+		postIDs = append(postIDs, comment.PostID)
+	}
+
+	var users []model.User
+	if len(authorIDs) > 0 {
+		database.DB.Where("id IN ?", authorIDs).Find(&users)
+	}
+	userMap := make(map[uint]model.User)
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	var posts []model.Post
+	if len(postIDs) > 0 {
+		database.DB.Select("id, title").Where("id IN ?", postIDs).Find(&posts)
+	}
+	postMap := make(map[uint]model.Post)
+	for _, p := range posts {
+		postMap[p.ID] = p
+	}
+
+	type commentImageReviewItem struct {
+		model.Comment
+		AuthorName string `json:"author_name"`
+		PostTitle  string `json:"post_title"`
+	}
+	result := make([]commentImageReviewItem, len(comments))
+	for i, comment := range comments {
+		result[i] = commentImageReviewItem{
+			Comment:    comment,
+			AuthorName: userMap[comment.AuthorID].Username,
+			PostTitle:  postMap[comment.PostID].Title,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"comments": result, "total": total})
+}
+
+// reviewPostCommentImage 审核帖子评论图片
+func (s *Server) reviewPostCommentImage(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var comment model.Comment
+	if err := database.DB.First(&comment, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		return
+	}
+	if strings.TrimSpace(comment.ImageURL) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该评论没有图片"})
+		return
+	}
+
+	var req ReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核操作"})
+		return
+	}
+
+	now := time.Now()
+	comment.ImageReviewerID = &userID
+	comment.ImageReviewedAt = &now
+	comment.ImageReviewComment = strings.TrimSpace(req.Comment)
+	if req.Action == "approve" {
+		comment.ImageReviewStatus = "approved"
+	} else {
+		comment.ImageReviewStatus = "rejected"
+	}
+
+	if err := database.DB.Save(&comment).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		return
+	}
+
+	logAdminAction(c, "review_post_comment_image", "comment", comment.ID, strconv.FormatUint(uint64(comment.ID), 10), map[string]interface{}{
+		"action":  req.Action,
+		"comment": req.Comment,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "comment": comment})
+}
+
+// listPendingItemCommentImages 获取待审核的道具评论图片
+func (s *Server) listPendingItemCommentImages(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := strings.TrimSpace(c.DefaultQuery("status", "pending"))
+	if status != "pending" && status != "approved" && status != "rejected" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的status参数"})
+		return
+	}
+
+	query := database.DB.Model(&model.ItemComment{}).
+		Where("COALESCE(BTRIM(image_url), '') <> ''").
+		Where("image_review_status = ?", status)
+
+	var total int64
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	var comments []model.ItemComment
+	query.Order("created_at ASC").Offset(offset).Limit(pageSize).Find(&comments)
+
+	userIDs := make([]uint, 0, len(comments))
+	itemIDs := make([]uint, 0, len(comments))
+	for _, comment := range comments {
+		userIDs = append(userIDs, comment.UserID)
+		itemIDs = append(itemIDs, comment.ItemID)
+	}
+
+	var users []model.User
+	if len(userIDs) > 0 {
+		database.DB.Where("id IN ?", userIDs).Find(&users)
+	}
+	userMap := make(map[uint]model.User)
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	var items []model.Item
+	if len(itemIDs) > 0 {
+		database.DB.Select("id, name").Where("id IN ?", itemIDs).Find(&items)
+	}
+	itemMap := make(map[uint]model.Item)
+	for _, item := range items {
+		itemMap[item.ID] = item
+	}
+
+	type itemCommentImageReviewItem struct {
+		model.ItemComment
+		AuthorName string `json:"author_name"`
+		ItemName   string `json:"item_name"`
+	}
+	result := make([]itemCommentImageReviewItem, len(comments))
+	for i, comment := range comments {
+		result[i] = itemCommentImageReviewItem{
+			ItemComment: comment,
+			AuthorName:  userMap[comment.UserID].Username,
+			ItemName:    itemMap[comment.ItemID].Name,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"comments": result, "total": total})
+}
+
+// reviewItemCommentImage 审核道具评论图片
+func (s *Server) reviewItemCommentImage(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var comment model.ItemComment
+	if err := database.DB.First(&comment, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		return
+	}
+	if strings.TrimSpace(comment.ImageURL) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该评论没有图片"})
+		return
+	}
+
+	var req ReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核操作"})
+		return
+	}
+
+	now := time.Now()
+	comment.ImageReviewerID = &userID
+	comment.ImageReviewedAt = &now
+	comment.ImageReviewComment = strings.TrimSpace(req.Comment)
+	if req.Action == "approve" {
+		comment.ImageReviewStatus = "approved"
+	} else {
+		comment.ImageReviewStatus = "rejected"
+	}
+
+	if err := database.DB.Save(&comment).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		return
+	}
+
+	logAdminAction(c, "review_item_comment_image", "item_comment", comment.ID, strconv.FormatUint(uint64(comment.ID), 10), map[string]interface{}{
+		"action":  req.Action,
+		"comment": req.Comment,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "comment": comment})
+}
+
+// listPendingUserAvatars 获取待审核的用户头像
+func (s *Server) listPendingUserAvatars(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := strings.TrimSpace(c.DefaultQuery("status", "pending"))
+	if status != "pending" && status != "approved" && status != "rejected" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的status参数"})
+		return
+	}
+
+	query := database.DB.Model(&model.User{}).
+		Where("COALESCE(BTRIM(avatar), '') <> ''").
+		Where("avatar_review_status = ?", status)
+
+	var total int64
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	var users []model.User
+	query.Order("updated_at DESC").Offset(offset).Limit(pageSize).Find(&users)
+
+	type userAvatarReviewItem struct {
+		ID                  uint       `json:"id"`
+		Username            string     `json:"username"`
+		Role                string     `json:"role"`
+		AvatarReviewStatus  string     `json:"avatar_review_status"`
+		AvatarReviewComment string     `json:"avatar_review_comment"`
+		AvatarReviewedAt    *time.Time `json:"avatar_reviewed_at"`
+		AvatarURL           string     `json:"avatar_url"`
+		CreatedAt           time.Time  `json:"created_at"`
+		UpdatedAt           time.Time  `json:"updated_at"`
+	}
+
+	result := make([]userAvatarReviewItem, len(users))
+	for i, user := range users {
+		result[i] = userAvatarReviewItem{
+			ID:                  user.ID,
+			Username:            user.Username,
+			Role:                user.Role,
+			AvatarReviewStatus:  user.AvatarReviewStatus,
+			AvatarReviewComment: user.AvatarReviewComment,
+			AvatarReviewedAt:    user.AvatarReviewedAt,
+			AvatarURL:           buildAPIURL(s.cfg.Server.ApiHost, user.Avatar),
+			CreatedAt:           user.CreatedAt,
+			UpdatedAt:           user.UpdatedAt,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": result, "total": total})
+}
+
+// reviewUserAvatar 审核用户头像
+func (s *Server) reviewUserAvatar(c *gin.Context) {
+	modID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var user model.User
+	if err := database.DB.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+	if strings.TrimSpace(user.Avatar) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该用户没有待审核头像"})
+		return
+	}
+
+	var req ReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核操作"})
+		return
+	}
+
+	now := time.Now()
+	user.AvatarReviewerID = &modID
+	user.AvatarReviewedAt = &now
+	user.AvatarReviewComment = strings.TrimSpace(req.Comment)
+	if req.Action == "approve" {
+		user.AvatarReviewStatus = "approved"
+	} else {
+		user.AvatarReviewStatus = "rejected"
+	}
+
+	if err := database.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		return
+	}
+	s.invalidateUserProfileCache(c.Request.Context(), user.ID)
+
+	logAdminAction(c, "review_user_avatar", "user", user.ID, user.Username, map[string]interface{}{
+		"action":  req.Action,
+		"comment": req.Comment,
+	})
+
+	notifyMsg := "你的头像审核已通过。"
+	if req.Action == "reject" {
+		notifyMsg = "你的头像审核未通过。"
+		if strings.TrimSpace(req.Comment) != "" {
+			notifyMsg += " 原因：" + strings.TrimSpace(req.Comment)
+		}
+	}
+	_ = service.CreateNotification(&model.Notification{
+		UserID:     user.ID,
+		Type:       "system",
+		TargetType: "user",
+		TargetID:   user.ID,
+		Content:    notifyMsg,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "审核完成",
+		"user": gin.H{
+			"id":                    user.ID,
+			"username":              user.Username,
+			"avatar_review_status":  user.AvatarReviewStatus,
+			"avatar_reviewed_at":    user.AvatarReviewedAt,
+			"avatar_review_comment": user.AvatarReviewComment,
+		},
+	})
 }
 
 // listPendingItemEdits 获取待审核的道具编辑列表

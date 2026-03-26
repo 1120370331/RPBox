@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -233,25 +232,23 @@ func (s *Server) login(c *gin.Context) {
 	log.Printf("[Auth] login success user_id=%d username=%s ip=%s verified=%t", user.ID, user.Username, ip, user.EmailVerified)
 
 	// 返回头像 URL 而不是 base64 数据，避免 localStorage 配额超限
-	avatarURL := ""
-	if user.Avatar != "" {
-		avatarURL = fmt.Sprintf("%s/api/v1/images/user-avatar/%d?w=80&q=80", s.cfg.Server.ApiHost, user.ID)
-	}
+	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"user": gin.H{
-			"id":            user.ID,
-			"username":      user.Username,
-			"email":         user.Email,
-			"avatar":        avatarURL,
-			"role":          user.Role,
-			"is_sponsor":    level > sponsorLevelNone,
-			"sponsor_level": level,
-			"sponsor_color": user.SponsorColor,
-			"sponsor_bold":  user.SponsorBold,
-			"name_color":    nameColor,
-			"name_bold":     nameBold,
+			"id":                   user.ID,
+			"username":             user.Username,
+			"email":                user.Email,
+			"avatar":               avatarURL,
+			"avatar_review_status": user.AvatarReviewStatus,
+			"role":                 user.Role,
+			"is_sponsor":           level > sponsorLevelNone,
+			"sponsor_level":        level,
+			"sponsor_color":        user.SponsorColor,
+			"sponsor_bold":         user.SponsorBold,
+			"name_color":           nameColor,
+			"name_bold":            nameBold,
 		},
 	})
 }
