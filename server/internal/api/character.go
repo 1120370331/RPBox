@@ -2,14 +2,40 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/pkg/validator"
 )
+
+func (s *Server) migrateLegacyCharacterCustomAvatarIfNeeded(c *gin.Context, character *model.Character) {
+	if character == nil {
+		return
+	}
+	value := strings.TrimSpace(character.CustomAvatar)
+	if value == "" || isImageURL(value) {
+		return
+	}
+
+	normalized, err := s.normalizeAndStoreImageValue(c, value, fmt.Sprintf("characters/%d/avatar", character.UserID))
+	if err != nil {
+		return
+	}
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" || normalized == value || !isImageURL(normalized) {
+		return
+	}
+
+	if err := database.DB.Model(&model.Character{}).Where("id = ?", character.ID).Update("custom_avatar", normalized).Error; err != nil {
+		return
+	}
+	character.CustomAvatar = normalized
+}
 
 // CreateCharacterRequest 创建角色请求 (TRP3字段1:1对应)
 type CreateCharacterRequest struct {
@@ -75,6 +101,9 @@ func (s *Server) listCharacters(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
+	for i := range characters {
+		s.migrateLegacyCharacterCustomAvatarIfNeeded(c, &characters[i])
+	}
 
 	c.JSON(http.StatusOK, gin.H{"characters": characters})
 }
@@ -88,6 +117,7 @@ func (s *Server) getCharacter(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "角色不存在"})
 		return
 	}
+	s.migrateLegacyCharacterCustomAvatarIfNeeded(c, &character)
 
 	c.JSON(http.StatusOK, character)
 }
@@ -277,7 +307,12 @@ func (s *Server) updateCharacter(c *gin.Context) {
 
 	// 更新自定义字段
 	if req.CustomAvatar != "" {
-		character.CustomAvatar = req.CustomAvatar
+		normalizedAvatar, err := s.normalizeAndStoreImageValue(c, req.CustomAvatar, fmt.Sprintf("characters/%d/avatar", userID))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "头像格式无效"})
+			return
+		}
+		character.CustomAvatar = normalizedAvatar
 	}
 	if req.CustomName != "" {
 		character.CustomName = req.CustomName

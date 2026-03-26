@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/md5"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -19,6 +21,30 @@ import (
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 )
+
+func (s *Server) migrateLegacyItemImageDataIfNeeded(c *gin.Context, img *model.ItemImage) {
+	if img == nil {
+		return
+	}
+	value := strings.TrimSpace(img.ImageData)
+	if value == "" || isImageURL(value) {
+		return
+	}
+
+	normalized, err := s.normalizeAndStoreImageValue(c, value, fmt.Sprintf("items/%d/images", img.ItemID))
+	if err != nil {
+		return
+	}
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" || normalized == value || !isImageURL(normalized) {
+		return
+	}
+
+	if err := database.DB.Model(&model.ItemImage{}).Where("id = ?", img.ID).Update("image_data", normalized).Error; err != nil {
+		return
+	}
+	img.ImageData = normalized
+}
 
 // uploadItemImages 上传画作图片（支持多图）
 func (s *Server) uploadItemImages(c *gin.Context) {
@@ -155,6 +181,7 @@ func (s *Server) getItemImage(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "图片不存在"})
 		return
 	}
+	s.migrateLegacyItemImageDataIfNeeded(c, &img)
 
 	data, contentType, err := s.loadImageBytes(c, img.ImageData)
 	if err != nil {
@@ -165,8 +192,17 @@ func (s *Server) getItemImage(c *gin.Context) {
 		contentType = http.DetectContentType(data)
 	}
 
+	etag := fmt.Sprintf(`"%x"`, md5.Sum(data))
+	if c.GetHeader("If-None-Match") == etag {
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Header("ETag", etag)
+		c.Status(http.StatusNotModified)
+		return
+	}
+
 	c.Header("Content-Type", contentType)
-	c.Header("Cache-Control", "public, max-age=3600")
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Header("ETag", etag)
 	c.Data(http.StatusOK, contentType, data)
 }
 
@@ -187,6 +223,7 @@ func (s *Server) downloadItemImage(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "图片不存在"})
 		return
 	}
+	s.migrateLegacyItemImageDataIfNeeded(c, &img)
 
 	data, contentType, err := s.loadImageBytes(c, img.ImageData)
 	if err != nil {
