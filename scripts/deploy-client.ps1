@@ -22,18 +22,9 @@ Write-Host "Version: $Version"
 
 # 1. 更新版本号
 Write-Host "`n[1/5] Updating version numbers..." -ForegroundColor Yellow
-$files = @(
-    @{ Path = "client/src-tauri/tauri.conf.json"; Pattern = '"version": "[^"]*"'; Replace = "`"version`": `"$Version`"" },
-    @{ Path = "client/src-tauri/Cargo.toml"; Pattern = 'version = "[^"]*"'; Replace = "version = `"$Version`"" },
-    @{ Path = "client/package.json"; Pattern = '"version": "[^"]*"'; Replace = "`"version`": `"$Version`"" }
-)
-
-foreach ($file in $files) {
-    $fullPath = Join-Path $ProjectRoot $file.Path
-    $content = Get-Content $fullPath -Raw
-    $content = $content -replace $file.Pattern, $file.Replace
-    Set-Content $fullPath $content -NoNewline
-    Write-Host "  Updated: $($file.Path)"
+node (Join-Path $ProjectRoot "scripts\sync-client-version.mjs") $Version
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to sync client version files"
 }
 
 # 2. 构建
