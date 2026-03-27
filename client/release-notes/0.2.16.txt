@@ -1,0 +1,4 @@
+紧急热修：
+- 修复客户端发布流程中版本同步脚本对 Cargo.toml 匹配失败的问题
+- 发布前自动同步 tauri.conf.json、Cargo.toml 与 package.json 的版本号
+- 加固本地发布脚本，避免误替换 Cargo 依赖版本

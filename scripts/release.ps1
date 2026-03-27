@@ -48,28 +48,10 @@ Write-Host "  签名密钥已就绪" -ForegroundColor Green
 
 # 2. 更新版本号
 Write-Host "`n[2/6] 更新版本号到 $Version..." -ForegroundColor Yellow
-
-# 更新 tauri.conf.json
-$TauriConf = Join-Path $ClientDir "src-tauri\tauri.conf.json"
-$TauriJson = Get-Content $TauriConf -Raw | ConvertFrom-Json
-$OldVersion = $TauriJson.version
-$TauriJson.version = $Version
-$TauriJson | ConvertTo-Json -Depth 10 | Set-Content $TauriConf -Encoding UTF8
-Write-Host "  tauri.conf.json: $OldVersion -> $Version" -ForegroundColor Green
-
-# 更新 Cargo.toml
-$CargoToml = Join-Path $ClientDir "src-tauri\Cargo.toml"
-$CargoContent = Get-Content $CargoToml -Raw
-$CargoContent = $CargoContent -replace 'version = "[^"]*"', "version = `"$Version`""
-Set-Content $CargoToml $CargoContent -Encoding UTF8
-Write-Host "  Cargo.toml: 已更新" -ForegroundColor Green
-
-# 更新 package.json
-$PackageJson = Join-Path $ClientDir "package.json"
-$PkgJson = Get-Content $PackageJson -Raw | ConvertFrom-Json
-$PkgJson.version = $Version
-$PkgJson | ConvertTo-Json -Depth 10 | Set-Content $PackageJson -Encoding UTF8
-Write-Host "  package.json: 已更新" -ForegroundColor Green
+node (Join-Path $ProjectRoot "scripts\sync-client-version.mjs") $Version
+if ($LASTEXITCODE -ne 0) {
+    throw "版本号更新失败"
+}
 
 # 3. 构建客户端
 Write-Host "`n[3/6] 构建 Tauri 客户端..." -ForegroundColor Yellow
