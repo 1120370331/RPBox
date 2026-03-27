@@ -451,6 +451,17 @@
                 return downloadUrl.indexOf('apps.apple.com') !== -1 || downloadUrl.indexOf('testflight.apple.com') !== -1;
             }
 
+            function isCurrentDownloadPageUrl(downloadUrl) {
+                if (!downloadUrl) return false;
+                try {
+                    var target = new URL(downloadUrl, window.location.href);
+                    var current = new URL(window.location.href);
+                    return target.origin === current.origin && target.pathname === current.pathname;
+                } catch (err) {
+                    return false;
+                }
+            }
+
             function applyDownloadLink(downloadUrl) {
                 if (!downloadUrl || !els.button) return;
                 var filename = downloadUrl.split('/').pop() || 'RPBox-setup.exe';
@@ -660,6 +671,12 @@
                     var downloadUrl = sanitizeDownloadUrl(data.url, apiBase);
                     if (!downloadUrl) {
                         throw new Error('Invalid download URL');
+                    }
+                    if (platform.target === 'ios' && isCurrentDownloadPageUrl(downloadUrl)) {
+                        if (applyFallbackDownload(platform, apiBase)) {
+                            return;
+                        }
+                        throw new Error('Invalid iOS download URL');
                     }
                     applyDownloadLink(downloadUrl);
 
