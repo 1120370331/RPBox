@@ -15,6 +15,7 @@ import (
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"golang.org/x/net/html"
 	"gorm.io/gorm"
 )
 
@@ -86,6 +87,43 @@ func trimGuildRequestFields(name, description, icon, color, slogan, faction *str
 	*faction = strings.TrimSpace(*faction)
 }
 
+func visibleTextRuneCountFromHTML(content string) int {
+	if strings.TrimSpace(content) == "" {
+		return 0
+	}
+
+	root, err := html.Parse(strings.NewReader("<div>" + content + "</div>"))
+	if err != nil {
+		return utf8.RuneCountInString(strings.TrimSpace(content))
+	}
+
+	var builder strings.Builder
+	var walk func(node *html.Node, skipText bool)
+	walk = func(node *html.Node, skipText bool) {
+		if node == nil {
+			return
+		}
+
+		switch node.Type {
+		case html.ElementNode:
+			if node.Data == "script" || node.Data == "style" {
+				skipText = true
+			}
+		case html.TextNode:
+			if !skipText {
+				builder.WriteString(node.Data)
+			}
+		}
+
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child, skipText)
+		}
+	}
+
+	walk(root, false)
+	return utf8.RuneCountInString(strings.TrimSpace(builder.String()))
+}
+
 func validateGuildCommonFields(nameRequired bool, name, description, icon, color, slogan, lore, faction string) error {
 	if nameRequired && name == "" {
 		return fmt.Errorf("公会名称不能为空")
@@ -105,7 +143,7 @@ func validateGuildCommonFields(nameRequired bool, name, description, icon, color
 	if slogan != "" && utf8.RuneCountInString(slogan) > 256 {
 		return fmt.Errorf("公会标语不能超过256个字符")
 	}
-	if lore != "" && utf8.RuneCountInString(lore) > 20000 {
+	if lore != "" && visibleTextRuneCountFromHTML(lore) > 20000 {
 		return fmt.Errorf("公会设定不能超过20000个字符")
 	}
 	if faction != "" {

@@ -64,3 +64,25 @@ func TestNormalizeUpdateGuildRequestRejectsInvalidLayout(t *testing.T) {
 		t.Fatal("expected invalid update layout to be rejected")
 	}
 }
+
+func TestNormalizeUpdateGuildRequestCountsVisibleLoreTextInsteadOfHTMLLength(t *testing.T) {
+	req := UpdateGuildRequest{
+		Lore: strings.Repeat(`<p><span data-node-view-wrapper="" data-node-view-content="" data-jump-title="很长的元数据">设定</span></p>`, 1500),
+	}
+
+	err := normalizeUpdateGuildRequest(&req)
+	if err != nil {
+		t.Fatalf("expected lore with short visible text to be accepted, got error: %v", err)
+	}
+}
+
+func TestNormalizeUpdateGuildRequestRejectsOversizedVisibleLoreText(t *testing.T) {
+	req := UpdateGuildRequest{
+		Lore: "<p>" + strings.Repeat("设", 20001) + "</p>",
+	}
+
+	err := normalizeUpdateGuildRequest(&req)
+	if err == nil {
+		t.Fatal("expected oversized visible lore text to be rejected")
+	}
+}
