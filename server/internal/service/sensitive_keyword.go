@@ -76,6 +76,18 @@ var shortSensitiveKeywordAllowlist = map[string]struct{}{
 	"爆炸":  {},
 }
 
+var asciiSensitiveKeywordAllowlist = map[string]struct{}{
+	"fuck":         {},
+	"fucking":      {},
+	"motherfucker": {},
+	"shit":         {},
+	"bitch":        {},
+	"nigger":       {},
+	"terrorist":    {},
+	"terrorism":    {},
+	"isis":         {},
+}
+
 // DetectSensitiveKeywords returns matched keywords after normalization.
 func DetectSensitiveKeywords(contents ...string) []string {
 	text := normalizeSensitiveText(strings.Join(contents, " "))
@@ -225,9 +237,10 @@ func isUsableKeyword(keyword string) bool {
 		}
 	}
 
-	// 纯英文/数字关键词容易误伤，长度至少4
-	if asciiOnly && len(runes) < 4 {
-		return false
+	// 纯英文关键词误伤极高（例如 test/http），改为白名单制。
+	if asciiOnly {
+		_, ok := asciiSensitiveKeywordAllowlist[keyword]
+		return ok
 	}
 
 	// 中文短词（2/3字）误伤非常高，只允许明确高风险词保留。
