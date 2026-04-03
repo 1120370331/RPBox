@@ -53,26 +53,27 @@ var politicalKeywordMarkers = []string{
 }
 
 var shortSensitiveKeywordAllowlist = map[string]struct{}{
-	"开盒": {},
-	"六四": {},
-	"东突": {},
-	"台独": {},
-	"港独": {},
-	"藏独": {},
-	"疆独": {},
-	"强奸": {},
-	"轮奸": {},
-	"迷奸": {},
-	"嫖娼": {},
-	"卖淫": {},
-	"约炮": {},
-	"吸毒": {},
-	"贩毒": {},
-	"冰毒": {},
-	"毒品": {},
-	"枪支": {},
-	"炸药": {},
-	"爆炸": {},
+	"开盒":  {},
+	"法轮功": {},
+	"六四":  {},
+	"东突":  {},
+	"台独":  {},
+	"港独":  {},
+	"藏独":  {},
+	"疆独":  {},
+	"强奸":  {},
+	"轮奸":  {},
+	"迷奸":  {},
+	"嫖娼":  {},
+	"卖淫":  {},
+	"约炮":  {},
+	"吸毒":  {},
+	"贩毒":  {},
+	"冰毒":  {},
+	"毒品":  {},
+	"枪支":  {},
+	"炸药":  {},
+	"爆炸":  {},
 }
 
 // DetectSensitiveKeywords returns matched keywords after normalization.
@@ -229,7 +230,8 @@ func isUsableKeyword(keyword string) bool {
 		return false
 	}
 
-	if hasHan && len(runes) < 3 {
+	// 中文短词（2/3字）误伤非常高，只允许明确高风险词保留。
+	if hasHan && len(runes) < 4 {
 		_, ok := shortSensitiveKeywordAllowlist[keyword]
 		return ok
 	}
