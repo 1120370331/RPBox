@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -16,8 +17,8 @@ import (
 const (
 	moderationActionWarning       = "warning"
 	moderationActionSevereWarning = "severe_warning"
-	moderationActionPermanentBan  = "permanent_ban"
 	sensitiveViolationDecayWindow = 7 * 24 * time.Hour
+	legacySensitiveBanReason      = "敏感关键词违规累计达到3次，永久封禁"
 )
 
 type sensitiveDecision struct {
@@ -83,6 +84,18 @@ func (s *Server) ensureUserCanPublish(c *gin.Context, userID uint) (*model.User,
 			updates["sensitive_last_violation_at"] = *user.SensitiveLastViolationAt
 		}
 		database.DB.Model(&user).Updates(updates)
+	}
+
+	if user.IsBanned {
+		if clearLegacySensitiveBan(&user) {
+			database.DB.Model(&user).Updates(map[string]interface{}{
+				"is_banned":    false,
+				"banned_until": nil,
+				"ban_reason":   "",
+				"banned_by":    nil,
+				"banned_at":    nil,
+			})
+		}
 	}
 
 	if user.IsBanned {
@@ -173,20 +186,15 @@ func (s *Server) applySensitiveViolation(userID uint, contentType string, conten
 		user.SensitiveViolationCount++
 		user.SensitiveLastViolationAt = &now
 
-		if user.SensitiveViolationCount >= 3 {
-			decision.Action = moderationActionPermanentBan
-			decision.Message = "检测到敏感关键词，已删除内容并执行第3次处罚：账号永久封禁。"
-			user.IsBanned = true
-			user.BannedUntil = nil
-			user.BanReason = "敏感关键词违规累计达到3次，永久封禁"
-			user.BannedAt = &now
-			user.BannedBy = nil
-		} else if user.SensitiveViolationCount == 2 {
-			decision.Action = moderationActionSevereWarning
-			decision.Message = "检测到敏感关键词，已删除内容并执行第2次处罚：严重警告。再次违规将永久封禁。"
-		} else {
+		if user.SensitiveViolationCount == 1 {
 			decision.Action = moderationActionWarning
 			decision.Message = "检测到敏感关键词，已删除内容并执行第1次处罚：警告。"
+		} else if user.SensitiveViolationCount == 2 {
+			decision.Action = moderationActionSevereWarning
+			decision.Message = "检测到敏感关键词，已删除内容并执行第2次处罚：严重警告。"
+		} else {
+			decision.Action = moderationActionSevereWarning
+			decision.Message = fmt.Sprintf("检测到敏感关键词，已删除内容并记录第%d次违规：严重警告。当前不作封号处理，请勿继续违规。", user.SensitiveViolationCount)
 		}
 		decision.ViolationCount = user.SensitiveViolationCount
 
@@ -239,6 +247,21 @@ func applySensitiveViolationDecay(user *model.User, now time.Time) bool {
 
 	nextTime := user.SensitiveLastViolationAt.Add(time.Duration(steps) * sensitiveViolationDecayWindow)
 	user.SensitiveLastViolationAt = &nextTime
+	return true
+}
+
+func clearLegacySensitiveBan(user *model.User) bool {
+	if user == nil || !user.IsBanned {
+		return false
+	}
+	if strings.TrimSpace(user.BanReason) != legacySensitiveBanReason {
+		return false
+	}
+	user.IsBanned = false
+	user.BannedUntil = nil
+	user.BanReason = ""
+	user.BannedBy = nil
+	user.BannedAt = nil
 	return true
 }
 
