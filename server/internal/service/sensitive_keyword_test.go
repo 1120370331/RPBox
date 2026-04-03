@@ -17,7 +17,7 @@ func resetSensitiveKeywordCaches() {
 func TestDetectSensitiveKeywords(t *testing.T) {
 	tmpDir := t.TempDir()
 	keywordFile := filepath.Join(tmpDir, "keywords.txt")
-	if err := os.WriteFile(keywordFile, []byte("法轮功\n开盒\n民主\n政府\n共产党\n习近平\n打倒共产党\n台独\n第四\n时间\n信息\n一个\n受害者\n参赛者\n"), 0o644); err != nil {
+	if err := os.WriteFile(keywordFile, []byte("法轮功\n开盒\n民主\n政府\n共产党\n习近平\n打倒共产党\n台独\n第四\n时间\n信息\n一个\n受害者\n参赛者\ntest\nhttp\nfuck\n"), 0o644); err != nil {
 		t.Fatalf("write keyword file: %v", err)
 	}
 	strictPoliticalFile := filepath.Join(tmpDir, "strict_political.txt")
@@ -57,6 +57,13 @@ func TestDetectSensitiveKeywords(t *testing.T) {
 		}
 	})
 
+	t.Run("filters generic ascii keywords", func(t *testing.T) {
+		got := DetectSensitiveKeywords("this is just a test post with http link")
+		if len(got) != 0 {
+			t.Fatalf("expected generic ascii keywords to be ignored, got %v", got)
+		}
+	})
+
 	t.Run("keeps strict political keywords", func(t *testing.T) {
 		got := DetectSensitiveKeywords("有人公开喊出打倒共产党这样的口号")
 		if len(got) == 0 || got[0] != "打倒共产党" {
@@ -75,6 +82,13 @@ func TestDetectSensitiveKeywords(t *testing.T) {
 		got := DetectSensitiveKeywords("这类法轮功内容会被拦截")
 		if len(got) == 0 || got[0] != "法轮功" {
 			t.Fatalf("expected allowlisted three-character keyword to match, got %v", got)
+		}
+	})
+
+	t.Run("keeps allowlisted ascii keywords", func(t *testing.T) {
+		got := DetectSensitiveKeywords("do not say fuck here")
+		if len(got) == 0 || got[0] != "fuck" {
+			t.Fatalf("expected allowlisted ascii keyword to match, got %v", got)
 		}
 	})
 
