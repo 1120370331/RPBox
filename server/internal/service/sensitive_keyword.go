@@ -9,12 +9,48 @@ import (
 	"unicode"
 )
 
-const defaultSensitiveKeywordFile = "storage/moderation/sensitive_keywords_cn.txt"
+const (
+	defaultSensitiveKeywordFile       = "storage/moderation/sensitive_keywords_cn.txt"
+	defaultStrictPoliticalKeywordFile = "storage/moderation/sensitive_keywords_political_strict.txt"
+)
 
 var (
-	sensitiveKeywordsOnce sync.Once
-	sensitiveKeywords     []string
+	sensitiveKeywordsOnce       sync.Once
+	sensitiveKeywords           []string
+	strictPoliticalKeywordsOnce sync.Once
+	strictPoliticalKeywords     map[string]struct{}
 )
+
+var politicalKeywordMarkers = []string{
+	"政府",
+	"中共",
+	"共产党",
+	"民主",
+	"政权",
+	"政治",
+	"主席",
+	"总理",
+	"书记",
+	"国家",
+	"中央",
+	"人大",
+	"政协",
+	"习近平",
+	"毛泽东",
+	"邓小平",
+	"江泽民",
+	"胡锦涛",
+	"温家宝",
+	"李克强",
+	"胡耀邦",
+	"赵紫阳",
+	"天安门",
+	"六四",
+	"台独",
+	"港独",
+	"藏独",
+	"疆独",
+}
 
 // DetectSensitiveKeywords returns matched keywords after normalization.
 func DetectSensitiveKeywords(contents ...string) []string {
@@ -48,11 +84,15 @@ func getSensitiveKeywords() []string {
 			}
 		}
 
+		strictPolitical := getStrictPoliticalKeywords()
 		normalized := make([]string, 0, len(fileKeywords))
 		seen := make(map[string]struct{})
 		for _, kw := range fileKeywords {
 			k := normalizeSensitiveText(kw)
 			if !isUsableKeyword(k) {
+				continue
+			}
+			if shouldSkipPoliticalKeyword(k, strictPolitical) {
 				continue
 			}
 			if _, ok := seen[k]; ok {
@@ -64,6 +104,27 @@ func getSensitiveKeywords() []string {
 		sensitiveKeywords = normalized
 	})
 	return sensitiveKeywords
+}
+
+func getStrictPoliticalKeywords() map[string]struct{} {
+	strictPoliticalKeywordsOnce.Do(func() {
+		strictPoliticalKeywords = make(map[string]struct{})
+		for _, path := range strictPoliticalKeywordFileCandidates() {
+			keywords := loadSensitiveKeywords(path)
+			if len(keywords) == 0 {
+				continue
+			}
+			for _, kw := range keywords {
+				k := normalizeSensitiveText(kw)
+				if !isUsableKeyword(k) {
+					continue
+				}
+				strictPoliticalKeywords[k] = struct{}{}
+			}
+			break
+		}
+	})
+	return strictPoliticalKeywords
 }
 
 func loadSensitiveKeywords(path string) []string {
@@ -93,6 +154,17 @@ func keywordFileCandidates() []string {
 	return []string{
 		defaultSensitiveKeywordFile,
 		filepath.Join("..", "..", defaultSensitiveKeywordFile),
+	}
+}
+
+func strictPoliticalKeywordFileCandidates() []string {
+	envPath := strings.TrimSpace(os.Getenv("RPBOX_SENSITIVE_STRICT_POLITICAL_KEYWORDS_FILE"))
+	if envPath != "" {
+		return []string{envPath}
+	}
+	return []string{
+		defaultStrictPoliticalKeywordFile,
+		filepath.Join("..", "..", defaultStrictPoliticalKeywordFile),
 	}
 }
 
@@ -140,4 +212,21 @@ func isUsableKeyword(keyword string) bool {
 	}
 
 	return true
+}
+
+func shouldSkipPoliticalKeyword(keyword string, strict map[string]struct{}) bool {
+	if len(strict) == 0 || !isLikelyPoliticalKeyword(keyword) {
+		return false
+	}
+	_, ok := strict[keyword]
+	return !ok
+}
+
+func isLikelyPoliticalKeyword(keyword string) bool {
+	for _, marker := range politicalKeywordMarkers {
+		if strings.Contains(keyword, marker) {
+			return true
+		}
+	}
+	return false
 }
