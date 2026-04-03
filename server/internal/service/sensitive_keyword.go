@@ -52,6 +52,29 @@ var politicalKeywordMarkers = []string{
 	"疆独",
 }
 
+var shortSensitiveKeywordAllowlist = map[string]struct{}{
+	"开盒": {},
+	"六四": {},
+	"东突": {},
+	"台独": {},
+	"港独": {},
+	"藏独": {},
+	"疆独": {},
+	"强奸": {},
+	"轮奸": {},
+	"迷奸": {},
+	"嫖娼": {},
+	"卖淫": {},
+	"约炮": {},
+	"吸毒": {},
+	"贩毒": {},
+	"冰毒": {},
+	"毒品": {},
+	"枪支": {},
+	"炸药": {},
+	"爆炸": {},
+}
+
 // DetectSensitiveKeywords returns matched keywords after normalization.
 func DetectSensitiveKeywords(contents ...string) []string {
 	text := normalizeSensitiveText(strings.Join(contents, " "))
@@ -204,6 +227,11 @@ func isUsableKeyword(keyword string) bool {
 	// 纯英文/数字关键词容易误伤，长度至少4
 	if asciiOnly && len(runes) < 4 {
 		return false
+	}
+
+	if hasHan && len(runes) < 3 {
+		_, ok := shortSensitiveKeywordAllowlist[keyword]
+		return ok
 	}
 
 	// 既非纯ASCII又不含汉字（例如少量符号组合），长度至少3
