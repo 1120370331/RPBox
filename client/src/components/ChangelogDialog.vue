@@ -1,62 +1,72 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import RDialog from './RDialog.vue'
-import { useDialog } from '@/composables/useDialog'
+import { ref, computed, onMounted } from 'vue'
+import { getVersion } from '@tauri-apps/api/app'
+import { getDesktopLatestRelease, normalizeUpdaterVersion, type NormalizedDesktopLatestRelease } from '@/api/updater'
 
-const dialog = useDialog()
 const showChangelog = ref(false)
+const currentVersion = ref('0.0.0')
+const loading = ref(false)
+const latestRelease = ref<NormalizedDesktopLatestRelease | null>(null)
 
-// 当前版本（从 package.json 读取）
-const CURRENT_VERSION = '0.2.7'
+const displayVersion = computed(() => {
+  const remoteVersion = normalizeUpdaterVersion(latestRelease.value?.latest_version || latestRelease.value?.version || '')
+  if (remoteVersion) {
+    return remoteVersion
+  }
+  return normalizeUpdaterVersion(currentVersion.value)
+})
 
-// 更新日志内容
-const changelog = {
-  '0.2.7': {
-    date: '2026-01-23',
-    features: [
-      '插件更新 V1.0.8，适配 12.0 前夕版本',
-      '帖子新增"内部链接"，可跳转到其他帖子、公会剧情、公会主页',
-      '帖子作品评论区新增表情包功能，后续会持续更新',
-      '公会头像支持修改',
-    ],
-  },
-  '0.2.6': {
-    date: '2026-01-22',
-    features: [
-      '修复社区广场公告恢复显示',
-      '精华帖子仅标记不再提高排序',
-      '删除帖子与评论统一使用系统确认弹窗',
-      '删除帖子/作品后自动清理 OSS 图片',
-      '版主/管理员可编辑删除他人帖子',
-      '优化版主中心新增帖子筛选：置顶/精华/普通',
-      '优化管理中心帖子列表新增编辑入口',
-    ],
-  },
-  // 可以继续添加历史版本的更新日志
-}
+const displayDate = computed(() => latestRelease.value?.pub_date || '')
+const displayNotes = computed(() => latestRelease.value?.notes?.trim() || '暂无更新说明')
 
-onMounted(() => {
+onMounted(async () => {
+  await loadChangelog()
   checkVersion()
 })
 
+async function loadChangelog() {
+  loading.value = true
+  try {
+    currentVersion.value = await getVersion()
+  } catch (e) {
+    console.error('[ChangelogDialog] 获取当前版本失败:', e)
+  }
+
+  try {
+    latestRelease.value = await getDesktopLatestRelease()
+  } catch (e) {
+    console.error('[ChangelogDialog] 获取更新日志失败:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
 function checkVersion() {
   const lastViewedVersion = localStorage.getItem('last_viewed_version')
+  const current = displayVersion.value
 
   // 如果是首次使用或版本更新，显示更新日志
-  if (!lastViewedVersion || lastViewedVersion !== CURRENT_VERSION) {
+  if (current && (!lastViewedVersion || lastViewedVersion !== current)) {
     showChangelog.value = true
   }
 }
 
 function closeChangelog() {
   // 记录已查看的版本
-  localStorage.setItem('last_viewed_version', CURRENT_VERSION)
+  if (displayVersion.value) {
+    localStorage.setItem('last_viewed_version', displayVersion.value)
+  }
   showChangelog.value = false
 }
 
 // 暴露方法供外部调用（手动打开更新日志）
 defineExpose({
-  open: () => { showChangelog.value = true }
+  open: async () => {
+    if (!latestRelease.value && !loading.value) {
+      await loadChangelog()
+    }
+    showChangelog.value = true
+  },
 })
 </script>
 
@@ -75,16 +85,17 @@ defineExpose({
         </div>
 
         <div class="changelog-body">
-          <div v-for="(log, version) in changelog" :key="version" class="version-section">
+          <div v-if="loading" class="version-date">更新日志加载中...</div>
+          <div v-else class="version-section">
             <div class="version-header">
-              <span class="version-tag">v{{ version }}</span>
-              <span class="version-date">{{ log.date }}</span>
+              <span class="version-tag">v{{ displayVersion || '0.0.0' }}</span>
+              <span v-if="displayDate" class="version-date">{{ displayDate }}</span>
             </div>
 
             <div class="features-list">
-              <div v-for="(feature, index) in log.features" :key="index" class="feature-item">
-                <i class="ri-checkbox-circle-fill"></i>
-                <span>{{ feature }}</span>
+              <div class="feature-item">
+                <i class="ri-file-list-3-line"></i>
+                <span>{{ displayNotes }}</span>
               </div>
             </div>
           </div>
@@ -255,6 +266,7 @@ defineExpose({
 .feature-item span {
   color: #5D4037;
   font-size: 14px;
+  white-space: pre-wrap;
 }
 
 .changelog-footer {

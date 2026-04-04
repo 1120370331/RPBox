@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
+import { getDesktopLatestRelease, normalizeDesktopLatestRelease, type NormalizedDesktopLatestRelease } from '@/api/updater'
 
 export interface UpdateInfo {
   version: string
@@ -8,14 +9,42 @@ export interface UpdateInfo {
   date?: string
 }
 
+export type LatestReleaseInfo = NormalizedDesktopLatestRelease
+
 const updateAvailable = ref(false)
 const updateInfo = ref<UpdateInfo | null>(null)
+const latestRelease = ref<NormalizedDesktopLatestRelease | null>(null)
+const latestReleaseLoading = ref(false)
+const latestReleaseError = ref<string | null>(null)
 const checking = ref(false)
 const downloading = ref(false)
 const downloadProgress = ref(0)
 const lastError = ref<string | null>(null)
 
 export function useUpdater() {
+  async function fetchLatestRelease(force = false): Promise<LatestReleaseInfo | null> {
+    if (latestReleaseLoading.value) {
+      return latestRelease.value
+    }
+    if (!force && latestRelease.value) {
+      return latestRelease.value
+    }
+
+    latestReleaseLoading.value = true
+    latestReleaseError.value = null
+
+    try {
+      latestRelease.value = await getDesktopLatestRelease()
+      return latestRelease.value
+    } catch (e: any) {
+      latestReleaseError.value = e?.message || e?.toString() || '未知错误'
+      console.error('[Updater] 获取最新版本信息失败:', e)
+      return null
+    } finally {
+      latestReleaseLoading.value = false
+    }
+  }
+
   async function checkForUpdate() {
     if (checking.value) return
     checking.value = true
@@ -35,6 +64,12 @@ export function useUpdater() {
           notes: update.body || '',
           date: update.date || '',
         }
+        latestRelease.value = normalizeDesktopLatestRelease({
+          latest_version: update.version,
+          version: update.version,
+          notes: update.body || '',
+          pub_date: update.date || '',
+        })
         console.log('[Updater] 发现新版本:', update.version)
         console.log('[Updater] 更新说明:', update.body)
         return update
@@ -111,10 +146,14 @@ export function useUpdater() {
   return {
     updateAvailable,
     updateInfo,
+    latestRelease,
+    latestReleaseLoading,
+    latestReleaseError,
     checking,
     downloading,
     downloadProgress,
     lastError,
+    fetchLatestRelease,
     checkForUpdate,
     downloadAndInstall,
   }

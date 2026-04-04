@@ -112,6 +112,8 @@ export default {
     downloadComplete: 'Update downloaded, restarting app',
     startDownload: 'Starting download...',
     changelog: 'Changelog',
+    loadingChangelog: 'Loading changelog...',
+    noChangelog: 'No changelog available',
     clientChangelog: 'Client Changelog',
     github: 'GitHub',
     feedback: 'Feedback',
