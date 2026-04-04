@@ -26,14 +26,23 @@ const hasDownloadListener = computed(() => {
 const minScale = 0.2
 const maxScale = 5
 const scaleStep = 0.2
+const controlsFadeDelay = 2200
 
 const currentIndex = ref(0)
 const scale = ref(1)
 const rotation = ref(0)
+const translateX = ref(0)
+const translateY = ref(0)
+const isDragging = ref(false)
+const controlsVisible = ref(true)
+const viewerContentRef = ref<HTMLDivElement | null>(null)
+const panStartX = ref(0)
+const panStartY = ref(0)
+let controlsFadeTimer: ReturnType<typeof setTimeout> | null = null
 
 const currentImage = computed(() => props.images[currentIndex.value] || '')
 const transformStyle = computed(() => ({
-  transform: `scale(${scale.value}) rotate(${rotation.value}deg)`,
+  transform: `translate3d(${translateX.value}px, ${translateY.value}px, 0) scale(${scale.value}) rotate(${rotation.value}deg)`,
 }))
 
 watch(() => props.modelValue, (visible) => {
@@ -41,8 +50,12 @@ watch(() => props.modelValue, (visible) => {
     currentIndex.value = Math.min(props.startIndex || 0, Math.max(props.images.length - 1, 0))
     resetTransform()
     window.addEventListener('keydown', handleKeydown)
+    showControlsTemporarily()
   } else {
     window.removeEventListener('keydown', handleKeydown)
+    clearControlsFadeTimer()
+    controlsVisible.value = true
+    isDragging.value = false
   }
 })
 
@@ -55,10 +68,19 @@ watch(() => props.startIndex, (value) => {
 
 watch(currentIndex, () => {
   resetTransform()
+  showControlsTemporarily()
+})
+
+watch(scale, (value) => {
+  if (value <= 1) {
+    resetPan()
+    isDragging.value = false
+  }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
+  clearControlsFadeTimer()
 })
 
 function closeViewer() {
@@ -86,6 +108,12 @@ function nextImage() {
 function resetTransform() {
   scale.value = 1
   rotation.value = 0
+  resetPan()
+}
+
+function resetPan() {
+  translateX.value = 0
+  translateY.value = 0
 }
 
 function clampScale(value: number) {
@@ -94,27 +122,96 @@ function clampScale(value: number) {
 
 function zoomIn() {
   scale.value = clampScale(scale.value + scaleStep)
+  showControlsTemporarily()
 }
 
 function zoomOut() {
   scale.value = clampScale(scale.value - scaleStep)
+  showControlsTemporarily()
 }
 
 function rotateLeft() {
   rotation.value -= 90
+  showControlsTemporarily()
 }
 
 function rotateRight() {
   rotation.value += 90
+  showControlsTemporarily()
 }
 
 function handleWheel(event: WheelEvent) {
   event.preventDefault()
+  showControlsTemporarily()
   if (event.deltaY < 0) {
     zoomIn()
   } else {
     zoomOut()
   }
+}
+
+function canPan() {
+  return scale.value > 1
+}
+
+function handlePointerDown(event: PointerEvent) {
+  if (!canPan()) return
+  event.preventDefault()
+  showControlsTemporarily()
+  isDragging.value = true
+  panStartX.value = event.clientX - translateX.value
+  panStartY.value = event.clientY - translateY.value
+  viewerContentRef.value?.setPointerCapture(event.pointerId)
+}
+
+function handlePointerMove(event: PointerEvent) {
+  if (!isDragging.value) return
+  event.preventDefault()
+  translateX.value = event.clientX - panStartX.value
+  translateY.value = event.clientY - panStartY.value
+}
+
+function stopDragging(pointerId?: number) {
+  if (!isDragging.value) return
+  isDragging.value = false
+  if (pointerId !== undefined) {
+    try {
+      viewerContentRef.value?.releasePointerCapture(pointerId)
+    } catch {
+      // ignore pointer capture release errors
+    }
+  }
+  showControlsTemporarily()
+}
+
+function handlePointerUp(event: PointerEvent) {
+  stopDragging(event.pointerId)
+}
+
+function handleUserActivity() {
+  if (!props.modelValue) return
+  showControlsTemporarily()
+}
+
+function clearControlsFadeTimer() {
+  if (controlsFadeTimer) {
+    clearTimeout(controlsFadeTimer)
+    controlsFadeTimer = null
+  }
+}
+
+function showControlsTemporarily() {
+  controlsVisible.value = true
+  clearControlsFadeTimer()
+
+  if (!props.modelValue) return
+  controlsFadeTimer = setTimeout(() => {
+    if (isDragging.value) {
+      showControlsTemporarily()
+      return
+    }
+    controlsVisible.value = false
+  }, controlsFadeDelay)
 }
 
 function getDefaultFilename(url: string) {
@@ -141,10 +238,12 @@ function handleDownload() {
   if (!hasDownloadListener.value) {
     downloadCurrentImage()
   }
+  showControlsTemporarily()
 }
 
 function handleKeydown(event: KeyboardEvent) {
   if (!props.modelValue) return
+  showControlsTemporarily()
   if (event.key === 'Escape') {
     closeViewer()
     return
@@ -176,24 +275,40 @@ function handleKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div v-if="modelValue" class="image-viewer-modal" @click.self="closeViewer">
-    <button class="viewer-close" @click="closeViewer">
+  <div
+    v-if="modelValue"
+    class="image-viewer-modal"
+    @click.self="closeViewer"
+    @mousemove="handleUserActivity"
+    @touchstart="handleUserActivity"
+  >
+    <button class="viewer-close viewer-control" :class="{ 'controls-hidden': !controlsVisible }" @click="closeViewer">
       <i class="ri-close-line"></i>
     </button>
 
-    <button class="viewer-nav prev" @click="prevImage" v-if="images.length > 1">
+    <button class="viewer-nav prev viewer-control" :class="{ 'controls-hidden': !controlsVisible }" @click="prevImage" v-if="images.length > 1">
       <i class="ri-arrow-left-s-line"></i>
     </button>
 
-    <div class="viewer-content" @wheel="handleWheel">
-      <img v-if="currentImage" :src="currentImage" alt="" :style="transformStyle" />
+    <div
+      ref="viewerContentRef"
+      class="viewer-content"
+      :class="{ 'is-pannable': scale > 1, 'is-dragging': isDragging }"
+      @wheel="handleWheel"
+      @pointerdown="handlePointerDown"
+      @pointermove="handlePointerMove"
+      @pointerup="handlePointerUp"
+      @pointercancel="handlePointerUp"
+      @pointerleave="handlePointerUp"
+    >
+      <img v-if="currentImage" :src="currentImage" alt="" :style="transformStyle" draggable="false" @dragstart.prevent />
     </div>
 
-    <button class="viewer-nav next" @click="nextImage" v-if="images.length > 1">
+    <button class="viewer-nav next viewer-control" :class="{ 'controls-hidden': !controlsVisible }" @click="nextImage" v-if="images.length > 1">
       <i class="ri-arrow-right-s-line"></i>
     </button>
 
-    <div class="viewer-toolbar" v-if="images.length > 0">
+    <div class="viewer-toolbar viewer-control" :class="{ 'controls-hidden': !controlsVisible }" v-if="images.length > 0">
       <span class="viewer-counter">{{ currentIndex + 1 }} / {{ images.length }}</span>
       <button class="viewer-tool-btn" @click="zoomOut" title="缩小 (-)">
         <i class="ri-zoom-out-line"></i>
@@ -225,8 +340,17 @@ function handleKeydown(event: KeyboardEvent) {
   background: rgba(0, 0, 0, 0.9);
   z-index: 4000;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.viewer-control {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.viewer-control.controls-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .viewer-close {
@@ -282,19 +406,35 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 .viewer-content {
-  max-width: 92vw;
-  max-height: 84vh;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
-  cursor: zoom-in;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  touch-action: none;
+  user-select: none;
+}
+
+.viewer-content.is-pannable {
+  cursor: grab;
+}
+
+.viewer-content.is-dragging {
+  cursor: grabbing;
 }
 
 .viewer-content img {
   max-width: 100%;
-  max-height: 84vh;
+  max-height: 100%;
   object-fit: contain;
   display: block;
   transform-origin: center center;
   transition: transform 0.15s ease-out;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .viewer-toolbar {
