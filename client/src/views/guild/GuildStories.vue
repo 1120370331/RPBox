@@ -313,7 +313,7 @@ onMounted(async () => {
             :key="tag.id"
             class="filter-tag"
             :class="{ active: selectedTagIds.includes(tag.id) }"
-            :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: '#fff' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+            :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: 'var(--btn-primary-text, #fff)' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
             @click="toggleTag(tag.id)"
           >
             {{ tag.name }}
@@ -483,7 +483,7 @@ onMounted(async () => {
   gap: 8px;
   background: transparent;
   border: none;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -495,8 +495,8 @@ onMounted(async () => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid #E5D4C1;
-  background: white;
+  border: 1px solid var(--color-border, #E5D4C1);
+  background: var(--color-panel-bg, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -504,12 +504,12 @@ onMounted(async () => {
 }
 
 .back-btn:hover {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .back-btn:hover i {
-  border-color: #B87333;
-  background: #F5EFE7;
+  border-color: var(--color-accent, #B87333);
+  background: var(--color-card-bg, #F5EFE7);
 }
 
 .header-content {
@@ -522,7 +522,7 @@ onMounted(async () => {
   font-size: 2.5rem;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0;
   line-height: 1.2;
 }
@@ -530,10 +530,10 @@ onMounted(async () => {
 .page-desc {
   font-size: 14px;
   font-weight: 300;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin: 0;
   padding-left: 8px;
-  border-left: 2px solid #D4A373;
+  border-left: 2px solid var(--color-accent, #B87333);
 }
 
 /* 快速跳转导航 */
@@ -548,10 +548,10 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: white;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 2px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -559,15 +559,15 @@ onMounted(async () => {
 }
 
 .nav-btn:hover {
-  border-color: #B87333;
-  color: #804030;
-  background: #F5EFE7;
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-secondary, #804030);
+  background: var(--color-card-bg, #F5EFE7);
 }
 
 .nav-btn.active {
-  background: #804030;
-  color: white;
-  border-color: #804030;
+  background: var(--btn-primary-bg, #804030);
+  color: var(--btn-primary-text, #fff);
+  border-color: var(--btn-primary-bg, #804030);
 }
 
 .nav-btn i {
@@ -592,8 +592,8 @@ onMounted(async () => {
   width: 100%;
   background: transparent;
   border: none;
-  border-bottom: 2px solid #E5D4C1;
-  color: #2C1810;
+  border-bottom: 2px solid var(--color-border, #E5D4C1);
+  color: var(--color-text-main, #2C1810);
   padding: 8px 0;
   font-size: 14px;
   outline: none;
@@ -601,11 +601,11 @@ onMounted(async () => {
 }
 
 .search-input input::placeholder {
-  color: rgba(212, 163, 115, 0.7);
+  color: var(--input-placeholder, rgba(212, 163, 115, 0.7));
 }
 
 .search-input input:focus {
-  border-bottom-color: #804030;
+  border-bottom-color: var(--input-focus, #804030);
 }
 
 .search-input i {
@@ -613,21 +613,21 @@ onMounted(async () => {
   right: 0;
   top: 8px;
   font-size: 20px;
-  color: #D4A373;
+  color: var(--input-placeholder, #D4A373);
   transition: color 0.3s ease;
 }
 
 .search-input:hover i {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .story-count {
   font-size: 11px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   white-space: nowrap;
   font-weight: 600;
   font-family: monospace;
-  background: #F5EFE7;
+  background: var(--color-card-bg, #F5EFE7);
   padding: 6px 12px;
   border-radius: 999px;
 }
@@ -638,10 +638,10 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: white;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -649,9 +649,9 @@ onMounted(async () => {
 }
 
 .filter-toggle-btn:hover {
-  border-color: #B87333;
-  color: #804030;
-  background: #F5EFE7;
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-secondary, #804030);
+  background: var(--color-card-bg, #F5EFE7);
 }
 
 .filter-toggle-btn i {
@@ -691,7 +691,7 @@ onMounted(async () => {
 .filter-label {
   font-size: 13px;
   font-weight: 600;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -726,7 +726,7 @@ onMounted(async () => {
 
 .empty-hint {
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-style: italic;
 }
 
@@ -740,10 +740,10 @@ onMounted(async () => {
 .date-input {
   flex: 1;
   padding: 10px 14px;
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--input-bg, #F5EFE7);
+  border: 1px solid var(--input-border, #E5D4C1);
   border-radius: 8px;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-size: 13px;
   font-family: inherit;
   outline: none;
@@ -751,13 +751,13 @@ onMounted(async () => {
 }
 
 .date-input:focus {
-  border-color: #B87333;
-  background: white;
+  border-color: var(--input-focus, #B87333);
+  background: var(--color-panel-bg, #fff);
 }
 
 .date-separator {
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-weight: 500;
 }
 
@@ -770,10 +770,10 @@ onMounted(async () => {
 .filter-select {
   flex: 1;
   padding: 10px 14px;
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--input-bg, #F5EFE7);
+  border: 1px solid var(--input-border, #E5D4C1);
   border-radius: 8px;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-size: 13px;
   font-family: inherit;
   outline: none;
@@ -782,8 +782,8 @@ onMounted(async () => {
 }
 
 .filter-select:focus {
-  border-color: #B87333;
-  background: white;
+  border-color: var(--input-focus, #B87333);
+  background: var(--color-panel-bg, #fff);
 }
 
 .sort-order-btn {
@@ -792,18 +792,18 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--input-bg, #F5EFE7);
+  border: 1px solid var(--input-border, #E5D4C1);
   border-radius: 8px;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   font-size: 18px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .sort-order-btn:hover {
-  border-color: #B87333;
-  background: white;
+  border-color: var(--color-accent, #B87333);
+  background: var(--color-panel-bg, #fff);
 }
 
 /* 筛选操作按钮 */
@@ -811,7 +811,7 @@ onMounted(async () => {
   display: flex;
   gap: 12px;
   padding-top: 8px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light, #F5EFE7);
 }
 
 .filter-btn {
@@ -830,22 +830,22 @@ onMounted(async () => {
 }
 
 .reset-btn {
-  background: #F5EFE7;
-  color: #8D7B68;
+  background: var(--btn-secondary-bg, #F5EFE7);
+  color: var(--btn-secondary-text, #8D7B68);
 }
 
 .reset-btn:hover {
-  background: #E5D4C1;
-  color: #804030;
+  background: var(--btn-secondary-hover, #E5D4C1);
+  color: var(--color-secondary, #804030);
 }
 
 .apply-btn {
-  background: #804030;
-  color: white;
+  background: var(--btn-primary-bg, #804030);
+  color: var(--btn-primary-text, #fff);
 }
 
 .apply-btn:hover {
-  background: #6B3626;
+  background: var(--btn-primary-hover, #6B3626);
 }
 
 .filter-btn i {
@@ -859,7 +859,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 12px;
   padding: 60px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 16px;
 }
 
@@ -1028,10 +1028,10 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  background: #fff3e0;
-  border: 1px solid #ffb74d;
+  background: var(--color-warning-light, #fff3e0);
+  border: 1px solid var(--color-warning-border, #ffb74d);
   border-radius: 6px;
-  color: #f57c00;
+  color: var(--color-warning-dark, #f57c00);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -1039,11 +1039,11 @@ onMounted(async () => {
 }
 
 .remove-archive-btn:hover {
-  background: #ffe0b2;
-  border-color: #ff9800;
-  color: #e65100;
+  background: var(--color-warning-light, #ffe0b2);
+  border-color: var(--color-warning, #ff9800);
+  color: var(--color-warning-dark, #e65100);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
+  box-shadow: 0 2px 8px var(--color-warning-light, rgba(255, 152, 0, 0.2));
 }
 
 .remove-archive-btn i {

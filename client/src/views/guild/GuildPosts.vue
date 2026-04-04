@@ -320,7 +320,7 @@ onMounted(async () => {
   gap: 8px;
   background: transparent;
   border: none;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -332,8 +332,8 @@ onMounted(async () => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid #E5D4C1;
-  background: white;
+  border: 1px solid var(--color-border, #E5D4C1);
+  background: var(--color-panel-bg, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -341,12 +341,12 @@ onMounted(async () => {
 }
 
 .back-btn:hover {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .back-btn:hover i {
-  border-color: #B87333;
-  background: #F5EFE7;
+  border-color: var(--color-accent, #B87333);
+  background: var(--color-card-bg, #F5EFE7);
 }
 
 .header-content {
@@ -359,7 +359,7 @@ onMounted(async () => {
   font-size: 2.5rem;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0;
   line-height: 1.2;
 }
@@ -367,10 +367,10 @@ onMounted(async () => {
 .page-desc {
   font-size: 14px;
   font-weight: 300;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin: 0;
   padding-left: 8px;
-  border-left: 2px solid #D4A373;
+  border-left: 2px solid var(--color-accent, #B87333);
 }
 
 /* 快速跳转导航 */
@@ -385,10 +385,10 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: white;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 2px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -396,15 +396,15 @@ onMounted(async () => {
 }
 
 .nav-btn:hover {
-  border-color: #B87333;
-  color: #804030;
-  background: #F5EFE7;
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-secondary, #804030);
+  background: var(--color-card-bg, #F5EFE7);
 }
 
 .nav-btn.active {
-  background: #804030;
-  color: white;
-  border-color: #804030;
+  background: var(--btn-primary-bg, #804030);
+  color: var(--btn-primary-text, #fff);
+  border-color: var(--btn-primary-bg, #804030);
 }
 
 .nav-btn i {
@@ -435,9 +435,9 @@ onMounted(async () => {
 .category-filter button {
   padding: 8px 20px;
   background: transparent;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 2px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -446,14 +446,14 @@ onMounted(async () => {
 }
 
 .category-filter button:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-accent, #B87333);
+  color: var(--color-accent, #B87333);
 }
 
 .category-filter button.active {
-  background: #2C1810;
-  color: white;
-  border-color: #2C1810;
+  background: var(--btn-primary-bg, #804030);
+  color: var(--btn-primary-text, #fff);
+  border-color: var(--btn-primary-bg, #804030);
   border-radius: 12px 2px 12px 2px; /* 对角圆角 */
   box-shadow: 0 2px 8px rgba(44, 24, 16, 0.2);
 }
@@ -463,7 +463,7 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   padding-top: 16px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light, #F5EFE7);
   width: 100%;
 }
 
@@ -477,15 +477,15 @@ onMounted(async () => {
 
 .sort-label {
   font-size: 11px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   font-family: monospace;
   font-weight: 600;
 }
 
 .sort-select select {
-  background: #F5EFE7;
+  background: var(--input-bg, #F5EFE7);
   border: none;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -514,19 +514,19 @@ onMounted(async () => {
   gap: 12px;
   padding: 12px 16px;
   background: rgba(255, 255, 255, 0.6);
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 2px 24px 2px 24px; /* leaf-shape */
   transition: all 0.3s ease;
 }
 
 .search-input:focus-within {
-  background: white;
-  border-color: #B87333;
+  background: var(--color-panel-bg, #fff);
+  border-color: var(--input-focus, #B87333);
 }
 
 .search-input i {
   font-size: 18px;
-  color: #D4A373;
+  color: var(--input-placeholder, #D4A373);
 }
 
 .search-input input {
@@ -535,21 +535,21 @@ onMounted(async () => {
   border: none;
   outline: none;
   font-size: 14px;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-weight: 400;
 }
 
 .search-input input::placeholder {
-  color: #D4A373;
+  color: var(--input-placeholder, #D4A373);
 }
 
 .post-count {
   font-size: 11px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   white-space: nowrap;
   font-weight: 600;
   font-family: monospace;
-  background: #F5EFE7;
+  background: var(--color-card-bg, #F5EFE7);
   padding: 6px 12px;
   border-radius: 999px;
 }
@@ -561,7 +561,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 12px;
   padding: 60px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 16px;
 }
 
@@ -812,9 +812,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 50%;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -822,9 +822,9 @@ onMounted(async () => {
 }
 
 .page-btn:hover:not(:disabled) {
-  background: #2C1810;
-  color: white;
-  border-color: #2C1810;
+  background: var(--btn-primary-bg, #804030);
+  color: var(--btn-primary-text, #fff);
+  border-color: var(--btn-primary-bg, #804030);
 }
 
 .page-btn:disabled {
@@ -834,7 +834,7 @@ onMounted(async () => {
 
 .page-info {
   font-size: 18px;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   font-weight: 400;
 }
 </style>
