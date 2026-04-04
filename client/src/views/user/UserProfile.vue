@@ -457,7 +457,7 @@ async function handleBindEmail() {
                 class="guild-item"
                 :class="{ pending: guild.status === 'pending' }"
               >
-                <div class="guild-icon" :style="{ background: guild.color || '#D4A373' }">
+                <div class="guild-icon" :style="{ background: guild.color || 'var(--color-accent, #D4A373)' }">
                   {{ guild.name?.charAt(0) || 'G' }}
                 </div>
                 <div class="guild-info">
@@ -601,10 +601,10 @@ async function handleBindEmail() {
 .identity-card {
   grid-column: span 12;
   grid-row: span 2;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
-  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
-  border: 1px solid #E8DCC8;
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(75, 54, 33, 0.05));
+  border: 1px solid var(--color-border, #E8DCC8);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -626,7 +626,7 @@ async function handleBindEmail() {
   left: 0;
   width: 100%;
   height: 4px;
-  background: linear-gradient(to right, #D4A373, #B87333);
+  background: linear-gradient(to right, var(--color-accent, #D4A373), var(--color-secondary, #B87333));
 }
 
 /* 头像 */
@@ -642,7 +642,7 @@ async function handleBindEmail() {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 4px solid #fff;
+  border: 4px solid var(--color-panel-bg, #fff);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
@@ -650,14 +650,14 @@ async function handleBindEmail() {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  background: linear-gradient(135deg, var(--color-accent, #D4A373), var(--color-text-secondary, #8C7B70));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 36px;
   font-weight: 700;
-  color: #fff;
-  border: 4px solid #fff;
+  color: var(--color-text-light, #fff);
+  border: 4px solid var(--color-panel-bg, #fff);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
@@ -668,7 +668,7 @@ async function handleBindEmail() {
 .avatar-overlay {
   position: absolute;
   inset: 4px;
-  background: rgba(75, 54, 33, 0.6);
+  background: rgba(var(--shadow-base, 75, 54, 33), 0.6);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -684,7 +684,7 @@ async function handleBindEmail() {
 
 .avatar-overlay i {
   font-size: 32px;
-  color: #fff;
+  color: var(--color-text-light, #fff);
 }
 
 .spin {
@@ -699,7 +699,7 @@ async function handleBindEmail() {
 .username {
   font-size: 24px;
   font-weight: 700;
-  color: #4B3621;
+  color: var(--color-text-main, #4B3621);
   margin: 0 0 8px 0;
   letter-spacing: -0.5px;
 }
@@ -718,15 +718,15 @@ async function handleBindEmail() {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  background: linear-gradient(135deg, #E7C67D, #D6A645);
-  color: #4B3621;
+  background: linear-gradient(135deg, var(--color-accent, #E7C67D), var(--color-secondary, #D6A645));
+  color: var(--color-primary, #4B3621);
   border: 1px solid rgba(214, 166, 69, 0.4);
 }
 
 .sponsor-badge.locked {
-  background: #F2E6D8;
-  color: #8C7B70;
-  border-color: #E0D2C1;
+  background: var(--color-card-bg, #F2E6D8);
+  color: var(--color-text-secondary, #8C7B70);
+  border-color: var(--color-border, #E0D2C1);
 }
 
 .role-badge {
@@ -739,21 +739,21 @@ async function handleBindEmail() {
 }
 
 .role-badge.user {
-  background: rgba(140, 123, 112, 0.1);
-  color: #8C7B70;
-  border: 1px solid rgba(140, 123, 112, 0.2);
+  background: var(--color-primary-light, rgba(140, 123, 112, 0.1));
+  color: var(--color-text-secondary, #8C7B70);
+  border: 1px solid rgba(var(--shadow-base, 75, 54, 33), 0.2);
 }
 
 .role-badge.moderator {
-  background: rgba(184, 115, 51, 0.1);
-  color: #B87333;
-  border: 1px solid rgba(184, 115, 51, 0.2);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
+  color: var(--color-accent, #B87333);
+  border: 1px solid rgba(var(--shadow-base, 75, 54, 33), 0.2);
 }
 
 .role-badge.admin {
-  background: rgba(128, 64, 48, 0.1);
-  color: #804030;
-  border: 1px solid rgba(128, 64, 48, 0.2);
+  background: var(--color-primary-light, rgba(128, 64, 48, 0.1));
+  color: var(--color-secondary, #804030);
+  border: 1px solid rgba(var(--shadow-base, 75, 54, 33), 0.2);
 }
 
 /* 统计数据 */
@@ -762,7 +762,7 @@ async function handleBindEmail() {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  border-top: 1px solid #F2E6D8;
+  border-top: 1px solid var(--color-border-light, #F2E6D8);
   padding-top: 24px;
   margin-top: auto;
 }
@@ -772,21 +772,21 @@ async function handleBindEmail() {
 }
 
 .stat-item.bordered {
-  border-left: 1px solid #F2E6D8;
-  border-right: 1px solid #F2E6D8;
+  border-left: 1px solid var(--color-border-light, #F2E6D8);
+  border-right: 1px solid var(--color-border-light, #F2E6D8);
 }
 
 .stat-value {
   font-size: 18px;
   font-weight: 700;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .stat-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   margin-top: 4px;
 }
 
@@ -794,10 +794,10 @@ async function handleBindEmail() {
   width: 100%;
   margin-top: 24px;
   padding: 10px;
-  background: #FBF5EF;
-  border: 1px solid #E8DCC8;
+  background: var(--color-card-bg, #FBF5EF);
+  border: 1px solid var(--color-border, #E8DCC8);
   border-radius: 4px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -807,17 +807,17 @@ async function handleBindEmail() {
 }
 
 .edit-profile-btn:hover {
-  background: #F2E6D8;
-  border-color: #D4A373;
+  background: var(--color-card-bg-hover, #F2E6D8);
+  border-color: var(--color-border-hover, #D4A373);
 }
 
 /* 2. 简介卡片 */
 .bio-card {
   grid-column: span 12;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
-  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
-  border: 1px solid #E8DCC8;
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(75, 54, 33, 0.05));
+  border: 1px solid var(--color-border, #E8DCC8);
   padding: 24px 32px;
   position: relative;
   display: flex;
@@ -836,7 +836,7 @@ async function handleBindEmail() {
   top: 16px;
   right: 16px;
   font-size: 24px;
-  color: #D4A373;
+  color: var(--icon-color, #D4A373);
   opacity: 0.2;
 }
 
@@ -845,14 +845,14 @@ async function handleBindEmail() {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 2px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   margin: 0 0 16px 0;
 }
 
 .bio-text {
   font-size: 15px;
   font-weight: 500;
-  color: #4B3621;
+  color: var(--color-text-main, #4B3621);
   line-height: 1.7;
   margin: 0;
   max-width: 600px;
@@ -865,7 +865,7 @@ async function handleBindEmail() {
   gap: 24px;
   margin-top: 24px;
   padding-top: 24px;
-  border-top: 1px solid #F2E6D8;
+  border-top: 1px solid var(--color-border-light, #F2E6D8);
 }
 
 .info-item {
@@ -873,15 +873,15 @@ async function handleBindEmail() {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main, #4B3621);
 }
 
 .info-item i {
-  color: #D4A373;
+  color: var(--icon-color, #D4A373);
 }
 
 .info-item a {
-  color: #B87333;
+  color: var(--link-color, #B87333);
   text-decoration: underline;
   text-decoration-color: rgba(212, 163, 115, 0.5);
   text-underline-offset: 2px;
@@ -889,7 +889,7 @@ async function handleBindEmail() {
 }
 
 .info-item a:hover {
-  color: #4B3621;
+  color: var(--link-hover, #4B3621);
 }
 
 /* 编辑表单 */
@@ -1201,10 +1201,10 @@ async function handleBindEmail() {
 /* 3. 公会卡片 */
 .guilds-card {
   grid-column: span 12;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
-  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
-  border: 1px solid #E8DCC8;
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(75, 54, 33, 0.05));
+  border: 1px solid var(--color-border, #E8DCC8);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -1227,7 +1227,7 @@ async function handleBindEmail() {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1237,7 +1237,7 @@ async function handleBindEmail() {
 }
 
 .create-btn:hover {
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .header-actions {
@@ -1250,7 +1250,7 @@ async function handleBindEmail() {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1260,7 +1260,7 @@ async function handleBindEmail() {
 }
 
 .join-btn:hover {
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .guilds-list {
@@ -1272,7 +1272,7 @@ async function handleBindEmail() {
 .empty-guilds {
   text-align: center;
   padding: 40px 20px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
 }
 
 .empty-guilds i {
@@ -1287,16 +1287,16 @@ async function handleBindEmail() {
   align-items: center;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid #F2E6D8;
-  background: rgba(251, 245, 239, 0.3);
+  border: 1px solid var(--color-border-light, #F2E6D8);
+  background: var(--color-card-bg, rgba(251, 245, 239, 0.3));
   text-decoration: none;
   transition: all 0.2s;
 }
 
 .guild-item:hover {
-  background: #fff;
-  border-color: #D4A373;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  background: var(--color-panel-bg, #fff);
+  border-color: var(--color-border-hover, #D4A373);
+  box-shadow: var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.05));
 }
 
 .guild-item.pending {
@@ -1314,10 +1314,10 @@ async function handleBindEmail() {
   justify-content: center;
   font-size: 20px;
   font-weight: 700;
-  color: #fff;
+  color: var(--color-text-light, #fff);
   margin-right: 16px;
   flex-shrink: 0;
-  border: 1px solid #E8DCC8;
+  border: 1px solid var(--color-border, #E8DCC8);
 }
 
 .guild-info {
@@ -1328,7 +1328,7 @@ async function handleBindEmail() {
 .guild-info h3 {
   font-size: 14px;
   font-weight: 700;
-  color: #4B3621;
+  color: var(--color-text-main, #4B3621);
   margin: 0 0 4px 0;
   white-space: nowrap;
   overflow: hidden;
@@ -1337,7 +1337,7 @@ async function handleBindEmail() {
 
 .guild-info p {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary, #8C7B70);
   margin: 0;
 }
 
@@ -1349,9 +1349,9 @@ async function handleBindEmail() {
 .role-tag {
   display: inline-flex;
   padding: 4px 8px;
-  background: #F2E6D8;
-  color: #4B3621;
-  border: 1px solid #E8DCC8;
+  background: var(--color-card-bg, #F2E6D8);
+  color: var(--color-text-main, #4B3621);
+  border: 1px solid var(--color-border, #E8DCC8);
   border-radius: 4px;
   font-size: 10px;
   font-weight: 700;
@@ -1379,11 +1379,11 @@ async function handleBindEmail() {
 /* 4. 账户状态卡片 */
 .status-card {
   grid-column: span 12;
-  background: #4B3621;
+  background: var(--color-primary, #4B3621);
   border-radius: 12px;
-  box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.2);
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(75, 54, 33, 0.2));
   padding: 24px;
-  color: #fff;
+  color: var(--color-text-light, #fff);
   position: relative;
   overflow: hidden;
   display: flex;
@@ -1403,7 +1403,7 @@ async function handleBindEmail() {
   right: -32px;
   width: 128px;
   height: 128px;
-  background: #B87333;
+  background: var(--color-accent, #B87333);
   border-radius: 50%;
   opacity: 0.2;
   filter: blur(40px);
@@ -1437,7 +1437,7 @@ async function handleBindEmail() {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #4ade80;
+  background: var(--color-success, #4ade80);
   box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
 }
 
@@ -1464,7 +1464,7 @@ async function handleBindEmail() {
 
 .status-row .mono {
   font-family: monospace;
-  color: #D4A373;
+  color: var(--color-accent, #D4A373);
 }
 
 .settings-btn {
@@ -1476,7 +1476,7 @@ async function handleBindEmail() {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
-  color: #fff;
+  color: var(--color-text-light, #fff);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;

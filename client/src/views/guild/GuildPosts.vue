@@ -289,7 +289,7 @@ onMounted(async () => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 48px 24px;
-  background: #EED9C4;
+  background: var(--color-main-bg, #EED9C4);
   min-height: 100vh;
   animation: fadeIn 0.5s ease-out;
 }
@@ -420,10 +420,10 @@ onMounted(async () => {
   gap: 24px;
   margin-bottom: 40px;
   padding: 16px;
-  background: white;
+  background: var(--color-panel-bg, #fff);
   border-radius: 24px 2px 24px 2px; /* leaf-shape-reverse */
-  box-shadow: 0 4px 20px -2px rgba(44, 24, 16, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(44, 24, 16, 0.08));
+  border: 1px solid var(--color-border, #E5D4C1);
 }
 
 .category-filter {
@@ -501,10 +501,10 @@ onMounted(async () => {
   gap: 16px;
   margin-bottom: 24px;
   padding: 20px;
-  background: white;
+  background: var(--color-panel-bg, #fff);
   border-radius: 2px 24px 2px 24px; /* leaf-shape */
-  box-shadow: 0 4px 20px -2px rgba(44, 24, 16, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(44, 24, 16, 0.08));
+  border: 1px solid var(--color-border, #E5D4C1);
 }
 
 .search-input {
@@ -596,12 +596,12 @@ onMounted(async () => {
 .post-card {
   position: relative;
   padding: 24px;
-  background: white;
-  border: 1px solid rgba(229, 212, 193, 0.5);
+  background: var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 2px 24px 2px 24px; /* leaf-shape */
   cursor: pointer;
   transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
-  box-shadow: 0 4px 20px -2px rgba(44, 24, 16, 0.08);
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(44, 24, 16, 0.08));
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -642,7 +642,7 @@ onMounted(async () => {
   right: 0;
   width: 96px;
   height: 96px;
-  background: linear-gradient(to bottom right, #F5EFE7, transparent);
+  background: linear-gradient(to bottom right, var(--color-card-bg, #F5EFE7), transparent);
   opacity: 0.3;
   border-radius: 0 0 0 100%;
   pointer-events: none;
@@ -650,7 +650,7 @@ onMounted(async () => {
 
 .post-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px -4px rgba(44, 24, 16, 0.12);
+  box-shadow: var(--shadow-lg, 0 20px 40px -4px rgba(44, 24, 16, 0.12));
 }
 
 .post-header {
@@ -672,12 +672,12 @@ onMounted(async () => {
 .category-tag {
   display: inline-block;
   padding: 4px 12px;
-  background: #F5EFE7;
-  border: 1px solid #E5D4C1;
+  background: var(--tag-bg, #F5EFE7);
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 2px;
   font-size: 11px;
   font-weight: 700;
-  color: #804030;
+  color: var(--tag-text, #804030);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -685,8 +685,8 @@ onMounted(async () => {
 .pinned-tag {
   display: inline-block;
   padding: 4px 12px;
-  background: #804030;
-  color: white;
+  background: var(--btn-primary-bg, #804030);
+  color: var(--btn-primary-text, #fff);
   border-radius: 2px;
   font-size: 11px;
   font-weight: 700;
@@ -697,8 +697,8 @@ onMounted(async () => {
 .featured-tag {
   display: inline-block;
   padding: 4px 12px;
-  background: linear-gradient(135deg, #E6A23C, #D97706);
-  color: white;
+  background: linear-gradient(135deg, var(--color-accent, #E6A23C), var(--color-secondary, #D97706));
+  color: var(--btn-primary-text, #fff);
   border-radius: 2px;
   font-size: 11px;
   font-weight: 700;
@@ -709,19 +709,19 @@ onMounted(async () => {
 .post-title {
   font-size: 20px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0 0 12px 0;
   line-height: 1.4;
   transition: color 0.3s ease;
 }
 
 .post-card:hover .post-title {
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .post-excerpt {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   line-height: 1.6;
   margin: 0 0 24px 0;
   display: -webkit-box;
@@ -733,7 +733,7 @@ onMounted(async () => {
 .post-footer {
   margin-top: auto;
   padding-top: 16px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light, #F5EFE7);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -749,15 +749,15 @@ onMounted(async () => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #804030);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-secondary, #804030));
+  color: var(--color-text-light, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   font-size: 14px;
   overflow: hidden;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
 }
 
 .author-avatar img {
@@ -769,12 +769,12 @@ onMounted(async () => {
 .author-name {
   font-size: 12px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .post-time {
   font-size: 10px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .post-stats {
@@ -787,7 +787,7 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #D4A373;
+  color: var(--color-text-secondary, #8D7B68);
   font-family: monospace;
 }
 
