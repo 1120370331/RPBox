@@ -5,9 +5,10 @@ import { useUserStore } from '@/stores/user'
 import { dialog } from '@/composables/useDialog'
 import { useToast } from '@/composables/useToast'
 import { getPost } from '@/api/post'
-import { getItem } from '@/api/item'
+import { getItem, resolveApiUrl } from '@/api/item'
 import { getGuild } from '@/api/guild'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import ImageViewer from '@/components/ImageViewer.vue'
 import * as echarts from 'echarts'
 import {
   getModeratorStats,
@@ -26,6 +27,12 @@ import {
   featurePost,
   getPendingGuilds,
   reviewGuild,
+  getPendingPostCommentImages,
+  reviewPostCommentImage,
+  getPendingItemCommentImages,
+  reviewItemCommentImage,
+  getPendingUserAvatars,
+  reviewUserAvatar,
   getAllGuilds,
   changeGuildOwner,
   deleteGuildByMod,
@@ -47,6 +54,10 @@ import {
   broadcastSystemMessage,
   type ModeratorStats,
   type ReviewRequest,
+  type ImageReviewStatus,
+  type PostCommentImageReviewItem,
+  type ItemCommentImageReviewItem,
+  type UserAvatarReviewItem,
   type SafeUser,
   type AdminActionLog,
   type DailyMetrics,
@@ -66,7 +77,10 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('review')
-const activeSubTab = ref<'posts' | 'items' | 'guilds' | 'users'>('posts')
+type ReviewSubTab = 'posts' | 'items' | 'guilds' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
+type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
+type ModeratorSubTab = ReviewSubTab | ManageSubTab
+const activeSubTab = ref<ModeratorSubTab>('posts')
 const adminSubTab = ref<'moderators' | 'guilds' | 'sponsors' | 'system'>('guilds')
 
 // 系统通知
@@ -81,6 +95,9 @@ const stats = ref<ModeratorStats | null>(null)
 const pendingPosts = ref<any[]>([])
 const pendingItems = ref<any[]>([])
 const pendingGuilds = ref<any[]>([])
+const pendingPostCommentImages = ref<PostCommentImageReviewItem[]>([])
+const pendingItemCommentImages = ref<ItemCommentImageReviewItem[]>([])
+const pendingUserAvatars = ref<UserAvatarReviewItem[]>([])
 const allPosts = ref<any[]>([])
 const allItems = ref<any[]>([])
 const allGuilds = ref<any[]>([])
@@ -100,6 +117,8 @@ const filterPostFlag = ref('')
 const filterRole = ref('')
 const filterGuildStatus = ref('')
 const filterSponsorLevel = ref('')
+const imageReviewStatus = ref<ImageReviewStatus>('pending')
+const imageReviewCommentDrafts = ref<Record<string, string>>({})
 const sponsorLevelDrafts = ref<Record<number, number>>({})
 const sponsorLevelOptions = [
   { value: 0, label: '无赞助' },
@@ -121,6 +140,11 @@ const showReviewModal = ref(false)
 const reviewTarget = ref<{ type: 'post' | 'item' | 'guild'; id: number; title: string } | null>(null)
 const reviewAction = ref<'approve' | 'reject'>('approve')
 const reviewComment = ref('')
+
+// 图片查看器
+const showImageViewer = ref(false)
+const imageViewerImages = ref<string[]>([])
+const imageViewerStartIndex = ref(0)
 
 // 更换会长弹窗
 const showChangeOwnerModal = ref(false)
@@ -179,6 +203,54 @@ onMounted(async () => {
 onUnmounted(() => {
   disposeMetricsChart()
 })
+
+const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'guilds', 'postCommentImages', 'itemCommentImages', 'userAvatars']
+const manageSubTabs: ManageSubTab[] = ['posts', 'items', 'guilds', 'users']
+
+function isReviewSubTab(subTab: ModeratorSubTab): subTab is ReviewSubTab {
+  return reviewSubTabs.includes(subTab as ReviewSubTab)
+}
+
+function isManageSubTab(subTab: ModeratorSubTab): subTab is ManageSubTab {
+  return manageSubTabs.includes(subTab as ManageSubTab)
+}
+
+function getImageReviewDraftKey(type: 'post' | 'item' | 'avatar', id: number) {
+  return `${type}-${id}`
+}
+
+function clearImageReviewDraft(type: 'post' | 'item' | 'avatar', id: number) {
+  const key = getImageReviewDraftKey(type, id)
+  const next = { ...imageReviewCommentDrafts.value }
+  delete next[key]
+  imageReviewCommentDrafts.value = next
+}
+
+function resolveImageUrl(url?: string | null) {
+  return resolveApiUrl(url || '')
+}
+
+function openImageViewer(images: string[], startIndex: number = 0) {
+  imageViewerImages.value = images.filter(Boolean).map(resolveImageUrl)
+  imageViewerStartIndex.value = startIndex
+  showImageViewer.value = imageViewerImages.value.length > 0
+}
+
+function downloadImageFromViewer(index: number) {
+  const url = imageViewerImages.value[index]
+  if (!url) return
+  const cleaned = url.split('?')[0]
+  const match = cleaned.match(/\/([^/]+)$/)
+  const fileName = match?.[1] || `image-${Date.now()}.jpg`
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.target = '_blank'
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 
 async function loadStats() {
   try {
@@ -274,6 +346,57 @@ async function loadPendingGuilds() {
   }
 }
 
+async function loadPendingPostCommentImages() {
+  loading.value = true
+  try {
+    const res = await getPendingPostCommentImages({
+      page: page.value,
+      page_size: pageSize.value,
+      status: imageReviewStatus.value
+    })
+    pendingPostCommentImages.value = res.comments || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载待审核帖子评论图片失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadPendingItemCommentImages() {
+  loading.value = true
+  try {
+    const res = await getPendingItemCommentImages({
+      page: page.value,
+      page_size: pageSize.value,
+      status: imageReviewStatus.value
+    })
+    pendingItemCommentImages.value = res.comments || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载待审核道具评论图片失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadPendingUserAvatars() {
+  loading.value = true
+  try {
+    const res = await getPendingUserAvatars({
+      page: page.value,
+      page_size: pageSize.value,
+      status: imageReviewStatus.value
+    })
+    pendingUserAvatars.value = res.users || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载待审核头像失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadAllGuilds() {
   loading.value = true
   try {
@@ -332,6 +455,22 @@ function formatSponsorLevel(level: number): string {
   return 'Lv3 个性化'
 }
 
+function loadReviewSubTab(subTab: ReviewSubTab) {
+  if (subTab === 'posts') loadPendingPosts()
+  else if (subTab === 'items') loadPendingItems()
+  else if (subTab === 'guilds') loadPendingGuilds()
+  else if (subTab === 'postCommentImages') loadPendingPostCommentImages()
+  else if (subTab === 'itemCommentImages') loadPendingItemCommentImages()
+  else loadPendingUserAvatars()
+}
+
+function loadManageSubTab(subTab: ManageSubTab) {
+  if (subTab === 'posts') loadAllPosts()
+  else if (subTab === 'items') loadAllItems()
+  else if (subTab === 'guilds') loadAllGuilds()
+  else loadModeratorUsers()
+}
+
 function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
   if (tab === 'metrics' && !isAdmin.value) return
   const previousTab = activeTab.value
@@ -341,13 +480,15 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
     disposeMetricsChart()
   }
   if (tab === 'review') {
-    if (activeSubTab.value === 'posts') loadPendingPosts()
-    else if (activeSubTab.value === 'items') loadPendingItems()
-    else loadPendingGuilds()
+    if (!isReviewSubTab(activeSubTab.value)) {
+      activeSubTab.value = 'posts'
+    }
+    loadReviewSubTab(activeSubTab.value)
   } else if (tab === 'manage') {
-    if (activeSubTab.value === 'posts') loadAllPosts()
-    else if (activeSubTab.value === 'items') loadAllItems()
-    else loadAllGuilds()
+    if (!isManageSubTab(activeSubTab.value)) {
+      activeSubTab.value = 'posts'
+    }
+    loadManageSubTab(activeSubTab.value)
   } else if (tab === 'admin') {
     if (adminSubTab.value === 'moderators' || adminSubTab.value === 'sponsors') {
       loadUsers()
@@ -362,18 +503,17 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
   }
 }
 
-function switchSubTab(subTab: 'posts' | 'items' | 'guilds' | 'users') {
+function switchSubTab(subTab: ModeratorSubTab) {
   activeSubTab.value = subTab
   page.value = 1
   if (activeTab.value === 'review') {
-    if (subTab === 'posts') loadPendingPosts()
-    else if (subTab === 'items') loadPendingItems()
-    else loadPendingGuilds()
-  } else {
-    if (subTab === 'posts') loadAllPosts()
-    else if (subTab === 'items') loadAllItems()
-    else if (subTab === 'guilds') loadAllGuilds()
-    else if (subTab === 'users') loadModeratorUsers()
+    if (isReviewSubTab(subTab)) {
+      loadReviewSubTab(subTab)
+    }
+  } else if (activeTab.value === 'manage') {
+    if (isManageSubTab(subTab)) {
+      loadManageSubTab(subTab)
+    }
   }
 }
 
@@ -450,6 +590,9 @@ function formatActionType(type: string): string {
     'delete_item': '删除作品',
     'hide_item': '屏蔽作品',
     'review_guild': '审核公会',
+    'review_post_comment_image': '审核帖子评论图片',
+    'review_item_comment_image': '审核道具评论图片',
+    'review_user_avatar': '审核用户头像',
     'delete_guild': '删除公会',
     'change_guild_owner': '更换会长',
     'mute_user': '禁言用户',
@@ -841,6 +984,57 @@ async function submitReview() {
   } catch (error) {
     console.error('审核失败:', error)
     alert('审核失败: ' + (error as Error).message)
+  }
+}
+
+function handleImageReviewStatusChange() {
+  page.value = 1
+  if (activeTab.value === 'review' && isReviewSubTab(activeSubTab.value)) {
+    loadReviewSubTab(activeSubTab.value)
+  }
+}
+
+async function quickReviewImage(
+  type: 'postComment' | 'itemComment' | 'avatar',
+  id: number,
+  action: 'approve' | 'reject',
+  comment?: string
+) {
+  const actionText = action === 'approve' ? '通过' : '拒绝'
+  const typeText = type === 'postComment' ? '帖子评论图片' : type === 'itemComment' ? '道具评论图片' : '头像'
+
+  const confirmed = await dialog.confirm({
+    title: `${actionText}${typeText}`,
+    message: `确定要${actionText}该${typeText}吗？`,
+    type: action === 'approve' ? 'success' : 'warning',
+    confirmText: actionText,
+    cancelText: '取消'
+  })
+  if (!confirmed) return
+
+  const payload: ReviewRequest = {
+    action,
+    comment: (comment || '').trim()
+  }
+
+  try {
+    if (type === 'postComment') {
+      await reviewPostCommentImage(id, payload)
+      clearImageReviewDraft('post', id)
+      await loadPendingPostCommentImages()
+    } else if (type === 'itemComment') {
+      await reviewItemCommentImage(id, payload)
+      clearImageReviewDraft('item', id)
+      await loadPendingItemCommentImages()
+    } else {
+      await reviewUserAvatar(id, payload)
+      clearImageReviewDraft('avatar', id)
+      await loadPendingUserAvatars()
+    }
+    toast.success(`${actionText}成功`)
+  } catch (error) {
+    console.error('图片审核失败:', error)
+    toast.error('审核失败: ' + (error as Error).message)
   }
 }
 
@@ -1336,6 +1530,30 @@ function formatBanTime(dateStr: string | null) {
           </span>
         </button>
         <button
+          v-if="activeTab === 'review'"
+          :class="{ active: activeSubTab === 'postCommentImages' }"
+          @click="switchSubTab('postCommentImages')"
+        >
+          <i class="ri-image-2-line"></i>
+          帖子评论图
+        </button>
+        <button
+          v-if="activeTab === 'review'"
+          :class="{ active: activeSubTab === 'itemCommentImages' }"
+          @click="switchSubTab('itemCommentImages')"
+        >
+          <i class="ri-image-line"></i>
+          道具评论图
+        </button>
+        <button
+          v-if="activeTab === 'review'"
+          :class="{ active: activeSubTab === 'userAvatars' }"
+          @click="switchSubTab('userAvatars')"
+        >
+          <i class="ri-user-3-line"></i>
+          头像审核
+        </button>
+        <button
           v-if="activeTab === 'manage'"
           :class="{ active: activeSubTab === 'users' }"
           @click="switchSubTab('users')"
@@ -1494,6 +1712,211 @@ function formatBanTime(dateStr: string | null) {
               <button class="btn-preview" @click="openPreview('guild', guild.id)">
                 <i class="ri-eye-line"></i> 预览
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 审核中心 - 帖子评论图片 -->
+      <div v-if="activeTab === 'review' && activeSubTab === 'postCommentImages'" class="content-list anim-item" style="--delay: 4">
+        <div class="filter-bar">
+          <select v-model="imageReviewStatus" @change="handleImageReviewStatusChange">
+            <option value="pending">待审核</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已拒绝</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingPostCommentImages.length === 0" class="empty-state">
+          <i class="ri-image-2-line"></i>
+          <p>暂无帖子评论图片</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="comment in pendingPostCommentImages" :key="comment.id" class="item-card image-review-card">
+            <div class="item-header">
+              <span class="item-title">{{ comment.post_title || `帖子 #${comment.post_id}` }}</span>
+              <span class="status-badge" :class="comment.image_review_status">{{ getReviewStatusLabel(comment.image_review_status) }}</span>
+            </div>
+            <div class="item-meta">
+              <span>
+                <i class="ri-user-line"></i>
+                {{ comment.author_name }}
+              </span>
+              <span><i class="ri-hashtag"></i> 评论 #{{ comment.id }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(comment.created_at) }}</span>
+            </div>
+            <div class="image-review-body">
+              <img class="image-review-thumb" :src="resolveImageUrl(comment.image_url)" alt="帖子评论图片" @click="openImageViewer([comment.image_url])" />
+              <div class="image-review-main">
+                <p class="image-review-text">{{ comment.content || '（无评论文字）' }}</p>
+                <textarea
+                  v-if="comment.image_review_status === 'pending'"
+                  v-model="imageReviewCommentDrafts[getImageReviewDraftKey('post', comment.id)]"
+                  class="image-review-comment"
+                  rows="2"
+                  placeholder="审核备注（可选）"
+                />
+                <p v-else-if="comment.image_review_comment" class="image-review-history">
+                  审核备注：{{ comment.image_review_comment }}
+                </p>
+              </div>
+            </div>
+            <div class="item-actions">
+              <button class="btn-preview" @click="openImageViewer([comment.image_url])">
+                <i class="ri-zoom-in-line"></i> 查看大图
+              </button>
+              <template v-if="comment.image_review_status === 'pending'">
+                <button
+                  class="btn-approve"
+                  @click="quickReviewImage('postComment', comment.id, 'approve', imageReviewCommentDrafts[getImageReviewDraftKey('post', comment.id)])"
+                >
+                  <i class="ri-checkbox-circle-line"></i> 通过
+                </button>
+                <button
+                  class="btn-reject"
+                  @click="quickReviewImage('postComment', comment.id, 'reject', imageReviewCommentDrafts[getImageReviewDraftKey('post', comment.id)])"
+                >
+                  <i class="ri-close-circle-line"></i> 拒绝
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 审核中心 - 道具评论图片 -->
+      <div v-if="activeTab === 'review' && activeSubTab === 'itemCommentImages'" class="content-list anim-item" style="--delay: 4">
+        <div class="filter-bar">
+          <select v-model="imageReviewStatus" @change="handleImageReviewStatusChange">
+            <option value="pending">待审核</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已拒绝</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingItemCommentImages.length === 0" class="empty-state">
+          <i class="ri-image-line"></i>
+          <p>暂无道具评论图片</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="comment in pendingItemCommentImages" :key="comment.id" class="item-card image-review-card">
+            <div class="item-header">
+              <span class="item-title">{{ comment.item_name || `道具 #${comment.item_id}` }}</span>
+              <span class="status-badge" :class="comment.image_review_status">{{ getReviewStatusLabel(comment.image_review_status) }}</span>
+            </div>
+            <div class="item-meta">
+              <span>
+                <i class="ri-user-line"></i>
+                {{ comment.author_name }}
+              </span>
+              <span><i class="ri-hashtag"></i> 评论 #{{ comment.id }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(comment.created_at) }}</span>
+            </div>
+            <div class="image-review-body">
+              <img class="image-review-thumb" :src="resolveImageUrl(comment.image_url)" alt="道具评论图片" @click="openImageViewer([comment.image_url])" />
+              <div class="image-review-main">
+                <p class="image-review-text">{{ comment.content || '（无评论文字）' }}</p>
+                <textarea
+                  v-if="comment.image_review_status === 'pending'"
+                  v-model="imageReviewCommentDrafts[getImageReviewDraftKey('item', comment.id)]"
+                  class="image-review-comment"
+                  rows="2"
+                  placeholder="审核备注（可选）"
+                />
+                <p v-else-if="comment.image_review_comment" class="image-review-history">
+                  审核备注：{{ comment.image_review_comment }}
+                </p>
+              </div>
+            </div>
+            <div class="item-actions">
+              <button class="btn-preview" @click="openImageViewer([comment.image_url])">
+                <i class="ri-zoom-in-line"></i> 查看大图
+              </button>
+              <template v-if="comment.image_review_status === 'pending'">
+                <button
+                  class="btn-approve"
+                  @click="quickReviewImage('itemComment', comment.id, 'approve', imageReviewCommentDrafts[getImageReviewDraftKey('item', comment.id)])"
+                >
+                  <i class="ri-checkbox-circle-line"></i> 通过
+                </button>
+                <button
+                  class="btn-reject"
+                  @click="quickReviewImage('itemComment', comment.id, 'reject', imageReviewCommentDrafts[getImageReviewDraftKey('item', comment.id)])"
+                >
+                  <i class="ri-close-circle-line"></i> 拒绝
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 审核中心 - 用户头像 -->
+      <div v-if="activeTab === 'review' && activeSubTab === 'userAvatars'" class="content-list anim-item" style="--delay: 4">
+        <div class="filter-bar">
+          <select v-model="imageReviewStatus" @change="handleImageReviewStatusChange">
+            <option value="pending">待审核</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已拒绝</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingUserAvatars.length === 0" class="empty-state">
+          <i class="ri-user-3-line"></i>
+          <p>暂无头像审核记录</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="user in pendingUserAvatars" :key="user.id" class="item-card image-review-card">
+            <div class="item-header">
+              <span class="item-title">{{ user.username }}</span>
+              <span class="status-badge" :class="user.avatar_review_status">{{ getReviewStatusLabel(user.avatar_review_status) }}</span>
+            </div>
+            <div class="item-meta">
+              <span><i class="ri-shield-user-line"></i> {{ getRoleLabel(user.role) }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(user.updated_at) }}</span>
+            </div>
+            <div class="image-review-body">
+              <img class="image-review-thumb avatar" :src="resolveImageUrl(user.avatar_url)" alt="用户头像" @click="openImageViewer([user.avatar_url])" />
+              <div class="image-review-main">
+                <textarea
+                  v-if="user.avatar_review_status === 'pending'"
+                  v-model="imageReviewCommentDrafts[getImageReviewDraftKey('avatar', user.id)]"
+                  class="image-review-comment"
+                  rows="2"
+                  placeholder="审核备注（可选）"
+                />
+                <p v-else-if="user.avatar_review_comment" class="image-review-history">
+                  审核备注：{{ user.avatar_review_comment }}
+                </p>
+              </div>
+            </div>
+            <div class="item-actions">
+              <button class="btn-preview" @click="openImageViewer([user.avatar_url])">
+                <i class="ri-zoom-in-line"></i> 查看大图
+              </button>
+              <template v-if="user.avatar_review_status === 'pending'">
+                <button
+                  class="btn-approve"
+                  @click="quickReviewImage('avatar', user.id, 'approve', imageReviewCommentDrafts[getImageReviewDraftKey('avatar', user.id)])"
+                >
+                  <i class="ri-checkbox-circle-line"></i> 通过
+                </button>
+                <button
+                  class="btn-reject"
+                  @click="quickReviewImage('avatar', user.id, 'reject', imageReviewCommentDrafts[getImageReviewDraftKey('avatar', user.id)])"
+                >
+                  <i class="ri-close-circle-line"></i> 拒绝
+                </button>
+              </template>
             </div>
           </div>
         </div>
@@ -2493,6 +2916,15 @@ function formatBanTime(dateStr: string | null) {
           </div>
         </div>
       </div>
+
+      <ImageViewer
+        v-model="showImageViewer"
+        :images="imageViewerImages"
+        :start-index="imageViewerStartIndex"
+        :show-download="true"
+        download-label="下载图片"
+        @download="downloadImageFromViewer"
+      />
     </template>
   </div>
 </template>
@@ -2777,6 +3209,81 @@ function formatBanTime(dateStr: string | null) {
 .item-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.image-review-card {
+  overflow: hidden;
+}
+
+.image-review-body {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.image-review-thumb {
+  width: 108px;
+  height: 108px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #E5D4C1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.image-review-thumb.avatar {
+  border-radius: 50%;
+}
+
+.image-review-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.image-review-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #5D4E37;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.image-review-comment {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #4B3621;
+  resize: vertical;
+  background: #fff;
+}
+
+.image-review-history {
+  margin: 0;
+  font-size: 12px;
+  color: #8D7B68;
+}
+
+@media (max-width: 768px) {
+  .image-review-body {
+    flex-direction: column;
+  }
+
+  .image-review-thumb {
+    width: 100%;
+    height: 180px;
+  }
+
+  .image-review-thumb.avatar {
+    width: 120px;
+    height: 120px;
+  }
 }
 
 .btn-approve {

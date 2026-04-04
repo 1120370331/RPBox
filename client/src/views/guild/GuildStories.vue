@@ -452,7 +452,7 @@ onMounted(async () => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 48px 24px;
-  background: #EED9C4;
+  background: var(--color-main-bg, #EED9C4);
   min-height: 100vh;
   animation: fadeIn 0.5s ease-out;
 }
@@ -664,9 +664,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 20px;
   padding: 24px;
-  background: white;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
-  box-shadow: 0 4px 20px -2px rgba(44, 24, 16, 0.08);
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(44, 24, 16, 0.08));
   margin-bottom: 32px;
   animation: slideDown 0.3s ease-out;
 }
@@ -882,12 +882,12 @@ onMounted(async () => {
 .story-card {
   position: relative;
   padding: 24px 32px;
-  background: white;
-  border-left: 4px solid #804030;
+  background: var(--color-panel-bg, #fff);
+  border-left: 4px solid var(--color-secondary, #804030);
   border-radius: 0 48px 48px 0;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 20px -2px rgba(44, 24, 16, 0.08);
+  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(44, 24, 16, 0.08));
   overflow: hidden;
   animation: slideInLeft 0.6s ease-out backwards;
 }
@@ -915,7 +915,7 @@ onMounted(async () => {
 }
 
 .story-card:hover {
-  box-shadow: 0 20px 40px -4px rgba(44, 24, 16, 0.12);
+  box-shadow: var(--shadow-lg, 0 20px 40px -4px rgba(44, 24, 16, 0.12));
 }
 
 .story-header {
@@ -930,21 +930,21 @@ onMounted(async () => {
   flex: 1;
   font-size: 20px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0;
   line-height: 1.4;
 }
 
 .story-date {
   font-size: 12px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
   white-space: nowrap;
   font-weight: 600;
 }
 
 .story-desc {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   line-height: 1.6;
   margin: 0 0 16px 0;
   display: -webkit-box;
@@ -965,8 +965,8 @@ onMounted(async () => {
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
-  background: rgba(184, 115, 51, 0.15);
-  color: #B87333;
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.15));
+  color: var(--color-accent, #B87333);
   letter-spacing: 0.02em;
 }
 
@@ -974,7 +974,7 @@ onMounted(async () => {
   display: flex;
   gap: 16px;
   padding-top: 16px;
-  border-top: 1px solid #F5EFE7;
+  border-top: 1px solid var(--color-border-light, #F5EFE7);
 }
 
 .meta-item {
@@ -982,7 +982,7 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #D4A373;
+  color: var(--color-text-secondary, #8D7B68);
   font-family: monospace;
 }
 
@@ -999,8 +999,8 @@ onMounted(async () => {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
+  color: var(--color-text-light, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1017,7 +1017,7 @@ onMounted(async () => {
 
 .uploader-name {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-family: inherit;
 }
 

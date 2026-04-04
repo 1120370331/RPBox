@@ -44,6 +44,91 @@ export function reviewItem(id: number, data: ReviewRequest) {
   return request.post<{ message: string; item: any }>(`/moderator/review/items/${id}`, data)
 }
 
+// ========== 审核中心 - 图片审核 ==========
+
+export type ImageReviewStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ImageReviewQueryParams {
+  page?: number
+  page_size?: number
+  status?: ImageReviewStatus
+}
+
+export interface PostCommentImageReviewItem {
+  id: number
+  post_id: number
+  author_id: number
+  parent_id?: number | null
+  content: string
+  image_url: string
+  image_review_status: ImageReviewStatus
+  image_review_comment?: string
+  image_reviewed_at?: string | null
+  created_at: string
+  author_name: string
+  post_title: string
+}
+
+export interface ItemCommentImageReviewItem {
+  id: number
+  item_id: number
+  user_id: number
+  parent_id?: number | null
+  content: string
+  image_url: string
+  image_review_status: ImageReviewStatus
+  image_review_comment?: string
+  image_reviewed_at?: string | null
+  created_at: string
+  author_name: string
+  item_name: string
+}
+
+export interface UserAvatarReviewItem {
+  id: number
+  username: string
+  role: string
+  avatar_url: string
+  avatar_review_status: ImageReviewStatus
+  avatar_review_comment?: string
+  avatar_reviewed_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export function getPendingPostCommentImages(params?: ImageReviewQueryParams) {
+  return request.get<{ comments: PostCommentImageReviewItem[]; total: number }>('/moderator/review/post-comment-images', { params })
+}
+
+export function reviewPostCommentImage(id: number, data: ReviewRequest) {
+  return request.post<{ message: string; comment: PostCommentImageReviewItem }>(`/moderator/review/post-comment-images/${id}`, data)
+}
+
+export function getPendingItemCommentImages(params?: ImageReviewQueryParams) {
+  return request.get<{ comments: ItemCommentImageReviewItem[]; total: number }>('/moderator/review/item-comment-images', { params })
+}
+
+export function reviewItemCommentImage(id: number, data: ReviewRequest) {
+  return request.post<{ message: string; comment: ItemCommentImageReviewItem }>(`/moderator/review/item-comment-images/${id}`, data)
+}
+
+export function getPendingUserAvatars(params?: ImageReviewQueryParams) {
+  return request.get<{ users: UserAvatarReviewItem[]; total: number }>('/moderator/review/user-avatars', { params })
+}
+
+export function reviewUserAvatar(id: number, data: ReviewRequest) {
+  return request.post<{
+    message: string
+    user: {
+      id: number
+      username: string
+      avatar_review_status: ImageReviewStatus
+      avatar_reviewed_at?: string | null
+      avatar_review_comment?: string
+    }
+  }>(`/moderator/review/user-avatars/${id}`, data)
+}
+
 // ========== 管理中心 - 帖子 ==========
 
 export interface PostQueryParams {

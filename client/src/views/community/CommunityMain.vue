@@ -18,7 +18,7 @@ const pinnedPosts = ref<PostWithAuthor[]>([])
 
 // 活动日历
 const events = ref<EventItem[]>([])
-const eventsExpanded = ref(true)
+const eventsExpanded = ref(false)
 const eventsLoading = ref(false)
 
 const sortBy = ref<'created_at' | 'view_count' | 'like_count'>('created_at')
