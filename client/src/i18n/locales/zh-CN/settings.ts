@@ -112,6 +112,8 @@ export default {
     downloadComplete: '更新下载完成，即将重启应用',
     startDownload: '开始下载更新...',
     changelog: '更新日志',
+    loadingChangelog: '更新日志加载中...',
+    noChangelog: '暂无更新日志',
     clientChangelog: '客户端更新日志',
     github: 'GitHub',
     feedback: '反馈问题',

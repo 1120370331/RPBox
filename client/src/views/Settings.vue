@@ -28,7 +28,19 @@ const userStore = useUserStore()
 const toast = useToastStore()
 const themeStore = useThemeStore()
 const localeStore = useLocaleStore()
-const { checking, updateAvailable, updateInfo, checkForUpdate, downloadAndInstall, downloading, downloadProgress, lastError } = useUpdater()
+const {
+  checking,
+  updateAvailable,
+  updateInfo,
+  latestRelease,
+  latestReleaseLoading,
+  fetchLatestRelease,
+  checkForUpdate,
+  downloadAndInstall,
+  downloading,
+  downloadProgress,
+  lastError,
+} = useUpdater()
 
 // 检查是否为 LV3+ 赞助者
 const sponsorLevel = computed(() => {
@@ -52,52 +64,19 @@ const addonChecking = ref(false)
 const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
 const showChangelogModal = ref(false)
 
-const changelogEntries = [
-  {
-    title: 'RPBox 更新日志 v0.2.7',
-    content: `插件更新 V1.0.8
-适配了12.0前夕版本
-新功能追加
-1. 在帖子内加入了"内部链接"功能，可以链接到其他帖子、公会剧情、公会主页
-2. 在帖子作品评论区增加了表情包功能，后续会持续更新
-3. 增加了公会头像，现在公会可以修改自己的头像了`,
-  },
-  {
-    title: 'RPBox 更新日志 v0.2.2',
-    content: `插件更新 V1.0.5
-修复 NPC 密语开头乱码与颜色显示问题；清理旁白/无名 NPC 前缀残留符号
-新功能追加
-1. 剧情归档升级，现在，可以在剧情中插入图片，并且时间轴上可以显示彩色标签；
-[图片]
+const changelogEntries = computed(() => {
+  if (!latestRelease.value?.version) {
+    return []
+  }
 
-[图片]
-优化与修复
-1. 修复了编辑道具无法编辑详情的问题
-2. 优化了我的帖子、我的作品列表加载速度
-3. 邮箱验证已上线，请绑定自己的邮箱！
-4. 修复了道具帖子图片的显示问题
-5. 修复了记录格式的一些问题`,
-  },
-  {
-    title: 'RPBox 更新日志 v0.2.0-0.2.1',
-    content: `新功能追加
-1. 新增消息区域， 现在可以看到别人的和你的互动消息了。
-
-2.公会公会社区和公会帖子已上线，在这里，包括访客可以看到所有归档到公会的剧情和帖子（可配置）
-现在可以通过将剧情归档到公会来分享给其他人观看，后续将更新独立链接和网页版
-
-3. 道具市场更名创意市场，并添加了新分类画作，支持无损上传图像作品。优化了筛选逻辑。
-
-4. 现在创意市场和社区广场都添加了收藏夹和历史记录，可以看到自己收藏/浏览过的帖子。
-优化与修复
-1. 修复了社区广场和创意市场的分页逻辑失效问题
-2. 增强了RPBox插件对于/表情的采集逻辑，现在会将第一视角 你笑得很开心 替换为 玩家名笑得很开心，请更新RPBOX插件
-3. 优化了社区加载速度
-4. 添加了RPBox插件使用提示教程在剧情故事标签
-5. 美化了剧情故事查看的页面
-6. 现在在个人中心可以更改自己的用户名了（重新登录后生效），请记住自己的用户名！`,
-  },
-]
+  return [
+    {
+      title: `RPBox ${t('settings.about.changelog')} v${latestRelease.value.version}`,
+      date: latestRelease.value.pub_date || '',
+      content: latestRelease.value.notes?.trim() || t('settings.about.noChangelog'),
+    },
+  ]
+})
 
 onMounted(async () => {
   wowPath.value = localStorage.getItem('wow_path') || ''
@@ -111,6 +90,9 @@ onMounted(async () => {
   } catch (e) {
     console.error('获取版本失败:', e)
   }
+
+  // 拉取最新版本元信息（用于显示更新日志）
+  await fetchLatestRelease()
 
   // 检查插件版本
   await checkAddonInstalled()
@@ -180,6 +162,11 @@ async function handleDownloadAndInstall() {
     const errorMsg = lastError.value || e?.message || 'Unknown error'
     toast.error(`${t('settings.about.downloadFailed')}: ${errorMsg}`)
   }
+}
+
+async function openChangelogModal() {
+  showChangelogModal.value = true
+  await fetchLatestRelease(true)
 }
 
 function triggerAvatarUpload() {
@@ -619,7 +606,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
             <i class="ri-shield-check-line"></i>
             {{ $t('auth.register.privacy') }}
           </button>
-          <button class="btn btn-outline" @click="showChangelogModal = true">
+          <button class="btn btn-outline" @click="openChangelogModal">
             <i class="ri-file-list-3-line"></i>
             {{ $t('settings.about.viewChangelog') }}
           </button>
@@ -635,9 +622,16 @@ watch(() => localeStore.currentLocale, (newLocale) => {
     <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonInstalled" />
     <RModal v-model="showChangelogModal" :title="$t('settings.about.clientChangelog')" width="640px">
       <div class="changelog-modal">
-        <div v-for="entry in changelogEntries" :key="entry.title" class="changelog-entry">
+        <div v-if="latestReleaseLoading && changelogEntries.length === 0" class="changelog-state">
+          {{ $t('settings.about.loadingChangelog') }}
+        </div>
+        <div v-else-if="changelogEntries.length === 0" class="changelog-state">
+          {{ $t('settings.about.noChangelog') }}
+        </div>
+        <div v-else v-for="entry in changelogEntries" :key="entry.title" class="changelog-entry">
           <div class="changelog-header">
             <span class="changelog-tag">{{ entry.title }}</span>
+            <span v-if="entry.date" class="changelog-date">{{ entry.date }}</span>
           </div>
           <div class="changelog-content">{{ entry.content }}</div>
         </div>
@@ -1142,6 +1136,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 .changelog-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -1155,11 +1150,23 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   border-radius: 999px;
 }
 
+.changelog-date {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
 .changelog-content {
   color: var(--color-primary);
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.changelog-state {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0;
 }
 
 

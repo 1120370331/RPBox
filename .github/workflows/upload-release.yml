@@ -7,6 +7,10 @@ on:
         description: 'Version number (e.g., 0.2.8)'
         required: true
         type: string
+      notes:
+        description: 'Release notes (optional)'
+        required: false
+        type: string
 
 jobs:
   upload:
@@ -27,23 +31,37 @@ jobs:
           echo "Preparing to upload version $VERSION"
 
       - name: Prepare metadata
+        env:
+          VERSION: ${{ inputs.version }}
+          INPUT_NOTES: ${{ inputs.notes }}
         run: |
-          VERSION=${{ inputs.version }}
           NOTES_FILE="client/release-notes/${VERSION}.txt"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-          NOTES=""
+          NOTES_FROM_FILE=""
           if [ -f "$NOTES_FILE" ]; then
-            NOTES=$(cat "$NOTES_FILE")
+            NOTES_FROM_FILE="$(cat "$NOTES_FILE")"
           fi
 
-          cat > latest.json << EOF
-          {
-            "latest_version": "$VERSION",
-            "notes": "$NOTES",
-            "pub_date": "$PUB_DATE"
+          export VERSION PUB_DATE INPUT_NOTES NOTES_FROM_FILE
+          python3 - <<'PY'
+          import json
+          import os
+
+          version = os.environ["VERSION"]
+          pub_date = os.environ["PUB_DATE"]
+          notes = (os.environ.get("INPUT_NOTES") or "").strip()
+          if not notes:
+              notes = (os.environ.get("NOTES_FROM_FILE") or "").strip()
+          notes = notes.replace("\r\n", "\n").replace("\r", "\n")
+
+          data = {
+              "latest_version": version,
+              "notes": notes,
+              "pub_date": pub_date,
           }
-          EOF
+          with open("latest.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False)
+          PY
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0

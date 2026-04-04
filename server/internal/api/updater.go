@@ -59,26 +59,8 @@ func (s *Server) checkUpdate(c *gin.Context) {
 		return
 	}
 
-	// 读取最新版本信息
-	latestVersion := config.Get().Updater.LatestVersion
-	notes := config.Get().Updater.ReleaseNotes
-	pubDate := config.Get().Updater.PubDate
-	if latestVersion == "" {
-		latestVersion = "0.1.0"
-	}
-	if latest, err := readLatestRelease(); err == nil {
-		if latest.LatestVersion != "" {
-			latestVersion = latest.LatestVersion
-		}
-		if latest.Notes != "" {
-			notes = latest.Notes
-		}
-		if latest.PubDate != "" {
-			pubDate = latest.PubDate
-		}
-	} else if !os.IsNotExist(err) {
-		fmt.Printf("checkUpdate: failed to read latest.json: %v\n", err)
-	}
+	latest := s.resolveDesktopLatestRelease()
+	latestVersion := latest.LatestVersion
 
 	// 调试日志
 	fmt.Printf("checkUpdate: current=%s latest=%s\n", currentVersion, latestVersion)
@@ -124,13 +106,19 @@ func (s *Server) checkUpdate(c *gin.Context) {
 
 	response := UpdateResponse{
 		Version:   latestVersion,
-		Notes:     notes,
-		PubDate:   pubDate,
+		Notes:     latest.Notes,
+		PubDate:   latest.PubDate,
 		URL:       url,
 		Signature: signature,
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// getDesktopLatest 返回桌面端最新版本元信息。
+func (s *Server) getDesktopLatest(c *gin.Context) {
+	latest := s.resolveDesktopLatestRelease()
+	c.JSON(http.StatusOK, latest)
 }
 
 func (s *Server) checkMobileUpdate(c *gin.Context, target, currentVersion string) {
@@ -296,6 +284,42 @@ func readLatestRelease() (*LatestRelease, error) {
 		return nil, fmt.Errorf("latest.json missing latest_version")
 	}
 	return &latest, nil
+}
+
+func (s *Server) resolveDesktopLatestRelease() *LatestRelease {
+	latest := &LatestRelease{
+		LatestVersion: config.Get().Updater.LatestVersion,
+		Notes:         config.Get().Updater.ReleaseNotes,
+		PubDate:       config.Get().Updater.PubDate,
+	}
+	latest.Version = latest.LatestVersion
+
+	if metadata, err := readLatestRelease(); err == nil {
+		if metadata.LatestVersion != "" {
+			latest.LatestVersion = metadata.LatestVersion
+		}
+		if metadata.Version != "" {
+			latest.Version = metadata.Version
+		}
+		if metadata.Notes != "" {
+			latest.Notes = metadata.Notes
+		}
+		if metadata.PubDate != "" {
+			latest.PubDate = metadata.PubDate
+		}
+	} else if !os.IsNotExist(err) {
+		fmt.Printf("resolveDesktopLatestRelease: failed to read latest.json: %v\n", err)
+	}
+
+	if latest.LatestVersion == "" && latest.Version != "" {
+		latest.LatestVersion = latest.Version
+	}
+	if latest.LatestVersion == "" {
+		latest.LatestVersion = "0.1.0"
+	}
+	latest.Version = latest.LatestVersion
+
+	return latest
 }
 
 func readMobileLatestRelease(target string) (*MobileLatestRelease, error) {

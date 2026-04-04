@@ -52,6 +52,7 @@ func (s *Server) setupRoutes() {
 
 		// 客户端更新检查（公开）
 		v1.GET("/updater/:target/:arch/:current_version", s.checkUpdate)
+		v1.GET("/updater/latest", s.getDesktopLatest)
 		v1.GET("/mobile/:target/latest", s.getMobileLatest)
 		v1.GET("/mobile/:target/latest/download", s.downloadMobileLatest)
 		v1.GET("/mobile/ios/update-link", s.getIOSUpdateLink)

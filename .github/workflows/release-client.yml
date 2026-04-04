@@ -98,23 +98,34 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Prepare updater metadata
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
           NOTES_FILE="client/release-notes/${VERSION}.txt"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          export VERSION NOTES_FILE PUB_DATE
+          NOTES_FROM_FILE=""
+          if [ -f "$NOTES_FILE" ]; then
+            NOTES_FROM_FILE="$(cat "$NOTES_FILE")"
+          fi
+
+          TAG_NOTES="$(git for-each-ref "refs/tags/${TAG_NAME}" --format='%(contents)')"
+          if [ -z "$TAG_NOTES" ]; then
+            TAG_NOTES="$(git log -1 --pretty=%B)"
+          fi
+
+          export VERSION PUB_DATE NOTES_FROM_FILE TAG_NOTES
           python3 - <<'PY'
           import json
           import os
 
           version = os.environ["VERSION"]
-          notes_file = os.environ["NOTES_FILE"]
           pub_date = os.environ["PUB_DATE"]
+          notes = (os.environ.get("NOTES_FROM_FILE") or "").strip()
+          if not notes:
+              notes = (os.environ.get("TAG_NOTES") or "").strip()
 
-          notes = ""
-          if os.path.exists(notes_file):
-              with open(notes_file, "r", encoding="utf-8") as f:
-                  notes = f.read().strip().replace("\r\n", "\n").replace("\r", "\n")
+          notes = notes.replace("\r\n", "\n").replace("\r", "\n")
 
           data = {
               "latest_version": version,
