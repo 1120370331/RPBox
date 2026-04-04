@@ -102,6 +102,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
+          DEFAULT_NOTES="修复若干已知问题，优化使用体验并提升稳定性。"
           NOTES_FILE="client/release-notes/${VERSION}.txt"
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           NOTES_FROM_FILE=""
@@ -110,8 +111,8 @@ jobs:
           fi
 
           TAG_NOTES="$(git for-each-ref "refs/tags/${TAG_NAME}" --format='%(contents)')"
-          if [ -z "$TAG_NOTES" ]; then
-            TAG_NOTES="$(git log -1 --pretty=%B)"
+          if [ -z "$TAG_NOTES" ] && [ -z "$NOTES_FROM_FILE" ]; then
+            TAG_NOTES="$DEFAULT_NOTES"
           fi
 
           export VERSION PUB_DATE NOTES_FROM_FILE TAG_NOTES
