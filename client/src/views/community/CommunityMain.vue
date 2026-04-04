@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
@@ -27,6 +27,8 @@ const searchKeyword = ref('')
 const filterGuildId = ref<number | null>(null)
 const currentGuild = ref<Guild | null>(null)
 const currentPage = ref(1)
+const SEARCH_DEBOUNCE_MS = 350
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(async () => {
   // 从 URL query 读取公会筛选
@@ -49,6 +51,14 @@ watch(() => route.query.guild_id, async (newGuildId) => {
     currentGuild.value = null
   }
   await Promise.all([loadPosts(), loadPinnedPosts()])
+})
+
+watch(searchKeyword, () => {
+  queueSearchReload()
+})
+
+onUnmounted(() => {
+  clearSearchDebounce()
 })
 
 async function loadGuildInfo() {
@@ -76,6 +86,7 @@ async function loadEvents() {
 async function loadPosts() {
   loading.value = true
   try {
+    const normalizedSearch = searchKeyword.value.trim()
     const params: ListPostsParams = {
       page: currentPage.value,
       page_size: 12,
@@ -83,6 +94,9 @@ async function loadPosts() {
       order: 'desc',
       status: 'published',
       is_pinned: false,
+    }
+    if (normalizedSearch) {
+      params.search = normalizedSearch
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -102,6 +116,7 @@ async function loadPosts() {
 
 async function loadPinnedPosts() {
   try {
+    const normalizedSearch = searchKeyword.value.trim()
     const params: ListPostsParams = {
       page: 1,
       page_size: 10,
@@ -109,6 +124,9 @@ async function loadPinnedPosts() {
       order: 'desc',
       status: 'published',
       is_pinned: true,
+    }
+    if (normalizedSearch) {
+      params.search = normalizedSearch
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -121,6 +139,27 @@ async function loadPinnedPosts() {
   } catch (error) {
     console.error('加载置顶公告失败:', error)
   }
+}
+
+function clearSearchDebounce() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+}
+
+function queueSearchReload(immediate = false) {
+  currentPage.value = 1
+  clearSearchDebounce()
+
+  if (immediate) {
+    void Promise.all([loadPosts(), loadPinnedPosts()])
+    return
+  }
+
+  searchDebounceTimer = setTimeout(() => {
+    void Promise.all([loadPosts(), loadPinnedPosts()])
+  }, SEARCH_DEBOUNCE_MS)
 }
 
 function goToPost(id: number) {
@@ -524,7 +563,7 @@ function getEventStyle(event: EventItem) {
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
-          <input v-model="searchKeyword" type="text" :placeholder="t('community.filter.search')" />
+          <input v-model="searchKeyword" type="text" :placeholder="t('community.filter.search')" @keyup.enter="queueSearchReload(true)" />
         </div>
         <button class="favorites-btn" @click="goToFavorites">
           <i class="ri-bookmark-3-line"></i>

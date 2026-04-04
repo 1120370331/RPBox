@@ -59,6 +59,7 @@ type postListParams struct {
 	PageSize int
 	SortBy   string
 	Order    string
+	Search   string
 	GuildID  string
 	TagID    string
 	AuthorID string
@@ -100,6 +101,11 @@ func (s *Server) listPosts(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	sortBy := c.DefaultQuery("sort", "created_at") // created_at|view_count|like_count
 	order := c.DefaultQuery("order", "desc")
+	search := strings.TrimSpace(c.Query("search"))
+	if search == "" {
+		// 兼容历史参数名 keyword
+		search = strings.TrimSpace(c.Query("keyword"))
+	}
 	guildID := c.Query("guild_id")
 	tagID := c.Query("tag_id")
 	authorID := c.Query("author_id")
@@ -113,6 +119,7 @@ func (s *Server) listPosts(c *gin.Context) {
 		PageSize: pageSize,
 		SortBy:   sortBy,
 		Order:    order,
+		Search:   search,
 		GuildID:  guildID,
 		TagID:    tagID,
 		AuthorID: authorID,
@@ -135,8 +142,8 @@ func (s *Server) listPosts(c *gin.Context) {
 		if params.IsPinned != nil {
 			pinnedValue = strconv.FormatBool(*params.IsPinned)
 		}
-		filterKey := fmt.Sprintf("page=%d|size=%d|sort=%s|order=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
-			params.Page, params.PageSize, params.SortBy, params.Order, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
+		filterKey := fmt.Sprintf("page=%d|size=%d|sort=%s|order=%s|search=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
+			params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
 		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
 		if err != nil {
 			log.Printf("[Cache] Version error: %v", err)
@@ -214,6 +221,12 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	// 分区筛选
 	if params.Category != "" {
 		query = query.Where("category = ?", params.Category)
+	}
+
+	// 关键字搜索
+	if params.Search != "" {
+		likeKeyword := "%" + params.Search + "%"
+		query = query.Where("(title LIKE ? OR content LIKE ?)", likeKeyword, likeKeyword)
 	}
 
 	if params.IsPinned != nil {
