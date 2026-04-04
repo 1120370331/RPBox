@@ -755,6 +755,15 @@ function initMetricsChart() {
   let dates: string[] = []
   let legendData: string[] = []
   let series: echarts.SeriesOption[] = []
+  const palette = {
+    linePrimary: getComputedStyle(document.documentElement).getPropertyValue('--color-secondary').trim() || '#804030',
+    lineAccent: getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#4682B4',
+    lineAux: getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim() || '#9370DB',
+    lineSuccess: getComputedStyle(document.documentElement).getPropertyValue('--color-success').trim() || '#6B9B6B',
+    textSecondary: getComputedStyle(document.documentElement).getPropertyValue('--color-text-secondary').trim() || '#8D7B68',
+    border: getComputedStyle(document.documentElement).getPropertyValue('--color-border').trim() || '#E5D4C1',
+    borderLight: getComputedStyle(document.documentElement).getPropertyValue('--color-border-light').trim() || '#F5EBE0',
+  }
 
   if (isGrowth) {
     dates = metricsHistory.value.map((m: DailyMetrics) => m.date.slice(5)) // 只显示月-日
@@ -764,10 +773,10 @@ function initMetricsChart() {
     const newGuilds = metricsHistory.value.map((m: DailyMetrics) => m.new_guilds)
     legendData = ['新增用户', '新增帖子', '新增作品', '新增公会']
     series = [
-      { name: '新增用户', type: 'line', data: newUsers, smooth: true, itemStyle: { color: '#804030' } },
-      { name: '新增帖子', type: 'line', data: newPosts, smooth: true, itemStyle: { color: '#4682B4' } },
-      { name: '新增作品', type: 'line', data: newItems, smooth: true, itemStyle: { color: '#9370DB' } },
-      { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: '#6B9B6B' } }
+      { name: '新增用户', type: 'line', data: newUsers, smooth: true, itemStyle: { color: palette.linePrimary } },
+      { name: '新增帖子', type: 'line', data: newPosts, smooth: true, itemStyle: { color: palette.lineAccent } },
+      { name: '新增作品', type: 'line', data: newItems, smooth: true, itemStyle: { color: palette.lineAux } },
+      { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: palette.lineSuccess } }
     ]
   } else {
     dates = basicMetricsHistory.value.map((m: BasicDailyMetrics) => m.date.slice(5))
@@ -776,9 +785,9 @@ function initMetricsChart() {
     const newBackups = basicMetricsHistory.value.map((m: BasicDailyMetrics) => m.new_profile_backups)
     legendData = ['新增剧情归档', '新增归档条目', '新增人物卡备份']
     series = [
-      { name: '新增剧情归档', type: 'line', data: newArchives, smooth: true, itemStyle: { color: '#8B4513' } },
-      { name: '新增归档条目', type: 'line', data: newEntries, smooth: true, itemStyle: { color: '#1E88E5' } },
-      { name: '新增人物卡备份', type: 'line', data: newBackups, smooth: true, itemStyle: { color: '#2E7D32' } }
+      { name: '新增剧情归档', type: 'line', data: newArchives, smooth: true, itemStyle: { color: palette.linePrimary } },
+      { name: '新增归档条目', type: 'line', data: newEntries, smooth: true, itemStyle: { color: palette.lineAccent } },
+      { name: '新增人物卡备份', type: 'line', data: newBackups, smooth: true, itemStyle: { color: palette.lineSuccess } }
     ]
   }
 
@@ -789,7 +798,7 @@ function initMetricsChart() {
     },
     legend: {
       data: legendData,
-      textStyle: { color: '#8D7B68' }
+      textStyle: { color: palette.textSecondary }
     },
     grid: {
       left: '3%',
@@ -800,14 +809,14 @@ function initMetricsChart() {
     xAxis: {
       type: 'category',
       data: dates,
-      axisLine: { lineStyle: { color: '#E5D4C1' } },
-      axisLabel: { color: '#8D7B68' }
+      axisLine: { lineStyle: { color: palette.border } },
+      axisLabel: { color: palette.textSecondary }
     },
     yAxis: {
       type: 'value',
-      axisLine: { lineStyle: { color: '#E5D4C1' } },
-      axisLabel: { color: '#8D7B68' },
-      splitLine: { lineStyle: { color: '#F5EBE0' } }
+      axisLine: { lineStyle: { color: palette.border } },
+      axisLabel: { color: palette.textSecondary },
+      splitLine: { lineStyle: { color: palette.borderLight } }
     },
     series
   }
@@ -2942,7 +2951,7 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   justify-content: center;
   padding: 100px 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .no-access i {
@@ -2953,7 +2962,7 @@ function formatBanTime(dateStr: string | null) {
 
 .no-access h2 {
   font-size: 24px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   margin-bottom: 8px;
 }
 
@@ -2965,7 +2974,7 @@ function formatBanTime(dateStr: string | null) {
 
 .page-title {
   font-size: 42px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   margin: 0;
 }
 
@@ -2974,8 +2983,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: linear-gradient(135deg, #B87333, #804030);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-secondary, #804030));
+  color: var(--btn-primary-text, #fff);
   border-radius: 20px;
   font-weight: 600;
 }
@@ -2987,7 +2996,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .stat-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 20px;
   display: flex;
@@ -2997,8 +3006,8 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .stat-card.pending {
-  background: linear-gradient(135deg, #FFF5E6, #FFE4CC);
-  border: 2px solid #FFB366;
+  background: linear-gradient(135deg, var(--color-warning-light, #FFF5E6), var(--color-warning-light, #FFE4CC));
+  border: 2px solid var(--color-warning-border, #FFB366);
 }
 
 .stat-icon {
@@ -3010,27 +3019,27 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   justify-content: center;
   font-size: 24px;
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .stat-card.pending .stat-icon {
   background: rgba(255, 153, 51, 0.2);
-  color: #CC6600;
+  color: var(--color-warning-dark, #CC6600);
 }
 
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .stat-label {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .tab-container {
-  background: #4B3621;
+  background: var(--color-primary, #4B3621);
   border-radius: 16px;
   padding: 8px;
   display: flex;
@@ -3048,18 +3057,18 @@ function formatBanTime(dateStr: string | null) {
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
-  color: #EED9C4;
+  color: var(--color-main-bg, #EED9C4);
   transition: all 0.3s;
 }
 
 .tab-item.active {
-  background: #EED9C4;
-  color: #4B3621;
+  background: var(--color-main-bg, #EED9C4);
+  color: var(--color-primary, #4B3621);
 }
 
 .tab-item .badge {
-  background: #FF6B6B;
-  color: #fff;
+  background: var(--btn-danger-bg, #FF6B6B);
+  color: var(--btn-primary-text, #fff);
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
@@ -3076,10 +3085,10 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  background: #fff;
-  border: 2px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 10px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -3087,9 +3096,9 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .sub-tab-container button.active {
-  background: #804030;
-  border-color: #804030;
-  color: #fff;
+  background: var(--color-secondary, #804030);
+  border-color: var(--color-secondary, #804030);
+  color: var(--btn-primary-text, #fff);
 }
 
 .review-badge {
@@ -3099,8 +3108,8 @@ function formatBanTime(dateStr: string | null) {
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  background: #FF6B6B;
-  color: #fff;
+  background: var(--btn-danger-bg, #FF6B6B);
+  color: var(--btn-primary-text, #fff);
   border-radius: 9px;
   font-size: 11px;
   font-weight: 700;
@@ -3126,17 +3135,17 @@ function formatBanTime(dateStr: string | null) {
   flex: 1;
   min-width: 200px;
   padding: 10px 16px;
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 14px;
 }
 
 .filter-bar select {
   padding: 10px 16px;
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 14px;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
 }
 
 .item-list {
@@ -3146,7 +3155,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .item-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
@@ -3162,7 +3171,7 @@ function formatBanTime(dateStr: string | null) {
 .item-title {
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .status-badges {
@@ -3178,25 +3187,25 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .status-badge.pending {
-  background: #FFF3E0;
-  color: #E65100;
+  background: var(--color-warning-light, #FFF3E0);
+  color: var(--color-warning-dark, #E65100);
 }
 
 .status-badge.approved, .status-badge.published {
-  background: #E8F5E9;
-  color: #2E7D32;
+  background: var(--color-success-light, #E8F5E9);
+  color: var(--color-success, #2E7D32);
 }
 
 .status-badge.rejected, .status-badge.draft {
-  background: #FFEBEE;
-  color: #C62828;
+  background: var(--color-warning-light, #FFEBEE);
+  color: var(--btn-danger-bg, #C62828);
 }
 
 .item-meta {
   display: flex;
   gap: 16px;
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin-bottom: 12px;
 }
 
@@ -3227,7 +3236,7 @@ function formatBanTime(dateStr: string | null) {
   height: 108px;
   border-radius: 8px;
   object-fit: cover;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -3248,7 +3257,7 @@ function formatBanTime(dateStr: string | null) {
   margin: 0;
   font-size: 13px;
   line-height: 1.6;
-  color: #5D4E37;
+  color: var(--color-text-secondary, #5D4E37);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -3256,18 +3265,18 @@ function formatBanTime(dateStr: string | null) {
 .image-review-comment {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 13px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   resize: vertical;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
 }
 
 .image-review-history {
   margin: 0;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 @media (max-width: 768px) {
@@ -3291,8 +3300,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #4CAF50;
-  color: #fff;
+  background: var(--color-success, #4CAF50);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3301,7 +3310,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-approve:hover {
-  background: #388E3C;
+  background: var(--color-success, #388E3C);
 }
 
 .btn-sponsor {
@@ -3309,8 +3318,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: linear-gradient(135deg, #E7C67D, #D6A645);
-  color: #4B3621;
+  background: linear-gradient(135deg, var(--color-warning, #E7C67D), var(--color-accent, #D6A645));
+  color: var(--color-primary, #4B3621);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3319,7 +3328,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-sponsor:hover {
-  background: linear-gradient(135deg, #EED79A, #E1B256);
+  background: linear-gradient(135deg, var(--color-warning-light, #EED79A), var(--color-accent, #E1B256));
 }
 
 .sponsor-level-actions {
@@ -3333,10 +3342,10 @@ function formatBanTime(dateStr: string | null) {
   min-width: 160px;
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid #E2D3C3;
-  background: #FFFDFB;
+  border: 1px solid var(--color-border, #E2D3C3);
+  background: var(--input-bg, #FFFDFB);
   font-size: 13px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .btn-reject {
@@ -3344,8 +3353,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #FF5722;
-  color: #fff;
+  background: var(--btn-danger-bg, #FF5722);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3354,7 +3363,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-reject:hover {
-  background: #E64A19;
+  background: var(--btn-danger-hover, #E64A19);
 }
 
 .btn-delete {
@@ -3362,8 +3371,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #F44336;
-  color: #fff;
+  background: var(--btn-danger-bg, #F44336);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3377,8 +3386,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #9C27B0;
-  color: #fff;
+  background: var(--color-secondary, #9C27B0);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3387,12 +3396,12 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-pin:hover {
-  background: #7B1FA2;
+  background: var(--color-secondary, #7B1FA2);
 }
 
 .btn-pin.active {
-  background: #E1BEE7;
-  color: #7B1FA2;
+  background: var(--color-primary-light, #E1BEE7);
+  color: var(--color-secondary, #7B1FA2);
 }
 
 /* 精华按钮 */
@@ -3401,8 +3410,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #FF9800;
-  color: #fff;
+  background: var(--color-warning, #FF9800);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3411,12 +3420,12 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-feature:hover {
-  background: #F57C00;
+  background: var(--color-warning, #F57C00);
 }
 
 .btn-feature.active {
-  background: #FFE0B2;
-  color: #E65100;
+  background: var(--color-warning-light, #FFE0B2);
+  color: var(--color-warning-dark, #E65100);
 }
 
 /* 标题带标签 */
@@ -3438,13 +3447,13 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .mod-tag.pinned {
-  background: #F3E5F5;
-  color: #7B1FA2;
+  background: var(--color-primary-light, #F3E5F5);
+  color: var(--color-secondary, #7B1FA2);
 }
 
 .mod-tag.featured {
-  background: #FFF3E0;
-  color: #E65100;
+  background: var(--color-warning-light, #FFF3E0);
+  color: var(--color-warning-dark, #E65100);
 }
 
 .modal-overlay {
@@ -3461,7 +3470,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .modal {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   width: 90%;
   max-width: 480px;
@@ -3473,19 +3482,19 @@ function formatBanTime(dateStr: string | null) {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid #E5D4C1;
+  border-bottom: 1px solid var(--color-border, #E5D4C1);
 }
 
 .modal-header h3 {
   margin: 0;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .close-btn {
   background: none;
   border: none;
   font-size: 24px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   cursor: pointer;
 }
 
@@ -3496,7 +3505,7 @@ function formatBanTime(dateStr: string | null) {
 .review-title {
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin-bottom: 16px;
 }
 
@@ -3513,13 +3522,13 @@ function formatBanTime(dateStr: string | null) {
   cursor: pointer;
 }
 
-.radio-text.approve { color: #4CAF50; font-weight: 600; }
-.radio-text.reject { color: #F44336; font-weight: 600; }
+.radio-text.approve { color: var(--color-success, #4CAF50); font-weight: 600; }
+.radio-text.reject { color: var(--btn-danger-bg, #F44336); font-weight: 600; }
 
 .modal-body textarea {
   width: 100%;
   padding: 12px;
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 14px;
   resize: vertical;
@@ -3530,25 +3539,25 @@ function formatBanTime(dateStr: string | null) {
   justify-content: flex-end;
   gap: 12px;
   padding: 20px;
-  border-top: 1px solid #E5D4C1;
+  border-top: 1px solid var(--color-border, #E5D4C1);
 }
 
 .btn-cancel {
   padding: 10px 20px;
-  background: #fff;
-  border: 2px solid #E5D4C1;
+  background: var(--color-panel-bg, #fff);
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   font-weight: 600;
   cursor: pointer;
 }
 
 .btn-submit {
   padding: 10px 20px;
-  background: #804030;
+  background: var(--color-secondary, #804030);
   border: none;
   border-radius: 8px;
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   font-weight: 600;
   cursor: pointer;
 }
@@ -3558,7 +3567,7 @@ function formatBanTime(dateStr: string | null) {
   flex-direction: column;
   align-items: center;
   padding: 60px 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .empty-state i {
@@ -3574,12 +3583,12 @@ function formatBanTime(dateStr: string | null) {
   justify-content: center;
   gap: 12px;
   padding: 60px 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .loading-spinner {
   font-size: 32px;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   animation: spin 1s linear infinite;
 }
 
@@ -3601,8 +3610,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #2196F3;
-  color: #fff;
+  background: var(--color-secondary, #2196F3);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3611,7 +3620,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-edit:hover {
-  background: #1976D2;
+  background: var(--color-secondary-hover, #1976D2);
 }
 
 /* 警告按钮 */
@@ -3620,8 +3629,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #FF9800;
-  color: #fff;
+  background: var(--color-warning, #FF9800);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3630,7 +3639,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-warning:hover {
-  background: #F57C00;
+  background: var(--color-warning, #F57C00);
 }
 
 /* 用户卡片样式 */
@@ -3657,12 +3666,12 @@ function formatBanTime(dateStr: string | null) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #E5D4C1;
+  background: var(--color-border, #E5D4C1);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 /* 角色标签 */
@@ -3671,8 +3680,8 @@ function formatBanTime(dateStr: string | null) {
   border-radius: 12px;
   font-size: 13px;
   font-weight: 700;
-  background: linear-gradient(135deg, #E7C67D, #D6A645);
-  color: #4B3621;
+  background: linear-gradient(135deg, var(--color-warning, #E7C67D), var(--color-accent, #D6A645));
+  color: var(--color-primary, #4B3621);
   border: 1px solid rgba(214, 166, 69, 0.4);
 }
 
@@ -3684,18 +3693,18 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .role-tag.user {
-  background: #E3F2FD;
-  color: #1565C0;
+  background: var(--color-primary-light, #E3F2FD);
+  color: var(--color-accent, #1565C0);
 }
 
 .role-tag.moderator {
-  background: #FFF3E0;
-  color: #E65100;
+  background: var(--color-warning-light, #FFF3E0);
+  color: var(--color-warning-dark, #E65100);
 }
 
 .role-tag.admin {
-  background: #FCE4EC;
-  color: #C2185B;
+  background: var(--color-primary-light, #FCE4EC);
+  color: var(--color-accent, #C2185B);
 }
 
 /* 角色设置弹窗样式 */
@@ -3705,7 +3714,7 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 16px;
   padding: 20px;
-  background: #F5F0EB;
+  background: var(--color-card-bg, #F5F0EB);
   border-radius: 12px;
   margin-bottom: 16px;
 }
@@ -3716,12 +3725,12 @@ function formatBanTime(dateStr: string | null) {
   gap: 8px;
   font-size: 18px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .user-preview i {
   font-size: 24px;
-  color: #804030;
+  color: var(--color-secondary, #804030);
 }
 
 .role-arrow {
@@ -3732,12 +3741,12 @@ function formatBanTime(dateStr: string | null) {
 
 .role-arrow i {
   font-size: 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .confirm-text {
   font-size: 14px;
-  color: #5D4E37;
+  color: var(--color-text-secondary, #5D4E37);
   text-align: center;
   line-height: 1.6;
 }
@@ -3751,21 +3760,21 @@ function formatBanTime(dateStr: string | null) {
   display: block;
   font-size: 14px;
   font-weight: 600;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   margin-bottom: 8px;
 }
 
 .form-input {
   width: 100%;
   padding: 12px;
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 14px;
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #804030;
+  border-color: var(--color-secondary, #804030);
 }
 
 .hint-text {
@@ -3773,7 +3782,7 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin-top: 8px;
 }
 
@@ -3783,13 +3792,13 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .tab-item.admin-tab.active {
-  background: #C2185B;
-  color: #fff;
+  background: var(--color-accent, #C2185B);
+  color: var(--btn-primary-text, #fff);
 }
 
 /* 禁用按钮 */
 .btn-submit:disabled {
-  background: #ccc;
+  background: var(--color-border, #ccc);
   cursor: not-allowed;
 }
 
@@ -3799,8 +3808,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #7C4DFF;
-  color: #fff;
+  background: var(--color-secondary, #7C4DFF);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3809,7 +3818,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-preview:hover {
-  background: #651FFF;
+  background: var(--color-secondary-hover, #651FFF);
 }
 
 /* 编辑按钮 */
@@ -3818,8 +3827,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #2F855A;
-  color: #fff;
+  background: var(--color-success, #2F855A);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3828,7 +3837,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-edit:hover {
-  background: #276749;
+  background: var(--color-success, #276749);
 }
 
 /* 预览弹窗 */
@@ -3857,18 +3866,18 @@ function formatBanTime(dateStr: string | null) {
   justify-content: center;
   padding: 60px;
   gap: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .preview-header {
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #E5D4C1;
+  border-bottom: 1px solid var(--color-border, #E5D4C1);
 }
 
 .preview-title {
   font-size: 24px;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin: 0 0 12px 0;
 }
 
@@ -3876,7 +3885,7 @@ function formatBanTime(dateStr: string | null) {
   display: flex;
   gap: 16px;
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .preview-meta span {
@@ -3887,26 +3896,26 @@ function formatBanTime(dateStr: string | null) {
 
 .category-tag, .type-tag {
   padding: 2px 8px;
-  background: #E5D4C1;
+  background: var(--color-border, #E5D4C1);
   border-radius: 4px;
   font-size: 12px;
 }
 
 .preview-content {
   line-height: 1.8;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   margin-bottom: 20px;
 }
 
 .review-section {
-  background: #F5F0EB;
+  background: var(--color-card-bg, #F5F0EB);
   border-radius: 12px;
   padding: 16px;
 }
 
 .review-section h4 {
   margin: 0 0 12px 0;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   font-size: 14px;
 }
 
@@ -3916,8 +3925,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: #D32F2F;
-  color: #fff;
+  background: var(--btn-danger-bg, #D32F2F);
+  color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3926,7 +3935,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-danger:hover {
-  background: #B71C1C;
+  background: var(--btn-danger-hover, #B71C1C);
 }
 
 /* 用户状态标签 */
@@ -3944,13 +3953,13 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .status-tag.muted {
-  background: #FFF3E0;
-  color: #E65100;
+  background: var(--color-warning-light, #FFF3E0);
+  color: var(--color-warning-dark, #E65100);
 }
 
 .status-tag.banned {
-  background: #FFEBEE;
-  color: #C62828;
+  background: var(--color-warning-light, #FFEBEE);
+  color: var(--btn-danger-bg, #C62828);
 }
 
 /* 封禁信息 */
@@ -3959,10 +3968,10 @@ function formatBanTime(dateStr: string | null) {
   flex-direction: column;
   gap: 4px;
   padding: 8px 12px;
-  background: #FFF8E1;
+  background: var(--color-warning-light, #FFF8E1);
   border-radius: 6px;
   font-size: 12px;
-  color: #5D4037;
+  color: var(--color-text-secondary, #5D4037);
   margin-bottom: 12px;
 }
 
@@ -3977,14 +3986,14 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: #F5F0EB;
+  background: var(--color-card-bg, #F5F0EB);
   border-radius: 12px;
   margin-bottom: 16px;
 }
 
 .action-description {
   font-size: 14px;
-  color: #5D4E37;
+  color: var(--color-text-secondary, #5D4E37);
   text-align: center;
   margin: 0;
 }
@@ -4001,7 +4010,7 @@ function formatBanTime(dateStr: string | null) {
   gap: 6px;
   cursor: pointer;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
 }
 
 .duration-input {
@@ -4010,7 +4019,7 @@ function formatBanTime(dateStr: string | null) {
 
 .duration-unit {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 /* 系统通知 */
@@ -4024,17 +4033,17 @@ function formatBanTime(dateStr: string | null) {
   width: 100%;
   min-height: 140px;
   padding: 12px;
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 14px;
-  color: #4B3621;
-  background: #FFFDFB;
+  color: var(--color-primary, #4B3621);
+  background: var(--input-bg, #FFFDFB);
   resize: vertical;
 }
 
 .system-message-textarea:focus {
   outline: none;
-  border-color: #804030;
+  border-color: var(--color-secondary, #804030);
 }
 
 .system-message-actions {
@@ -4046,12 +4055,12 @@ function formatBanTime(dateStr: string | null) {
 
 .system-message-hint {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .char-count {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 /* 警告框 */
@@ -4060,36 +4069,36 @@ function formatBanTime(dateStr: string | null) {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 16px;
-  background: #FFF8E1;
-  border: 1px solid #FFE082;
+  background: var(--color-warning-light, #FFF8E1);
+  border: 1px solid var(--color-warning-border, #FFE082);
   border-radius: 8px;
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-secondary, #5D4037);
 }
 
 .warning-box i {
   font-size: 20px;
-  color: #FF9800;
+  color: var(--color-warning, #FF9800);
   flex-shrink: 0;
 }
 
 .warning-box.danger {
-  background: #FFEBEE;
-  border-color: #EF9A9A;
-  color: #B71C1C;
+  background: var(--color-warning-light, #FFEBEE);
+  border-color: var(--btn-danger-bg, #EF9A9A);
+  color: var(--btn-danger-hover, #B71C1C);
 }
 
 .warning-box.danger i {
-  color: #D32F2F;
+  color: var(--btn-danger-bg, #D32F2F);
 }
 
 /* 危险提交按钮 */
 .btn-submit.danger {
-  background: #D32F2F;
+  background: var(--btn-danger-bg, #D32F2F);
 }
 
 .btn-submit.danger:hover {
-  background: #B71C1C;
+  background: var(--btn-danger-hover, #B71C1C);
 }
 
 /* 权限警告标签 - 道具列表 */
@@ -4105,9 +4114,9 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  background: #FFF3E0;
-  color: #E65100;
-  border: 1px solid #FFB74D;
+  background: var(--color-warning-light, #FFF3E0);
+  color: var(--color-warning-dark, #E65100);
+  border: 1px solid var(--color-warning-border, #FFB74D);
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
@@ -4119,8 +4128,8 @@ function formatBanTime(dateStr: string | null) {
 
 /* 需要权限的道具卡片高亮 */
 .item-card.has-permission {
-  border-left: 3px solid #E65100;
-  background: linear-gradient(90deg, #FFF8E1 0%, #fff 20%);
+  border-left: 3px solid var(--color-warning-dark, #E65100);
+  background: linear-gradient(90deg, var(--color-warning-light, #FFF8E1) 0%, var(--color-panel-bg, #fff) 20%);
 }
 
 /* 权限警告横幅 - 预览弹窗 */
@@ -4129,15 +4138,15 @@ function formatBanTime(dateStr: string | null) {
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
-  border: 2px solid #FFB74D;
+  background: linear-gradient(135deg, var(--color-warning-light, #FFF3E0) 0%, var(--color-warning-light, #FFE0B2) 100%);
+  border: 2px solid var(--color-warning-border, #FFB74D);
   border-radius: 12px;
   margin-bottom: 20px;
 }
 
 .permission-warning-banner > i {
   font-size: 24px;
-  color: #E65100;
+  color: var(--color-warning-dark, #E65100);
   flex-shrink: 0;
 }
 
@@ -4148,21 +4157,21 @@ function formatBanTime(dateStr: string | null) {
 .permission-warning-banner .warning-content strong {
   display: block;
   font-size: 15px;
-  color: #E65100;
+  color: var(--color-warning-dark, #E65100);
   margin-bottom: 4px;
 }
 
 .permission-warning-banner .warning-content p {
   margin: 0;
   font-size: 13px;
-  color: #5D4037;
+  color: var(--color-text-secondary, #5D4037);
   line-height: 1.5;
 }
 
 /* 操作日志表格样式 */
 .logs-table-wrapper {
   overflow-x: auto;
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
 }
@@ -4177,23 +4186,23 @@ function formatBanTime(dateStr: string | null) {
 .logs-table td {
   padding: 12px 16px;
   text-align: left;
-  border-bottom: 1px solid #E5D4C1;
+  border-bottom: 1px solid var(--color-border, #E5D4C1);
 }
 
 .logs-table th {
-  background: #FAF7F2;
+  background: var(--color-card-bg, #FAF7F2);
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   white-space: nowrap;
 }
 
 .logs-table tr:hover {
-  background: #FAF7F2;
+  background: var(--color-card-bg, #FAF7F2);
 }
 
 .logs-table .operator {
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   margin-right: 8px;
 }
 
@@ -4205,31 +4214,31 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .logs-table .role-tag.admin {
-  background: #FFE4E1;
-  color: #C0392B;
+  background: var(--color-warning-light, #FFE4E1);
+  color: var(--btn-danger-bg, #C0392B);
 }
 
 .logs-table .role-tag.moderator {
-  background: #E3F2FD;
-  color: #1976D2;
+  background: var(--color-primary-light, #E3F2FD);
+  color: var(--color-secondary-hover, #1976D2);
 }
 
 .logs-table .action-type {
-  color: #5D4037;
+  color: var(--color-text-secondary, #5D4037);
   font-weight: 500;
 }
 
 .logs-table .target-type {
   font-size: 11px;
   padding: 2px 6px;
-  background: #E5D4C1;
+  background: var(--color-border, #E5D4C1);
   border-radius: 4px;
   margin-right: 8px;
-  color: #5D4037;
+  color: var(--color-text-secondary, #5D4037);
 }
 
 .logs-table .target-name {
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .logs-table .details-cell {
@@ -4237,18 +4246,18 @@ function formatBanTime(dateStr: string | null) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #7B6B5A;
+  color: var(--color-text-muted, #7B6B5A);
 }
 
 .logs-table .ip-cell {
   font-family: monospace;
   font-size: 12px;
-  color: #7B6B5A;
+  color: var(--color-text-muted, #7B6B5A);
 }
 
 .logs-table .time-cell {
   white-space: nowrap;
-  color: #7B6B5A;
+  color: var(--color-text-muted, #7B6B5A);
   font-size: 13px;
 }
 
@@ -4261,7 +4270,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .summary-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
@@ -4274,9 +4283,9 @@ function formatBanTime(dateStr: string | null) {
 .summary-header .period {
   font-size: 14px;
   font-weight: 600;
-  color: #5D4037;
+  color: var(--color-text-secondary, #5D4037);
   padding: 4px 10px;
-  background: #FAF7F2;
+  background: var(--color-card-bg, #FAF7F2);
   border-radius: 6px;
 }
 
@@ -4293,18 +4302,18 @@ function formatBanTime(dateStr: string | null) {
 
 .summary-item .label {
   font-size: 12px;
-  color: #7B6B5A;
+  color: var(--color-text-muted, #7B6B5A);
   margin-bottom: 4px;
 }
 
 .summary-item .value {
   font-size: 20px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .metrics-chart-container {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
@@ -4314,14 +4323,14 @@ function formatBanTime(dateStr: string | null) {
   margin: 0 0 16px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .metrics-chart-container h4 i {
-  color: #8B4513;
+  color: var(--color-secondary, #8B4513);
 }
 
 .metrics-chart {
@@ -4341,7 +4350,7 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .basic-metric-card {
-  background: #fff;
+  background: var(--color-panel-bg, #fff);
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -4359,7 +4368,7 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  color: #804030;
+  color: var(--color-secondary, #804030);
   flex-shrink: 0;
 }
 
@@ -4372,12 +4381,12 @@ function formatBanTime(dateStr: string | null) {
 .basic-metric-value {
   font-size: 22px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main, #2C1810);
 }
 
 .basic-metric-label {
   font-size: 13px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 /* 分页样式 */
@@ -4392,10 +4401,10 @@ function formatBanTime(dateStr: string | null) {
 .pagination button {
   width: 36px;
   height: 36px;
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
-  background: #fff;
-  color: #5D4037;
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-text-secondary, #5D4037);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -4404,9 +4413,9 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .pagination button:hover:not(:disabled) {
-  background: #FAF7F2;
-  border-color: #8B4513;
-  color: #8B4513;
+  background: var(--color-card-bg, #FAF7F2);
+  border-color: var(--color-secondary, #8B4513);
+  color: var(--color-secondary, #8B4513);
 }
 
 .pagination button:disabled {
@@ -4416,7 +4425,7 @@ function formatBanTime(dateStr: string | null) {
 
 .pagination span {
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-secondary, #5D4037);
 }
 
 /* 作品预览样式 */
@@ -4444,25 +4453,25 @@ function formatBanTime(dateStr: string | null) {
   height: 48px;
   border-radius: 8px;
   object-fit: cover;
-  border: 2px solid #E5D4C1;
+  border: 2px solid var(--color-border, #E5D4C1);
 }
 
 .preview-description {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #E5D4C1;
+  border-top: 1px solid var(--color-border, #E5D4C1);
 }
 
 .preview-description h4,
 .preview-detail-content h4 {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
   margin: 0 0 12px 0;
   font-weight: 600;
 }
 
 .preview-description p {
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   line-height: 1.7;
   margin: 0;
   white-space: pre-wrap;
@@ -4471,11 +4480,11 @@ function formatBanTime(dateStr: string | null) {
 .preview-detail-content {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #E5D4C1;
+  border-top: 1px solid var(--color-border, #E5D4C1);
 }
 
 .preview-detail-content .rich-content {
-  color: #4B3621;
+  color: var(--color-primary, #4B3621);
   line-height: 1.8;
 }
 
@@ -4494,8 +4503,8 @@ function formatBanTime(dateStr: string | null) {
 
 .preview-tag {
   padding: 4px 12px;
-  background: #F5EBE0;
-  color: #8D7B68;
+  background: var(--color-card-bg, #F5EBE0);
+  color: var(--color-text-secondary, #8D7B68);
   border-radius: 12px;
   font-size: 12px;
 }
@@ -4506,7 +4515,7 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   justify-content: center;
   padding: 40px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .empty-preview i {
