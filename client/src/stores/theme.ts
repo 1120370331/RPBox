@@ -296,8 +296,8 @@ const blackGoldTheme: Theme = {
     primary: '#D4AF37',
     primaryHover: '#E5C158',
     primaryLight: 'rgba(212, 175, 55, 0.16)',
-    secondary: '#2A2A2A',
-    secondaryHover: '#333333',
+    secondary: '#B9932F',
+    secondaryHover: '#D4AF37',
     accent: '#E5C158',
     accentHover: '#E5C158',
     background: '#0F0F0F',
@@ -327,13 +327,13 @@ const blackGoldTheme: Theme = {
 
     // 按钮
     btnPrimaryBg: '#D4AF37',
-    btnPrimaryText: '#000000',
+    btnPrimaryText: '#FFF4CC',
     btnPrimaryHover: '#E5C158',
     btnSecondaryBg: 'rgba(212, 175, 55, 0.12)',
-    btnSecondaryText: '#E5C158',
+    btnSecondaryText: '#FFF4CC',
     btnSecondaryHover: 'rgba(212, 175, 55, 0.2)',
     btnOutlineBorder: '#D4AF37',
-    btnOutlineText: '#E5C158',
+    btnOutlineText: '#FFF4CC',
     btnOutlineHover: 'rgba(212, 175, 55, 0.1)',
     btnDangerBg: '#DC3545',
     btnDangerHover: '#C82333',
@@ -377,7 +377,7 @@ const blackGoldTheme: Theme = {
     warning: '#D4AF37',
     warningLight: 'rgba(212, 175, 55, 0.15)',
     warningBorder: 'rgba(212, 175, 55, 0.35)',
-    warningDark: '#B28228',
+    warningDark: '#F0D88A',
   },
 }
 
