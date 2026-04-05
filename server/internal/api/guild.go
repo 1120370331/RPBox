@@ -1202,6 +1202,19 @@ func (s *Server) applyGuild(c *gin.Context) {
 		return
 	}
 
+	// 每个用户最多同时保留 1 条待审核公会申请（跨公会）
+	var pendingAppCount int64
+	if err := database.DB.Model(&model.GuildApplication{}).
+		Where("user_id = ? AND status = ?", userID, "pending").
+		Count(&pendingAppCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "检查申请状态失败"})
+		return
+	}
+	if pendingAppCount >= 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "你最多只能同时有1个待审核公会申请"})
+		return
+	}
+
 	// 检查是否已有申请记录（任何状态）
 	var existingApp model.GuildApplication
 	err := database.DB.Where("guild_id = ? AND user_id = ?", guildID, userID).First(&existingApp).Error

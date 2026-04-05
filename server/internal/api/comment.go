@@ -19,6 +19,26 @@ type CreateCommentRequest struct {
 	ParentID *uint  `json:"parent_id"`
 }
 
+const maxPendingCommentReviewRequests = 5
+
+func pendingCommentReviewRequestCount(userID uint) (int64, error) {
+	var postCommentPending int64
+	if err := database.DB.Model(&model.Comment{}).
+		Where("author_id = ? AND image_review_status = ?", userID, "pending").
+		Count(&postCommentPending).Error; err != nil {
+		return 0, err
+	}
+
+	var itemCommentPending int64
+	if err := database.DB.Model(&model.ItemComment{}).
+		Where("user_id = ? AND image_review_status = ?", userID, "pending").
+		Count(&itemCommentPending).Error; err != nil {
+		return 0, err
+	}
+
+	return postCommentPending + itemCommentPending, nil
+}
+
 // listComments 获取帖子的评论列表
 func (s *Server) listComments(c *gin.Context) {
 	postID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -116,6 +136,17 @@ func (s *Server) createComment(c *gin.Context) {
 	}
 	if s.enforcePostCommentHardRules(c, userID, "comment", nil, req.Content) {
 		return
+	}
+	if req.ImageURL != "" {
+		pendingCount, err := pendingCommentReviewRequestCount(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "检查待审核评论数量失败"})
+			return
+		}
+		if pendingCount >= maxPendingCommentReviewRequests {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "你最多只能同时有5条待审核评论申请"})
+			return
+		}
 	}
 
 	// 如果是回复评论，检查父评论是否存在
