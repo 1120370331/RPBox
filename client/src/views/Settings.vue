@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { getVersion } from '@tauri-apps/api/app'
+import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart'
 import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { useThemeStore, themes, type Theme } from '@/stores/theme'
@@ -56,6 +57,9 @@ const detectedPaths = ref<WowInstallation[]>([])
 const isScanning = ref(false)
 const autoSync = ref(false)
 const syncOnStartup = ref(true)
+const launchOnStartup = ref(false)
+const launchOnStartupSupported = ref(true)
+const launchOnStartupLoading = ref(false)
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const appVersion = ref('0.0.0')
@@ -96,6 +100,9 @@ onMounted(async () => {
 
   // 检查插件版本
   await checkAddonInstalled()
+
+  // 检查系统开机启动状态
+  await loadLaunchOnStartup()
 })
 
 async function detectPaths() {
@@ -116,6 +123,40 @@ function saveSettings() {
   localStorage.setItem('wow_path', wowPath.value)
   localStorage.setItem('auto_sync', String(autoSync.value))
   localStorage.setItem('sync_on_startup', String(syncOnStartup.value))
+}
+
+async function loadLaunchOnStartup() {
+  try {
+    launchOnStartup.value = await isAutostartEnabled()
+    launchOnStartupSupported.value = true
+  } catch (e) {
+    console.warn('读取开机启动状态失败:', e)
+    launchOnStartupSupported.value = false
+    launchOnStartup.value = false
+  }
+}
+
+async function toggleLaunchOnStartup() {
+  if (launchOnStartupLoading.value || !launchOnStartupSupported.value) return
+
+  const nextValue = !launchOnStartup.value
+  launchOnStartupLoading.value = true
+  try {
+    if (nextValue) {
+      await enableAutostart()
+    } else {
+      await disableAutostart()
+    }
+    launchOnStartup.value = nextValue
+    toast.success(nextValue
+      ? t('settings.system.launchOnStartupEnabled')
+      : t('settings.system.launchOnStartupDisabled'))
+  } catch (e) {
+    console.error('设置开机启动失败:', e)
+    toast.error(t('settings.system.launchOnStartupFailed'))
+  } finally {
+    launchOnStartupLoading.value = false
+  }
 }
 
 async function clearCache() {
@@ -477,6 +518,38 @@ watch(() => localeStore.currentLocale, (newLocale) => {
               <span class="switch-desc">{{ $t('settings.sync.autoSyncOnChangeDesc') }}</span>
             </div>
             <div class="switch" :class="{ active: autoSync }">
+              <div class="switch-thumb"></div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- 系统设置 -->
+      <div class="setting-card anim-item" style="--delay: 3.5">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-computer-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>{{ $t('settings.system.title') }}</h3>
+            <p>{{ $t('settings.system.description') }}</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <label
+            class="switch-item"
+            :class="{ disabled: !launchOnStartupSupported || launchOnStartupLoading }"
+            @click="toggleLaunchOnStartup"
+          >
+            <div class="switch-info">
+              <span class="switch-label">{{ $t('settings.system.launchOnStartup') }}</span>
+              <span class="switch-desc">
+                {{ launchOnStartupSupported
+                  ? $t('settings.system.launchOnStartupDesc')
+                  : $t('settings.system.launchOnStartupUnsupported') }}
+              </span>
+            </div>
+            <div class="switch" :class="{ active: launchOnStartup && launchOnStartupSupported }">
               <div class="switch-thumb"></div>
             </div>
           </label>
@@ -909,6 +982,15 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 
 .switch-item:hover {
   background: var(--color-card-bg-hover);
+}
+
+.switch-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.switch-item.disabled:hover {
+  background: var(--color-card-bg);
 }
 
 .switch-info {
