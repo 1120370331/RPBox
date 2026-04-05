@@ -468,6 +468,17 @@ func (s *Server) createPost(c *gin.Context) {
 			post.Status = "published"
 			post.ReviewStatus = "approved" // 版主/管理员自动通过
 		} else {
+			var pendingPostCount int64
+			if err := database.DB.Model(&model.Post{}).
+				Where("author_id = ? AND status = ? AND review_status = ?", userID, "pending", "pending").
+				Count(&pendingPostCount).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "检查待审核帖子数量失败"})
+				return
+			}
+			if pendingPostCount >= 5 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "你最多只能同时有5个待通过帖子申请"})
+				return
+			}
 			post.Status = "pending"       // 改为待发布状态
 			post.ReviewStatus = "pending" // 待审核
 		}

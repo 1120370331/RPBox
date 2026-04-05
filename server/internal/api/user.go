@@ -69,6 +69,16 @@ func (s *Server) getUserInfo(c *gin.Context) {
 func (s *Server) updateAvatar(c *gin.Context) {
 	userID := c.GetUint("userID")
 
+	var user model.User
+	if err := database.DB.Select("id", "avatar_review_status").First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+	if user.AvatarReviewStatus == "pending" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "你最多只能同时有1个待审核头像申请"})
+		return
+	}
+
 	header, err := c.FormFile("avatar")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择头像文件"})

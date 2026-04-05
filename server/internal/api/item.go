@@ -957,6 +957,17 @@ func (s *Server) addItemComment(c *gin.Context) {
 	if s.enforcePostCommentHardRules(c, userID, "item_comment", nil, req.Content) {
 		return
 	}
+	if req.ImageURL != "" {
+		pendingCount, err := pendingCommentReviewRequestCount(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "检查待审核评论数量失败"})
+			return
+		}
+		if pendingCount >= maxPendingCommentReviewRequests {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "你最多只能同时有5条待审核评论申请"})
+			return
+		}
+	}
 
 	// 验证评论长度：带评分时至少10字
 	if req.Rating > 0 && len([]rune(req.Content)) < 10 {
