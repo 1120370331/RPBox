@@ -244,12 +244,25 @@ async function handleSubmit(status: 'draft' | 'published') {
     toast.warning(t('community.create.contentRequired'))
     return
   }
+  if (form.value.category === 'event' && form.value.event_type === 'guild' && !form.value.guild_id) {
+    toast.warning(t('community.create.selectGuildForEvent'))
+    return
+  }
 
   loading.value = true
   try {
     const id = Number(route.params.id)
-    form.value.status = status
-    await updatePost(id, form.value)
+    const payload: UpdatePostRequest = {
+      ...form.value,
+      status,
+    }
+    if (payload.event_start_time) {
+      payload.event_start_time = new Date(payload.event_start_time).toISOString()
+    }
+    if (payload.event_end_time) {
+      payload.event_end_time = new Date(payload.event_end_time).toISOString()
+    }
+    await updatePost(id, payload)
 
     // 更新标签
     const addedTags = selectedTags.value.filter(t => !originalTags.value.includes(t))
@@ -530,6 +543,11 @@ function toggleQuickJump() {
             :class="{ active: form.event_type === 'guild' }"
             @click="form.event_type = 'guild'"
           >{{ t('community.create.eventTypeGuild') }}</button>
+        </div>
+        <div class="event-calendar-guide">
+          <p class="event-calendar-guide-title">{{ t('community.create.eventCalendarGuideTitle') }}</p>
+          <p class="event-calendar-guide-text">{{ t('community.create.eventCalendarGuideBody') }}</p>
+          <p class="event-calendar-guide-text">{{ t('community.create.eventCalendarGuideGuild') }}</p>
         </div>
       </div>
 
@@ -891,6 +909,31 @@ function toggleQuickJump() {
   background: #fff;
   color: #804030;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.event-calendar-guide {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(184, 115, 51, 0.08);
+  border: 1px solid rgba(184, 115, 51, 0.2);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-calendar-guide-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #804030;
+  margin: 0;
+}
+
+.event-calendar-guide-text {
+  font-size: 12px;
+  color: #5D4037;
+  margin: 0;
+  line-height: 1.45;
 }
 
 .time-input {

@@ -390,25 +390,21 @@ func (s *Server) createPost(c *gin.Context) {
 		req.Content = s.normalizeAndStoreContentImages(c, req.Content, fmt.Sprintf("posts/%d/content", userID))
 	}
 
-	// 活动分区权限验证
-	if req.Category == "event" && req.EventType != "" {
-		if req.EventType == "server" {
-			// 服务器活动需要版主权限
-			if !checkModerator(userID) {
-				c.JSON(http.StatusForbidden, gin.H{"error": "发布服务器活动需要版主权限"})
-				return
-			}
-		} else if req.EventType == "guild" {
-			// 公会活动需要公会管理员权限
-			if req.GuildID == nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
-				return
-			}
-			if !checkGuildAdmin(*req.GuildID, userID) {
-				c.JSON(http.StatusForbidden, gin.H{"error": "发布公会活动需要公会管理员权限"})
-				return
-			}
+	// 活动分区基础校验
+	if req.Category == "event" {
+		if req.EventType != "" && req.EventType != "server" && req.EventType != "guild" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
+			return
 		}
+		if req.EventType == "guild" && req.GuildID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
+			return
+		}
+	} else {
+		req.EventType = ""
+		req.EventStartTime = nil
+		req.EventEndTime = nil
+		req.EventColor = ""
 	}
 
 	post := model.Post{
@@ -636,6 +632,26 @@ func (s *Server) updatePost(c *gin.Context) {
 		req.Content = s.normalizeAndStoreContentImages(c, req.Content, fmt.Sprintf("posts/%d/content", userID))
 	}
 
+	effectiveCategory := post.Category
+	if req.Category != "" {
+		effectiveCategory = req.Category
+	}
+	effectiveEventType := post.EventType
+	if req.EventType != "" {
+		effectiveEventType = req.EventType
+	}
+
+	if effectiveCategory == "event" {
+		if effectiveEventType != "" && effectiveEventType != "server" && effectiveEventType != "guild" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
+			return
+		}
+		if effectiveEventType == "guild" && req.GuildID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
+			return
+		}
+	}
+
 	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
 	if post.Status == "published" && post.ReviewStatus == "approved" && !isModerator {
 		// 创建或更新编辑请求
@@ -708,9 +724,6 @@ func (s *Server) updatePost(c *gin.Context) {
 	if req.Status != "" {
 		post.Status = req.Status
 	}
-	if req.EventColor != "" {
-		post.EventColor = req.EventColor
-	}
 	post.GuildID = req.GuildID
 	post.StoryID = req.StoryID
 	if post.GuildID == nil {
@@ -730,6 +743,30 @@ func (s *Server) updatePost(c *gin.Context) {
 		}
 	} else if req.Status == "draft" {
 		post.ReviewStatus = ""
+	}
+
+	if post.Category == "event" {
+		if req.EventType != "" {
+			post.EventType = req.EventType
+		}
+		if req.EventStartTime != nil {
+			if t, err := time.Parse(time.RFC3339, *req.EventStartTime); err == nil {
+				post.EventStartTime = &t
+			}
+		}
+		if req.EventEndTime != nil {
+			if t, err := time.Parse(time.RFC3339, *req.EventEndTime); err == nil {
+				post.EventEndTime = &t
+			}
+		}
+		if req.EventColor != "" {
+			post.EventColor = req.EventColor
+		}
+	} else {
+		post.EventType = ""
+		post.EventStartTime = nil
+		post.EventEndTime = nil
+		post.EventColor = ""
 	}
 
 	database.DB.Save(&post)
