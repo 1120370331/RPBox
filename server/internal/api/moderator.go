@@ -230,6 +230,17 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 		post.Content = edit.Content
 		post.ContentType = edit.ContentType
 		post.Category = edit.Category
+		if edit.Category == "event" {
+			post.EventType = edit.EventType
+			post.EventStartTime = edit.EventStartTime
+			post.EventEndTime = edit.EventEndTime
+			post.EventColor = edit.EventColor
+		} else {
+			post.EventType = ""
+			post.EventStartTime = nil
+			post.EventEndTime = nil
+			post.EventColor = ""
+		}
 		database.DB.Save(&post)
 
 		// 删除待审核记录

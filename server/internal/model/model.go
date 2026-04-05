@@ -463,18 +463,22 @@ type Post struct {
 
 // PostEditRequest 帖子编辑请求（待审核）
 type PostEditRequest struct {
-	ID          uint       `gorm:"primarykey" json:"id"`
-	PostID      uint       `gorm:"uniqueIndex;not null" json:"post_id"`
-	AuthorID    uint       `gorm:"index;not null" json:"author_id"`
-	Title       string     `gorm:"size:256" json:"title"`
-	Content     string     `gorm:"type:text" json:"content"`
-	ContentType string     `gorm:"size:20" json:"content_type"`
-	Category    string     `gorm:"size:20" json:"category"`
-	Status      string     `gorm:"size:20;default:pending" json:"status"`
-	ReviewerID  *uint      `gorm:"index" json:"reviewer_id"`
-	ReviewedAt  *time.Time `json:"reviewed_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID             uint       `gorm:"primarykey" json:"id"`
+	PostID         uint       `gorm:"uniqueIndex;not null" json:"post_id"`
+	AuthorID       uint       `gorm:"index;not null" json:"author_id"`
+	Title          string     `gorm:"size:256" json:"title"`
+	Content        string     `gorm:"type:text" json:"content"`
+	ContentType    string     `gorm:"size:20" json:"content_type"`
+	Category       string     `gorm:"size:20" json:"category"`
+	EventType      string     `gorm:"size:20" json:"event_type"`
+	EventStartTime *time.Time `json:"event_start_time"`
+	EventEndTime   *time.Time `json:"event_end_time"`
+	EventColor     string     `gorm:"size:7" json:"event_color"`
+	Status         string     `gorm:"size:20;default:pending" json:"status"`
+	ReviewerID     *uint      `gorm:"index" json:"reviewer_id"`
+	ReviewedAt     *time.Time `json:"reviewed_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 // PostTag 帖子-标签关联

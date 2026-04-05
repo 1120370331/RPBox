@@ -92,6 +92,37 @@ func (e *apiError) Error() string {
 	return e.message
 }
 
+func parseEventDateTime(raw string) (*time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, nil
+	}
+
+	// 兼容客户端/外部编辑器的常见时间格式
+	withZoneLayouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+	}
+	withoutZoneLayouts := []string{
+		"2006-01-02T15:04",
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+	}
+
+	for _, layout := range withZoneLayouts {
+		if t, err := time.Parse(layout, value); err == nil {
+			return &t, nil
+		}
+	}
+	for _, layout := range withoutZoneLayouts {
+		if t, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+			return &t, nil
+		}
+	}
+
+	return nil, fmt.Errorf("invalid event datetime: %s", value)
+}
+
 // listPosts 获取帖子列表
 func (s *Server) listPosts(c *gin.Context) {
 	userID := c.GetUint("userID")
@@ -447,16 +478,20 @@ func (s *Server) createPost(c *gin.Context) {
 
 	// 解析活动时间
 	if req.EventStartTime != nil {
-		t, err := time.Parse(time.RFC3339, *req.EventStartTime)
-		if err == nil {
-			post.EventStartTime = &t
+		parsed, err := parseEventDateTime(*req.EventStartTime)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动开始时间格式无效"})
+			return
 		}
+		post.EventStartTime = parsed
 	}
 	if req.EventEndTime != nil {
-		t, err := time.Parse(time.RFC3339, *req.EventEndTime)
-		if err == nil {
-			post.EventEndTime = &t
+		parsed, err := parseEventDateTime(*req.EventEndTime)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动结束时间格式无效"})
+			return
 		}
+		post.EventEndTime = parsed
 	}
 
 	if err := database.DB.Create(&post).Error; err != nil {
@@ -640,16 +675,42 @@ func (s *Server) updatePost(c *gin.Context) {
 	if req.EventType != "" {
 		effectiveEventType = req.EventType
 	}
+	effectiveGuildID := post.GuildID
+	if req.GuildID != nil {
+		effectiveGuildID = req.GuildID
+	}
 
 	if effectiveCategory == "event" {
 		if effectiveEventType != "" && effectiveEventType != "server" && effectiveEventType != "guild" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
 			return
 		}
-		if effectiveEventType == "guild" && req.GuildID == nil {
+		if effectiveEventType == "guild" && effectiveGuildID == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
 			return
 		}
+	}
+
+	eventStartProvided := req.EventStartTime != nil
+	var parsedEventStart *time.Time
+	if eventStartProvided {
+		parsed, err := parseEventDateTime(*req.EventStartTime)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动开始时间格式无效"})
+			return
+		}
+		parsedEventStart = parsed
+	}
+
+	eventEndProvided := req.EventEndTime != nil
+	var parsedEventEnd *time.Time
+	if eventEndProvided {
+		parsed, err := parseEventDateTime(*req.EventEndTime)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动结束时间格式无效"})
+			return
+		}
+		parsedEventEnd = parsed
 	}
 
 	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
@@ -680,6 +741,33 @@ func (s *Server) updatePost(c *gin.Context) {
 			editReq.Category = req.Category
 		} else {
 			editReq.Category = post.Category
+		}
+		if editReq.Category == "event" {
+			if req.EventType != "" {
+				editReq.EventType = req.EventType
+			} else {
+				editReq.EventType = post.EventType
+			}
+			if eventStartProvided {
+				editReq.EventStartTime = parsedEventStart
+			} else {
+				editReq.EventStartTime = post.EventStartTime
+			}
+			if eventEndProvided {
+				editReq.EventEndTime = parsedEventEnd
+			} else {
+				editReq.EventEndTime = post.EventEndTime
+			}
+			if req.EventColor != "" {
+				editReq.EventColor = req.EventColor
+			} else {
+				editReq.EventColor = post.EventColor
+			}
+		} else {
+			editReq.EventType = ""
+			editReq.EventStartTime = nil
+			editReq.EventEndTime = nil
+			editReq.EventColor = ""
 		}
 
 		if req.IsPublic != nil {
@@ -749,15 +837,11 @@ func (s *Server) updatePost(c *gin.Context) {
 		if req.EventType != "" {
 			post.EventType = req.EventType
 		}
-		if req.EventStartTime != nil {
-			if t, err := time.Parse(time.RFC3339, *req.EventStartTime); err == nil {
-				post.EventStartTime = &t
-			}
+		if eventStartProvided {
+			post.EventStartTime = parsedEventStart
 		}
-		if req.EventEndTime != nil {
-			if t, err := time.Parse(time.RFC3339, *req.EventEndTime); err == nil {
-				post.EventEndTime = &t
-			}
+		if eventEndProvided {
+			post.EventEndTime = parsedEventEnd
 		}
 		if req.EventColor != "" {
 			post.EventColor = req.EventColor
