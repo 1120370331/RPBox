@@ -47,17 +47,6 @@ const quickJumpOpen = ref(false)
 // 是否为活动分区
 const isEventCategory = computed(() => form.value.category === 'event')
 
-// 权限检查：是否可以发布服务器活动
-const canPostServerEvent = computed(() => userStore.isModerator)
-
-// 有管理权限的公会列表（owner 或 admin）
-const adminGuilds = computed(() => {
-  return guilds.value.filter(g => g.my_role === 'owner' || g.my_role === 'admin')
-})
-
-// 权限检查：是否可以发布公会活动
-const canPostGuildEvent = computed(() => adminGuilds.value.length > 0)
-
 // 监听分区变化，重置活动相关字段
 watch(() => form.value.category, (newVal) => {
   if (newVal !== 'event') {
@@ -180,17 +169,9 @@ async function handleSubmit(status: 'draft' | 'published') {
     return
   }
 
-  // 活动分区权限验证
+  // 活动分区基础验证
   if (form.value.category === 'event') {
-    if (form.value.event_type === 'server' && !canPostServerEvent.value) {
-      toast.error(t('community.create.noServerEventPermission'))
-      return
-    }
     if (form.value.event_type === 'guild') {
-      if (!canPostGuildEvent.value) {
-        toast.error(t('community.create.noGuildEventPermission'))
-        return
-      }
       if (!form.value.guild_id) {
         toast.warning(t('community.create.selectGuildForEvent'))
         return
@@ -203,15 +184,17 @@ async function handleSubmit(status: 'draft' | 'published') {
     form.value.status = status
     form.value.tag_ids = selectedTags.value
 
+    const payload: CreatePostRequest = { ...form.value }
+
     // 转换时间格式为 ISO8601/RFC3339
-    if (form.value.event_start_time) {
-      form.value.event_start_time = new Date(form.value.event_start_time).toISOString()
+    if (payload.event_start_time) {
+      payload.event_start_time = new Date(payload.event_start_time).toISOString()
     }
-    if (form.value.event_end_time) {
-      form.value.event_end_time = new Date(form.value.event_end_time).toISOString()
+    if (payload.event_end_time) {
+      payload.event_end_time = new Date(payload.event_end_time).toISOString()
     }
 
-    const res: any = await createPost(form.value)
+    const res: any = await createPost(payload)
 
     // 添加到合集
     if (selectedCollectionId.value && res.data?.id) {
@@ -449,14 +432,17 @@ function toggleQuickJump() {
         <div class="event-type-toggle">
           <button
             :class="{ active: form.event_type === 'server' }"
-            :disabled="!canPostServerEvent"
             @click="form.event_type = 'server'"
           >{{ t('community.create.eventTypeServer') }}</button>
           <button
             :class="{ active: form.event_type === 'guild' }"
-            :disabled="!canPostGuildEvent"
             @click="form.event_type = 'guild'"
           >{{ t('community.create.eventTypeGuild') }}</button>
+        </div>
+        <div class="event-calendar-guide">
+          <p class="event-calendar-guide-title">{{ t('community.create.eventCalendarGuideTitle') }}</p>
+          <p class="event-calendar-guide-text">{{ t('community.create.eventCalendarGuideBody') }}</p>
+          <p class="event-calendar-guide-text">{{ t('community.create.eventCalendarGuideGuild') }}</p>
         </div>
       </div>
 
@@ -501,7 +487,7 @@ function toggleQuickJump() {
         <label class="setting-label">{{ t('community.create.guild') }}</label>
         <select v-model="form.guild_id" class="guild-select">
           <option :value="undefined">{{ t('community.create.guildSelect') }}</option>
-          <option v-for="g in adminGuilds" :key="g.id" :value="g.id">{{ g.name }}</option>
+          <option v-for="g in guilds" :key="g.id" :value="g.id">{{ g.name }}</option>
         </select>
       </div>
 
@@ -821,7 +807,7 @@ function toggleQuickJump() {
   transition: all 0.2s;
 }
 
-.event-type-toggle button:hover:not(:disabled) {
+.event-type-toggle button:hover {
   color: #4B3621;
 }
 
@@ -831,9 +817,28 @@ function toggleQuickJump() {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.event-type-toggle button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.event-calendar-guide {
+  padding: 10px 12px;
+  background: rgba(184, 115, 51, 0.08);
+  border: 1px solid rgba(184, 115, 51, 0.2);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-calendar-guide-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #804030;
+  margin: 0;
+}
+
+.event-calendar-guide-text {
+  font-size: 12px;
+  color: #5D4037;
+  margin: 0;
+  line-height: 1.45;
 }
 
 .event-guild {
