@@ -9,6 +9,7 @@ mod chat_log;
 use std::path::{Path, PathBuf};
 use serde_json::Value;
 use tauri::Manager;
+use tauri_plugin_autostart::MacosLauncher;
 use crate::writer::replace_trp3_profiles;
 
 #[tauri::command]
@@ -226,6 +227,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None::<Vec<&str>>
+        ))
         .invoke_handler(tauri::generate_handler![
             parse_trp3_file,
             detect_wow_paths,

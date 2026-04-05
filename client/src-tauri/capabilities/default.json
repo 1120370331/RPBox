@@ -9,6 +9,7 @@
     "dialog:allow-save",
     "shell:default",
     "shell:allow-open",
+    "autostart:default",
     "updater:default",
     "process:allow-restart",
     "process:allow-exit"
