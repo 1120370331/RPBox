@@ -28,6 +28,9 @@ importers:
       '@tauri-apps/plugin-updater':
         specifier: ^2
         version: 2.10.0
+      '@tiptap/core':
+        specifier: ^3.15.3
+        version: 3.20.0(@tiptap/pm@3.20.0)
       '@tiptap/extension-image':
         specifier: ^3.15.3
         version: 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
