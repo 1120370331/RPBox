@@ -1,0 +1,56 @@
+name: Backfill Community Activity
+
+on:
+  workflow_dispatch:
+    inputs:
+      before:
+        description: "仅回补该时间之前的历史行为（例如 2026-04-09T12:45:36+08:00）"
+        required: false
+        type: string
+      username:
+        description: "仅回补指定用户名；为空时处理全部用户"
+        required: false
+        type: string
+      apply:
+        description: "是否正式写入数据库"
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  backfill:
+    name: Run Backfill
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Run backfill on production server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 2233
+          script: |
+            set -e
+            cd ~/RPBox
+            git fetch origin main
+            git reset --hard origin/main
+            cd server
+
+            BEFORE='${{ github.event.inputs.before }}'
+            USERNAME='${{ github.event.inputs.username }}'
+            APPLY='${{ github.event.inputs.apply }}'
+
+            set --
+            if [ -n "$BEFORE" ]; then
+              set -- "$@" -before "$BEFORE"
+            fi
+            if [ -n "$USERNAME" ]; then
+              set -- "$@" -username "$USERNAME"
+            fi
+            if [ "$APPLY" = "true" ]; then
+              set -- "$@" -apply
+            fi
+
+            echo "Running: go run ./cmd/backfillactivity $*"
+            go run ./cmd/backfillactivity "$@"
