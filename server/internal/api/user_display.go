@@ -113,10 +113,6 @@ func normalizedNameStylePreference(user model.User) string {
 }
 
 func userDisplayStyle(user model.User) (string, bool) {
-	if user.Role == "admin" || user.Role == "moderator" {
-		return adminNameColor, false
-	}
-
 	preference := normalizedNameStylePreference(user)
 
 	switch preference {
@@ -127,8 +123,14 @@ func userDisplayStyle(user model.User) (string, bool) {
 			if color := normalizeHexColor(user.SponsorColor); color != "" {
 				return color, bold
 			}
-			return defaultUserNameColor(user), bold
+			if bold {
+				return defaultUserNameColor(user), true
+			}
 		}
+	}
+
+	if user.Role == "admin" || user.Role == "moderator" {
+		return adminNameColor, false
 	}
 
 	return defaultUserNameColor(user), false
