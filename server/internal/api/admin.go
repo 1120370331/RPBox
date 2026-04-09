@@ -54,46 +54,53 @@ func (s *Server) listUsers(c *gin.Context) {
 
 	// 隐藏敏感信息
 	type SafeUser struct {
-		ID           uint       `json:"id"`
-		Username     string     `json:"username"`
-		Email        string     `json:"email"`
-		Avatar       string     `json:"avatar"`
-		Role         string     `json:"role"`
-		IsSponsor    bool       `json:"is_sponsor"`
-		SponsorLevel int        `json:"sponsor_level"`
-		NameColor    string     `json:"name_color"`
-		NameBold     bool       `json:"name_bold"`
-		IsMuted      bool       `json:"is_muted"`
-		MutedUntil   *time.Time `json:"muted_until"`
-		MuteReason   string     `json:"mute_reason"`
-		IsBanned     bool       `json:"is_banned"`
-		BannedUntil  *time.Time `json:"banned_until"`
-		BanReason    string     `json:"ban_reason"`
-		PostCount    int        `json:"post_count"`
-		CreatedAt    time.Time  `json:"created_at"`
+		ID                 uint       `json:"id"`
+		Username           string     `json:"username"`
+		Email              string     `json:"email"`
+		Avatar             string     `json:"avatar"`
+		Role               string     `json:"role"`
+		IsSponsor          bool       `json:"is_sponsor"`
+		SponsorLevel       int        `json:"sponsor_level"`
+		NameColor          string     `json:"name_color"`
+		NameBold           bool       `json:"name_bold"`
+		IsMuted            bool       `json:"is_muted"`
+		MutedUntil         *time.Time `json:"muted_until"`
+		MuteReason         string     `json:"mute_reason"`
+		IsBanned           bool       `json:"is_banned"`
+		BannedUntil        *time.Time `json:"banned_until"`
+		BanReason          string     `json:"ban_reason"`
+		PostCount          int        `json:"post_count"`
+		ActivityExperience int        `json:"activity_experience"`
+		ForumLevel         int        `json:"forum_level"`
+		ForumLevelName     string     `json:"forum_level_name"`
+		CreatedAt          time.Time  `json:"created_at"`
 	}
 	result := make([]SafeUser, len(users))
 	for i, u := range users {
 		nameColor, nameBold := userDisplayStyle(u)
 		level := resolveSponsorLevel(u)
+		levelInfo := resolveForumLevelInfo(u.ActivityExperience)
 		result[i] = SafeUser{
-			ID:           u.ID,
-			Username:     u.Username,
-			Email:        u.Email,
-			Avatar:       userAvatarURL(s.cfg.Server.ApiHost, u),
-			Role:         u.Role,
-			IsSponsor:    level > sponsorLevelNone,
-			SponsorLevel: level,
-			NameColor:    nameColor,
-			NameBold:     nameBold,
-			IsMuted:      u.IsMuted,
-			MutedUntil:   u.MutedUntil,
-			MuteReason:   u.MuteReason,
-			IsBanned:     u.IsBanned,
-			BannedUntil:  u.BannedUntil,
-			BanReason:    u.BanReason,
-			PostCount:    u.PostCount,
-			CreatedAt:    u.CreatedAt,
+			ID:                 u.ID,
+			Username:           u.Username,
+			Email:              u.Email,
+			Avatar:             userAvatarURL(s.cfg.Server.ApiHost, u),
+			Role:               u.Role,
+			IsSponsor:          level > sponsorLevelNone,
+			SponsorLevel:       level,
+			NameColor:          nameColor,
+			NameBold:           nameBold,
+			IsMuted:            u.IsMuted,
+			MutedUntil:         u.MutedUntil,
+			MuteReason:         u.MuteReason,
+			IsBanned:           u.IsBanned,
+			BannedUntil:        u.BannedUntil,
+			BanReason:          u.BanReason,
+			PostCount:          u.PostCount,
+			ActivityExperience: u.ActivityExperience,
+			ForumLevel:         levelInfo.Level,
+			ForumLevelName:     levelInfo.Name,
+			CreatedAt:          u.CreatedAt,
 		}
 	}
 
@@ -204,6 +211,63 @@ func (s *Server) setUserSponsor(c *gin.Context) {
 		"username":      user.Username,
 		"is_sponsor":    level > sponsorLevelNone,
 		"sponsor_level": level,
+	}})
+}
+
+// setUserExperience 设置用户社区经验值
+func (s *Server) setUserExperience(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var user model.User
+	if err := database.DB.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	var req struct {
+		ActivityExperience *int `json:"activity_experience"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if req.ActivityExperience == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少经验值"})
+		return
+	}
+
+	nextExperience := *req.ActivityExperience
+	if nextExperience < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "经验值不能小于0"})
+		return
+	}
+	if nextExperience == user.ActivityExperience {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "经验值未变化"})
+		return
+	}
+
+	beforeLevel := resolveForumLevelInfo(user.ActivityExperience)
+	afterLevel := resolveForumLevelInfo(nextExperience)
+
+	if err := database.DB.Model(&user).Update("activity_experience", nextExperience).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+	s.invalidateUserProfileCache(c.Request.Context(), user.ID)
+
+	logAdminAction(c, "set_experience", "user", user.ID, user.Username, map[string]interface{}{
+		"before_experience": user.ActivityExperience,
+		"after_experience":  nextExperience,
+		"before_level":      beforeLevel.Level,
+		"after_level":       afterLevel.Level,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "社区经验值已更新", "user": gin.H{
+		"id":                  user.ID,
+		"username":            user.Username,
+		"activity_experience": nextExperience,
+		"forum_level":         afterLevel.Level,
+		"forum_level_name":    afterLevel.Name,
 	}})
 }
 

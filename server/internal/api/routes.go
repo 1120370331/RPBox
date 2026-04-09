@@ -339,6 +339,7 @@ func (s *Server) setupRoutes() {
 				admin.GET("/users", s.listUsers)
 				admin.PUT("/users/:id/role", s.setUserRole)
 				admin.PUT("/users/:id/sponsor", s.setUserSponsor)
+				admin.PUT("/users/:id/experience", s.setUserExperience)
 				admin.POST("/notifications/broadcast", s.broadcastSystemNotification)
 			}
 		}
