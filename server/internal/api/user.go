@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,7 +14,9 @@ import (
 	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 )
 
 // getUserInfo 获取当前用户信息
@@ -38,30 +41,102 @@ func (s *Server) getUserInfo(c *gin.Context) {
 
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
+	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
 
 	// 返回头像 URL 而不是 base64 数据
 	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
 
+	response := struct {
+		ID                 uint      `json:"id"`
+		Username           string    `json:"username"`
+		Email              string    `json:"email"`
+		Avatar             string    `json:"avatar"`
+		AvatarReviewStatus string    `json:"avatar_review_status"`
+		Role               string    `json:"role"`
+		IsSponsor          bool      `json:"is_sponsor"`
+		SponsorLevel       int       `json:"sponsor_level"`
+		SponsorColor       string    `json:"sponsor_color"`
+		SponsorBold        bool      `json:"sponsor_bold"`
+		NameColor          string    `json:"name_color"`
+		NameBold           bool      `json:"name_bold"`
+		Bio                string    `json:"bio"`
+		Location           string    `json:"location"`
+		Website            string    `json:"website"`
+		PostCount          int64     `json:"post_count"`
+		StoryCount         int64     `json:"story_count"`
+		ProfileCount       int64     `json:"profile_count"`
+		CreatedAt          time.Time `json:"created_at"`
+		userActivityPayload
+	}{
+		ID:                  user.ID,
+		Username:            user.Username,
+		Email:               user.Email,
+		Avatar:              avatarURL,
+		AvatarReviewStatus:  user.AvatarReviewStatus,
+		Role:                user.Role,
+		IsSponsor:           level > sponsorLevelNone,
+		SponsorLevel:        level,
+		SponsorColor:        user.SponsorColor,
+		SponsorBold:         user.SponsorBold,
+		NameColor:           nameColor,
+		NameBold:            nameBold,
+		Bio:                 user.Bio,
+		Location:            user.Location,
+		Website:             user.Website,
+		PostCount:           postCount,
+		StoryCount:          storyCount,
+		ProfileCount:        profileCount,
+		CreatedAt:           user.CreatedAt,
+		userActivityPayload: activity,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// signInDaily 处理每日签到。
+func (s *Server) signInDaily(c *gin.Context) {
+	userID := c.GetUint("userID")
+	now := time.Now()
+
+	result, err := func() (service.RewardResult, error) {
+		var output service.RewardResult
+		err := database.DB.Transaction(func(tx *gorm.DB) error {
+			reward, txErr := service.ApplyDailySignIn(tx, userID, now)
+			if txErr != nil {
+				return txErr
+			}
+			output = reward
+			return nil
+		})
+		return output, err
+	}()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "签到失败"})
+		return
+	}
+
+	var user model.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, now))
 	c.JSON(http.StatusOK, gin.H{
-		"id":                   user.ID,
-		"username":             user.Username,
-		"email":                user.Email,
-		"avatar":               avatarURL,
-		"avatar_review_status": user.AvatarReviewStatus,
-		"role":                 user.Role,
-		"is_sponsor":           level > sponsorLevelNone,
-		"sponsor_level":        level,
-		"sponsor_color":        user.SponsorColor,
-		"sponsor_bold":         user.SponsorBold,
-		"name_color":           nameColor,
-		"name_bold":            nameBold,
-		"bio":                  user.Bio,
-		"location":             user.Location,
-		"website":              user.Website,
-		"post_count":           postCount,
-		"story_count":          storyCount,
-		"profile_count":        profileCount,
-		"created_at":           user.CreatedAt,
+		"message":                map[bool]string{true: "签到成功", false: "今天已经签到过了"}[result.Granted],
+		"granted":                result.Granted,
+		"points_delta":           result.PointsDelta,
+		"experience_delta":       result.ExperienceDelta,
+		"activity_points":        activity.ActivityPoints,
+		"activity_experience":    activity.ActivityExperience,
+		"forum_level":            activity.ForumLevel,
+		"forum_level_name":       activity.ForumLevelName,
+		"forum_level_color":      activity.ForumLevelColor,
+		"forum_level_bold":       activity.ForumLevelBold,
+		"current_level_exp":      activity.CurrentLevelExp,
+		"next_level_exp":         activity.NextLevelExp,
+		"level_progress_percent": activity.LevelProgressPercent,
+		"signed_in_today":        activity.SignedInToday,
 	})
 }
 
@@ -70,7 +145,7 @@ func (s *Server) updateAvatar(c *gin.Context) {
 	userID := c.GetUint("userID")
 
 	var user model.User
-	if err := database.DB.Select("id", "avatar_review_status").First(&user, userID).Error; err != nil {
+	if err := database.DB.Select("id", "avatar_review_status", "avatar_change_count", "activity_points").First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
@@ -91,29 +166,58 @@ func (s *Server) updateAvatar(c *gin.Context) {
 		return
 	}
 
+	if user.AvatarChangeCount > 0 && user.ActivityPoints < service.AvatarChangeCost {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("积分不足，修改头像需要%d积分", service.AvatarChangeCost)})
+		return
+	}
+
 	avatarURL, err := s.saveUploadedImage(c, header, fmt.Sprintf("users/%d/avatar", userID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存头像失败"})
 		return
 	}
 
-	// 更新数据库
-	updates := map[string]interface{}{
-		"avatar":                avatarURL,
-		"avatar_review_status":  "pending",
-		"avatar_reviewer_id":    nil,
-		"avatar_reviewed_at":    nil,
-		"avatar_review_comment": "",
-	}
-	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		var current model.User
+		if err := tx.Select("id", "avatar_change_count", "activity_points").First(&current, userID).Error; err != nil {
+			return err
+		}
+		if current.AvatarChangeCount > 0 {
+			if _, spendErr := service.SpendActivityPoints(tx, userID, "avatar_change_cost", fmt.Sprintf("avatar-change:%d", current.AvatarChangeCount+1), service.AvatarChangeCost); spendErr != nil {
+				return spendErr
+			}
+		}
+
+		updates := map[string]interface{}{
+			"avatar":                avatarURL,
+			"avatar_review_status":  "pending",
+			"avatar_reviewer_id":    nil,
+			"avatar_reviewed_at":    nil,
+			"avatar_review_comment": "",
+			"avatar_change_count":   current.AvatarChangeCount + 1,
+		}
+		return tx.Model(&model.User{}).Where("id = ?", userID).Updates(updates).Error
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrInsufficientPoints) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("积分不足，修改头像需要%d积分", service.AvatarChangeCost)})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新头像失败"})
 		return
 	}
 	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
+	var refreshed model.User
+	_ = database.DB.First(&refreshed, userID).Error
+	activity := buildUserActivityPayload(refreshed, loadUserActivitySnapshot(refreshed.ID, time.Now()))
 	c.JSON(http.StatusOK, gin.H{
-		"message":              "头像已提交审核",
-		"avatar_review_status": "pending",
+		"message":                 "头像已提交审核",
+		"avatar":                  avatarURL,
+		"avatar_review_status":    "pending",
+		"activity_points":         activity.ActivityPoints,
+		"avatar_change_count":     activity.AvatarChangeCount,
+		"next_avatar_change_cost": activity.NextAvatarChangeCost,
 	})
 }
 
@@ -122,69 +226,134 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 	userID := c.GetUint("userID")
 
 	var req struct {
-		Username     string  `json:"username"`
-		Email        string  `json:"email"`
-		Bio          string  `json:"bio"`
-		Location     string  `json:"location"`
-		Website      string  `json:"website"`
-		SponsorColor *string `json:"sponsor_color"`
-		SponsorBold  *bool   `json:"sponsor_bold"`
+		Username            string  `json:"username"`
+		Email               string  `json:"email"`
+		Bio                 string  `json:"bio"`
+		Location            string  `json:"location"`
+		Website             string  `json:"website"`
+		SponsorColor        *string `json:"sponsor_color"`
+		SponsorBold         *bool   `json:"sponsor_bold"`
+		NameStylePreference *string `json:"name_style_preference"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
 
-	updates := make(map[string]interface{})
-	if req.Username != "" {
-		updates["username"] = req.Username
-	}
-	if req.Email != "" {
-		updates["email"] = req.Email
-	}
-	if req.Bio != "" {
-		updates["bio"] = req.Bio
-	}
-	if req.Location != "" {
-		updates["location"] = req.Location
-	}
-	if req.Website != "" {
-		updates["website"] = req.Website
-	}
-	if req.SponsorColor != nil || req.SponsorBold != nil {
-		var user model.User
-		if err := database.DB.Select("id", "is_sponsor", "sponsor_level").First(&user, userID).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询用户失败"})
-			return
-		}
-		if resolveSponsorLevel(user) < sponsorLevelStyle {
-			c.JSON(http.StatusForbidden, gin.H{"error": "无权操作赞助者样式"})
-			return
-		}
-		if req.SponsorColor != nil {
-			if *req.SponsorColor == "" {
-				updates["sponsor_color"] = ""
-			} else {
-				normalized := normalizeHexValue(*req.SponsorColor)
-				if normalized == "" {
-					c.JSON(http.StatusBadRequest, gin.H{"error": "颜色格式无效"})
-					return
-				}
-				updates["sponsor_color"] = normalized
+	req.Username = strings.TrimSpace(req.Username)
+
+	var normalizedSponsorColor *string
+	if req.SponsorColor != nil {
+		if *req.SponsorColor == "" {
+			empty := ""
+			normalizedSponsorColor = &empty
+		} else {
+			normalized := normalizeHexValue(*req.SponsorColor)
+			if normalized == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "颜色格式无效"})
+				return
 			}
-		}
-		if req.SponsorBold != nil {
-			updates["sponsor_bold"] = *req.SponsorBold
+			normalizedSponsorColor = &normalized
 		}
 	}
 
-	if len(updates) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "没有要更新的内容"})
+	if req.NameStylePreference != nil {
+		preference := strings.ToLower(strings.TrimSpace(*req.NameStylePreference))
+		if preference != "default" && preference != "level" && preference != "sponsor" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "昵称样式无效"})
+			return
+		}
+		req.NameStylePreference = &preference
+	}
+
+	updated := false
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		var user model.User
+		if err := tx.Select("id", "username", "username_change_count", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").
+			First(&user, userID).Error; err != nil {
+			return err
+		}
+
+		updates := make(map[string]interface{})
+		if req.Username != "" && req.Username != user.Username {
+			if len([]rune(req.Username)) < 3 || len([]rune(req.Username)) > 50 {
+				return &apiError{status: http.StatusBadRequest, message: "用户名长度需在3到50个字符之间"}
+			}
+
+			var existingCount int64
+			if err := tx.Model(&model.User{}).Where("username = ? AND id != ?", req.Username, userID).Count(&existingCount).Error; err != nil {
+				return err
+			}
+			if existingCount > 0 {
+				return &apiError{status: http.StatusConflict, message: "用户名已存在"}
+			}
+
+			if user.UsernameChangeCount > 0 {
+				if _, spendErr := service.SpendActivityPoints(tx, userID, "username_change_cost", fmt.Sprintf("username-change:%d", user.UsernameChangeCount+1), service.UsernameChangeCost); spendErr != nil {
+					return spendErr
+				}
+			}
+			updates["username"] = req.Username
+			updates["username_change_count"] = user.UsernameChangeCount + 1
+		}
+
+		if req.Email != "" {
+			updates["email"] = req.Email
+		}
+		if req.Bio != "" {
+			updates["bio"] = req.Bio
+		}
+		if req.Location != "" {
+			updates["location"] = req.Location
+		}
+		if req.Website != "" {
+			updates["website"] = req.Website
+		}
+
+		if normalizedSponsorColor != nil || req.SponsorBold != nil || req.NameStylePreference != nil {
+			if resolveSponsorLevel(user) < sponsorLevelStyle {
+				if normalizedSponsorColor != nil || req.SponsorBold != nil || (req.NameStylePreference != nil && *req.NameStylePreference == "sponsor") {
+					return &apiError{status: http.StatusForbidden, message: "无权操作赞助者样式"}
+				}
+			}
+			if normalizedSponsorColor != nil {
+				updates["sponsor_color"] = *normalizedSponsorColor
+			}
+			if req.SponsorBold != nil {
+				updates["sponsor_bold"] = *req.SponsorBold
+			}
+			if req.NameStylePreference != nil {
+				updates["name_style_preference"] = *req.NameStylePreference
+			}
+		} else if req.NameStylePreference != nil {
+			updates["name_style_preference"] = *req.NameStylePreference
+		}
+
+		if len(updates) == 0 {
+			return &apiError{status: http.StatusBadRequest, message: "没有要更新的内容"}
+		}
+
+		if err := tx.Model(&model.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
+			return err
+		}
+		updated = true
+		return nil
+	})
+	if err != nil {
+		if apiErr, ok := err.(*apiError); ok {
+			c.JSON(apiErr.status, gin.H{"error": apiErr.message})
+			return
+		}
+		if errors.Is(err, service.ErrInsufficientPoints) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("积分不足，修改用户名需要%d积分", service.UsernameChangeCost)})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
 		return
 	}
 
-	if err := database.DB.Model(&model.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+	if !updated {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "没有要更新的内容"})
 		return
 	}
 	s.invalidateUserProfileCache(c.Request.Context(), userID)
@@ -245,23 +414,30 @@ type userProfileCounts struct {
 	ProfileCount int64
 }
 
-type userProfileResponse struct {
-	ID           uint      `json:"id"`
-	Username     string    `json:"username"`
-	Avatar       string    `json:"avatar"`
-	Role         string    `json:"role"`
-	IsSponsor    bool      `json:"is_sponsor"`
-	SponsorLevel int       `json:"sponsor_level"`
-	NameColor    string    `json:"name_color"`
-	NameBold     bool      `json:"name_bold"`
-	Bio          string    `json:"bio"`
-	Location     string    `json:"location"`
-	Website      string    `json:"website"`
-	PostCount    int64     `json:"post_count"`
-	StoryCount   int64     `json:"story_count"`
-	ProfileCount int64     `json:"profile_count"`
-	CreatedAt    time.Time `json:"created_at"`
-	Email        string    `json:"email,omitempty"`
+type publicUserProfileResponse struct {
+	ID                   uint      `json:"id"`
+	Username             string    `json:"username"`
+	Avatar               string    `json:"avatar"`
+	Role                 string    `json:"role"`
+	IsSponsor            bool      `json:"is_sponsor"`
+	SponsorLevel         int       `json:"sponsor_level"`
+	NameColor            string    `json:"name_color"`
+	NameBold             bool      `json:"name_bold"`
+	Bio                  string    `json:"bio"`
+	Location             string    `json:"location"`
+	Website              string    `json:"website"`
+	PostCount            int64     `json:"post_count"`
+	StoryCount           int64     `json:"story_count"`
+	ProfileCount         int64     `json:"profile_count"`
+	CreatedAt            time.Time `json:"created_at"`
+	Email                string    `json:"email,omitempty"`
+	ForumLevel           int       `json:"forum_level"`
+	ForumLevelName       string    `json:"forum_level_name"`
+	ForumLevelColor      string    `json:"forum_level_color"`
+	ForumLevelBold       bool      `json:"forum_level_bold"`
+	CurrentLevelExp      int       `json:"current_level_exp"`
+	NextLevelExp         int       `json:"next_level_exp"`
+	LevelProgressPercent int       `json:"level_progress_percent"`
 }
 
 func fetchUserProfileData(ctx context.Context, userID string) (model.User, userProfileCounts, error) {
@@ -279,25 +455,33 @@ func fetchUserProfileData(ctx context.Context, userID string) (model.User, userP
 	return user, counts, nil
 }
 
-func buildPublicUserProfile(apiHost string, user model.User, counts userProfileCounts) userProfileResponse {
+func buildPublicUserProfile(apiHost string, user model.User, counts userProfileCounts) publicUserProfileResponse {
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
-	response := userProfileResponse{
-		ID:           user.ID,
-		Username:     user.Username,
-		Avatar:       userAvatarURL(apiHost, user),
-		Role:         user.Role,
-		IsSponsor:    level > sponsorLevelNone,
-		SponsorLevel: level,
-		NameColor:    nameColor,
-		NameBold:     nameBold,
-		Bio:          user.Bio,
-		Location:     user.Location,
-		Website:      user.Website,
-		PostCount:    counts.PostCount,
-		StoryCount:   counts.StoryCount,
-		ProfileCount: counts.ProfileCount,
-		CreatedAt:    user.CreatedAt,
+	levelInfo := resolveForumLevelInfo(user.ActivityExperience)
+	response := publicUserProfileResponse{
+		ID:                   user.ID,
+		Username:             user.Username,
+		Avatar:               userAvatarURL(apiHost, user),
+		Role:                 user.Role,
+		IsSponsor:            level > sponsorLevelNone,
+		SponsorLevel:         level,
+		NameColor:            nameColor,
+		NameBold:             nameBold,
+		Bio:                  user.Bio,
+		Location:             user.Location,
+		Website:              user.Website,
+		PostCount:            counts.PostCount,
+		StoryCount:           counts.StoryCount,
+		ProfileCount:         counts.ProfileCount,
+		CreatedAt:            user.CreatedAt,
+		ForumLevel:           levelInfo.Level,
+		ForumLevelName:       levelInfo.Name,
+		ForumLevelColor:      levelInfo.Color,
+		ForumLevelBold:       levelInfo.Bold,
+		CurrentLevelExp:      levelInfo.CurrentLevelExp,
+		NextLevelExp:         levelInfo.NextLevelExp,
+		LevelProgressPercent: levelInfo.ProgressPercent,
 	}
 
 	if maskedEmail := user.MaskedEmail(); maskedEmail != "" {
@@ -314,7 +498,7 @@ func (s *Server) getUserProfile(c *gin.Context) {
 	isOwnProfile := exists && userID == fmt.Sprint(currentUserID.(uint))
 
 	if !isOwnProfile && s.cache != nil {
-		var cached userProfileResponse
+		var cached publicUserProfileResponse
 		cacheKey := s.userProfileCacheKey(userID)
 		err := s.cache.Fetch(c.Request.Context(), cacheKey, cache.TTL["user"], &cached, func(ctx context.Context) (interface{}, error) {
 			user, counts, err := fetchUserProfileData(ctx, userID)
@@ -339,26 +523,42 @@ func (s *Server) getUserProfile(c *gin.Context) {
 
 	// 如果是查看自己的资料，返回敏感信息
 	if isOwnProfile {
+		activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
 		response := gin.H{
-			"id":             publicProfile.ID,
-			"username":       publicProfile.Username,
-			"avatar":         publicProfile.Avatar,
-			"role":           publicProfile.Role,
-			"is_sponsor":     publicProfile.IsSponsor,
-			"sponsor_level":  publicProfile.SponsorLevel,
-			"name_color":     publicProfile.NameColor,
-			"name_bold":      publicProfile.NameBold,
-			"bio":            publicProfile.Bio,
-			"location":       publicProfile.Location,
-			"website":        publicProfile.Website,
-			"post_count":     publicProfile.PostCount,
-			"story_count":    publicProfile.StoryCount,
-			"profile_count":  publicProfile.ProfileCount,
-			"created_at":     publicProfile.CreatedAt,
-			"email":          user.Email,
-			"email_verified": user.EmailVerified,
-			"sponsor_color":  user.SponsorColor,
-			"sponsor_bold":   user.SponsorBold,
+			"id":                        publicProfile.ID,
+			"username":                  publicProfile.Username,
+			"avatar":                    publicProfile.Avatar,
+			"role":                      publicProfile.Role,
+			"is_sponsor":                publicProfile.IsSponsor,
+			"sponsor_level":             publicProfile.SponsorLevel,
+			"name_color":                publicProfile.NameColor,
+			"name_bold":                 publicProfile.NameBold,
+			"bio":                       publicProfile.Bio,
+			"location":                  publicProfile.Location,
+			"website":                   publicProfile.Website,
+			"post_count":                publicProfile.PostCount,
+			"story_count":               publicProfile.StoryCount,
+			"profile_count":             publicProfile.ProfileCount,
+			"created_at":                publicProfile.CreatedAt,
+			"email":                     user.Email,
+			"email_verified":            user.EmailVerified,
+			"sponsor_color":             user.SponsorColor,
+			"sponsor_bold":              user.SponsorBold,
+			"activity_points":           activity.ActivityPoints,
+			"activity_experience":       activity.ActivityExperience,
+			"forum_level":               publicProfile.ForumLevel,
+			"forum_level_name":          publicProfile.ForumLevelName,
+			"forum_level_color":         publicProfile.ForumLevelColor,
+			"forum_level_bold":          publicProfile.ForumLevelBold,
+			"current_level_exp":         publicProfile.CurrentLevelExp,
+			"next_level_exp":            publicProfile.NextLevelExp,
+			"level_progress_percent":    publicProfile.LevelProgressPercent,
+			"signed_in_today":           activity.SignedInToday,
+			"name_style_preference":     activity.NameStylePreference,
+			"avatar_change_count":       activity.AvatarChangeCount,
+			"username_change_count":     activity.UsernameChangeCount,
+			"next_avatar_change_cost":   activity.NextAvatarChangeCost,
+			"next_username_change_cost": activity.NextUsernameChangeCost,
 		}
 		c.JSON(http.StatusOK, response)
 		return
@@ -447,7 +647,7 @@ func (s *Server) listSponsors(c *gin.Context) {
 
 	var users []model.User
 	if err := database.DB.
-		Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "created_at").
+		Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "created_at").
 		Where("sponsor_level > ? OR is_sponsor = ?", 0, true).
 		Order("sponsor_level DESC, created_at ASC").
 		Find(&users).Error; err != nil {

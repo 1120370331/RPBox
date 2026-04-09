@@ -28,12 +28,19 @@ const visible = ref(false)
 .r-tooltip { position: relative; display: inline-block; }
 .r-tooltip__content {
   position: absolute;
-  padding: 6px 10px;
-  background: var(--color-primary);
-  color: var(--text-light);
+  padding: 8px 10px;
+  width: 260px;
+  max-width: min(260px, calc(100vw - 32px));
+  background: var(--color-primary, #4B3621);
+  color: var(--color-text-light, #FBF5EF);
   font-size: 12px;
-  border-radius: 4px;
-  white-space: nowrap;
+  line-height: 1.5;
+  text-align: left;
+  border-radius: 8px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
   z-index: 100;
 }
 .r-tooltip--top { bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px; }

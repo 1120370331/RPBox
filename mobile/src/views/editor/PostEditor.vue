@@ -20,6 +20,7 @@ import {
   removePostFromCollection,
 } from '@/api/collection'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
+import MobileRichEditor from '@/components/MobileRichEditor.vue'
 
 interface PostEditorForm {
   title: string
@@ -159,6 +160,11 @@ function validateForm() {
   return true
 }
 
+function handleContentChange(value: string) {
+  form.value.content = value
+  form.value.content_type = 'html'
+}
+
 async function submit(status: 'draft' | 'published') {
   if (!validateForm()) return
 
@@ -168,6 +174,7 @@ async function submit(status: 'draft' | 'published') {
       ...form.value,
       title: form.value.title.trim(),
       content: form.value.content.trim(),
+      content_type: 'html' as const,
       status,
     }
 
@@ -272,10 +279,10 @@ onMounted(async () => {
 
           <label class="field">
             <span>{{ $t('community.editor.content') }}</span>
-            <textarea
-              v-model="form.content"
-              rows="10"
+            <MobileRichEditor
+              :model-value="form.content"
               :placeholder="$t('community.editor.contentPlaceholder')"
+              @update:modelValue="handleContentChange"
             />
           </label>
 

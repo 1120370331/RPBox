@@ -3,11 +3,14 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { useToastStore } from '../../stores/toast'
-import { uploadAvatar, bindEmail } from '../../api/user'
+import { uploadAvatar, bindEmail, type UserInfo } from '../../api/user'
 import { sendVerificationCode } from '../../api/auth'
 import request from '../../api/request'
 import RColorPicker from '@/components/RColorPicker.vue'
 import RCheckbox from '@/components/RCheckbox.vue'
+import RModal from '@/components/RModal.vue'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
@@ -36,10 +39,12 @@ const userProfile = ref<any>(null)
 const userGuilds = ref<any[]>([])
 const loading = ref(true)
 const editMode = ref(false)
+const showLevelGuide = ref(false)
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const sponsorColor = ref('')
 const sponsorBold = ref(false)
+const nameStylePreference = ref<'default' | 'level' | 'sponsor'>('level')
 
 // 邮箱绑定相关
 const showEmailBinding = ref(false)
@@ -58,6 +63,45 @@ const formData = ref({
   website: ''
 })
 
+const nameStyleOptions = computed(() => [
+  { value: 'default' as const, label: '默认颜色', disabled: false },
+  { value: 'level' as const, label: '等级颜色', disabled: false },
+  { value: 'sponsor' as const, label: '赞助者颜色', disabled: !canEditSponsorStyle.value },
+])
+
+const activityExpRules = [
+  '每日签到 +10',
+  '每日首次点赞 +5',
+  '发表评论 +3，收到评论 +3',
+  '帖子获赞 +5，道具获赞 +10',
+  '帖子审核通过 +30，道具审核通过 +50',
+  '道具被下载 +10',
+  '剧情归档每累计 10 条 +1，每日最多 +50',
+]
+
+const forumLevelDefinitions = [
+  { level: 1, name: '新人', color: '#403B33', bold: false },
+  { level: 2, name: '启源', color: '#808080', bold: false },
+  { level: 3, name: '常态', color: '#FFFFFF', bold: false },
+  { level: 4, name: '优秀', color: '#00C100', bold: false },
+  { level: 5, name: '精良', color: '#0080FF', bold: false },
+  { level: 6, name: '史诗', color: '#800080', bold: false },
+  { level: 7, name: '传奇', color: '#F59B00', bold: true },
+  { level: 8, name: '传承', color: '#0080C0', bold: true },
+  { level: 9, name: '神话', color: '#EBD7A7', bold: true },
+  { level: 10, name: '顶级', color: '#8E1027', bold: true },
+] as const
+
+const forumLevelGuide = computed(() => buildForumLevelGuide(forumLevelDefinitions))
+
+const activityProgressPercent = computed(() => {
+  const apiValue = Number(userProfile.value?.level_progress_percent)
+  if (Number.isFinite(apiValue)) {
+    return Math.max(0, Math.min(100, Math.round(apiValue)))
+  }
+  return computeLevelProgressPercent(userProfile.value?.current_level_exp, userProfile.value?.next_level_exp)
+})
+
 onMounted(async () => {
   await loadUserProfile()
   await loadUserGuilds()
@@ -66,7 +110,7 @@ onMounted(async () => {
 async function loadUserProfile() {
   try {
     loading.value = true
-    const res = await request.get(`/users/${userId.value}`)
+    const res = await request.get<UserInfo>(`/users/${userId.value}`)
     userProfile.value = res
     formData.value = {
       username: res.username || '',
@@ -76,16 +120,19 @@ async function loadUserProfile() {
     }
     sponsorColor.value = res.sponsor_color || ''
     sponsorBold.value = !!res.sponsor_bold
+    nameStylePreference.value = res.name_style_preference || 'level'
     if (isOwnProfile.value && userStore.user) {
       const level = typeof res.sponsor_level === 'number' ? res.sponsor_level : (res.is_sponsor ? 2 : 0)
-      userStore.user.username = res.username
-      userStore.user.name_color = res.name_color
-      userStore.user.name_bold = res.name_bold
-      userStore.user.is_sponsor = level > 0
-      userStore.user.sponsor_level = level
-      userStore.user.sponsor_color = res.sponsor_color
-      userStore.user.sponsor_bold = res.sponsor_bold
-      localStorage.setItem('user', JSON.stringify(userStore.user))
+      userStore.mergeUser({
+        ...res,
+        username: res.username,
+        name_color: res.name_color,
+        name_bold: res.name_bold,
+        is_sponsor: level > 0,
+        sponsor_level: level,
+        sponsor_color: res.sponsor_color,
+        sponsor_bold: res.sponsor_bold,
+      })
     }
   } catch (error: any) {
     console.error('加载用户信息失败:', error)
@@ -96,7 +143,7 @@ async function loadUserProfile() {
 
 async function loadUserGuilds() {
   try {
-    const res = await request.get(`/users/${userId.value}/guilds`)
+    const res = await request.get<{ guilds: any[] }>(`/users/${userId.value}/guilds`)
     userGuilds.value = res.guilds || []
   } catch (error: any) {
     console.error('加载公会列表失败:', error)
@@ -110,6 +157,7 @@ async function saveProfile() {
       payload.sponsor_color = sponsorColor.value
       payload.sponsor_bold = sponsorBold.value
     }
+    payload.name_style_preference = nameStylePreference.value
     await request.put('/user/info', payload)
     await loadUserProfile()
     editMode.value = false
@@ -130,6 +178,7 @@ function cancelEdit() {
   }
   sponsorColor.value = userProfile.value?.sponsor_color || ''
   sponsorBold.value = !!userProfile.value?.sponsor_bold
+  nameStylePreference.value = userProfile.value?.name_style_preference || 'level'
 }
 
 function triggerAvatarUpload() {
@@ -150,9 +199,13 @@ async function handleAvatarChange(event: Event) {
   avatarUploading.value = true
   try {
     const res = await uploadAvatar(file)
-    userStore.updateAvatar(res.avatar)
-    userProfile.value.avatar = res.avatar
-    toast.success('头像更新成功')
+    userStore.mergeUser(res)
+    userProfile.value = {
+      ...userProfile.value,
+      ...res,
+      avatar: res.avatar,
+    }
+    toast.success(res.message || '头像更新成功')
   } catch (error: any) {
     toast.error(error.message || '上传失败')
   } finally {
@@ -170,6 +223,10 @@ function formatDate(dateStr: string) {
 function getRoleLabel(role: string) {
   const map: Record<string, string> = { owner: '会长', admin: '管理员', member: '成员' }
   return map[role] || role
+}
+
+function formatCostLabel(cost?: number) {
+  return cost && cost > 0 ? `${cost} 积分` : '免费'
 }
 
 function goBack() {
@@ -272,6 +329,53 @@ async function handleBindEmail() {
             </span>
           </div>
 
+          <div class="activity-panel">
+            <div class="activity-header">
+              <span class="activity-title">社区活跃度</span>
+              <UserLevelBadge
+                :level="userProfile.forum_level"
+                :name="userProfile.forum_level_name"
+                :color="userProfile.forum_level_color"
+                :bold="userProfile.forum_level_bold"
+                size="md"
+              />
+            </div>
+            <div class="activity-progress">
+              <div class="progress-meta">
+                <span>等级进度</span>
+                <span>{{ activityProgressPercent }}%</span>
+              </div>
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  :style="{
+                    width: `${activityProgressPercent}%`,
+                    background: userProfile.forum_level_color || '#B87333',
+                  }"
+                ></div>
+              </div>
+              <div class="progress-foot">
+                <span>{{ userProfile.current_level_exp || 0 }} / {{ userProfile.next_level_exp || userProfile.current_level_exp || 0 }}</span>
+                <span class="progress-foot-note">
+                  <span>经验</span>
+                  <button type="button" class="progress-help" aria-label="经验与等级说明" @click="showLevelGuide = true">
+                      <i class="ri-question-line"></i>
+                  </button>
+                </span>
+              </div>
+            </div>
+            <div v-if="isOwnProfile" class="activity-stats">
+              <div class="activity-stat">
+                <span>积分</span>
+                <strong>{{ userProfile.activity_points || 0 }}</strong>
+              </div>
+              <div class="activity-stat">
+                <span>累计经验</span>
+                <strong>{{ userProfile.activity_experience || 0 }}</strong>
+              </div>
+            </div>
+          </div>
+
           <!-- 统计数据 -->
           <div class="stats-row">
             <div class="stat-item">
@@ -322,6 +426,7 @@ async function handleBindEmail() {
               <div class="form-group">
                 <label>用户名</label>
                 <input v-model="formData.username" type="text" placeholder="你的用户名" maxlength="50">
+                <p class="field-hint">本次修改费用：{{ formatCostLabel(userProfile.next_username_change_cost) }}</p>
               </div>
 
               <div class="form-group sponsor-style" :class="{ locked: !canEditSponsorStyle }">
@@ -336,6 +441,24 @@ async function handleBindEmail() {
                   <RCheckbox v-model="sponsorBold" label="加粗显示" />
                 </div>
                 <p v-if="!canEditSponsorStyle" class="sponsor-style-tip locked">{{ sponsorStyleTip }}</p>
+              </div>
+
+              <div class="form-group name-style-section">
+                <label>昵称展示</label>
+                <div class="name-style-options">
+                  <button
+                    v-for="option in nameStyleOptions"
+                    :key="option.value"
+                    type="button"
+                    class="name-style-btn"
+                    :class="{ active: nameStylePreference === option.value }"
+                    :disabled="option.disabled"
+                    @click="nameStylePreference = option.value"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+                <p class="field-hint">等级颜色优先级低于赞助色与版主标识。</p>
               </div>
 
               <!-- 邮箱绑定区域 -->
@@ -504,6 +627,48 @@ async function handleBindEmail() {
         </div>
       </div>
     </div>
+
+    <RModal v-model="showLevelGuide" title="经验与等级说明" width="720px">
+      <div class="level-guide">
+        <section class="guide-section">
+          <h3>经验获取方式</h3>
+          <ul class="guide-rule-list">
+            <li v-for="rule in activityExpRules" :key="rule">{{ rule }}</li>
+          </ul>
+        </section>
+
+        <section class="guide-section">
+          <div class="guide-section-head">
+            <h3>等级列表</h3>
+            <span v-if="userProfile?.forum_level" class="guide-current-text">当前等级：Lv{{ userProfile.forum_level }} {{ userProfile.forum_level_name }}</span>
+          </div>
+          <div class="level-guide-list">
+            <div
+              v-for="level in forumLevelGuide"
+              :key="level.level"
+              class="level-guide-item"
+              :class="{ current: userProfile?.forum_level === level.level }"
+            >
+              <div class="level-guide-main">
+                <UserLevelBadge
+                  :level="level.level"
+                  :name="level.name"
+                  :color="level.color"
+                  :bold="level.bold"
+                  size="sm"
+                />
+                <span v-if="userProfile?.forum_level === level.level" class="level-guide-current-badge">当前</span>
+              </div>
+              <div class="level-guide-meta">
+                <span>等级门槛：{{ level.currentBase }} 总经验</span>
+                <span v-if="level.nextBase !== null">下一级：{{ level.nextBase }} 经验</span>
+                <span v-else>已到最高等级</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </RModal>
   </div>
 </template>
 
@@ -709,6 +874,259 @@ async function handleBindEmail() {
   align-items: center;
   gap: 8px;
   margin-bottom: 24px;
+}
+
+.activity-panel {
+  width: 100%;
+  margin-bottom: 24px;
+  padding: 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(251, 245, 239, 0.92), rgba(242, 230, 216, 0.92));
+  border: 1px solid var(--color-border, #E8DCC8);
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activity-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #8C7B70);
+}
+
+.activity-progress {
+  margin-top: 14px;
+}
+
+.progress-meta,
+.progress-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #8C7B70);
+}
+
+.progress-foot-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.progress-help {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(75, 54, 33, 0.08);
+  border: 1px solid rgba(140, 123, 112, 0.26);
+  color: var(--color-text-secondary, #8C7B70);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.progress-help:hover {
+  background: rgba(184, 115, 51, 0.12);
+  border-color: rgba(184, 115, 51, 0.32);
+  color: var(--color-accent, #B87333);
+}
+
+.progress-help i {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.level-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.guide-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.guide-section h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-main, #4B3621);
+}
+
+.guide-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.guide-current-text {
+  font-size: 12px;
+  color: var(--color-text-secondary, #8C7B70);
+}
+
+.guide-rule-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text-secondary, #8C7B70);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+.level-guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.level-guide-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(232, 220, 200, 0.92);
+  background: rgba(255, 250, 245, 0.82);
+}
+
+.level-guide-item.current {
+  border-color: rgba(184, 115, 51, 0.32);
+  background: linear-gradient(135deg, rgba(255, 249, 240, 0.96), rgba(246, 233, 214, 0.96));
+  box-shadow: 0 10px 24px -20px rgba(128, 64, 48, 0.42);
+}
+
+.level-guide-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.level-guide-current-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(184, 115, 51, 0.14);
+  color: var(--color-accent, #B87333);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.level-guide-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 12px;
+  text-align: right;
+}
+
+@media (max-width: 767px) {
+  .progress-meta,
+  .progress-foot {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .progress-help {
+    width: 22px;
+    height: 22px;
+  }
+
+  .guide-section {
+    gap: 10px;
+  }
+
+  .guide-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .guide-rule-list {
+    padding-left: 16px;
+    font-size: 13px;
+  }
+
+  .level-guide-item {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px 13px;
+  }
+
+  .level-guide-main {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .level-guide-meta {
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+    font-size: 12px;
+  }
+}
+
+.progress-track {
+  margin: 8px 0;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(75, 54, 33, 0.08);
+  overflow: visible;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
+}
+
+.activity-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.activity-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(232, 220, 200, 0.9);
+}
+
+.activity-stat span {
+  font-size: 11px;
+  color: var(--color-text-secondary, #8C7B70);
+}
+
+.activity-stat strong {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--color-text-main, #4B3621);
 }
 
 .sponsor-badge {
@@ -919,6 +1337,12 @@ async function handleBindEmail() {
   letter-spacing: 0.5px;
 }
 
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #8C7B70;
+}
+
 .sponsor-style {
   border: 1px dashed #E8DCC8;
   border-radius: 8px;
@@ -959,6 +1383,47 @@ async function handleBindEmail() {
 
 .sponsor-style-tip.locked {
   color: #9C8E82;
+}
+
+.name-style-section {
+  border: 1px solid #E8DCC8;
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(251, 245, 239, 0.55);
+}
+
+.name-style-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.name-style-btn {
+  padding: 8px 12px;
+  border: 1px solid #E8DCC8;
+  border-radius: 999px;
+  background: #fff;
+  color: #6F5B4B;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.name-style-btn:hover:not(:disabled) {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.name-style-btn.active {
+  background: #4B3621;
+  border-color: #4B3621;
+  color: #fff;
+}
+
+.name-style-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .form-group input,
@@ -1385,7 +1850,7 @@ async function handleBindEmail() {
   padding: 24px;
   color: var(--color-text-light, #fff);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

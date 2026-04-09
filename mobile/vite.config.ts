@@ -12,10 +12,14 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': resolve(__dirname, 'src'),
         '@shared': resolve(__dirname, '../shared'),
+        '@client': resolve(__dirname, '../client/src'),
       },
     },
     server: {
       port: 3102,
+      fs: {
+        allow: [resolve(__dirname, '..')],
+      },
       proxy: {
         '/api': {
           target: proxyTarget,

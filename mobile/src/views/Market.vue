@@ -176,7 +176,12 @@ onMounted(loadItems)
                 class="author-avatar" alt=""
               />
               <i v-else class="ri-user-3-fill avatar-icon" />
-              <span>{{ item.author_username }}</span>
+              <span
+                :style="{
+                  color: item.author_name_color || undefined,
+                  fontWeight: item.author_name_bold ? 'bold' : undefined,
+                }"
+              >{{ item.author_username }}</span>
             </div>
             <p class="item-desc">{{ item.description }}</p>
             <div class="item-stats">

@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { listItems, type Item, getImageUrl, resolveApiUrl } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import LazyBgImage from '@/components/LazyBgImage.vue'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
@@ -248,6 +249,13 @@ watch([sortBy], () => {
                 {{ (item.author_username || 'U').charAt(0) }}
               </span>
               <span class="author-name" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || t('market.item.anonymous') }}</span>
+              <UserLevelBadge
+                :level="item.author_forum_level"
+                :name="item.author_forum_level_name"
+                :color="item.author_forum_level_color"
+                :bold="item.author_forum_level_bold"
+                size="xs"
+              />
             </div>
           </div>
           <p class="desc">{{ item.description || t('market.item.noDescription') }}</p>
@@ -557,6 +565,7 @@ watch([sortBy], () => {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .author-avatar {

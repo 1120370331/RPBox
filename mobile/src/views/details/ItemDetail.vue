@@ -5,6 +5,7 @@ import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import { useUserStore } from '@shared/stores/user'
 import {
@@ -49,6 +50,10 @@ const itemDescriptionHtml = computed(() => {
   void emoteVersion.value
   return renderTextWithEmotes(item.value?.description || '')
 })
+const itemDetailContentHtml = computed(() => {
+  if (!item.value?.detail_content) return ''
+  return normalizeRichContentHtml(item.value.detail_content)
+})
 const canEdit = computed(() => {
   const currentUserId = userStore.user?.id
   if (!currentUserId || !item.value) return false
@@ -62,6 +67,119 @@ const commentPreviewHtml = computed(() => {
 function renderCommentHtml(content: string) {
   void emoteVersion.value
   return renderTextWithEmotes(content || '')
+}
+
+function normalizeRichContentHtml(raw: string) {
+  void emoteVersion.value
+  let html = raw.trim()
+  if (!html) return ''
+
+  if (!/<[a-z][\s\S]*>/i.test(html) && /&lt;\/?[a-z]/i.test(html)) {
+    const decoder = document.createElement('textarea')
+    decoder.innerHTML = html
+    html = decoder.value
+  }
+
+  if (!/<[a-z][\s\S]*>/i.test(html)) {
+    return renderTextWithEmotes(html)
+  }
+
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  doc.querySelectorAll('script,style,iframe').forEach((node) => node.remove())
+
+  doc.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src')
+    if (!src) return
+    img.setAttribute('src', mapContentUrl(src))
+    img.setAttribute('loading', 'lazy')
+  })
+
+  doc.querySelectorAll('a').forEach((a) => {
+    const href = a.getAttribute('href')
+    if (!href) return
+    a.setAttribute('href', mapContentUrl(href))
+    if (/^https?:\/\//.test(href)) {
+      a.setAttribute('target', '_blank')
+      a.setAttribute('rel', 'noopener noreferrer')
+    }
+  })
+
+  return doc.body.innerHTML
+}
+
+function mapContentUrl(url: string) {
+  if (!url) return url
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('#')) {
+    return url
+  }
+
+  if (
+    url.startsWith('/archives/') ||
+    url.startsWith('/community/') ||
+    url.startsWith('/posts/') ||
+    url.startsWith('/stories/')
+  ) {
+    return url
+  }
+
+  return resolveApiUrl(url)
+}
+
+function normalizeAppHref(href: string) {
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    try {
+      const url = new URL(href)
+      if (url.origin === window.location.origin) {
+        return `${url.pathname}${url.search}${url.hash}`
+      }
+    } catch {
+      return href
+    }
+  }
+  return href
+}
+
+function handleDetailContentClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  const image = target?.closest('img')
+  if (image) {
+    const src = (image as HTMLImageElement).currentSrc || image.getAttribute('src') || ''
+    if (src) {
+      event.preventDefault()
+      openImagePreview(src)
+      return
+    }
+  }
+
+  const link = target?.closest('a')
+  if (!link) return
+  const rawHref = link.getAttribute('href') || ''
+  if (!rawHref) return
+  const href = normalizeAppHref(rawHref)
+
+  if (href.startsWith('/community/post/')) {
+    event.preventDefault()
+    const id = href.replace('/community/post/', '').split('/')[0]
+    router.push({ name: 'post-detail', params: { id } })
+    return
+  }
+  if (href.startsWith('/posts/')) {
+    event.preventDefault()
+    const id = href.replace('/posts/', '').split('/')[0]
+    router.push({ name: 'post-detail', params: { id } })
+    return
+  }
+  if (href.startsWith('/archives/story/')) {
+    event.preventDefault()
+    const id = href.replace('/archives/story/', '').split('/')[0]
+    router.push({ name: 'story-detail', params: { id } })
+    return
+  }
+  if (href.startsWith('/stories/')) {
+    event.preventDefault()
+    const id = href.replace('/stories/', '').split('/')[0]
+    router.push({ name: 'story-detail', params: { id } })
+  }
 }
 
 async function loadItemDetail() {
@@ -201,12 +319,28 @@ onMounted(async () => {
           </button>
           <h2>{{ item.name }}</h2>
           <div v-if="author" class="author-row">
-            <span :style="{ color: author.name_color || undefined, fontWeight: author.name_bold ? 'bold' : undefined }">
-              {{ author.username }}
+            <span class="author-identity">
+              <span :style="{ color: author.name_color || undefined, fontWeight: author.name_bold ? 'bold' : undefined }">
+                {{ author.username }}
+              </span>
+              <UserLevelBadge
+                v-if="author.forum_level"
+                compact
+                :level="author.forum_level"
+                :name="author.forum_level_name"
+                :color="author.forum_level_color"
+                :bold="author.forum_level_bold"
+              />
             </span>
             <span class="type-tag">{{ $t('market.typeBadge.' + item.type) }}</span>
           </div>
           <p v-html="itemDescriptionHtml"></p>
+          <div
+            v-if="item.detail_content"
+            class="detail-content"
+            v-html="itemDetailContentHtml"
+            @click="handleDetailContentClick"
+          />
           <div class="stat-row">
             <span><i class="ri-download-line" /> {{ item.downloads }}</span>
             <span>★ {{ item.rating.toFixed(1) }} ({{ item.rating_count }})</span>
@@ -267,8 +401,18 @@ onMounted(async () => {
                   alt=""
                 >
                 <i v-else class="ri-user-3-fill comment-avatar-fallback" />
-                <span :style="{ color: comment.name_color || undefined, fontWeight: comment.name_bold ? 'bold' : undefined }">
-                  {{ comment.username }}
+                <span class="comment-author-name">
+                  <span :style="{ color: comment.name_color || undefined, fontWeight: comment.name_bold ? 'bold' : undefined }">
+                    {{ comment.username }}
+                  </span>
+                  <UserLevelBadge
+                    v-if="comment.forum_level"
+                    compact
+                    :level="comment.forum_level"
+                    :name="comment.forum_level_name"
+                    :color="comment.forum_level_color"
+                    :bold="comment.forum_level_bold"
+                  />
                 </span>
               </div>
               <time>{{ formatTime(comment.created_at) }}</time>
@@ -325,8 +469,17 @@ onMounted(async () => {
 .author-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.author-identity,
+.comment-author-name {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .type-tag {
@@ -342,6 +495,79 @@ onMounted(async () => {
   line-height: 1.68;
   color: var(--color-text-secondary);
   margin-bottom: 10px;
+}
+
+.detail-content {
+  font-size: 15px;
+  line-height: 1.72;
+  color: var(--color-text-main);
+  margin-bottom: 12px;
+  word-break: break-word;
+}
+
+.detail-content :deep(p) {
+  margin: 0 0 12px;
+}
+
+.detail-content :deep(h1) {
+  font-size: 21px;
+  line-height: 1.35;
+  margin: 0 0 12px;
+}
+
+.detail-content :deep(h2) {
+  font-size: 18px;
+  line-height: 1.4;
+  margin: 14px 0 10px;
+}
+
+.detail-content :deep(h3) {
+  font-size: 16px;
+  line-height: 1.45;
+  margin: 12px 0 8px;
+}
+
+.detail-content :deep(ul),
+.detail-content :deep(ol) {
+  padding-left: 20px;
+  margin: 0 0 12px;
+}
+
+.detail-content :deep(li) {
+  margin: 4px 0;
+}
+
+.detail-content :deep(blockquote) {
+  margin: 0 0 12px;
+  padding-left: 12px;
+  border-left: 3px solid var(--color-accent);
+  color: var(--color-text-secondary);
+}
+
+.detail-content :deep(a) {
+  color: var(--color-secondary);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.detail-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  cursor: zoom-in;
+}
+
+.detail-content :deep(pre) {
+  margin: 0 0 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: #2c1810;
+  color: #fbf5ef;
+  overflow-x: auto;
+}
+
+.detail-content :deep(code) {
+  font-size: 13px;
 }
 
 .stat-row {
@@ -501,6 +727,7 @@ onMounted(async () => {
 .comment-author {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }

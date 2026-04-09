@@ -13,6 +13,8 @@
   --color-text-main: #2C1810;
   --color-text-secondary: #8C7B70;
   --color-text-muted: rgba(75, 54, 33, 0.5);
+  --color-text-light: #FBF5EF;
+  --color-text-dark: #2C1810;
   --text-light: #FBF5EF;
   --text-dark: #2C1810;
   --color-border: #E8DCCF;
@@ -40,6 +42,7 @@
   --overlay-text: #FFFFFF;
   --shadow-sm: 0 2px 8px rgba(75, 54, 33, 0.05);
   --shadow-md: 0 4px 20px rgba(75, 54, 33, 0.08);
+  --shadow-base: 44, 24, 16;
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 20px;

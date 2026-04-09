@@ -1,20 +1,9 @@
 import { request } from './request'
+import type { UserData } from '@/types/user'
 
 export interface LoginResponse {
   token: string
-  user: {
-    id: number
-    username: string
-    email: string
-    avatar?: string
-    role?: string
-    is_sponsor?: boolean
-    sponsor_level?: number
-    sponsor_color?: string
-    sponsor_bold?: boolean
-    name_color?: string
-    name_bold?: boolean
-  }
+  user: UserData
 }
 
 export interface RegisterAgreementPayload {

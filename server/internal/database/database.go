@@ -69,6 +69,8 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.AdminActionLog{},
 		&model.DailyMetrics{},
 		&model.Notification{},
+		&model.UserDailyActivity{},
+		&model.UserActivityLog{},
 		&model.Collection{},
 		&model.CollectionPost{},
 		&model.CollectionItem{},
@@ -96,6 +98,15 @@ func Init(cfg *config.DatabaseConfig) error {
 	}
 	if err := db.Exec("UPDATE users SET sponsor_level = 2 WHERE is_sponsor = true AND (sponsor_level IS NULL OR sponsor_level = 0)").Error; err != nil {
 		log.Printf("[DB Migration] update sponsor_level from is_sponsor - %v", err)
+	}
+	if err := db.Exec("UPDATE users SET name_style_preference = 'sponsor' WHERE (sponsor_level >= 2 OR is_sponsor = true) AND COALESCE(NULLIF(BTRIM(name_style_preference), ''), '') = ''").Error; err != nil {
+		log.Printf("[DB Migration] update sponsor name style preference - %v", err)
+	}
+	if err := db.Exec("UPDATE users SET name_style_preference = 'level' WHERE COALESCE(NULLIF(BTRIM(name_style_preference), ''), '') = ''").Error; err != nil {
+		log.Printf("[DB Migration] default name style preference - %v", err)
+	}
+	if err := db.Exec("UPDATE users SET avatar_change_count = 1 WHERE COALESCE(BTRIM(avatar), '') <> '' AND COALESCE(avatar_change_count, 0) = 0").Error; err != nil {
+		log.Printf("[DB Migration] backfill avatar change count - %v", err)
 	}
 
 	// 添加性能优化索引

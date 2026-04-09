@@ -7,6 +7,7 @@ import { listComments, createComment, deleteComment, likeComment, unlikeComment,
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { resolveApiUrl } from '@/api/item'
@@ -178,8 +179,13 @@ async function loadPost() {
     const res = await getPost(id)
     post.value = res.post
     post.value.author_name = res.author_name  // author_name 在响应顶层
+    post.value.author_avatar = res.author_avatar
     post.value.author_name_color = res.author_name_color
     post.value.author_name_bold = res.author_name_bold
+    post.value.author_forum_level = res.author_forum_level
+    post.value.author_forum_level_name = res.author_forum_level_name
+    post.value.author_forum_level_color = res.author_forum_level_color
+    post.value.author_forum_level_bold = res.author_forum_level_bold
     authorAvatar.value = resolveApiUrl(res.author_avatar)
     liked.value = res.liked
     favorited.value = res.favorited
@@ -521,7 +527,16 @@ async function handleDelete() {
                 <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
               </div>
               <div class="author-info">
-                <h4 class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</h4>
+                <div class="author-name-row">
+                  <h4 class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</h4>
+                  <UserLevelBadge
+                    :level="post.author_forum_level"
+                    :name="post.author_forum_level_name"
+                    :color="post.author_forum_level_color"
+                    :bold="post.author_forum_level_bold"
+                    size="xs"
+                  />
+                </div>
                 <span class="post-date">{{ formatDate(post.created_at) }}</span>
               </div>
             </div>
@@ -583,6 +598,13 @@ async function handleDelete() {
               <div class="comment-body">
                 <div class="comment-meta">
                   <span class="comment-author" :style="buildNameStyle(comment.author_name_color, comment.author_name_bold)">{{ comment.author_name }}</span>
+                  <UserLevelBadge
+                    :level="comment.author_forum_level"
+                    :name="comment.author_forum_level_name"
+                    :color="comment.author_forum_level_color"
+                    :bold="comment.author_forum_level_bold"
+                    size="xs"
+                  />
                   <button class="like-btn-inline" :class="{ active: commentLikes.get(comment.id) }" type="button" @click.stop="handleCommentLike(comment)">
                     <i :class="commentLikes.get(comment.id) ? 'ri-heart-fill' : 'ri-heart-line'"></i>
                     <span v-if="comment.like_count">{{ comment.like_count }}</span>
@@ -627,6 +649,13 @@ async function handleDelete() {
                     <div class="reply-body">
                       <div class="reply-meta">
                         <span class="reply-author" :style="buildNameStyle(reply.author_name_color, reply.author_name_bold)">{{ reply.author_name }}</span>
+                        <UserLevelBadge
+                          :level="reply.author_forum_level"
+                          :name="reply.author_forum_level_name"
+                          :color="reply.author_forum_level_color"
+                          :bold="reply.author_forum_level_bold"
+                          size="xs"
+                        />
                         <span v-if="reply.replyToName" class="reply-to">
                           {{ t('community.detail.replyToLabel') }} <span class="reply-to-name">@{{ reply.replyToName }}</span>
                         </span>
@@ -872,6 +901,13 @@ async function handleDelete() {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.author-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .author-name {

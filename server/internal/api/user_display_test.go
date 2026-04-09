@@ -51,6 +51,74 @@ func TestHslToHex(t *testing.T) {
 	}
 }
 
+func TestResolveForumLevelUsesIndependentThresholds(t *testing.T) {
+	tests := []struct {
+		name  string
+		total int
+		want  int
+	}{
+		{name: "below level 2", total: 179, want: 1},
+		{name: "at level 2", total: 180, want: 2},
+		{name: "below level 3", total: 323, want: 2},
+		{name: "at level 3", total: 324, want: 3},
+		{name: "at level 4", total: 583, want: 4},
+		{name: "at level 10", total: 19836, want: 10},
+		{name: "beyond max level threshold", total: 25000, want: 10},
+	}
+
+	for _, tt := range tests {
+		if level := resolveForumLevel(tt.total); level != tt.want {
+			t.Fatalf("%s: expected level %d, got %d", tt.name, tt.want, level)
+		}
+	}
+}
+
+func TestResolveForumLevelInfoResetsProgressAtLevelUp(t *testing.T) {
+	info := resolveForumLevelInfo(180)
+	if info.Level != 2 {
+		t.Fatalf("expected level 2, got %d", info.Level)
+	}
+	if info.CurrentLevelExp != 0 {
+		t.Fatalf("expected current level exp to reset at threshold, got %d", info.CurrentLevelExp)
+	}
+	if info.NextLevelExp != 144 {
+		t.Fatalf("expected 144 exp to next level, got %d", info.NextLevelExp)
+	}
+	if info.ProgressPercent != 0 {
+		t.Fatalf("expected zero progress right after level up, got %d", info.ProgressPercent)
+	}
+
+	info = resolveForumLevelInfo(252)
+	if info.Level != 2 {
+		t.Fatalf("expected level 2 for mid-progress sample, got %d", info.Level)
+	}
+	if info.CurrentLevelExp != 72 {
+		t.Fatalf("expected 72 exp into current level, got %d", info.CurrentLevelExp)
+	}
+	if info.NextLevelExp != 144 {
+		t.Fatalf("expected 144 total exp span for level 2, got %d", info.NextLevelExp)
+	}
+	if info.ProgressPercent != 50 {
+		t.Fatalf("expected 50 percent progress, got %d", info.ProgressPercent)
+	}
+}
+
+func TestResolveForumLevelInfoAtMaxLevel(t *testing.T) {
+	info := resolveForumLevelInfo(20000)
+	if info.Level != 10 {
+		t.Fatalf("expected level 10, got %d", info.Level)
+	}
+	if info.CurrentLevelExp != 164 {
+		t.Fatalf("expected overflow within max level to be retained, got %d", info.CurrentLevelExp)
+	}
+	if info.NextLevelExp != 0 {
+		t.Fatalf("expected no next level exp at max level, got %d", info.NextLevelExp)
+	}
+	if info.ProgressPercent != 100 {
+		t.Fatalf("expected max level progress to stay full, got %d", info.ProgressPercent)
+	}
+}
+
 func userFixture(level int, sponsor bool) model.User {
 	return model.User{
 		SponsorLevel: level,

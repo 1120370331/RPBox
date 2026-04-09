@@ -6,6 +6,7 @@ import { POST_CATEGORIES } from '@/api/post'
 import { useUserStore } from '@/stores/user'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -113,7 +114,16 @@ function handlePreviewContentClick(event: MouseEvent) {
                 <span v-else>{{ userStore.user?.username?.charAt(0) || 'U' }}</span>
               </div>
               <div class="author-info">
-                <h4 class="author-name" :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || t('community.preview.unknownUser') }}</h4>
+                <div class="author-name-row">
+                  <h4 class="author-name" :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || t('community.preview.unknownUser') }}</h4>
+                  <UserLevelBadge
+                    :level="userStore.user?.forum_level"
+                    :name="userStore.user?.forum_level_name"
+                    :color="userStore.user?.forum_level_color"
+                    :bold="userStore.user?.forum_level_bold"
+                    size="xs"
+                  />
+                </div>
                 <span class="post-date">{{ formatDate() }}</span>
               </div>
             </div>
@@ -315,6 +325,13 @@ function handlePreviewContentClick(event: MouseEvent) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.author-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .author-name {

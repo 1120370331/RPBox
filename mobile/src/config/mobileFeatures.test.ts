@@ -7,8 +7,9 @@ describe('mobileFeatures', () => {
       'community',
       'stories',
       'market',
-      'profiles',
+      'guild',
       'profile',
+      'profiles',
     ])
   })
 

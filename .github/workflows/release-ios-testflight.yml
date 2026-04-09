@@ -21,11 +21,14 @@ env:
   NODE_VERSION: '20'
   XCODE_WORKSPACE: 'mobile/ios/App/App.xcworkspace'
   XCODE_SCHEME: 'App'
+  IOS_DEFAULT_PUBLIC_URL: 'https://testflight.apple.com/join/rZ7Va5WA'
 
 jobs:
   build-and-upload:
     name: Build and Upload to TestFlight
     runs-on: macos-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - name: Checkout code
@@ -362,3 +365,144 @@ jobs:
             ${{ runner.temp }}/export
             ${{ runner.temp }}/ExportOptions.plist
           if-no-files-found: warn
+
+  deploy-ios-metadata:
+    name: Deploy iOS Metadata
+    runs-on: ubuntu-latest
+    needs: build-and-upload
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          elif [[ "${GITHUB_REF:-}" == refs/tags/ios-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/ios-v}"
+          elif [[ "${GITHUB_REF:-}" == refs/tags/mobile-ios-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/mobile-ios-v}"
+          else
+            VERSION="${{ needs.build-and-upload.outputs.version }}"
+            if [ -z "$VERSION" ]; then
+              VERSION="$(node -p "require('./mobile/package.json').version")"
+            fi
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_NOTES="${{ github.event.inputs.release_notes }}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          NOTES_FILE="mobile/release-notes/${VERSION}.txt"
+
+          if [ -n "${INPUT_NOTES:-}" ]; then
+            NOTES="$INPUT_NOTES"
+          elif [ -f "$NOTES_FILE" ]; then
+            NOTES="$(cat "$NOTES_FILE")"
+          else
+            NOTES="iOS build ${VERSION}"
+          fi
+
+          {
+            echo "NOTES<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve public iOS URL
+        id: public_url
+        shell: bash
+        env:
+          IOS_PUBLIC_UPDATE_URL: ${{ secrets.IOS_PUBLIC_UPDATE_URL }}
+          IOS_APP_STORE_URL: ${{ secrets.IOS_APP_STORE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${IOS_PUBLIC_UPDATE_URL:-}" ]; then
+            URL="$IOS_PUBLIC_UPDATE_URL"
+          elif [ -n "${IOS_APP_STORE_URL:-}" ]; then
+            URL="$IOS_APP_STORE_URL"
+          else
+            URL="${{ env.IOS_DEFAULT_PUBLIC_URL }}"
+          fi
+
+          echo "URL=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare iOS metadata
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.NOTES }}
+          PUBLIC_URL: ${{ steps.public_url.outputs.URL }}
+        run: |
+          set -euo pipefail
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          export VERSION RELEASE_NOTES PUBLIC_URL PUB_DATE
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          notes = os.environ.get("RELEASE_NOTES", "").strip().replace("\r\n", "\n").replace("\r", "\n")
+          public_url = os.environ["PUBLIC_URL"].strip()
+          pub_date = os.environ["PUB_DATE"].strip()
+
+          data = {
+              "latest_version": version,
+              "version": version,
+              "notes": notes,
+              "pub_date": pub_date,
+              "url": public_url,
+              "mandatory": False,
+          }
+
+          Path("latest-ios.json").write_text(
+              json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload iOS metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          REMOTE_BASE="${{ secrets.MOBILE_RELEASE_PATH }}"
+          if [ -z "$REMOTE_BASE" ]; then
+            REMOTE_BASE="${{ secrets.RELEASE_PATH }}/mobile"
+          fi
+          REMOTE_DIR="$REMOTE_BASE/$VERSION"
+
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR $REMOTE_BASE"
+
+          REMOTE_META_VER_FINAL="$REMOTE_DIR/latest-ios.json"
+          REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
+          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/latest-ios.json"
+          REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
+
+          scp -P 2233 -C latest-ios.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:"$REMOTE_META_VER_TMP"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
+
+          scp -P 2233 -C latest-ios.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:"$REMOTE_META_LATEST_TMP"
+          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
