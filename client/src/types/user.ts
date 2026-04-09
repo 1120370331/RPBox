@@ -9,7 +9,7 @@ export interface UserActivityInfo {
   next_level_exp?: number
   level_progress_percent?: number
   signed_in_today?: boolean
-  name_style_preference?: 'default' | 'level' | 'sponsor'
+  name_style_preference?: 'default' | 'sponsor'
   avatar_change_count?: number
   username_change_count?: number
   next_avatar_change_cost?: number

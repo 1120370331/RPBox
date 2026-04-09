@@ -38,11 +38,6 @@ func buildUserActivityPayload(user model.User, snapshot service.DailyActivitySna
 		nextUsernameCost = service.UsernameChangeCost
 	}
 
-	preference := user.NameStylePreference
-	if preference == "" {
-		preference = "level"
-	}
-
 	return userActivityPayload{
 		ActivityPoints:         user.ActivityPoints,
 		ActivityExperience:     user.ActivityExperience,
@@ -54,7 +49,7 @@ func buildUserActivityPayload(user model.User, snapshot service.DailyActivitySna
 		NextLevelExp:           levelInfo.NextLevelExp,
 		LevelProgressPercent:   levelInfo.ProgressPercent,
 		SignedInToday:          snapshot.SignedInToday,
-		NameStylePreference:    preference,
+		NameStylePreference:    normalizedNameStylePreference(user),
 		AvatarChangeCount:      user.AvatarChangeCount,
 		UsernameChangeCount:    user.UsernameChangeCount,
 		NextAvatarChangeCost:   nextAvatarCost,

@@ -45,6 +45,40 @@ func TestUserDisplayStyle(t *testing.T) {
 	}
 }
 
+func TestUserDisplayStyleDoesNotUseForumLevelColor(t *testing.T) {
+	user := userFixture(0, false)
+	user.ActivityExperience = 324
+
+	color, bold := userDisplayStyle(user)
+	if color != defaultNameColor || bold {
+		t.Fatalf("expected regular user default style, got %s %v", color, bold)
+	}
+}
+
+func TestLegacyLevelNameStyleFallsBackToDefault(t *testing.T) {
+	user := userFixture(2, true)
+	user.NameStylePreference = "level"
+	user.SponsorColor = "00ff00"
+
+	color, bold := userDisplayStyle(user)
+	if color != defaultNameColor || bold {
+		t.Fatalf("expected legacy level preference to use default style, got %s %v", color, bold)
+	}
+}
+
+func TestNormalizedNameStylePreference(t *testing.T) {
+	user := userFixture(2, true)
+	user.SponsorColor = "00ff00"
+	if preference := normalizedNameStylePreference(user); preference != "sponsor" {
+		t.Fatalf("expected sponsor preference for sponsor user with custom style, got %s", preference)
+	}
+
+	user.NameStylePreference = "level"
+	if preference := normalizedNameStylePreference(user); preference != "default" {
+		t.Fatalf("expected legacy level preference to normalize to default, got %s", preference)
+	}
+}
+
 func TestHslToHex(t *testing.T) {
 	if color := hslToHex(0, 1, 0.5); color != "#FF0000" {
 		t.Fatalf("expected red, got %s", color)
