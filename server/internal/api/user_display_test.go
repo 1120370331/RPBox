@@ -45,6 +45,28 @@ func TestUserDisplayStyle(t *testing.T) {
 	}
 }
 
+func TestSponsorStyleOverridesModeratorColor(t *testing.T) {
+	user := userFixture(2, true)
+	user.Role = "moderator"
+	user.NameStylePreference = "sponsor"
+	user.SponsorColor = "00ff00"
+
+	color, bold := userDisplayStyle(user)
+	if color != "#00FF00" || !bold {
+		t.Fatalf("expected sponsor style to override moderator color, got %s %v", color, bold)
+	}
+}
+
+func TestModeratorColorRemainsWithoutSponsorStyle(t *testing.T) {
+	user := userFixture(0, false)
+	user.Role = "moderator"
+
+	color, bold := userDisplayStyle(user)
+	if color != adminNameColor || bold {
+		t.Fatalf("expected moderator color without sponsor style, got %s %v", color, bold)
+	}
+}
+
 func TestUserDisplayStyleDoesNotUseForumLevelColor(t *testing.T) {
 	user := userFixture(0, false)
 	user.ActivityExperience = 324
