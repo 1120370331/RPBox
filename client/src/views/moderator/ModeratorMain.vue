@@ -39,6 +39,7 @@ import {
   getUsers,
   setUserRole,
   setUserSponsorLevel,
+  setUserExperience,
   getModeratorUsers,
   muteUser,
   unmuteUser,
@@ -81,7 +82,7 @@ type ReviewSubTab = 'posts' | 'items' | 'guilds' | 'postCommentImages' | 'itemCo
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
 const activeSubTab = ref<ModeratorSubTab>('posts')
-const adminSubTab = ref<'moderators' | 'guilds' | 'sponsors' | 'system'>('guilds')
+const adminSubTab = ref<'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'>('guilds')
 
 // 系统通知
 const systemMessage = ref('')
@@ -120,6 +121,7 @@ const filterSponsorLevel = ref('')
 const imageReviewStatus = ref<ImageReviewStatus>('pending')
 const imageReviewCommentDrafts = ref<Record<string, string>>({})
 const sponsorLevelDrafts = ref<Record<number, number>>({})
+const experienceDrafts = ref<Record<number, number>>({})
 const sponsorLevelOptions = [
   { value: 0, label: '无赞助' },
   { value: 1, label: 'Lv1 仅鸣谢' },
@@ -428,6 +430,7 @@ async function loadUsers() {
     allUsers.value = res.users || []
     total.value = res.total
     syncSponsorLevelDrafts()
+    syncExperienceDrafts()
   } catch (error) {
     console.error('加载用户失败:', error)
   } finally {
@@ -448,11 +451,25 @@ function syncSponsorLevelDrafts() {
   sponsorLevelDrafts.value = drafts
 }
 
+function syncExperienceDrafts() {
+  const drafts: Record<number, number> = {}
+  for (const user of allUsers.value) {
+    drafts[user.id] = typeof user.activity_experience === 'number' ? user.activity_experience : 0
+  }
+  experienceDrafts.value = drafts
+}
+
 function formatSponsorLevel(level: number): string {
   if (level <= 0) return '无赞助'
   if (level === 1) return 'Lv1 仅鸣谢'
   if (level === 2) return 'Lv2 昵称样式'
   return 'Lv3 个性化'
+}
+
+function formatForumLevel(user: SafeUser): string {
+  const level = typeof user.forum_level === 'number' ? user.forum_level : 1
+  const name = user.forum_level_name || '新人'
+  return `Lv${level} ${name}`
 }
 
 function loadReviewSubTab(subTab: ReviewSubTab) {
@@ -490,7 +507,7 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
     }
     loadManageSubTab(activeSubTab.value)
   } else if (tab === 'admin') {
-    if (adminSubTab.value === 'moderators' || adminSubTab.value === 'sponsors') {
+    if (adminSubTab.value === 'moderators' || adminSubTab.value === 'sponsors' || adminSubTab.value === 'experience') {
       loadUsers()
     } else if (adminSubTab.value === 'guilds') {
       loadAllGuilds()
@@ -517,7 +534,7 @@ function switchSubTab(subTab: ModeratorSubTab) {
   }
 }
 
-function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors' | 'system') {
+function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system') {
   adminSubTab.value = subTab
   page.value = 1
   if (subTab === 'moderators') {
@@ -525,6 +542,10 @@ function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors' | 'syste
     loadUsers()
   } else if (subTab === 'sponsors') {
     filterRole.value = ''
+    loadUsers()
+  } else if (subTab === 'experience') {
+    filterRole.value = ''
+    filterSponsorLevel.value = ''
     loadUsers()
   } else if (subTab === 'system') {
     filterRole.value = ''
@@ -601,6 +622,7 @@ function formatActionType(type: string): string {
     'unban_user': '解除封禁',
     'set_role': '设置角色',
     'set_sponsor': '设置赞助',
+    'set_experience': '设置经验',
     'disable_posts': '禁用帖子',
     'delete_posts': '删除用户帖子',
     'broadcast_notification': '系统通知'
@@ -657,6 +679,13 @@ function formatLogDetails(log: AdminActionLog): string {
       parts.push(`赞助等级: ${formatSponsorLevel(d.sponsor_level)}`)
     } else if (d.is_sponsor !== undefined) {
       parts.push(`赞助者: ${d.is_sponsor ? '是' : '否'}`)
+    }
+
+    if (d.before_experience !== undefined || d.after_experience !== undefined) {
+      parts.push(`经验: ${d.before_experience ?? '-'} -> ${d.after_experience ?? '-'}`)
+    }
+    if (d.before_level !== undefined || d.after_level !== undefined) {
+      parts.push(`等级: Lv${d.before_level ?? '-'} -> Lv${d.after_level ?? '-'}`)
     }
 
     // 影响数量
@@ -1235,6 +1264,38 @@ async function applySponsorLevel(user: SafeUser) {
   }
 }
 
+async function applyUserExperience(user: SafeUser) {
+  const currentExperience = typeof user.activity_experience === 'number' ? user.activity_experience : 0
+  const nextExperienceRaw = experienceDrafts.value[user.id]
+  const nextExperience = Number.isFinite(nextExperienceRaw) ? Math.max(0, Math.floor(nextExperienceRaw)) : currentExperience
+  experienceDrafts.value[user.id] = nextExperience
+
+  if (nextExperience === currentExperience) return
+
+  const confirmed = await dialog.confirm({
+    title: '设置社区经验值',
+    message: `确定要将 ${user.username} 的社区经验值从 ${currentExperience} 调整为 ${nextExperience} 吗？`,
+    type: nextExperience >= currentExperience ? 'success' : 'warning',
+    confirmText: '应用',
+    cancelText: '取消'
+  })
+
+  if (!confirmed) {
+    experienceDrafts.value[user.id] = currentExperience
+    return
+  }
+
+  try {
+    await setUserExperience(user.id, nextExperience)
+    toast.success('社区经验值已更新')
+    await loadUsers()
+  } catch (error) {
+    experienceDrafts.value[user.id] = currentExperience
+    console.error('设置社区经验值失败:', error)
+    toast.error('设置社区经验值失败: ' + (error as Error).message)
+  }
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN')
 }
@@ -1582,13 +1643,21 @@ function formatBanTime(dateStr: string | null) {
           <i class="ri-user-star-line"></i>
           版主管理
         </button>
+        <button
+          v-if="isAdmin"
+          :class="{ active: adminSubTab === 'sponsors' }"
+          @click="switchAdminSubTab('sponsors')"
+        >
+          <i class="ri-vip-crown-2-line"></i>
+          赞助管理
+        </button>
           <button
             v-if="isAdmin"
-            :class="{ active: adminSubTab === 'sponsors' }"
-            @click="switchAdminSubTab('sponsors')"
+            :class="{ active: adminSubTab === 'experience' }"
+            @click="switchAdminSubTab('experience')"
           >
-            <i class="ri-vip-crown-2-line"></i>
-            赞助管理
+            <i class="ri-medal-line"></i>
+            等级管理
           </button>
           <button
             v-if="isAdmin"
@@ -2269,6 +2338,61 @@ function formatBanTime(dateStr: string | null) {
         </div>
       </div>
 
+      <div v-if="activeTab === 'admin' && adminSubTab === 'experience'" class="content-list anim-item" style="--delay: 4">
+        <div class="filter-bar">
+          <input v-model="filterKeyword" placeholder="搜索用户名或邮箱..." @keyup.enter="loadUsers" />
+          <select v-model="filterRole" @change="loadUsers">
+            <option value="">全部角色</option>
+            <option value="user">普通用户</option>
+            <option value="moderator">版主</option>
+            <option value="admin">管理员</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="allUsers.length === 0" class="empty-state">
+          <i class="ri-medal-line"></i>
+          <p>暂无用户数据</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="user in allUsers" :key="user.id" class="item-card user-card">
+            <div class="item-header">
+              <div class="user-info">
+                <img v-if="user.avatar" :src="user.avatar" class="user-avatar" />
+                <i v-else class="ri-user-line user-avatar-placeholder"></i>
+                <span class="item-title" :style="buildNameStyle(user.name_color, user.name_bold)">{{ user.username }}</span>
+              </div>
+              <div class="user-status-tags">
+                <span class="level-tag">{{ formatForumLevel(user) }}</span>
+                <span class="role-tag" :class="user.role">{{ getRoleLabel(user.role) }}</span>
+              </div>
+            </div>
+            <div class="item-meta">
+              <span><i class="ri-mail-line"></i> {{ user.email }}</span>
+              <span><i class="ri-sparkling-line"></i> 总经验 {{ user.activity_experience || 0 }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(user.created_at) }}</span>
+            </div>
+            <div class="item-actions experience-actions">
+              <label class="experience-label">
+                <span>总经验</span>
+                <input
+                  v-model.number="experienceDrafts[user.id]"
+                  class="experience-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                />
+              </label>
+              <button class="btn-sponsor" @click="applyUserExperience(user)">
+                <i class="ri-medal-line"></i> 应用
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 管理标签 - 系统通知 -->
       <div v-if="activeTab === 'admin' && adminSubTab === 'system'" class="content-list anim-item" style="--delay: 4">
         <div class="item-card system-message-card">
@@ -2364,6 +2488,7 @@ function formatBanTime(dateStr: string | null) {
             <option value="unban_user">解除封禁</option>
             <option value="set_role">设置角色</option>
             <option value="set_sponsor">设置赞助</option>
+            <option value="set_experience">设置经验</option>
           </select>
           <select v-model="logsTargetType" @change="loadActionLogs">
             <option value="">全部类型</option>
@@ -3338,8 +3463,33 @@ function formatBanTime(dateStr: string | null) {
   flex-wrap: wrap;
 }
 
+.experience-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .sponsor-level-select {
   min-width: 160px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #E2D3C3);
+  background: var(--input-bg, #FFFDFB);
+  font-size: 13px;
+  color: var(--color-primary, #4B3621);
+}
+
+.experience-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-secondary, #6D5B48);
+}
+
+.experience-input {
+  width: 140px;
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--color-border, #E2D3C3);
@@ -3683,6 +3833,16 @@ function formatBanTime(dateStr: string | null) {
   background: linear-gradient(135deg, var(--color-warning, #E7C67D), var(--color-accent, #D6A645));
   color: var(--color-primary, #4B3621);
   border: 1px solid rgba(214, 166, 69, 0.4);
+}
+
+.level-tag {
+  padding: 5px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--color-primary-light, #F3E8D8);
+  color: var(--color-primary, #5C432B);
+  border: 1px solid rgba(92, 67, 43, 0.12);
 }
 
 .role-tag {

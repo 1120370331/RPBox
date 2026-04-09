@@ -242,6 +242,9 @@ export interface SafeUser {
   banned_until: string | null
   ban_reason: string
   post_count: number
+  activity_experience: number
+  forum_level: number
+  forum_level_name: string
   created_at: string
 }
 
@@ -255,6 +258,10 @@ export function setUserRole(id: number, role: 'user' | 'moderator') {
 
 export function setUserSponsorLevel(id: number, sponsorLevel: number) {
   return request.put<{ message: string; user: any }>(`/admin/users/${id}/sponsor`, { sponsor_level: sponsorLevel })
+}
+
+export function setUserExperience(id: number, activityExperience: number) {
+  return request.put<{ message: string; user: any }>(`/admin/users/${id}/experience`, { activity_experience: activityExperience })
 }
 
 export function broadcastSystemMessage(content: string) {
