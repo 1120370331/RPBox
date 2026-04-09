@@ -27,6 +27,12 @@ type User struct {
 	Bio      string `gorm:"size:500" json:"bio"`      // 个人简介
 	Location string `gorm:"size:100" json:"location"` // 地区
 	Website  string `gorm:"size:256" json:"website"`  // 个人网站
+	// 活跃度系统
+	ActivityPoints      int    `gorm:"default:0" json:"activity_points"`                   // 社区积分
+	ActivityExperience  int    `gorm:"default:0" json:"activity_experience"`               // 社区经验
+	AvatarChangeCount   int    `gorm:"default:0" json:"avatar_change_count"`               // 头像上传次数
+	UsernameChangeCount int    `gorm:"default:0" json:"username_change_count"`             // 用户名修改次数
+	NameStylePreference string `gorm:"size:20;default:level" json:"name_style_preference"` // default|level|sponsor
 	// 统计数据
 	PostCount    int `gorm:"default:0" json:"post_count"`    // 帖子数
 	StoryCount   int `gorm:"default:0" json:"story_count"`   // 剧情数
@@ -597,6 +603,30 @@ type Notification struct {
 	Content    string    `gorm:"size:512" json:"content"`            // 通知内容
 	IsRead     bool      `gorm:"default:false;index" json:"is_read"` // 是否已读
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+// UserDailyActivity 用户每日活跃度状态
+type UserDailyActivity struct {
+	ID                     uint       `gorm:"primarykey" json:"id"`
+	UserID                 uint       `gorm:"uniqueIndex:idx_user_daily_activity;not null" json:"user_id"`
+	ActivityDate           time.Time  `gorm:"type:date;uniqueIndex:idx_user_daily_activity;not null" json:"activity_date"`
+	SignedInAt             *time.Time `json:"signed_in_at"`
+	LikeBonusAwardedAt     *time.Time `json:"like_bonus_awarded_at"`
+	StoryArchiveEntries    int        `gorm:"default:0" json:"story_archive_entries"`
+	StoryArchiveExpAwarded int        `gorm:"default:0" json:"story_archive_exp_awarded"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+}
+
+// UserActivityLog 用户活跃度奖励流水
+type UserActivityLog struct {
+	ID              uint      `gorm:"primarykey" json:"id"`
+	UserID          uint      `gorm:"uniqueIndex:idx_user_activity_unique;index;not null" json:"user_id"`
+	Action          string    `gorm:"size:64;uniqueIndex:idx_user_activity_unique;index;not null" json:"action"`
+	ReferenceKey    string    `gorm:"size:128;uniqueIndex:idx_user_activity_unique;not null" json:"reference_key"`
+	PointsDelta     int       `json:"points_delta"`
+	ExperienceDelta int       `json:"experience_delta"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // ========== 合集系统 ==========

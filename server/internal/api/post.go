@@ -15,6 +15,7 @@ import (
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -75,12 +76,16 @@ type postListResponse struct {
 
 type postListItem struct {
 	model.Post
-	AuthorName      string `json:"author_name"`
-	AuthorAvatar    string `json:"author_avatar"`
-	AuthorRole      string `json:"author_role"`
-	AuthorNameColor string `json:"author_name_color"`
-	AuthorNameBold  bool   `json:"author_name_bold"`
-	CoverImageURL   string `json:"cover_image_url"`
+	AuthorName            string `json:"author_name"`
+	AuthorAvatar          string `json:"author_avatar"`
+	AuthorRole            string `json:"author_role"`
+	AuthorNameColor       string `json:"author_name_color"`
+	AuthorNameBold        bool   `json:"author_name_bold"`
+	AuthorForumLevel      int    `json:"author_forum_level"`
+	AuthorForumLevelName  string `json:"author_forum_level_name"`
+	AuthorForumLevelColor string `json:"author_forum_level_color"`
+	AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
+	CoverImageURL         string `json:"cover_image_url"`
 }
 
 type apiError struct {
@@ -360,6 +365,7 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 		coverURL := ""
 		if hasCoverMap[p.ID] {
 			if directURL := directCoverURLMap[p.ID]; directURL != "" {
@@ -370,13 +376,17 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 			}
 		}
 		result[i] = postListItem{
-			Post:            p,
-			AuthorName:      author.Username,
-			AuthorAvatar:    userAvatarURL(s.cfg.Server.ApiHost, author),
-			AuthorRole:      author.Role,
-			AuthorNameColor: nameColor,
-			AuthorNameBold:  nameBold,
-			CoverImageURL:   coverURL,
+			Post:                  p,
+			AuthorName:            author.Username,
+			AuthorAvatar:          userAvatarURL(s.cfg.Server.ApiHost, author),
+			AuthorRole:            author.Role,
+			AuthorNameColor:       nameColor,
+			AuthorNameBold:        nameBold,
+			AuthorForumLevel:      levelInfo.Level,
+			AuthorForumLevelName:  levelInfo.Name,
+			AuthorForumLevelColor: levelInfo.Color,
+			AuthorForumLevelBold:  levelInfo.Bold,
+			CoverImageURL:         coverURL,
 		}
 	}
 
@@ -505,26 +515,39 @@ func (s *Server) createPost(c *gin.Context) {
 		post.EventEndTime = parsed
 	}
 
-	if err := database.DB.Create(&post).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&post).Error; err != nil {
+			return err
+		}
+
+		if len(req.TagIDs) > 0 {
+			for _, tagID := range req.TagIDs {
+				postTag := model.PostTag{
+					PostID:  post.ID,
+					TagID:   tagID,
+					AddedBy: userID,
+				}
+				if err := tx.Create(&postTag).Error; err != nil {
+					return err
+				}
+				if err := tx.Model(&model.Tag{}).Where("id = ?", tagID).Update("usage_count", tx.Raw("usage_count + 1")).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		if post.Status == "published" && post.ReviewStatus == "approved" {
+			if _, err := service.AwardActivityReward(tx, userID, "post_publish", fmt.Sprintf("post:%d", post.ID), 0, service.PostPublishExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 		return
 	}
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
-
-	// 添加标签
-	if len(req.TagIDs) > 0 {
-		for _, tagID := range req.TagIDs {
-			postTag := model.PostTag{
-				PostID:  post.ID,
-				TagID:   tagID,
-				AddedBy: userID,
-			}
-			database.DB.Create(&postTag)
-			// 更新标签使用次数
-			database.DB.Model(&model.Tag{}).Where("id = ?", tagID).Update("usage_count", database.DB.Raw("usage_count + 1"))
-		}
-	}
 
 	// @提及通知（非草稿）
 	if post.Status != "draft" {
@@ -589,6 +612,7 @@ func (s *Server) getPost(c *gin.Context) {
 	var author model.User
 	database.DB.First(&author, post.AuthorID)
 	nameColor, nameBold := userDisplayStyle(author)
+	levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 
 	// 获取标签
 	var postTags []model.PostTag
@@ -617,14 +641,18 @@ func (s *Server) getPost(c *gin.Context) {
 	post.CoverImage = postCoverURL(post)
 
 	c.JSON(http.StatusOK, gin.H{
-		"post":              post,
-		"author_name":       author.Username,
-		"author_avatar":     userAvatarURL(s.cfg.Server.ApiHost, author),
-		"author_name_color": nameColor,
-		"author_name_bold":  nameBold,
-		"tags":              tags,
-		"liked":             liked,
-		"favorited":         favorited,
+		"post":                     post,
+		"author_name":              author.Username,
+		"author_avatar":            userAvatarURL(s.cfg.Server.ApiHost, author),
+		"author_name_color":        nameColor,
+		"author_name_bold":         nameBold,
+		"author_forum_level":       levelInfo.Level,
+		"author_forum_level_name":  levelInfo.Name,
+		"author_forum_level_color": levelInfo.Color,
+		"author_forum_level_bold":  levelInfo.Bold,
+		"tags":                     tags,
+		"liked":                    liked,
+		"favorited":                favorited,
 	})
 }
 
@@ -864,7 +892,20 @@ func (s *Server) updatePost(c *gin.Context) {
 		post.EventColor = ""
 	}
 
-	database.DB.Save(&post)
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&post).Error; err != nil {
+			return err
+		}
+		if post.Status == "published" && post.ReviewStatus == "approved" {
+			if _, err := service.AwardActivityReward(tx, userID, "post_publish", fmt.Sprintf("post:%d", post.ID), 0, service.PostPublishExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
 
 	if post.Status != "draft" {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
@@ -926,15 +967,30 @@ func (s *Server) likePost(c *gin.Context) {
 		return
 	}
 
-	// 创建点赞记录
-	postLike := model.PostLike{
-		PostID: uint(id),
-		UserID: userID,
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		postLike := model.PostLike{
+			PostID: uint(id),
+			UserID: userID,
+		}
+		if err := tx.Create(&postLike).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&post).Update("like_count", post.LikeCount+1).Error; err != nil {
+			return err
+		}
+		if _, err := service.ApplyDailyFirstLikeBonus(tx, userID, time.Now()); err != nil {
+			return err
+		}
+		if post.AuthorID != userID {
+			if _, err := service.AwardActivityReward(tx, post.AuthorID, "post_like_received", fmt.Sprintf("post:%d:liker:%d", post.ID, userID), service.PostLikeRewardPoints, service.PostLikeRewardExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "点赞失败"})
+		return
 	}
-	database.DB.Create(&postLike)
-
-	// 更新点赞数
-	database.DB.Model(&post).Update("like_count", post.LikeCount+1)
 
 	// 创建通知（不给自己发通知）
 	if post.AuthorID != userID {
@@ -1235,6 +1291,7 @@ func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn 
 	for _, p := range filtered {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 		coverURL := ""
 		if hasCoverMap[p.ID] {
 			if directURL := directCoverURLMap[p.ID]; directURL != "" {
@@ -1245,13 +1302,17 @@ func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn 
 			}
 		}
 		result = append(result, postListItem{
-			Post:            p,
-			AuthorName:      author.Username,
-			AuthorAvatar:    userAvatarURL(s.cfg.Server.ApiHost, author),
-			AuthorRole:      author.Role,
-			AuthorNameColor: nameColor,
-			AuthorNameBold:  nameBold,
-			CoverImageURL:   coverURL,
+			Post:                  p,
+			AuthorName:            author.Username,
+			AuthorAvatar:          userAvatarURL(s.cfg.Server.ApiHost, author),
+			AuthorRole:            author.Role,
+			AuthorNameColor:       nameColor,
+			AuthorNameBold:        nameBold,
+			AuthorForumLevel:      levelInfo.Level,
+			AuthorForumLevelName:  levelInfo.Name,
+			AuthorForumLevelColor: levelInfo.Color,
+			AuthorForumLevelBold:  levelInfo.Bold,
+			CoverImageURL:         coverURL,
 		})
 	}
 
@@ -1310,10 +1371,14 @@ func (s *Server) listEvents(c *gin.Context) {
 	// 获取作者和公会信息
 	type EventItem struct {
 		model.Post
-		AuthorName      string `json:"author_name"`
-		AuthorNameColor string `json:"author_name_color"`
-		AuthorNameBold  bool   `json:"author_name_bold"`
-		GuildName       string `json:"guild_name,omitempty"`
+		AuthorName            string `json:"author_name"`
+		AuthorNameColor       string `json:"author_name_color"`
+		AuthorNameBold        bool   `json:"author_name_bold"`
+		AuthorForumLevel      int    `json:"author_forum_level"`
+		AuthorForumLevelName  string `json:"author_forum_level_name"`
+		AuthorForumLevelColor string `json:"author_forum_level_color"`
+		AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
+		GuildName             string `json:"guild_name,omitempty"`
 	}
 
 	// 收集ID
@@ -1351,11 +1416,16 @@ func (s *Server) listEvents(c *gin.Context) {
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 		item := EventItem{
-			Post:            p,
-			AuthorName:      author.Username,
-			AuthorNameColor: nameColor,
-			AuthorNameBold:  nameBold,
+			Post:                  p,
+			AuthorName:            author.Username,
+			AuthorNameColor:       nameColor,
+			AuthorNameBold:        nameBold,
+			AuthorForumLevel:      levelInfo.Level,
+			AuthorForumLevelName:  levelInfo.Name,
+			AuthorForumLevelColor: levelInfo.Color,
+			AuthorForumLevelBold:  levelInfo.Bold,
 		}
 		if p.GuildID != nil {
 			item.GuildName = guildMap[*p.GuildID]

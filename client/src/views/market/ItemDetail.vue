@@ -7,6 +7,7 @@ import { useToast } from '@/composables/useToast'
 import ImageViewer from '@/components/ImageViewer.vue'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { renderEmoteContent } from '@/utils/emote'
@@ -438,7 +439,15 @@ function downloadAllImages() {
           <h1>{{ item.name }}</h1>
           <div class="item-meta">
             <span class="type-badge">{{ getTypeText(item.type) }}</span>
-            <span class="author" :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ t('market.detail.author') }}: {{ author?.username || t('market.detail.unknown') }}</span>
+            <span class="author-label">{{ t('market.detail.author') }}:</span>
+            <span class="author" :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || t('market.detail.unknown') }}</span>
+            <UserLevelBadge
+              :level="author?.forum_level"
+              :name="author?.forum_level_name"
+              :color="author?.forum_level_color"
+              :bold="author?.forum_level_bold"
+              size="xs"
+            />
             <span class="permission-badge" v-if="item.requires_permission && !isArtwork">
               <i class="ri-shield-keyhole-line"></i> {{ t('market.detail.permission.badge') }}
               <div class="permission-tooltip">
@@ -591,7 +600,16 @@ function downloadAllImages() {
             <div class="comment-body">
               <div class="comment-header">
                 <div class="comment-user-info">
-                  <span class="comment-author" :style="buildNameStyle(comment.name_color, comment.name_bold)">{{ comment.username || t('market.detail.comments.anonymous') }}</span>
+                  <div class="comment-author-row">
+                    <span class="comment-author" :style="buildNameStyle(comment.name_color, comment.name_bold)">{{ comment.username || t('market.detail.comments.anonymous') }}</span>
+                    <UserLevelBadge
+                      :level="comment.forum_level"
+                      :name="comment.forum_level_name"
+                      :color="comment.forum_level_color"
+                      :bold="comment.forum_level_bold"
+                      size="xs"
+                    />
+                  </div>
                   <div v-if="comment.rating > 0" class="comment-rating">
                     <i v-for="star in 5" :key="star" class="ri-star-fill" :class="{ active: star <= comment.rating }"></i>
                   </div>
@@ -921,6 +939,11 @@ function downloadAllImages() {
 }
 
 .author {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.author-label {
   color: var(--color-text-muted);
   font-size: 14px;
 }
@@ -1396,6 +1419,13 @@ function downloadAllImages() {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.comment-author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .comment-author {

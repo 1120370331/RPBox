@@ -21,6 +21,7 @@ import {
 } from '@/api/item'
 import { resolveApiUrl } from '@/api/image'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
+import MobileRichEditor from '@/components/MobileRichEditor.vue'
 
 interface ItemEditorForm {
   name: string
@@ -224,6 +225,10 @@ function buildPayload(status: 'draft' | 'published'): UpdateItemRequest {
   }
 }
 
+function handleDetailContentChange(value: string) {
+  form.value.detail_content = value
+}
+
 async function submit(status: 'draft' | 'published') {
   if (!validateForm()) return
 
@@ -338,7 +343,11 @@ onMounted(loadItemForEdit)
 
           <label class="field">
             <span>{{ $t('market.editor.detailContent') }}</span>
-            <textarea v-model="form.detail_content" rows="6" />
+            <MobileRichEditor
+              :model-value="form.detail_content"
+              :placeholder="$t('market.editor.detailContent')"
+              @update:modelValue="handleDetailContentChange"
+            />
           </label>
 
           <label v-if="!isArtwork" class="field">

@@ -33,6 +33,10 @@ export interface PostWithAuthor extends Post {
   author_avatar?: string
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   cover_image_url?: string
 }
 
@@ -107,6 +111,10 @@ export interface PostComment {
   author_avatar?: string
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   liked?: boolean
 }
 
@@ -116,6 +124,10 @@ export interface PostDetailResponse {
   author_avatar?: string
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   tags?: Array<{ id: number; name: string; color?: string }>
   liked: boolean
   favorited: boolean

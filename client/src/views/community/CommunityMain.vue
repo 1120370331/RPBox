@@ -6,6 +6,7 @@ import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPo
 import { getGuild, type Guild } from '@/api/guild'
 import { getImageUrl, resolveApiUrl } from '@/api/item'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -821,6 +822,13 @@ function getEventStyle(event: EventItem) {
                   <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
                 </div>
                 <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
+                <UserLevelBadge
+                  :level="post.author_forum_level"
+                  :name="post.author_forum_level_name"
+                  :color="post.author_forum_level_color"
+                  :bold="post.author_forum_level_bold"
+                  size="xs"
+                />
               </div>
               <span class="comment-count">
                 <i class="ri-chat-3-line"></i>

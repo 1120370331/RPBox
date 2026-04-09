@@ -223,6 +223,7 @@ func (s *Server) login(c *gin.Context) {
 
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
+	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
 	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
@@ -237,18 +238,33 @@ func (s *Server) login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"user": gin.H{
-			"id":                   user.ID,
-			"username":             user.Username,
-			"email":                user.Email,
-			"avatar":               avatarURL,
-			"avatar_review_status": user.AvatarReviewStatus,
-			"role":                 user.Role,
-			"is_sponsor":           level > sponsorLevelNone,
-			"sponsor_level":        level,
-			"sponsor_color":        user.SponsorColor,
-			"sponsor_bold":         user.SponsorBold,
-			"name_color":           nameColor,
-			"name_bold":            nameBold,
+			"id":                        user.ID,
+			"username":                  user.Username,
+			"email":                     user.Email,
+			"avatar":                    avatarURL,
+			"avatar_review_status":      user.AvatarReviewStatus,
+			"role":                      user.Role,
+			"is_sponsor":                level > sponsorLevelNone,
+			"sponsor_level":             level,
+			"sponsor_color":             user.SponsorColor,
+			"sponsor_bold":              user.SponsorBold,
+			"name_color":                nameColor,
+			"name_bold":                 nameBold,
+			"activity_points":           activity.ActivityPoints,
+			"activity_experience":       activity.ActivityExperience,
+			"forum_level":               activity.ForumLevel,
+			"forum_level_name":          activity.ForumLevelName,
+			"forum_level_color":         activity.ForumLevelColor,
+			"forum_level_bold":          activity.ForumLevelBold,
+			"current_level_exp":         activity.CurrentLevelExp,
+			"next_level_exp":            activity.NextLevelExp,
+			"level_progress_percent":    activity.LevelProgressPercent,
+			"signed_in_today":           activity.SignedInToday,
+			"name_style_preference":     activity.NameStylePreference,
+			"avatar_change_count":       activity.AvatarChangeCount,
+			"username_change_count":     activity.UsernameChangeCount,
+			"next_avatar_change_cost":   activity.NextAvatarChangeCost,
+			"next_username_change_cost": activity.NextUsernameChangeCost,
 		},
 	})
 }

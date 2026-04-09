@@ -16,7 +16,38 @@ const (
 	sponsorLevelNone    = 0
 	sponsorLevelStyle   = 2
 	sponsorLevelPremium = 3
+	maxForumLevel       = 10
 )
+
+type forumLevelDefinition struct {
+	Level int
+	Name  string
+	Color string
+	Bold  bool
+}
+
+type forumLevelInfo struct {
+	Level           int
+	Name            string
+	Color           string
+	Bold            bool
+	CurrentLevelExp int
+	NextLevelExp    int
+	ProgressPercent int
+}
+
+var forumLevelDefinitions = map[int]forumLevelDefinition{
+	1:  {Level: 1, Name: "新人", Color: "#403B33"},
+	2:  {Level: 2, Name: "启源", Color: "#808080"},
+	3:  {Level: 3, Name: "常态", Color: "#FFFFFF"},
+	4:  {Level: 4, Name: "优秀", Color: "#00C100"},
+	5:  {Level: 5, Name: "精良", Color: "#0080FF"},
+	6:  {Level: 6, Name: "史诗", Color: "#800080"},
+	7:  {Level: 7, Name: "传奇", Color: "#F59B00", Bold: true},
+	8:  {Level: 8, Name: "传承", Color: "#0080C0", Bold: true},
+	9:  {Level: 9, Name: "神话", Color: "#EBD7A7", Bold: true},
+	10: {Level: 10, Name: "顶级", Color: "#8E1027", Bold: true},
+}
 
 func resolveSponsorLevel(user model.User) int {
 	if user.SponsorLevel > 0 {
@@ -65,17 +96,117 @@ func defaultUserNameColor(user model.User) string {
 }
 
 func userDisplayStyle(user model.User) (string, bool) {
-	level := resolveSponsorLevel(user)
-	bold := level >= sponsorLevelStyle && user.SponsorBold
-	if level >= sponsorLevelStyle {
-		if color := normalizeHexColor(user.SponsorColor); color != "" {
-			return color, bold
+	if user.Role == "admin" || user.Role == "moderator" {
+		return adminNameColor, false
+	}
+
+	preference := strings.ToLower(strings.TrimSpace(user.NameStylePreference))
+	if preference == "" {
+		if resolveSponsorLevel(user) >= sponsorLevelStyle && (strings.TrimSpace(user.SponsorColor) != "" || user.SponsorBold) {
+			preference = "sponsor"
+		} else {
+			preference = "level"
 		}
 	}
-	if user.Role == "admin" || user.Role == "moderator" {
-		return adminNameColor, bold
+
+	switch preference {
+	case "sponsor":
+		level := resolveSponsorLevel(user)
+		if level >= sponsorLevelStyle {
+			bold := user.SponsorBold
+			if color := normalizeHexColor(user.SponsorColor); color != "" {
+				return color, bold
+			}
+			return defaultUserNameColor(user), bold
+		}
+	case "level":
+		info := resolveForumLevelInfo(user.ActivityExperience)
+		return info.Color, info.Bold
 	}
-	return defaultUserNameColor(user), bold
+
+	return defaultUserNameColor(user), false
+}
+
+func levelDefinition(level int) forumLevelDefinition {
+	if level < 1 {
+		level = 1
+	}
+	if level > maxForumLevel {
+		level = maxForumLevel
+	}
+	return forumLevelDefinitions[level]
+}
+
+func levelStepExperience(level int) int {
+	if level < 1 {
+		return 0
+	}
+	return int(math.Round(100 * math.Pow(1.8, float64(level-1))))
+}
+
+func levelThresholdExperience(level int) int {
+	if level <= 1 {
+		return 0
+	}
+	return levelStepExperience(level)
+}
+
+func resolveForumLevel(totalExperience int) int {
+	if totalExperience <= 0 {
+		return 1
+	}
+
+	level := 1
+	for level < maxForumLevel {
+		nextThreshold := levelThresholdExperience(level + 1)
+		if totalExperience < nextThreshold {
+			break
+		}
+		level++
+	}
+	return level
+}
+
+func resolveForumLevelInfo(totalExperience int) forumLevelInfo {
+	level := resolveForumLevel(totalExperience)
+	definition := levelDefinition(level)
+	currentThreshold := levelThresholdExperience(level)
+
+	if level >= maxForumLevel {
+		return forumLevelInfo{
+			Level:           definition.Level,
+			Name:            definition.Name,
+			Color:           definition.Color,
+			Bold:            definition.Bold,
+			CurrentLevelExp: totalExperience - currentThreshold,
+			NextLevelExp:    0,
+			ProgressPercent: 100,
+		}
+	}
+
+	nextThreshold := levelThresholdExperience(level + 1)
+	currentExp := totalExperience - currentThreshold
+	nextExp := nextThreshold - currentThreshold
+	progress := 0
+	if nextExp > 0 {
+		progress = int(math.Round(float64(currentExp) / float64(nextExp) * 100))
+	}
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+
+	return forumLevelInfo{
+		Level:           definition.Level,
+		Name:            definition.Name,
+		Color:           definition.Color,
+		Bold:            definition.Bold,
+		CurrentLevelExp: currentExp,
+		NextLevelExp:    nextExp,
+		ProgressPercent: progress,
+	}
 }
 
 func hslToHex(h, s, l float64) string {

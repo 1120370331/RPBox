@@ -1,15 +1,18 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 )
 
 // CreateCommentRequest 创建评论请求
@@ -85,11 +88,15 @@ func (s *Server) listComments(c *gin.Context) {
 	// 组装响应
 	type CommentWithAuthor struct {
 		model.Comment
-		AuthorName      string `json:"author_name"`
-		AuthorAvatar    string `json:"author_avatar"`
-		AuthorNameColor string `json:"author_name_color"`
-		AuthorNameBold  bool   `json:"author_name_bold"`
-		Liked           bool   `json:"liked"`
+		AuthorName            string `json:"author_name"`
+		AuthorAvatar          string `json:"author_avatar"`
+		AuthorNameColor       string `json:"author_name_color"`
+		AuthorNameBold        bool   `json:"author_name_bold"`
+		AuthorForumLevel      int    `json:"author_forum_level"`
+		AuthorForumLevelName  string `json:"author_forum_level_name"`
+		AuthorForumLevelColor string `json:"author_forum_level_color"`
+		AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
+		Liked                 bool   `json:"liked"`
 	}
 	result := make([]CommentWithAuthor, len(comments))
 	for i, comment := range comments {
@@ -98,13 +105,18 @@ func (s *Server) listComments(c *gin.Context) {
 		}
 		author := userMap[comment.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 		result[i] = CommentWithAuthor{
-			Comment:         comment,
-			AuthorName:      author.Username,
-			AuthorAvatar:    userAvatarURL(s.cfg.Server.ApiHost, author),
-			AuthorNameColor: nameColor,
-			AuthorNameBold:  nameBold,
-			Liked:           likedMap[comment.ID],
+			Comment:               comment,
+			AuthorName:            author.Username,
+			AuthorAvatar:          userAvatarURL(s.cfg.Server.ApiHost, author),
+			AuthorNameColor:       nameColor,
+			AuthorNameBold:        nameBold,
+			AuthorForumLevel:      levelInfo.Level,
+			AuthorForumLevelName:  levelInfo.Name,
+			AuthorForumLevelColor: levelInfo.Color,
+			AuthorForumLevelBold:  levelInfo.Bold,
+			Liked:                 likedMap[comment.ID],
 		}
 	}
 
@@ -150,8 +162,8 @@ func (s *Server) createComment(c *gin.Context) {
 	}
 
 	// 如果是回复评论，检查父评论是否存在
+	var parent model.Comment
 	if req.ParentID != nil {
-		var parent model.Comment
 		if err := database.DB.First(&parent, *req.ParentID).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "父评论不存在"})
 			return
@@ -174,19 +186,37 @@ func (s *Server) createComment(c *gin.Context) {
 		comment.ImageReviewStatus = "pending"
 	}
 
-	if err := database.DB.Create(&comment).Error; err != nil {
+	commentOwnerID := post.AuthorID
+	if req.ParentID != nil {
+		commentOwnerID = parent.AuthorID
+	}
+
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&comment).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Post{}).
+			Where("id = ?", post.ID).
+			Update("comment_count", gorm.Expr("comment_count + ?", 1)).Error; err != nil {
+			return err
+		}
+		if _, err := service.AwardActivityReward(tx, userID, "post_comment_create", fmt.Sprintf("post-comment:%d", comment.ID), 0, service.CommentCreateExperience); err != nil {
+			return err
+		}
+		if commentOwnerID != userID {
+			if _, err := service.AwardActivityReward(tx, commentOwnerID, "post_comment_received", fmt.Sprintf("comment:%d:owner:%d", comment.ID, commentOwnerID), 0, service.CommentReceivedExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 		return
 	}
 
-	// 更新帖子评论数
-	database.DB.Model(&post).Update("comment_count", post.CommentCount+1)
-
 	// 创建通知
 	if req.ParentID != nil {
 		// 回复评论：通知被回复的评论作者
-		var parent model.Comment
-		database.DB.First(&parent, *req.ParentID)
 		if parent.AuthorID != userID {
 			// 构建通知内容：包含帖子标题和回复片段
 			replyPreview := req.Content
@@ -310,14 +340,27 @@ func (s *Server) likeComment(c *gin.Context) {
 	}
 
 	// 创建点赞记录
-	commentLike := model.CommentLike{
-		CommentID: uint(commentID),
-		UserID:    userID,
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		commentLike := model.CommentLike{
+			CommentID: uint(commentID),
+			UserID:    userID,
+		}
+		if err := tx.Create(&commentLike).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Comment{}).
+			Where("id = ?", comment.ID).
+			Update("like_count", gorm.Expr("like_count + ?", 1)).Error; err != nil {
+			return err
+		}
+		if _, err := service.ApplyDailyFirstLikeBonus(tx, userID, time.Now()); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "点赞失败"})
+		return
 	}
-	database.DB.Create(&commentLike)
-
-	// 更新点赞数
-	database.DB.Model(&comment).Update("like_count", comment.LikeCount+1)
 
 	// 创建通知（不给自己发通知）
 	if comment.AuthorID != userID {

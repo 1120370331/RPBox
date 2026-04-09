@@ -11,7 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 )
 
 // CreateStoryRequest 创建剧情请求
@@ -767,83 +769,105 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
-
-	// 获取当前最大排序号
-	var maxOrder int
-	database.DB.Model(&model.StoryEntry{}).
-		Where("story_id = ?", id).
-		Select("COALESCE(MAX(sort_order), 0)").
-		Scan(&maxOrder)
-
-	var minTimestamp *time.Time
-	var maxTimestamp *time.Time
-	for i, req := range entries {
-		var characterID *uint
-
-		// 如果有角色信息，查找或创建角色
-		if req.RefID != "" || req.GameID != "" {
-			character := findOrCreateCharacter(userID, req.RefID, req.GameID, req.TRP3Data, req.IsNPC)
-			if character != nil {
-				characterID = &character.ID
-			}
-		}
-
-		entry := model.StoryEntry{
-			StoryID:     uint(id),
-			SourceID:    req.SourceID,
-			Type:        req.Type,
-			CharacterID: characterID,
-			Speaker:     req.Speaker,
-			Content:     req.Content,
-			Channel:     req.Channel,
-			SortOrder:   maxOrder + i + 1,
-		}
-		if req.Timestamp != "" {
-			if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
-				entry.Timestamp = t
-				if minTimestamp == nil || t.Before(*minTimestamp) {
-					ts := t
-					minTimestamp = &ts
-				}
-				if maxTimestamp == nil || t.After(*maxTimestamp) {
-					ts := t
-					maxTimestamp = &ts
-				}
-			}
-		}
-		database.DB.Create(&entry)
+	if len(entries) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请至少提供一条记录"})
+		return
 	}
 
-	updates := map[string]interface{}{
-		"updated_at": time.Now(),
-	}
-	if story.StartTime.IsZero() || story.EndTime.IsZero() {
-		type storyEntryStats struct {
-			MinTime *time.Time `gorm:"column:min_time"`
-			MaxTime *time.Time `gorm:"column:max_time"`
-		}
-		var stat storyEntryStats
-		zeroTime := time.Time{}
-		database.DB.Model(&model.StoryEntry{}).
-			Select("MIN(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS min_time, MAX(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS max_time", zeroTime, zeroTime).
+	now := time.Now()
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		// 获取当前最大排序号
+		var maxOrder int
+		if err := tx.Model(&model.StoryEntry{}).
 			Where("story_id = ?", id).
-			Scan(&stat)
-		if story.StartTime.IsZero() && stat.MinTime != nil {
-			updates["start_time"] = *stat.MinTime
+			Select("COALESCE(MAX(sort_order), 0)").
+			Scan(&maxOrder).Error; err != nil {
+			return err
 		}
-		if story.EndTime.IsZero() && stat.MaxTime != nil {
-			updates["end_time"] = *stat.MaxTime
-		}
-	} else {
-		if minTimestamp != nil && minTimestamp.Before(story.StartTime) {
-			updates["start_time"] = *minTimestamp
-		}
-		if maxTimestamp != nil && maxTimestamp.After(story.EndTime) {
-			updates["end_time"] = *maxTimestamp
-		}
-	}
 
-	database.DB.Model(&story).Updates(updates)
+		var minTimestamp *time.Time
+		var maxTimestamp *time.Time
+		for i, req := range entries {
+			var characterID *uint
+
+			// 如果有角色信息，查找或创建角色
+			if req.RefID != "" || req.GameID != "" {
+				character := findOrCreateCharacter(userID, req.RefID, req.GameID, req.TRP3Data, req.IsNPC)
+				if character != nil {
+					characterID = &character.ID
+				}
+			}
+
+			entry := model.StoryEntry{
+				StoryID:     uint(id),
+				SourceID:    req.SourceID,
+				Type:        req.Type,
+				CharacterID: characterID,
+				Speaker:     req.Speaker,
+				Content:     req.Content,
+				Channel:     req.Channel,
+				SortOrder:   maxOrder + i + 1,
+			}
+			if req.Timestamp != "" {
+				if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
+					entry.Timestamp = t
+					if minTimestamp == nil || t.Before(*minTimestamp) {
+						ts := t
+						minTimestamp = &ts
+					}
+					if maxTimestamp == nil || t.After(*maxTimestamp) {
+						ts := t
+						maxTimestamp = &ts
+					}
+				}
+			}
+			if err := tx.Create(&entry).Error; err != nil {
+				return err
+			}
+		}
+
+		updates := map[string]interface{}{
+			"updated_at": now,
+		}
+		if story.StartTime.IsZero() || story.EndTime.IsZero() {
+			type storyEntryStats struct {
+				MinTime *time.Time `gorm:"column:min_time"`
+				MaxTime *time.Time `gorm:"column:max_time"`
+			}
+			var stat storyEntryStats
+			zeroTime := time.Time{}
+			if err := tx.Model(&model.StoryEntry{}).
+				Select("MIN(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS min_time, MAX(CASE WHEN timestamp > ? THEN timestamp ELSE created_at END) AS max_time", zeroTime, zeroTime).
+				Where("story_id = ?", id).
+				Scan(&stat).Error; err != nil {
+				return err
+			}
+			if story.StartTime.IsZero() && stat.MinTime != nil {
+				updates["start_time"] = *stat.MinTime
+			}
+			if story.EndTime.IsZero() && stat.MaxTime != nil {
+				updates["end_time"] = *stat.MaxTime
+			}
+		} else {
+			if minTimestamp != nil && minTimestamp.Before(story.StartTime) {
+				updates["start_time"] = *minTimestamp
+			}
+			if maxTimestamp != nil && maxTimestamp.After(story.EndTime) {
+				updates["end_time"] = *maxTimestamp
+			}
+		}
+
+		if err := tx.Model(&story).Updates(updates).Error; err != nil {
+			return err
+		}
+		if _, err := service.ApplyStoryArchiveProgress(tx, userID, len(entries), now); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "添加失败"})
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "添加成功", "count": len(entries)})
 }

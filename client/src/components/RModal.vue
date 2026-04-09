@@ -32,7 +32,7 @@ function onMaskClick() {
   <Teleport to="body">
     <Transition name="r-modal">
       <div v-if="modelValue" class="r-modal__mask" @click.self="onMaskClick">
-        <div class="r-modal" :style="{ width }">
+        <div class="r-modal" :style="{ '--r-modal-width': width }">
           <div v-if="title || closable" class="r-modal__header">
             <span class="r-modal__title">{{ title }}</span>
             <button v-if="closable" class="r-modal__close" @click="close">×</button>
@@ -57,9 +57,11 @@ function onMaskClick() {
 }
 
 .r-modal {
+  width: var(--r-modal-width, 480px);
+  max-width: calc(100vw - 24px);
   background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
-  max-height: 90vh;
+  max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-lg);
@@ -110,5 +112,35 @@ function onMaskClick() {
 .r-modal-enter-from, .r-modal-leave-to { opacity: 0; }
 .r-modal-enter-from .r-modal, .r-modal-leave-to .r-modal {
   transform: scale(0.9);
+}
+
+@media (max-width: 640px) {
+  .r-modal__mask {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .r-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 18px;
+  }
+
+  .r-modal__header {
+    padding: 16px 18px;
+  }
+
+  .r-modal__title {
+    font-size: 16px;
+  }
+
+  .r-modal__body {
+    padding: 18px;
+  }
+
+  .r-modal__footer {
+    padding: 14px 18px;
+  }
 }
 </style>

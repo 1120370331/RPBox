@@ -12,6 +12,15 @@ export interface UserData {
   sponsor_bold?: boolean
   name_color?: string
   name_bold?: boolean
+  activity_points?: number
+  activity_experience?: number
+  forum_level?: number
+  forum_level_name?: string
+  forum_level_color?: string
+  forum_level_bold?: boolean
+  current_level_exp?: number
+  next_level_exp?: number
+  signed_in_today?: boolean
 }
 
 export const useUserStore = defineStore('user', () => {
@@ -56,6 +65,13 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  function mergeUser(patch: Partial<UserData>) {
+    if (user.value) {
+      user.value = { ...user.value, ...patch }
+      localStorage.setItem('user', JSON.stringify(user.value))
+    }
+  }
+
   function logout() {
     token.value = ''
     user.value = null
@@ -63,5 +79,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('user')
   }
 
-  return { token, user, isModerator, isAdmin, setAuth, updateAvatar, updateRole, logout }
+  return { token, user, isModerator, isAdmin, setAuth, updateAvatar, updateRole, mergeUser, logout }
 })

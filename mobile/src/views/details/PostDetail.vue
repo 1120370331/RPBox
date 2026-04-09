@@ -6,6 +6,7 @@ import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
+import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
@@ -42,6 +43,10 @@ const authorName = ref('')
 const authorAvatar = ref('')
 const authorNameColor = ref('')
 const authorNameBold = ref(false)
+const authorForumLevel = ref<number | null>(null)
+const authorForumLevelName = ref('')
+const authorForumLevelColor = ref('')
+const authorForumLevelBold = ref(false)
 const imagePreviewOpen = ref(false)
 const imagePreviewSrc = ref('')
 const emoteVersion = ref(0)
@@ -83,6 +88,10 @@ async function loadPostDetail() {
     authorAvatar.value = postRes.author_avatar || ''
     authorNameColor.value = postRes.author_name_color || ''
     authorNameBold.value = !!postRes.author_name_bold
+    authorForumLevel.value = postRes.author_forum_level || null
+    authorForumLevelName.value = postRes.author_forum_level_name || ''
+    authorForumLevelColor.value = postRes.author_forum_level_color || ''
+    authorForumLevelBold.value = !!postRes.author_forum_level_bold
   } catch (error) {
     toast.error((error as Error)?.message || t('community.actionFailed'))
     console.error('Failed to load post detail', error)
@@ -342,9 +351,19 @@ onMounted(async () => {
           <div class="author-row">
             <img v-if="authorAvatar" :src="resolveApiUrl(authorAvatar)" class="author-avatar" alt="" />
             <i v-else class="ri-user-3-fill avatar-icon" />
-            <span
-              :style="{ color: authorNameColor || undefined, fontWeight: authorNameBold ? 'bold' : undefined }"
-            >{{ authorName }}</span>
+            <span class="author-identity">
+              <span
+                :style="{ color: authorNameColor || undefined, fontWeight: authorNameBold ? 'bold' : undefined }"
+              >{{ authorName }}</span>
+              <UserLevelBadge
+                v-if="authorForumLevel"
+                compact
+                :level="authorForumLevel"
+                :name="authorForumLevelName"
+                :color="authorForumLevelColor"
+                :bold="authorForumLevelBold"
+              />
+            </span>
             <time>{{ formatTime(post.created_at) }}</time>
           </div>
           <div class="content" v-html="postContentHtml" @click="handleContentClick" />
@@ -393,12 +412,22 @@ onMounted(async () => {
                   alt=""
                 >
                 <i v-else class="ri-user-3-fill comment-avatar-fallback" />
-                <span
-                  :style="{
-                    color: comment.author_name_color || undefined,
-                    fontWeight: comment.author_name_bold ? 'bold' : undefined,
-                  }"
-                >{{ comment.author_name }}</span>
+                <span class="comment-author-name">
+                  <span
+                    :style="{
+                      color: comment.author_name_color || undefined,
+                      fontWeight: comment.author_name_bold ? 'bold' : undefined,
+                    }"
+                  >{{ comment.author_name }}</span>
+                  <UserLevelBadge
+                    v-if="comment.author_forum_level"
+                    compact
+                    :level="comment.author_forum_level"
+                    :name="comment.author_forum_level_name"
+                    :color="comment.author_forum_level_color"
+                    :bold="comment.author_forum_level_bold"
+                  />
+                </span>
               </div>
               <time>{{ formatTime(comment.created_at) }}</time>
             </header>
@@ -454,6 +483,7 @@ onMounted(async () => {
 .author-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 13px;
   color: var(--color-text-secondary);
@@ -473,6 +503,14 @@ onMounted(async () => {
 
 .author-row > span {
   font-size: 15px;
+}
+
+.author-identity,
+.comment-author-name {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .author-row time {
@@ -636,6 +674,7 @@ onMounted(async () => {
 .comment-author {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }

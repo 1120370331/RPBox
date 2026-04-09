@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 )
 
 // logAdminAction 记录管理员操作日志
@@ -46,6 +48,33 @@ func logAdminAction(c *gin.Context, actionType, targetType string, targetID uint
 type ReviewRequest struct {
 	Action  string `json:"action" binding:"required"` // approve|reject
 	Comment string `json:"comment"`                   // 审核意见
+}
+
+func buildModerationNotification(subject, action, comment string) string {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		subject = "内容"
+	}
+
+	if action == "reject" {
+		message := "你的" + subject + "审核未通过。"
+		if trimmed := strings.TrimSpace(comment); trimmed != "" {
+			message += " 原因：" + trimmed
+		}
+		return message
+	}
+
+	return "你的" + subject + "审核已通过。"
+}
+
+func notifyModerationResult(userID uint, targetType string, targetID uint, subject, action, comment string) {
+	_ = service.CreateNotification(&model.Notification{
+		UserID:     userID,
+		Type:       "system",
+		TargetType: targetType,
+		TargetID:   targetID,
+		Content:    buildModerationNotification(subject, action, comment),
+	})
 }
 
 // ========== 帖子审核 ==========
@@ -141,13 +170,27 @@ func (s *Server) reviewPost(c *gin.Context) {
 		return
 	}
 
-	database.DB.Save(&post)
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&post).Error; err != nil {
+			return err
+		}
+		if req.Action == "approve" {
+			if _, err := service.AwardActivityReward(tx, post.AuthorID, "post_publish", fmt.Sprintf("post:%d", post.ID), 0, service.PostPublishExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "审核失败"})
+		return
+	}
 
 	// 记录日志
 	logAdminAction(c, "review_post", "post", uint(id), post.Title, map[string]interface{}{
 		"action":  req.Action,
 		"comment": req.Comment,
 	})
+	notifyModerationResult(post.AuthorID, "post", post.ID, "帖子《"+post.Title+"》", req.Action, req.Comment)
 
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
@@ -351,13 +394,27 @@ func (s *Server) reviewItem(c *gin.Context) {
 		return
 	}
 
-	database.DB.Save(&item)
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&item).Error; err != nil {
+			return err
+		}
+		if req.Action == "approve" {
+			if _, err := service.AwardActivityReward(tx, item.AuthorID, "item_publish", fmt.Sprintf("item:%d", item.ID), 0, service.ItemPublishExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "审核失败"})
+		return
+	}
 
 	// 记录日志
 	logAdminAction(c, "review_item", "item", uint(id), item.Name, map[string]interface{}{
 		"action":  req.Action,
 		"comment": req.Comment,
 	})
+	notifyModerationResult(item.AuthorID, "item", item.ID, "道具《"+item.Name+"》", req.Action, req.Comment)
 
 	ensureItemPreviewUpdatedAt(&item)
 	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")

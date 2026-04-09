@@ -695,7 +695,7 @@ func (s *Server) listGuildMembers(c *gin.Context) {
 	}
 
 	var users []model.User
-	database.DB.Select("id, username, role, is_sponsor, sponsor_level, sponsor_color, sponsor_bold, updated_at").Where("id IN ?", userIDs).Find(&users)
+	database.DB.Select("id, username, role, is_sponsor, sponsor_level, sponsor_color, sponsor_bold, name_style_preference, activity_experience, updated_at").Where("id IN ?", userIDs).Find(&users)
 	userMap := make(map[uint]model.User)
 	for _, u := range users {
 		userMap[u.ID] = u

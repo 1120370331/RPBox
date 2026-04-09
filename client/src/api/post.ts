@@ -47,6 +47,10 @@ export interface PostWithAuthor extends Post {
   author_role?: string
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   cover_image_url?: string  // 封面图缩略图 URL（列表页使用）
 }
 
@@ -63,8 +67,13 @@ export interface Comment {
 
 export interface CommentWithAuthor extends Comment {
   author_name: string
+  author_avatar?: string
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   liked?: boolean
 }
 
@@ -128,8 +137,13 @@ export async function createPost(data: CreatePostRequest): Promise<Post> {
 export async function getPost(id: number): Promise<{
   post: Post
   author_name: string
+  author_avatar?: string
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   tags: any[]
   liked: boolean
   favorited: boolean
@@ -217,6 +231,12 @@ export async function listMyPostViews(): Promise<{ posts: PostWithAuthor[]; tota
 
 export interface EventItem extends Post {
   author_name: string
+  author_name_color?: string
+  author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   guild_name?: string
 }
 

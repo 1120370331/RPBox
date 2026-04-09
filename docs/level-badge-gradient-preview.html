@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPBox 等级勋章渐变预览</title>
+  <style>
+    :root {
+      --bg-a: #f7efe2;
+      --bg-b: #eadbc8;
+      --panel: rgba(255, 251, 246, 0.78);
+      --panel-border: rgba(104, 78, 56, 0.12);
+      --text-main: #2f241c;
+      --text-muted: #7d6758;
+      --shadow: 0 18px 40px rgba(66, 40, 18, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(217, 144, 101, 0.14), transparent 28%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+      color: var(--text-main);
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(30px, 4vw, 52px);
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 680px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-muted);
+    }
+
+    .hero-mark {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(75, 54, 33, 0.08);
+      border: 1px solid rgba(75, 54, 33, 0.12);
+      color: var(--text-muted);
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    .panel {
+      padding: 24px;
+      border-radius: 28px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .level-card {
+      position: relative;
+      overflow: hidden;
+      padding: 18px 18px 16px;
+      border-radius: 22px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.45), transparent 32%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(245, 236, 226, 0.88));
+      border: 1px solid rgba(87, 67, 52, 0.08);
+      min-height: 148px;
+    }
+
+    .level-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .level-index {
+      display: inline-flex;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(75, 54, 33, 0.08);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .level-name {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .level-color {
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      opacity: 0.9;
+    }
+
+    .badge-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .user-level-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--badge-bg);
+      color: var(--badge-color);
+      box-shadow: 0 6px 16px -12px var(--badge-shadow);
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .user-level-badge.bold {
+      font-weight: 700;
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      box-shadow: 0 0 6px var(--badge-border);
+      flex-shrink: 0;
+    }
+
+    .badge-note {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 28px 16px 40px;
+      }
+
+      .hero {
+        flex-direction: column;
+        align-items: start;
+      }
+
+      .panel {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <h1>等级勋章渐变预览</h1>
+        <p>这一页把 1 到 10 级的勋章渐变全部摊开，颜色仍沿用现有等级色系，但处理成更克制的和风渐变，偏和纸、陶釉、淡染的简约感觉。</p>
+      </div>
+      <div class="hero-mark">Local Preview HTML</div>
+    </section>
+
+    <section class="panel">
+      <div class="grid" id="badgeGrid"></div>
+    </section>
+  </main>
+
+  <script>
+    const levels = [
+      { level: 1, name: '新人', color: '#403B33', bold: false },
+      { level: 2, name: '启源', color: '#808080', bold: false },
+      { level: 3, name: '常态', color: '#FFFFFF', bold: false },
+      { level: 4, name: '优秀', color: '#00C100', bold: false },
+      { level: 5, name: '精良', color: '#0080FF', bold: false },
+      { level: 6, name: '史诗', color: '#800080', bold: false },
+      { level: 7, name: '传奇', color: '#F59B00', bold: true },
+      { level: 8, name: '传承', color: '#0080C0', bold: true },
+      { level: 9, name: '神话', color: '#EBD7A7', bold: true },
+      { level: 10, name: '顶级', color: '#8E1027', bold: true },
+    ]
+
+    const presets = {
+      1: { start: '#7A6656', end: '#4B3E35' },
+      2: { start: '#D7D9DE', end: '#9A9DA4' },
+      3: { start: '#FBF8F1', end: '#E7E1D8' },
+      4: { start: '#B7CFB1', end: '#6F8F71' },
+      5: { start: '#A9BFD8', end: '#5B7598' },
+      6: { start: '#C7B4D9', end: '#7E6896' },
+      7: { start: '#E7BB86', end: '#C68E5B' },
+      8: { start: '#A6C9CC', end: '#628C93' },
+      9: { start: '#E7D9BE', end: '#C7B394' },
+      10: { start: '#B61C3A', end: '#4B0817' },
+    }
+
+    function normalizeHex(hex) {
+      const normalized = String(hex || '').trim().replace(/^#/, '')
+      if (normalized.length === 3) {
+        return normalized.split('').map((char) => char + char).join('')
+      }
+      return /^[0-9a-fA-F]{6}$/.test(normalized) ? normalized : '8C7B70'
+    }
+
+    function hexToRgb(hex) {
+      const value = normalizeHex(hex)
+      return {
+        r: parseInt(value.slice(0, 2), 16),
+        g: parseInt(value.slice(2, 4), 16),
+        b: parseInt(value.slice(4, 6), 16),
+      }
+    }
+
+    function rgbToHex(r, g, b) {
+      const toHex = (value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0')
+      return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+    }
+
+    function mixHexColors(from, to, ratio) {
+      const start = hexToRgb(from)
+      const end = hexToRgb(to)
+      return rgbToHex(
+        start.r + (end.r - start.r) * ratio,
+        start.g + (end.g - start.g) * ratio,
+        start.b + (end.b - start.b) * ratio,
+      )
+    }
+
+    function hexToRgba(hex, alpha) {
+      const { r, g, b } = hexToRgb(hex)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    }
+
+    function getContrastTextColor(hex) {
+      const { r, g, b } = hexToRgb(hex)
+      const luminance = (r * 299 + g * 587 + b * 114) / 1000
+      return luminance >= 160 ? '#1F2328' : '#FFF8EF'
+    }
+
+    function getGradientTextColor(start, end) {
+      return getContrastTextColor(mixHexColors(start, end, 0.5))
+    }
+
+    function buildBadge(level) {
+      const preset = presets[level.level]
+      const badge = document.createElement('span')
+      badge.className = `user-level-badge${level.bold ? ' bold' : ''}`
+      badge.style.setProperty('--badge-bg', `linear-gradient(145deg, ${preset.start} 0%, ${preset.end} 100%)`)
+      badge.style.setProperty('--badge-color', getGradientTextColor(preset.start, preset.end))
+      badge.style.setProperty('--badge-border', hexToRgba(preset.end, 0.3))
+      badge.style.setProperty('--badge-shadow', hexToRgba(preset.end, 0.18))
+      badge.innerHTML = `<span class="badge-dot"></span><span>Lv${level.level} ${level.name}</span>`
+      return badge
+    }
+
+    function buildCard(level) {
+      const card = document.createElement('article')
+      card.className = 'level-card'
+      const top = document.createElement('div')
+      top.className = 'level-top'
+      top.innerHTML = `
+        <div>
+          <div class="level-index">Level ${level.level}</div>
+          <div class="level-name">${level.name}</div>
+        </div>
+        <div class="level-color">${level.color}</div>
+      `
+
+      const stack = document.createElement('div')
+      stack.className = 'badge-stack'
+      stack.appendChild(buildBadge(level))
+
+      const note = document.createElement('div')
+      note.className = 'badge-note'
+      note.textContent = level.bold ? '高阶等级保留克制的强调感。' : '常规等级走柔和和风色带。'
+      stack.appendChild(note)
+
+      card.appendChild(top)
+      card.appendChild(stack)
+      return card
+    }
+
+    const grid = document.getElementById('badgeGrid')
+    levels.forEach((level) => grid.appendChild(buildCard(level)))
+  </script>
+</body>
+</html>

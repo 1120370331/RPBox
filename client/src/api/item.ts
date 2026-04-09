@@ -13,6 +13,10 @@ export interface Item {
   author_avatar?: string    // 作者头像
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   name: string
   type: 'item' | 'campaign' | 'artwork'  // item=道具, campaign=剧本, artwork=画作
   icon: string
@@ -54,8 +58,13 @@ export interface ItemComment {
   created_at: string
   updated_at: string
   username?: string
+  avatar?: string
   name_color?: string
   name_bold?: boolean
+  forum_level?: number
+  forum_level_name?: string
+  forum_level_color?: string
+  forum_level_bold?: boolean
 }
 
 export interface CreateItemRequest {

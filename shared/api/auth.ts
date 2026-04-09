@@ -14,6 +14,15 @@ export interface LoginResponse {
     sponsor_bold?: boolean
     name_color?: string
     name_bold?: boolean
+    activity_points?: number
+    activity_experience?: number
+    forum_level?: number
+    forum_level_name?: string
+    forum_level_color?: string
+    forum_level_bold?: boolean
+    current_level_exp?: number
+    next_level_exp?: number
+    signed_in_today?: boolean
   }
 }
 

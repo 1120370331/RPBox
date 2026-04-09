@@ -1,17 +1,16 @@
 import request from './request'
+import type { UserActivityInfo, UserData } from '@/types/user'
 
-export interface UserInfo {
-  id: number
-  username: string
+export interface UserInfo extends UserData {
   email: string
   avatar: string
-  role?: string
-  is_sponsor?: boolean
-  sponsor_level?: number
-  sponsor_color?: string
-  sponsor_bold?: boolean
-  name_color?: string
-  name_bold?: boolean
+  bio?: string
+  location?: string
+  website?: string
+  post_count?: number
+  story_count?: number
+  profile_count?: number
+  created_at?: string
 }
 
 export interface UserMentionItem {
@@ -47,12 +46,17 @@ export async function updateUserInfo(data: {
   website?: string
   sponsor_color?: string
   sponsor_bold?: boolean
+  name_style_preference?: 'default' | 'level' | 'sponsor'
 }): Promise<void> {
   return request.put('/user/info', data)
 }
 
 // 上传头像
-export async function uploadAvatar(file: File): Promise<{ avatar: string }> {
+export async function uploadAvatar(file: File): Promise<UserActivityInfo & {
+  avatar: string
+  avatar_review_status: string
+  message: string
+}> {
   const formData = new FormData()
   formData.append('avatar', file)
 
@@ -73,6 +77,15 @@ export async function uploadAvatar(file: File): Promise<{ avatar: string }> {
   }
 
   return res.json()
+}
+
+export async function signInDaily(): Promise<UserActivityInfo & {
+  message: string
+  granted: boolean
+  points_delta: number
+  experience_delta: number
+}> {
+  return request.post('/user/sign-in')
 }
 
 // 绑定邮箱

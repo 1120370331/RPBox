@@ -6,8 +6,10 @@ import { useNotificationStore } from '../stores/notification'
 import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
+import UserLevelBadge from './UserLevelBadge.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
+import { getUserInfo } from '@/api/user'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -20,7 +22,7 @@ const jumpReturn = ref<JumpReturnInfo | null>(null)
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   if (userStore.token) {
-    // 加载初始未读数量
+    void refreshCurrentUser()
     notificationStore.loadUnreadCount()
   }
   document.addEventListener('click', handleGlobalJumpLink, true)
@@ -35,6 +37,15 @@ onBeforeUnmount(() => {
 function handleMenuClick() {
   if (userStore.token) {
     notificationStore.loadUnreadCount()
+  }
+}
+
+async function refreshCurrentUser() {
+  try {
+    const userInfo = await getUserInfo()
+    userStore.mergeUser(userInfo)
+  } catch (error) {
+    console.error('刷新用户信息失败:', error)
   }
 }
 
@@ -141,8 +152,19 @@ const activeMenu = computed(() => {
     <!-- 侧边栏 -->
     <aside class="sidebar">
       <div class="logo-area">
-        <i class="ri-box-3-fill logo-icon"></i>
-        <span>RPBox</span>
+        <div class="logo-brand">
+          <i class="ri-box-3-fill logo-icon"></i>
+          <span>RPBox</span>
+        </div>
+        <router-link
+          v-if="userStore.token"
+          to="/notifications"
+          class="notification-btn top"
+          :title="t('nav.user.notifications')"
+        >
+          <i class="ri-notification-3-line"></i>
+          <span v-if="notificationStore.unreadCount > 0" class="notification-badge">{{ notificationStore.unreadCount > 99 ? '99+' : notificationStore.unreadCount }}</span>
+        </router-link>
       </div>
 
       <nav class="menu">
@@ -180,15 +202,21 @@ const activeMenu = computed(() => {
             </div>
           </router-link>
           <div class="user-info">
-            <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
-              <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username }}</h4>
-            </router-link>
+            <div class="user-name-row">
+              <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
+                <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username }}</h4>
+              </router-link>
+              <UserLevelBadge
+                :level="userStore.user?.forum_level"
+                :name="userStore.user?.forum_level_name"
+                :color="userStore.user?.forum_level_color"
+                :bold="userStore.user?.forum_level_bold"
+                size="xs"
+              />
+            </div>
+            <span class="user-points">积分 {{ userStore.user?.activity_points ?? 0 }}</span>
             <p class="logout-link" @click="handleLogout">{{ t('nav.user.logout') }}</p>
           </div>
-          <router-link to="/notifications" class="notification-btn" :title="t('nav.user.notifications')">
-            <i class="ri-notification-3-line"></i>
-            <span v-if="notificationStore.unreadCount > 0" class="notification-badge">{{ notificationStore.unreadCount > 99 ? '99+' : notificationStore.unreadCount }}</span>
-          </router-link>
         </template>
         <router-link v-else to="/login" class="login-btn">
           <i class="ri-login-box-line"></i>
@@ -240,11 +268,19 @@ const activeMenu = computed(() => {
   height: 80px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 0 24px;
   font-size: 24px;
   font-weight: 700;
   letter-spacing: 1px;
   border-bottom: 1px solid rgba(238, 217, 196, 0.1);
+}
+
+.logo-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .logo-icon {
@@ -327,6 +363,22 @@ const activeMenu = computed(() => {
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  min-width: 0;
+}
+
+.user-name-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+  min-width: 0;
+}
+
+.user-points {
+  font-size: 11px;
+  color: rgba(251, 245, 239, 0.72);
+  white-space: nowrap;
 }
 
 .notification-btn {
@@ -346,6 +398,14 @@ const activeMenu = computed(() => {
   font-size: 20px;
   transition: all 0.3s;
   flex-shrink: 0;
+}
+
+.notification-btn.top {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
 }
 
 .notification-btn:hover {
@@ -375,6 +435,8 @@ const activeMenu = computed(() => {
 
 .username-link {
   text-decoration: none;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 .username-link h4 {
@@ -382,6 +444,9 @@ const activeMenu = computed(() => {
   color: var(--color-text-light, #FBF5EF);
   margin: 0;
   transition: color 0.3s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .username-link:hover h4 {
@@ -469,5 +534,36 @@ const activeMenu = computed(() => {
   border-color: #B87333;
   color: #B87333;
   transform: translateY(-1px);
+}
+
+@media (max-width: 767px) {
+  .logo-area {
+    padding: 0 16px;
+  }
+
+  .logo-brand {
+    font-size: 22px;
+  }
+
+  .notification-btn.top {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .user-profile {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .user-name-row {
+    gap: 3px;
+  }
+
+  .user-points,
+  .logout-link {
+    font-size: 11px;
+  }
 }
 </style>

@@ -1,22 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { UserData } from '@/types/user'
 
-interface UserData {
-  id: number
-  username: string
-  avatar?: string
-  role?: string // user|moderator|admin
-  is_sponsor?: boolean
-  sponsor_level?: number
-  sponsor_color?: string
-  sponsor_bold?: boolean
-  name_color?: string
-  name_bold?: boolean
-}
+export type { UserData } from '@/types/user'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || '')
   const user = ref<UserData | null>(null)
+
+  function persistUserState() {
+    if (user.value) {
+      localStorage.setItem('user', JSON.stringify(user.value))
+    } else {
+      localStorage.removeItem('user')
+    }
+  }
 
   // 初始化时从 localStorage 恢复用户信息
   const savedUser = localStorage.getItem('user')
@@ -41,21 +39,34 @@ export const useUserStore = defineStore('user', () => {
     token.value = t
     user.value = u
     localStorage.setItem('token', t)
-    localStorage.setItem('user', JSON.stringify(u))
+    persistUserState()
   }
 
   function updateAvatar(avatar: string) {
     if (user.value) {
       user.value.avatar = avatar
-      localStorage.setItem('user', JSON.stringify(user.value))
+      persistUserState()
     }
   }
 
   function updateRole(role: string) {
     if (user.value) {
       user.value.role = role
-      localStorage.setItem('user', JSON.stringify(user.value))
+      persistUserState()
     }
+  }
+
+  function mergeUser(patch: Partial<UserData>) {
+    if (!user.value) {
+      if (typeof patch.id !== 'number' || !patch.username) return
+      user.value = patch as UserData
+    } else {
+      user.value = {
+        ...user.value,
+        ...patch,
+      }
+    }
+    persistUserState()
   }
 
   function logout() {
@@ -65,5 +76,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('user')
   }
 
-  return { token, user, isModerator, isAdmin, setAuth, updateAvatar, updateRole, logout }
+  return { token, user, isModerator, isAdmin, setAuth, updateAvatar, updateRole, mergeUser, logout }
 })

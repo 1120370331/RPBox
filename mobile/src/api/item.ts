@@ -8,6 +8,10 @@ export interface Item {
   author_avatar?: string
   author_name_color?: string
   author_name_bold?: boolean
+  author_forum_level?: number
+  author_forum_level_name?: string
+  author_forum_level_color?: string
+  author_forum_level_bold?: boolean
   name: string
   type: 'item' | 'campaign' | 'artwork'
   icon: string
@@ -82,6 +86,10 @@ export interface ItemAuthor {
   username: string
   name_color?: string
   name_bold?: boolean
+  forum_level?: number
+  forum_level_name?: string
+  forum_level_color?: string
+  forum_level_bold?: boolean
 }
 
 export interface ItemComment {
@@ -96,6 +104,10 @@ export interface ItemComment {
   avatar?: string
   name_color?: string
   name_bold?: boolean
+  forum_level?: number
+  forum_level_name?: string
+  forum_level_color?: string
+  forum_level_bold?: boolean
 }
 
 export interface ItemDetailResponse {
@@ -149,6 +161,12 @@ export function uploadImage(file: File) {
   const formData = new FormData()
   formData.append('image', file)
   return request.post<{ url: string }>('/upload/image', formData)
+}
+
+export function uploadAttachment(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<{ url: string; name?: string }>('/upload/attachment', formData)
 }
 
 export function uploadItemImages(itemId: number, files: File[]) {

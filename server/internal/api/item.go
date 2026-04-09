@@ -12,6 +12,7 @@ import (
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -162,7 +163,7 @@ func (s *Server) listItems(c *gin.Context) {
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	// 创建作者ID到用户信息的映射
@@ -174,18 +175,23 @@ func (s *Server) listItems(c *gin.Context) {
 	// 构建包含作者信息的响应
 	type ItemWithAuthor struct {
 		model.Item
-		AuthorUsername  string `json:"author_username"`
-		AuthorAvatar    string `json:"author_avatar"`
-		AuthorRole      string `json:"author_role"`
-		AuthorNameColor string `json:"author_name_color"`
-		AuthorNameBold  bool   `json:"author_name_bold"`
-		PreviewImageURL string `json:"preview_image_url"`
+		AuthorUsername        string `json:"author_username"`
+		AuthorAvatar          string `json:"author_avatar"`
+		AuthorRole            string `json:"author_role"`
+		AuthorNameColor       string `json:"author_name_color"`
+		AuthorNameBold        bool   `json:"author_name_bold"`
+		AuthorForumLevel      int    `json:"author_forum_level"`
+		AuthorForumLevelName  string `json:"author_forum_level_name"`
+		AuthorForumLevelColor string `json:"author_forum_level_color"`
+		AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
+		PreviewImageURL       string `json:"preview_image_url"`
 	}
 
 	var result []ItemWithAuthor
 	for _, item := range items {
 		author := authorMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 		previewURL := ""
 		if hasPreviewMap[item.ID] {
 			if directURL := directPreviewURLMap[item.ID]; directURL != "" {
@@ -198,13 +204,17 @@ func (s *Server) listItems(c *gin.Context) {
 			previewURL = buildItemPreviewURL(item, false)
 		}
 		result = append(result, ItemWithAuthor{
-			Item:            item,
-			AuthorUsername:  author.Username,
-			AuthorAvatar:    userAvatarURL("", author),
-			AuthorRole:      author.Role,
-			AuthorNameColor: nameColor,
-			AuthorNameBold:  nameBold,
-			PreviewImageURL: previewURL,
+			Item:                  item,
+			AuthorUsername:        author.Username,
+			AuthorAvatar:          userAvatarURL("", author),
+			AuthorRole:            author.Role,
+			AuthorNameColor:       nameColor,
+			AuthorNameBold:        nameBold,
+			AuthorForumLevel:      levelInfo.Level,
+			AuthorForumLevelName:  levelInfo.Name,
+			AuthorForumLevelColor: levelInfo.Color,
+			AuthorForumLevelBold:  levelInfo.Bold,
+			PreviewImageURL:       previewURL,
 		})
 	}
 
@@ -266,7 +276,7 @@ func (s *Server) listUserItemsByRelation(c *gin.Context, joinTable, orderColumn 
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").Where("id IN ?", authorIDs).Find(&authors)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	authorMap := make(map[uint]model.User)
@@ -276,18 +286,23 @@ func (s *Server) listUserItemsByRelation(c *gin.Context, joinTable, orderColumn 
 
 	type ItemWithAuthor struct {
 		model.Item
-		AuthorUsername  string `json:"author_username"`
-		AuthorAvatar    string `json:"author_avatar"`
-		AuthorRole      string `json:"author_role"`
-		AuthorNameColor string `json:"author_name_color"`
-		AuthorNameBold  bool   `json:"author_name_bold"`
-		PreviewImageURL string `json:"preview_image_url"`
+		AuthorUsername        string `json:"author_username"`
+		AuthorAvatar          string `json:"author_avatar"`
+		AuthorRole            string `json:"author_role"`
+		AuthorNameColor       string `json:"author_name_color"`
+		AuthorNameBold        bool   `json:"author_name_bold"`
+		AuthorForumLevel      int    `json:"author_forum_level"`
+		AuthorForumLevelName  string `json:"author_forum_level_name"`
+		AuthorForumLevelColor string `json:"author_forum_level_color"`
+		AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
+		PreviewImageURL       string `json:"preview_image_url"`
 	}
 
 	result := make([]ItemWithAuthor, 0, len(filtered))
 	for _, item := range filtered {
 		author := authorMap[item.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
+		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 		previewURL := ""
 		if hasPreviewMap[item.ID] {
 			if directURL := directPreviewURLMap[item.ID]; directURL != "" {
@@ -300,13 +315,17 @@ func (s *Server) listUserItemsByRelation(c *gin.Context, joinTable, orderColumn 
 			previewURL = buildItemPreviewURL(item, false)
 		}
 		result = append(result, ItemWithAuthor{
-			Item:            item,
-			AuthorUsername:  author.Username,
-			AuthorAvatar:    userAvatarURL("", author),
-			AuthorRole:      author.Role,
-			AuthorNameColor: nameColor,
-			AuthorNameBold:  nameBold,
-			PreviewImageURL: previewURL,
+			Item:                  item,
+			AuthorUsername:        author.Username,
+			AuthorAvatar:          userAvatarURL("", author),
+			AuthorRole:            author.Role,
+			AuthorNameColor:       nameColor,
+			AuthorNameBold:        nameBold,
+			AuthorForumLevel:      levelInfo.Level,
+			AuthorForumLevelName:  levelInfo.Name,
+			AuthorForumLevelColor: levelInfo.Color,
+			AuthorForumLevelBold:  levelInfo.Bold,
+			PreviewImageURL:       previewURL,
 		})
 	}
 
@@ -433,22 +452,34 @@ func (s *Server) createItem(c *gin.Context) {
 		item.ReviewStatus = ""
 	}
 
-	if err := database.DB.Create(&item).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&item).Error; err != nil {
+			return err
+		}
+
+		for _, tagID := range req.TagIDs {
+			itemTag := model.ItemTag{
+				ItemID:  item.ID,
+				TagID:   tagID,
+				AddedBy: userID,
+			}
+			if err := tx.Create(&itemTag).Error; err != nil {
+				return err
+			}
+		}
+
+		if item.Status == "published" && item.ReviewStatus == "approved" {
+			if _, err := service.AwardActivityReward(tx, userID, "item_publish", fmt.Sprintf("item:%d", item.ID), 0, service.ItemPublishExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	ensureItemPreviewUpdatedAt(&item)
 	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
-
-	// 添加标签
-	for _, tagID := range req.TagIDs {
-		itemTag := model.ItemTag{
-			ItemID:  item.ID,
-			TagID:   tagID,
-			AddedBy: userID,
-		}
-		database.DB.Create(&itemTag)
-	}
 
 	if item.Status != "draft" {
 		mentionMessage := "在作品《" + item.Name + "》中提到了你"
@@ -480,19 +511,28 @@ func (s *Server) getItem(c *gin.Context) {
 
 	// 获取作者信息
 	var author model.User
-	database.DB.Select("id", "username", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").First(&author, item.AuthorID)
+	database.DB.Select("id", "username", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").First(&author, item.AuthorID)
 	nameColor, nameBold := userDisplayStyle(author)
+	levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 	type AuthorInfo struct {
-		ID        uint   `json:"id"`
-		Username  string `json:"username"`
-		NameColor string `json:"name_color"`
-		NameBold  bool   `json:"name_bold"`
+		ID              uint   `json:"id"`
+		Username        string `json:"username"`
+		NameColor       string `json:"name_color"`
+		NameBold        bool   `json:"name_bold"`
+		ForumLevel      int    `json:"forum_level"`
+		ForumLevelName  string `json:"forum_level_name"`
+		ForumLevelColor string `json:"forum_level_color"`
+		ForumLevelBold  bool   `json:"forum_level_bold"`
 	}
 	authorInfo := AuthorInfo{
-		ID:        author.ID,
-		Username:  author.Username,
-		NameColor: nameColor,
-		NameBold:  nameBold,
+		ID:              author.ID,
+		Username:        author.Username,
+		NameColor:       nameColor,
+		NameBold:        nameBold,
+		ForumLevel:      levelInfo.Level,
+		ForumLevelName:  levelInfo.Name,
+		ForumLevelColor: levelInfo.Color,
+		ForumLevelBold:  levelInfo.Bold,
 	}
 
 	// 获取标签
@@ -740,7 +780,17 @@ func (s *Server) updateItem(c *gin.Context) {
 		item.ReviewStatus = ""
 	}
 
-	if err := database.DB.Save(&item).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&item).Error; err != nil {
+			return err
+		}
+		if item.Status == "published" && item.ReviewStatus == "approved" {
+			if _, err := service.AwardActivityReward(tx, userID, "item_publish", fmt.Sprintf("item:%d", item.ID), 0, service.ItemPublishExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -815,13 +865,27 @@ func (s *Server) downloadItem(c *gin.Context) {
 	err := database.DB.Where("item_id = ? AND user_id = ?", item.ID, userID).First(&existingDownload).Error
 
 	if err != nil {
-		// 用户首次下载，记录并增加下载次数
-		download := model.ItemDownload{
-			ItemID: item.ID,
-			UserID: userID,
+		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+			download := model.ItemDownload{
+				ItemID: item.ID,
+				UserID: userID,
+			}
+			if err := tx.Create(&download).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&item).Update("downloads", item.Downloads+1).Error; err != nil {
+				return err
+			}
+			if item.AuthorID != userID {
+				if _, err := service.AwardActivityReward(tx, item.AuthorID, "item_download_received", fmt.Sprintf("item:%d:downloader:%d", item.ID, userID), 0, service.ItemDownloadRewardExperience); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
-		database.DB.Create(&download)
-		database.DB.Model(&item).Update("downloads", item.Downloads+1)
 	}
 	// 如果已下载过，不增加下载次数，但仍返回导入代码
 
@@ -904,10 +968,14 @@ func (s *Server) getItemComments(c *gin.Context) {
 	// 获取评论者信息
 	type CommentWithUser struct {
 		model.ItemComment
-		Username  string `json:"username"`
-		Avatar    string `json:"avatar"`
-		NameColor string `json:"name_color"`
-		NameBold  bool   `json:"name_bold"`
+		Username        string `json:"username"`
+		Avatar          string `json:"avatar"`
+		NameColor       string `json:"name_color"`
+		NameBold        bool   `json:"name_bold"`
+		ForumLevel      int    `json:"forum_level"`
+		ForumLevelName  string `json:"forum_level_name"`
+		ForumLevelColor string `json:"forum_level_color"`
+		ForumLevelBold  bool   `json:"forum_level_bold"`
 	}
 
 	var result []CommentWithUser
@@ -916,14 +984,19 @@ func (s *Server) getItemComments(c *gin.Context) {
 			comment.ImageURL = ""
 		}
 		var user model.User
-		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold").First(&user, comment.UserID)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").First(&user, comment.UserID)
 		nameColor, nameBold := userDisplayStyle(user)
+		levelInfo := resolveForumLevelInfo(user.ActivityExperience)
 		result = append(result, CommentWithUser{
-			ItemComment: comment,
-			Username:    user.Username,
-			Avatar:      userAvatarURL(s.cfg.Server.ApiHost, user),
-			NameColor:   nameColor,
-			NameBold:    nameBold,
+			ItemComment:     comment,
+			Username:        user.Username,
+			Avatar:          userAvatarURL(s.cfg.Server.ApiHost, user),
+			NameColor:       nameColor,
+			NameBold:        nameBold,
+			ForumLevel:      levelInfo.Level,
+			ForumLevelName:  levelInfo.Name,
+			ForumLevelColor: levelInfo.Color,
+			ForumLevelBold:  levelInfo.Bold,
 		})
 	}
 
@@ -1004,21 +1077,35 @@ func (s *Server) addItemComment(c *gin.Context) {
 		comment.ImageReviewStatus = "pending"
 	}
 
-	if err := database.DB.Create(&comment).Error; err != nil {
+	var avgRating float64
+	var count int64
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&comment).Error; err != nil {
+			return err
+		}
+
+		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Count(&count)
+		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Select("AVG(rating)").Scan(&avgRating)
+
+		if err := tx.Model(&item).Updates(map[string]interface{}{
+			"rating":       avgRating,
+			"rating_count": count,
+		}).Error; err != nil {
+			return err
+		}
+		if _, err := service.AwardActivityReward(tx, userID, "item_comment_create", fmt.Sprintf("item-comment:%d", comment.ID), 0, service.CommentCreateExperience); err != nil {
+			return err
+		}
+		if item.AuthorID != userID {
+			if _, err := service.AwardActivityReward(tx, item.AuthorID, "item_comment_received", fmt.Sprintf("item:%d:comment:%d", item.ID, comment.ID), 0, service.CommentReceivedExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 重新计算平均评分（只计算带评分的评论，rating > 0）
-	var avgRating float64
-	var count int64
-	database.DB.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Count(&count)
-	database.DB.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Select("AVG(rating)").Scan(&avgRating)
-
-	database.DB.Model(&item).Updates(map[string]interface{}{
-		"rating":       avgRating,
-		"rating_count": count,
-	})
 
 	// 创建通知（不给自己发通知）
 	if item.AuthorID != userID {
@@ -1159,18 +1246,32 @@ func (s *Server) likeItem(c *gin.Context) {
 	}
 
 	itemID, _ := strconv.ParseUint(id, 10, 32)
-	like := model.ItemLike{
-		ItemID: uint(itemID),
-		UserID: userID,
-	}
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		like := model.ItemLike{
+			ItemID: uint(itemID),
+			UserID: userID,
+		}
 
-	if err := database.DB.Create(&like).Error; err != nil {
+		if err := tx.Create(&like).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&item).Update("like_count", item.LikeCount+1).Error; err != nil {
+			return err
+		}
+		if _, err := service.ApplyDailyFirstLikeBonus(tx, userID, time.Now()); err != nil {
+			return err
+		}
+		if item.AuthorID != userID {
+			if _, err := service.AwardActivityReward(tx, item.AuthorID, "item_like_received", fmt.Sprintf("item:%d:liker:%d", item.ID, userID), service.ItemLikeRewardPoints, service.ItemLikeRewardExperience); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 更新点赞数
-	database.DB.Model(&item).Update("like_count", item.LikeCount+1)
 
 	// 创建通知（不给自己发通知）
 	if item.AuthorID != userID {
