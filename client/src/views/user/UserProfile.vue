@@ -44,7 +44,7 @@ const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const sponsorColor = ref('')
 const sponsorBold = ref(false)
-const nameStylePreference = ref<'default' | 'level' | 'sponsor'>('level')
+const nameStylePreference = ref<'default' | 'sponsor'>('default')
 
 // 邮箱绑定相关
 const showEmailBinding = ref(false)
@@ -54,6 +54,10 @@ const sendingEmailCode = ref(false)
 const emailCountdown = ref(0)
 
 let emailCountdownTimer: number | null = null
+
+function normalizeNameStylePreference(value?: string): 'default' | 'sponsor' {
+  return value === 'sponsor' ? 'sponsor' : 'default'
+}
 
 // 表单数据
 const formData = ref({
@@ -65,7 +69,6 @@ const formData = ref({
 
 const nameStyleOptions = computed(() => [
   { value: 'default' as const, label: '默认颜色', disabled: false },
-  { value: 'level' as const, label: '等级颜色', disabled: false },
   { value: 'sponsor' as const, label: '赞助者颜色', disabled: !canEditSponsorStyle.value },
 ])
 
@@ -120,7 +123,7 @@ async function loadUserProfile() {
     }
     sponsorColor.value = res.sponsor_color || ''
     sponsorBold.value = !!res.sponsor_bold
-    nameStylePreference.value = res.name_style_preference || 'level'
+    nameStylePreference.value = normalizeNameStylePreference(res.name_style_preference)
     if (isOwnProfile.value && userStore.user) {
       const level = typeof res.sponsor_level === 'number' ? res.sponsor_level : (res.is_sponsor ? 2 : 0)
       userStore.mergeUser({
@@ -178,7 +181,7 @@ function cancelEdit() {
   }
   sponsorColor.value = userProfile.value?.sponsor_color || ''
   sponsorBold.value = !!userProfile.value?.sponsor_bold
-  nameStylePreference.value = userProfile.value?.name_style_preference || 'level'
+  nameStylePreference.value = normalizeNameStylePreference(userProfile.value?.name_style_preference)
 }
 
 function triggerAvatarUpload() {
@@ -458,7 +461,7 @@ async function handleBindEmail() {
                     {{ option.label }}
                   </button>
                 </div>
-                <p class="field-hint">等级颜色优先级低于赞助色与版主标识。</p>
+                <p class="field-hint">普通用户统一使用默认昵称颜色，赞助者可切换为赞助者颜色。</p>
               </div>
 
               <!-- 邮箱绑定区域 -->

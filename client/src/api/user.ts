@@ -46,7 +46,7 @@ export async function updateUserInfo(data: {
   website?: string
   sponsor_color?: string
   sponsor_bold?: boolean
-  name_style_preference?: 'default' | 'level' | 'sponsor'
+  name_style_preference?: 'default' | 'sponsor'
 }): Promise<void> {
   return request.put('/user/info', data)
 }

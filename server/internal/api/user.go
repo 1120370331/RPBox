@@ -259,7 +259,10 @@ func (s *Server) updateUserInfo(c *gin.Context) {
 
 	if req.NameStylePreference != nil {
 		preference := strings.ToLower(strings.TrimSpace(*req.NameStylePreference))
-		if preference != "default" && preference != "level" && preference != "sponsor" {
+		if preference == "level" {
+			preference = "default"
+		}
+		if preference != "default" && preference != "sponsor" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "昵称样式无效"})
 			return
 		}

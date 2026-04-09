@@ -95,19 +95,29 @@ func defaultUserNameColor(user model.User) string {
 	return defaultNameColor
 }
 
+func normalizedNameStylePreference(user model.User) string {
+	preference := strings.ToLower(strings.TrimSpace(user.NameStylePreference))
+
+	switch preference {
+	case "sponsor":
+		if resolveSponsorLevel(user) >= sponsorLevelStyle {
+			return "sponsor"
+		}
+	case "", "default", "level":
+		if preference == "" && resolveSponsorLevel(user) >= sponsorLevelStyle && (strings.TrimSpace(user.SponsorColor) != "" || user.SponsorBold) {
+			return "sponsor"
+		}
+	}
+
+	return "default"
+}
+
 func userDisplayStyle(user model.User) (string, bool) {
 	if user.Role == "admin" || user.Role == "moderator" {
 		return adminNameColor, false
 	}
 
-	preference := strings.ToLower(strings.TrimSpace(user.NameStylePreference))
-	if preference == "" {
-		if resolveSponsorLevel(user) >= sponsorLevelStyle && (strings.TrimSpace(user.SponsorColor) != "" || user.SponsorBold) {
-			preference = "sponsor"
-		} else {
-			preference = "level"
-		}
-	}
+	preference := normalizedNameStylePreference(user)
 
 	switch preference {
 	case "sponsor":
@@ -119,9 +129,6 @@ func userDisplayStyle(user model.User) (string, bool) {
 			}
 			return defaultUserNameColor(user), bold
 		}
-	case "level":
-		info := resolveForumLevelInfo(user.ActivityExperience)
-		return info.Color, info.Bold
 	}
 
 	return defaultUserNameColor(user), false

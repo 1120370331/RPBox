@@ -28,11 +28,11 @@ type User struct {
 	Location string `gorm:"size:100" json:"location"` // 地区
 	Website  string `gorm:"size:256" json:"website"`  // 个人网站
 	// 活跃度系统
-	ActivityPoints      int    `gorm:"default:0" json:"activity_points"`                   // 社区积分
-	ActivityExperience  int    `gorm:"default:0" json:"activity_experience"`               // 社区经验
-	AvatarChangeCount   int    `gorm:"default:0" json:"avatar_change_count"`               // 头像上传次数
-	UsernameChangeCount int    `gorm:"default:0" json:"username_change_count"`             // 用户名修改次数
-	NameStylePreference string `gorm:"size:20;default:level" json:"name_style_preference"` // default|level|sponsor
+	ActivityPoints      int    `gorm:"default:0" json:"activity_points"`                     // 社区积分
+	ActivityExperience  int    `gorm:"default:0" json:"activity_experience"`                 // 社区经验
+	AvatarChangeCount   int    `gorm:"default:0" json:"avatar_change_count"`                 // 头像上传次数
+	UsernameChangeCount int    `gorm:"default:0" json:"username_change_count"`               // 用户名修改次数
+	NameStylePreference string `gorm:"size:20;default:default" json:"name_style_preference"` // default|sponsor (legacy level is treated as default)
 	// 统计数据
 	PostCount    int `gorm:"default:0" json:"post_count"`    // 帖子数
 	StoryCount   int `gorm:"default:0" json:"story_count"`   // 剧情数
