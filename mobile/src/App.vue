@@ -7,6 +7,7 @@ import { useThemeStore } from '@shared/stores/theme'
 import { useUserStore } from '@shared/stores/user'
 import { useToastStore } from '@shared/stores/toast'
 import { useMobileUpdater } from '@/composables/useMobileUpdater'
+import { resolveInAppPathFromUrl } from '@/utils/appLink'
 import RToast from './components/RToast.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -17,6 +18,7 @@ const router = useRouter()
 const toast = useToastStore()
 const mobileUpdater = useMobileUpdater()
 let backButtonHandle: PluginListenerHandle | null = null
+let appUrlOpenHandle: PluginListenerHandle | null = null
 let lastBackPressAt = 0
 let viewportHandler: (() => void) | null = null
 
@@ -66,6 +68,31 @@ async function bindNativeBackButton() {
   })
 }
 
+async function openSharedRoute(rawUrl: string) {
+  const path = resolveInAppPathFromUrl(rawUrl)
+  if (!path) return
+  if (router.currentRoute.value.fullPath === path) return
+
+  try {
+    await router.replace(path)
+  } catch (error) {
+    console.error('Failed to open shared route', error)
+  }
+}
+
+async function bindAppUrlOpen() {
+  if (!Capacitor.isNativePlatform()) return
+
+  appUrlOpenHandle = await CapacitorApp.addListener('appUrlOpen', ({ url }) => {
+    void openSharedRoute(url)
+  })
+
+  const launchUrl = await CapacitorApp.getLaunchUrl()
+  if (launchUrl?.url) {
+    await openSharedRoute(launchUrl.url)
+  }
+}
+
 onMounted(() => {
   themeStore.initTheme()
   updateViewportVariables()
@@ -85,6 +112,7 @@ onMounted(() => {
   })
 
   void bindNativeBackButton()
+  void bindAppUrlOpen()
 })
 
 onBeforeUnmount(() => {
@@ -97,6 +125,8 @@ onBeforeUnmount(() => {
   }
   backButtonHandle?.remove()
   backButtonHandle = null
+  appUrlOpenHandle?.remove()
+  appUrlOpenHandle = null
 })
 </script>
 

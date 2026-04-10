@@ -131,6 +131,7 @@ jobs:
             pnpm exec cap add ios
           fi
           pnpm exec cap sync ios
+          node ./scripts/prepareNativeShare.mjs ios
 
       - name: Resolve iOS scheme
         shell: bash

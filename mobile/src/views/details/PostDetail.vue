@@ -8,6 +8,7 @@ import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
+import { shareRouteLink } from '@/utils/mobileShare'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
 import {
@@ -157,6 +158,26 @@ async function submitComment() {
     console.error('Failed to create post comment', error)
   } finally {
     submitting.value = false
+  }
+}
+
+async function sharePostLink() {
+  if (!Number.isFinite(postId.value) || postId.value <= 0) {
+    toast.error(t('community.shareLinkFailed'))
+    return
+  }
+
+  try {
+    await shareRouteLink({
+      path: `/posts/${postId.value}`,
+      title: post.value?.title || authorName.value || 'RPBox Post',
+      text: post.value?.title || authorName.value || '',
+      dialogTitle: post.value?.title || authorName.value || 'RPBox Post',
+    })
+    toast.success(t('community.shareLinkSuccess'))
+  } catch (error) {
+    toast.error((error as Error)?.message || t('community.shareLinkFailed'))
+    console.error('Failed to share post link', error)
   }
 }
 
@@ -382,6 +403,12 @@ onMounted(async () => {
           </button>
         </section>
 
+        <section class="share-row single">
+          <button class="share-btn primary" @click="sharePostLink">
+            <i class="ri-share-forward-line" /> {{ $t('community.shareLink') }}
+          </button>
+        </section>
+
         <section class="comment-box">
           <h3>{{ $t('community.comments') }} ({{ comments.length }})</h3>
           <div class="comment-input-wrap">
@@ -572,6 +599,37 @@ onMounted(async () => {
 .action-row button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.share-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.share-row.single {
+  grid-template-columns: 1fr;
+}
+
+.share-btn {
+  min-height: 42px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.share-btn.primary {
+  background: var(--color-secondary);
+  color: var(--btn-primary-text);
+  border-color: transparent;
 }
 
 .comment-box {
