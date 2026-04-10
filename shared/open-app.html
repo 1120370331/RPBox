@@ -98,7 +98,7 @@
         <p id="status">如果你的手机已经安装 RPBox，将自动跳转到应用内；如果未安装，会在稍后打开下载页。</p>
         <div class="actions">
             <a id="open-app-btn" class="btn btn-primary" href="./download.html">立即打开 App</a>
-            <a class="btn btn-secondary" href="./download.html">下载 RPBox</a>
+            <a id="download-btn" class="btn btn-secondary" href="./download.html">下载 RPBox</a>
         </div>
         <p class="tip">如果微信、QQ 内置浏览器拦截了跳转，请点击“立即打开 App”。</p>
     </main>
@@ -109,8 +109,11 @@
             var rawPath = params.get('path') || '';
             var normalized = '';
             var downloadUrl = 'https://www.totalrpbox.com/download.html';
+            var AUTO_FALLBACK_DELAY = 2200;
+            var MANUAL_STATUS_DELAY = 2600;
             var status = document.getElementById('status');
             var openBtn = document.getElementById('open-app-btn');
+            var downloadBtn = document.getElementById('download-btn');
 
             function normalizePath(input) {
                 if (!input) return '';
@@ -148,24 +151,84 @@
             var schemeUrl = 'app.rpbox.mobile://open?path=' + encodeURIComponent(normalized);
             openBtn.href = schemeUrl;
 
-            var redirected = false;
-            var fallbackTimer = window.setTimeout(function () {
-                if (redirected) return;
-                window.location.replace(downloadUrl);
-            }, 1800);
+            var appOpened = false;
+            var fallbackTimer = 0;
+
+            downloadBtn.href = downloadUrl;
+
+            function clearFallbackTimer() {
+                if (!fallbackTimer) return;
+                window.clearTimeout(fallbackTimer);
+                fallbackTimer = 0;
+            }
+
+            function markAppOpened() {
+                appOpened = true;
+                clearFallbackTimer();
+            }
+
+            function attemptOpenApp() {
+                openBtn.href = schemeUrl;
+                try {
+                    window.location.href = schemeUrl;
+                } catch (err) {
+                    return false;
+                }
+                return true;
+            }
+
+            function scheduleAutoFallback() {
+                clearFallbackTimer();
+                fallbackTimer = window.setTimeout(function () {
+                    if (appOpened) return;
+                    window.location.replace(downloadUrl);
+                }, AUTO_FALLBACK_DELAY);
+            }
+
+            function showManualFallbackHint() {
+                clearFallbackTimer();
+                fallbackTimer = window.setTimeout(function () {
+                    if (appOpened) return;
+                    status.textContent = '未能自动打开 RPBox，请确认手机端已安装；若仍无反应，请点击下方下载。';
+                }, MANUAL_STATUS_DELAY);
+            }
 
             document.addEventListener('visibilitychange', function () {
                 if (document.hidden) {
-                    redirected = true;
-                    window.clearTimeout(fallbackTimer);
+                    markAppOpened();
                 }
             });
 
-            try {
-                window.location.href = schemeUrl;
-            } catch (err) {
+            window.addEventListener('pagehide', markAppOpened);
+            window.addEventListener('blur', function () {
+                // 部分移动浏览器在切到原生 App 时只触发 blur，不会立即 hidden。
+                if (document.hidden) {
+                    markAppOpened();
+                    return;
+                }
+                window.setTimeout(function () {
+                    if (document.hidden) {
+                        markAppOpened();
+                    }
+                }, 120);
+            });
+
+            openBtn.addEventListener('click', function (event) {
+                event.preventDefault();
+                clearFallbackTimer();
+                status.textContent = '正在再次尝试打开 RPBox...';
+                if (!attemptOpenApp()) {
+                    status.textContent = '无法调用 RPBox，请点击下方下载。';
+                    return;
+                }
+                showManualFallbackHint();
+            });
+
+            if (!attemptOpenApp()) {
                 window.location.replace(downloadUrl);
+                return;
             }
+            scheduleAutoFallback();
         })();
     </script>
 </body>
