@@ -1,6 +1,6 @@
 {
   "name": "rpbox-mobile",
-  "version": "0.1.0",
+  "version": "1.0.30",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "test": "vitest run",
     "build": "vite build",
     "preview": "vite preview",
+    "prepare:native-share": "node ./scripts/prepareNativeShare.mjs",
     "cap:sync": "cap sync",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios"
@@ -16,12 +17,16 @@
   "dependencies": {
     "@capacitor/android": "^6.0.0",
     "@capacitor/app": "^6.0.0",
+    "@capacitor/clipboard": "^6.0.3",
     "@capacitor/core": "^6.0.0",
+    "@capacitor/filesystem": "^6.0.4",
     "@capacitor/haptics": "^6.0.0",
     "@capacitor/ios": "^6.0.0",
     "@capacitor/keyboard": "^6.0.0",
     "@capacitor/push-notifications": "^6.0.0",
+    "@capacitor/share": "^6.0.4",
     "@capacitor/status-bar": "^6.0.0",
+    "@rpbox/shared": "workspace:*",
     "@tiptap/core": "^3.15.3",
     "@tiptap/extension-image": "^3.15.3",
     "@tiptap/extension-link": "^3.15.3",
@@ -30,7 +35,6 @@
     "@tiptap/extension-text-align": "^3.18.0",
     "@tiptap/starter-kit": "^3.15.3",
     "@tiptap/vue-3": "^3.15.3",
-    "@rpbox/shared": "workspace:*",
     "pinia": "^2.1.7",
     "remixicon": "^4.8.0",
     "vue": "^3.4.0",

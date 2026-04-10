@@ -89,6 +89,7 @@ jobs:
           fi
           pnpm dlx @capacitor/assets generate --android
           pnpm exec cap sync android
+          node ./scripts/prepareNativeShare.mjs android
 
       - name: Sync Android native version
         run: |

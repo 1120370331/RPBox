@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>打开 RPBox</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f4ede4;
+            --panel: rgba(255, 255, 255, 0.9);
+            --text: #3e2d22;
+            --muted: #7d6858;
+            --accent: #8f5631;
+            --accent-strong: #734326;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top, rgba(143, 86, 49, 0.18), transparent 32%),
+                linear-gradient(180deg, #f7f0e7 0%, var(--bg) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .panel {
+            width: min(480px, 100%);
+            padding: 28px;
+            border-radius: 24px;
+            background: var(--panel);
+            box-shadow: 0 24px 60px rgba(62, 45, 34, 0.14);
+            border: 1px solid rgba(143, 86, 49, 0.12);
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 28px;
+        }
+
+        p {
+            margin: 0;
+            line-height: 1.7;
+            color: var(--muted);
+        }
+
+        .actions {
+            display: grid;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            padding: 0 18px;
+            border-radius: 999px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1px solid rgba(143, 86, 49, 0.18);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-strong);
+        }
+
+        .btn-secondary {
+            color: var(--text);
+            background: rgba(143, 86, 49, 0.06);
+        }
+
+        .tip {
+            margin-top: 18px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+    <main class="panel">
+        <h1>正在尝试打开 RPBox</h1>
+        <p id="status">如果你的手机已经安装 RPBox，将自动跳转到应用内；如果未安装，会在稍后打开下载页。</p>
+        <div class="actions">
+            <a id="open-app-btn" class="btn btn-primary" href="./download.html">立即打开 App</a>
+            <a class="btn btn-secondary" href="./download.html">下载 RPBox</a>
+        </div>
+        <p class="tip">如果微信、QQ 内置浏览器拦截了跳转，请点击“立即打开 App”。</p>
+    </main>
+
+    <script>
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            var rawPath = params.get('path') || '';
+            var normalized = '';
+            var downloadUrl = 'https://www.totalrpbox.com/download.html';
+            var status = document.getElementById('status');
+            var openBtn = document.getElementById('open-app-btn');
+
+            function normalizePath(input) {
+                if (!input) return '';
+                try {
+                    input = decodeURIComponent(input);
+                } catch (err) {
+                    return '';
+                }
+                if (input.charAt(0) !== '/') {
+                    input = '/' + input.replace(/^\/+/, '');
+                }
+                input = input.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+                if (!input) return '';
+                var allowed = [
+                    /^\/posts\/\d+$/,
+                    /^\/items\/\d+$/,
+                    /^\/stories\/\d+$/,
+                    /^\/profiles\/\d+$/,
+                    /^\/guild\/\d+$/,
+                    /^\/guild\/\d+\/posts$/,
+                    /^\/guild\/\d+\/stories$/,
+                ];
+                for (var i = 0; i < allowed.length; i += 1) {
+                    if (allowed[i].test(input)) return input;
+                }
+                return '';
+            }
+
+            normalized = normalizePath(rawPath);
+            if (!normalized) {
+                window.location.replace(downloadUrl);
+                return;
+            }
+
+            var schemeUrl = 'app.rpbox.mobile://open?path=' + encodeURIComponent(normalized);
+            openBtn.href = schemeUrl;
+
+            var redirected = false;
+            var fallbackTimer = window.setTimeout(function () {
+                if (redirected) return;
+                window.location.replace(downloadUrl);
+            }, 1800);
+
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    redirected = true;
+                    window.clearTimeout(fallbackTimer);
+                }
+            });
+
+            try {
+                window.location.href = schemeUrl;
+            } catch (err) {
+                window.location.replace(downloadUrl);
+            }
+        })();
+    </script>
+</body>
+</html>

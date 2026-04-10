@@ -150,6 +150,7 @@ export function likeItem(id: number) { return request.post(`/items/${id}/like`) 
 export function unlikeItem(id: number) { return request.delete(`/items/${id}/like`) }
 export function favoriteItem(id: number) { return request.post(`/items/${id}/favorite`) }
 export function unfavoriteItem(id: number) { return request.delete(`/items/${id}/favorite`) }
+export function downloadItem(id: number) { return request.post(`/items/${id}/download`) }
 export function listItemComments(id: number) {
   return request.get<ItemComment[] | { comments: ItemComment[] }>(`/items/${id}/comments`)
 }
