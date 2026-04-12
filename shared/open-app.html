@@ -90,9 +90,66 @@
             font-size: 13px;
             color: var(--muted);
         }
+
+        .browser-guide {
+            position: fixed;
+            inset: 0;
+            display: none;
+            background: rgba(24, 18, 14, 0.72);
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .browser-guide.active {
+            display: block;
+        }
+
+        .browser-guide__arrow {
+            position: absolute;
+            top: 14px;
+            right: 26px;
+            width: 96px;
+            height: 96px;
+            border-top: 4px solid #fff;
+            border-right: 4px solid #fff;
+            border-radius: 0 20px 0 0;
+            transform: rotate(14deg);
+            opacity: 0.98;
+        }
+
+        .browser-guide__arrow::after {
+            content: "";
+            position: absolute;
+            top: -9px;
+            right: -6px;
+            width: 18px;
+            height: 18px;
+            border-top: 4px solid #fff;
+            border-right: 4px solid #fff;
+            transform: rotate(12deg);
+        }
+
+        .browser-guide__card {
+            position: absolute;
+            top: 92px;
+            right: 18px;
+            max-width: min(280px, calc(100vw - 32px));
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.96);
+            color: var(--text);
+            font-size: 15px;
+            line-height: 1.65;
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.16);
+        }
     </style>
 </head>
 <body>
+    <aside id="browser-guide" class="browser-guide" aria-hidden="true">
+        <div class="browser-guide__arrow"></div>
+        <div class="browser-guide__card">请点击右上角菜单，选择“在浏览器中打开链接”，再返回打开 RPBox。</div>
+    </aside>
+
     <main class="panel">
         <h1>正在尝试打开 RPBox</h1>
         <p id="status">如果你的手机已经安装 RPBox，将自动跳转到应用内；如果未安装，会在稍后打开下载页。</p>
@@ -116,6 +173,7 @@
             var status = document.getElementById('status');
             var openBtn = document.getElementById('open-app-btn');
             var downloadBtn = document.getElementById('download-btn');
+            var browserGuide = document.getElementById('browser-guide');
 
             function normalizePath(input) {
                 if (!input) return '';
@@ -148,6 +206,14 @@
                 return /Android/i.test(window.navigator.userAgent || '');
             }
 
+            function isEmbeddedSocialBrowser() {
+                var ua = window.navigator.userAgent || '';
+                if (/MicroMessenger/i.test(ua)) return true;
+                if (/V1_AND_SQ_/i.test(ua)) return true;
+                if (/QQ\//i.test(ua) && !/QQBrowser|MQQBrowser/i.test(ua)) return true;
+                return false;
+            }
+
             function buildSchemeUrl(path) {
                 return APP_SCHEME + '://open?path=' + encodeURIComponent(path);
             }
@@ -167,9 +233,22 @@
                 return buildSchemeUrl(path);
             }
 
+            function showBrowserGuide() {
+                if (!browserGuide) return;
+                browserGuide.classList.add('active');
+                browserGuide.setAttribute('aria-hidden', 'false');
+                status.textContent = '当前是微信/QQ 内置浏览器，请点击右上角菜单，选择“在浏览器中打开链接”。';
+            }
+
             normalized = normalizePath(rawPath);
             if (!normalized) {
                 window.location.replace(downloadUrl);
+                return;
+            }
+
+            if (isEmbeddedSocialBrowser()) {
+                showBrowserGuide();
+                downloadBtn.href = downloadUrl;
                 return;
             }
 
