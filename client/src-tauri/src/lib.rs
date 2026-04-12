@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_deep_link::DeepLinkExt;
 use crate::writer::replace_trp3_profiles;
 
 #[tauri::command]
@@ -222,15 +223,35 @@ fn set_str_field(target: &mut Value, path: &[&str], value: Option<&Value>) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None::<Vec<&str>>
-        ))
+        ));
+
+    let builder = builder.plugin(
+        tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            focus_main_window(app);
+        })
+    );
+
+    builder
+        .setup(|app| {
+            focus_main_window(&app.handle());
+
+            if cfg!(target_os = "linux") || cfg!(all(debug_assertions, target_os = "windows")) {
+                if let Err(error) = app.deep_link().register_all() {
+                    eprintln!("failed to register desktop deep links: {error}");
+                }
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             parse_trp3_file,
             detect_wow_paths,
@@ -253,6 +274,14 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn focus_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
 }
 
 #[tauri::command]

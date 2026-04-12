@@ -11,6 +11,7 @@ export interface ThemeColors {
   secondaryHover: string
   accent: string
   accentHover: string
+  accentContrast: string
   background: string
   highlight: string
 
@@ -110,6 +111,7 @@ const classicTheme: Theme = {
     secondaryHover: '#6B3528',
     accent: '#B87333',
     accentHover: '#A66329',
+    accentContrast: '#4B3621',
     background: '#EED9C4',
     highlight: '#D2691E',
 
@@ -205,6 +207,7 @@ const tealTheme: Theme = {
     secondaryHover: '#3a9a8b',
     accent: '#49b5a4',
     accentHover: '#3a9a8b',
+    accentContrast: '#092a30',
     background: '#d8ebe7',
     highlight: '#49b5a4',
 
@@ -295,11 +298,12 @@ const blackGoldTheme: Theme = {
     // 主色调
     primary: '#D4AF37',
     primaryHover: '#E5C158',
-    primaryLight: 'rgba(212, 175, 55, 0.16)',
+    primaryLight: 'rgba(255, 255, 255, 0.08)',
     secondary: '#B9932F',
     secondaryHover: '#D4AF37',
     accent: '#E5C158',
     accentHover: '#E5C158',
+    accentContrast: '#15120B',
     background: '#0F0F0F',
     highlight: '#E5C158',
 
@@ -312,13 +316,13 @@ const blackGoldTheme: Theme = {
     // 面板/卡片
     panelBg: '#181818',
     cardBg: '#202020',
-    cardBgHover: 'rgba(212, 175, 55, 0.1)',
+    cardBgHover: 'rgba(255, 255, 255, 0.06)',
 
     // 文字
-    textMain: '#E8C96A',
-    textLight: '#FFF4CC',
-    textSecondary: '#C9A94A',
-    textMuted: 'rgba(229, 193, 88, 0.6)',
+    textMain: '#F5EBD1',
+    textLight: '#FFF8E7',
+    textSecondary: '#C9BC9A',
+    textMuted: 'rgba(245, 235, 209, 0.58)',
 
     // 边框
     border: '#333333',
@@ -327,13 +331,13 @@ const blackGoldTheme: Theme = {
 
     // 按钮
     btnPrimaryBg: '#D4AF37',
-    btnPrimaryText: '#FFF4CC',
+    btnPrimaryText: '#15120B',
     btnPrimaryHover: '#E5C158',
-    btnSecondaryBg: 'rgba(212, 175, 55, 0.12)',
-    btnSecondaryText: '#FFF4CC',
-    btnSecondaryHover: 'rgba(212, 175, 55, 0.2)',
+    btnSecondaryBg: 'rgba(255, 255, 255, 0.08)',
+    btnSecondaryText: '#F5EBD1',
+    btnSecondaryHover: 'rgba(255, 255, 255, 0.14)',
     btnOutlineBorder: '#D4AF37',
-    btnOutlineText: '#FFF4CC',
+    btnOutlineText: '#F5EBD1',
     btnOutlineHover: 'rgba(212, 175, 55, 0.1)',
     btnDangerBg: '#DC3545',
     btnDangerHover: '#C82333',
@@ -350,8 +354,8 @@ const blackGoldTheme: Theme = {
     checkboxActive: '#D4AF37',
 
     // 标签/徽章
-    tagBg: 'rgba(212, 175, 55, 0.15)',
-    tagText: '#E5C158',
+    tagBg: 'rgba(255, 255, 255, 0.08)',
+    tagText: '#F5EBD1',
     badgeBg: '#D4AF37',
 
     // 阴影基色
@@ -362,7 +366,7 @@ const blackGoldTheme: Theme = {
     scrollbarThumbHover: '#D4AF37',
 
     // 特殊元素
-    iconBg: 'rgba(212, 175, 55, 0.15)',
+    iconBg: 'rgba(255, 255, 255, 0.08)',
     iconColor: '#D4AF37',
     linkColor: '#D4AF37',
     linkHover: '#E5C158',
@@ -417,6 +421,7 @@ export const useThemeStore = defineStore('theme', () => {
     root.style.setProperty('--color-secondary-hover', c.secondaryHover)
     root.style.setProperty('--color-accent', c.accent)
     root.style.setProperty('--color-accent-hover', c.accentHover)
+    root.style.setProperty('--color-accent-contrast', c.accentContrast)
     root.style.setProperty('--color-background', c.background)
     root.style.setProperty('--color-highlight', c.highlight)
 

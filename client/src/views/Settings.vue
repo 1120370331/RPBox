@@ -1141,7 +1141,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 
 .btn-update {
   background: var(--color-accent);
-  color: var(--color-text-main);
+  color: var(--color-accent-contrast, var(--color-text-main));
 }
 
 .btn-update:hover:not(:disabled) {

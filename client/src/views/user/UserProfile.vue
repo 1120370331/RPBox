@@ -884,7 +884,7 @@ async function handleBindEmail() {
   margin-bottom: 24px;
   padding: 16px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(251, 245, 239, 0.92), rgba(242, 230, 216, 0.92));
+  background: linear-gradient(135deg, var(--color-card-bg, #FBF5EF), var(--color-panel-bg, #F2E6D8));
   border: 1px solid var(--color-border, #E8DCC8);
   box-sizing: border-box;
   overflow: visible;
@@ -933,16 +933,16 @@ async function handleBindEmail() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(75, 54, 33, 0.08);
-  border: 1px solid rgba(140, 123, 112, 0.26);
+  background: var(--color-primary-light, rgba(75, 54, 33, 0.08));
+  border: 1px solid var(--color-border, rgba(140, 123, 112, 0.26));
   color: var(--color-text-secondary, #8C7B70);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .progress-help:hover {
-  background: rgba(184, 115, 51, 0.12);
-  border-color: rgba(184, 115, 51, 0.32);
+  background: var(--color-card-bg-hover, rgba(184, 115, 51, 0.12));
+  border-color: var(--color-border-hover, rgba(184, 115, 51, 0.32));
   color: var(--color-accent, #B87333);
 }
 
@@ -1005,14 +1005,14 @@ async function handleBindEmail() {
   gap: 14px;
   padding: 14px 16px;
   border-radius: 14px;
-  border: 1px solid rgba(232, 220, 200, 0.92);
-  background: rgba(255, 250, 245, 0.82);
+  border: 1px solid var(--color-border, rgba(232, 220, 200, 0.92));
+  background: var(--color-card-bg, rgba(255, 250, 245, 0.82));
 }
 
 .level-guide-item.current {
-  border-color: rgba(184, 115, 51, 0.32);
-  background: linear-gradient(135deg, rgba(255, 249, 240, 0.96), rgba(246, 233, 214, 0.96));
-  box-shadow: 0 10px 24px -20px rgba(128, 64, 48, 0.42);
+  border-color: var(--color-border-hover, rgba(184, 115, 51, 0.32));
+  background: linear-gradient(135deg, var(--color-card-bg, rgba(255, 249, 240, 0.96)), var(--color-panel-bg, rgba(246, 233, 214, 0.96)));
+  box-shadow: var(--shadow-sm, 0 10px 24px -20px rgba(128, 64, 48, 0.42));
 }
 
 .level-guide-main {
@@ -1025,7 +1025,7 @@ async function handleBindEmail() {
 .level-guide-current-badge {
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(184, 115, 51, 0.14);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.14));
   color: var(--color-accent, #B87333);
   font-size: 11px;
   font-weight: 700;
@@ -1094,7 +1094,7 @@ async function handleBindEmail() {
   margin: 8px 0;
   height: 10px;
   border-radius: 999px;
-  background: rgba(75, 54, 33, 0.08);
+  background: var(--color-card-bg-hover, rgba(75, 54, 33, 0.08));
   overflow: visible;
 }
 
@@ -1117,8 +1117,8 @@ async function handleBindEmail() {
   gap: 4px;
   padding: 12px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(232, 220, 200, 0.9);
+  background: var(--color-panel-bg, rgba(255, 255, 255, 0.72));
+  border: 1px solid var(--color-border-light, rgba(232, 220, 200, 0.9));
 }
 
 .activity-stat span {
@@ -1140,7 +1140,7 @@ async function handleBindEmail() {
   font-size: 12px;
   font-weight: 700;
   background: linear-gradient(135deg, var(--color-accent, #E7C67D), var(--color-secondary, #D6A645));
-  color: var(--color-primary, #4B3621);
+  color: var(--color-accent-contrast, var(--color-primary, #4B3621));
   border: 1px solid rgba(214, 166, 69, 0.4);
 }
 

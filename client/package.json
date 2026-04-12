@@ -1,6 +1,6 @@
 {
   "name": "rpbox-client",
-  "version": "0.2.18",
+  "version": "0.2.23",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -15,6 +15,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-autostart": "^2.5.0",
+    "@tauri-apps/plugin-deep-link": "^2.4.8",
     "@tauri-apps/plugin-dialog": "^2.5.0",
     "@tauri-apps/plugin-process": "^2",
     "@tauri-apps/plugin-shell": "^2.3.4",
