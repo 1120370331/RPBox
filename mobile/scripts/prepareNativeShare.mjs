@@ -5,7 +5,7 @@ const platform = (process.argv[2] || 'all').toLowerCase()
 const cwd = process.cwd()
 const mobileRoot = path.basename(cwd) === 'mobile' ? cwd : path.join(cwd, 'mobile')
 const appId = 'app.rpbox.mobile'
-const associatedHosts = ['totalrpbox.com']
+const associatedHosts = ['totalrpbox.com', 'www.totalrpbox.com']
 const appLinkPathPrefixes = ['/posts/', '/items/', '/stories/', '/profiles/', '/guild/', '/open-app.html']
 
 function ensureFile(filePath, contents) {

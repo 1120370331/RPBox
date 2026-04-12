@@ -130,6 +130,7 @@ jobs:
           if [ ! -d ios/App ]; then
             pnpm exec cap add ios
           fi
+          pnpm dlx @capacitor/assets generate --ios
           pnpm exec cap sync ios
           node ./scripts/prepareNativeShare.mjs ios
 

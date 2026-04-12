@@ -1,4 +1,5 @@
 const APP_URL_SCHEME = 'app.rpbox.mobile'
+const APP_PACKAGE_NAME = 'app.rpbox.mobile'
 const DEFAULT_PUBLIC_SITE_ORIGIN = 'https://totalrpbox.com'
 
 const SUPPORTED_PATH_PATTERNS = [
@@ -66,6 +67,16 @@ export function buildCustomSchemeUrl(path: string) {
   return `${APP_URL_SCHEME}://open?path=${encodeURIComponent(normalized)}`
 }
 
+export function buildAndroidIntentUrl(path: string, fallbackUrl = getDownloadPageUrl()) {
+  const normalized = normalizeInAppPath(path)
+  if (!normalized) {
+    throw new Error(`Unsupported app path: ${path}`)
+  }
+
+  const encodedFallbackUrl = encodeURIComponent(fallbackUrl)
+  return `intent://open?path=${encodeURIComponent(normalized)}#Intent;scheme=${APP_URL_SCHEME};package=${APP_PACKAGE_NAME};S.browser_fallback_url=${encodedFallbackUrl};end`
+}
+
 export function buildOpenAppRedirectUrl(path: string) {
   const normalized = normalizeInAppPath(path)
   if (!normalized) {
@@ -89,6 +100,13 @@ export function buildPublicSitePathUrl(path: string) {
 export function resolveInAppPathFromUrl(rawUrl: string) {
   if (!rawUrl) return null
 
+  if (rawUrl.startsWith('intent://')) {
+    const match = rawUrl.match(/^intent:\/\/([^#]+)#Intent;.*(?:^|;)scheme=([^;]+);/i)
+    if (!match) return null
+    const [, route, scheme] = match
+    return resolveInAppPathFromUrl(`${scheme}://${route}`)
+  }
+
   try {
     const url = new URL(rawUrl)
     const queryPath = url.searchParams.get('path')
@@ -111,4 +129,4 @@ export function buildPostShareRedirectUrl(postId: number) {
   return buildPublicSitePathUrl(`/posts/${postId}`)
 }
 
-export { APP_URL_SCHEME }
+export { APP_PACKAGE_NAME, APP_URL_SCHEME }
