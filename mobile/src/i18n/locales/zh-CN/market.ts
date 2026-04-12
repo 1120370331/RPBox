@@ -34,7 +34,7 @@ export default {
   shareImportCodeSuccess: '已打开系统转发',
   shareImportCodeFailed: '转发失败，请稍后重试',
   desktopDownloadPromptTitle: '电脑端使用更方便',
-  desktopDownloadPromptMessage: '推荐下载 RPBox 电脑客户端，使用导入代码会更方便，还能享受人物卡备份、剧情归档等完整功能。\n请在电脑上打开 www.totalrpbox.com 下载。',
+  desktopDownloadPromptMessage: '推荐下载 RPBox 电脑客户端，使用导入代码会更方便，还能享受人物卡备份、剧情归档等完整功能。\n请在电脑上打开 totalrpbox.com 下载。',
   desktopDownloadPromptConfirm: '我知道了',
   desktopDownloadPromptOpenSite: '打开官网',
   typeBadge: {

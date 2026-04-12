@@ -1,5 +1,5 @@
 const APP_URL_SCHEME = 'app.rpbox.mobile'
-const DEFAULT_PUBLIC_SITE_ORIGIN = 'https://www.totalrpbox.com'
+const DEFAULT_PUBLIC_SITE_ORIGIN = 'https://totalrpbox.com'
 
 const SUPPORTED_PATH_PATTERNS = [
   /^\/posts\/\d+$/,
@@ -22,6 +22,17 @@ export function getPublicSiteOrigin() {
 
 export function getDownloadPageUrl() {
   return `${getPublicSiteOrigin()}/download.html`
+}
+
+function isPublicSiteHost(hostname: string) {
+  if (!hostname) return false
+
+  try {
+    const canonicalHost = new URL(getPublicSiteOrigin()).hostname
+    return hostname === canonicalHost || hostname === 'totalrpbox.com' || hostname === 'www.totalrpbox.com'
+  } catch {
+    return false
+  }
 }
 
 export function normalizeInAppPath(input: string) {
@@ -66,6 +77,15 @@ export function buildOpenAppRedirectUrl(path: string) {
   return url.toString()
 }
 
+export function buildPublicSitePathUrl(path: string) {
+  const normalized = normalizeInAppPath(path)
+  if (!normalized) {
+    throw new Error(`Unsupported app path: ${path}`)
+  }
+
+  return new URL(normalized, `${getPublicSiteOrigin()}/`).toString()
+}
+
 export function resolveInAppPathFromUrl(rawUrl: string) {
   if (!rawUrl) return null
 
@@ -76,6 +96,10 @@ export function resolveInAppPathFromUrl(rawUrl: string) {
       return normalizeInAppPath(queryPath)
     }
 
+    if ((url.protocol === 'https:' || url.protocol === 'http:') && isPublicSiteHost(url.hostname)) {
+      return normalizeInAppPath(url.pathname)
+    }
+
     const directPath = `${url.hostname ? `/${url.hostname}` : ''}${url.pathname || ''}`
     return normalizeInAppPath(directPath)
   } catch {
@@ -84,7 +108,7 @@ export function resolveInAppPathFromUrl(rawUrl: string) {
 }
 
 export function buildPostShareRedirectUrl(postId: number) {
-  return buildOpenAppRedirectUrl(`/posts/${postId}`)
+  return buildPublicSitePathUrl(`/posts/${postId}`)
 }
 
 export { APP_URL_SCHEME }

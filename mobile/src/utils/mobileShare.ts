@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core'
 import { Clipboard } from '@capacitor/clipboard'
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
-import { buildOpenAppRedirectUrl } from './appLink'
+import { buildPublicSitePathUrl } from './appLink'
 
 interface ShareTextFileOptions {
   filename: string
@@ -119,7 +119,7 @@ export async function shareTextFile(options: ShareTextFileOptions) {
 }
 
 export async function shareRouteLink(options: ShareRouteLinkOptions) {
-  const url = buildOpenAppRedirectUrl(options.path)
+  const url = buildPublicSitePathUrl(options.path)
 
   if (Capacitor.isNativePlatform()) {
     await Share.share({

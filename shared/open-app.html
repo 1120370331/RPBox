@@ -108,7 +108,7 @@
             var params = new URLSearchParams(window.location.search);
             var rawPath = params.get('path') || '';
             var normalized = '';
-            var downloadUrl = 'https://www.totalrpbox.com/download.html';
+            var downloadUrl = 'https://totalrpbox.com/download.html';
             var AUTO_FALLBACK_DELAY = 2200;
             var MANUAL_STATUS_DELAY = 2600;
             var status = document.getElementById('status');
@@ -213,14 +213,9 @@
                 }, 120);
             });
 
-            openBtn.addEventListener('click', function (event) {
-                event.preventDefault();
+            openBtn.addEventListener('click', function () {
                 clearFallbackTimer();
                 status.textContent = '正在再次尝试打开 RPBox...';
-                if (!attemptOpenApp()) {
-                    status.textContent = '无法调用 RPBox，请点击下方下载。';
-                    return;
-                }
                 showManualFallbackHint();
             });
 

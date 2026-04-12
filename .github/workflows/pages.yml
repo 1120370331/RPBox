@@ -33,10 +33,85 @@ jobs:
         with:
           enablement: true
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Prepare static site
+        env:
+          ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
         run: |
           mkdir -p dist
-          cp shared/download.html shared/open-app.html shared/mainpic.webp shared/.nojekyll shared/CNAME shared/index.html dist/
+          mkdir -p dist/.well-known
+          cp shared/download.html shared/open-app.html shared/mainpic.webp shared/.nojekyll shared/CNAME shared/index.html shared/404.html dist/
+
+          ANDROID_PACKAGE_ID="app.rpbox.mobile"
+          ANDROID_SHA256=""
+          if [ -n "${ANDROID_SIGNING_KEYSTORE_BASE64:-}" ] && [ -n "${ANDROID_SIGNING_STORE_PASSWORD:-}" ] && [ -n "${ANDROID_SIGNING_KEY_ALIAS:-}" ]; then
+            echo "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > /tmp/rpbox-pages-signing.jks
+            ANDROID_SHA256="$(keytool -list -v -keystore /tmp/rpbox-pages-signing.jks -alias "$ANDROID_SIGNING_KEY_ALIAS" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" | awk -F': ' '/SHA256:/{print $2; exit}')"
+          else
+            echo "Warning: Android signing secrets are missing, assetlinks.json will be generated without statements."
+          fi
+
+          export ANDROID_PACKAGE_ID ANDROID_SHA256 IOS_TEAM_ID IOS_BUNDLE_ID
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          dist = Path("dist")
+          well_known = dist / ".well-known"
+          well_known.mkdir(parents=True, exist_ok=True)
+
+          assetlinks = []
+          package_id = os.environ.get("ANDROID_PACKAGE_ID", "").strip()
+          android_sha256 = os.environ.get("ANDROID_SHA256", "").strip()
+          if package_id and android_sha256:
+            assetlinks.append({
+              "relation": ["delegate_permission/common.handle_all_urls"],
+              "target": {
+                "namespace": "android_app",
+                "package_name": package_id,
+                "sha256_cert_fingerprints": [android_sha256],
+              },
+            })
+
+          assetlinks_path = well_known / "assetlinks.json"
+          assetlinks_path.write_text(json.dumps(assetlinks, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+          applinks = {
+            "applinks": {
+              "apps": [],
+              "details": [],
+            }
+          }
+
+          ios_team_id = os.environ.get("IOS_TEAM_ID", "").strip()
+          ios_bundle_id = os.environ.get("IOS_BUNDLE_ID", "").strip()
+          if ios_team_id and ios_bundle_id:
+            applinks["applinks"]["details"].append({
+              "appID": f"{ios_team_id}.{ios_bundle_id}",
+              "paths": [
+                "/posts/*",
+                "/items/*",
+                "/stories/*",
+                "/profiles/*",
+                "/guild/*",
+                "/open-app.html",
+              ],
+            })
+
+          apple_app_site_association = json.dumps(applinks, ensure_ascii=False, indent=2) + "\n"
+          (well_known / "apple-app-site-association").write_text(apple_app_site_association, encoding="utf-8")
+          (dist / "apple-app-site-association").write_text(apple_app_site_association, encoding="utf-8")
+          PY
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

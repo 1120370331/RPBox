@@ -390,7 +390,7 @@ function closeDesktopPrompt() {
 }
 
 function openDesktopDownloadSite() {
-  const url = 'https://www.totalrpbox.com'
+  const url = 'https://totalrpbox.com'
   const popup = window.open(url, '_blank', 'noopener,noreferrer')
   if (!popup) {
     window.location.href = url

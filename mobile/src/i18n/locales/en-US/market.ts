@@ -34,7 +34,7 @@ export default {
   shareImportCodeSuccess: 'Share sheet opened',
   shareImportCodeFailed: 'Failed to share, please try again',
   desktopDownloadPromptTitle: 'Desktop is more convenient',
-  desktopDownloadPromptMessage: 'RPBox desktop makes importing easier and gives full features like character backup and story archive.\nOpen www.totalrpbox.com on your computer to download it.',
+  desktopDownloadPromptMessage: 'RPBox desktop makes importing easier and gives full features like character backup and story archive.\nOpen totalrpbox.com on your computer to download it.',
   desktopDownloadPromptConfirm: 'Got it',
   desktopDownloadPromptOpenSite: 'Open Website',
   typeBadge: {
