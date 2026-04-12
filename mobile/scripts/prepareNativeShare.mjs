@@ -14,7 +14,14 @@ function ensureFile(filePath, contents) {
 }
 
 function buildAndroidAppLinkBlock() {
-  const filters = []
+  const filters = [
+    `            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${appId}" />
+            </intent-filter>`,
+  ]
 
   for (const host of associatedHosts) {
     for (const pathPrefix of appLinkPathPrefixes) {

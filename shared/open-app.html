@@ -110,7 +110,6 @@
             var normalized = '';
             var currentOrigin = window.location.origin || 'https://totalrpbox.com';
             var downloadUrl = currentOrigin + '/download.html';
-            var AUTO_FALLBACK_DELAY = 2600;
             var MANUAL_STATUS_DELAY = 2600;
             var APP_SCHEME = 'app.rpbox.mobile';
             var APP_PACKAGE = 'app.rpbox.mobile';
@@ -178,19 +177,19 @@
             openBtn.href = preferredOpenUrl;
 
             var appOpened = false;
-            var fallbackTimer = 0;
+            var manualHintTimer = 0;
 
             downloadBtn.href = downloadUrl;
 
-            function clearFallbackTimer() {
-                if (!fallbackTimer) return;
-                window.clearTimeout(fallbackTimer);
-                fallbackTimer = 0;
+            function clearManualHintTimer() {
+                if (!manualHintTimer) return;
+                window.clearTimeout(manualHintTimer);
+                manualHintTimer = 0;
             }
 
             function markAppOpened() {
                 appOpened = true;
-                clearFallbackTimer();
+                clearManualHintTimer();
             }
 
             function attemptOpenApp() {
@@ -203,19 +202,11 @@
                 return true;
             }
 
-            function scheduleAutoFallback() {
-                clearFallbackTimer();
-                fallbackTimer = window.setTimeout(function () {
-                    if (appOpened) return;
-                    window.location.replace(downloadUrl);
-                }, AUTO_FALLBACK_DELAY);
-            }
-
             function showManualFallbackHint() {
-                clearFallbackTimer();
-                fallbackTimer = window.setTimeout(function () {
+                clearManualHintTimer();
+                manualHintTimer = window.setTimeout(function () {
                     if (appOpened) return;
-                    status.textContent = '未能自动打开 RPBox，请确认手机端已安装；若仍无反应，请点击下方下载。';
+                    status.textContent = '如果没有自动打开 RPBox，请点击“立即打开 App”；若仍无反应，再点击“下载 RPBox”。';
                 }, MANUAL_STATUS_DELAY);
             }
 
@@ -241,20 +232,20 @@
 
             openBtn.addEventListener('click', function (event) {
                 event.preventDefault();
-                clearFallbackTimer();
+                clearManualHintTimer();
                 status.textContent = '正在再次尝试打开 RPBox...';
                 if (!attemptOpenApp()) {
-                    window.location.replace(downloadUrl);
+                    status.textContent = '未能打开 RPBox，请点击“下载 RPBox”。';
                     return;
                 }
                 showManualFallbackHint();
             });
 
             if (!attemptOpenApp()) {
-                window.location.replace(downloadUrl);
+                showManualFallbackHint();
                 return;
             }
-            scheduleAutoFallback();
+            showManualFallbackHint();
         })();
     </script>
 </body>
