@@ -51,6 +51,7 @@ onUnmounted(() => {
   --color-primary: #4B3621;      /* 深咖啡 */
   --color-secondary: #804030;    /* 中棕色 */
   --color-accent: #B87333;       /* 铜橙色 */
+  --color-accent-contrast: #4B3621;
   --color-background: #EED9C4;   /* 浅米色 */
   --color-highlight: #D2691E;    /* 巧克力色-标记用 */
 
@@ -84,7 +85,7 @@ body {
 .btn-primary {
   padding: 12px 24px;
   background: var(--color-accent);
-  color: var(--color-primary);
+  color: var(--color-accent-contrast);
   border: none;
   border-radius: var(--radius-sm);
   font-weight: 600;
