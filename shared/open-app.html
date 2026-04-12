@@ -108,9 +108,12 @@
             var params = new URLSearchParams(window.location.search);
             var rawPath = params.get('path') || '';
             var normalized = '';
-            var downloadUrl = 'https://totalrpbox.com/download.html';
-            var AUTO_FALLBACK_DELAY = 2200;
+            var currentOrigin = window.location.origin || 'https://totalrpbox.com';
+            var downloadUrl = currentOrigin + '/download.html';
+            var AUTO_FALLBACK_DELAY = 2600;
             var MANUAL_STATUS_DELAY = 2600;
+            var APP_SCHEME = 'app.rpbox.mobile';
+            var APP_PACKAGE = 'app.rpbox.mobile';
             var status = document.getElementById('status');
             var openBtn = document.getElementById('open-app-btn');
             var downloadBtn = document.getElementById('download-btn');
@@ -142,14 +145,37 @@
                 return '';
             }
 
+            function isAndroidDevice() {
+                return /Android/i.test(window.navigator.userAgent || '');
+            }
+
+            function buildSchemeUrl(path) {
+                return APP_SCHEME + '://open?path=' + encodeURIComponent(path);
+            }
+
+            function buildAndroidIntentUrl(path) {
+                return 'intent://open?path=' + encodeURIComponent(path)
+                    + '#Intent;scheme=' + APP_SCHEME
+                    + ';package=' + APP_PACKAGE
+                    + ';S.browser_fallback_url=' + encodeURIComponent(downloadUrl)
+                    + ';end';
+            }
+
+            function getPreferredOpenUrl(path) {
+                if (isAndroidDevice()) {
+                    return buildAndroidIntentUrl(path);
+                }
+                return buildSchemeUrl(path);
+            }
+
             normalized = normalizePath(rawPath);
             if (!normalized) {
                 window.location.replace(downloadUrl);
                 return;
             }
 
-            var schemeUrl = 'app.rpbox.mobile://open?path=' + encodeURIComponent(normalized);
-            openBtn.href = schemeUrl;
+            var preferredOpenUrl = getPreferredOpenUrl(normalized);
+            openBtn.href = preferredOpenUrl;
 
             var appOpened = false;
             var fallbackTimer = 0;
@@ -168,9 +194,9 @@
             }
 
             function attemptOpenApp() {
-                openBtn.href = schemeUrl;
+                openBtn.href = preferredOpenUrl;
                 try {
-                    window.location.href = schemeUrl;
+                    window.location.href = preferredOpenUrl;
                 } catch (err) {
                     return false;
                 }
@@ -213,9 +239,14 @@
                 }, 120);
             });
 
-            openBtn.addEventListener('click', function () {
+            openBtn.addEventListener('click', function (event) {
+                event.preventDefault();
                 clearFallbackTimer();
                 status.textContent = '正在再次尝试打开 RPBox...';
+                if (!attemptOpenApp()) {
+                    window.location.replace(downloadUrl);
+                    return;
+                }
                 showManualFallbackHint();
             });
 

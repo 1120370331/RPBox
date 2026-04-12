@@ -95,9 +95,10 @@
                 }
             }
 
+            var origin = window.location.origin || 'https://totalrpbox.com';
             var target = normalized
-                ? 'https://totalrpbox.com/open-app.html?path=' + encodeURIComponent(normalized)
-                : 'https://totalrpbox.com/download.html';
+                ? origin + '/open-app.html?path=' + encodeURIComponent(normalized)
+                : origin + '/download.html';
 
             document.getElementById('fallback-link').href = target;
             window.location.replace(target);
