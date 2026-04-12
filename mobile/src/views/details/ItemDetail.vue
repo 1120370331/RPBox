@@ -8,7 +8,7 @@ import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
-import { copyTextToClipboard, shareRouteLink, shareTextFile } from '@/utils/mobileShare'
+import { shareRouteLink, shareTextFile } from '@/utils/mobileShare'
 import { useUserStore } from '@shared/stores/user'
 import { useToastStore } from '@shared/stores/toast'
 import {
@@ -45,8 +45,6 @@ const rating = ref(0)
 const imagePreviewOpen = ref(false)
 const imagePreviewSrc = ref('')
 const emoteVersion = ref(0)
-const desktopPromptOpen = ref(false)
-const itemShareSheetOpen = ref(false)
 
 const itemId = computed(() => Number(route.params.id))
 const exportableImportCode = computed(() => item.value?.import_code?.trim() || item.value?.raw_data?.trim() || '')
@@ -259,23 +257,6 @@ async function toggleFavorite() {
   }
 }
 
-async function copyImportCode() {
-  if (!exportableImportCode.value) {
-    toast.error(t('market.importCodeUnavailable'))
-    return
-  }
-
-  try {
-    await copyTextToClipboard(exportableImportCode.value, item.value?.name)
-    toast.success(t('market.copyImportCodeSuccess'))
-    desktopPromptOpen.value = true
-    void recordItemDownload()
-  } catch (error) {
-    console.error('Failed to copy import code', error)
-    toast.error(t('market.copyImportCodeFailed'))
-  }
-}
-
 async function shareImportCodeFile() {
   if (!exportableImportCode.value) {
     toast.error(t('market.importCodeUnavailable'))
@@ -304,7 +285,6 @@ async function shareItemLink() {
     return
   }
 
-  itemShareSheetOpen.value = false
   try {
     await shareRouteLink({
       path: `/items/${itemId.value}`,
@@ -320,7 +300,6 @@ async function shareItemLink() {
 }
 
 async function shareItemFile() {
-  itemShareSheetOpen.value = false
   await shareImportCodeFile()
 }
 
@@ -383,28 +362,6 @@ function openImagePreview(src: string) {
   if (!src) return
   imagePreviewSrc.value = src
   imagePreviewOpen.value = true
-}
-
-function closeDesktopPrompt() {
-  desktopPromptOpen.value = false
-}
-
-function openDesktopDownloadSite() {
-  const url = 'https://totalrpbox.com'
-  const popup = window.open(url, '_blank', 'noopener,noreferrer')
-  if (!popup) {
-    window.location.href = url
-    return
-  }
-  closeDesktopPrompt()
-}
-
-function openItemShareSheet() {
-  itemShareSheetOpen.value = true
-}
-
-function closeItemShareSheet() {
-  itemShareSheetOpen.value = false
 }
 
 onMounted(async () => {
@@ -476,11 +433,11 @@ onMounted(async () => {
           v-if="item && item.type !== 'artwork' && ((item.import_code && item.import_code.trim()) || (item.raw_data && item.raw_data.trim()))"
           class="share-row"
         >
-          <button class="share-btn primary" @click="copyImportCode">
-            <i class="ri-file-copy-line" /> {{ $t('market.copyImportCode') }}
+          <button class="share-btn" @click="shareItemFile">
+            <i class="ri-file-text-line" /> {{ $t('market.shareItemAsFile') }}
           </button>
-          <button class="share-btn" @click="openItemShareSheet">
-            <i class="ri-share-forward-line" /> {{ $t('market.shareItem') }}
+          <button class="share-btn" @click="shareItemLink">
+            <i class="ri-link" /> {{ $t('market.shareItemAsLink') }}
           </button>
         </section>
 
@@ -554,48 +511,6 @@ onMounted(async () => {
       @close="emojiPickerOpen = false"
       @select="handleEmojiSelect"
     />
-    <Teleport to="body">
-      <Transition name="share-sheet">
-        <div v-if="itemShareSheetOpen" class="share-sheet-mask" @click.self="closeItemShareSheet">
-          <div class="share-sheet">
-            <div class="share-sheet__handle" />
-            <h3>{{ $t('market.shareItemOptionsTitle') }}</h3>
-            <button class="share-sheet__action" @click="shareItemLink">
-              <i class="ri-link" />
-              <span>{{ $t('market.shareItemAsLink') }}</span>
-            </button>
-            <button class="share-sheet__action" @click="shareItemFile">
-              <i class="ri-file-text-line" />
-              <span>{{ $t('market.shareItemAsFile') }}</span>
-            </button>
-            <button class="share-sheet__cancel" @click="closeItemShareSheet">
-              {{ $t('market.shareItemCancel') }}
-            </button>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-    <Teleport to="body">
-      <Transition name="desktop-tip">
-        <div v-if="desktopPromptOpen" class="desktop-tip-mask" @click.self="closeDesktopPrompt">
-          <div class="desktop-tip-dialog">
-            <div class="desktop-tip-icon">
-              <i class="ri-computer-line" />
-            </div>
-            <h3>{{ $t('market.desktopDownloadPromptTitle') }}</h3>
-            <p>{{ $t('market.desktopDownloadPromptMessage') }}</p>
-            <div class="desktop-tip-actions">
-              <button class="desktop-tip-btn desktop-tip-btn--ghost" @click="closeDesktopPrompt">
-                {{ $t('market.desktopDownloadPromptConfirm') }}
-              </button>
-              <button class="desktop-tip-btn desktop-tip-btn--primary" @click="openDesktopDownloadSite">
-                {{ $t('market.desktopDownloadPromptOpenSite') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
   </div>
 </template>
 
@@ -782,187 +697,6 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-}
-
-.share-btn.primary {
-  background: var(--color-secondary);
-  color: var(--btn-primary-text);
-  border-color: transparent;
-}
-
-.share-sheet-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 2200;
-  background: rgba(33, 24, 18, 0.42);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.share-sheet {
-  width: min(520px, 100%);
-  border-radius: 24px 24px 0 0;
-  background: var(--color-card-bg);
-  padding: 12px 16px calc(16px + var(--safe-bottom, 0px));
-  box-shadow: 0 -12px 36px rgba(33, 24, 18, 0.18);
-}
-
-.share-sheet__handle {
-  width: 48px;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(125, 104, 88, 0.28);
-  margin: 0 auto 14px;
-}
-
-.share-sheet h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-  text-align: center;
-  color: var(--color-text-main);
-}
-
-.share-sheet__action,
-.share-sheet__cancel {
-  width: 100%;
-  min-height: 48px;
-  border-radius: 14px;
-  border: 1px solid var(--color-border);
-  background: var(--color-card-bg);
-  color: var(--color-text-main);
-  font-size: 14px;
-}
-
-.share-sheet__action {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  margin-bottom: 10px;
-}
-
-.share-sheet__action i {
-  font-size: 18px;
-  color: var(--color-secondary);
-}
-
-.share-sheet__cancel {
-  margin-top: 4px;
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.share-sheet-enter-active,
-.share-sheet-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.share-sheet-enter-active .share-sheet,
-.share-sheet-leave-active .share-sheet {
-  transition: transform 0.2s ease;
-}
-
-.share-sheet-enter-from,
-.share-sheet-leave-to {
-  opacity: 0;
-}
-
-.share-sheet-enter-from .share-sheet,
-.share-sheet-leave-to .share-sheet {
-  transform: translateY(18px);
-}
-
-.desktop-tip-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 2100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(33, 24, 18, 0.5);
-}
-
-.desktop-tip-dialog {
-  width: min(420px, 100%);
-  border-radius: 22px;
-  background: var(--color-card-bg);
-  box-shadow: 0 24px 48px rgba(33, 24, 18, 0.22);
-  padding: 22px 20px 18px;
-}
-
-.desktop-tip-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-primary-light);
-  color: var(--color-secondary);
-  font-size: 24px;
-  margin-bottom: 12px;
-}
-
-.desktop-tip-dialog h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
-  color: var(--color-text-main);
-}
-
-.desktop-tip-dialog p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--color-text-secondary);
-  white-space: pre-wrap;
-}
-
-.desktop-tip-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.desktop-tip-btn {
-  min-height: 42px;
-  border-radius: 12px;
-  font-size: 14px;
-  border: 1px solid var(--color-border);
-  background: var(--color-card-bg);
-  color: var(--color-text-main);
-}
-
-.desktop-tip-btn--ghost {
-  background: rgba(255, 255, 255, 0.82);
-}
-
-.desktop-tip-btn--primary {
-  border-color: transparent;
-  background: var(--color-secondary);
-  color: var(--btn-primary-text);
-}
-
-.desktop-tip-enter-active,
-.desktop-tip-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.desktop-tip-enter-active .desktop-tip-dialog,
-.desktop-tip-leave-active .desktop-tip-dialog {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.desktop-tip-enter-from,
-.desktop-tip-leave-to {
-  opacity: 0;
-}
-
-.desktop-tip-enter-from .desktop-tip-dialog,
-.desktop-tip-leave-to .desktop-tip-dialog {
-  opacity: 0;
-  transform: translateY(8px) scale(0.98);
 }
 
 .comment-box {
