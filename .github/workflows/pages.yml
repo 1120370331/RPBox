@@ -49,7 +49,7 @@ jobs:
         run: |
           mkdir -p dist
           mkdir -p dist/.well-known
-          cp shared/download.html shared/open-app.html shared/mainpic.webp shared/.nojekyll shared/CNAME shared/index.html shared/404.html dist/
+          cp shared/download.html shared/open-app.html shared/privacy.html shared/mainpic.webp shared/.nojekyll shared/CNAME shared/index.html shared/404.html dist/
 
           ANDROID_PACKAGE_ID="app.rpbox.mobile"
           ANDROID_SHA256=""
