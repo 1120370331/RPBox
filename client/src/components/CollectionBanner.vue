@@ -299,7 +299,7 @@ onMounted(loadCollection)
   justify-content: center;
   background: var(--color-accent);
   border-radius: 8px;
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   font-size: 18px;
   flex-shrink: 0;
 }
@@ -401,7 +401,7 @@ onMounted(loadCollection)
 
 .create-btn:hover {
   background: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border-color: var(--color-accent);
 }
 
@@ -433,7 +433,7 @@ onMounted(loadCollection)
 .save-btn {
   background: var(--color-accent);
   border: none;
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
 }
 
 .save-btn:hover:not(:disabled) {
@@ -560,7 +560,7 @@ onMounted(loadCollection)
 
 .btn-confirm {
   background: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
 }
 
 .btn-confirm:hover:not(:disabled) {

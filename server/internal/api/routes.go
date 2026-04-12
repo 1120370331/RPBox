@@ -1,12 +1,19 @@
 package api
 
 import (
+	"net/http"
 	"path/filepath"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/middleware"
 )
 
 func (s *Server) setupRoutes() {
+	// 浏览器开发环境会先发 OPTIONS 预检；这里显式兜底，确保 CORS 中间件有机会返回 204。
+	s.router.OPTIONS("/*path", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
 	s.router.GET("/health", s.healthCheck)
 
 	// 静态文件服务 - 更新包下载

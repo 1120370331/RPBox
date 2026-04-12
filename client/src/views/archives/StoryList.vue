@@ -749,7 +749,7 @@ defineExpose({
   height: 28px;
   border-radius: 50%;
   background: var(--color-accent);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -940,7 +940,7 @@ defineExpose({
   height: 28px;
   border-radius: 50%;
   background: var(--color-accent, #D4A373);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   display: flex;
   align-items: center;
   justify-content: center;

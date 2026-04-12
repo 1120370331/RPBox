@@ -263,7 +263,7 @@ watch(isVisible, (val) => {
 .avatar-text {
   font-size: 24px;
   font-weight: 600;
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
 }
 
 .info-section {

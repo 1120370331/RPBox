@@ -201,7 +201,7 @@ function clearAvatar() {
   border-radius: 50%;
   border: none;
   background: var(--btn-danger-bg);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -237,7 +237,7 @@ function clearAvatar() {
 .mode-tabs button.active {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
 }
 
 .input-section {

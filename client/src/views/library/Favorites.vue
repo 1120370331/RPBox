@@ -568,7 +568,7 @@ function getCategoryLabel(category: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   font-size: 24px;
   flex-shrink: 0;
 }

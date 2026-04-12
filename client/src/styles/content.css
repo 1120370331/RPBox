@@ -104,7 +104,7 @@
 
 .jump-tag--status {
   background: var(--color-text-main, #2C1810);
-  color: var(--color-text-light, #FBF5EF);
+  color: var(--btn-primary-text, var(--color-text-light, #FBF5EF));
   border-color: var(--color-text-main, #2C1810);
 }
 
@@ -193,7 +193,7 @@
   justify-content: center;
   font-size: 32px;
   font-weight: 700;
-  color: var(--color-text-light, #FBF5EF);
+  color: var(--btn-primary-text, var(--color-text-light, #FBF5EF));
   background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
 }
 
@@ -262,7 +262,7 @@
   position: relative;
   height: 200px;
   overflow: hidden;
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   background: var(--color-text-main, #2C1810);
 }
 
@@ -307,7 +307,7 @@
   align-self: flex-start;
   padding: 2px 8px;
   background: var(--color-highlight, #D2691E);
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.2em;
@@ -315,7 +315,7 @@
 
 .jump-card--post-public .jump-card__title {
   font-size: 22px;
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -346,7 +346,7 @@
   width: 22px;
   height: 22px;
   background: var(--color-accent, #B87333);
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   font-size: 10px;
   font-weight: 700;
   display: flex;
@@ -412,7 +412,7 @@
   justify-content: center;
   font-size: 26px;
   font-weight: 700;
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
 }
 

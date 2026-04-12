@@ -885,7 +885,7 @@ async function handleDelete() {
   line-height: 44px;
   font-size: 18px;
   font-weight: 700;
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -1314,7 +1314,7 @@ async function handleDelete() {
 
 .post-btn {
   background: var(--color-text-main);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border: none;
   padding: 8px 20px;
   font-size: 11px;
@@ -1391,7 +1391,7 @@ async function handleDelete() {
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -1633,7 +1633,7 @@ async function handleDelete() {
   background: var(--color-secondary);
   border: none;
   border-radius: 4px;
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   font-size: 12px;
   cursor: pointer;
 }
@@ -1670,7 +1670,7 @@ async function handleDelete() {
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   flex-shrink: 0;
   overflow: hidden;
 }

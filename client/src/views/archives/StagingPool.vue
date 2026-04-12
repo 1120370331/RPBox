@@ -893,7 +893,7 @@ defineExpose({
 .channel-filter-btn.active {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   font-weight: 500;
 }
 

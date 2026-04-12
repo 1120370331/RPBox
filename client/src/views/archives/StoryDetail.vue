@@ -2919,7 +2919,7 @@ onBeforeUnmount(() => {
   height: 40px;
   border-radius: 8px;
   background: var(--color-accent);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2990,7 +2990,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   background: rgba(44, 24, 16, 0.45);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3460,7 +3460,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.6);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3517,7 +3517,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.6);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3965,7 +3965,7 @@ onBeforeUnmount(() => {
   height: 48px;
   border-radius: 50%;
   background: var(--color-accent);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   border: none;
   cursor: pointer;
   display: flex;

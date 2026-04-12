@@ -256,7 +256,7 @@ const activeMenu = computed(() => {
 .sidebar {
   width: 240px;
   background-color: var(--color-sidebar-bg, #4B3621);
-  color: var(--color-text-light, #FBF5EF);
+  color: var(--color-sidebar-text, #FBF5EF);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -305,7 +305,7 @@ const activeMenu = computed(() => {
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 15px;
-  color: rgba(251, 245, 239, 0.7);
+  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.7));
   text-decoration: none;
 }
 
@@ -315,15 +315,15 @@ const activeMenu = computed(() => {
 }
 
 .menu-item:hover {
-  background-color: rgba(238, 217, 196, 0.1);
-  color: var(--color-text-light, #FBF5EF);
+  background-color: var(--color-sidebar-hover, rgba(238, 217, 196, 0.1));
+  color: var(--color-sidebar-text, #FBF5EF);
 }
 
 .menu-item.active {
-  background-color: var(--color-primary-light, rgba(75, 54, 33, 0.12));
-  color: var(--color-text-main, #2C1810);
+  background: linear-gradient(135deg, var(--color-accent, #D4A373), var(--color-accent-hover, #B87333));
+  color: var(--btn-primary-text, var(--color-accent-contrast, #2C1810));
   font-weight: bold;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 10px 24px -16px rgba(var(--shadow-base, 75, 54, 33), 0.8);
 }
 
 .user-profile {
@@ -343,7 +343,7 @@ const activeMenu = computed(() => {
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  color: #FFF;
+  color: var(--btn-primary-text, #FFF);
   border: 2px solid rgba(255,255,255,0.2);
   overflow: hidden;
 }
@@ -393,7 +393,7 @@ const activeMenu = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(251, 245, 239, 0.8);
+  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.8));
   text-decoration: none;
   font-size: 20px;
   transition: all 0.3s;
@@ -409,9 +409,9 @@ const activeMenu = computed(() => {
 }
 
 .notification-btn:hover {
-  background: rgba(238, 217, 196, 0.3);
+  background: var(--color-sidebar-hover, rgba(238, 217, 196, 0.3));
   border-color: rgba(238, 217, 196, 0.5);
-  color: #FBF5EF;
+  color: var(--color-sidebar-text, #FBF5EF);
 }
 
 .notification-badge {
@@ -441,7 +441,7 @@ const activeMenu = computed(() => {
 
 .username-link h4 {
   font-size: 14px;
-  color: var(--color-text-light, #FBF5EF);
+  color: var(--color-sidebar-text, #FBF5EF);
   margin: 0;
   transition: color 0.3s;
   white-space: nowrap;
@@ -455,27 +455,27 @@ const activeMenu = computed(() => {
 
 .logout-link {
   font-size: 12px;
-  color: rgba(251, 245, 239, 0.5);
+  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.5));
   margin: 0;
   cursor: pointer;
   transition: color 0.3s;
 }
 
 .logout-link:hover {
-  color: rgba(251, 245, 239, 0.8);
+  color: var(--color-sidebar-text, rgba(251, 245, 239, 0.8));
 }
 
 .login-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: rgba(251, 245, 239, 0.7);
+  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.7));
   text-decoration: none;
   font-size: 14px;
 }
 
 .login-btn:hover {
-  color: var(--color-text-light, #FBF5EF);
+  color: var(--color-sidebar-text, #FBF5EF);
 }
 
 /* 版主菜单项特殊样式 */
@@ -491,7 +491,7 @@ const activeMenu = computed(() => {
 
 .menu-item.moderator-item.active {
   background: linear-gradient(135deg, #B87333, #804030);
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
 }
 
 /* 主内容区 */

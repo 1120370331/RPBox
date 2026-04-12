@@ -824,7 +824,7 @@ async function handleBindEmail() {
   justify-content: center;
   font-size: 36px;
   font-weight: 700;
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   border: 4px solid var(--color-panel-bg, #fff);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
