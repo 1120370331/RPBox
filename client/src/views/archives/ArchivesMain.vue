@@ -852,7 +852,7 @@ function handleViewStory(id: number) {
 
 .tips-icon i {
   font-size: 20px;
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
 }
 
 .tips-content {

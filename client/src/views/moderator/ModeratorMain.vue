@@ -3393,7 +3393,7 @@ function formatBanTime(dateStr: string | null) {
   border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 13px;
-  color: var(--color-primary, #4B3621);
+  color: var(--btn-primary-text, var(--color-primary, #4B3621));
   resize: vertical;
   background: var(--color-panel-bg, #fff);
 }
@@ -3444,7 +3444,7 @@ function formatBanTime(dateStr: string | null) {
   gap: 4px;
   padding: 8px 16px;
   background: linear-gradient(135deg, var(--color-warning, #E7C67D), var(--color-accent, #D6A645));
-  color: var(--color-primary, #4B3621);
+  color: var(--btn-primary-text, var(--color-primary, #4B3621));
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -3477,7 +3477,7 @@ function formatBanTime(dateStr: string | null) {
   border: 1px solid var(--color-border, #E2D3C3);
   background: var(--input-bg, #FFFDFB);
   font-size: 13px;
-  color: var(--color-primary, #4B3621);
+  color: var(--btn-primary-text, var(--color-primary, #4B3621));
 }
 
 .experience-label {
@@ -3495,7 +3495,7 @@ function formatBanTime(dateStr: string | null) {
   border: 1px solid var(--color-border, #E2D3C3);
   background: var(--input-bg, #FFFDFB);
   font-size: 13px;
-  color: var(--color-primary, #4B3621);
+  color: var(--btn-primary-text, var(--color-primary, #4B3621));
 }
 
 .btn-reject {
@@ -3831,7 +3831,7 @@ function formatBanTime(dateStr: string | null) {
   font-size: 13px;
   font-weight: 700;
   background: linear-gradient(135deg, var(--color-warning, #E7C67D), var(--color-accent, #D6A645));
-  color: var(--color-primary, #4B3621);
+  color: var(--btn-primary-text, var(--color-primary, #4B3621));
   border: 1px solid rgba(214, 166, 69, 0.4);
 }
 

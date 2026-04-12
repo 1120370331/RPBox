@@ -706,7 +706,7 @@ onMounted(loadGuild)
   gap: 6px;
   padding: 8px 16px;
   background: var(--color-secondary, #804030);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -728,7 +728,7 @@ onMounted(loadGuild)
   top: -6px;
   right: -6px;
   background: #FF9800;
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
@@ -1153,7 +1153,7 @@ onMounted(loadGuild)
   height: 36px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   display: flex;
   align-items: center;
   justify-content: center;

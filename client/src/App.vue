@@ -85,7 +85,7 @@ body {
 .btn-primary {
   padding: 12px 24px;
   background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  color: var(--btn-primary-text, var(--color-accent-contrast));
   border: none;
   border-radius: var(--radius-sm);
   font-weight: 600;

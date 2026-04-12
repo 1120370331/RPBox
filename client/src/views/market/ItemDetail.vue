@@ -733,7 +733,7 @@ function downloadAllImages() {
   gap: 8px;
   padding: 10px 20px;
   background: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -933,7 +933,7 @@ function downloadAllImages() {
 .type-badge {
   padding: 6px 16px;
   background: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border-radius: 20px;
   font-size: 14px;
 }
@@ -973,7 +973,7 @@ function downloadAllImages() {
   margin-top: 8px;
   padding: 12px 16px;
   background: var(--color-text-main);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.6;
@@ -1073,7 +1073,7 @@ function downloadAllImages() {
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-secondary) 100%);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -1179,7 +1179,7 @@ function downloadAllImages() {
   gap: 6px;
   padding: 8px 16px;
   background: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border: none;
   border-radius: 8px;
   font-size: 13px;
@@ -1343,7 +1343,7 @@ function downloadAllImages() {
 .submit-review-btn {
   padding: 10px 24px;
   background: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -1387,7 +1387,7 @@ function downloadAllImages() {
   height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1590,7 +1590,7 @@ function downloadAllImages() {
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-secondary) 100%);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -1712,7 +1712,7 @@ function downloadAllImages() {
   gap: 8px;
   padding: 10px 20px;
   background: var(--color-accent);
-  color: var(--color-text-light);
+  color: var(--btn-primary-text, var(--color-text-light));
   border: none;
   border-radius: 8px;
   font-size: 14px;

@@ -119,7 +119,7 @@ const classicTheme: Theme = {
     sidebarBg: '#4B3621',
     sidebarText: '#FBF5EF',
     sidebarTextMuted: 'rgba(251, 245, 239, 0.7)',
-    sidebarHover: 'rgba(238, 217, 196, 0.1)',
+    sidebarHover: 'rgba(238, 217, 196, 0.18)',
 
     // 面板/卡片
     panelBg: '#FFFFFF',
@@ -215,7 +215,7 @@ const tealTheme: Theme = {
     sidebarBg: '#092a30',
     sidebarText: '#e8f5f3',
     sidebarTextMuted: 'rgba(232, 245, 243, 0.7)',
-    sidebarHover: 'rgba(106, 233, 213, 0.15)',
+    sidebarHover: 'rgba(106, 233, 213, 0.22)',
 
     // 面板/卡片
     panelBg: '#f0f9f7',

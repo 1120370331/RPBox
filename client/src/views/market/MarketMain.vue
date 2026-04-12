@@ -358,7 +358,7 @@ watch([sortBy], () => {
   gap: 6px;
   padding: 10px 20px;
   background: var(--color-accent, #B87333);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -459,7 +459,7 @@ watch([sortBy], () => {
 
 .tag-item.active {
   background: var(--tag-color, var(--color-accent, #B87333));
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   border-color: var(--tag-color, var(--color-accent, #B87333));
 }
 
@@ -496,7 +496,7 @@ watch([sortBy], () => {
 
 .tag.active {
   background: var(--color-accent, #B87333);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
 }
 
 .sort-select {
@@ -584,7 +584,7 @@ watch([sortBy], () => {
 
 .author-avatar.placeholder {
   background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -652,7 +652,7 @@ watch([sortBy], () => {
   border: none;
   border-radius: 10px;
   background: var(--color-accent, #B87333);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

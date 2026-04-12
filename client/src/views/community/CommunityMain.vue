@@ -1029,7 +1029,7 @@ function getEventStyle(event: EventItem) {
   gap: 8px;
   padding: 8px 20px;
   background: var(--color-secondary, #804030);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   border: none;
   border-radius: 6px;
   font-size: 14px;
@@ -1151,7 +1151,7 @@ function getEventStyle(event: EventItem) {
   flex-shrink: 0;
   padding: 2px 6px;
   background: var(--color-secondary, #804030);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   font-size: 10px;
   font-weight: 600;
   border-radius: 3px;
@@ -1383,7 +1383,7 @@ function getEventStyle(event: EventItem) {
   border: 1px solid var(--color-accent, #B87333);
   border-radius: 8px;
   background: var(--color-accent, #B87333);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -1649,7 +1649,7 @@ function getEventStyle(event: EventItem) {
   min-width: 56px;
   padding: 8px;
   border-radius: 10px;
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
 }
 
 .event-month {
@@ -1776,7 +1776,7 @@ function getEventStyle(event: EventItem) {
   gap: 4px;
   padding: 4px 10px;
   background: linear-gradient(135deg, var(--color-warning, #E6A23C), var(--color-warning-dark, #D97706));
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   font-size: 11px;
   font-weight: 600;
   border-radius: 4px;
@@ -1980,7 +1980,7 @@ function getEventStyle(event: EventItem) {
   display: block;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   overflow: hidden;
   text-align: center;
   line-height: 32px;

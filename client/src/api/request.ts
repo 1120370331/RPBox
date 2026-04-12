@@ -1,7 +1,7 @@
 import router from '../router'
 import { useUserStore } from '../stores/user'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
+const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? '/api/v1' : 'http://localhost:8080/api/v1')
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 

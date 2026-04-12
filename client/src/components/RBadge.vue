@@ -58,7 +58,7 @@ const displayValue = typeof props.value === 'number' && props.value > props.max
   border-radius: 50%;
 }
 
-.r-badge--primary { background: var(--color-accent); }
+.r-badge--primary { background: var(--color-accent); color: var(--btn-primary-text); }
 .r-badge--success { background: var(--color-success); }
 .r-badge--warning { background: var(--color-warning-dark); }
 .r-badge--danger { background: var(--btn-danger-bg); }

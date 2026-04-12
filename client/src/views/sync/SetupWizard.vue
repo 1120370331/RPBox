@@ -245,7 +245,7 @@ function complete() {
 
 .steps span.active {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
 }
 
 .steps .line {
@@ -295,7 +295,7 @@ function complete() {
   width: 100%;
   padding: 14px;
   background: var(--color-accent);
-  color: var(--color-accent-contrast, var(--color-primary));
+  color: var(--btn-primary-text, var(--color-accent-contrast, var(--color-primary)));
   border: none;
   border-radius: var(--radius-sm);
   font-size: 15px;

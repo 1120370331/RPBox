@@ -750,7 +750,7 @@ onMounted(async () => {
   height: 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-secondary, #804030));
-  color: var(--color-text-light, #fff);
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
   display: flex;
   align-items: center;
   justify-content: center;
