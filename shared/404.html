@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>正在打开 RPBox</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f4ede4;
+            --panel: rgba(255, 255, 255, 0.92);
+            --text: #3e2d22;
+            --muted: #7d6858;
+            --accent: #8f5631;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top, rgba(143, 86, 49, 0.18), transparent 32%),
+                linear-gradient(180deg, #f7f0e7 0%, var(--bg) 100%);
+        }
+
+        .panel {
+            width: min(480px, 100%);
+            padding: 28px;
+            border-radius: 24px;
+            background: var(--panel);
+            box-shadow: 0 24px 60px rgba(62, 45, 34, 0.14);
+            border: 1px solid rgba(143, 86, 49, 0.12);
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 28px;
+        }
+
+        p {
+            margin: 0;
+            line-height: 1.7;
+            color: var(--muted);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            margin-top: 20px;
+            padding: 0 18px;
+            border-radius: 999px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            background: var(--accent);
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <main class="panel">
+        <h1>正在跳转到 RPBox</h1>
+        <p id="status">如果没有自动打开，将跳转到下载页面。</p>
+        <a id="fallback-link" class="btn" href="https://totalrpbox.com/download.html">前往下载页</a>
+    </main>
+
+    <script>
+        (function () {
+            var supported = [
+                /^\/posts\/\d+$/,
+                /^\/items\/\d+$/,
+                /^\/stories\/\d+$/,
+                /^\/profiles\/\d+$/,
+                /^\/guild\/\d+$/,
+                /^\/guild\/\d+\/posts$/,
+                /^\/guild\/\d+\/stories$/,
+            ];
+            var pathname = window.location.pathname || '';
+            pathname = pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+
+            var normalized = '';
+            for (var i = 0; i < supported.length; i += 1) {
+                if (supported[i].test(pathname)) {
+                    normalized = pathname;
+                    break;
+                }
+            }
+
+            var target = normalized
+                ? 'https://totalrpbox.com/open-app.html?path=' + encodeURIComponent(normalized)
+                : 'https://totalrpbox.com/download.html';
+
+            document.getElementById('fallback-link').href = target;
+            window.location.replace(target);
+        })();
+    </script>
+</body>
+</html>
