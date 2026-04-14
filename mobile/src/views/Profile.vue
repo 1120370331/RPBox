@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
 import { useRouter } from 'vue-router'
-import { getUserInfo, signInDaily, type UserInfo } from '@/api/user'
+import { deleteAccount, getUserInfo, signInDaily, type UserInfo } from '@/api/user'
 import { resolveApiUrl } from '@/api/image'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
@@ -16,6 +16,9 @@ const toast = useToastStore()
 const userInfo = ref<UserInfo | null>(null)
 const showLevelGuide = ref(false)
 const signingIn = ref(false)
+const showDeleteAccountDialog = ref(false)
+const deletePassword = ref('')
+const deletingAccount = ref(false)
 
 const displayUser = computed(() => userInfo.value || userStore.user)
 const displayEmail = computed(() => userInfo.value?.email || '')
@@ -129,6 +132,39 @@ async function handleDailySignIn() {
 function handleLogout() {
   userStore.logout()
   router.replace({ name: 'login' })
+}
+
+function openDeleteAccountDialog() {
+  deletePassword.value = ''
+  showDeleteAccountDialog.value = true
+}
+
+function closeDeleteAccountDialog() {
+  if (deletingAccount.value) return
+  deletePassword.value = ''
+  showDeleteAccountDialog.value = false
+}
+
+async function handleDeleteAccount() {
+  if (deletingAccount.value) return
+  const password = deletePassword.value.trim()
+  if (!password) {
+    toast.warning(t('profile.deleteAccount.passwordRequired'))
+    return
+  }
+
+  deletingAccount.value = true
+  try {
+    await deleteAccount(password)
+    userStore.logout()
+    toast.success(t('profile.deleteAccount.success'))
+    router.replace({ name: 'login' })
+  } catch (error) {
+    console.error('Failed to delete account', error)
+    toast.error((error as Error)?.message || t('profile.deleteAccount.failed'))
+  } finally {
+    deletingAccount.value = false
+  }
 }
 
 function formatLevelRange(level: { currentBase: number; nextBase: number | null }) {
@@ -299,6 +335,14 @@ onMounted(loadProfile)
         </button>
       </div>
 
+      <div class="menu-section danger-section">
+        <button class="menu-item danger-item" @click="openDeleteAccountDialog">
+          <i class="ri-user-unfollow-line" />
+          <span>{{ $t('profile.deleteAccount.entry') }}</span>
+          <i class="ri-arrow-right-s-line arrow" />
+        </button>
+      </div>
+
       <button class="logout-btn" @click="handleLogout">
         <i class="ri-logout-box-r-line" /> {{ $t('profile.logout') }}
       </button>
@@ -344,6 +388,31 @@ onMounted(loadProfile)
           <div class="dialog-actions">
             <button type="button" class="action-btn primary" @click="showLevelGuide = false">
               {{ $t('profile.activity.close') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showDeleteAccountDialog" class="dialog-mask" @click.self="closeDeleteAccountDialog">
+        <div class="dialog level-guide-dialog delete-account-dialog">
+          <h3>{{ $t('profile.deleteAccount.title') }}</h3>
+          <p class="guide-current">{{ $t('profile.deleteAccount.message') }}</p>
+          <label class="delete-account-field">
+            <span>{{ $t('profile.deleteAccount.passwordLabel') }}</span>
+            <input
+              v-model="deletePassword"
+              type="password"
+              autocomplete="current-password"
+              :placeholder="$t('profile.deleteAccount.passwordPlaceholder')"
+            >
+          </label>
+          <p class="delete-account-hint">{{ $t('profile.deleteAccount.hint') }}</p>
+          <div class="dialog-actions">
+            <button type="button" class="action-btn" :disabled="deletingAccount" @click="closeDeleteAccountDialog">
+              {{ $t('profile.deleteAccount.cancel') }}
+            </button>
+            <button type="button" class="action-btn danger-action" :disabled="deletingAccount" @click="handleDeleteAccount">
+              {{ deletingAccount ? $t('common.status.loading') : $t('profile.deleteAccount.confirm') }}
             </button>
           </div>
         </div>
@@ -594,6 +663,15 @@ onMounted(loadProfile)
 .menu-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-item .arrow { color: var(--color-text-muted); font-size: 16px; }
 
+.danger-item {
+  color: #B23A3A;
+}
+
+.danger-item i,
+.danger-item .arrow {
+  color: inherit;
+}
+
 .logout-btn {
   width: 100%; padding: 13px; border: none; border-radius: var(--radius-sm);
   background: var(--btn-danger-bg); color: var(--btn-primary-text); font-size: 14px; font-weight: 500;
@@ -712,6 +790,39 @@ onMounted(loadProfile)
 .action-btn.primary {
   background: var(--color-secondary);
   color: var(--btn-primary-text);
+}
+
+.danger-action {
+  background: #B23A3A;
+  color: #fff;
+}
+
+.delete-account-field {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.delete-account-field span {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.delete-account-field input {
+  width: 100%;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+}
+
+.delete-account-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 380px) {

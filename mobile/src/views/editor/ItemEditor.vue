@@ -22,6 +22,7 @@ import {
 import { resolveApiUrl } from '@/api/image'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
+import { canUseNativeImagePicker, pickSingleNativeImageFile } from '@/utils/nativeImagePicker'
 
 interface ItemEditorForm {
   name: string
@@ -53,6 +54,7 @@ const deletedImageIds = ref<number[]>([])
 const newImages = ref<Array<{ file: File; preview: string }>>([])
 const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
+const useNativeImagePicker = canUseNativeImagePicker()
 
 const form = ref<ItemEditorForm>({
   name: '',
@@ -105,13 +107,10 @@ async function loadItemForEdit() {
   }
 }
 
-async function onCoverFileChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+async function uploadCoverFile(file: File) {
   if (!file) return
   if (!file.type.startsWith('image/')) {
     toast.warning(t('market.editor.invalidImage'))
-    input.value = ''
     return
   }
 
@@ -128,7 +127,33 @@ async function onCoverFileChange(event: Event) {
     toast.error((error as Error)?.message || t('market.editor.uploadFailed'))
   } finally {
     coverUploading.value = false
+  }
+}
+
+async function onCoverFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  try {
+    await uploadCoverFile(file as File)
+  } finally {
     input.value = ''
+  }
+}
+
+async function triggerCoverPicker() {
+  if (!useNativeImagePicker) {
+    coverInput.value?.click()
+    return
+  }
+
+  try {
+    const file = await pickSingleNativeImageFile()
+    if (file) {
+      await uploadCoverFile(file)
+    }
+  } catch (error) {
+    console.error('Failed to pick preview image', error)
+    toast.error((error as Error)?.message || t('market.editor.uploadFailed'))
   }
 }
 
@@ -137,15 +162,12 @@ function removeCoverImage() {
   coverPreview.value = ''
 }
 
-function onArtworkFilesSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = input.files ? Array.from(input.files) : []
+function appendArtworkFiles(files: File[]) {
   if (files.length === 0) return
 
   const maxAllowed = 20 - totalArtworkImages.value
   if (maxAllowed <= 0) {
     toast.warning(t('market.editor.maxArtworkImages'))
-    input.value = ''
     return
   }
 
@@ -160,8 +182,37 @@ function onArtworkFilesSelected(event: Event) {
     }
     reader.readAsDataURL(file)
   })
+}
 
-  input.value = ''
+function onArtworkFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  try {
+    appendArtworkFiles(input.files ? Array.from(input.files) : [])
+  } finally {
+    input.value = ''
+  }
+}
+
+async function triggerArtworkPicker() {
+  if (!useNativeImagePicker) {
+    artworkInput.value?.click()
+    return
+  }
+
+  if (totalArtworkImages.value >= 20) {
+    toast.warning(t('market.editor.maxArtworkImages'))
+    return
+  }
+
+  try {
+    const file = await pickSingleNativeImageFile()
+    if (file) {
+      appendArtworkFiles([file])
+    }
+  } catch (error) {
+    console.error('Failed to pick artwork image', error)
+    toast.error((error as Error)?.message || t('market.editor.uploadFailed'))
+  }
 }
 
 function removeNewImage(index: number) {
@@ -329,7 +380,7 @@ onMounted(loadItemForEdit)
               <button v-if="coverPreview" type="button" class="inline-btn" @click="removeCoverImage">
                 {{ $t('market.editor.removeCover') }}
               </button>
-              <button type="button" class="inline-btn" :disabled="coverUploading" @click="coverInput?.click()">
+              <button type="button" class="inline-btn" :disabled="coverUploading" @click="triggerCoverPicker">
                 {{ coverUploading ? $t('common.status.loading') : $t('market.editor.uploadCover') }}
               </button>
               <input ref="coverInput" type="file" accept="image/*" hidden @change="onCoverFileChange">
@@ -390,7 +441,7 @@ onMounted(loadItemForEdit)
                 </button>
               </div>
 
-              <button v-if="totalArtworkImages < 20" type="button" class="add-artwork-btn" @click="artworkInput?.click()">
+              <button v-if="totalArtworkImages < 20" type="button" class="add-artwork-btn" @click="triggerArtworkPicker">
                 <i class="ri-add-line" />
               </button>
               <input ref="artworkInput" type="file" accept="image/*" multiple hidden @change="onArtworkFilesSelected">

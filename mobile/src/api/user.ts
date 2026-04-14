@@ -49,6 +49,10 @@ export function signInDaily() {
   return request.post<SignInDailyResponse>('/user/sign-in')
 }
 
+export function deleteAccount(password: string) {
+  return request.delete<{ message: string }>('/user/account', { password })
+}
+
 export function listSponsors() {
   return request.get<{ users: SponsorUser[] }>('/sponsors')
 }

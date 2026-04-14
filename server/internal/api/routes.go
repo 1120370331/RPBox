@@ -225,6 +225,7 @@ func (s *Server) setupRoutes() {
 			// 用户管理
 			auth.GET("/user/info", s.getUserInfo)
 			auth.PUT("/user/info", s.updateUserInfo)
+			auth.DELETE("/user/account", s.deleteAccount)
 			auth.POST("/user/sign-in", s.signInDaily)
 			auth.POST("/user/avatar", s.updateAvatar)
 			auth.POST("/user/bind-email", s.bindEmail)
