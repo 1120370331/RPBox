@@ -188,6 +188,11 @@ func (s *Server) login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
+	if user.AccountDeletedAt != nil {
+		log.Printf("[Auth] login failed user=%s ip=%s reason=account_deleted", req.Username, ip)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号已删除"})
+		return
+	}
 
 	if !auth.CheckPassword(req.Password, user.PassHash) {
 		log.Printf("[Auth] login failed user=%s ip=%s reason=bad_password", req.Username, ip)

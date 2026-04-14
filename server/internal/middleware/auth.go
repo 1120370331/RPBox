@@ -41,6 +41,18 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
+		var user model.User
+		if err := database.DB.Select("id", "account_deleted_at").First(&user, claims.UserID).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
+			c.Abort()
+			return
+		}
+		if user.AccountDeletedAt != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "账号已删除"})
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Set("userID", claims.UserID) // 兼容两种命名方式
 		c.Set("username", claims.Username)

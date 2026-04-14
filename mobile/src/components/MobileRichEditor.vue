@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DesktopTiptapEditor from '@client/components/TiptapEditor.vue'
+import { pickNativeEditorImages } from '@/utils/nativeImagePicker'
 
 defineProps<{
   modelValue: string
@@ -16,6 +17,7 @@ const emit = defineEmits<{
     <DesktopTiptapEditor
       :model-value="modelValue"
       :placeholder="placeholder"
+      :pick-images="pickNativeEditorImages"
       @update:modelValue="emit('update:modelValue', $event)"
     >
       <template v-if="$slots.toolbar" #toolbar>

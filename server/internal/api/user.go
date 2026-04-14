@@ -651,6 +651,7 @@ func (s *Server) listSponsors(c *gin.Context) {
 	var users []model.User
 	if err := database.DB.
 		Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "created_at").
+		Where("account_deleted_at IS NULL").
 		Where("sponsor_level > ? OR is_sponsor = ?", 0, true).
 		Order("sponsor_level DESC, created_at ASC").
 		Find(&users).Error; err != nil {

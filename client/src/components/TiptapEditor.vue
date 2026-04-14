@@ -15,6 +15,7 @@ import { searchUsers, type UserMentionItem } from '@/api/user'
 const props = defineProps<{
   modelValue: string
   placeholder?: string
+  pickImages?: () => Promise<File[] | null | undefined>
 }>()
 
 const emit = defineEmits<{
@@ -755,13 +756,24 @@ watch(() => props.modelValue, (value) => {
 })
 
 // 图片上传
-function triggerImageUpload() {
-  imageInputRef.value?.click()
+async function triggerImageUpload() {
+  if (!props.pickImages) {
+    imageInputRef.value?.click()
+    return
+  }
+
+  try {
+    const files = await props.pickImages()
+    if (files && files.length > 0) {
+      await uploadImageFiles(files)
+    }
+  } catch (error: any) {
+    console.error('图片选择失败:', error)
+    toast.error(error?.message || '图片选择失败')
+  }
 }
 
-async function handleImageUpload(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = input.files ? Array.from(input.files) : []
+async function uploadImageFiles(files: File[]) {
   if (files.length === 0) return
 
   for (const file of files) {
@@ -792,7 +804,16 @@ async function handleImageUpload(event: Event) {
     }
   }
 
-  input.value = ''
+}
+
+async function handleImageUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  try {
+    await uploadImageFiles(files)
+  } finally {
+    input.value = ''
+  }
 }
 
 // 通过URL插入图片

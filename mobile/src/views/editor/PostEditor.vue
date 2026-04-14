@@ -21,6 +21,7 @@ import {
 } from '@/api/collection'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
+import { canUseNativeImagePicker, pickSingleNativeImageFile } from '@/utils/nativeImagePicker'
 
 interface PostEditorForm {
   title: string
@@ -47,6 +48,7 @@ const coverInput = ref<HTMLInputElement | null>(null)
 const coverPreview = ref('')
 const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
+const useNativeImagePicker = canUseNativeImagePicker()
 
 const form = ref<PostEditorForm>({
   title: '',
@@ -98,13 +100,10 @@ async function loadPostForEdit() {
   }
 }
 
-async function onCoverFileChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+async function uploadCoverFile(file: File) {
   if (!file) return
   if (!file.type.startsWith('image/')) {
     toast.warning(t('community.editor.invalidImage'))
-    input.value = ''
     return
   }
 
@@ -121,7 +120,33 @@ async function onCoverFileChange(event: Event) {
     toast.error((error as Error)?.message || t('community.editor.uploadFailed'))
   } finally {
     coverUploading.value = false
+  }
+}
+
+async function onCoverFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  try {
+    await uploadCoverFile(file as File)
+  } finally {
     input.value = ''
+  }
+}
+
+async function triggerCoverPicker() {
+  if (!useNativeImagePicker) {
+    coverInput.value?.click()
+    return
+  }
+
+  try {
+    const file = await pickSingleNativeImageFile()
+    if (file) {
+      await uploadCoverFile(file)
+    }
+  } catch (error) {
+    console.error('Failed to pick cover image', error)
+    toast.error((error as Error)?.message || t('community.editor.uploadFailed'))
   }
 }
 
@@ -270,7 +295,7 @@ onMounted(async () => {
               <button v-if="coverPreview" type="button" class="inline-btn" @click="removeCoverImage">
                 {{ $t('community.editor.removeCover') }}
               </button>
-              <button type="button" class="inline-btn" :disabled="coverUploading" @click="coverInput?.click()">
+              <button type="button" class="inline-btn" :disabled="coverUploading" @click="triggerCoverPicker">
                 {{ coverUploading ? $t('common.status.loading') : $t('community.editor.uploadCover') }}
               </button>
               <input ref="coverInput" type="file" accept="image/*" hidden @change="onCoverFileChange">

@@ -48,6 +48,17 @@ function upsertPlistArray(plist, key, values) {
   return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${block}\n</dict>\n</plist>\n`)
 }
 
+function upsertPlistString(plist, key, value) {
+  const block = `\t<key>${key}</key>\n\t<string>${value}</string>`
+  const pattern = new RegExp(`\\t<key>${key}<\\/key>\\s*\\t<string>[\\s\\S]*?<\\/string>`)
+
+  if (pattern.test(plist)) {
+    return plist.replace(pattern, block)
+  }
+
+  return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${block}\n</dict>\n</plist>\n`)
+}
+
 function patchAndroid() {
   const stringsPath = path.join(mobileRoot, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml')
   if (!fs.existsSync(stringsPath)) return
@@ -98,6 +109,9 @@ function patchIos() {
   } else {
     plist = plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${urlTypesBlock}\n</dict>\n</plist>\n`)
   }
+  plist = upsertPlistString(plist, 'NSCameraUsageDescription', 'RPBox 需要访问相机，以便拍摄并上传帖子、道具和评论图片。')
+  plist = upsertPlistString(plist, 'NSPhotoLibraryUsageDescription', 'RPBox 需要访问照片，以便选择并上传帖子、道具和评论图片。')
+  plist = upsertPlistString(plist, 'NSPhotoLibraryAddUsageDescription', 'RPBox 需要访问照片，以便保存和处理中转图片。')
   fs.writeFileSync(infoPlistPath, plist, 'utf8')
 
   const entitlementsPath = path.join(mobileRoot, 'ios', 'App', 'App', 'App.entitlements')

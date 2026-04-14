@@ -38,14 +38,15 @@ type User struct {
 	StoryCount   int `gorm:"default:0" json:"story_count"`   // 剧情数
 	ProfileCount int `gorm:"default:0" json:"profile_count"` // 人物卡数
 	// 封禁状态
-	IsMuted     bool       `gorm:"default:false" json:"is_muted"`  // 禁言状态
-	MutedUntil  *time.Time `json:"muted_until"`                    // 禁言截止时间（空=永久）
-	MuteReason  string     `gorm:"size:512" json:"mute_reason"`    // 禁言原因
-	IsBanned    bool       `gorm:"default:false" json:"is_banned"` // 禁止登录状态
-	BannedUntil *time.Time `json:"banned_until"`                   // 禁止登录截止时间（空=永久）
-	BanReason   string     `gorm:"size:512" json:"ban_reason"`     // 禁止登录原因
-	BannedBy    *uint      `json:"banned_by"`                      // 执行封禁的版主ID
-	BannedAt    *time.Time `json:"banned_at"`                      // 封禁时间
+	IsMuted          bool       `gorm:"default:false" json:"is_muted"`  // 禁言状态
+	MutedUntil       *time.Time `json:"muted_until"`                    // 禁言截止时间（空=永久）
+	MuteReason       string     `gorm:"size:512" json:"mute_reason"`    // 禁言原因
+	IsBanned         bool       `gorm:"default:false" json:"is_banned"` // 禁止登录状态
+	BannedUntil      *time.Time `json:"banned_until"`                   // 禁止登录截止时间（空=永久）
+	BanReason        string     `gorm:"size:512" json:"ban_reason"`     // 禁止登录原因
+	BannedBy         *uint      `json:"banned_by"`                      // 执行封禁的版主ID
+	BannedAt         *time.Time `json:"banned_at"`                      // 封禁时间
+	AccountDeletedAt *time.Time `json:"account_deleted_at"`             // 账号删除时间（保留脱敏壳记录）
 	// 敏感词违规累计
 	SensitiveViolationCount  int        `gorm:"default:0" json:"sensitive_violation_count"`
 	SensitiveLastViolationAt *time.Time `json:"sensitive_last_violation_at"`
