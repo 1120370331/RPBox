@@ -134,6 +134,18 @@ jobs:
           pnpm exec cap sync ios
           node ./scripts/prepareNativeShare.mjs ios
 
+      - name: Verify iOS camera setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          INFO_PLIST="mobile/ios/App/App/Info.plist"
+          CAP_CONFIG="mobile/ios/App/App/capacitor.config.json"
+
+          grep -q "<key>NSCameraUsageDescription</key>" "$INFO_PLIST"
+          grep -q "<key>NSPhotoLibraryUsageDescription</key>" "$INFO_PLIST"
+          grep -q "<key>NSPhotoLibraryAddUsageDescription</key>" "$INFO_PLIST"
+          grep -q "\"CAPCameraPlugin\"" "$CAP_CONFIG"
+
       - name: Resolve iOS scheme
         shell: bash
         run: |

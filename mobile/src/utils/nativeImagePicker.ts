@@ -1,26 +1,24 @@
-import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { Camera, CameraResultType, CameraSource, type CameraPermissionState } from '@capacitor/camera'
 import { Capacitor } from '@capacitor/core'
 
-const cameraPromptLabels = {
-  promptLabelHeader: '选择图片',
-  promptLabelPhoto: '从相册选择',
-  promptLabelPicture: '拍照',
-}
+export type NativeImageSource = 'camera' | 'photos'
 
 export function canUseNativeImagePicker() {
-  return Capacitor.isNativePlatform()
+  return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('Camera')
 }
 
-export async function pickSingleNativeImageFile() {
+export async function pickSingleNativeImageFile(source: NativeImageSource = 'photos') {
   if (!canUseNativeImagePicker()) return null
 
   try {
+    await ensureNativeImagePermission(source)
+
     const photo = await Camera.getPhoto({
-      source: CameraSource.Prompt,
+      source: resolveCameraSource(source),
       resultType: CameraResultType.Uri,
       quality: 90,
       saveToGallery: false,
-      ...cameraPromptLabels,
+      presentationStyle: shouldUsePopoverPresentation() ? 'popover' : 'fullscreen',
     })
 
     return await photoToFile(photo.webPath, photo.format)
@@ -33,8 +31,46 @@ export async function pickSingleNativeImageFile() {
 }
 
 export async function pickNativeEditorImages() {
-  const file = await pickSingleNativeImageFile()
+  const file = await pickSingleNativeImageFile('photos')
   return file ? [file] : []
+}
+
+function resolveCameraSource(source: NativeImageSource) {
+  return source === 'camera' ? CameraSource.Camera : CameraSource.Photos
+}
+
+async function ensureNativeImagePermission(source: NativeImageSource) {
+  const permissionKey = source === 'camera' ? 'camera' : 'photos'
+  const permission = await getPermissionState(permissionKey)
+
+  if (isPermissionGranted(permission)) {
+    return
+  }
+
+  const requested = await Camera.requestPermissions({
+    permissions: [permissionKey],
+  })
+
+  if (!isPermissionGranted(requested[permissionKey])) {
+    throw new Error(source === 'camera' ? '需要相机权限才能拍照' : '需要照片权限才能选择图片')
+  }
+}
+
+async function getPermissionState(permissionKey: 'camera' | 'photos') {
+  const permissions = await Camera.checkPermissions()
+  return permissions[permissionKey]
+}
+
+function isPermissionGranted(state: CameraPermissionState) {
+  return state === 'granted' || state === 'limited'
+}
+
+function shouldUsePopoverPresentation() {
+  if (typeof navigator === 'undefined') return false
+
+  const ua = navigator.userAgent || ''
+  const isTouchMac = ua.includes('Macintosh') && navigator.maxTouchPoints > 1
+  return /iPad/i.test(ua) || isTouchMac
 }
 
 async function photoToFile(webPath?: string, format?: string) {

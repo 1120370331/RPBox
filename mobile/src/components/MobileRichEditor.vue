@@ -1,6 +1,12 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref } from 'vue'
 import DesktopTiptapEditor from '@client/components/TiptapEditor.vue'
-import { pickNativeEditorImages } from '@/utils/nativeImagePicker'
+import NativeImageSourceDialog from '@/components/NativeImageSourceDialog.vue'
+import {
+  canUseNativeImagePicker,
+  pickSingleNativeImageFile,
+  type NativeImageSource,
+} from '@/utils/nativeImagePicker'
 
 defineProps<{
   modelValue: string
@@ -10,6 +16,47 @@ defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+const useNativeImagePicker = canUseNativeImagePicker()
+const showImageSourceDialog = ref(false)
+let pendingSourceResolver: ((source: NativeImageSource | null) => void) | null = null
+
+async function handlePickImages() {
+  const source = await requestNativeImageSource()
+  if (!source) return []
+
+  const file = await pickSingleNativeImageFile(source)
+  return file ? [file] : []
+}
+
+function requestNativeImageSource() {
+  showImageSourceDialog.value = true
+  return new Promise<NativeImageSource | null>((resolve) => {
+    pendingSourceResolver = resolve
+  })
+}
+
+function handleSourceSelect(source: NativeImageSource) {
+  resolvePendingSource(source)
+}
+
+function handleDialogToggle(next: boolean) {
+  showImageSourceDialog.value = next
+  if (!next) {
+    resolvePendingSource(null)
+  }
+}
+
+function resolvePendingSource(source: NativeImageSource | null) {
+  const resolve = pendingSourceResolver
+  pendingSourceResolver = null
+  showImageSourceDialog.value = false
+  resolve?.(source)
+}
+
+onBeforeUnmount(() => {
+  resolvePendingSource(null)
+})
 </script>
 
 <template>
@@ -17,13 +64,18 @@ const emit = defineEmits<{
     <DesktopTiptapEditor
       :model-value="modelValue"
       :placeholder="placeholder"
-      :pick-images="pickNativeEditorImages"
+      :pick-images="useNativeImagePicker ? handlePickImages : undefined"
       @update:modelValue="emit('update:modelValue', $event)"
     >
       <template v-if="$slots.toolbar" #toolbar>
         <slot name="toolbar" />
       </template>
     </DesktopTiptapEditor>
+    <NativeImageSourceDialog
+      :model-value="showImageSourceDialog"
+      @update:modelValue="handleDialogToggle"
+      @select="handleSourceSelect"
+    />
   </div>
 </template>
 
