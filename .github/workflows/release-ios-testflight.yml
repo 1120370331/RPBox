@@ -251,11 +251,11 @@ jobs:
               <key>teamID</key>
               <string>${IOS_TEAM_ID}</string>
               <key>signingStyle</key>
-              <string>automatic</string>
+              <string>manual</string>
               <key>provisioningProfiles</key>
               <dict>
                 <key>${IOS_BUNDLE_ID}</key>
-                <string>${IOS_PROFILE_UUID}</string>
+                <string>${IOS_PROVISION_PROFILE_NAME}</string>
               </dict>
             </dict>
           </plist>
@@ -284,27 +284,12 @@ jobs:
 
       - name: Export IPA
         shell: bash
-        env:
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
         run: |
           set -euo pipefail
-          if [ -z "${ASC_ISSUER_ID:-}" ] || [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_API_KEY_BASE64:-}" ]; then
-            echo "Missing App Store Connect API key secrets for export."
-            exit 1
-          fi
-
-          KEY_P8_PATH="$RUNNER_TEMP/AuthKey.p8"
-          echo "$ASC_API_KEY_BASE64" | base64 --decode > "$KEY_P8_PATH"
 
           mkdir -p "$RUNNER_TEMP/export"
           xcodebuild \
             -exportArchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$KEY_P8_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             -archivePath "$RUNNER_TEMP/RPBox.xcarchive" \
             -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
