@@ -21,7 +21,12 @@ import {
 } from '@/api/collection'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
-import { canUseNativeImagePicker, pickSingleNativeImageFile } from '@/utils/nativeImagePicker'
+import NativeImageSourceDialog from '@/components/NativeImageSourceDialog.vue'
+import {
+  canUseNativeImagePicker,
+  pickSingleNativeImageFile,
+  type NativeImageSource,
+} from '@/utils/nativeImagePicker'
 
 interface PostEditorForm {
   title: string
@@ -49,6 +54,7 @@ const coverPreview = ref('')
 const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
 const useNativeImagePicker = canUseNativeImagePicker()
+const showImageSourceDialog = ref(false)
 
 const form = ref<PostEditorForm>({
   title: '',
@@ -139,8 +145,17 @@ async function triggerCoverPicker() {
     return
   }
 
+  showImageSourceDialog.value = true
+}
+
+function removeCoverImage() {
+  form.value.cover_image = ''
+  coverPreview.value = ''
+}
+
+async function handleImageSourceSelect(source: NativeImageSource) {
   try {
-    const file = await pickSingleNativeImageFile()
+    const file = await pickSingleNativeImageFile(source)
     if (file) {
       await uploadCoverFile(file)
     }
@@ -148,11 +163,6 @@ async function triggerCoverPicker() {
     console.error('Failed to pick cover image', error)
     toast.error((error as Error)?.message || t('community.editor.uploadFailed'))
   }
-}
-
-function removeCoverImage() {
-  form.value.cover_image = ''
-  coverPreview.value = ''
 }
 
 async function syncPostCollection(targetPostId: number) {
@@ -343,6 +353,12 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <NativeImageSourceDialog
+      :model-value="showImageSourceDialog"
+      @update:modelValue="showImageSourceDialog = $event"
+      @select="handleImageSourceSelect"
+    />
   </div>
 </template>
 

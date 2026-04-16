@@ -22,7 +22,12 @@ import {
 import { resolveApiUrl } from '@/api/image'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
-import { canUseNativeImagePicker, pickSingleNativeImageFile } from '@/utils/nativeImagePicker'
+import NativeImageSourceDialog from '@/components/NativeImageSourceDialog.vue'
+import {
+  canUseNativeImagePicker,
+  pickSingleNativeImageFile,
+  type NativeImageSource,
+} from '@/utils/nativeImagePicker'
 
 interface ItemEditorForm {
   name: string
@@ -55,6 +60,8 @@ const newImages = ref<Array<{ file: File; preview: string }>>([])
 const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
 const useNativeImagePicker = canUseNativeImagePicker()
+const showImageSourceDialog = ref(false)
+const pendingImageTarget = ref<'cover' | 'artwork' | null>(null)
 
 const form = ref<ItemEditorForm>({
   name: '',
@@ -146,15 +153,8 @@ async function triggerCoverPicker() {
     return
   }
 
-  try {
-    const file = await pickSingleNativeImageFile()
-    if (file) {
-      await uploadCoverFile(file)
-    }
-  } catch (error) {
-    console.error('Failed to pick preview image', error)
-    toast.error((error as Error)?.message || t('market.editor.uploadFailed'))
-  }
+  pendingImageTarget.value = 'cover'
+  showImageSourceDialog.value = true
 }
 
 function removeCoverImage() {
@@ -204,15 +204,8 @@ async function triggerArtworkPicker() {
     return
   }
 
-  try {
-    const file = await pickSingleNativeImageFile()
-    if (file) {
-      appendArtworkFiles([file])
-    }
-  } catch (error) {
-    console.error('Failed to pick artwork image', error)
-    toast.error((error as Error)?.message || t('market.editor.uploadFailed'))
-  }
+  pendingImageTarget.value = 'artwork'
+  showImageSourceDialog.value = true
 }
 
 function removeNewImage(index: number) {
@@ -332,6 +325,35 @@ async function confirmDelete() {
   } finally {
     deleting.value = false
     showDeleteDialog.value = false
+  }
+}
+
+async function handleImageSourceSelect(source: NativeImageSource) {
+  const target = pendingImageTarget.value
+  pendingImageTarget.value = null
+
+  if (!target) return
+
+  try {
+    const file = await pickSingleNativeImageFile(source)
+    if (!file) return
+
+    if (target === 'cover') {
+      await uploadCoverFile(file)
+      return
+    }
+
+    appendArtworkFiles([file])
+  } catch (error) {
+    console.error(`Failed to pick ${target} image`, error)
+    toast.error((error as Error)?.message || t('market.editor.uploadFailed'))
+  }
+}
+
+function handleImageSourceDialogToggle(next: boolean) {
+  showImageSourceDialog.value = next
+  if (!next) {
+    pendingImageTarget.value = null
   }
 }
 
@@ -480,6 +502,12 @@ onMounted(loadItemForEdit)
         </div>
       </div>
     </div>
+
+    <NativeImageSourceDialog
+      :model-value="showImageSourceDialog"
+      @update:modelValue="handleImageSourceDialogToggle"
+      @select="handleImageSourceSelect"
+    />
   </div>
 </template>
 
