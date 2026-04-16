@@ -4,22 +4,26 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
+import { useDialog } from '@/composables/useDialog'
 import ImageViewer from '@/components/ImageViewer.vue'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { handleAttachmentClick } from '@/utils/download'
 import { useEmoteStore } from '@/stores/emote'
+import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import CollectionBanner from '@/components/CollectionBanner.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const dialog = useDialog()
 const emoteStore = useEmoteStore()
 const loading = ref(false)
 const item = ref<Item | null>(null)
@@ -40,6 +44,27 @@ const submitting = ref(false)
 const detailContentRef = ref<HTMLElement | null>(null)
 const showImportTutorial = ref(false)
 const dontShowTutorialAgain = ref(false)
+const showReportDialog = ref(false)
+const safetySubmitting = ref(false)
+const reportContext = ref<{
+  targetType: Extract<ReportTargetType, 'item' | 'item_comment'>
+  targetId: number
+  title: string
+  dialogTitle: string
+} | null>(null)
+const currentUserId = ref<number>(0)
+const currentUserRole = ref('user')
+
+const userStr = localStorage.getItem('user')
+if (userStr) {
+  try {
+    const user = JSON.parse(userStr)
+    currentUserId.value = user.id
+    currentUserRole.value = user.role || 'user'
+  } catch (error) {
+    console.error('解析用户信息失败:', error)
+  }
+}
 
 // 画作图片查看
 const selectedImageIndex = ref(0)
@@ -54,6 +79,15 @@ const previewFrom = ref('')
 
 // 是否为画作类型
 const isArtwork = computed(() => item.value?.type === 'artwork')
+const canUseSafetyActions = computed(() => {
+  if (!item.value || !author.value?.id || !currentUserId.value) return false
+  return author.value.id !== currentUserId.value
+})
+
+function canUseCommentSafetyActions(comment: ItemComment): boolean {
+  if (!currentUserId.value) return false
+  return comment.user_id !== currentUserId.value
+}
 
 // 获取类型显示文本
 function getTypeText(type: string) {
@@ -348,6 +382,16 @@ function renderCommentContent(content: string) {
   return renderEmoteContent(content, emoteStore.emoteMap)
 }
 
+function buildReportExcerpt(content: string) {
+  const text = content.replace(/\s+/g, ' ').trim()
+  if (!text) return '评论'
+  return text.length > 36 ? `${text.slice(0, 36)}...` : text
+}
+
+function buildCommentReportLabel(comment: ItemComment) {
+  return `${comment.username || '匿名用户'}：${buildReportExcerpt(comment.content)}`
+}
+
 function handleViewerDownload(index: number) {
   if (viewerMode.value !== 'artwork' || !item.value) return
   const img = images.value[index]
@@ -365,6 +409,100 @@ function downloadAllImages() {
     window.open(url, '_blank')
   }
   toast.success(t('market.detail.messages.downloadAllStarted', { count: images.value.length }))
+}
+
+async function submitSafetyReport(payload: { reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean }) {
+  if (safetySubmitting.value || !reportContext.value) return
+  safetySubmitting.value = true
+  try {
+    const context = reportContext.value
+    await createContentReport({
+      target_type: context.targetType,
+      target_id: context.targetId,
+      reason: payload.reason,
+      detail: payload.detail,
+      hide_target: payload.hideTarget,
+      block_author: payload.blockAuthor,
+    })
+    closeReportDialog()
+    if (context.targetType === 'item' && (payload.hideTarget || payload.blockAuthor)) {
+      router.push('/market')
+      return
+    }
+    if (context.targetType === 'item_comment' && (payload.hideTarget || payload.blockAuthor)) {
+      await loadComments()
+    }
+    toast.success('举报已提交，版主会尽快处理')
+  } catch (error: any) {
+    toast.error(error?.message || '举报提交失败')
+  } finally {
+    safetySubmitting.value = false
+  }
+}
+
+function openItemReport() {
+  if (!item.value) return
+  reportContext.value = {
+    targetType: 'item',
+    targetId: item.value.id,
+    title: item.value.name,
+    dialogTitle: '举报作品',
+  }
+  showReportDialog.value = true
+}
+
+function openCommentReport(comment: ItemComment) {
+  reportContext.value = {
+    targetType: 'item_comment',
+    targetId: comment.id,
+    title: buildCommentReportLabel(comment),
+    dialogTitle: '举报评论',
+  }
+  showReportDialog.value = true
+}
+
+function closeReportDialog() {
+  showReportDialog.value = false
+  reportContext.value = null
+}
+
+async function handleBlockAuthor() {
+  if (!author.value?.id || !item.value) return
+  const confirmed = await dialog.confirm({
+    title: '屏蔽作者',
+    message: '屏蔽后将立即隐藏该作者的作品和评论，你稍后仍可取消屏蔽。',
+    type: 'warning',
+    confirmText: '确认屏蔽',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  try {
+    await createUserBlock(author.value.id, `作品举报：${item.value.name}`)
+    toast.success('已屏蔽该作者，相关内容将不再显示')
+    router.push('/market')
+  } catch (error: any) {
+    toast.error(error?.message || '屏蔽作者失败')
+  }
+}
+
+async function handleBlockCommentAuthor(comment: ItemComment) {
+  const confirmed = await dialog.confirm({
+    title: '屏蔽该评论作者',
+    message: '屏蔽后该作者的作品评论会立即从当前页面隐藏，你稍后仍可取消屏蔽。',
+    type: 'warning',
+    confirmText: '确认屏蔽',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  try {
+    await createUserBlock(comment.user_id, `作品评论举报：${buildReportExcerpt(comment.content)}`)
+    toast.success('已屏蔽该作者，相关评论已隐藏')
+    await loadComments()
+  } catch (error: any) {
+    toast.error(error?.message || '屏蔽作者失败')
+  }
 }
 </script>
 
@@ -521,6 +659,15 @@ function downloadAllImages() {
           </button>
         </div>
 
+        <div v-if="canUseSafetyActions" class="safety-actions">
+          <button class="safety-btn" @click="openItemReport">
+            <i class="ri-alarm-warning-line"></i> 举报内容
+          </button>
+          <button class="safety-btn danger" @click="handleBlockAuthor">
+            <i class="ri-forbid-2-line"></i> 屏蔽作者
+          </button>
+        </div>
+
         <!-- 导入代码显示区域（非画作类型） -->
         <div v-if="showImportCode && !isArtwork" class="import-code-section">
           <div class="import-code-header">
@@ -617,6 +764,14 @@ function downloadAllImages() {
                 <span class="comment-time">{{ new Date(comment.created_at).toLocaleDateString() }}</span>
               </div>
               <div class="comment-content" v-html="renderCommentContent(comment.content)"></div>
+              <div v-if="canUseCommentSafetyActions(comment)" class="comment-actions">
+                <button class="comment-safety-btn" @click="openCommentReport(comment)">
+                  <i class="ri-alarm-warning-line"></i> 举报评论
+                </button>
+                <button class="comment-safety-btn danger" @click="handleBlockCommentAuthor(comment)">
+                  <i class="ri-forbid-2-line"></i> 屏蔽作者
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -667,6 +822,15 @@ function downloadAllImages() {
       :show-download="viewerMode === 'artwork'"
       :download-label="t('market.detail.imageViewer.download')"
       @download="handleViewerDownload"
+    />
+    <SafetyReportDialog
+      :visible="showReportDialog"
+      :submitting="safetySubmitting"
+      :title="reportContext?.dialogTitle"
+      :target-label="reportContext?.title"
+      :target-type="reportContext?.targetType"
+      @close="closeReportDialog"
+      @submit="submitSafetyReport"
     />
   </div>
 </template>
@@ -1093,6 +1257,34 @@ function downloadAllImages() {
   margin-bottom: 24px;
 }
 
+.safety-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.safety-btn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.safety-btn.danger {
+  color: #C44536;
+  border-color: rgba(196, 69, 54, 0.26);
+  background: rgba(196, 69, 54, 0.06);
+}
+
 .download-btn {
   width: 100%;
   height: 40px;
@@ -1458,6 +1650,37 @@ function downloadAllImages() {
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.comment-safety-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.comment-safety-btn:hover {
+  color: var(--color-secondary);
+}
+
+.comment-safety-btn.danger {
+  color: #C44536;
+}
+
+.comment-safety-btn.danger:hover {
+  color: #DC2626;
 }
 
 .comment-content :deep(.comment-emote) {

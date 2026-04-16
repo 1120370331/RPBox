@@ -33,6 +33,7 @@ const router = createRouter({
         { path: 'notifications', name: 'notifications', component: () => import('./views/Notifications.vue') },
         { path: 'thanks', name: 'thanks', component: () => import('./views/Thanks.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/Settings.vue') },
+        { path: 'settings/blocked-users', name: 'settings-blocked-users', component: () => import('./views/BlockedUsers.vue') },
         { path: 'guide', name: 'guide', component: () => import('./views/Guide.vue') },
         { path: 'guild', name: 'guild', component: () => import('./views/guild/GuildList.vue') },
         { path: 'guild/create', name: 'guild-create', component: () => import('./views/guild/GuildCreate.vue') },

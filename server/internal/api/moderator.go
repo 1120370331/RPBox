@@ -1169,7 +1169,7 @@ func (s *Server) hideItemByMod(c *gin.Context) {
 
 // getModeratorStats 获取版主统计数据
 func (s *Server) getModeratorStats(c *gin.Context) {
-	var pendingPosts, pendingItems int64
+	var pendingPosts, pendingItems, pendingReports int64
 	var totalPosts, totalItems int64
 	var todayPosts, todayItems int64
 	var pendingGuilds, totalGuilds int64
@@ -1179,6 +1179,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Post{}).Where("review_status = ?", "pending").Count(&pendingPosts)
 	database.DB.Model(&model.Item{}).Where("review_status = ?", "pending").Count(&pendingItems)
 	database.DB.Model(&model.Guild{}).Where("status = ?", "pending").Count(&pendingGuilds)
+	database.DB.Model(&model.ContentReport{}).Where("status = ?", "pending").Count(&pendingReports)
 
 	// 总数量
 	database.DB.Model(&model.Post{}).Count(&totalPosts)
@@ -1193,16 +1194,17 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", today).Count(&todayUsers)
 
 	c.JSON(http.StatusOK, gin.H{
-		"pending_posts":  pendingPosts,
-		"pending_items":  pendingItems,
-		"pending_guilds": pendingGuilds,
-		"total_posts":    totalPosts,
-		"total_items":    totalItems,
-		"total_guilds":   totalGuilds,
-		"total_users":    totalUsers,
-		"today_posts":    todayPosts,
-		"today_items":    todayItems,
-		"today_users":    todayUsers,
+		"pending_posts":   pendingPosts,
+		"pending_items":   pendingItems,
+		"pending_guilds":  pendingGuilds,
+		"pending_reports": pendingReports,
+		"total_posts":     totalPosts,
+		"total_items":     totalItems,
+		"total_guilds":    totalGuilds,
+		"total_users":     totalUsers,
+		"today_posts":     todayPosts,
+		"today_items":     todayItems,
+		"today_users":     todayUsers,
 	})
 }
 

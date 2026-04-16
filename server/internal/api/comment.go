@@ -53,9 +53,54 @@ func (s *Server) listComments(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
 		return
 	}
+	if isContentHidden(userID, reportTargetPost, post.ID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
+	}
 
 	var comments []model.Comment
 	database.DB.Where("post_id = ?", postID).Order("created_at ASC").Find(&comments)
+	if userID != 0 {
+		blockedIDs, err := getBlockedUserIDs(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载评论失败"})
+			return
+		}
+		if len(blockedIDs) > 0 {
+			filtered := make([]model.Comment, 0, len(comments))
+			blockedMap := make(map[uint]struct{}, len(blockedIDs))
+			for _, blockedID := range blockedIDs {
+				blockedMap[blockedID] = struct{}{}
+			}
+			for _, comment := range comments {
+				if _, blocked := blockedMap[comment.AuthorID]; blocked {
+					continue
+				}
+				filtered = append(filtered, comment)
+			}
+			comments = filtered
+		}
+
+		hiddenCommentIDs, err := hiddenContentIDs(userID, reportTargetComment)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载评论失败"})
+			return
+		}
+		if len(hiddenCommentIDs) > 0 {
+			hiddenMap := make(map[uint]struct{}, len(hiddenCommentIDs))
+			for _, hiddenID := range hiddenCommentIDs {
+				hiddenMap[hiddenID] = struct{}{}
+			}
+			filtered := make([]model.Comment, 0, len(comments))
+			for _, comment := range comments {
+				if _, hidden := hiddenMap[comment.ID]; hidden {
+					continue
+				}
+				filtered = append(filtered, comment)
+			}
+			comments = filtered
+		}
+	}
 
 	likedMap := make(map[uint]bool)
 	if userID != 0 && len(comments) > 0 {

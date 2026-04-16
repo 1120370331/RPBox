@@ -559,6 +559,44 @@ type ContentModerationViolation struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+// UserBlock 用户拉黑关系
+type UserBlock struct {
+	ID            uint      `gorm:"primarykey" json:"id"`
+	BlockerID     uint      `gorm:"uniqueIndex:idx_user_block_pair;not null" json:"blocker_id"`
+	BlockedUserID uint      `gorm:"uniqueIndex:idx_user_block_pair;not null" json:"blocked_user_id"`
+	Reason        string    `gorm:"size:512" json:"reason"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// UserHiddenContent 用户主动隐藏的内容
+type UserHiddenContent struct {
+	ID         uint      `gorm:"primarykey" json:"id"`
+	UserID     uint      `gorm:"uniqueIndex:idx_user_hidden_content;not null" json:"user_id"`
+	TargetType string    `gorm:"size:32;uniqueIndex:idx_user_hidden_content;not null" json:"target_type"` // post|item|comment|item_comment
+	TargetID   uint      `gorm:"uniqueIndex:idx_user_hidden_content;not null" json:"target_id"`
+	Reason     string    `gorm:"size:512" json:"reason"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// ContentReport 用户举报记录
+type ContentReport struct {
+	ID            uint       `gorm:"primarykey" json:"id"`
+	ReporterID    uint       `gorm:"index;not null" json:"reporter_id"`
+	TargetType    string     `gorm:"size:32;index:idx_content_report_target;not null" json:"target_type"` // post|item|user|comment|item_comment
+	TargetID      uint       `gorm:"index:idx_content_report_target;not null" json:"target_id"`
+	TargetUserID  uint       `gorm:"index" json:"target_user_id"`
+	Reason        string     `gorm:"size:64;not null" json:"reason"`
+	Detail        string     `gorm:"type:text" json:"detail"`
+	Status        string     `gorm:"size:20;default:pending;index" json:"status"` // pending|resolved|rejected
+	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`
+	ReviewComment string     `gorm:"size:512" json:"review_comment"`
+	ReviewedAt    *time.Time `json:"reviewed_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 // ========== 管理系统 ==========
 
 // AdminActionLog 管理操作日志

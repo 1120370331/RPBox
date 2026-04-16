@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -499,6 +500,12 @@ func (s *Server) getUserProfile(c *gin.Context) {
 	userID := c.Param("id")
 	currentUserID, exists := c.Get("userID")
 	isOwnProfile := exists && userID == fmt.Sprint(currentUserID.(uint))
+	if !isOwnProfile && exists {
+		if targetID, err := strconv.ParseUint(userID, 10, 64); err == nil && isUserBlocked(currentUserID.(uint), uint(targetID)) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+			return
+		}
+	}
 
 	if !isOwnProfile && s.cache != nil {
 		var cached publicUserProfileResponse

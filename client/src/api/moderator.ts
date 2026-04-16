@@ -5,6 +5,7 @@ export interface ModeratorStats {
   pending_posts: number
   pending_items: number
   pending_guilds: number
+  pending_reports: number
   total_posts: number
   total_items: number
   total_guilds: number
@@ -42,6 +43,60 @@ export function getPendingItems(params?: { page?: number; page_size?: number; ty
 
 export function reviewItem(id: number, data: ReviewRequest) {
   return request.post<{ message: string; item: any }>(`/moderator/review/items/${id}`, data)
+}
+
+// ========== 举报审查 ========== 
+
+export interface ReportReviewQueryParams {
+  page?: number
+  page_size?: number
+  status?: 'pending' | 'resolved' | 'rejected' | 'all'
+  target_scope?: 'user' | 'content' | 'comment'
+  target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment'
+  sort?: 'report_count' | 'latest_reported_at'
+  order?: 'asc' | 'desc'
+}
+
+export interface ReportReasonItem {
+  id: number
+  reporter_id: number
+  reporter_name?: string
+  reason: string
+  detail?: string
+  created_at: string
+}
+
+export interface ReportReviewItem {
+  id: number
+  target_type: 'post' | 'item' | 'user' | 'comment' | 'item_comment'
+  target_id: number
+  target_user_id: number
+  target_title: string
+  target_author_name?: string
+  parent_target_id?: number
+  parent_target_title?: string
+  target_preview_text?: string
+  target_preview_image?: string
+  status: 'pending' | 'resolved' | 'rejected'
+  report_count: number
+  latest_reported_at: string
+  reasons: ReportReasonItem[]
+  review_comment?: string
+  reviewed_at?: string | null
+}
+
+export interface ReportReviewRequest {
+  action: 'delete_content' | 'delete_and_mute_user' | 'delete_and_ban_user' | 'mute_user' | 'ban_user' | 'reject'
+  duration?: number
+  comment?: string
+}
+
+export function getModeratorReports(params?: ReportReviewQueryParams) {
+  return request.get<{ reports: ReportReviewItem[]; total: number }>('/moderator/reports', { params })
+}
+
+export function reviewModeratorReport(id: number, data: ReportReviewRequest) {
+  return request.post<{ message: string; affected_count: number; status: string }>(`/moderator/reports/${id}/review`, data)
 }
 
 // ========== 审核中心 - 图片审核 ==========

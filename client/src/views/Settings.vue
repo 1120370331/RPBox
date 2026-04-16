@@ -376,6 +376,27 @@ watch(() => localeStore.currentLocale, (newLocale) => {
         </div>
       </div>
 
+      <div class="setting-card anim-item" style="--delay: 1.2">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-forbid-2-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>{{ $t('settings.blocks.title') }}</h3>
+            <p>{{ $t('settings.blocks.description') }}</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="setting-inline-action">
+            <p class="setting-inline-desc">{{ $t('settings.blocks.description') }}</p>
+            <button class="btn btn-primary" @click="router.push({ name: 'settings-blocked-users' })">
+              <i class="ri-arrow-right-line"></i>
+              {{ $t('settings.blocks.manageAction') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 主题设置 -->
       <div class="setting-card anim-item" style="--delay: 1.5">
         <div class="card-header">
@@ -874,6 +895,20 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   margin: 0;
   font-size: 13px;
   color: var(--color-text-secondary);
+}
+
+.setting-inline-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.setting-inline-desc {
+  flex: 1;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 /* 路径输入 */

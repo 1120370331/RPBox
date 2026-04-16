@@ -22,10 +22,18 @@ func (s *Server) searchUsers(c *gin.Context) {
 	query := database.DB.Model(&model.User{}).
 		Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").
 		Where("account_deleted_at IS NULL")
+	blockedIDs, err := getBlockedUserIDs(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
 	if keyword != "" {
 		query = query.Where("username LIKE ?", "%"+keyword+"%")
 	}
 	query = query.Where("id != ?", userID).Order("username ASC").Limit(limit)
+	if len(blockedIDs) > 0 {
+		query = query.Where("id NOT IN ?", blockedIDs)
+	}
 
 	var users []model.User
 	if err := query.Find(&users).Error; err != nil {

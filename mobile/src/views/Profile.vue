@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
 import { useRouter } from 'vue-router'
-import { deleteAccount, getUserInfo, signInDaily, type UserInfo } from '@/api/user'
 import { resolveApiUrl } from '@/api/image'
+import { deleteAccount, getUserInfo, signInDaily, type UserInfo } from '@/api/user'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
 
@@ -174,7 +174,9 @@ function formatLevelRange(level: { currentBase: number; nextBase: number | null 
   return t('profile.activity.rangeToNext', { start: level.currentBase, end: level.nextBase - 1 })
 }
 
-onMounted(loadProfile)
+onMounted(() => {
+  void loadProfile()
+})
 </script>
 
 <template>
@@ -323,6 +325,11 @@ onMounted(loadProfile)
         <button class="menu-item" @click="router.push('/my-collections')">
           <i class="ri-folder-line" />
           <span>{{ $t('profile.menu.collections') }}</span>
+          <i class="ri-arrow-right-s-line arrow" />
+        </button>
+        <button class="menu-item" @click="router.push('/profile/blocked-users')">
+          <i class="ri-forbid-2-line" />
+          <span>{{ $t('profile.blocks.title') }}</span>
           <i class="ri-arrow-right-s-line arrow" />
         </button>
       </div>

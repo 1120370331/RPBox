@@ -226,9 +226,13 @@ func (s *Server) setupRoutes() {
 			auth.GET("/user/info", s.getUserInfo)
 			auth.PUT("/user/info", s.updateUserInfo)
 			auth.DELETE("/user/account", s.deleteAccount)
+			auth.GET("/user/blocks", s.listUserBlocks)
+			auth.POST("/user/blocks", s.createUserBlock)
+			auth.DELETE("/user/blocks/:blockedUserId", s.deleteUserBlock)
 			auth.POST("/user/sign-in", s.signInDaily)
 			auth.POST("/user/avatar", s.updateAvatar)
 			auth.POST("/user/bind-email", s.bindEmail)
+			auth.POST("/reports", s.createContentReport)
 			auth.GET("/sponsors", s.listSponsors)
 			auth.GET("/users/search", s.searchUsers)
 			auth.GET("/users/:id", s.getUserProfile)
@@ -301,6 +305,8 @@ func (s *Server) setupRoutes() {
 				// 审核中心 - 道具编辑
 				mod.GET("/review/item-edits", s.listPendingItemEdits)
 				mod.POST("/review/item-edits/:id", s.reviewItemEdit)
+				mod.GET("/reports", s.listContentReports)
+				mod.POST("/reports/:id/review", s.reviewContentReport)
 
 				// 管理中心 - 帖子
 				mod.GET("/manage/posts", s.listAllPosts)

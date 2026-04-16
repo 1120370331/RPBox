@@ -178,8 +178,8 @@ func (s *Server) listPosts(c *gin.Context) {
 		if params.IsPinned != nil {
 			pinnedValue = strconv.FormatBool(*params.IsPinned)
 		}
-		filterKey := fmt.Sprintf("page=%d|size=%d|sort=%s|order=%s|search=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
-			params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
+		filterKey := fmt.Sprintf("viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
+			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
 		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
 		if err != nil {
 			log.Printf("[Cache] Version error: %v", err)
@@ -218,6 +218,24 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	query := db.Model(&model.Post{})
 	isSelfView := params.AuthorID != "" && params.AuthorID == strconv.Itoa(int(params.UserID))
 	guildRole := ""
+	if params.UserID != 0 && !isSelfView {
+		blockedIDs, err := getBlockedUserIDs(params.UserID)
+		if err != nil {
+			return postListResponse{}, err
+		}
+		if len(blockedIDs) > 0 {
+			query = query.Where("author_id NOT IN ?", blockedIDs)
+		}
+	}
+	if params.UserID != 0 {
+		hiddenPostIDs, err := hiddenContentIDs(params.UserID, reportTargetPost)
+		if err != nil {
+			return postListResponse{}, err
+		}
+		if len(hiddenPostIDs) > 0 {
+			query = query.Where("id NOT IN ?", hiddenPostIDs)
+		}
+	}
 
 	// 只显示公开的帖子，除非是查看自己的
 	if isSelfView {
@@ -575,6 +593,14 @@ func (s *Server) getPost(c *gin.Context) {
 	if normalizedContent := s.normalizeAndStoreContentImages(c, post.Content, fmt.Sprintf("posts/%d/content", post.AuthorID)); normalizedContent != post.Content {
 		post.Content = normalizedContent
 		_ = database.DB.Model(&model.Post{}).Where("id = ?", post.ID).Update("content", normalizedContent).Error
+	}
+	if isContentHidden(userID, reportTargetPost, post.ID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
+	}
+	if post.AuthorID != userID && isUserBlocked(userID, post.AuthorID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
 	}
 
 	// 权限检查：非公开帖子仅公会成员可见
@@ -1221,6 +1247,22 @@ func (s *Server) listUserPostsByRelation(c *gin.Context, joinTable, orderColumn 
 		Joins("JOIN "+joinTable+" ON "+joinTable+".post_id = posts.id").
 		Where(joinTable+".user_id = ?", userID).
 		Order(joinTable + "." + orderColumn + " DESC")
+	blockedIDs, err := getBlockedUserIDs(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if len(blockedIDs) > 0 {
+		query = query.Where("posts.author_id NOT IN ?", blockedIDs)
+	}
+	hiddenPostIDs, err := hiddenContentIDs(userID, reportTargetPost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if len(hiddenPostIDs) > 0 {
+		query = query.Where("posts.id NOT IN ?", hiddenPostIDs)
+	}
 
 	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
