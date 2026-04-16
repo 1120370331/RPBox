@@ -146,6 +146,11 @@ const router = createRouter({
       name: 'about',
       component: () => import('./views/profile/About.vue'),
     },
+    {
+      path: '/profile/blocked-users',
+      name: 'blocked-users',
+      component: () => import('./views/profile/BlockedUsers.vue'),
+    },
   ],
 })
 

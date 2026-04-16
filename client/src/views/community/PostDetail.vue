@@ -8,12 +8,14 @@ import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { resolveApiUrl } from '@/api/item'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { handleAttachmentClick } from '@/utils/download'
+import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import { useEmoteStore } from '@/stores/emote'
@@ -63,6 +65,14 @@ const articleContentRef = ref<HTMLElement | null>(null)
 const showImageViewer = ref(false)
 const viewerImages = ref<string[]>([])
 const viewerStartIndex = ref(0)
+const showReportDialog = ref(false)
+const safetySubmitting = ref(false)
+const reportContext = ref<{
+  targetType: Extract<ReportTargetType, 'post' | 'comment'>
+  targetId: number
+  title: string
+  dialogTitle: string
+} | null>(null)
 
 // 评论点赞状态
 const commentLikes = reactive(new Map<number, boolean>())
@@ -85,6 +95,16 @@ const canManagePost = computed(() => {
   if (currentUserId.value === post.value.author_id) return true
   return currentUserRole.value === 'moderator' || currentUserRole.value === 'admin'
 })
+
+const canUseSafetyActions = computed(() => {
+  if (!post.value || !currentUserId.value) return false
+  return post.value.author_id !== currentUserId.value
+})
+
+function canUseCommentSafetyActions(comment: CommentWithAuthor): boolean {
+  if (!currentUserId.value) return false
+  return comment.author_id !== currentUserId.value
+}
 
 // 检查是否可以删除评论
 function canDeleteComment(comment: CommentWithAuthor): boolean {
@@ -345,6 +365,16 @@ function renderCommentContent(content: string) {
   return renderEmoteContent(content, emoteStore.emoteMap)
 }
 
+function buildReportExcerpt(content: string) {
+  const text = content.replace(/\s+/g, ' ').trim()
+  if (!text) return '评论'
+  return text.length > 36 ? `${text.slice(0, 36)}...` : text
+}
+
+function buildCommentReportLabel(comment: CommentWithAuthor) {
+  return `${comment.author_name}：${buildReportExcerpt(comment.content)}`
+}
+
 // 删除评论
 async function handleDeleteComment(comment: CommentWithAuthor) {
   const confirmed = await dialog.confirm({
@@ -483,6 +513,100 @@ async function handleDelete() {
     toast.error(t('community.edit.deleteFailed'))
   }
 }
+
+async function submitSafetyReport(payload: { reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean }) {
+  if (safetySubmitting.value || !reportContext.value) return
+  safetySubmitting.value = true
+  try {
+    const context = reportContext.value
+    await createContentReport({
+      target_type: context.targetType,
+      target_id: context.targetId,
+      reason: payload.reason,
+      detail: payload.detail,
+      hide_target: payload.hideTarget,
+      block_author: payload.blockAuthor,
+    })
+    closeReportDialog()
+    if (context.targetType === 'post' && (payload.hideTarget || payload.blockAuthor)) {
+      router.push({ name: 'community' })
+      return
+    }
+    if (context.targetType === 'comment' && (payload.hideTarget || payload.blockAuthor)) {
+      await loadComments()
+    }
+    toast.success('举报已提交，版主会尽快处理')
+  } catch (error: any) {
+    toast.error(error?.message || '举报提交失败')
+  } finally {
+    safetySubmitting.value = false
+  }
+}
+
+function openPostReport() {
+  if (!post.value) return
+  reportContext.value = {
+    targetType: 'post',
+    targetId: post.value.id,
+    title: post.value.title,
+    dialogTitle: '举报帖子',
+  }
+  showReportDialog.value = true
+}
+
+function openCommentReport(comment: CommentWithAuthor) {
+  reportContext.value = {
+    targetType: 'comment',
+    targetId: comment.id,
+    title: buildCommentReportLabel(comment),
+    dialogTitle: '举报评论',
+  }
+  showReportDialog.value = true
+}
+
+function closeReportDialog() {
+  showReportDialog.value = false
+  reportContext.value = null
+}
+
+async function handleBlockAuthor() {
+  if (!post.value) return
+  const confirmed = await dialog.confirm({
+    title: '屏蔽作者',
+    message: '屏蔽后将立即隐藏该作者的帖子和评论，你仍可稍后在设置里取消屏蔽。',
+    type: 'warning',
+    confirmText: '确认屏蔽',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  try {
+    await createUserBlock(post.value.author_id, `帖子举报：${post.value.title}`)
+    toast.success('已屏蔽该作者，相关内容将不再显示')
+    router.push({ name: 'community' })
+  } catch (error: any) {
+    toast.error(error?.message || '屏蔽作者失败')
+  }
+}
+
+async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
+  const confirmed = await dialog.confirm({
+    title: '屏蔽该评论作者',
+    message: '屏蔽后该作者的评论会立即从当前页面隐藏，你稍后仍可取消屏蔽。',
+    type: 'warning',
+    confirmText: '确认屏蔽',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  try {
+    await createUserBlock(comment.author_id, `评论举报：${buildReportExcerpt(comment.content)}`)
+    toast.success('已屏蔽该作者，相关评论已隐藏')
+    await loadComments()
+  } catch (error: any) {
+    toast.error(error?.message || '屏蔽作者失败')
+  }
+}
 </script>
 
 <template>
@@ -580,6 +704,14 @@ async function handleDelete() {
               <i class="ri-delete-bin-line"></i> {{ t('community.action.delete') }}
             </button>
           </div>
+          <div v-if="canUseSafetyActions" class="safety-actions">
+            <button class="safety-btn" @click="openPostReport">
+              <i class="ri-alarm-warning-line"></i> 举报内容
+            </button>
+            <button class="safety-btn danger" @click="handleBlockAuthor">
+              <i class="ri-forbid-2-line"></i> 屏蔽作者
+            </button>
+          </div>
         </article>
 
         <!-- 评论区 -->
@@ -615,6 +747,12 @@ async function handleDelete() {
                 <div class="comment-actions">
                   <button class="reply-btn" @click="startReply(comment)">
                     <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
+                  </button>
+                  <button v-if="canUseCommentSafetyActions(comment)" class="comment-safety-btn" @click="openCommentReport(comment)">
+                    <i class="ri-alarm-warning-line"></i> 举报评论
+                  </button>
+                  <button v-if="canUseCommentSafetyActions(comment)" class="comment-safety-btn danger" @click="handleBlockCommentAuthor(comment)">
+                    <i class="ri-forbid-2-line"></i> 屏蔽作者
                   </button>
                   <button v-if="canDeleteComment(comment)" class="delete-btn" @click="handleDeleteComment(comment)">
                     <i class="ri-delete-bin-line"></i> {{ t('community.action.delete') }}
@@ -669,6 +807,12 @@ async function handleDelete() {
                       <div class="comment-actions">
                         <button class="reply-btn" @click="startReply(reply)">
                           <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
+                        </button>
+                        <button v-if="canUseCommentSafetyActions(reply)" class="comment-safety-btn" @click="openCommentReport(reply)">
+                          <i class="ri-alarm-warning-line"></i> 举报评论
+                        </button>
+                        <button v-if="canUseCommentSafetyActions(reply)" class="comment-safety-btn danger" @click="handleBlockCommentAuthor(reply)">
+                          <i class="ri-forbid-2-line"></i> 屏蔽作者
                         </button>
                         <button v-if="canDeleteComment(reply)" class="delete-btn" @click="handleDeleteComment(reply)">
                           <i class="ri-delete-bin-line"></i> {{ t('community.action.delete') }}
@@ -748,6 +892,15 @@ async function handleDelete() {
       v-model="showImageViewer"
       :images="viewerImages"
       :start-index="viewerStartIndex"
+    />
+    <SafetyReportDialog
+      :visible="showReportDialog"
+      :submitting="safetySubmitting"
+      :title="reportContext?.dialogTitle"
+      :target-label="reportContext?.title"
+      :target-type="reportContext?.targetType"
+      @close="closeReportDialog"
+      @submit="submitSafetyReport"
     />
   </div>
 </template>
@@ -1244,6 +1397,36 @@ async function handleDelete() {
   background: rgba(196, 69, 54, 0.1);
 }
 
+.safety-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 32px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.safety-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.safety-btn.danger {
+  color: #C44536;
+  border-color: rgba(196, 69, 54, 0.26);
+  background: rgba(196, 69, 54, 0.06);
+}
+
 /* ========== 评论区 ========== */
 .comments-section {
   background: var(--color-panel-bg);
@@ -1484,6 +1667,32 @@ async function handleDelete() {
   align-items: center;
   gap: 12px;
   margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.comment-safety-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.comment-safety-btn:hover {
+  color: var(--color-secondary);
+}
+
+.comment-safety-btn.danger {
+  color: #C44536;
+}
+
+.comment-safety-btn.danger:hover {
+  color: #DC2626;
 }
 
 .like-btn {

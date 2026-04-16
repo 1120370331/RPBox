@@ -14,8 +14,10 @@ import {
   getModeratorStats,
   getPendingPosts,
   getPendingItems,
+  getModeratorReports,
   reviewPost,
   reviewItem,
+  reviewModeratorReport,
   getAllPosts,
   type PostQueryParams,
   getAllItems,
@@ -55,6 +57,8 @@ import {
   broadcastSystemMessage,
   type ModeratorStats,
   type ReviewRequest,
+  type ReportReviewItem,
+  type ReportReviewRequest,
   type ImageReviewStatus,
   type PostCommentImageReviewItem,
   type ItemCommentImageReviewItem,
@@ -67,6 +71,15 @@ import {
   type BasicDailyMetrics
 } from '@/api/moderator'
 
+interface VisibleReportReason {
+  id: number
+  reporter_id?: number
+  reporter_name?: string
+  reason: string
+  detail?: string
+  created_at?: string
+}
+
 const router = useRouter()
 const userStore = useUserStore()
 const toast = useToast()
@@ -78,7 +91,7 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('review')
-type ReviewSubTab = 'posts' | 'items' | 'guilds' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
+type ReviewSubTab = 'posts' | 'items' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
 const activeSubTab = ref<ModeratorSubTab>('posts')
@@ -96,6 +109,7 @@ const stats = ref<ModeratorStats | null>(null)
 const pendingPosts = ref<any[]>([])
 const pendingItems = ref<any[]>([])
 const pendingGuilds = ref<any[]>([])
+const pendingReports = ref<ReportReviewItem[]>([])
 const pendingPostCommentImages = ref<PostCommentImageReviewItem[]>([])
 const pendingItemCommentImages = ref<ItemCommentImageReviewItem[]>([])
 const pendingUserAvatars = ref<UserAvatarReviewItem[]>([])
@@ -118,6 +132,18 @@ const filterPostFlag = ref('')
 const filterRole = ref('')
 const filterGuildStatus = ref('')
 const filterSponsorLevel = ref('')
+const reportStatus = ref<'pending' | 'resolved' | 'rejected' | 'all'>('pending')
+const reportScope = ref<'user' | 'content' | 'comment'>('content')
+const reportSort = ref<'report_count' | 'latest_reported_at'>('report_count')
+const reportOrder = ref<'asc' | 'desc'>('desc')
+type ReportReviewAction = ReportReviewRequest['action']
+const selectedReportIds = ref<number[]>([])
+const showReportActionModal = ref(false)
+const reportActionType = ref<ReportReviewAction>('delete_content')
+const reportActionDuration = ref(24)
+const reportActionPermanent = ref(false)
+const reportActionComment = ref('')
+const reportActionSubmitting = ref(false)
 const imageReviewStatus = ref<ImageReviewStatus>('pending')
 const imageReviewCommentDrafts = ref<Record<string, string>>({})
 const sponsorLevelDrafts = ref<Record<number, number>>({})
@@ -128,6 +154,25 @@ const sponsorLevelOptions = [
   { value: 2, label: 'Lv2 昵称样式' },
   { value: 3, label: 'Lv3 个性化' }
 ]
+const selectedReportIdSet = computed(() => new Set(selectedReportIds.value))
+const pendingSelectableReports = computed(() => pendingReports.value.filter(report => report.status === 'pending'))
+const selectedPendingReports = computed(() => pendingSelectableReports.value.filter(report => selectedReportIdSet.value.has(report.id)))
+const hasSelectedReports = computed(() => selectedPendingReports.value.length > 0)
+const isAllPendingReportsSelected = computed(() => (
+  pendingSelectableReports.value.length > 0
+  && pendingSelectableReports.value.every(report => selectedReportIdSet.value.has(report.id))
+))
+const reportScopeSupportsDelete = computed(() => reportScope.value !== 'user')
+const reportActionNeedsDuration = computed(() => (
+  reportActionType.value === 'delete_and_mute_user'
+  || reportActionType.value === 'delete_and_ban_user'
+  || reportActionType.value === 'mute_user'
+  || reportActionType.value === 'ban_user'
+))
+const reportActionDanger = computed(() => (
+  reportActionType.value === 'delete_and_ban_user'
+  || reportActionType.value === 'ban_user'
+))
 
 // 审核预览弹窗
 const showPreviewModal = ref(false)
@@ -206,7 +251,7 @@ onUnmounted(() => {
   disposeMetricsChart()
 })
 
-const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'guilds', 'postCommentImages', 'itemCommentImages', 'userAvatars']
+const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'userAvatars']
 const manageSubTabs: ManageSubTab[] = ['posts', 'items', 'guilds', 'users']
 
 function isReviewSubTab(subTab: ModeratorSubTab): subTab is ReviewSubTab {
@@ -348,6 +393,28 @@ async function loadPendingGuilds() {
   }
 }
 
+async function loadPendingReports() {
+  loading.value = true
+  try {
+    const res = await getModeratorReports({
+      page: page.value,
+      page_size: pageSize.value,
+      status: reportStatus.value,
+      target_scope: reportScope.value,
+      sort: reportSort.value,
+      order: reportOrder.value,
+    })
+    pendingReports.value = res.reports || []
+    const availableIds = new Set(pendingReports.value.filter(report => report.status === 'pending').map(report => report.id))
+    selectedReportIds.value = selectedReportIds.value.filter(id => availableIds.has(id))
+    total.value = res.total
+  } catch (error) {
+    console.error('加载举报列表失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadPendingPostCommentImages() {
   loading.value = true
   try {
@@ -476,6 +543,7 @@ function loadReviewSubTab(subTab: ReviewSubTab) {
   if (subTab === 'posts') loadPendingPosts()
   else if (subTab === 'items') loadPendingItems()
   else if (subTab === 'guilds') loadPendingGuilds()
+  else if (subTab === 'reports') loadPendingReports()
   else if (subTab === 'postCommentImages') loadPendingPostCommentImages()
   else if (subTab === 'itemCommentImages') loadPendingItemCommentImages()
   else loadPendingUserAvatars()
@@ -603,6 +671,7 @@ async function loadActionLogs() {
 function formatActionType(type: string): string {
   const map: Record<string, string> = {
     'review_post': '审核帖子',
+    'review_report': '处理举报',
     'delete_post': '删除帖子',
     'hide_post': '屏蔽帖子',
     'pin_post': '置顶帖子',
@@ -630,6 +699,287 @@ function formatActionType(type: string): string {
   return map[type] || type
 }
 
+function getReportTargetLabel(type: string) {
+  if (type === 'post') return '帖子'
+  if (type === 'item') return '作品'
+  if (type === 'user') return '用户'
+  if (type === 'comment') return '帖子评论'
+  if (type === 'item_comment') return '作品评论'
+  return type
+}
+
+function getReportStatusLabel(status: string) {
+  if (status === 'resolved') return '已处置'
+  if (status === 'rejected') return '已驳回'
+  return '待处理'
+}
+
+function getReportScopeLabel(scope: 'user' | 'content' | 'comment') {
+  if (scope === 'user') return '举报用户'
+  if (scope === 'comment') return '举报评论'
+  return '举报帖子/道具'
+}
+
+function getReportEmptyText() {
+  return `暂无${getReportScopeLabel(reportScope.value)}记录`
+}
+
+function switchReportScope(scope: 'user' | 'content' | 'comment') {
+  if (reportScope.value === scope) return
+  reportScope.value = scope
+  selectedReportIds.value = []
+  closeReportActionModal()
+  page.value = 1
+  loadPendingReports()
+}
+
+function handleReportFilterChange() {
+  selectedReportIds.value = []
+  closeReportActionModal()
+  page.value = 1
+  loadPendingReports()
+}
+
+function formatReportReason(reason: string) {
+  const reasonMap: Record<string, string> = {
+    spam: '垃圾信息或刷屏',
+    abuse: '辱骂、人身攻击',
+    fraud: '诈骗或恶意引流',
+    sexual: '色情或不适内容',
+    illegal: '违法违规内容',
+    other: '其他问题',
+    block_user: '用户已执行屏蔽',
+  }
+  return reasonMap[reason] || reason
+}
+
+function normalizeVisibleReportReason(reason: Partial<VisibleReportReason> & { reporterId?: number }, fallbackCreatedAt?: string): VisibleReportReason {
+  const reporterId = typeof reason.reporter_id === 'number'
+    ? reason.reporter_id
+    : (typeof reason.reporterId === 'number' ? reason.reporterId : undefined)
+
+  return {
+    id: typeof reason.id === 'number' ? reason.id : 0,
+    reporter_id: reporterId,
+    reporter_name: reason.reporter_name?.trim() || '',
+    reason: reason.reason || 'other',
+    detail: reason.detail || '',
+    created_at: reason.created_at || fallbackCreatedAt,
+  }
+}
+
+function getVisibleReportReasons(report: ReportReviewItem): VisibleReportReason[] {
+  const reportAny = report as ReportReviewItem & {
+    reason?: string
+    detail?: string
+    reporter_id?: number
+    reporter_name?: string
+    created_at?: string
+    reporterId?: number
+    reports?: Array<VisibleReportReason & { reporterId?: number }>
+  }
+
+  if (Array.isArray(report.reasons) && report.reasons.length > 0) {
+    return report.reasons.map(reason => normalizeVisibleReportReason(reason, report.latest_reported_at))
+  }
+  if (Array.isArray(reportAny.reports) && reportAny.reports.length > 0) {
+    return reportAny.reports.map(reason => normalizeVisibleReportReason(reason, report.latest_reported_at))
+  }
+  if (reportAny.reason || reportAny.detail) {
+    return [normalizeVisibleReportReason({
+      id: report.id,
+      reporter_id: reportAny.reporter_id,
+      reporterId: reportAny.reporterId,
+      reporter_name: reportAny.reporter_name,
+      reason: reportAny.reason || 'other',
+      detail: reportAny.detail || '',
+      created_at: reportAny.created_at || report.latest_reported_at,
+    }, report.latest_reported_at)]
+  }
+  return []
+}
+
+function getReportReporterLabel(reason: VisibleReportReason) {
+  const reporterName = reason.reporter_name?.trim()
+  if (reporterName) return reporterName
+  if (typeof reason.reporter_id === 'number' && reason.reporter_id > 0) return `用户#${reason.reporter_id}`
+  return '未知用户'
+}
+
+function isBlockUserReason(reason: string) {
+  return reason === 'block_user'
+}
+
+function getReportReasonSummaryLabel(reason: VisibleReportReason) {
+  return isBlockUserReason(reason.reason) ? '触发类型' : '举报原因'
+}
+
+function getReportReasonSummaryValue(reason: VisibleReportReason) {
+  return isBlockUserReason(reason.reason) ? '用户主动屏蔽' : formatReportReason(reason.reason)
+}
+
+function getReportReasonDetailLabel(reason: VisibleReportReason) {
+  return isBlockUserReason(reason.reason) ? '用户备注' : '备注说明'
+}
+
+function hasReportPreview(report: ReportReviewItem) {
+  return Boolean(report.target_preview_image || report.target_preview_text)
+}
+
+function toggleReportSelection(reportId: number) {
+  const next = new Set(selectedReportIds.value)
+  if (next.has(reportId)) next.delete(reportId)
+  else next.add(reportId)
+  selectedReportIds.value = Array.from(next)
+}
+
+function toggleSelectAllReports() {
+  if (isAllPendingReportsSelected.value) {
+    selectedReportIds.value = []
+    return
+  }
+  selectedReportIds.value = pendingSelectableReports.value.map(report => report.id)
+}
+
+function clearReportSelection() {
+  selectedReportIds.value = []
+}
+
+function getReportMuteActionLabel() {
+  return reportScope.value === 'user' ? '禁言用户' : '删除并禁言用户'
+}
+
+function getReportBanActionLabel() {
+  return reportScope.value === 'user' ? '封禁用户' : '删除并封禁用户'
+}
+
+function getReportActionTitle(action: ReportReviewAction = reportActionType.value) {
+  if (action === 'delete_content') return '删除内容'
+  if (action === 'delete_and_mute_user') return '删除并禁言用户'
+  if (action === 'delete_and_ban_user') return '删除并封禁用户'
+  if (action === 'mute_user') return '禁言用户'
+  if (action === 'ban_user') return '封禁用户'
+  return '驳回举报'
+}
+
+function getReportActionDescription(action: ReportReviewAction = reportActionType.value) {
+  const count = selectedPendingReports.value.length
+  if (action === 'delete_content') return `将删除选中的 ${count} 条被举报内容，并把对应举报标记为已处置。`
+  if (action === 'delete_and_mute_user') return `将删除选中的 ${count} 条被举报内容，并对对应作者执行禁言。`
+  if (action === 'delete_and_ban_user') return `将删除选中的 ${count} 条被举报内容，并对对应作者执行封禁。`
+  if (action === 'mute_user') return `将对选中的 ${count} 位被举报用户执行禁言。`
+  if (action === 'ban_user') return `将对选中的 ${count} 位被举报用户执行封禁。`
+  return `将驳回选中的 ${count} 条举报，不会删除内容，也不会处罚用户。`
+}
+
+function getReportActionWarning() {
+  if (reportActionType.value === 'delete_content') return '删除后内容会立即从前台消失，请确认举报依据充分。'
+  if (reportActionType.value === 'delete_and_mute_user') return '删除内容后，作者将无法继续发帖和评论。'
+  if (reportActionType.value === 'delete_and_ban_user') return '删除内容后，作者将被禁止登录；如果选择永久，需谨慎执行。'
+  if (reportActionType.value === 'mute_user') return '禁言用户后，对方将无法继续发帖和评论。'
+  if (reportActionType.value === 'ban_user') return '封禁用户后，对方将无法继续登录。'
+  return '驳回后举报将被关闭，内容与账号状态不会发生变化。'
+}
+
+function closeReportActionModal() {
+  showReportActionModal.value = false
+  reportActionComment.value = ''
+  reportActionDuration.value = 24
+  reportActionPermanent.value = false
+  reportActionSubmitting.value = false
+}
+
+function openReportActionModal(action: ReportReviewAction, report?: ReportReviewItem) {
+  if (report) {
+    selectedReportIds.value = report.status === 'pending' ? [report.id] : []
+  }
+  if (!hasSelectedReports.value) {
+    toast.error('请先勾选要处理的举报记录')
+    return
+  }
+  reportActionType.value = action
+  reportActionDuration.value = 24
+  reportActionPermanent.value = false
+  reportActionComment.value = ''
+  showReportActionModal.value = true
+}
+
+function openReportTarget(report: ReportReviewItem) {
+  if (report.target_type === 'post' || report.target_type === 'item') {
+    openPreview(report.target_type, report.target_id)
+    return
+  }
+  if (report.target_type === 'comment' && report.parent_target_id) {
+    router.push({
+      name: 'post-detail',
+      params: { id: report.parent_target_id },
+      query: { comment: String(report.target_id) },
+    })
+    return
+  }
+  if (report.target_type === 'item_comment' && report.parent_target_id) {
+    router.push({
+      name: 'item-detail',
+      params: { id: report.parent_target_id },
+    })
+    return
+  }
+  router.push({ name: 'user-profile', params: { id: report.target_id } })
+}
+
+function getReportReasonDetail(detail?: string) {
+  const trimmed = detail?.trim()
+  return trimmed || '未填写补充说明'
+}
+
+async function submitReportAction() {
+  if (!hasSelectedReports.value) {
+    toast.error('请先勾选要处理的举报记录')
+    return
+  }
+  if (reportActionNeedsDuration.value && !reportActionPermanent.value && (!Number.isFinite(reportActionDuration.value) || reportActionDuration.value < 1)) {
+    toast.error('请输入有效的处理时长')
+    return
+  }
+
+  reportActionSubmitting.value = true
+  const duration = reportActionPermanent.value ? 0 : reportActionDuration.value
+  const comment = reportActionComment.value.trim()
+  let successCount = 0
+  let failureMessage = ''
+
+  for (const report of selectedPendingReports.value) {
+    try {
+      await reviewModeratorReport(report.id, {
+        action: reportActionType.value,
+        duration: reportActionNeedsDuration.value ? duration : undefined,
+        comment: comment || undefined,
+      })
+      successCount += 1
+    } catch (error) {
+      failureMessage = (error as Error).message
+      break
+    }
+  }
+
+  reportActionSubmitting.value = false
+  if (successCount === 0 && failureMessage) {
+    toast.error('处理举报失败: ' + failureMessage)
+    return
+  }
+
+  const totalCount = selectedPendingReports.value.length
+  closeReportActionModal()
+  clearReportSelection()
+  await loadStats()
+  await loadPendingReports()
+  if (failureMessage) {
+    toast.error(`已处理 ${successCount}/${totalCount} 条举报，剩余失败：${failureMessage}`)
+    return
+  }
+  toast.success(`已处理 ${successCount} 条举报`)
+}
+
 function formatLogDetails(log: AdminActionLog): string {
   if (!log.details) return '-'
   try {
@@ -638,7 +988,16 @@ function formatLogDetails(log: AdminActionLog): string {
 
     // 审核操作
     if (d.action) {
-      parts.push(d.action === 'approve' ? '通过' : '拒绝')
+      const actionMap: Record<string, string> = {
+        approve: '通过',
+        reject: log.action_type === 'review_report' ? '驳回举报' : '拒绝',
+        delete_content: '删除内容',
+        delete_and_mute_user: '删除并禁言用户',
+        delete_and_ban_user: '删除并封禁用户',
+        mute_user: '禁言用户',
+        ban_user: '封禁用户',
+      }
+      parts.push(actionMap[d.action] || d.action)
     }
 
     // 封禁/禁言时长
@@ -654,6 +1013,9 @@ function formatLogDetails(log: AdminActionLog): string {
     // 审核意见
     if (d.comment) {
       parts.push(`意见: ${d.comment}`)
+    }
+    if (d.review_comment) {
+      parts.push(`处理结果: ${d.review_comment}`)
     }
 
     // 置顶/精华状态
@@ -1488,6 +1850,13 @@ function formatBanTime(dateStr: string | null) {
             <div class="stat-label">待审核公会</div>
           </div>
         </div>
+        <div class="stat-card pending">
+          <div class="stat-icon"><i class="ri-alarm-warning-line"></i></div>
+          <div class="stat-info">
+            <div class="stat-value">{{ stats?.pending_reports || 0 }}</div>
+            <div class="stat-label">待处理举报</div>
+          </div>
+        </div>
         <div class="stat-card">
           <div class="stat-icon"><i class="ri-article-line"></i></div>
           <div class="stat-info">
@@ -1527,8 +1896,8 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-checkbox-circle-line"></i>
           <span>审核中心</span>
-          <span v-if="(stats?.pending_posts || 0) + (stats?.pending_items || 0) + (stats?.pending_guilds || 0) > 0" class="badge">
-            {{ (stats?.pending_posts || 0) + (stats?.pending_items || 0) + (stats?.pending_guilds || 0) }}
+          <span v-if="(stats?.pending_posts || 0) + (stats?.pending_items || 0) + (stats?.pending_guilds || 0) + (stats?.pending_reports || 0) > 0" class="badge">
+            {{ (stats?.pending_posts || 0) + (stats?.pending_items || 0) + (stats?.pending_guilds || 0) + (stats?.pending_reports || 0) }}
           </span>
         </div>
         <div
@@ -1597,6 +1966,17 @@ function formatBanTime(dateStr: string | null) {
           公会
           <span v-if="activeTab === 'review' && (stats?.pending_guilds || 0) > 0" class="review-badge">
             {{ stats?.pending_guilds }}
+          </span>
+        </button>
+        <button
+          v-if="activeTab === 'review'"
+          :class="{ active: activeSubTab === 'reports' }"
+          @click="switchSubTab('reports')"
+        >
+          <i class="ri-alarm-warning-line"></i>
+          举报
+          <span v-if="(stats?.pending_reports || 0) > 0" class="review-badge">
+            {{ stats?.pending_reports }}
           </span>
         </button>
         <button
@@ -1789,6 +2169,194 @@ function formatBanTime(dateStr: string | null) {
               </button>
               <button class="btn-preview" @click="openPreview('guild', guild.id)">
                 <i class="ri-eye-line"></i> 预览
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'review' && activeSubTab === 'reports'" class="content-list anim-item" style="--delay: 4">
+          <div class="report-scope-tabs">
+            <button :class="{ active: reportScope === 'content' }" @click="switchReportScope('content')">
+              <i class="ri-article-line"></i> 举报帖子/道具
+            </button>
+            <button :class="{ active: reportScope === 'comment' }" @click="switchReportScope('comment')">
+              <i class="ri-message-3-line"></i> 举报评论
+            </button>
+            <button :class="{ active: reportScope === 'user' }" @click="switchReportScope('user')">
+              <i class="ri-user-shared-line"></i> 举报用户
+            </button>
+          </div>
+          <div class="filter-bar">
+            <select v-model="reportStatus" @change="handleReportFilterChange">
+              <option value="pending">待处理</option>
+              <option value="resolved">已处置</option>
+              <option value="rejected">已驳回</option>
+              <option value="all">全部状态</option>
+            </select>
+            <select v-model="reportSort" @change="handleReportFilterChange">
+              <option value="report_count">按举报数排序</option>
+              <option value="latest_reported_at">按最新举报时间</option>
+            </select>
+            <select v-model="reportOrder" @change="handleReportFilterChange">
+              <option value="desc">降序</option>
+              <option value="asc">升序</option>
+            </select>
+          </div>
+          <div v-if="pendingSelectableReports.length" class="report-batch-toolbar">
+            <label class="report-select-toggle">
+              <input
+                type="checkbox"
+                :checked="isAllPendingReportsSelected"
+                @change="toggleSelectAllReports"
+              />
+              <span>全选当前页待处理</span>
+            </label>
+            <div class="report-batch-info">
+              <span v-if="hasSelectedReports">已选择 {{ selectedPendingReports.length }} 条举报</span>
+              <span v-else>勾选后可批量处置</span>
+            </div>
+            <div class="report-batch-actions">
+              <button
+                v-if="reportScopeSupportsDelete"
+                class="btn-danger"
+                :disabled="!hasSelectedReports"
+                @click="openReportActionModal('delete_content')"
+              >
+                <i class="ri-delete-bin-line"></i> 删除内容
+              </button>
+              <button
+                class="btn-warning"
+                :disabled="!hasSelectedReports"
+                @click="openReportActionModal(reportScope === 'user' ? 'mute_user' : 'delete_and_mute_user')"
+              >
+                <i class="ri-forbid-2-line"></i> {{ getReportMuteActionLabel() }}
+              </button>
+              <button
+                class="btn-danger"
+                :disabled="!hasSelectedReports"
+                @click="openReportActionModal(reportScope === 'user' ? 'ban_user' : 'delete_and_ban_user')"
+              >
+                <i class="ri-shield-user-line"></i> {{ getReportBanActionLabel() }}
+              </button>
+              <button
+                class="btn-reject"
+                :disabled="!hasSelectedReports"
+                @click="openReportActionModal('reject')"
+              >
+                <i class="ri-close-circle-line"></i> 驳回举报
+              </button>
+            </div>
+          </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingReports.length === 0" class="empty-state">
+          <i class="ri-shield-check-line"></i>
+          <p>{{ getReportEmptyText() }}</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="report in pendingReports" :key="report.id" class="item-card report-card">
+            <div class="item-header report-card-header">
+              <label v-if="report.status === 'pending'" class="report-select-toggle card-toggle" @click.stop>
+                <input
+                  type="checkbox"
+                  :checked="selectedReportIdSet.has(report.id)"
+                  @change="toggleReportSelection(report.id)"
+                />
+                <span>选择</span>
+              </label>
+              <div class="report-title-wrap">
+                <span class="item-title">{{ report.target_title || `#${report.target_id}` }}</span>
+                <span class="report-type-tag">{{ getReportTargetLabel(report.target_type) }}</span>
+              </div>
+              <div class="report-tags">
+                <span class="report-count-tag">
+                  <i class="ri-flag-line"></i> {{ report.report_count }}
+                </span>
+                <span class="status-badge" :class="report.status">{{ getReportStatusLabel(report.status) }}</span>
+              </div>
+            </div>
+            <div class="item-meta">
+              <span v-if="report.target_author_name && report.target_type !== 'user'">
+                <i class="ri-user-line"></i> {{ report.target_author_name }}
+              </span>
+              <span v-if="report.parent_target_title">
+                <i class="ri-links-line"></i> 所属：{{ report.parent_target_title }}
+              </span>
+              <span><i class="ri-time-line"></i> {{ formatDate(report.latest_reported_at) }}</span>
+            </div>
+            <div v-if="getVisibleReportReasons(report).length" class="report-reason-section">
+              <div class="report-section-title">
+                <i class="ri-file-list-3-line"></i>
+                <span>举报依据（{{ getVisibleReportReasons(report).length }}）</span>
+              </div>
+              <div class="report-reason-list">
+              <div v-for="reason in getVisibleReportReasons(report)" :key="reason.id" class="report-reason-item">
+                <div class="report-reason-head">
+                  <div class="report-reason-main">
+                    <span class="report-reason-meta">
+                      举报人：{{ getReportReporterLabel(reason) }}
+                    </span>
+                    <div class="report-reason-summary">
+                      {{ getReportReasonSummaryLabel(reason) }}：{{ getReportReasonSummaryValue(reason) }}
+                    </div>
+                  </div>
+                  <span class="report-reason-time">
+                    {{ reason.created_at ? formatDate(reason.created_at) : '-' }}
+                  </span>
+                </div>
+                <div v-if="reason.detail?.trim()" class="report-evidence-row detail-row">
+                  <div class="report-evidence-title">{{ getReportReasonDetailLabel(reason) }}</div>
+                  <div class="report-evidence-content">{{ getReportReasonDetail(reason.detail) }}</div>
+                </div>
+              </div>
+              </div>
+            </div>
+            <div v-if="hasReportPreview(report)" class="report-preview-card">
+              <img
+                v-if="report.target_preview_image"
+                class="report-preview-image"
+                :src="resolveImageUrl(report.target_preview_image)"
+                :alt="report.target_title"
+              />
+              <div class="report-preview-main">
+                <div class="report-preview-label">被举报内容预览</div>
+                <p v-if="report.target_preview_text" class="report-preview-text">{{ report.target_preview_text }}</p>
+                <p v-else class="report-preview-text muted">该目标当前没有可展示的正文摘要</p>
+              </div>
+            </div>
+            <div v-if="report.review_comment" class="report-review-text">
+              <i class="ri-chat-check-line"></i> 处理结果：{{ report.review_comment }}
+            </div>
+            <div class="item-actions">
+              <button class="btn-preview" @click="openReportTarget(report)">
+                <i class="ri-eye-line"></i> 查看目标
+              </button>
+              <button
+                v-if="report.status === 'pending' && reportScopeSupportsDelete"
+                class="btn-danger"
+                @click="openReportActionModal('delete_content', report)"
+              >
+                <i class="ri-delete-bin-line"></i> 删除内容
+              </button>
+              <button
+                v-if="report.status === 'pending'"
+                class="btn-warning"
+                @click="openReportActionModal(reportScope === 'user' ? 'mute_user' : 'delete_and_mute_user', report)"
+              >
+                <i class="ri-forbid-2-line"></i> {{ getReportMuteActionLabel() }}
+              </button>
+              <button
+                v-if="report.status === 'pending'"
+                class="btn-danger"
+                @click="openReportActionModal(reportScope === 'user' ? 'ban_user' : 'delete_and_ban_user', report)"
+              >
+                <i class="ri-shield-user-line"></i> {{ getReportBanActionLabel() }}
+              </button>
+              <button v-if="report.status === 'pending'" class="btn-reject" @click="openReportActionModal('reject', report)">
+                <i class="ri-close-circle-line"></i> 驳回举报
               </button>
             </div>
           </div>
@@ -2909,6 +3477,74 @@ function formatBanTime(dateStr: string | null) {
               @click="submitUserAction"
             >
               确认{{ getUserActionTitle() }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showReportActionModal" class="modal-overlay" @click.self="closeReportActionModal()">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>{{ getReportActionTitle() }}</h3>
+            <button class="close-btn" @click="closeReportActionModal()">
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="report-action-summary">
+              <p class="action-description">{{ getReportActionDescription() }}</p>
+              <div class="report-action-chip-list">
+                <span v-for="report in selectedPendingReports.slice(0, 6)" :key="report.id" class="report-action-chip">
+                  {{ report.target_title || `#${report.target_id}` }}
+                </span>
+                <span v-if="selectedPendingReports.length > 6" class="report-action-chip more-chip">
+                  另 {{ selectedPendingReports.length - 6 }} 条
+                </span>
+              </div>
+            </div>
+
+            <div v-if="reportActionNeedsDuration" class="form-group">
+              <label>处理时长</label>
+              <div class="duration-options">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="reportActionPermanent" />
+                  <span>永久</span>
+                </label>
+                <input
+                  v-if="!reportActionPermanent"
+                  v-model.number="reportActionDuration"
+                  type="number"
+                  min="1"
+                  placeholder="小时数"
+                  class="form-input duration-input"
+                />
+                <span v-if="!reportActionPermanent" class="duration-unit">小时</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>版主备注</label>
+              <textarea
+                v-model="reportActionComment"
+                placeholder="可选，作为审核备注记录在举报处理结果里"
+                rows="3"
+              ></textarea>
+            </div>
+
+            <div class="warning-box" :class="{ danger: reportActionDanger }">
+              <i :class="reportActionDanger ? 'ri-error-warning-line' : 'ri-information-line'"></i>
+              <span>{{ getReportActionWarning() }}</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="closeReportActionModal()">取消</button>
+            <button
+              class="btn-submit"
+              :class="{ danger: reportActionDanger }"
+              :disabled="reportActionSubmitting"
+              @click="submitReportAction"
+            >
+              {{ reportActionSubmitting ? '处理中...' : `确认${getReportActionTitle()}` }}
             </button>
           </div>
         </div>
@@ -4419,6 +5055,331 @@ function formatBanTime(dateStr: string | null) {
   white-space: nowrap;
   color: var(--color-text-muted, #7B6B5A);
   font-size: 13px;
+}
+
+.report-card {
+  gap: 14px;
+}
+
+.report-card-header {
+  gap: 12px;
+}
+
+.report-scope-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.report-scope-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border, #E5D4C1);
+  background: var(--color-card-bg, #FFFFFF);
+  color: var(--color-text-secondary, #8D7B68);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.report-scope-tabs button.active {
+  border-color: rgba(154, 52, 18, 0.26);
+  background: rgba(251, 146, 60, 0.12);
+  color: #9A3412;
+}
+
+.report-batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: rgba(251, 146, 60, 0.08);
+  border: 1px solid rgba(154, 52, 18, 0.12);
+}
+
+.report-batch-info {
+  color: var(--color-text-secondary, #8D7B68);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.report-batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.report-batch-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.report-select-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-main, #2C1810);
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.report-select-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #9A3412;
+}
+
+.report-select-toggle.card-toggle {
+  flex-shrink: 0;
+}
+
+.report-title-wrap,
+.report-tags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.report-type-tag,
+.report-count-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-card-bg, #FAF7F2);
+  color: var(--color-text-muted, #7B6B5A);
+  font-size: 12px;
+}
+
+.report-count-tag {
+  color: #9A3412;
+  background: rgba(251, 146, 60, 0.12);
+}
+
+.report-preview-card {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.04);
+  align-items: flex-start;
+}
+
+.report-preview-image {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--color-border, #E5D4C1);
+  background: var(--color-card-bg, #FFFFFF);
+}
+
+.report-preview-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.report-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #8D7B68);
+  margin-bottom: 6px;
+}
+
+.report-preview-text {
+  margin: 0;
+  color: var(--color-text-main, #2C1810);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.report-preview-text.muted {
+  color: var(--color-text-muted, #7B6B5A);
+}
+
+.report-reason-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--color-card-bg, #FDFBF9) 0%, var(--color-panel-bg, #FFFFFF) 100%);
+  border: 1px solid var(--color-border, #E8DCCF);
+}
+
+.report-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-main, #2C1810);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.report-reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.report-reason-item {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--color-panel-bg, #FFFFFF);
+  border: 1px solid var(--color-border, #E8DCCF);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.report-reason-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.report-reason-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.report-reason-meta {
+  font-size: 13px;
+  color: var(--color-text-main, #2C1810);
+  font-weight: 700;
+}
+
+.report-reason-summary {
+  color: var(--btn-secondary-text, var(--color-text-main, #2C1810));
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.report-review-text {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.report-reason-time {
+  font-size: 12px;
+  color: var(--color-text-secondary, #8C7B70);
+  font-weight: 600;
+}
+
+.report-evidence-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border, #E8DCCF);
+  background: var(--color-panel-bg, #FFFFFF);
+}
+
+.report-evidence-row + .report-evidence-row {
+  margin-top: 10px;
+}
+
+.report-evidence-row.detail-row {
+  background: var(--color-card-bg, #FDFBF9);
+  border-color: var(--color-border-light, #F0E6DC);
+}
+
+.report-evidence-row:not(.detail-row) {
+  border-color: var(--color-border-hover, #D4A373);
+  background: var(--btn-secondary-bg, rgba(128, 64, 48, 0.1));
+}
+
+.report-evidence-title {
+  color: var(--btn-secondary-text, var(--color-text-main, #2C1810));
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.report-evidence-content {
+  color: var(--color-text-main, #2C1810);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.report-evidence-content.strong {
+  color: var(--btn-secondary-text, var(--color-text-main, #2C1810));
+}
+
+.report-card .item-meta,
+.report-card .item-meta span {
+  color: var(--color-text-secondary, #8C7B70);
+}
+
+.report-card .item-title {
+  color: var(--color-text-main, #2C1810);
+}
+
+@media (max-width: 768px) {
+  .report-batch-toolbar {
+    align-items: stretch;
+  }
+
+  .report-batch-actions {
+    width: 100%;
+  }
+}
+
+.report-action-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.report-action-chip-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-action-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--color-text-main, #2C1810);
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-action-chip.more-chip {
+  color: var(--color-text-secondary, #8D7B68);
+}
+
+.report-review-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(34, 197, 94, 0.08);
+  color: #166534;
 }
 
 /* 数据统计样式 */

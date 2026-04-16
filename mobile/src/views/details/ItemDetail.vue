@@ -6,9 +6,11 @@ import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
+import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import { shareRouteLink, shareTextFile } from '@/utils/mobileShare'
+import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useUserStore } from '@shared/stores/user'
 import { useToastStore } from '@shared/stores/toast'
 import {
@@ -45,6 +47,14 @@ const rating = ref(0)
 const imagePreviewOpen = ref(false)
 const imagePreviewSrc = ref('')
 const emoteVersion = ref(0)
+const reportSheetOpen = ref(false)
+const safetySubmitting = ref(false)
+const reportContext = ref<{
+  targetType: Extract<ReportTargetType, 'item' | 'item_comment'>
+  targetId: number
+  title: string
+  dialogTitle: string
+} | null>(null)
 
 const itemId = computed(() => Number(route.params.id))
 const exportableImportCode = computed(() => item.value?.import_code?.trim() || item.value?.raw_data?.trim() || '')
@@ -67,10 +77,31 @@ const canEdit = computed(() => {
   if (item.value.author_id === currentUserId) return true
   return userStore.isModerator
 })
+const canUseSafetyActions = computed(() => {
+  const currentUserId = userStore.user?.id
+  if (!currentUserId || !item.value || !author.value?.id) return false
+  return author.value.id !== currentUserId
+})
+function canUseCommentSafetyActions(comment: ItemComment): boolean {
+  const currentUserId = userStore.user?.id
+  if (!currentUserId) return false
+  return comment.user_id !== currentUserId
+}
 const commentPreviewHtml = computed(() => {
   void emoteVersion.value
   return renderTextWithEmotes(commentText.value || '')
 })
+
+function buildReportExcerpt(content: string) {
+  const text = content.replace(/\s+/g, ' ').trim()
+  if (!text) return '评论'
+  return text.length > 36 ? `${text.slice(0, 36)}...` : text
+}
+
+function buildCommentReportLabel(comment: ItemComment) {
+  return `${comment.username || '匿名用户'}：${buildReportExcerpt(comment.content)}`
+}
+
 function renderCommentHtml(content: string) {
   void emoteVersion.value
   return renderTextWithEmotes(content || '')
@@ -303,6 +334,88 @@ async function shareItemFile() {
   await shareImportCodeFile()
 }
 
+async function submitSafetyReport(payload: { reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean }) {
+  if (safetySubmitting.value || !reportContext.value) return
+  safetySubmitting.value = true
+  try {
+    const context = reportContext.value
+    await createContentReport({
+      target_type: context.targetType,
+      target_id: context.targetId,
+      reason: payload.reason,
+      detail: payload.detail,
+      hide_target: payload.hideTarget,
+      block_author: payload.blockAuthor,
+    })
+    closeReportSheet()
+    if (context.targetType === 'item' && (payload.hideTarget || payload.blockAuthor)) {
+      router.replace({ name: 'market' })
+      return
+    }
+    if (context.targetType === 'item_comment' && (payload.hideTarget || payload.blockAuthor)) {
+      await loadItemDetail()
+    }
+    toast.success('举报已提交，版主会尽快处理')
+  } catch (error) {
+    toast.error((error as Error)?.message || '举报提交失败')
+  } finally {
+    safetySubmitting.value = false
+  }
+}
+
+function openItemReport() {
+  if (!item.value) return
+  reportContext.value = {
+    targetType: 'item',
+    targetId: item.value.id,
+    title: item.value.name,
+    dialogTitle: '举报作品',
+  }
+  reportSheetOpen.value = true
+}
+
+function openCommentReport(comment: ItemComment) {
+  reportContext.value = {
+    targetType: 'item_comment',
+    targetId: comment.id,
+    title: buildCommentReportLabel(comment),
+    dialogTitle: '举报评论',
+  }
+  reportSheetOpen.value = true
+}
+
+function closeReportSheet() {
+  reportSheetOpen.value = false
+  reportContext.value = null
+}
+
+async function blockAuthor() {
+  if (!author.value?.id || !item.value) return
+  if (!window.confirm('屏蔽后将立即隐藏该作者的作品和评论，继续吗？')) {
+    return
+  }
+  try {
+    await createUserBlock(author.value.id, `作品举报：${item.value.name}`)
+    toast.success('已屏蔽该作者')
+    router.replace({ name: 'market' })
+  } catch (error) {
+    toast.error((error as Error)?.message || '屏蔽作者失败')
+  }
+}
+
+async function blockCommentAuthor(comment: ItemComment) {
+  if (!window.confirm('屏蔽后该作者的作品评论会立即从当前页面隐藏，继续吗？')) {
+    return
+  }
+  try {
+    await createUserBlock(comment.user_id, `作品评论举报：${buildReportExcerpt(comment.content)}`)
+    toast.success('已屏蔽该作者')
+    await loadItemDetail()
+  } catch (error) {
+    toast.error((error as Error)?.message || '屏蔽作者失败')
+  }
+}
+
 async function submitComment() {
   if (!item.value || !commentText.value.trim()) return
   submitting.value = true
@@ -441,6 +554,15 @@ onMounted(async () => {
           </button>
         </section>
 
+        <section v-if="canUseSafetyActions" class="safety-row">
+          <button class="share-btn" @click="openItemReport">
+            <i class="ri-alarm-warning-line" /> 举报内容
+          </button>
+          <button class="share-btn danger" @click="blockAuthor">
+            <i class="ri-forbid-2-line" /> 屏蔽作者
+          </button>
+        </section>
+
         <section class="comment-box">
           <h3 class="comment-title">
             <span><i class="ri-message-3-line" /> {{ $t('market.comments') }}</span>
@@ -500,6 +622,14 @@ onMounted(async () => {
             </header>
             <p v-html="renderCommentHtml(comment.content)" />
             <div class="rate" v-if="comment.rating > 0">★ {{ comment.rating }}</div>
+            <div v-if="canUseCommentSafetyActions(comment)" class="comment-actions">
+              <button type="button" class="comment-safety-btn" @click="openCommentReport(comment)">
+                <i class="ri-alarm-warning-line" /> 举报评论
+              </button>
+              <button type="button" class="comment-safety-btn danger" @click="blockCommentAuthor(comment)">
+                <i class="ri-forbid-2-line" /> 屏蔽作者
+              </button>
+            </div>
           </article>
         </section>
       </template>
@@ -510,6 +640,15 @@ onMounted(async () => {
       :open="emojiPickerOpen"
       @close="emojiPickerOpen = false"
       @select="handleEmojiSelect"
+    />
+    <SafetyReportSheet
+      :open="reportSheetOpen"
+      :submitting="safetySubmitting"
+      :title="reportContext?.dialogTitle"
+      :target-label="reportContext?.title"
+      :target-type="reportContext?.targetType"
+      @close="closeReportSheet"
+      @submit="submitSafetyReport"
     />
   </div>
 </template>
@@ -685,6 +824,13 @@ onMounted(async () => {
   margin-bottom: 14px;
 }
 
+.safety-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
 .share-btn {
   min-height: 42px;
   border: 1px solid var(--color-border);
@@ -697,6 +843,12 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.share-btn.danger {
+  color: #C2410C;
+  border-color: rgba(194, 65, 12, 0.24);
+  background: rgba(194, 65, 12, 0.08);
 }
 
 .comment-box {
@@ -860,6 +1012,29 @@ onMounted(async () => {
   line-height: 1.66;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.comment-safety-btn {
+  min-height: 30px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.comment-safety-btn.danger {
+  color: #C2410C;
 }
 
 .comment-item p :deep(.inline-emote),

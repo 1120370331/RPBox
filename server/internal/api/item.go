@@ -60,7 +60,7 @@ func (s *Server) loadItemDirectPreviewURLMap(itemIDs []uint) map[uint]string {
 
 // listItems 获取道具列表
 func (s *Server) listItems(c *gin.Context) {
-	userID := c.GetUint("user_id")
+	userID := c.GetUint("userID")
 	var items []model.Item
 	query := database.DB.Model(&model.Item{})
 
@@ -73,7 +73,8 @@ func (s *Server) listItems(c *gin.Context) {
 	authorID := c.Query("author_id")
 
 	// 权限控制：查看自己的道具 vs 查看他人的道具
-	if authorID != "" && authorID == strconv.Itoa(int(userID)) {
+	isSelfView := authorID != "" && authorID == strconv.Itoa(int(userID))
+	if isSelfView {
 		// 查看自己的道具：可以看到所有状态
 		query = query.Where("author_id = ?", authorID)
 		// 如果指定了状态，则过滤
@@ -87,6 +88,26 @@ func (s *Server) listItems(c *gin.Context) {
 		query = query.Where("is_public = ?", true)
 		if authorID != "" {
 			query = query.Where("author_id = ?", authorID)
+		}
+	}
+	if userID != 0 && !isSelfView {
+		blockedIDs, err := getBlockedUserIDs(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载道具失败"})
+			return
+		}
+		if len(blockedIDs) > 0 {
+			query = query.Where("items.author_id NOT IN ?", blockedIDs)
+		}
+	}
+	if userID != 0 {
+		hiddenItemIDs, err := hiddenContentIDs(userID, reportTargetItem)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载道具失败"})
+			return
+		}
+		if len(hiddenItemIDs) > 0 {
+			query = query.Where("items.id NOT IN ?", hiddenItemIDs)
 		}
 	}
 
@@ -229,13 +250,29 @@ func (s *Server) listItems(c *gin.Context) {
 }
 
 func (s *Server) listUserItemsByRelation(c *gin.Context, joinTable, orderColumn string) {
-	userID := c.GetUint("user_id")
+	userID := c.GetUint("userID")
 	var items []model.Item
 
 	query := database.DB.Model(&model.Item{}).
 		Joins("JOIN "+joinTable+" ON "+joinTable+".item_id = items.id").
 		Where(joinTable+".user_id = ?", userID).
 		Order(joinTable + "." + orderColumn + " DESC")
+	blockedIDs, err := getBlockedUserIDs(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if len(blockedIDs) > 0 {
+		query = query.Where("items.author_id NOT IN ?", blockedIDs)
+	}
+	hiddenItemIDs, err := hiddenContentIDs(userID, reportTargetItem)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if len(hiddenItemIDs) > 0 {
+		query = query.Where("items.id NOT IN ?", hiddenItemIDs)
+	}
 
 	if err := query.Select("items.id, items.author_id, items.name, items.type, items.icon, items.description, items.downloads, items.rating, items.rating_count, items.like_count, items.favorite_count, items.requires_permission, items.status, items.review_status, items.preview_image_updated_at, items.created_at, items.updated_at").Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -494,7 +531,7 @@ func (s *Server) createItem(c *gin.Context) {
 
 // getItem 获取道具详情
 func (s *Server) getItem(c *gin.Context) {
-	userID := c.GetUint("user_id")
+	userID := c.GetUint("userID")
 	id := c.Param("id")
 	var item model.Item
 
@@ -505,6 +542,14 @@ func (s *Server) getItem(c *gin.Context) {
 	if normalizedContent := s.normalizeAndStoreContentImages(c, item.DetailContent, fmt.Sprintf("items/%d/detail", item.AuthorID)); normalizedContent != item.DetailContent {
 		item.DetailContent = normalizedContent
 		_ = database.DB.Model(&model.Item{}).Where("id = ?", item.ID).Update("detail_content", normalizedContent).Error
+	}
+	if isContentHidden(userID, reportTargetItem, item.ID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
+		return
+	}
+	if item.AuthorID != userID && isUserBlocked(userID, item.AuthorID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
+		return
 	}
 	ensureItemPreviewUpdatedAt(&item)
 	item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
@@ -958,11 +1003,58 @@ func (s *Server) rateItem(c *gin.Context) {
 // getItemComments 获取道具评论
 func (s *Server) getItemComments(c *gin.Context) {
 	id := c.Param("id")
+	userID := c.GetUint("userID")
+	itemID, _ := strconv.ParseUint(id, 10, 32)
+	if isContentHidden(userID, reportTargetItem, uint(itemID)) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
+		return
+	}
 	var comments []model.ItemComment
 
 	if err := database.DB.Where("item_id = ?", id).Order("created_at desc").Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if userID != 0 {
+		blockedIDs, err := getBlockedUserIDs(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载评论失败"})
+			return
+		}
+		if len(blockedIDs) > 0 {
+			filtered := make([]model.ItemComment, 0, len(comments))
+			blockedMap := make(map[uint]struct{}, len(blockedIDs))
+			for _, blockedID := range blockedIDs {
+				blockedMap[blockedID] = struct{}{}
+			}
+			for _, comment := range comments {
+				if _, blocked := blockedMap[comment.UserID]; blocked {
+					continue
+				}
+				filtered = append(filtered, comment)
+			}
+			comments = filtered
+		}
+
+		hiddenCommentIDs, err := hiddenContentIDs(userID, reportTargetItemComment)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载评论失败"})
+			return
+		}
+		if len(hiddenCommentIDs) > 0 {
+			hiddenMap := make(map[uint]struct{}, len(hiddenCommentIDs))
+			for _, hiddenID := range hiddenCommentIDs {
+				hiddenMap[hiddenID] = struct{}{}
+			}
+			filtered := make([]model.ItemComment, 0, len(comments))
+			for _, comment := range comments {
+				if _, hidden := hiddenMap[comment.ID]; hidden {
+					continue
+				}
+				filtered = append(filtered, comment)
+			}
+			comments = filtered
+		}
 	}
 
 	// 获取评论者信息
@@ -1008,7 +1100,7 @@ func (s *Server) getItemComments(c *gin.Context) {
 
 // addItemComment 添加评论（带评分）
 func (s *Server) addItemComment(c *gin.Context) {
-	userID := c.GetUint("user_id")
+	userID := c.GetUint("userID")
 	id := c.Param("id")
 
 	var req struct {
