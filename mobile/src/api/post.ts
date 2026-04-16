@@ -57,6 +57,8 @@ export interface ListPostsParams {
   page_size?: number
   sort?: 'created_at' | 'view_count' | 'like_count'
   order?: 'asc' | 'desc'
+  search?: string
+  author_name?: string
   category?: PostCategory
   guild_id?: number
   author_id?: number

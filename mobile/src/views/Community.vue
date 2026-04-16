@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { listPosts, type PostWithAuthor, type ListPostsParams } from '@/api/post'
@@ -20,6 +20,9 @@ const switchingPage = ref(false)
 
 const activeCategory = ref('')
 const sortBy = ref<'created_at' | 'like_count' | 'view_count'>('created_at')
+const searchText = ref('')
+const authorName = ref('')
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const categories = computed(() => [
   { key: '', label: t('community.categories.all') },
@@ -62,6 +65,8 @@ async function loadPosts() {
       order: 'desc',
     }
     if (activeCategory.value) params.category = activeCategory.value
+    if (searchText.value.trim()) params.search = searchText.value.trim()
+    if (authorName.value.trim()) params.author_name = authorName.value.trim()
     const res = await listPosts(params)
     if (serial !== requestSerial.value) return
     posts.value = res.posts || []
@@ -84,6 +89,19 @@ function selectCategory(key: string) {
 function changeSort(key: string) {
   sortBy.value = key as typeof sortBy.value
   currentPage.value = 1
+}
+
+function onSearchInput() {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
+  searchTimer = setTimeout(() => {
+    const shouldReload = currentPage.value === 1
+    currentPage.value = 1
+    if (shouldReload) {
+      void loadPosts()
+    }
+  }, 400)
 }
 
 function onPageChange(page: number) {
@@ -120,6 +138,11 @@ const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
 
 watch([activeCategory, sortBy, currentPage], loadPosts)
 onMounted(loadPosts)
+onUnmounted(() => {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
+})
 </script>
 
 <template>
@@ -140,6 +163,25 @@ onMounted(loadPosts)
         >{{ opt.label }}</button>
       </div>
     </header>
+
+    <div class="search-panel">
+      <label class="search-bar">
+        <i class="ri-search-line" />
+        <input
+          v-model="searchText"
+          :placeholder="$t('community.searchPlaceholder')"
+          @input="onSearchInput"
+        />
+      </label>
+      <label class="search-bar secondary">
+        <i class="ri-user-search-line" />
+        <input
+          v-model="authorName"
+          :placeholder="$t('community.authorSearchPlaceholder')"
+          @input="onSearchInput"
+        />
+      </label>
+    </div>
 
     <div class="category-bar">
       <button
@@ -226,6 +268,40 @@ onMounted(loadPosts)
 .page-header { padding: 6px 0 0; display: flex; flex-direction: column; gap: 8px; }
 .title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .page-header h1 { font-size: 24px; line-height: 1.1; letter-spacing: 0.01em; flex-shrink: 0; }
+
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--input-bg);
+  border: 1px solid rgba(75, 54, 33, 0.12);
+  border-radius: 20px;
+  padding: 9px 14px;
+}
+
+.search-bar.secondary {
+  background: var(--color-card-bg);
+}
+
+.search-bar i {
+  color: var(--input-placeholder);
+  font-size: 16px;
+}
+
+.search-bar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-dark);
+}
 
 .create-btn {
   border: 1px solid var(--color-primary);

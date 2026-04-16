@@ -2,6 +2,8 @@ export default {
   title: 'Community',
   createPost: 'Create',
   editPost: 'Edit',
+  searchPlaceholder: 'Search titles or content...',
+  authorSearchPlaceholder: 'Search by author...',
   categories: {
     all: 'All',
     profile: 'Profile',

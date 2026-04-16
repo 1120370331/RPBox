@@ -4,6 +4,7 @@ export default {
   editItem: 'Edit',
   detailTitle: 'Item Detail',
   searchPlaceholder: 'Search items...',
+  authorSearchPlaceholder: 'Search by author...',
   types: {
     all: 'All',
     item: 'Item',

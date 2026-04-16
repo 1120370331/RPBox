@@ -55,18 +55,19 @@ type UpdatePostRequest struct {
 }
 
 type postListParams struct {
-	UserID   uint
-	Page     int
-	PageSize int
-	SortBy   string
-	Order    string
-	Search   string
-	GuildID  string
-	TagID    string
-	AuthorID string
-	Status   string
-	Category string
-	IsPinned *bool
+	UserID     uint
+	Page       int
+	PageSize   int
+	SortBy     string
+	Order      string
+	Search     string
+	AuthorName string
+	GuildID    string
+	TagID      string
+	AuthorID   string
+	Status     string
+	Category   string
+	IsPinned   *bool
 }
 
 type postListResponse struct {
@@ -142,6 +143,7 @@ func (s *Server) listPosts(c *gin.Context) {
 		// 兼容历史参数名 keyword
 		search = strings.TrimSpace(c.Query("keyword"))
 	}
+	authorName := strings.TrimSpace(c.Query("author_name"))
 	guildID := c.Query("guild_id")
 	tagID := c.Query("tag_id")
 	authorID := c.Query("author_id")
@@ -150,17 +152,18 @@ func (s *Server) listPosts(c *gin.Context) {
 	isPinned := c.Query("is_pinned")
 
 	params := postListParams{
-		UserID:   userID,
-		Page:     page,
-		PageSize: pageSize,
-		SortBy:   sortBy,
-		Order:    order,
-		Search:   search,
-		GuildID:  guildID,
-		TagID:    tagID,
-		AuthorID: authorID,
-		Status:   status,
-		Category: category,
+		UserID:     userID,
+		Page:       page,
+		PageSize:   pageSize,
+		SortBy:     sortBy,
+		Order:      order,
+		Search:     search,
+		AuthorName: authorName,
+		GuildID:    guildID,
+		TagID:      tagID,
+		AuthorID:   authorID,
+		Status:     status,
+		Category:   category,
 	}
 	if isPinned != "" {
 		pinnedValue, err := strconv.ParseBool(isPinned)
@@ -178,8 +181,8 @@ func (s *Server) listPosts(c *gin.Context) {
 		if params.IsPinned != nil {
 			pinnedValue = strconv.FormatBool(*params.IsPinned)
 		}
-		filterKey := fmt.Sprintf("viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
-			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
+		filterKey := fmt.Sprintf("viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
+			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
 		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
 		if err != nil {
 			log.Printf("[Cache] Version error: %v", err)
@@ -224,7 +227,7 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 			return postListResponse{}, err
 		}
 		if len(blockedIDs) > 0 {
-			query = query.Where("author_id NOT IN ?", blockedIDs)
+			query = query.Where("posts.author_id NOT IN ?", blockedIDs)
 		}
 	}
 	if params.UserID != 0 {
@@ -233,24 +236,24 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 			return postListResponse{}, err
 		}
 		if len(hiddenPostIDs) > 0 {
-			query = query.Where("id NOT IN ?", hiddenPostIDs)
+			query = query.Where("posts.id NOT IN ?", hiddenPostIDs)
 		}
 	}
 
 	// 只显示公开的帖子，除非是查看自己的
 	if isSelfView {
 		// 查看自己的帖子：可以看到所有状态（包括草稿）
-		query = query.Where("author_id = ?", params.AuthorID)
+		query = query.Where("posts.author_id = ?", params.AuthorID)
 		// 如果指定了状态，则过滤
 		if params.Status != "" && params.Status != "all" {
-			query = query.Where("status = ?", params.Status)
+			query = query.Where("posts.status = ?", params.Status)
 		}
 	} else {
 		// 查看他人帖子：只能看到已发布且审核通过的公开帖子
-		query = query.Where("status = ?", "published")
-		query = query.Where("review_status = ?", "approved")
+		query = query.Where("posts.status = ?", "published")
+		query = query.Where("posts.review_status = ?", "approved")
 		if params.AuthorID != "" {
-			query = query.Where("author_id = ?", params.AuthorID)
+			query = query.Where("posts.author_id = ?", params.AuthorID)
 		}
 	}
 
@@ -262,29 +265,34 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 			return postListResponse{}, &apiError{status: http.StatusForbidden, message: "无权查看公会内容"}
 		}
 		guildRole = role
-		query = query.Where("guild_id = ?", params.GuildID)
+		query = query.Where("posts.guild_id = ?", params.GuildID)
 		// 访客查看公会帖子时，仅返回公开帖子
 		if !isSelfView && guildRole == "" {
-			query = query.Where("is_public = ?", true)
+			query = query.Where("posts.is_public = ?", true)
 		}
 	} else if !isSelfView {
 		// 社区广场：只显示公开帖子
-		query = query.Where("is_public = ?", true)
+		query = query.Where("posts.is_public = ?", true)
 	}
 
 	// 分区筛选
 	if params.Category != "" {
-		query = query.Where("category = ?", params.Category)
+		query = query.Where("posts.category = ?", params.Category)
 	}
 
 	// 关键字搜索
 	if params.Search != "" {
 		likeKeyword := "%" + params.Search + "%"
-		query = query.Where("(title LIKE ? OR content LIKE ?)", likeKeyword, likeKeyword)
+		query = query.Where("(posts.title LIKE ? OR posts.content LIKE ?)", likeKeyword, likeKeyword)
+	}
+
+	if params.AuthorName != "" {
+		query = query.Joins("JOIN users ON users.id = posts.author_id").
+			Where("users.username LIKE ?", "%"+params.AuthorName+"%")
 	}
 
 	if params.IsPinned != nil {
-		query = query.Where("is_pinned = ?", *params.IsPinned)
+		query = query.Where("posts.is_pinned = ?", *params.IsPinned)
 	}
 
 	if params.TagID != "" {
@@ -298,7 +306,7 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 			postIDs[i] = pt.PostID
 		}
 		if len(postIDs) > 0 {
-			query = query.Where("id IN ?", postIDs)
+			query = query.Where("posts.id IN ?", postIDs)
 		} else {
 			return postListResponse{Posts: []postListItem{}, Total: 0}, nil
 		}
@@ -312,12 +320,19 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 
 	// 排序和分页
 	offset := (params.Page - 1) * params.PageSize
-	query = query.Order(params.SortBy + " " + params.Order).Offset(offset).Limit(params.PageSize)
+	sortColumn := "posts.created_at"
+	switch params.SortBy {
+	case "view_count":
+		sortColumn = "posts.view_count"
+	case "like_count":
+		sortColumn = "posts.like_count"
+	}
+	query = query.Order(sortColumn + " " + params.Order).Offset(offset).Limit(params.PageSize)
 
 	var posts []model.Post
 	// 列表查询排除大字段（content, cover_image）以提高性能
 	// cover_image 通过独立的图片 API 访问
-	if err := query.Select("id, author_id, title, content_type, category, guild_id, story_id, status, is_public, is_pinned, is_featured, view_count, like_count, comment_count, favorite_count, review_status, event_type, event_start_time, event_end_time, event_color, cover_image_updated_at, created_at, updated_at").Find(&posts).Error; err != nil {
+	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
 		return postListResponse{}, err
 	}
 

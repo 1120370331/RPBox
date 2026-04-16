@@ -2,6 +2,8 @@ export default {
   title: '社区',
   createPost: '发帖',
   editPost: '编辑',
+  searchPlaceholder: '搜索帖子标题或内容...',
+  authorSearchPlaceholder: '按作者搜索...',
   categories: {
     all: '全部',
     profile: '人物卡',
