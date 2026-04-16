@@ -10,6 +10,9 @@ on:
       version:
         description: 'Override app version (semver, e.g. 1.0.10)'
         required: false
+      build_number:
+        description: 'Override iOS build number (numeric, e.g. 1000037)'
+        required: false
       release_notes:
         description: 'Override release notes (optional)'
         required: false
@@ -78,8 +81,18 @@ jobs:
             exit 1
           fi
 
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          BUILD_NUMBER=$((MAJOR * 1000000 + MINOR * 1000 + PATCH))
+          INPUT_BUILD_NUMBER="${{ github.event.inputs.build_number }}"
+          if [ -n "${INPUT_BUILD_NUMBER:-}" ]; then
+            BUILD_NUMBER="$INPUT_BUILD_NUMBER"
+          else
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+            BUILD_NUMBER=$((MAJOR * 1000000 + MINOR * 1000 + PATCH))
+          fi
+
+          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Invalid build number: $BUILD_NUMBER"
+            exit 1
+          fi
 
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
@@ -345,15 +358,13 @@ jobs:
               --api_key_path "$API_KEY_JSON" \
               --skip_waiting_for_build_processing true \
               --distribute_external false \
-              --groups "$IOS_TESTFLIGHT_GROUPS" \
-              --changelog "${{ steps.notes.outputs.NOTES }}"
+              --groups "$IOS_TESTFLIGHT_GROUPS"
           else
             fastlane pilot upload \
               --ipa "$IPA_PATH" \
               --api_key_path "$API_KEY_JSON" \
               --skip_waiting_for_build_processing true \
-              --distribute_external false \
-              --changelog "${{ steps.notes.outputs.NOTES }}"
+              --distribute_external false
           fi
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
