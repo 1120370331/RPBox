@@ -47,6 +47,7 @@ export default {
   loading: 'Loading...',
   filter: {
     search: 'Search posts...',
+    authorSearch: 'Search by author...',
     category: 'Category',
     all: 'All',
     sortLabel: 'Sort:',

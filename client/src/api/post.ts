@@ -116,6 +116,7 @@ export interface ListPostsParams {
   sort?: 'created_at' | 'view_count' | 'like_count'
   order?: 'asc' | 'desc'
   search?: string
+  author_name?: string
   guild_id?: number
   tag_id?: number
   author_id?: number

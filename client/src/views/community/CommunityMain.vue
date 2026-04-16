@@ -25,6 +25,7 @@ const eventsLoading = ref(false)
 const sortBy = ref<'created_at' | 'view_count' | 'like_count'>('created_at')
 const filterCategory = ref<PostCategory | ''>('')
 const searchKeyword = ref('')
+const authorName = ref('')
 const filterGuildId = ref<number | null>(null)
 const currentGuild = ref<Guild | null>(null)
 const currentPage = ref(1)
@@ -54,7 +55,7 @@ watch(() => route.query.guild_id, async (newGuildId) => {
   await Promise.all([loadPosts(), loadPinnedPosts()])
 })
 
-watch(searchKeyword, () => {
+watch([searchKeyword, authorName], () => {
   queueSearchReload()
 })
 
@@ -88,6 +89,7 @@ async function loadPosts() {
   loading.value = true
   try {
     const normalizedSearch = searchKeyword.value.trim()
+    const normalizedAuthorName = authorName.value.trim()
     const params: ListPostsParams = {
       page: currentPage.value,
       page_size: 12,
@@ -98,6 +100,9 @@ async function loadPosts() {
     }
     if (normalizedSearch) {
       params.search = normalizedSearch
+    }
+    if (normalizedAuthorName) {
+      params.author_name = normalizedAuthorName
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -118,6 +123,7 @@ async function loadPosts() {
 async function loadPinnedPosts() {
   try {
     const normalizedSearch = searchKeyword.value.trim()
+    const normalizedAuthorName = authorName.value.trim()
     const params: ListPostsParams = {
       page: 1,
       page_size: 10,
@@ -128,6 +134,9 @@ async function loadPinnedPosts() {
     }
     if (normalizedSearch) {
       params.search = normalizedSearch
+    }
+    if (normalizedAuthorName) {
+      params.author_name = normalizedAuthorName
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -561,10 +570,16 @@ function getEventStyle(event: EventItem) {
       </div>
       <div class="header-actions">
         <div class="search-box">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-          <input v-model="searchKeyword" type="text" :placeholder="t('community.filter.search')" @keyup.enter="queueSearchReload(true)" />
+          <div class="search-field keyword">
+            <svg class="search-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input v-model="searchKeyword" type="text" :placeholder="t('community.filter.search')" @keyup.enter="queueSearchReload(true)" />
+          </div>
+          <div class="search-field author">
+            <i class="ri-user-search-line search-field-icon"></i>
+            <input v-model="authorName" type="text" :placeholder="t('community.filter.authorSearch')" @keyup.enter="queueSearchReload(true)" />
+          </div>
         </div>
         <button class="favorites-btn" @click="goToFavorites">
           <i class="ri-bookmark-3-line"></i>
@@ -969,10 +984,25 @@ function getEventStyle(event: EventItem) {
 }
 
 .search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-field {
   position: relative;
 }
 
-.search-icon {
+.search-field.keyword {
+  flex: 1 1 256px;
+}
+
+.search-field.author {
+  flex: 0 1 180px;
+}
+
+.search-field-icon {
   position: absolute;
   left: 12px;
   top: 50%;
@@ -982,9 +1012,9 @@ function getEventStyle(event: EventItem) {
   color: var(--color-text-secondary, #8D7B68);
 }
 
-.search-box input {
+.search-field input {
   padding: 8px 16px 8px 36px;
-  width: 256px;
+  width: 100%;
   background: var(--color-panel-bg, #fff);
   border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 6px;
@@ -995,7 +1025,7 @@ function getEventStyle(event: EventItem) {
   transition: all 0.2s;
 }
 
-.search-box input:focus {
+.search-field input:focus {
   border-color: var(--color-accent, #B87333);
   box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.1);
 }

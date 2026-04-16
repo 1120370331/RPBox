@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { listItems, type Item, type ListItemsParams } from '@/api/item'
@@ -20,6 +20,7 @@ const switchingPage = ref(false)
 
 const activeType = ref('')
 const searchText = ref('')
+const authorName = ref('')
 const sortBy = ref<'created_at' | 'downloads' | 'rating'>('downloads')
 
 const typeOptions = computed(() => [
@@ -50,6 +51,7 @@ async function loadItems() {
     }
     if (activeType.value) params.type = activeType.value
     if (searchText.value.trim()) params.search = searchText.value.trim()
+    if (authorName.value.trim()) params.author_name = authorName.value.trim()
     const res = await listItems(params)
     if (serial !== requestSerial.value) return
     items.value = res.items || []
@@ -74,12 +76,17 @@ function changeSort(key: string) {
   currentPage.value = 1
 }
 
-let searchTimer: ReturnType<typeof setTimeout>
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 function onSearchInput() {
-  clearTimeout(searchTimer)
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
   searchTimer = setTimeout(() => {
+    const shouldReload = currentPage.value === 1
     currentPage.value = 1
-    loadItems()
+    if (shouldReload) {
+      void loadItems()
+    }
   }, 400)
 }
 
@@ -100,6 +107,11 @@ function renderStars(rating: number) {
 
 watch([activeType, sortBy, currentPage], loadItems)
 onMounted(loadItems)
+onUnmounted(() => {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
+})
 </script>
 
 <template>
@@ -117,6 +129,11 @@ onMounted(loadItems)
     <div class="search-bar">
       <i class="ri-search-line" />
       <input v-model="searchText" :placeholder="$t('market.searchPlaceholder')" @input="onSearchInput" />
+    </div>
+
+    <div class="search-bar secondary">
+      <i class="ri-user-search-line" />
+      <input v-model="authorName" :placeholder="$t('market.authorSearchPlaceholder')" @input="onSearchInput" />
     </div>
 
     <div class="type-bar">
@@ -232,6 +249,9 @@ onMounted(loadItems)
   border: 1px solid rgba(75, 54, 33, 0.12);
   border-radius: 20px;
   padding: 9px 14px;
+}
+.search-bar.secondary {
+  background: var(--color-card-bg);
 }
 .search-bar i { color: var(--input-placeholder); font-size: 16px; }
 .search-bar input {

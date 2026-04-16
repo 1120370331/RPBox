@@ -4,6 +4,7 @@ export default {
   editItem: '编辑',
   detailTitle: '道具详情',
   searchPlaceholder: '搜索道具...',
+  authorSearchPlaceholder: '按作者搜索...',
   types: {
     all: '全部',
     item: '道具',

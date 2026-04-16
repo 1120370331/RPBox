@@ -97,6 +97,82 @@ func TestProfileVersionFlow(t *testing.T) {
 	}
 }
 
+func TestListPostsSupportsAuthorNameSearch(t *testing.T) {
+	db := testutil.NewTestDB(t,
+		&model.User{},
+		&model.Post{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+	)
+	database.DB = db
+
+	viewer := model.User{Username: "viewer", Email: "viewer@example.com", PassHash: "hash"}
+	target := model.User{Username: "targetAuthor", Email: "target@example.com", PassHash: "hash"}
+	other := model.User{Username: "otherAuthor", Email: "other@example.com", PassHash: "hash"}
+	if err := db.Create(&viewer).Error; err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	if err := db.Create(&target).Error; err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+
+	posts := []model.Post{
+		{
+			AuthorID:     target.ID,
+			Title:        "Target post",
+			Content:      "for author filtering",
+			Status:       "published",
+			ReviewStatus: "approved",
+			IsPublic:     true,
+			Category:     "other",
+		},
+		{
+			AuthorID:     other.ID,
+			Title:        "Other post",
+			Content:      "should be filtered out",
+			Status:       "published",
+			ReviewStatus: "approved",
+			IsPublic:     true,
+			Category:     "other",
+		},
+	}
+	if err := db.Create(&posts).Error; err != nil {
+		t.Fatalf("create posts: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	token := newTestToken(t, viewer)
+
+	resp := performRequest(server.router, http.MethodGet, "/api/v1/posts?author_name=target", nil, token)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var payload struct {
+		Posts []struct {
+			ID         uint   `json:"id"`
+			AuthorName string `json:"author_name"`
+			Title      string `json:"title"`
+		} `json:"posts"`
+		Total int64 `json:"total"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Total != 1 {
+		t.Fatalf("expected total=1, got %d", payload.Total)
+	}
+	if len(payload.Posts) != 1 {
+		t.Fatalf("expected 1 post, got %d", len(payload.Posts))
+	}
+	if payload.Posts[0].AuthorName != target.Username {
+		t.Fatalf("expected author %q, got %q", target.Username, payload.Posts[0].AuthorName)
+	}
+}
+
 func newTestServer(t *testing.T, db *gorm.DB) *Server {
 	t.Helper()
 

@@ -47,6 +47,7 @@ export default {
   loading: '加载中...',
   filter: {
     search: '搜索帖子...',
+    authorSearch: '按作者搜索...',
     category: '分类',
     all: '全部',
     sortLabel: '排序:',
