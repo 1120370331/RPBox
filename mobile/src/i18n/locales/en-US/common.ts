@@ -27,4 +27,11 @@ export default {
     favorited: 'Favorited',
     submitting: 'Submitting...',
   },
+  imagePicker: {
+    title: 'Choose image source',
+    message: 'Select whether to take a new photo or choose one from your library.',
+    camera: 'Take Photo',
+    photos: 'Choose from Library',
+    cancel: 'Cancel',
+  },
 }

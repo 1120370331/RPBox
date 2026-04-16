@@ -27,4 +27,11 @@ export default {
     favorited: '已收藏',
     submitting: '提交中...',
   },
+  imagePicker: {
+    title: '选择图片来源',
+    message: '请选择拍照或从相册中选择图片。',
+    camera: '拍照',
+    photos: '从相册选择',
+    cancel: '取消',
+  },
 }

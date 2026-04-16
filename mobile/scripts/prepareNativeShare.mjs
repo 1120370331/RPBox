@@ -88,7 +88,12 @@ function patchAndroid() {
 
 function patchIos() {
   const infoPlistPath = path.join(mobileRoot, 'ios', 'App', 'App', 'Info.plist')
-  if (!fs.existsSync(infoPlistPath)) return
+  if (!fs.existsSync(infoPlistPath)) {
+    if (platform === 'ios') {
+      throw new Error(`Missing iOS Info.plist: ${infoPlistPath}`)
+    }
+    return
+  }
 
   let plist = fs.readFileSync(infoPlistPath, 'utf8')
   const urlTypesBlock = `
@@ -114,6 +119,12 @@ function patchIos() {
   plist = upsertPlistString(plist, 'NSPhotoLibraryAddUsageDescription', 'RPBox 需要访问照片，以便保存和处理中转图片。')
   fs.writeFileSync(infoPlistPath, plist, 'utf8')
 
+  for (const key of ['NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription', 'NSPhotoLibraryAddUsageDescription']) {
+    if (!plist.includes(`<key>${key}</key>`)) {
+      throw new Error(`Failed to inject ${key} into ${infoPlistPath}`)
+    }
+  }
+
   const entitlementsPath = path.join(mobileRoot, 'ios', 'App', 'App', 'App.entitlements')
   const associatedDomains = associatedHosts.map((host) => `applinks:${host}`)
   if (fs.existsSync(entitlementsPath)) {
@@ -138,14 +149,20 @@ ${associatedDomains.map((domain) => `\t\t<string>${domain}</string>`).join('\n')
   }
 
   const pbxprojPath = path.join(mobileRoot, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj')
-  if (fs.existsSync(pbxprojPath)) {
-    let pbxproj = fs.readFileSync(pbxprojPath, 'utf8')
-    if (/CODE_SIGN_ENTITLEMENTS = [^;]+;/.test(pbxproj)) {
-      pbxproj = pbxproj.replace(/CODE_SIGN_ENTITLEMENTS = [^;]+;/g, 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
-    } else {
-      pbxproj = pbxproj.replace(/INFOPLIST_FILE = App\/Info\.plist;/g, 'INFOPLIST_FILE = App/Info.plist;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
-    }
-    fs.writeFileSync(pbxprojPath, pbxproj, 'utf8')
+  if (!fs.existsSync(pbxprojPath)) {
+    throw new Error(`Missing iOS Xcode project: ${pbxprojPath}`)
+  }
+
+  let pbxproj = fs.readFileSync(pbxprojPath, 'utf8')
+  if (/CODE_SIGN_ENTITLEMENTS = [^;]+;/.test(pbxproj)) {
+    pbxproj = pbxproj.replace(/CODE_SIGN_ENTITLEMENTS = [^;]+;/g, 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
+  } else {
+    pbxproj = pbxproj.replace(/INFOPLIST_FILE = App\/Info\.plist;/g, 'INFOPLIST_FILE = App/Info.plist;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
+  }
+  fs.writeFileSync(pbxprojPath, pbxproj, 'utf8')
+
+  if (!pbxproj.includes('CODE_SIGN_ENTITLEMENTS = App/App.entitlements;')) {
+    throw new Error(`Failed to inject CODE_SIGN_ENTITLEMENTS into ${pbxprojPath}`)
   }
 
   const privacyManifestPath = path.join(mobileRoot, 'ios', 'App', 'PrivacyInfo.xcprivacy')
