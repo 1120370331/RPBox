@@ -147,9 +147,13 @@ jobs:
         run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Upload to server
+        shell: bash
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
-          REMOTE_DIR="${{ secrets.RELEASE_PATH }}/$VERSION"
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          REMOTE_BASE="${{ secrets.RELEASE_PATH }}"
+          REMOTE_DIR="$REMOTE_BASE/$VERSION"
 
           # 查找构建产物
           EXE_PATH=$(find artifacts -type f -path "*/nsis/*" -name "RPBox_*_x64-setup.exe" | head -n1)
@@ -158,12 +162,51 @@ jobs:
           SIG_PATH="${EXE_PATH}.sig"
           [ ! -f "$SIG_PATH" ] && { echo "ERROR: signature not found"; exit 1; }
 
-          # 创建远程目录并上传文件
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR"
-          scp -P 2233 -C "$EXE_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
-          scp -P 2233 -C "$SIG_PATH" ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
-          scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$REMOTE_DIR/
-          scp -P 2233 latest.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.RELEASE_PATH }}/latest.json
+          SSH_HOST="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          SSH_OPTS=(-p 2233 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=30)
+          SCP_OPTS=(-P 2233 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=30)
+
+          upload_with_retry() {
+            local src="$1"
+            local dest="$2"
+            local attempt
+            for attempt in 1 2 3; do
+              if scp "${SCP_OPTS[@]}" "$src" "${SSH_HOST}:$dest"; then
+                return 0
+              fi
+
+              if [ "$attempt" -lt 3 ]; then
+                echo "Upload failed for $src (attempt $attempt), retrying..."
+                sleep $((attempt * 15))
+              fi
+            done
+
+            echo "ERROR: failed to upload $src after 3 attempts"
+            return 1
+          }
+
+          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mkdir -p '$REMOTE_DIR' '$REMOTE_BASE'"
+
+          REMOTE_EXE_FINAL="$REMOTE_DIR/$(basename "$EXE_PATH")"
+          REMOTE_EXE_TMP="$REMOTE_EXE_FINAL.part"
+          REMOTE_SIG_FINAL="$REMOTE_DIR/$(basename "$SIG_PATH")"
+          REMOTE_SIG_TMP="$REMOTE_SIG_FINAL.part"
+          REMOTE_META_VER_FINAL="$REMOTE_DIR/latest.json"
+          REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
+          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/latest.json"
+          REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
+
+          upload_with_retry "$EXE_PATH" "$REMOTE_EXE_TMP"
+          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_EXE_TMP' '$REMOTE_EXE_FINAL'"
+
+          upload_with_retry "$SIG_PATH" "$REMOTE_SIG_TMP"
+          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_SIG_TMP' '$REMOTE_SIG_FINAL'"
+
+          upload_with_retry latest.json "$REMOTE_META_VER_TMP"
+          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
+
+          upload_with_retry latest.json "$REMOTE_META_LATEST_TMP"
+          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
 
   update-pages:
     name: Update GitHub Pages
