@@ -26,6 +26,8 @@ type CreatePostRequest struct {
 	ContentType    string  `json:"content_type"`
 	CoverImage     string  `json:"cover_image"`
 	Category       string  `json:"category"` // profile|guild|report|novel|item|event|other
+	Region         string  `json:"region"`
+	Address        string  `json:"address"`
 	GuildID        *uint   `json:"guild_id"`
 	StoryID        *uint   `json:"story_id"`
 	TagIDs         []uint  `json:"tag_ids"`
@@ -44,6 +46,8 @@ type UpdatePostRequest struct {
 	ContentType    string  `json:"content_type"`
 	CoverImage     string  `json:"cover_image"`
 	Category       string  `json:"category"`
+	Region         *string `json:"region"`
+	Address        *string `json:"address"`
 	GuildID        *uint   `json:"guild_id"`
 	StoryID        *uint   `json:"story_id"`
 	Status         string  `json:"status"`
@@ -62,6 +66,8 @@ type postListParams struct {
 	Order      string
 	Search     string
 	AuthorName string
+	Region     string
+	Address    string
 	GuildID    string
 	TagID      string
 	AuthorID   string
@@ -144,6 +150,8 @@ func (s *Server) listPosts(c *gin.Context) {
 		search = strings.TrimSpace(c.Query("keyword"))
 	}
 	authorName := strings.TrimSpace(c.Query("author_name"))
+	region := strings.TrimSpace(c.Query("region"))
+	address := strings.TrimSpace(c.Query("address"))
 	guildID := c.Query("guild_id")
 	tagID := c.Query("tag_id")
 	authorID := c.Query("author_id")
@@ -159,6 +167,8 @@ func (s *Server) listPosts(c *gin.Context) {
 		Order:      order,
 		Search:     search,
 		AuthorName: authorName,
+		Region:     region,
+		Address:    address,
 		GuildID:    guildID,
 		TagID:      tagID,
 		AuthorID:   authorID,
@@ -181,8 +191,8 @@ func (s *Server) listPosts(c *gin.Context) {
 		if params.IsPinned != nil {
 			pinnedValue = strconv.FormatBool(*params.IsPinned)
 		}
-		filterKey := fmt.Sprintf("viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
-			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
+		filterKey := fmt.Sprintf("search_scope=global_v2|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
+			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.Region, params.Address, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
 		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
 		if err != nil {
 			log.Printf("[Cache] Version error: %v", err)
@@ -280,15 +290,31 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 		query = query.Where("posts.category = ?", params.Category)
 	}
 
+	if params.Search != "" || params.AuthorName != "" {
+		query = query.Joins("JOIN users ON users.id = posts.author_id")
+	}
+
 	// 关键字搜索
 	if params.Search != "" {
 		likeKeyword := "%" + params.Search + "%"
-		query = query.Where("(posts.title LIKE ? OR posts.content LIKE ?)", likeKeyword, likeKeyword)
+		query = query.Where(
+			"(posts.title LIKE ? OR posts.content LIKE ? OR users.username LIKE ? OR posts.region LIKE ? OR posts.address LIKE ?)",
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
+		)
 	}
 
 	if params.AuthorName != "" {
-		query = query.Joins("JOIN users ON users.id = posts.author_id").
-			Where("users.username LIKE ?", "%"+params.AuthorName+"%")
+		query = query.Where("users.username LIKE ?", "%"+params.AuthorName+"%")
+	}
+	if params.Region != "" {
+		query = query.Where("posts.region LIKE ?", "%"+params.Region+"%")
+	}
+	if params.Address != "" {
+		query = query.Where("posts.address LIKE ?", "%"+params.Address+"%")
 	}
 
 	if params.IsPinned != nil {
@@ -332,7 +358,7 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	var posts []model.Post
 	// 列表查询排除大字段（content, cover_image）以提高性能
 	// cover_image 通过独立的图片 API 访问
-	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
+	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.region, posts.address, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
 		return postListResponse{}, err
 	}
 
@@ -437,6 +463,8 @@ func (s *Server) createPost(c *gin.Context) {
 	}
 	req.Title = strings.TrimSpace(req.Title)
 	req.Content = strings.TrimSpace(req.Content)
+	req.Region = strings.TrimSpace(req.Region)
+	req.Address = strings.TrimSpace(req.Address)
 
 	if s.enforcePostCommentHardRules(c, userID, "post", nil, req.Title, req.Content) {
 		return
@@ -488,6 +516,8 @@ func (s *Server) createPost(c *gin.Context) {
 		ContentType: req.ContentType,
 		CoverImage:  req.CoverImage,
 		Category:    req.Category,
+		Region:      req.Region,
+		Address:     req.Address,
 		GuildID:     req.GuildID,
 		StoryID:     req.StoryID,
 		Status:      req.Status,
@@ -722,6 +752,14 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 	req.Title = strings.TrimSpace(req.Title)
 	req.Content = strings.TrimSpace(req.Content)
+	if req.Region != nil {
+		trimmed := strings.TrimSpace(*req.Region)
+		req.Region = &trimmed
+	}
+	if req.Address != nil {
+		trimmed := strings.TrimSpace(*req.Address)
+		req.Address = &trimmed
+	}
 
 	nextTitle := post.Title
 	if req.Title != "" {
@@ -822,6 +860,16 @@ func (s *Server) updatePost(c *gin.Context) {
 		} else {
 			editReq.Category = post.Category
 		}
+		if req.Region != nil {
+			editReq.Region = *req.Region
+		} else {
+			editReq.Region = post.Region
+		}
+		if req.Address != nil {
+			editReq.Address = *req.Address
+		} else {
+			editReq.Address = post.Address
+		}
 		if editReq.Category == "event" {
 			if req.EventType != "" {
 				editReq.EventType = req.EventType
@@ -888,6 +936,12 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 	if req.Category != "" {
 		post.Category = req.Category
+	}
+	if req.Region != nil {
+		post.Region = *req.Region
+	}
+	if req.Address != nil {
+		post.Address = *req.Address
 	}
 	if req.Status != "" {
 		post.Status = req.Status

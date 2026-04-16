@@ -21,7 +21,6 @@ const switchingPage = ref(false)
 const activeCategory = ref('')
 const sortBy = ref<'created_at' | 'like_count' | 'view_count'>('created_at')
 const searchText = ref('')
-const authorName = ref('')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const categories = computed(() => [
@@ -66,7 +65,6 @@ async function loadPosts() {
     }
     if (activeCategory.value) params.category = activeCategory.value
     if (searchText.value.trim()) params.search = searchText.value.trim()
-    if (authorName.value.trim()) params.author_name = authorName.value.trim()
     const res = await listPosts(params)
     if (serial !== requestSerial.value) return
     posts.value = res.posts || []
@@ -134,6 +132,11 @@ function categoryLabel(category?: string) {
   return categoryLabelMap.value[category] || category
 }
 
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map(part => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
+}
+
 const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
 
 watch([activeCategory, sortBy, currentPage], loadPosts)
@@ -170,14 +173,6 @@ onUnmounted(() => {
         <input
           v-model="searchText"
           :placeholder="$t('community.searchPlaceholder')"
-          @input="onSearchInput"
-        />
-      </label>
-      <label class="search-bar secondary">
-        <i class="ri-user-search-line" />
-        <input
-          v-model="authorName"
-          :placeholder="$t('community.authorSearchPlaceholder')"
           @input="onSearchInput"
         />
       </label>
@@ -220,6 +215,10 @@ onUnmounted(() => {
             <div class="post-meta-top">
               <span v-if="post.category" class="category-tag">{{ categoryLabel(post.category) }}</span>
               <span class="post-time">{{ formatDate(post.created_at) }}</span>
+            </div>
+            <div v-if="formatLocation(post.region, post.address)" class="post-location">
+              <i class="ri-map-pin-2-fill" />
+              <span>{{ formatLocation(post.region, post.address) }}</span>
             </div>
             <h3 class="post-title">{{ post.title }}</h3>
             <div class="post-author">
@@ -283,10 +282,6 @@ onUnmounted(() => {
   border: 1px solid rgba(75, 54, 33, 0.12);
   border-radius: 20px;
   padding: 9px 14px;
-}
-
-.search-bar.secondary {
-  background: var(--color-card-bg);
 }
 
 .search-bar i {
@@ -379,6 +374,25 @@ onUnmounted(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.post-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  margin-bottom: 8px;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(75, 54, 33, 0.1);
+  background: var(--color-primary-light);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+
+.post-location i {
+  color: var(--color-primary);
 }
 
 .post-author { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }

@@ -119,6 +119,11 @@ function formatDate(dateStr: string) {
   return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map((part) => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
+}
+
 function onPageChange(page: number) {
   if (page === currentPage.value) return
   switchingPage.value = true
@@ -189,6 +194,10 @@ onMounted(async () => {
           <div class="post-head">
             <span class="category-tag">{{ post.category || $t('guild.posts.categoryOther') }}</span>
             <span class="time">{{ formatDate(post.created_at) }}</span>
+          </div>
+          <div v-if="formatLocation(post.region, post.address)" class="location-row">
+            <i class="ri-map-pin-2-fill" />
+            <span>{{ formatLocation(post.region, post.address) }}</span>
           </div>
           <h3 class="title">{{ post.title }}</h3>
           <p class="excerpt">{{ stripHtml(post.content).slice(0, 120) }}</p>
@@ -358,6 +367,26 @@ onMounted(async () => {
   line-height: 1.55;
   margin-bottom: 8px;
 }
+
+.location-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(75, 54, 33, 0.1);
+  background: var(--color-primary-light);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+
+.location-row i {
+  color: var(--color-primary);
+  font-size: 14px;
+}
+
 .foot {
   display: flex;
   justify-content: space-between;

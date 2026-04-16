@@ -5,6 +5,8 @@ export interface Story {
   user_id: number
   title: string
   description: string
+  region?: string
+  address?: string
   participants: string
   tags: string
   start_time: string
@@ -43,6 +45,8 @@ export interface StoryEntry {
 export interface CreateStoryRequest {
   title: string
   description?: string
+  region?: string
+  address?: string
   participants?: string[]
   tags?: string[]
   start_time?: string
@@ -67,6 +71,8 @@ export interface StoryFilterParams {
   tag_ids?: string      // 标签ID列表，逗号分隔
   guild_id?: string     // 公会ID
   search?: string       // 搜索关键词
+  region?: string       // 地区
+  address?: string      // 地址
   start_date?: string   // 开始日期 YYYY-MM-DD
   end_date?: string     // 结束日期 YYYY-MM-DD
   sort?: string         // 排序字段 created_at|updated_at|start_time
@@ -81,6 +87,8 @@ export async function listStories(params?: StoryFilterParams): Promise<{ stories
     if (params.tag_ids) searchParams.set('tag_ids', params.tag_ids)
     if (params.guild_id) searchParams.set('guild_id', params.guild_id)
     if (params.search) searchParams.set('search', params.search)
+    if (params.region) searchParams.set('region', params.region)
+    if (params.address) searchParams.set('address', params.address)
     if (params.start_date) searchParams.set('start_date', params.start_date)
     if (params.end_date) searchParams.set('end_date', params.end_date)
     if (params.sort) searchParams.set('sort', params.sort)

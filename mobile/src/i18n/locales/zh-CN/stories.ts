@@ -2,7 +2,10 @@ export default {
   title: '剧情',
   detailTitle: '剧情详情',
   narrator: '旁白',
-  searchPlaceholder: '搜索剧情...',
+  searchPlaceholder: '搜索标题、简介、地区或地点...',
+  regionSearchPlaceholder: '按地区搜索...',
+  addressSearchPlaceholder: '按地址搜索...',
+  locationLabel: '地点',
   sort: {
     recentUpdate: '最近更新',
     newest: '最新创建',

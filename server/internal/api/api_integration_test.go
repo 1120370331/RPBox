@@ -187,6 +187,82 @@ func newTestServer(t *testing.T, db *gorm.DB) *Server {
 	return NewServer(cfg)
 }
 
+func TestListPostsSearchIncludesAuthorAndLocation(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.UserBlock{}, &model.UserHiddenContent{})
+
+	viewer := model.User{Username: "viewer", Email: "viewer@example.com", PassHash: "hash"}
+	target := model.User{Username: "target", Email: "target@example.com", PassHash: "hash"}
+	other := model.User{Username: "other", Email: "other@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&viewer, &target, &other}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	posts := []model.Post{
+		{
+			AuthorID:     target.ID,
+			Title:        "A tale",
+			Content:      "plain content",
+			Region:       "Goldshire",
+			Address:      "Lion's Pride Inn",
+			Status:       "published",
+			ReviewStatus: "approved",
+			IsPublic:     true,
+			Category:     "other",
+		},
+		{
+			AuthorID:     other.ID,
+			Title:        "Another tale",
+			Content:      "plain content",
+			Region:       "Stormwind",
+			Address:      "Trade District",
+			Status:       "published",
+			ReviewStatus: "approved",
+			IsPublic:     true,
+			Category:     "other",
+		},
+	}
+	if err := db.Create(&posts).Error; err != nil {
+		t.Fatalf("create posts: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	token := newTestToken(t, viewer)
+
+	assertSinglePostSearch := func(path string) {
+		t.Helper()
+
+		resp := performRequest(server.router, http.MethodGet, path, nil, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", resp.Code, resp.Body.String())
+		}
+
+		var payload struct {
+			Posts []struct {
+				ID         uint   `json:"id"`
+				AuthorName string `json:"author_name"`
+				Title      string `json:"title"`
+			} `json:"posts"`
+			Total int64 `json:"total"`
+		}
+		if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if payload.Total != 1 {
+			t.Fatalf("expected total=1, got %d", payload.Total)
+		}
+		if len(payload.Posts) != 1 {
+			t.Fatalf("expected 1 post, got %d", len(payload.Posts))
+		}
+		if payload.Posts[0].AuthorName != target.Username {
+			t.Fatalf("expected author %q, got %q", target.Username, payload.Posts[0].AuthorName)
+		}
+	}
+
+	assertSinglePostSearch("/api/v1/posts?search=target")
+	assertSinglePostSearch("/api/v1/posts?search=Goldshire")
+	assertSinglePostSearch("/api/v1/posts?search=Lion")
+}
+
 func newTestToken(t *testing.T, user model.User) string {
 	t.Helper()
 

@@ -7,6 +7,8 @@ export interface Post {
   content: string
   content_type: string
   category: PostCategory
+  region?: string
+  address?: string
   guild_id?: number
   story_id?: number
   status: 'draft' | 'published'
@@ -82,6 +84,8 @@ export interface CreatePostRequest {
   content: string
   content_type?: string
   category?: PostCategory
+  region?: string
+  address?: string
   guild_id?: number
   story_id?: number
   tag_ids?: number[]
@@ -99,6 +103,8 @@ export interface UpdatePostRequest {
   content?: string
   content_type?: string
   category?: PostCategory
+  region?: string
+  address?: string
   guild_id?: number
   story_id?: number
   status?: 'draft' | 'published'
@@ -117,6 +123,8 @@ export interface ListPostsParams {
   order?: 'asc' | 'desc'
   search?: string
   author_name?: string
+  region?: string
+  address?: string
   guild_id?: number
   tag_id?: number
   author_id?: number

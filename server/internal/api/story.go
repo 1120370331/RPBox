@@ -20,6 +20,8 @@ import (
 type CreateStoryRequest struct {
 	Title        string   `json:"title" binding:"required"`
 	Description  string   `json:"description"`
+	Region       string   `json:"region"`
+	Address      string   `json:"address"`
 	Participants []string `json:"participants"`
 	Tags         []string `json:"tags"`
 	StartTime    string   `json:"start_time"`
@@ -99,8 +101,21 @@ func (s *Server) listStories(c *gin.Context) {
 	}
 
 	// 搜索关键词
-	if search := c.Query("search"); search != "" {
-		query = query.Where("title LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
+	if search := strings.TrimSpace(c.Query("search")); search != "" {
+		likeKeyword := "%" + search + "%"
+		query = query.Where(
+			"(title LIKE ? OR description LIKE ? OR region LIKE ? OR address LIKE ?)",
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
+			likeKeyword,
+		)
+	}
+	if region := strings.TrimSpace(c.Query("region")); region != "" {
+		query = query.Where("region LIKE ?", "%"+region+"%")
+	}
+	if address := strings.TrimSpace(c.Query("address")); address != "" {
+		query = query.Where("address LIKE ?", "%"+address+"%")
 	}
 
 	// 日期范围筛选
@@ -276,11 +291,17 @@ func (s *Server) createStory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Description = strings.TrimSpace(req.Description)
+	req.Region = strings.TrimSpace(req.Region)
+	req.Address = strings.TrimSpace(req.Address)
 
 	story := model.Story{
 		UserID:      userID,
 		Title:       req.Title,
 		Description: req.Description,
+		Region:      req.Region,
+		Address:     req.Address,
 		Status:      "draft",
 	}
 
@@ -363,9 +384,15 @@ func (s *Server) updateStory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Description = strings.TrimSpace(req.Description)
+	req.Region = strings.TrimSpace(req.Region)
+	req.Address = strings.TrimSpace(req.Address)
 
 	story.Title = req.Title
 	story.Description = req.Description
+	story.Region = req.Region
+	story.Address = req.Address
 
 	if len(req.Participants) > 0 {
 		data, _ := json.Marshal(req.Participants)

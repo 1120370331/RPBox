@@ -84,6 +84,11 @@ const canUseSafetyActions = computed(() => {
   return post.value.author_id !== currentUserId
 })
 
+const locationRegionText = computed(() => post.value?.region?.trim() || '')
+const locationAddressText = computed(() => post.value?.address?.trim() || '')
+const locationText = computed(() => locationAddressText.value || locationRegionText.value)
+const locationContext = computed(() => locationRegionText.value && locationAddressText.value ? locationRegionText.value : '')
+
 function canUseCommentSafetyActions(comment: PostComment): boolean {
   const currentUserId = userStore.user?.id
   if (!currentUserId) return false
@@ -481,6 +486,18 @@ onMounted(async () => {
           <button v-if="postCoverUrl" class="cover-btn" @click="imagePreviewSrc = postCoverUrl; imagePreviewOpen = true">
             <CachedImage :src="postCoverUrl" class="cover" alt="" />
           </button>
+          <div v-if="locationText" class="location-banner">
+            <div class="location-banner__icon">
+              <i class="ri-map-pin-2-fill" />
+            </div>
+            <div class="location-banner__content">
+              <div class="location-banner__top">
+                <span class="location-banner__label">{{ $t('community.locationLabel') }}</span>
+                <span v-if="locationContext" class="location-banner__chip">{{ locationContext }}</span>
+              </div>
+              <strong class="location-banner__main">{{ locationText }}</strong>
+            </div>
+          </div>
           <h2>{{ post.title }}</h2>
           <div class="author-row">
             <img v-if="authorAvatar" :src="resolveApiUrl(authorAvatar)" class="author-avatar" alt="" />
@@ -644,6 +661,70 @@ onMounted(async () => {
   font-size: 19px;
   line-height: 1.5;
   margin-bottom: 10px;
+}
+
+.location-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, rgba(184, 115, 51, 0.12) 100%);
+}
+
+.location-banner__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--color-primary);
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.location-banner__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.location-banner__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.location-banner__label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.location-banner__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.location-banner__main {
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--text-dark);
+  word-break: break-word;
 }
 
 .author-row {

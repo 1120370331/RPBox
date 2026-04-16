@@ -5,6 +5,8 @@ export interface Story {
   user_id: number
   title: string
   description: string
+  region?: string
+  address?: string
   participants: string
   start_time: string
   end_time: string

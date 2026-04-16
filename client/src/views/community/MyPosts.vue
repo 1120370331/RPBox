@@ -177,6 +177,11 @@ function formatDate(dateStr: string) {
   return date.toLocaleString('zh-CN')
 }
 
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map((part) => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
+}
+
 // 去除HTML标签，只保留纯文本
 function stripHtml(html: string) {
   const div = document.createElement('div')
@@ -285,6 +290,11 @@ function stripHtml(html: string) {
           </span>
           <span v-if="post.status === 'draft'" class="draft-badge">{{ t('community.myPosts.draft') }}</span>
           <span v-else-if="post.status === 'pending' || post.review_status === 'pending'" class="pending-badge">{{ t('community.myPosts.pending') }}</span>
+        </div>
+
+        <div v-if="formatLocation(post.region, post.address)" class="post-location">
+          <i class="ri-map-pin-2-fill"></i>
+          <span>{{ formatLocation(post.region, post.address) }}</span>
         </div>
 
         <div class="post-content">{{ getPostPreview(post) }}</div>
@@ -626,6 +636,25 @@ function stripHtml(html: string) {
   line-height: 1.6;
   color: #4B3621;
   margin-bottom: 16px;
+}
+
+.post-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  border: 1px solid #F0E0CF;
+  background: rgba(184, 115, 51, 0.12);
+  font-size: 13px;
+  font-weight: 600;
+  color: #804030;
+}
+
+.post-location i {
+  font-size: 15px;
+  color: #B87333;
 }
 
 .post-footer {
