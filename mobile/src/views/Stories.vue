@@ -68,7 +68,6 @@ onMounted(loadStories)
         @input="onSearchInput"
       />
     </div>
-
     <div class="sort-row">
       <button
         v-for="opt in sortOptions" :key="opt.key"

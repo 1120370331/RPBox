@@ -120,6 +120,11 @@ function getCategoryLabel(category: string) {
   return cat ? cat.label : t('guild.posts.categoryOther')
 }
 
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map((part) => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
+}
+
 function stripHtml(html: string) {
   const div = document.createElement('div')
   div.innerHTML = html
@@ -228,6 +233,10 @@ onMounted(async () => {
             <span v-if="post.is_pinned" class="pinned-tag">{{ t('guild.posts.pinned') }}</span>
             <span v-if="post.is_featured" class="featured-tag">{{ t('guild.posts.featured') }}</span>
           </div>
+        </div>
+        <div v-if="formatLocation(post.region, post.address)" class="post-location">
+          <i class="ri-map-pin-2-fill"></i>
+          <span>{{ formatLocation(post.region, post.address) }}</span>
         </div>
         <h3 class="post-title">{{ post.title }}</h3>
         <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
@@ -728,6 +737,25 @@ onMounted(async () => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.post-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-light, #F5EFE7);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.12));
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-secondary, #804030);
+}
+
+.post-location i {
+  font-size: 14px;
+  color: var(--color-accent, #B87333);
 }
 
 .post-footer {

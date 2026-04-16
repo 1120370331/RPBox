@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Tag } from '@/api/tag'
 import type { Guild } from '@/api/guild'
 import RButton from './RButton.vue'
@@ -25,6 +26,7 @@ const emit = defineEmits<{
   reset: []
 }>()
 
+const { t } = useI18n()
 const selectedTags = ref<number[]>([])
 const selectedGuild = ref<number | null>(null)
 const searchKeyword = ref('')
@@ -77,10 +79,10 @@ function resetFilter() {
 <template>
   <div class="story-filter">
     <div class="filter-section">
-      <label class="filter-label">搜索</label>
+      <label class="filter-label">{{ t('archives.filter.search') }}</label>
       <RInput
         v-model="searchKeyword"
-        placeholder="搜索标题或描述..."
+        :placeholder="t('archives.filter.searchPlaceholder')"
         @keyup.enter="applyFilter"
       >
         <template #prefix>
@@ -90,7 +92,7 @@ function resetFilter() {
     </div>
 
     <div class="filter-section">
-      <label class="filter-label">标签筛选</label>
+      <label class="filter-label">{{ t('archives.modal.addTags') }}</label>
       <div class="tag-filters">
         <span
           v-for="tag in tags"
@@ -106,9 +108,9 @@ function resetFilter() {
     </div>
 
     <div class="filter-section">
-      <label class="filter-label">公会筛选</label>
+      <label class="filter-label">{{ t('community.create.guild') }}</label>
       <select v-model="selectedGuild" class="filter-select">
-        <option :value="null">全部公会</option>
+        <option :value="null">{{ t('community.filter.all') }}</option>
         <option v-for="guild in guilds" :key="guild.id" :value="guild.id">
           {{ guild.name }}
         </option>
@@ -116,19 +118,19 @@ function resetFilter() {
     </div>
 
     <div class="filter-section">
-      <label class="filter-label">日期范围</label>
+      <label class="filter-label">{{ t('archives.story.date') }}</label>
       <div class="date-range">
         <input v-model="startDate" type="date" class="date-input" />
-        <span class="date-separator">至</span>
+        <span class="date-separator">~</span>
         <input v-model="endDate" type="date" class="date-input" />
       </div>
     </div>
 
     <div class="filter-section">
-      <label class="filter-label">排序</label>
+      <label class="filter-label">{{ t('archives.filter.sortBy') }}</label>
       <div class="sort-controls">
         <select v-model="sortBy" class="filter-select">
-          <option value="created_at">创建时间</option>
+          <option value="created_at">{{ t('archives.filter.newest') }}</option>
           <option value="updated_at">更新时间</option>
           <option value="start_time">剧情时间</option>
         </select>
@@ -142,8 +144,8 @@ function resetFilter() {
     </div>
 
     <div class="filter-actions">
-      <RButton v-if="hasActiveFilters" @click="resetFilter">重置</RButton>
-      <RButton type="primary" @click="applyFilter">应用筛选</RButton>
+      <RButton v-if="hasActiveFilters" @click="resetFilter">{{ t('archives.filter.clearFilter') }}</RButton>
+      <RButton type="primary" @click="applyFilter">{{ t('archives.filter.apply') }}</RButton>
     </div>
   </div>
 </template>

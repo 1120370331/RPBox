@@ -25,7 +25,6 @@ const eventsLoading = ref(false)
 const sortBy = ref<'created_at' | 'view_count' | 'like_count'>('created_at')
 const filterCategory = ref<PostCategory | ''>('')
 const searchKeyword = ref('')
-const authorName = ref('')
 const filterGuildId = ref<number | null>(null)
 const currentGuild = ref<Guild | null>(null)
 const currentPage = ref(1)
@@ -55,7 +54,7 @@ watch(() => route.query.guild_id, async (newGuildId) => {
   await Promise.all([loadPosts(), loadPinnedPosts()])
 })
 
-watch([searchKeyword, authorName], () => {
+watch(searchKeyword, () => {
   queueSearchReload()
 })
 
@@ -89,7 +88,6 @@ async function loadPosts() {
   loading.value = true
   try {
     const normalizedSearch = searchKeyword.value.trim()
-    const normalizedAuthorName = authorName.value.trim()
     const params: ListPostsParams = {
       page: currentPage.value,
       page_size: 12,
@@ -100,9 +98,6 @@ async function loadPosts() {
     }
     if (normalizedSearch) {
       params.search = normalizedSearch
-    }
-    if (normalizedAuthorName) {
-      params.author_name = normalizedAuthorName
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -123,7 +118,6 @@ async function loadPosts() {
 async function loadPinnedPosts() {
   try {
     const normalizedSearch = searchKeyword.value.trim()
-    const normalizedAuthorName = authorName.value.trim()
     const params: ListPostsParams = {
       page: 1,
       page_size: 10,
@@ -134,9 +128,6 @@ async function loadPinnedPosts() {
     }
     if (normalizedSearch) {
       params.search = normalizedSearch
-    }
-    if (normalizedAuthorName) {
-      params.author_name = normalizedAuthorName
     }
     if (filterCategory.value) {
       params.category = filterCategory.value
@@ -229,6 +220,11 @@ function stripHtml(html: string) {
   const div = document.createElement('div')
   div.innerHTML = html
   return div.textContent || div.innerText || ''
+}
+
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map(part => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
 }
 
 function formatEventTime(dateStr: string) {
@@ -576,10 +572,6 @@ function getEventStyle(event: EventItem) {
             </svg>
             <input v-model="searchKeyword" type="text" :placeholder="t('community.filter.search')" @keyup.enter="queueSearchReload(true)" />
           </div>
-          <div class="search-field author">
-            <i class="ri-user-search-line search-field-icon"></i>
-            <input v-model="authorName" type="text" :placeholder="t('community.filter.authorSearch')" @keyup.enter="queueSearchReload(true)" />
-          </div>
         </div>
         <button class="favorites-btn" @click="goToFavorites">
           <i class="ri-bookmark-3-line"></i>
@@ -656,7 +648,13 @@ function getEventStyle(event: EventItem) {
             @click="goToPost(post.id)"
           >
             <span class="pinned-tag">{{ t('community.pinned.tag') }}</span>
-            <span class="pinned-title">{{ post.title }}</span>
+            <div class="pinned-content">
+              <span class="pinned-title">{{ post.title }}</span>
+              <span v-if="formatLocation(post.region, post.address)" class="pinned-location">
+                <i class="ri-map-pin-2-fill"></i>
+                {{ formatLocation(post.region, post.address) }}
+              </span>
+            </div>
             <span class="pinned-time">{{ formatDate(post.created_at) }}</span>
           </div>
         </div>
@@ -824,6 +822,10 @@ function getEventStyle(event: EventItem) {
                 {{ t('community.post.featured') }}
               </span>
             </div>
+            <p v-if="formatLocation(post.region, post.address)" class="post-location">
+              <i class="ri-map-pin-2-fill"></i>
+              {{ formatLocation(post.region, post.address) }}
+            </p>
             <h3 class="post-title">{{ post.title }}</h3>
             <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
             <!-- 封面图 -->
@@ -986,20 +988,17 @@ function getEventStyle(event: EventItem) {
 .search-box {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex: 1 1 360px;
+  min-width: min(100%, 360px);
 }
 
 .search-field {
   position: relative;
+  flex: 1 1 auto;
 }
 
 .search-field.keyword {
-  flex: 1 1 256px;
-}
-
-.search-field.author {
-  flex: 0 1 180px;
+  min-width: min(100%, 320px);
 }
 
 .search-field-icon {
@@ -1749,10 +1748,30 @@ function getEventStyle(event: EventItem) {
 }
 
 .pinned-title {
-  flex: 1;
   font-size: 14px;
   color: var(--color-text-main, #2C1810);
   font-weight: 500;
+  display: block;
+}
+
+.pinned-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pinned-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #8D7B68);
+}
+
+.pinned-location i {
+  color: var(--color-accent, #B87333);
 }
 
 .pinned-time {
@@ -2144,6 +2163,26 @@ function getEventStyle(event: EventItem) {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.post-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-light, #F5EFE7);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.12));
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-secondary, #804030);
+  line-height: 1.4;
+}
+
+.post-location i {
+  color: var(--color-accent, #B87333);
 }
 
 .post-card.standard .card-footer {

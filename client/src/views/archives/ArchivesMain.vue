@@ -65,6 +65,8 @@ const storyFilter = computed<StoryFilterParams | undefined>(() => {
 const showCreateModal = ref(false)
 const newStoryTitle = ref('')
 const newStoryDesc = ref('')
+const newStoryRegion = ref('')
+const newStoryAddress = ref('')
 const creating = ref(false)
 const storyListRef = ref<InstanceType<typeof StoryList> | null>(null)
 const stagingPoolRef = ref<InstanceType<typeof StagingPool> | null>(null)
@@ -330,6 +332,8 @@ async function handleCreateStory() {
       const story = await createStory({
         title: newStoryTitle.value,
         description: newStoryDesc.value,
+        region: newStoryRegion.value.trim(),
+        address: newStoryAddress.value.trim(),
       })
       storyId = story.id
 
@@ -363,6 +367,8 @@ async function handleCreateStory() {
     showCreateModal.value = false
     newStoryTitle.value = ''
     newStoryDesc.value = ''
+    newStoryRegion.value = ''
+    newStoryAddress.value = ''
     selectedTagIds.value = []
     selectedStoryId.value = null
     archiveMode.value = 'create'
@@ -493,6 +499,14 @@ function handleViewStory(id: number) {
           <div class="form-field">
             <label>{{ $t('archives.modal.storyDesc') }}</label>
             <textarea v-model="newStoryDesc" :placeholder="$t('archives.modal.storyDescPlaceholder')" rows="3"></textarea>
+          </div>
+          <div class="form-field">
+            <label>{{ $t('archives.modal.storyRegion') }}</label>
+            <RInput v-model="newStoryRegion" :placeholder="$t('archives.modal.storyRegionPlaceholder')" />
+          </div>
+          <div class="form-field">
+            <label>{{ $t('archives.modal.storyAddress') }}</label>
+            <RInput v-model="newStoryAddress" :placeholder="$t('archives.modal.storyAddressPlaceholder')" />
           </div>
           <div class="form-field">
             <label>{{ $t('archives.modal.addTags') }}</label>
@@ -756,6 +770,10 @@ function handleViewStory(id: number) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.form-field :deep(.r-input) {
+  width: 100%;
 }
 
 .form-field label {

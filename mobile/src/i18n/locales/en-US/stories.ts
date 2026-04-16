@@ -2,7 +2,10 @@ export default {
   title: 'Stories',
   detailTitle: 'Story Detail',
   narrator: 'Narrator',
-  searchPlaceholder: 'Search stories...',
+  searchPlaceholder: 'Search titles, summaries, regions, or places...',
+  regionSearchPlaceholder: 'Search region...',
+  addressSearchPlaceholder: 'Search address...',
+  locationLabel: 'Location',
   sort: {
     recentUpdate: 'Recent Update',
     newest: 'Newest',

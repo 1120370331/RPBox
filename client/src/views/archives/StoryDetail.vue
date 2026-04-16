@@ -36,6 +36,8 @@ const entries = ref<StoryEntry[]>([])
 const editing = ref(false)
 const editTitle = ref('')
 const editDesc = ref('')
+const editRegion = ref('')
+const editAddress = ref('')
 const saving = ref(false)
 
 // 添加条目对话框
@@ -280,6 +282,8 @@ async function loadStory() {
     console.log('[StoryDetail] 第一条entry:', entries.value[0])
     editTitle.value = res.story.title
     editDesc.value = res.story.description
+    editRegion.value = res.story.region || ''
+    editAddress.value = res.story.address || ''
 
     // 加载所有关联的角色信息
     const characterIds = new Set<number>()
@@ -311,6 +315,8 @@ function startEdit() {
   editing.value = true
   editTitle.value = story.value?.title || ''
   editDesc.value = story.value?.description || ''
+  editRegion.value = story.value?.region || ''
+  editAddress.value = story.value?.address || ''
 }
 
 async function saveEdit() {
@@ -320,6 +326,8 @@ async function saveEdit() {
     const updated = await updateStory(storyId.value, {
       title: editTitle.value,
       description: editDesc.value,
+      region: editRegion.value,
+      address: editAddress.value,
     })
     story.value = updated
     editing.value = false
@@ -328,6 +336,29 @@ async function saveEdit() {
   } finally {
     saving.value = false
   }
+}
+
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map(part => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
+}
+
+function normalizeLocationPart(value?: string) {
+  return value?.trim() || ''
+}
+
+function hasLocation(region?: string, address?: string) {
+  return formatLocation(region, address).length > 0
+}
+
+function locationHeadline(region?: string, address?: string) {
+  return normalizeLocationPart(address) || normalizeLocationPart(region)
+}
+
+function locationContext(region?: string, address?: string) {
+  const regionText = normalizeLocationPart(region)
+  const addressText = normalizeLocationPart(address)
+  return regionText && addressText ? regionText : ''
 }
 
 // 处理图片选择
@@ -1527,6 +1558,20 @@ onBeforeUnmount(() => {
             <div class="header-info">
               <h1>{{ story.title }}</h1>
               <p class="description">{{ story.description || '暂无描述' }}</p>
+              <div v-if="hasLocation(story.region, story.address)" class="story-location-panel">
+                <div class="story-location-icon">
+                  <i class="ri-map-pin-2-fill"></i>
+                </div>
+                <div class="story-location-copy">
+                  <div class="story-location-top">
+                    <span class="story-location-label">{{ $t('archives.story.location') }}</span>
+                    <span v-if="locationContext(story.region, story.address)" class="story-location-chip">
+                      {{ locationContext(story.region, story.address) }}
+                    </span>
+                  </div>
+                  <strong class="story-location-main">{{ locationHeadline(story.region, story.address) }}</strong>
+                </div>
+              </div>
               <div class="meta">
                 <span class="meta-item">
                   <i class="ri-time-line"></i> {{ formatDate(story.created_at) }}
@@ -1619,6 +1664,14 @@ onBeforeUnmount(() => {
             <div class="form-field">
               <label>描述</label>
               <textarea v-model="editDesc" placeholder="剧情描述" rows="3"></textarea>
+            </div>
+            <div class="form-field">
+              <label>{{ $t('archives.modal.storyRegion') }}</label>
+              <RInput v-model="editRegion" :placeholder="$t('archives.modal.storyRegionPlaceholder')" />
+            </div>
+            <div class="form-field">
+              <label>{{ $t('archives.modal.storyAddress') }}</label>
+              <RInput v-model="editAddress" :placeholder="$t('archives.modal.storyAddressPlaceholder')" />
             </div>
             <div class="edit-actions">
               <RButton @click="editing = false">取消</RButton>
@@ -2543,6 +2596,75 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.6));
 }
 
+.story-location-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 0 0 16px 0;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--color-border-hover, #D4A373);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-light, rgba(75, 54, 33, 0.1)) 0%,
+    rgba(184, 115, 51, 0.12) 100%
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.story-location-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: var(--color-primary, #4B3621);
+  color: var(--color-text-light, #FBF5EF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.story-location-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.story-location-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.story-location-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--color-accent, #B87333);
+}
+
+.story-location-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-primary, #4B3621);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.story-location-main {
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--color-text-main, #2C1810);
+  word-break: break-word;
+}
+
 .meta {
   display: flex;
   gap: 16px;
@@ -2705,6 +2827,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.form-field :deep(.r-input) {
+  width: 100%;
 }
 
 .form-field label {

@@ -33,6 +33,8 @@ const form = ref<UpdatePostRequest>({
   content: '',
   content_type: 'html',
   category: 'other',
+  region: '',
+  address: '',
   status: 'published',
   cover_image: '',
   is_public: true,  // 公会外成员可见（默认开启）
@@ -144,7 +146,7 @@ onUnmounted(() => {
 })
 
 // 监听表单变化，自动保存
-watch([() => form.value.title, () => form.value.content, selectedTags], debouncedSaveDraft, { deep: true })
+watch([() => form.value.title, () => form.value.content, () => form.value.region, () => form.value.address, selectedTags], debouncedSaveDraft, { deep: true })
 
 async function loadPost() {
   loading.value = true
@@ -155,6 +157,8 @@ async function loadPost() {
     form.value.content = res.post.content
     form.value.content_type = res.post.content_type
     form.value.category = res.post.category || 'other'
+    form.value.region = res.post.region || ''
+    form.value.address = res.post.address || ''
     form.value.guild_id = res.post.guild_id
     form.value.status = res.post.status
     form.value.is_public = res.post.is_public ?? true
@@ -256,6 +260,8 @@ async function handleSubmit(status: 'draft' | 'published') {
       ...form.value,
       status,
     }
+    payload.region = form.value.region?.trim() || ''
+    payload.address = form.value.address?.trim() || ''
     if (payload.event_start_time) {
       payload.event_start_time = new Date(payload.event_start_time).toISOString()
     }
@@ -310,6 +316,8 @@ function handlePreview() {
     category: form.value.category,
     tag_ids: selectedTags.value,
     guild_id: form.value.guild_id,
+    region: form.value.region,
+    address: form.value.address,
     event_type: form.value.event_type,
     event_start_time: form.value.event_start_time,
     event_end_time: form.value.event_end_time,
@@ -519,15 +527,40 @@ function toggleQuickJump() {
 
     <!-- 设置区域 -->
     <div v-if="!loading || form.title" class="settings-bar anim-item" style="--delay: 2">
-      <!-- 分区选择 -->
-      <div class="setting-item">
-        <label class="setting-label">{{ t('community.create.category') }}</label>
-        <div class="category-select">
-          <select v-model="form.category">
-            <option v-for="cat in POST_CATEGORIES" :key="cat.value" :value="cat.value">
-              {{ cat.label }}
-            </option>
-          </select>
+      <!-- 分区与位置 -->
+      <div class="setting-block setting-block-primary">
+        <div class="setting-item setting-vertical setting-item--category">
+          <label class="setting-label">{{ t('community.create.category') }}</label>
+          <div class="category-select">
+            <select v-model="form.category">
+              <option v-for="cat in POST_CATEGORIES" :key="cat.value" :value="cat.value">
+                {{ cat.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="location-fields">
+          <div class="setting-item setting-vertical location-setting">
+            <label class="setting-label">{{ t('community.create.region') }}</label>
+            <input
+              v-model="form.region"
+              type="text"
+              class="location-text-input"
+              :placeholder="t('community.create.regionPlaceholder')"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="setting-item setting-vertical location-setting">
+            <label class="setting-label">{{ t('community.create.address') }}</label>
+            <input
+              v-model="form.address"
+              type="text"
+              class="location-text-input"
+              :placeholder="t('community.create.addressPlaceholder')"
+              autocomplete="off"
+            />
+          </div>
         </div>
       </div>
 
@@ -820,6 +853,7 @@ function toggleQuickJump() {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .setting-item.tags-setting {
@@ -827,10 +861,76 @@ function toggleQuickJump() {
   min-width: 200px;
 }
 
+.setting-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.setting-block-primary {
+  flex: 1 1 460px;
+  min-width: 320px;
+}
+
 .setting-item.setting-vertical {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+
+.setting-item--category {
+  width: 100%;
+}
+
+.setting-item--category .category-select {
+  width: min(360px, 100%);
+}
+
+.location-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.setting-item.location-setting {
+  min-width: 0;
+}
+
+.location-text-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #E5D4C1;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #4B3621;
+  outline: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s;
+}
+
+.location-text-input::placeholder {
+  color: #A99B8D;
+}
+
+.location-text-input:hover {
+  border-color: #B87333;
+}
+
+.location-text-input:focus {
+  border-color: #804030;
+  box-shadow: 0 0 0 2px rgba(128, 64, 48, 0.1);
+}
+
+@media (max-width: 900px) {
+  .setting-block-primary {
+    min-width: 100%;
+  }
+
+  .location-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .setting-label {

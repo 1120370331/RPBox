@@ -50,6 +50,11 @@ function formatDate(value: string) {
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map((part) => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
+}
+
 function statusText(post: PostWithAuthor) {
   if (post.status === 'draft') return t('profile.myPosts.statusDraft')
   if (post.status === 'pending' || post.review_status === 'pending') return t('profile.myPosts.statusPending')
@@ -109,6 +114,10 @@ onMounted(loadMyPosts)
               <div class="title-row">
                 <h3>{{ post.title }}</h3>
                 <span class="status-tag">{{ statusText(post) }}</span>
+              </div>
+              <div v-if="formatLocation(post.region, post.address)" class="location-row">
+                <i class="ri-map-pin-2-fill" />
+                <span>{{ formatLocation(post.region, post.address) }}</span>
               </div>
               <div class="meta">
                 <span><i class="ri-eye-line" /> {{ post.view_count }}</span>
@@ -220,8 +229,27 @@ onMounted(loadMyPosts)
   color: var(--tag-text);
 }
 
-.meta {
+.location-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+  border: 1px solid rgba(75, 54, 33, 0.1);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+
+.location-row i {
+  color: var(--color-primary);
+  font-size: 14px;
+}
+
+.meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;

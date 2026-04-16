@@ -79,6 +79,10 @@ const selectedGroupName = ref('')
 const emoteVersion = ref(0)
 
 const storyId = computed(() => Number(route.params.id))
+const locationRegionText = computed(() => story.value?.region?.trim() || '')
+const locationAddressText = computed(() => story.value?.address?.trim() || '')
+const locationText = computed(() => locationAddressText.value || locationRegionText.value)
+const locationContext = computed(() => locationRegionText.value && locationAddressText.value ? locationRegionText.value : '')
 const canManage = computed(() => !!story.value && !!userStore.user && (story.value.user_id === userStore.user.id || userStore.isAdmin || userStore.isModerator))
 const isAllSelected = computed(() => entries.value.length > 0 && selectedEntryIds.value.length === entries.value.length)
 const sortedBookmarks = computed(() => [...bookmarks.value].sort((a, b) => Number(b.is_favorite) - Number(a.is_favorite) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime()))
@@ -381,6 +385,18 @@ onMounted(async () => {
         <section class="story-summary">
           <h2>{{ story.title }}</h2>
           <p v-if="story.description">{{ story.description }}</p>
+          <div v-if="locationText" class="story-location-banner">
+            <div class="story-location-banner__icon">
+              <i class="ri-map-pin-2-fill" />
+            </div>
+            <div class="story-location-banner__content">
+              <div class="story-location-banner__top">
+                <span class="story-location-banner__label">{{ $t('stories.locationLabel') }}</span>
+                <span v-if="locationContext" class="story-location-banner__chip">{{ locationContext }}</span>
+              </div>
+              <strong class="story-location-banner__main">{{ locationText }}</strong>
+            </div>
+          </div>
           <div class="meta-row">
             <span><i class="ri-file-text-line" /> {{ $t('stories.entryCount', { n: entries.length }) }}</span>
             <span><i class="ri-eye-line" /> {{ story.view_count }}</span>
@@ -560,6 +576,63 @@ onMounted(async () => {
 .story-summary, .batch-bar, .group-block { background: var(--color-card-bg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 12px; margin-bottom: 12px; }
 .story-summary h2 { font-size: 17px; margin-bottom: 8px; }
 .story-summary p { font-size: 14px; color: var(--color-text-secondary); line-height: 1.6; }
+.story-location-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, rgba(184, 115, 51, 0.12) 100%);
+}
+.story-location-banner__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--color-primary);
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+.story-location-banner__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.story-location-banner__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.story-location-banner__label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.story-location-banner__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+.story-location-banner__main {
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--text-dark);
+  word-break: break-word;
+}
 .meta-row { margin-top: 10px; display: flex; gap: 12px; font-size: 12px; color: var(--color-text-secondary); }
 .bookmark-fab {
   position: fixed;

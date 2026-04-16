@@ -447,6 +447,29 @@ function getCategoryLabel(category: string) {
   return cat ? cat.label : t('community.category.other')
 }
 
+function normalizeLocationPart(value?: string) {
+  return value?.trim() || ''
+}
+
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map(normalizeLocationPart).filter(Boolean)
+  return parts.join(' · ')
+}
+
+function hasLocation(region?: string, address?: string) {
+  return formatLocation(region, address).length > 0
+}
+
+function locationHeadline(region?: string, address?: string) {
+  return normalizeLocationPart(address) || normalizeLocationPart(region)
+}
+
+function locationContext(region?: string, address?: string) {
+  const regionText = normalizeLocationPart(region)
+  const addressText = normalizeLocationPart(address)
+  return regionText && addressText ? regionText : ''
+}
+
 function goBack() {
   router.back()
 }
@@ -682,6 +705,21 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
           <!-- 文章内容 -->
           <div class="article-body">
+            <div v-if="hasLocation(post.region, post.address)" class="article-location-header">
+              <div class="article-location-icon">
+                <i class="ri-map-pin-2-fill"></i>
+              </div>
+              <div class="article-location-copy">
+                <div class="article-location-top">
+                  <span class="article-location-label">{{ t('community.detail.location') }}</span>
+                  <span v-if="locationContext(post.region, post.address)" class="article-location-chip">
+                    {{ locationContext(post.region, post.address) }}
+                  </span>
+                </div>
+                <strong class="article-location-main">{{ locationHeadline(post.region, post.address) }}</strong>
+              </div>
+            </div>
+
             <header class="article-header">
               <div class="category-badge">
                 <span class="badge-dot"></span>
@@ -1170,6 +1208,75 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   color: var(--color-text-main);
   line-height: 1.4;
   margin: 0 0 20px 0;
+}
+
+.article-location-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 0 0 24px 0;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--color-border-hover, #D4A373);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-light, rgba(75, 54, 33, 0.1)) 0%,
+    rgba(184, 115, 51, 0.12) 100%
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.article-location-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: var(--color-primary, #4B3621);
+  color: var(--color-text-light, #FBF5EF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.article-location-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.article-location-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.article-location-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--color-accent, #B87333);
+}
+
+.article-location-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-primary, #4B3621);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.article-location-main {
+  font-size: 20px;
+  line-height: 1.45;
+  color: var(--color-text-main, #2C1810);
+  word-break: break-word;
 }
 
 .article-meta {

@@ -17,6 +17,8 @@ interface PreviewData {
   title: string
   content: string
   category: string
+  region?: string
+  address?: string
   tag_ids: number[]
   guild_id?: number
   event_type?: string
@@ -68,6 +70,11 @@ function formatDate(dateStr?: string) {
 function getCategoryLabel(category: string) {
   const cat = POST_CATEGORIES.find(c => c.value === category)
   return cat ? cat.label : t('community.category.other')
+}
+
+function formatLocation(region?: string, address?: string) {
+  const parts = [region, address].map((part) => part?.trim()).filter(Boolean)
+  return parts.join(' · ')
 }
 
 function handlePreviewContentClick(event: MouseEvent) {
@@ -149,6 +156,10 @@ function handlePreviewContentClick(event: MouseEvent) {
               <div class="category-badge">
                 <span class="badge-dot"></span>
                 <span>{{ getCategoryLabel(previewData.category) }}</span>
+              </div>
+              <div v-if="formatLocation(previewData.region, previewData.address)" class="location-badge">
+                <i class="ri-map-pin-2-line"></i>
+                <span>{{ formatLocation(previewData.region, previewData.address) }}</span>
               </div>
               <h1 class="article-title">{{ previewData.title || t('community.preview.noTitle') }}</h1>
               <!-- 标签 -->
@@ -417,6 +428,24 @@ function handlePreviewContentClick(event: MouseEvent) {
   color: #2C1810;
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+.location-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, rgba(184, 115, 51, 0.1), rgba(128, 64, 48, 0.08));
+  border: 1px solid rgba(184, 115, 51, 0.2);
+  border-radius: 999px;
+  color: #804030;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.location-badge i {
+  font-size: 16px;
 }
 
 .article-title {

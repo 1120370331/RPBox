@@ -127,6 +127,8 @@ type Story struct {
 	UserID          uint           `gorm:"index;not null" json:"user_id"`
 	Title           string         `gorm:"size:256" json:"title"`
 	Description     string         `gorm:"type:text" json:"description"`
+	Region          string         `gorm:"size:128;index" json:"region"`
+	Address         string         `gorm:"size:256" json:"address"`
 	Participants    string         `gorm:"type:text" json:"participants"` // JSON数组
 	Tags            string         `gorm:"size:512" json:"tags"`          // 逗号分隔
 	StartTime       time.Time      `json:"start_time"`
@@ -443,9 +445,11 @@ type Post struct {
 	CoverImage          string     `gorm:"type:text" json:"cover_image"`                 // 封面图（URL或base64）
 	CoverImageUpdatedAt *time.Time `json:"cover_image_updated_at,omitempty"`
 	Category            string     `gorm:"size:20;default:other;index" json:"category"` // 分区: profile|guild|report|novel|item|event|other
-	GuildID             *uint      `gorm:"index" json:"guild_id"`                       // 关联公会（可选）
-	StoryID             *uint      `gorm:"index" json:"story_id"`                       // 关联剧情（可选）
-	Status              string     `gorm:"size:20;default:draft" json:"status"`         // draft|pending|published
+	Region              string     `gorm:"size:128;index" json:"region"`
+	Address             string     `gorm:"size:256" json:"address"`
+	GuildID             *uint      `gorm:"index" json:"guild_id"`               // 关联公会（可选）
+	StoryID             *uint      `gorm:"index" json:"story_id"`               // 关联剧情（可选）
+	Status              string     `gorm:"size:20;default:draft" json:"status"` // draft|pending|published
 	IsPublic            bool       `gorm:"default:true" json:"is_public"`
 	ViewCount           int        `gorm:"default:0" json:"view_count"`
 	LikeCount           int        `gorm:"default:0" json:"like_count"`
@@ -477,6 +481,8 @@ type PostEditRequest struct {
 	Content        string     `gorm:"type:text" json:"content"`
 	ContentType    string     `gorm:"size:20" json:"content_type"`
 	Category       string     `gorm:"size:20" json:"category"`
+	Region         string     `gorm:"size:128" json:"region"`
+	Address        string     `gorm:"size:256" json:"address"`
 	EventType      string     `gorm:"size:20" json:"event_type"`
 	EventStartTime *time.Time `json:"event_start_time"`
 	EventEndTime   *time.Time `json:"event_end_time"`

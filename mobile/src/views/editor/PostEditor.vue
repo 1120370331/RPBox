@@ -33,6 +33,8 @@ interface PostEditorForm {
   content: string
   content_type: 'markdown' | 'html'
   category: PostCategory
+  region: string
+  address: string
   guild_id?: number
   cover_image?: string
   is_public: boolean
@@ -61,6 +63,8 @@ const form = ref<PostEditorForm>({
   content: '',
   content_type: 'markdown',
   category: 'other',
+  region: '',
+  address: '',
   guild_id: undefined,
   cover_image: '',
   is_public: true,
@@ -88,6 +92,8 @@ async function loadPostForEdit() {
     form.value.content = res.post.content || ''
     form.value.content_type = (res.post.content_type as 'markdown' | 'html') || 'markdown'
     form.value.category = (res.post.category as PostCategory) || 'other'
+    form.value.region = res.post.region || ''
+    form.value.address = res.post.address || ''
     form.value.guild_id = res.post.guild_id
     form.value.cover_image = res.post.cover_image || ''
     form.value.is_public = res.post.is_public ?? true
@@ -209,6 +215,8 @@ async function submit(status: 'draft' | 'published') {
       ...form.value,
       title: form.value.title.trim(),
       content: form.value.content.trim(),
+      region: form.value.region.trim(),
+      address: form.value.address.trim(),
       content_type: 'html' as const,
       status,
     }
@@ -291,6 +299,16 @@ onMounted(async () => {
               <option :value="undefined">{{ $t('community.editor.guildNone') }}</option>
               <option v-for="guild in guilds" :key="guild.id" :value="guild.id">{{ guild.name }}</option>
             </select>
+          </label>
+
+          <label class="field">
+            <span>{{ $t('community.editor.region') }}</span>
+            <input v-model="form.region" type="text" :placeholder="$t('community.editor.regionPlaceholder')">
+          </label>
+
+          <label class="field">
+            <span>{{ $t('community.editor.address') }}</span>
+            <input v-model="form.address" type="text" :placeholder="$t('community.editor.addressPlaceholder')">
           </label>
 
           <label class="switch-field">

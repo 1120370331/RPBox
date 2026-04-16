@@ -273,6 +273,8 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 		post.Content = edit.Content
 		post.ContentType = edit.ContentType
 		post.Category = edit.Category
+		post.Region = edit.Region
+		post.Address = edit.Address
 		if edit.Category == "event" {
 			post.EventType = edit.EventType
 			post.EventStartTime = edit.EventStartTime
