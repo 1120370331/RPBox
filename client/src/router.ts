@@ -4,6 +4,37 @@ import { useUserStore } from './stores/user'
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(_to, _from, savedPosition) {
+    if (savedPosition) {
+      requestAnimationFrame(() => {
+        const mainContent = document.querySelector<HTMLElement>('.main-content')
+        if (mainContent) {
+          mainContent.scrollTo({
+            top: savedPosition.top,
+            left: savedPosition.left,
+            behavior: 'auto',
+          })
+        } else {
+          window.scrollTo({
+            top: savedPosition.top,
+            left: savedPosition.left,
+            behavior: 'auto',
+          })
+        }
+      })
+      return savedPosition
+    }
+
+    requestAnimationFrame(() => {
+      const mainContent = document.querySelector<HTMLElement>('.main-content')
+      if (mainContent) {
+        mainContent.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    })
+
+    return { top: 0 }
+  },
   routes: [
     {
       path: '/',
