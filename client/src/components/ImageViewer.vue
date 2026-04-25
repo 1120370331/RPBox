@@ -38,7 +38,9 @@ const controlsVisible = ref(true)
 const viewerContentRef = ref<HTMLDivElement | null>(null)
 const panStartX = ref(0)
 const panStartY = ref(0)
+const historyEntryActive = ref(false)
 let controlsFadeTimer: ReturnType<typeof setTimeout> | null = null
+let closingFromHistory = false
 
 const currentImage = computed(() => props.images[currentIndex.value] || '')
 const transformStyle = computed(() => ({
@@ -50,9 +52,16 @@ watch(() => props.modelValue, (visible) => {
     currentIndex.value = Math.min(props.startIndex || 0, Math.max(props.images.length - 1, 0))
     resetTransform()
     window.addEventListener('keydown', handleKeydown)
+    window.addEventListener('popstate', handlePopstate)
+    ensureHistoryEntry()
     showControlsTemporarily()
   } else {
     window.removeEventListener('keydown', handleKeydown)
+    window.removeEventListener('popstate', handlePopstate)
+    if (!closingFromHistory) {
+      clearHistoryEntry()
+    }
+    closingFromHistory = false
     clearControlsFadeTimer()
     controlsVisible.value = true
     isDragging.value = false
@@ -80,10 +89,15 @@ watch(scale, (value) => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('popstate', handlePopstate)
   clearControlsFadeTimer()
 })
 
 function closeViewer() {
+  if (historyEntryActive.value) {
+    history.back()
+    return
+  }
   emit('update:modelValue', false)
 }
 
@@ -271,6 +285,25 @@ function handleKeydown(event: KeyboardEvent) {
   if (event.key.toLowerCase() === 'r') {
     rotateRight()
   }
+}
+
+function handlePopstate() {
+  if (!props.modelValue || !historyEntryActive.value) return
+  closingFromHistory = true
+  historyEntryActive.value = false
+  emit('update:modelValue', false)
+}
+
+function ensureHistoryEntry() {
+  if (historyEntryActive.value) return
+  history.pushState({ imageViewer: true }, '')
+  historyEntryActive.value = true
+}
+
+function clearHistoryEntry() {
+  if (!historyEntryActive.value) return
+  historyEntryActive.value = false
+  history.back()
 }
 </script>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../stores/user'
 import { useNotificationStore } from '../stores/notification'
@@ -18,6 +18,16 @@ const router = useRouter()
 const route = useRoute()
 const mounted = ref(false)
 const jumpReturn = ref<JumpReturnInfo | null>(null)
+const mainContentRef = ref<HTMLElement | null>(null)
+const pendingRestoreMenu = ref<string | null>(null)
+
+interface MenuCacheState {
+  path: string
+  scrollTop: number
+  scrollLeft: number
+}
+
+const menuCache = ref<Record<string, MenuCacheState>>({})
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
@@ -38,6 +48,17 @@ function handleMenuClick() {
   if (userStore.token) {
     notificationStore.loadUnreadCount()
   }
+}
+
+function ensureMenuCache(menuId: string, path: string = route.fullPath) {
+  if (!menuCache.value[menuId]) {
+    menuCache.value[menuId] = {
+      path,
+      scrollTop: 0,
+      scrollLeft: 0,
+    }
+  }
+  return menuCache.value[menuId]
 }
 
 async function refreshCurrentUser() {
@@ -133,10 +154,6 @@ watch(currentMenu, (menu) => {
   }
 }, { immediate: true })
 
-watch(() => route.fullPath, () => {
-  refreshJumpReturn()
-})
-
 const activeMenu = computed(() => {
   if (currentMenu.value) return currentMenu.value
   // 合集页面和收藏夹页面保持在上一个主菜单
@@ -144,6 +161,81 @@ const activeMenu = computed(() => {
     return lastMainMenu.value
   }
   return 'home'
+})
+
+function saveMenuState(menuId: string | null, path: string = route.fullPath) {
+  if (!menuId) return
+
+  const cache = ensureMenuCache(menuId, path)
+  const mainContent = mainContentRef.value
+  cache.path = path
+  cache.scrollTop = mainContent?.scrollTop ?? 0
+  cache.scrollLeft = mainContent?.scrollLeft ?? 0
+}
+
+async function restoreMenuState(menuId: string) {
+  const cache = menuCache.value[menuId]
+  if (!cache) return
+
+  await nextTick()
+  requestAnimationFrame(() => {
+    const mainContent = mainContentRef.value
+    if (mainContent) {
+      mainContent.scrollTo({
+        top: cache.scrollTop,
+        left: cache.scrollLeft,
+        behavior: 'auto',
+      })
+    } else {
+      window.scrollTo({
+        top: cache.scrollTop,
+        left: cache.scrollLeft,
+        behavior: 'auto',
+      })
+    }
+  })
+}
+
+function handleMainContentScroll() {
+  saveMenuState(activeMenu.value)
+}
+
+async function handleMenuNavigate(menuId: string, fallbackRoute: string) {
+  handleMenuClick()
+  if (activeMenu.value === menuId) return
+
+  saveMenuState(activeMenu.value)
+
+  const cache = menuCache.value[menuId]
+  pendingRestoreMenu.value = menuId
+  await router.push(cache?.path || fallbackRoute)
+}
+
+watch(() => route.fullPath, async (newPath, oldPath) => {
+  saveMenuState(resolveMenu(oldPath || ''))
+
+  if (activeMenu.value) {
+    ensureMenuCache(activeMenu.value, newPath).path = newPath
+  }
+
+  refreshJumpReturn()
+
+  if (pendingRestoreMenu.value && pendingRestoreMenu.value === activeMenu.value) {
+    const menuId = pendingRestoreMenu.value
+    pendingRestoreMenu.value = null
+    await restoreMenuState(menuId)
+  }
+}, { flush: 'post' })
+
+onMounted(() => {
+  if (activeMenu.value) {
+    ensureMenuCache(activeMenu.value, route.fullPath)
+  }
+  saveMenuState(activeMenu.value)
+})
+
+onBeforeUnmount(() => {
+  saveMenuState(activeMenu.value)
 })
 </script>
 
@@ -168,29 +260,29 @@ const activeMenu = computed(() => {
       </div>
 
       <nav class="menu">
-        <RouterLink
+        <button
           v-for="item in menuItems"
           :key="item.id"
+          type="button"
           class="menu-item"
           :class="{ active: activeMenu === item.id }"
-          :to="item.route"
-          @click="handleMenuClick"
+          @click="handleMenuNavigate(item.id, item.route)"
         >
           <i :class="item.icon"></i>
           <span>{{ item.label }}</span>
-        </RouterLink>
+        </button>
 
         <!-- 版主中心（仅版主可见） -->
-        <RouterLink
+        <button
           v-if="moderatorMenuItem"
+          type="button"
           class="menu-item moderator-item"
           :class="{ active: activeMenu === 'moderator' }"
-          :to="moderatorMenuItem.route"
-          @click="handleMenuClick"
+          @click="handleMenuNavigate('moderator', moderatorMenuItem.route)"
         >
           <i :class="moderatorMenuItem.icon"></i>
           <span>{{ moderatorMenuItem.label }}</span>
-        </RouterLink>
+        </button>
       </nav>
 
       <div class="user-profile">
@@ -226,7 +318,7 @@ const activeMenu = computed(() => {
     </aside>
 
     <!-- 主内容区 -->
-    <main class="main-content">
+    <main ref="mainContentRef" class="main-content" @scroll.passive="handleMainContentScroll">
       <div v-if="jumpReturn?.type === 'post'" class="jump-return-bar">
         <button class="jump-return-btn" type="button" @click="handleReturnToPost">
           <i class="ri-arrow-left-line"></i>
@@ -302,9 +394,13 @@ const activeMenu = computed(() => {
   align-items: center;
   padding: 14px 16px;
   border-radius: 12px;
+  border: none;
+  background: transparent;
+  width: 100%;
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 15px;
+  text-align: left;
   color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.7));
   text-decoration: none;
 }
