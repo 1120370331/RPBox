@@ -14,6 +14,10 @@ import {
   getModeratorStats,
   getPendingPosts,
   getPendingItems,
+  getPendingPostEdits,
+  reviewPostEdit,
+  getPendingItemEdits,
+  reviewItemEdit,
   getModeratorReports,
   reviewPost,
   reviewItem,
@@ -63,6 +67,8 @@ import {
   type ReviewRequest,
   type ReportReviewItem,
   type ReportReviewRequest,
+  type PostEditReviewItem,
+  type ItemEditReviewItem,
   type ImageReviewStatus,
   type PostCommentImageReviewItem,
   type ItemCommentImageReviewItem,
@@ -96,7 +102,7 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('review')
-type ReviewSubTab = 'posts' | 'items' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
+type ReviewSubTab = 'posts' | 'items' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
 type AdminSubTab = 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'
@@ -132,6 +138,8 @@ const generatedSponsorCodeText = computed(() => generatedSponsorCodes.value.map(
 const stats = ref<ModeratorStats | null>(null)
 const pendingPosts = ref<any[]>([])
 const pendingItems = ref<any[]>([])
+const pendingPostEdits = ref<PostEditReviewItem[]>([])
+const pendingItemEdits = ref<ItemEditReviewItem[]>([])
 const pendingGuilds = ref<any[]>([])
 const pendingReports = ref<ReportReviewItem[]>([])
 const pendingPostCommentImages = ref<PostCommentImageReviewItem[]>([])
@@ -288,7 +296,7 @@ onUnmounted(() => {
   disposeMetricsChart()
 })
 
-const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'userAvatars']
+const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'userAvatars']
 const manageSubTabs: ManageSubTab[] = ['posts', 'items', 'guilds', 'users']
 
 function isReviewSubTab(subTab: ModeratorSubTab): subTab is ReviewSubTab {
@@ -365,6 +373,32 @@ async function loadPendingItems() {
     total.value = res.total
   } catch (error) {
     console.error('加载待审核道具失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadPendingPostEdits() {
+  loading.value = true
+  try {
+    const res = await getPendingPostEdits({ page: page.value, page_size: pageSize.value })
+    pendingPostEdits.value = res.edits || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载待审核帖子编辑失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadPendingItemEdits() {
+  loading.value = true
+  try {
+    const res = await getPendingItemEdits({ page: page.value, page_size: pageSize.value })
+    pendingItemEdits.value = res.edits || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载待审核道具编辑失败:', error)
   } finally {
     loading.value = false
   }
@@ -591,6 +625,8 @@ function formatForumLevel(user: SafeUser): string {
 function loadReviewSubTab(subTab: ReviewSubTab) {
   if (subTab === 'posts') loadPendingPosts()
   else if (subTab === 'items') loadPendingItems()
+  else if (subTab === 'postEdits') loadPendingPostEdits()
+  else if (subTab === 'itemEdits') loadPendingItemEdits()
   else if (subTab === 'guilds') loadPendingGuilds()
   else if (subTab === 'reports') loadPendingReports()
   else if (subTab === 'postCommentImages') loadPendingPostCommentImages()
@@ -1542,6 +1578,40 @@ async function quickReview(type: 'post' | 'item' | 'guild', id: number, action: 
   }
 }
 
+async function quickReviewEdit(type: 'post' | 'item', id: number, action: 'approve' | 'reject') {
+  const actionText = action === 'approve' ? '通过' : '拒绝'
+  const typeText = type === 'post' ? '帖子编辑申请' : '道具编辑申请'
+
+  const confirmed = await dialog.confirm({
+    title: `${actionText}${typeText}`,
+    message: action === 'approve'
+      ? `确定要${actionText}这个${typeText}吗？通过后会覆盖原内容。`
+      : `确定要${actionText}这个${typeText}吗？`,
+    type: action === 'approve' ? 'success' : 'warning',
+    confirmText: actionText,
+    cancelText: '取消'
+  })
+
+  if (!confirmed) return
+
+  const data: ReviewRequest = { action, comment: '' }
+
+  try {
+    if (type === 'post') {
+      await reviewPostEdit(id, data)
+      await loadPendingPostEdits()
+    } else {
+      await reviewItemEdit(id, data)
+      await loadPendingItemEdits()
+    }
+    await loadStats()
+    toast.success(`${actionText}成功`)
+  } catch (error) {
+    console.error('编辑审核失败:', error)
+    toast.error('审核失败: ' + (error as Error).message)
+  }
+}
+
 function openReviewModal(type: 'post' | 'item' | 'guild', id: number, title: string) {
   reviewTarget.value = { type, id, title }
   reviewAction.value = 'approve'
@@ -1920,6 +1990,17 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
+function formatEditPreview(content?: string | null, limit = 140) {
+  const source = content || ''
+  const text = source
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!text) return '（无内容预览）'
+  return text.length > limit ? `${text.slice(0, limit)}...` : text
+}
+
 function getStatusLabel(status: string) {
   const map: Record<string, string> = {
     draft: '草稿',
@@ -2108,6 +2189,20 @@ function formatBanTime(dateStr: string | null) {
           </div>
         </div>
         <div class="stat-card pending">
+          <div class="stat-icon"><i class="ri-edit-2-line"></i></div>
+          <div class="stat-info">
+            <div class="stat-value">{{ stats?.pending_post_edits || 0 }}</div>
+            <div class="stat-label">帖子编辑审核</div>
+          </div>
+        </div>
+        <div class="stat-card pending">
+          <div class="stat-icon"><i class="ri-edit-box-line"></i></div>
+          <div class="stat-info">
+            <div class="stat-value">{{ stats?.pending_item_edits || 0 }}</div>
+            <div class="stat-label">作品编辑审核</div>
+          </div>
+        </div>
+        <div class="stat-card pending">
           <div class="stat-icon"><i class="ri-team-line"></i></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats?.pending_guilds || 0 }}</div>
@@ -2220,6 +2315,28 @@ function formatBanTime(dateStr: string | null) {
           作品
           <span v-if="activeTab === 'review' && (stats?.pending_items || 0) > 0" class="review-badge">
             {{ stats?.pending_items }}
+          </span>
+        </button>
+        <button
+          v-if="activeTab === 'review'"
+          :class="{ active: activeSubTab === 'postEdits' }"
+          @click="switchSubTab('postEdits')"
+        >
+          <i class="ri-edit-2-line"></i>
+          帖子编辑
+          <span v-if="(stats?.pending_post_edits || 0) > 0" class="review-badge">
+            {{ stats?.pending_post_edits }}
+          </span>
+        </button>
+        <button
+          v-if="activeTab === 'review'"
+          :class="{ active: activeSubTab === 'itemEdits' }"
+          @click="switchSubTab('itemEdits')"
+        >
+          <i class="ri-edit-box-line"></i>
+          作品编辑
+          <span v-if="(stats?.pending_item_edits || 0) > 0" class="review-badge">
+            {{ stats?.pending_item_edits }}
           </span>
         </button>
         <button
@@ -2404,6 +2521,98 @@ function formatBanTime(dateStr: string | null) {
               </button>
               <button class="btn-preview" @click="openPreview('item', item.id)">
                 <i class="ri-eye-line"></i> 预览
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 审核中心 - 帖子编辑申请 -->
+      <div v-if="activeTab === 'review' && activeSubTab === 'postEdits'" class="content-list anim-item" style="--delay: 4">
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingPostEdits.length === 0" class="empty-state">
+          <i class="ri-edit-2-line"></i>
+          <p>暂无待审核帖子编辑</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="edit in pendingPostEdits" :key="edit.id" class="item-card edit-review-card">
+            <div class="item-header">
+              <div class="title-with-tags">
+                <span class="item-title">{{ edit.title || `帖子 #${edit.post_id}` }}</span>
+                <span class="permission-warning-tag">原：{{ edit.original_title || `帖子 #${edit.post_id}` }}</span>
+              </div>
+              <span class="status-badge pending">编辑待审核</span>
+            </div>
+            <div class="item-meta">
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(edit.author_name_color, edit.author_name_bold)">{{ edit.author_name }}</span>
+              </span>
+              <span><i class="ri-price-tag-3-line"></i> {{ edit.category || '未分类' }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(edit.created_at) }}</span>
+            </div>
+            <div class="edit-review-preview">
+              <div class="edit-review-label">编辑后内容预览</div>
+              <p>{{ formatEditPreview(edit.content) }}</p>
+            </div>
+            <div class="item-actions">
+              <button class="btn-approve" @click="quickReviewEdit('post', edit.id, 'approve')">
+                <i class="ri-checkbox-circle-line"></i> 通过并覆盖
+              </button>
+              <button class="btn-reject" @click="quickReviewEdit('post', edit.id, 'reject')">
+                <i class="ri-close-circle-line"></i> 拒绝
+              </button>
+              <button class="btn-preview" @click="openPreview('post', edit.post_id)">
+                <i class="ri-eye-line"></i> 查看原帖
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 审核中心 - 作品编辑申请 -->
+      <div v-if="activeTab === 'review' && activeSubTab === 'itemEdits'" class="content-list anim-item" style="--delay: 4">
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingItemEdits.length === 0" class="empty-state">
+          <i class="ri-edit-box-line"></i>
+          <p>暂无待审核作品编辑</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="edit in pendingItemEdits" :key="edit.id" class="item-card edit-review-card">
+            <div class="item-header">
+              <div class="title-with-tags">
+                <span class="item-title">{{ edit.name || `作品 #${edit.item_id}` }}</span>
+                <span class="permission-warning-tag">原：{{ edit.original_name || `作品 #${edit.item_id}` }}</span>
+              </div>
+              <span class="status-badge pending">编辑待审核</span>
+            </div>
+            <div class="item-meta">
+              <span>
+                <i class="ri-user-line"></i>
+                <span :style="buildNameStyle(edit.author_name_color, edit.author_name_bold)">{{ edit.author_name }}</span>
+              </span>
+              <span v-if="edit.icon"><i class="ri-ancient-gate-line"></i> {{ edit.icon }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(edit.created_at) }}</span>
+            </div>
+            <div class="edit-review-preview">
+              <div class="edit-review-label">编辑后描述预览</div>
+              <p>{{ formatEditPreview(edit.description) }}</p>
+            </div>
+            <div class="item-actions">
+              <button class="btn-approve" @click="quickReviewEdit('item', edit.id, 'approve')">
+                <i class="ri-checkbox-circle-line"></i> 通过并覆盖
+              </button>
+              <button class="btn-reject" @click="quickReviewEdit('item', edit.id, 'reject')">
+                <i class="ri-close-circle-line"></i> 拒绝
+              </button>
+              <button class="btn-preview" @click="openPreview('item', edit.item_id)">
+                <i class="ri-eye-line"></i> 查看原作品
               </button>
             </div>
           </div>
@@ -4356,6 +4565,7 @@ function formatBanTime(dateStr: string | null) {
 .sub-tab-container {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .sub-tab-container button {
@@ -4498,6 +4708,33 @@ function formatBanTime(dateStr: string | null) {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.edit-review-card {
+  border: 1px solid var(--color-border, #E5D4C1);
+}
+
+.edit-review-preview {
+  margin: 10px 0 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--color-card-bg-soft, rgba(128, 64, 48, 0.06));
+  border: 1px dashed var(--color-border, #E5D4C1);
+}
+
+.edit-review-label {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-secondary, #804030);
+}
+
+.edit-review-preview p {
+  margin: 0;
+  color: var(--color-text-main, #2C1810);
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 .image-review-card {

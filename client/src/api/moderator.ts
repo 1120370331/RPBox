@@ -51,6 +51,60 @@ export function reviewItem(id: number, data: ReviewRequest) {
   return request.post<{ message: string; item: any }>(`/moderator/review/items/${id}`, data)
 }
 
+// ========== 审核中心 - 编辑申请 ==========
+
+export interface PostEditReviewItem {
+  id: number
+  post_id: number
+  author_id: number
+  title: string
+  content: string
+  content_type?: string
+  category?: string
+  region?: string
+  address?: string
+  status: 'pending' | 'rejected'
+  created_at: string
+  updated_at: string
+  author_name: string
+  author_name_color?: string
+  author_name_bold?: boolean
+  original_title?: string
+}
+
+export interface ItemEditReviewItem {
+  id: number
+  item_id: number
+  author_id: number
+  name: string
+  icon?: string
+  description?: string
+  import_code?: string
+  review_status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  updated_at: string
+  author_name: string
+  author_name_color?: string
+  author_name_bold?: boolean
+  original_name?: string
+}
+
+export function getPendingPostEdits(params?: { page?: number; page_size?: number }) {
+  return request.get<{ edits: PostEditReviewItem[]; total: number }>('/moderator/review/post-edits', { params })
+}
+
+export function reviewPostEdit(id: number, data: ReviewRequest) {
+  return request.post<{ message: string; edit?: PostEditReviewItem; post?: any }>(`/moderator/review/post-edits/${id}`, data)
+}
+
+export function getPendingItemEdits(params?: { page?: number; page_size?: number }) {
+  return request.get<{ edits: ItemEditReviewItem[]; total: number }>('/moderator/review/item-edits', { params })
+}
+
+export function reviewItemEdit(id: number, data: ReviewRequest) {
+  return request.post<{ message: string; edit?: ItemEditReviewItem; item?: any }>(`/moderator/review/item-edits/${id}`, data)
+}
+
 // ========== 举报审查 ========== 
 
 export interface ReportReviewQueryParams {
