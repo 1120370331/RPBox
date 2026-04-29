@@ -170,6 +170,24 @@ function getFactionClass(f: string): string {
   return f || 'neutral'
 }
 
+function getGuildBannerStyle(guild: Guild) {
+  if (guild.banner_url) {
+    return {
+      background: `url(${getImageUrl('guild-banner', guild.id, { w: 600, q: 80, v: guild.banner_updated_at || guild.updated_at })}) center/cover`
+    }
+  }
+  if (guild.color) {
+    return {
+      background: `linear-gradient(135deg, #${guild.color}, var(--color-primary))`
+    }
+  }
+  return {}
+}
+
+function getGuildIconStyle(guild: Guild) {
+  return guild.color ? { background: `#${guild.color}` } : {}
+}
+
 onMounted(loadData)
 </script>
 
@@ -209,14 +227,14 @@ onMounted(loadData)
     <div v-else class="guild-grid">
       <div v-for="guild in displayGuilds" :key="guild.id" class="guild-card" @click="router.push(`/guild/${guild.id}`)">
         <!-- 头图 -->
-        <div class="card-banner" :style="{ background: guild.banner_url ? `url(${getImageUrl('guild-banner', guild.id, { w: 600, q: 80, v: guild.banner_updated_at || guild.updated_at })}) center/cover` : `linear-gradient(135deg, #${guild.color || 'B87333'}, #4B3621)` }">
+        <div class="card-banner" :style="getGuildBannerStyle(guild)">
           <div v-if="guild.faction" class="faction-badge" :class="getFactionClass(guild.faction)">
             {{ getFactionLabel(guild.faction) }}
           </div>
         </div>
         <!-- 卡片内容 -->
         <div class="card-body">
-          <div class="guild-icon" :style="{ background: '#' + (guild.color || 'B87333') }">
+          <div class="guild-icon" :style="getGuildIconStyle(guild)">
             <img
               v-if="guild.avatar_url || guild.avatar"
               :src="getImageUrl('guild-avatar', guild.id, { w: 96, q: 80, v: guild.avatar_updated_at || guild.updated_at })"
@@ -310,6 +328,7 @@ onMounted(loadData)
 }
 
 .tabs button {
+  position: relative;
   padding: 8px 20px;
   border: 1px solid transparent;
   background: transparent;
@@ -321,11 +340,28 @@ onMounted(loadData)
 }
 
 .tabs button.active {
-  background: var(--color-accent, #B87333);
-  border-color: var(--color-accent, #B87333);
-  color: var(--btn-primary-text, #fff);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-panel-bg, #fff) 78%, var(--color-secondary, #B87333)),
+      color-mix(in srgb, var(--color-panel-bg, #fff) 88%, var(--color-accent, #D4A373))
+    );
+  border-color: color-mix(in srgb, var(--color-secondary, #B87333) 34%, transparent);
+  color: var(--color-primary, #4B3621);
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 8px 20px -16px rgba(var(--shadow-base, 75, 54, 33), 0.78);
+}
+
+.tabs button.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-accent, #B87333);
+  transform: translateX(-50%);
 }
 
 .header-actions {
@@ -434,6 +470,9 @@ onMounted(loadData)
 .card-banner {
   height: 120px;
   position: relative;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.72), transparent 28%),
+    linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #4B3621));
 }
 
 .faction-badge {
@@ -468,6 +507,9 @@ onMounted(loadData)
 .guild-icon {
   width: 48px;
   height: 48px;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.7), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #4B3621));
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -580,7 +622,7 @@ onMounted(loadData)
   gap: 6px;
   width: 100%;
   padding: 8px 16px;
-  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-highlight, #D4A373));
+  background: linear-gradient(135deg, var(--btn-primary-bg, #B87333), var(--btn-primary-hover, #D4A373));
   color: var(--btn-primary-text, #fff);
   border: none;
   border-radius: 8px;
@@ -591,9 +633,9 @@ onMounted(loadData)
 }
 
 .apply-btn:hover {
-  background: linear-gradient(135deg, var(--color-secondary, #4B3621), var(--color-secondary-hover, #856a52));
+  background: linear-gradient(135deg, var(--btn-primary-hover, #4B3621), var(--color-primary, #856a52));
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(184, 115, 51, 0.3);
+  box-shadow: 0 4px 12px rgba(var(--shadow-base, 75, 54, 33), 0.24);
 }
 
 .apply-btn i {

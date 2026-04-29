@@ -48,25 +48,26 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
 
 	response := struct {
-		ID                 uint      `json:"id"`
-		Username           string    `json:"username"`
-		Email              string    `json:"email"`
-		Avatar             string    `json:"avatar"`
-		AvatarReviewStatus string    `json:"avatar_review_status"`
-		Role               string    `json:"role"`
-		IsSponsor          bool      `json:"is_sponsor"`
-		SponsorLevel       int       `json:"sponsor_level"`
-		SponsorColor       string    `json:"sponsor_color"`
-		SponsorBold        bool      `json:"sponsor_bold"`
-		NameColor          string    `json:"name_color"`
-		NameBold           bool      `json:"name_bold"`
-		Bio                string    `json:"bio"`
-		Location           string    `json:"location"`
-		Website            string    `json:"website"`
-		PostCount          int64     `json:"post_count"`
-		StoryCount         int64     `json:"story_count"`
-		ProfileCount       int64     `json:"profile_count"`
-		CreatedAt          time.Time `json:"created_at"`
+		ID                 uint       `json:"id"`
+		Username           string     `json:"username"`
+		Email              string     `json:"email"`
+		Avatar             string     `json:"avatar"`
+		AvatarReviewStatus string     `json:"avatar_review_status"`
+		Role               string     `json:"role"`
+		IsSponsor          bool       `json:"is_sponsor"`
+		SponsorLevel       int        `json:"sponsor_level"`
+		SponsorExpiresAt   *time.Time `json:"sponsor_expires_at"`
+		SponsorColor       string     `json:"sponsor_color"`
+		SponsorBold        bool       `json:"sponsor_bold"`
+		NameColor          string     `json:"name_color"`
+		NameBold           bool       `json:"name_bold"`
+		Bio                string     `json:"bio"`
+		Location           string     `json:"location"`
+		Website            string     `json:"website"`
+		PostCount          int64      `json:"post_count"`
+		StoryCount         int64      `json:"story_count"`
+		ProfileCount       int64      `json:"profile_count"`
+		CreatedAt          time.Time  `json:"created_at"`
 		userActivityPayload
 	}{
 		ID:                  user.ID,
@@ -77,6 +78,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		Role:                user.Role,
 		IsSponsor:           level > sponsorLevelNone,
 		SponsorLevel:        level,
+		SponsorExpiresAt:    user.SponsorExpiresAt,
 		SponsorColor:        user.SponsorColor,
 		SponsorBold:         user.SponsorBold,
 		NameColor:           nameColor,

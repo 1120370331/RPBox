@@ -503,24 +503,24 @@ onMounted(() => {
 
 /* Server Event Type - Primary color theme */
 .event-item.server {
-  background: var(--color-primary-light, rgba(128, 64, 48, 0.05));
+  background: color-mix(in srgb, var(--color-secondary, #804030) 12%, transparent);
   color: var(--color-secondary, #804030);
   border-color: var(--color-secondary, #804030);
 }
 
 .event-item.server:hover {
-  background: var(--btn-secondary-bg, rgba(128, 64, 48, 0.1));
+  background: color-mix(in srgb, var(--color-secondary, #804030) 20%, transparent);
 }
 
 /* Guild Event Type - Accent/Gold theme */
 .event-item.guild {
-  background: rgba(var(--shadow-base, 212, 163, 115), 0.1);
-  color: var(--color-primary, #8C5E35);
+  background: color-mix(in srgb, var(--color-accent, #D4A373) 14%, transparent);
+  color: var(--color-accent, #D4A373);
   border-color: var(--color-accent, #D4A373);
 }
 
 .event-item.guild:hover {
-  background: rgba(var(--shadow-base, 212, 163, 115), 0.2);
+  background: color-mix(in srgb, var(--color-accent, #D4A373) 24%, transparent);
 }
 
 .event-title {

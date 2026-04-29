@@ -17,7 +17,7 @@ func resetSensitiveKeywordCaches() {
 func TestDetectSensitiveKeywords(t *testing.T) {
 	tmpDir := t.TempDir()
 	keywordFile := filepath.Join(tmpDir, "keywords.txt")
-	if err := os.WriteFile(keywordFile, []byte("法轮功\n开盒\n民主\n政府\n共产党\n习近平\n打倒共产党\n台独\n第四\n时间\n信息\n一个\n受害者\n参赛者\ntest\nhttp\nfuck\n"), 0o644); err != nil {
+	if err := os.WriteFile(keywordFile, []byte("法轮功\n开盒\n民主\n政府\n共产党\n习近平\n打倒共产党\n台独\n强奸\n第四\n时间\n信息\n一个\n受害者\n参赛者\n管理员账户\ntest\nhttp\nfuck\n"), 0o644); err != nil {
 		t.Fatalf("write keyword file: %v", err)
 	}
 	strictPoliticalFile := filepath.Join(tmpDir, "strict_political.txt")
@@ -89,6 +89,27 @@ func TestDetectSensitiveKeywords(t *testing.T) {
 		got := DetectSensitiveKeywords("do not say fuck here")
 		if len(got) == 0 || got[0] != "fuck" {
 			t.Fatalf("expected allowlisted ascii keyword to match, got %v", got)
+		}
+	})
+
+	t.Run("keeps obfuscated high risk keywords", func(t *testing.T) {
+		got := DetectSensitiveKeywords("这类强-奸内容会被拦截")
+		if len(got) == 0 || got[0] != "强奸" {
+			t.Fatalf("expected obfuscated high risk keyword to match, got %v", got)
+		}
+	})
+
+	t.Run("does not join ordinary keywords across boundaries", func(t *testing.T) {
+		got := DetectSensitiveKeywords("管理员，账户资料已经更新")
+		if len(got) != 0 {
+			t.Fatalf("expected ordinary keyword separated by punctuation to be ignored, got %v", got)
+		}
+	})
+
+	t.Run("keeps contiguous ordinary keywords", func(t *testing.T) {
+		got := DetectSensitiveKeywords("请不要泄露管理员账户")
+		if len(got) == 0 || got[0] != "管理员账户" {
+			t.Fatalf("expected contiguous ordinary keyword to match, got %v", got)
 		}
 	})
 

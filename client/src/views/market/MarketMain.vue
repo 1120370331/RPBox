@@ -231,7 +231,7 @@ watch([sortBy], () => {
         <LazyBgImage
           class="card-image"
           :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80, v: item.preview_image_updated_at || item.updated_at }) : undefined"
-          fallback-gradient="linear-gradient(135deg, #D4A373 0%, #8C7B70 100%)"
+          fallback-gradient="radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.72), transparent 34%), linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%)"
         >
           <div v-if="!item.preview_image_url" class="placeholder-icon">
             <i class="ri-box-3-line"></i>
@@ -538,7 +538,9 @@ watch([sortBy], () => {
 
 .card-image {
   height: 140px;
-  background: linear-gradient(135deg, var(--color-accent, #D4A373) 0%, var(--color-text-secondary, #8C7B70) 100%);
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start, #D4A373) 0%, var(--gradient-end, #8C7B70) 100%);
   background-size: cover;
   background-position: center;
   display: flex;
@@ -549,7 +551,7 @@ watch([sortBy], () => {
 
 .placeholder-icon {
   font-size: 48px;
-  color: rgba(255, 255, 255, 0.5);
+  color: color-mix(in srgb, var(--color-accent-contrast, #fff) 72%, transparent);
 }
 
 /* 卡片元信息（类型+作者） */

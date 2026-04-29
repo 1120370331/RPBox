@@ -42,6 +42,10 @@ import {
   setUserRole,
   setUserSponsorLevel,
   setUserExperience,
+  setUserPoints,
+  adjustUserPoints,
+  createSponsorRedeemCodes,
+  getSponsorRedeemCodes,
   getModeratorUsers,
   muteUser,
   unmuteUser,
@@ -64,6 +68,7 @@ import {
   type ItemCommentImageReviewItem,
   type UserAvatarReviewItem,
   type SafeUser,
+  type SponsorRedeemCode,
   type AdminActionLog,
   type DailyMetrics,
   type MetricsSummary,
@@ -94,8 +99,11 @@ const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('revie
 type ReviewSubTab = 'posts' | 'items' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
+type AdminSubTab = 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'
+type SponsorAdminSubTab = 'users' | 'codes'
 const activeSubTab = ref<ModeratorSubTab>('posts')
-const adminSubTab = ref<'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'>('guilds')
+const adminSubTab = ref<AdminSubTab>('guilds')
+const sponsorAdminSubTab = ref<SponsorAdminSubTab>('users')
 
 // 系统通知
 const systemMessage = ref('')
@@ -103,6 +111,22 @@ const systemMessageSending = ref(false)
 const systemMessageMaxLength = 512
 const systemMessageLength = computed(() => systemMessage.value.length)
 const systemMessageTrimmed = computed(() => systemMessage.value.trim())
+
+// 赞助兑换码
+const sponsorCodeForm = ref({
+  count: 10,
+  sponsor_level: 2,
+  duration_mode: 'months' as 'months' | 'permanent',
+  duration_months: 1,
+  expires_mode: 'months' as 'months' | 'permanent',
+  expires_months: 1
+})
+const sponsorCodeGenerating = ref(false)
+const sponsorCodeListLoading = ref(false)
+const generatedSponsorCodes = ref<SponsorRedeemCode[]>([])
+const recentSponsorCodes = ref<SponsorRedeemCode[]>([])
+const sponsorCodeTotal = ref(0)
+const generatedSponsorCodeText = computed(() => generatedSponsorCodes.value.map(item => item.code).join('\n'))
 
 // 数据
 const stats = ref<ModeratorStats | null>(null)
@@ -148,6 +172,8 @@ const imageReviewStatus = ref<ImageReviewStatus>('pending')
 const imageReviewCommentDrafts = ref<Record<string, string>>({})
 const sponsorLevelDrafts = ref<Record<number, number>>({})
 const experienceDrafts = ref<Record<number, number>>({})
+const pointsDrafts = ref<Record<number, number>>({})
+const pointsDeltaDrafts = ref<Record<number, number>>({})
 const sponsorLevelOptions = [
   { value: 0, label: '无赞助' },
   { value: 1, label: 'Lv1 仅鸣谢' },
@@ -172,6 +198,17 @@ const reportActionNeedsDuration = computed(() => (
 const reportActionDanger = computed(() => (
   reportActionType.value === 'delete_and_ban_user'
   || reportActionType.value === 'ban_user'
+))
+const pendingReviewCount = computed(() => stats.value?.total_pending_reviews ?? (
+  (stats.value?.pending_posts || 0)
+  + (stats.value?.pending_items || 0)
+  + (stats.value?.pending_guilds || 0)
+  + (stats.value?.pending_reports || 0)
+  + (stats.value?.pending_post_edits || 0)
+  + (stats.value?.pending_item_edits || 0)
+  + (stats.value?.pending_post_comment_images || 0)
+  + (stats.value?.pending_item_comment_images || 0)
+  + (stats.value?.pending_user_avatars || 0)
 ))
 
 // 审核预览弹窗
@@ -498,6 +535,7 @@ async function loadUsers() {
     total.value = res.total
     syncSponsorLevelDrafts()
     syncExperienceDrafts()
+    syncPointsDrafts()
   } catch (error) {
     console.error('加载用户失败:', error)
   } finally {
@@ -524,6 +562,17 @@ function syncExperienceDrafts() {
     drafts[user.id] = typeof user.activity_experience === 'number' ? user.activity_experience : 0
   }
   experienceDrafts.value = drafts
+}
+
+function syncPointsDrafts() {
+  const points: Record<number, number> = {}
+  const deltas: Record<number, number> = {}
+  for (const user of allUsers.value) {
+    points[user.id] = typeof user.activity_points === 'number' ? user.activity_points : 0
+    deltas[user.id] = 0
+  }
+  pointsDrafts.value = points
+  pointsDeltaDrafts.value = deltas
 }
 
 function formatSponsorLevel(level: number): string {
@@ -556,6 +605,11 @@ function loadManageSubTab(subTab: ManageSubTab) {
   else loadModeratorUsers()
 }
 
+function loadSponsorAdminSubTab(subTab: SponsorAdminSubTab) {
+  if (subTab === 'users') loadUsers()
+  else loadSponsorCodes()
+}
+
 function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
   if (tab === 'metrics' && !isAdmin.value) return
   const previousTab = activeTab.value
@@ -575,8 +629,10 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
     }
     loadManageSubTab(activeSubTab.value)
   } else if (tab === 'admin') {
-    if (adminSubTab.value === 'moderators' || adminSubTab.value === 'sponsors' || adminSubTab.value === 'experience') {
+    if (adminSubTab.value === 'moderators' || adminSubTab.value === 'experience') {
       loadUsers()
+    } else if (adminSubTab.value === 'sponsors') {
+      loadSponsorAdminSubTab(sponsorAdminSubTab.value)
     } else if (adminSubTab.value === 'guilds') {
       loadAllGuilds()
     }
@@ -602,7 +658,7 @@ function switchSubTab(subTab: ModeratorSubTab) {
   }
 }
 
-function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system') {
+function switchAdminSubTab(subTab: AdminSubTab) {
   adminSubTab.value = subTab
   page.value = 1
   if (subTab === 'moderators') {
@@ -610,7 +666,7 @@ function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors' | 'exper
     loadUsers()
   } else if (subTab === 'sponsors') {
     filterRole.value = ''
-    loadUsers()
+    loadSponsorAdminSubTab(sponsorAdminSubTab.value)
   } else if (subTab === 'experience') {
     filterRole.value = ''
     filterSponsorLevel.value = ''
@@ -623,6 +679,12 @@ function switchAdminSubTab(subTab: 'moderators' | 'guilds' | 'sponsors' | 'exper
     filterSponsorLevel.value = ''
     loadAllGuilds()
   }
+}
+
+function switchSponsorAdminSubTab(subTab: SponsorAdminSubTab) {
+  sponsorAdminSubTab.value = subTab
+  page.value = 1
+  loadSponsorAdminSubTab(subTab)
 }
 
 async function sendSystemMessage() {
@@ -649,6 +711,115 @@ async function sendSystemMessage() {
     toast.error('发送失败: ' + (error as Error).message)
   } finally {
     systemMessageSending.value = false
+  }
+}
+
+function normalizeMonthValue(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(0, Math.floor(value))
+}
+
+function formatSponsorCodeDuration(months: number) {
+  return months > 0 ? `${months}个月` : '永久'
+}
+
+function formatSponsorCodeExpiry(expiresAt?: string | null) {
+  return expiresAt ? formatDate(expiresAt) : '永久有效'
+}
+
+function getSponsorCodeStatus(code: SponsorRedeemCode) {
+  if (code.used_at) return '已使用'
+  if (code.expires_at && new Date(code.expires_at).getTime() <= Date.now()) return '已过期'
+  return '未使用'
+}
+
+function getSponsorCodeStatusClass(code: SponsorRedeemCode) {
+  if (code.used_at) return 'used'
+  if (code.expires_at && new Date(code.expires_at).getTime() <= Date.now()) return 'expired'
+  return 'active'
+}
+
+async function loadSponsorCodes() {
+  if (!isAdmin.value) return
+  sponsorCodeListLoading.value = true
+  try {
+    const res = await getSponsorRedeemCodes({ page: 1, page_size: 20, status: 'all' })
+    recentSponsorCodes.value = res.codes || []
+    sponsorCodeTotal.value = res.total || 0
+  } catch (error) {
+    console.error('加载赞助兑换码失败:', error)
+    toast.error('加载赞助兑换码失败: ' + (error as Error).message)
+  } finally {
+    sponsorCodeListLoading.value = false
+  }
+}
+
+async function copySponsorCodeText(text: string, message = '已复制兑换码') {
+  if (!text.trim()) return
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    toast.success(message)
+  } catch (error) {
+    console.error('复制兑换码失败:', error)
+    toast.error('复制失败，请手动选择复制')
+  }
+}
+
+async function generateSponsorCodes() {
+  if (!isAdmin.value || sponsorCodeGenerating.value) return
+
+  const count = normalizeMonthValue(sponsorCodeForm.value.count, 10)
+  const durationMonths = sponsorCodeForm.value.duration_mode === 'permanent'
+    ? 0
+    : normalizeMonthValue(sponsorCodeForm.value.duration_months, 1)
+  const expiresMonths = sponsorCodeForm.value.expires_mode === 'permanent'
+    ? 0
+    : normalizeMonthValue(sponsorCodeForm.value.expires_months, 1)
+
+  sponsorCodeForm.value.count = count
+  sponsorCodeForm.value.duration_months = durationMonths || 1
+  sponsorCodeForm.value.expires_months = expiresMonths || 1
+
+  if (count < 1 || count > 100) {
+    toast.error('生成数量必须在1到100之间')
+    return
+  }
+  if (sponsorCodeForm.value.duration_mode === 'months' && durationMonths < 1) {
+    toast.error('按月持续时间至少为1个月')
+    return
+  }
+  if (sponsorCodeForm.value.expires_mode === 'months' && expiresMonths < 1) {
+    toast.error('按月过期时间至少为1个月')
+    return
+  }
+
+  sponsorCodeGenerating.value = true
+  try {
+    const res = await createSponsorRedeemCodes({
+      count,
+      sponsor_level: sponsorCodeForm.value.sponsor_level,
+      duration_months: durationMonths,
+      expires_months: expiresMonths
+    })
+    generatedSponsorCodes.value = res.codes || []
+    toast.success(`已生成 ${generatedSponsorCodes.value.length} 个赞助兑换码`)
+    await loadSponsorCodes()
+  } catch (error) {
+    console.error('生成赞助兑换码失败:', error)
+    toast.error('生成赞助兑换码失败: ' + (error as Error).message)
+  } finally {
+    sponsorCodeGenerating.value = false
   }
 }
 
@@ -691,6 +862,8 @@ function formatActionType(type: string): string {
     'unban_user': '解除封禁',
     'set_role': '设置角色',
     'set_sponsor': '设置赞助',
+    'create_sponsor_codes': '生成赞助兑换码',
+    'set_points': '设置积分',
     'set_experience': '设置经验',
     'disable_posts': '禁用帖子',
     'delete_posts': '删除用户帖子',
@@ -1042,9 +1215,21 @@ function formatLogDetails(log: AdminActionLog): string {
     } else if (d.is_sponsor !== undefined) {
       parts.push(`赞助者: ${d.is_sponsor ? '是' : '否'}`)
     }
+    if (d.count !== undefined && log.action_type === 'create_sponsor_codes') {
+      parts.push(`数量: ${d.count}`)
+    }
+    if (d.duration_months !== undefined) {
+      parts.push(`持续: ${formatSponsorCodeDuration(d.duration_months)}`)
+    }
+    if (d.expires_months !== undefined) {
+      parts.push(`有效期: ${formatSponsorCodeDuration(d.expires_months)}`)
+    }
 
     if (d.before_experience !== undefined || d.after_experience !== undefined) {
       parts.push(`经验: ${d.before_experience ?? '-'} -> ${d.after_experience ?? '-'}`)
+    }
+    if (d.before_points !== undefined || d.after_points !== undefined) {
+      parts.push(`积分: ${d.before_points ?? '-'} -> ${d.after_points ?? '-'}`)
     }
     if (d.before_level !== undefined || d.after_level !== undefined) {
       parts.push(`等级: Lv${d.before_level ?? '-'} -> Lv${d.after_level ?? '-'}`)
@@ -1162,12 +1347,14 @@ function initMetricsChart() {
     const newPosts = metricsHistory.value.map((m: DailyMetrics) => m.new_posts)
     const newItems = metricsHistory.value.map((m: DailyMetrics) => m.new_items)
     const newGuilds = metricsHistory.value.map((m: DailyMetrics) => m.new_guilds)
-    legendData = ['新增用户', '新增帖子', '新增作品', '新增公会']
+    const newSignIns = metricsHistory.value.map((m: DailyMetrics) => m.new_sign_ins || 0)
+    legendData = ['新增用户', '新增帖子', '新增作品', '新增公会', '签到用户']
     series = [
       { name: '新增用户', type: 'line', data: newUsers, smooth: true, itemStyle: { color: palette.linePrimary } },
       { name: '新增帖子', type: 'line', data: newPosts, smooth: true, itemStyle: { color: palette.lineAccent } },
       { name: '新增作品', type: 'line', data: newItems, smooth: true, itemStyle: { color: palette.lineAux } },
-      { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: palette.lineSuccess } }
+      { name: '新增公会', type: 'line', data: newGuilds, smooth: true, itemStyle: { color: palette.lineSuccess } },
+      { name: '签到用户', type: 'line', data: newSignIns, smooth: true, itemStyle: { color: palette.textSecondary } }
     ]
   } else {
     dates = basicMetricsHistory.value.map((m: BasicDailyMetrics) => m.date.slice(5))
@@ -1312,9 +1499,10 @@ async function submitPreviewReview() {
     if (previewType.value === 'post') await loadPendingPosts()
     else if (previewType.value === 'item') await loadPendingItems()
     else await loadPendingGuilds()
+    toast.success(`${previewReviewAction.value === 'approve' ? '通过' : '拒绝'}成功`)
   } catch (error) {
     console.error('审核失败:', error)
-    alert('审核失败: ' + (error as Error).message)
+    toast.error('审核失败: ' + (error as Error).message)
   }
 }
 
@@ -1347,9 +1535,10 @@ async function quickReview(type: 'post' | 'item' | 'guild', id: number, action: 
     if (type === 'post') await loadPendingPosts()
     else if (type === 'item') await loadPendingItems()
     else await loadPendingGuilds()
+    toast.success(`${actionText}成功`)
   } catch (error) {
     console.error('审核失败:', error)
-    alert('审核失败: ' + (error as Error).message)
+    toast.error('审核失败: ' + (error as Error).message)
   }
 }
 
@@ -1381,9 +1570,10 @@ async function submitReview() {
     if (activeSubTab.value === 'posts') await loadPendingPosts()
     else if (activeSubTab.value === 'items') await loadPendingItems()
     else await loadPendingGuilds()
+    toast.success(`${reviewAction.value === 'approve' ? '通过' : '拒绝'}成功`)
   } catch (error) {
     console.error('审核失败:', error)
-    alert('审核失败: ' + (error as Error).message)
+    toast.error('审核失败: ' + (error as Error).message)
   }
 }
 
@@ -1431,6 +1621,7 @@ async function quickReviewImage(
       clearImageReviewDraft('avatar', id)
       await loadPendingUserAvatars()
     }
+    await loadStats()
     toast.success(`${actionText}成功`)
   } catch (error) {
     console.error('图片审核失败:', error)
@@ -1658,6 +1849,73 @@ async function applyUserExperience(user: SafeUser) {
   }
 }
 
+async function applyUserPoints(user: SafeUser) {
+  const currentPoints = typeof user.activity_points === 'number' ? user.activity_points : 0
+  const nextPointsRaw = pointsDrafts.value[user.id]
+  const nextPoints = Number.isFinite(nextPointsRaw) ? Math.max(0, Math.floor(nextPointsRaw)) : currentPoints
+  pointsDrafts.value[user.id] = nextPoints
+
+  if (nextPoints === currentPoints) return
+
+  const confirmed = await dialog.confirm({
+    title: '设置社区积分',
+    message: `确定要将 ${user.username} 的社区积分从 ${currentPoints} 调整为 ${nextPoints} 吗？`,
+    type: nextPoints >= currentPoints ? 'success' : 'warning',
+    confirmText: '应用',
+    cancelText: '取消'
+  })
+
+  if (!confirmed) {
+    pointsDrafts.value[user.id] = currentPoints
+    return
+  }
+
+  try {
+    await setUserPoints(user.id, nextPoints)
+    toast.success('社区积分已更新')
+    await loadUsers()
+  } catch (error) {
+    pointsDrafts.value[user.id] = currentPoints
+    console.error('设置社区积分失败:', error)
+    toast.error('设置社区积分失败: ' + (error as Error).message)
+  }
+}
+
+async function applyUserPointsDelta(user: SafeUser) {
+  const currentPoints = typeof user.activity_points === 'number' ? user.activity_points : 0
+  const deltaRaw = pointsDeltaDrafts.value[user.id]
+  const delta = Number.isFinite(deltaRaw) ? Math.trunc(deltaRaw) : 0
+  pointsDeltaDrafts.value[user.id] = delta
+
+  if (delta === 0) return
+
+  const nextPoints = currentPoints + delta
+  if (nextPoints < 0) {
+    toast.error('积分不能小于0')
+    return
+  }
+
+  const actionText = delta > 0 ? `增加 ${delta}` : `减少 ${Math.abs(delta)}`
+  const confirmed = await dialog.confirm({
+    title: '增减社区积分',
+    message: `确定要给 ${user.username} ${actionText} 积分吗？调整后为 ${nextPoints}。`,
+    type: delta > 0 ? 'success' : 'warning',
+    confirmText: '应用',
+    cancelText: '取消'
+  })
+
+  if (!confirmed) return
+
+  try {
+    await adjustUserPoints(user.id, delta)
+    toast.success('社区积分已更新')
+    await loadUsers()
+  } catch (error) {
+    console.error('增减社区积分失败:', error)
+    toast.error('增减社区积分失败: ' + (error as Error).message)
+  }
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN')
 }
@@ -1821,9 +2079,15 @@ function formatBanTime(dateStr: string | null) {
       <!-- 头部 -->
       <div class="header anim-item" style="--delay: 0">
         <h1 class="page-title">版主中心</h1>
-        <div class="role-badge">
-          <i class="ri-shield-star-line"></i>
-          {{ userStore.user?.role === 'admin' ? '管理员' : '版主' }}
+        <div class="header-actions">
+          <div v-if="pendingReviewCount > 0" class="pending-todo-badge" title="待处理审核数量">
+            <i class="ri-alarm-warning-fill"></i>
+            <span>{{ pendingReviewCount > 99 ? '99+' : pendingReviewCount }}</span>
+          </div>
+          <div class="role-badge">
+            <i class="ri-shield-star-line"></i>
+            {{ userStore.user?.role === 'admin' ? '管理员' : '版主' }}
+          </div>
         </div>
       </div>
 
@@ -1896,8 +2160,8 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-checkbox-circle-line"></i>
           <span>审核中心</span>
-          <span v-if="(stats?.pending_posts || 0) + (stats?.pending_items || 0) + (stats?.pending_guilds || 0) + (stats?.pending_reports || 0) > 0" class="badge">
-            {{ (stats?.pending_posts || 0) + (stats?.pending_items || 0) + (stats?.pending_guilds || 0) + (stats?.pending_reports || 0) }}
+          <span v-if="pendingReviewCount > 0" class="badge">
+            {{ pendingReviewCount > 99 ? '99+' : pendingReviewCount }}
           </span>
         </div>
         <div
@@ -1986,6 +2250,9 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-image-2-line"></i>
           帖子评论图
+          <span v-if="(stats?.pending_post_comment_images || 0) > 0" class="review-badge">
+            {{ stats?.pending_post_comment_images }}
+          </span>
         </button>
         <button
           v-if="activeTab === 'review'"
@@ -1994,6 +2261,9 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-image-line"></i>
           道具评论图
+          <span v-if="(stats?.pending_item_comment_images || 0) > 0" class="review-badge">
+            {{ stats?.pending_item_comment_images }}
+          </span>
         </button>
         <button
           v-if="activeTab === 'review'"
@@ -2002,6 +2272,9 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-user-3-line"></i>
           头像审核
+          <span v-if="(stats?.pending_user_avatars || 0) > 0" class="review-badge">
+            {{ stats?.pending_user_avatars }}
+          </span>
         </button>
         <button
           v-if="activeTab === 'manage'"
@@ -2037,7 +2310,7 @@ function formatBanTime(dateStr: string | null) {
             @click="switchAdminSubTab('experience')"
           >
             <i class="ri-medal-line"></i>
-            等级管理
+            等级/积分管理
           </button>
           <button
             v-if="isAdmin"
@@ -2857,6 +3130,26 @@ function formatBanTime(dateStr: string | null) {
 
       <!-- 管理标签 - 赞助管理 -->
       <div v-if="activeTab === 'admin' && adminSubTab === 'sponsors'" class="content-list anim-item" style="--delay: 4">
+        <div class="sponsor-admin-tabs">
+          <button
+            type="button"
+            :class="{ active: sponsorAdminSubTab === 'users' }"
+            @click="switchSponsorAdminSubTab('users')"
+          >
+            <i class="ri-vip-crown-2-line"></i>
+            赞助用户
+          </button>
+          <button
+            type="button"
+            :class="{ active: sponsorAdminSubTab === 'codes' }"
+            @click="switchSponsorAdminSubTab('codes')"
+          >
+            <i class="ri-coupon-3-line"></i>
+            兑换码
+          </button>
+        </div>
+
+        <template v-if="sponsorAdminSubTab === 'users'">
         <div class="filter-bar">
           <input v-model="filterKeyword" placeholder="搜索用户名或邮箱..." @keyup.enter="loadUsers" />
           <select v-model="filterSponsorLevel" @change="loadUsers">
@@ -2904,6 +3197,168 @@ function formatBanTime(dateStr: string | null) {
             </div>
           </div>
         </div>
+        </template>
+        <template v-else>
+        <div class="item-card sponsor-code-card">
+          <div class="item-header">
+            <div>
+              <span class="item-title">批量生成赞助兑换码</span>
+              <p class="sponsor-code-desc">生成后可复制给赞助者，兑换时自动写入对应赞助等级和持续时间。</p>
+            </div>
+            <span class="system-message-hint">管理员可用</span>
+          </div>
+
+          <div class="sponsor-code-form">
+            <label class="sponsor-code-field">
+              <span>生成数量</span>
+              <input
+                v-model.number="sponsorCodeForm.count"
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+              />
+            </label>
+
+            <label class="sponsor-code-field">
+              <span>赞助类型</span>
+              <select v-model.number="sponsorCodeForm.sponsor_level">
+                <option value="1">Lv1 仅鸣谢</option>
+                <option value="2">Lv2 昵称样式</option>
+                <option value="3">Lv3 个性化</option>
+              </select>
+            </label>
+
+            <div class="sponsor-code-field wide">
+              <span>赞助持续时间</span>
+              <div class="sponsor-code-duration">
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.duration_mode === 'months' }"
+                  @click="sponsorCodeForm.duration_mode = 'months'"
+                >
+                  按月
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.duration_mode === 'permanent' }"
+                  @click="sponsorCodeForm.duration_mode = 'permanent'"
+                >
+                  永久
+                </button>
+                <input
+                  v-if="sponsorCodeForm.duration_mode === 'months'"
+                  v-model.number="sponsorCodeForm.duration_months"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="1"
+                />
+                <span v-if="sponsorCodeForm.duration_mode === 'months'" class="duration-unit">个月</span>
+              </div>
+            </div>
+
+            <div class="sponsor-code-field wide">
+              <span>兑换码过期时间</span>
+              <div class="sponsor-code-duration">
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.expires_mode === 'months' }"
+                  @click="sponsorCodeForm.expires_mode = 'months'"
+                >
+                  按月
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.expires_mode === 'permanent' }"
+                  @click="sponsorCodeForm.expires_mode = 'permanent'"
+                >
+                  永久
+                </button>
+                <input
+                  v-if="sponsorCodeForm.expires_mode === 'months'"
+                  v-model.number="sponsorCodeForm.expires_months"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="1"
+                />
+                <span v-if="sponsorCodeForm.expires_mode === 'months'" class="duration-unit">个月</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="sponsor-code-actions">
+            <button class="btn-sponsor" :disabled="sponsorCodeGenerating" @click="generateSponsorCodes">
+              <i :class="sponsorCodeGenerating ? 'ri-loader-4-line loading-spinner' : 'ri-coupon-3-line'"></i>
+              {{ sponsorCodeGenerating ? '生成中...' : '生成兑换码' }}
+            </button>
+            <div class="warning-box compact">
+              <i class="ri-information-line"></i>
+              <span>数量上限100个；持续时间或过期时间选择永久时，后端会保存为空到期时间。</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="generatedSponsorCodes.length > 0" class="item-card sponsor-code-result-card">
+          <div class="item-header">
+            <span class="item-title">刚生成的兑换码</span>
+            <button class="btn-preview" @click="copySponsorCodeText(generatedSponsorCodeText, '已复制全部兑换码')">
+              <i class="ri-file-copy-line"></i> 复制全部
+            </button>
+          </div>
+          <textarea class="sponsor-code-textarea" readonly :value="generatedSponsorCodeText"></textarea>
+          <div class="sponsor-code-chip-grid">
+            <button
+              v-for="code in generatedSponsorCodes"
+              :key="code.id"
+              type="button"
+              class="sponsor-code-chip"
+              @click="copySponsorCodeText(code.code)"
+            >
+              <span>{{ code.code }}</span>
+              <i class="ri-file-copy-line"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="item-card sponsor-code-history-card">
+          <div class="item-header">
+            <span class="item-title">最近兑换码</span>
+            <button class="btn-preview" :disabled="sponsorCodeListLoading" @click="loadSponsorCodes">
+              <i :class="sponsorCodeListLoading ? 'ri-loader-4-line loading-spinner' : 'ri-refresh-line'"></i>
+              刷新
+            </button>
+          </div>
+          <div v-if="sponsorCodeListLoading" class="loading compact-loading">
+            <i class="ri-loader-4-line loading-spinner"></i>
+            <span>加载中...</span>
+          </div>
+          <div v-else-if="recentSponsorCodes.length === 0" class="empty-state compact-empty">
+            <i class="ri-coupon-3-line"></i>
+            <p>暂无兑换码</p>
+          </div>
+          <div v-else class="sponsor-code-list">
+            <div v-for="code in recentSponsorCodes" :key="code.id" class="sponsor-code-row">
+              <div class="sponsor-code-main">
+                <code>{{ code.code }}</code>
+                <span class="sponsor-code-meta">
+                  {{ formatSponsorLevel(code.sponsor_level) }} · 持续 {{ formatSponsorCodeDuration(code.duration_months) }} · 有效期 {{ formatSponsorCodeExpiry(code.expires_at) }}
+                </span>
+              </div>
+              <span class="sponsor-code-status" :class="getSponsorCodeStatusClass(code)">
+                {{ getSponsorCodeStatus(code) }}
+              </span>
+              <button class="btn-preview" @click="copySponsorCodeText(code.code)">
+                <i class="ri-file-copy-line"></i> 复制
+              </button>
+            </div>
+          </div>
+          <p v-if="sponsorCodeTotal > recentSponsorCodes.length" class="sponsor-code-desc">
+            仅显示最近 {{ recentSponsorCodes.length }} 个，共 {{ sponsorCodeTotal }} 个。
+          </p>
+        </div>
+        </template>
       </div>
 
       <div v-if="activeTab === 'admin' && adminSubTab === 'experience'" class="content-list anim-item" style="--delay: 4">
@@ -2939,10 +3394,37 @@ function formatBanTime(dateStr: string | null) {
             </div>
             <div class="item-meta">
               <span><i class="ri-mail-line"></i> {{ user.email }}</span>
+              <span><i class="ri-coin-line"></i> 当前积分 {{ user.activity_points || 0 }}</span>
               <span><i class="ri-sparkling-line"></i> 总经验 {{ user.activity_experience || 0 }}</span>
               <span><i class="ri-time-line"></i> {{ formatDate(user.created_at) }}</span>
             </div>
             <div class="item-actions experience-actions">
+              <label class="experience-label">
+                <span>设积分</span>
+                <input
+                  v-model.number="pointsDrafts[user.id]"
+                  class="experience-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                />
+              </label>
+              <button class="btn-sponsor" @click="applyUserPoints(user)">
+                <i class="ri-coin-line"></i> 设积分
+              </button>
+              <label class="experience-label">
+                <span>增减积分</span>
+                <input
+                  v-model.number="pointsDeltaDrafts[user.id]"
+                  class="experience-input"
+                  type="number"
+                  step="1"
+                  placeholder="+/-"
+                />
+              </label>
+              <button class="btn-sponsor" @click="applyUserPointsDelta(user)">
+                <i class="ri-add-circle-line"></i> 增减
+              </button>
               <label class="experience-label">
                 <span>总经验</span>
                 <input
@@ -3174,6 +3656,10 @@ function formatBanTime(dateStr: string | null) {
                     <span class="label">新公会</span>
                     <span class="value">{{ metricsSummary.today.guilds }}</span>
                   </div>
+                  <div class="summary-item">
+                    <span class="label">签到</span>
+                    <span class="value">{{ metricsSummary.today.sign_ins || 0 }}</span>
+                  </div>
                 </div>
               </div>
               <div class="summary-card">
@@ -3196,6 +3682,10 @@ function formatBanTime(dateStr: string | null) {
                   <div class="summary-item">
                     <span class="label">新公会</span>
                     <span class="value">{{ metricsSummary.yesterday.guilds }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">签到</span>
+                    <span class="value">{{ metricsSummary.yesterday.sign_ins || 0 }}</span>
                   </div>
                 </div>
               </div>
@@ -3220,6 +3710,10 @@ function formatBanTime(dateStr: string | null) {
                     <span class="label">新公会</span>
                     <span class="value">{{ metricsSummary.week.guilds }}</span>
                   </div>
+                  <div class="summary-item">
+                    <span class="label">签到</span>
+                    <span class="value">{{ metricsSummary.week.sign_ins || 0 }}</span>
+                  </div>
                 </div>
               </div>
               <div class="summary-card">
@@ -3242,6 +3736,10 @@ function formatBanTime(dateStr: string | null) {
                   <div class="summary-item">
                     <span class="label">新公会</span>
                     <span class="value">{{ metricsSummary.month.guilds }}</span>
+                  </div>
+                  <div class="summary-item">
+                    <span class="label">签到</span>
+                    <span class="value">{{ metricsSummary.month.sign_ins || 0 }}</span>
                   </div>
                 </div>
               </div>
@@ -3739,6 +4237,26 @@ function formatBanTime(dateStr: string | null) {
   margin: 0;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pending-todo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #DC143C;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(220, 20, 60, 0.28);
+}
+
 .role-badge {
   display: flex;
   align-items: center;
@@ -4132,6 +4650,234 @@ function formatBanTime(dateStr: string | null) {
   background: var(--input-bg, #FFFDFB);
   font-size: 13px;
   color: var(--btn-primary-text, var(--color-primary, #4B3621));
+}
+
+.sponsor-admin-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sponsor-admin-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-radius: 999px;
+  background: var(--color-card-bg, var(--color-panel-bg, #fff));
+  color: var(--color-text-secondary, #8D7B68);
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sponsor-admin-tabs button.active {
+  border-color: rgba(214, 166, 69, 0.45);
+  background: rgba(214, 166, 69, 0.16);
+  color: var(--color-primary, #4B3621);
+}
+
+.sponsor-code-card,
+.sponsor-code-result-card,
+.sponsor-code-history-card {
+  border: 1px solid rgba(214, 166, 69, 0.22);
+}
+
+.sponsor-code-desc {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary, #8D7B68);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sponsor-code-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.sponsor-code-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-text-secondary, #6D5B48);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sponsor-code-field.wide {
+  grid-column: span 1;
+}
+
+.sponsor-code-field input,
+.sponsor-code-field select {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, #E2D3C3);
+  background: var(--input-bg, #FFFDFB);
+  color: var(--color-text-main, #2C1810);
+  font-size: 14px;
+}
+
+.sponsor-code-duration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sponsor-code-duration button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, #E2D3C3);
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-text-secondary, #6D5B48);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.sponsor-code-duration button.active {
+  border-color: var(--color-accent, #D6A645);
+  background: rgba(214, 166, 69, 0.16);
+  color: var(--color-primary, #4B3621);
+}
+
+.sponsor-code-duration input {
+  width: 96px;
+}
+
+.sponsor-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.sponsor-code-actions .btn-sponsor:disabled,
+.sponsor-code-history-card .btn-preview:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.warning-box.compact {
+  flex: 1;
+  min-width: 260px;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.sponsor-code-textarea {
+  width: 100%;
+  min-height: 118px;
+  padding: 12px;
+  border: 1px solid var(--color-border, #E2D3C3);
+  border-radius: 12px;
+  background: var(--input-bg, #FFFDFB);
+  color: var(--color-text-main, #2C1810);
+  font-family: "Fira Code", "Cascadia Code", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.sponsor-code-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sponsor-code-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 166, 69, 0.35);
+  background: rgba(214, 166, 69, 0.12);
+  color: var(--color-primary, #4B3621);
+  font-family: "Fira Code", "Cascadia Code", monospace;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sponsor-code-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sponsor-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border, #E2D3C3);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.sponsor-code-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sponsor-code-main code {
+  color: var(--color-primary, #4B3621);
+  font-family: "Fira Code", "Cascadia Code", monospace;
+  font-weight: 800;
+  word-break: break-all;
+}
+
+.sponsor-code-meta {
+  color: var(--color-text-secondary, #8D7B68);
+  font-size: 12px;
+}
+
+.sponsor-code-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sponsor-code-status.active {
+  background: var(--color-success-light, #E8F5E9);
+  color: var(--color-success, #2E7D32);
+}
+
+.sponsor-code-status.used {
+  background: var(--color-warning-light, #FFF3E0);
+  color: var(--color-warning-dark, #E65100);
+}
+
+.sponsor-code-status.expired {
+  background: rgba(198, 40, 40, 0.1);
+  color: var(--btn-danger-bg, #C62828);
+}
+
+.compact-loading,
+.compact-empty {
+  padding: 20px;
+}
+
+@media (max-width: 768px) {
+  .sponsor-code-form,
+  .sponsor-code-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sponsor-code-status {
+    justify-self: start;
+  }
 }
 
 .btn-reject {

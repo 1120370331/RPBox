@@ -88,6 +88,13 @@ export async function signInDaily(): Promise<UserActivityInfo & {
   return request.post('/user/sign-in')
 }
 
+export async function redeemSponsorCode(code: string): Promise<{
+  message: string
+  user: Partial<UserData>
+}> {
+  return request.post('/sponsor-codes/redeem', { code })
+}
+
 // 绑定邮箱
 export async function bindEmail(email: string, verificationCode: string): Promise<{ message: string }> {
   return request.post('/user/bind-email', { email, verification_code: verificationCode })

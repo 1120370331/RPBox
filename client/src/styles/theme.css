@@ -39,6 +39,7 @@
 /* 危险按钮 */
 .btn-danger {
   background: var(--btn-danger-bg) !important;
+  color: var(--btn-danger-text, #FFFFFF) !important;
 }
 
 .btn-danger:hover:not(:disabled) {
@@ -205,7 +206,8 @@ a:hover {
 }
 
 .about-logo {
-  background: rgba(255, 255, 255, 0.15) !important;
+  background: var(--gradient-surface) !important;
+  border-color: var(--gradient-border) !important;
 }
 
 /* ========== 更新日志样式 ========== */
@@ -217,6 +219,7 @@ a:hover {
 
 .changelog-tag {
   background: var(--badge-bg) !important;
+  color: var(--btn-primary-text, #FFFFFF) !important;
 }
 
 .changelog-content {
@@ -237,5 +240,7 @@ a:hover {
 
 .avatar-preview,
 .avatar {
-  background: linear-gradient(135deg, var(--color-accent), var(--color-text-secondary)) !important;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start), var(--gradient-end)) !important;
 }

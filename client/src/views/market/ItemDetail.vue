@@ -214,11 +214,35 @@ async function loadComments() {
     const res: any = await getItemComments(id)
     if (res.code === 0) {
       comments.value = res.data || []
+      await scrollToCommentFromRoute()
     }
   } catch (error) {
     console.error('加载评论失败:', error)
   }
 }
+
+function getCommentIdFromRoute() {
+  const raw = route.query.comment
+  if (!raw) return null
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const id = Number(value)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+async function scrollToCommentFromRoute() {
+  const commentId = getCommentIdFromRoute()
+  if (!commentId) return
+  await nextTick()
+  const target = document.getElementById(`item-comment-${commentId}`)
+  if (!target) return
+  target.classList.add('comment-highlight')
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  window.setTimeout(() => target.classList.remove('comment-highlight'), 1600)
+}
+
+watch(() => route.query.comment, () => {
+  scrollToCommentFromRoute()
+})
 
 // 下载道具
 async function handleDownload() {
@@ -739,7 +763,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
           <div v-if="comments.length === 0" class="empty-comments">
             {{ t('market.detail.comments.empty') }}
           </div>
-          <div v-else v-for="comment in comments" :key="comment.id" class="comment-item">
+          <div v-else v-for="comment in comments" :key="comment.id" class="comment-item" :id="`item-comment-${comment.id}`">
             <div class="comment-avatar">
               <img v-if="comment.avatar" :src="comment.avatar" alt="" />
               <span v-else>{{ comment.username?.charAt(0) || 'U' }}</span>
@@ -1572,6 +1596,11 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   border-radius: 8px;
   display: flex;
   gap: 12px;
+}
+
+.comment-item.comment-highlight {
+  background: rgba(184, 115, 51, 0.14);
+  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.45);
 }
 
 .comment-avatar {

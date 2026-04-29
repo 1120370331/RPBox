@@ -180,10 +180,10 @@ onMounted(() => {
     activeTab.value = 'stories'
   }
 
-  // 检查是否已设置魔兽路径，未设置则跳转到设置向导
+  // 检查是否已设置魔兽路径，未设置时留在当前模块展示配置提示
   const savedPath = localStorage.getItem('wow_path')
   if (!savedPath) {
-    router.push('/sync/setup')
+    setTimeout(() => mounted.value = true, 50)
     return
   }
   wowPath.value = savedPath
@@ -401,6 +401,27 @@ function handleViewStory(id: number) {
       </button>
     </div>
 
+    <div v-if="!wowPath" class="setup-required anim-item" style="--delay: 0.5">
+      <div class="setup-icon">
+        <i class="ri-folder-settings-line"></i>
+      </div>
+      <div class="setup-content">
+        <h2>{{ $t('archives.setupRequired.title') }}</h2>
+        <p>{{ $t('archives.setupRequired.desc') }}</p>
+        <div class="setup-actions">
+          <RButton type="primary" @click="router.push('/sync/setup')">
+            <i class="ri-settings-3-line"></i>
+            {{ $t('archives.setupRequired.action') }}
+          </RButton>
+          <RButton type="outline" @click="router.push('/guide')">
+            <i class="ri-question-line"></i>
+            {{ $t('archives.setupRequired.guide') }}
+          </RButton>
+        </div>
+      </div>
+    </div>
+
+    <template v-else>
     <!-- 插件状态提示 -->
     <div v-if="wowPath" class="addon-notice anim-item" style="--delay: 0.5">
       <!-- 未安装状态 -->
@@ -578,6 +599,7 @@ function handleViewStory(id: number) {
 
     <!-- 插件更新提示 -->
     <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonStatus" />
+    </template>
   </div>
 </template>
 
@@ -608,6 +630,56 @@ function handleViewStory(id: number) {
   font-size: 14px;
   color: var(--color-text-secondary, #856a52);
   margin: 0;
+}
+
+.setup-required {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 28px 32px;
+  background:
+    radial-gradient(circle at 10% 10%, color-mix(in srgb, var(--color-accent, #B87333) 16%, transparent), transparent 34%),
+    var(--color-panel-bg, #fff);
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-radius: 18px;
+  box-shadow: var(--shadow-md, 0 4px 20px rgba(75, 54, 33, 0.05));
+}
+
+.setup-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--icon-bg, rgba(128, 64, 48, 0.1));
+  color: var(--icon-color, var(--color-primary));
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.setup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setup-content h2 {
+  margin: 0;
+  color: var(--color-text-main, #2C1810);
+  font-size: 20px;
+}
+
+.setup-content p {
+  margin: 0;
+  color: var(--color-text-secondary, #856a52);
+  line-height: 1.6;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
 }
 
 .btn-create {

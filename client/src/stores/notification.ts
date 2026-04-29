@@ -3,10 +3,12 @@ import { ref } from 'vue'
 import { getUnreadCount } from '../api/notification'
 import { WebSocketService, MessageType, type WebSocketMessage } from '../services/websocket'
 import { useUserStore } from './user'
+import { useToastStore } from './toast'
 
 export const useNotificationStore = defineStore('notification', () => {
   const unreadCount = ref(0)
   const loading = ref(false)
+  const lastNotification = ref<WebSocketMessage['data'] | null>(null)
   let wsService: WebSocketService | null = null
 
   // 连接 WebSocket
@@ -39,6 +41,9 @@ export const useNotificationStore = defineStore('notification', () => {
       // 监听新通知
       wsService.on(MessageType.NewNotification, (message: WebSocketMessage) => {
         console.log('[Notification] 收到新通知:', message.data)
+        lastNotification.value = message.data
+        const toastStore = useToastStore()
+        toastStore.info(message.data?.content ? `新消息：${message.data.content}` : '你有一条新消息', 5000)
         // 新通知到达时，未读数量会通过 UnreadCountUpdate 消息更新
       })
 
@@ -86,6 +91,7 @@ export const useNotificationStore = defineStore('notification', () => {
   return {
     unreadCount,
     loading,
+    lastNotification,
     loadUnreadCount,
     decrementUnreadCount,
     resetUnreadCount,

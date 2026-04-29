@@ -26,6 +26,7 @@ export interface UserData extends UserActivityInfo {
   role?: string
   is_sponsor?: boolean
   sponsor_level?: number
+  sponsor_expires_at?: string | null
   sponsor_color?: string
   sponsor_bold?: boolean
   name_color?: string

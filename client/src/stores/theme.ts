@@ -48,6 +48,7 @@ export interface ThemeColors {
   btnOutlineText: string
   btnOutlineHover: string
   btnDangerBg: string
+  btnDangerText: string
   btnDangerHover: string
 
   // 输入框
@@ -82,6 +83,11 @@ export interface ThemeColors {
   // 渐变
   gradientStart: string
   gradientEnd: string
+  gradientText: string
+  gradientTextMuted: string
+  gradientSurface: string
+  gradientSurfaceHover: string
+  gradientBorder: string
 
   // 状态色
   success: string
@@ -148,6 +154,7 @@ const classicTheme: Theme = {
     btnOutlineText: '#2C1810',
     btnOutlineHover: 'rgba(128, 64, 48, 0.05)',
     btnDangerBg: '#DC3545',
+    btnDangerText: '#FFFFFF',
     btnDangerHover: '#C82333',
 
     // 输入框
@@ -182,6 +189,11 @@ const classicTheme: Theme = {
     // 渐变
     gradientStart: '#804030',
     gradientEnd: '#4B3621',
+    gradientText: '#FBF5EF',
+    gradientTextMuted: 'rgba(251, 245, 239, 0.68)',
+    gradientSurface: 'rgba(251, 245, 239, 0.14)',
+    gradientSurfaceHover: 'rgba(251, 245, 239, 0.22)',
+    gradientBorder: 'rgba(251, 245, 239, 0.22)',
 
     // 状态色
     success: '#5B8C5A',
@@ -244,6 +256,7 @@ const tealTheme: Theme = {
     btnOutlineText: '#092a30',
     btnOutlineHover: 'rgba(73, 181, 164, 0.1)',
     btnDangerBg: '#DC3545',
+    btnDangerText: '#FFFFFF',
     btnDangerHover: '#C82333',
 
     // 输入框
@@ -278,6 +291,11 @@ const tealTheme: Theme = {
     // 渐变
     gradientStart: '#126260',
     gradientEnd: '#092a30',
+    gradientText: '#e8f5f3',
+    gradientTextMuted: 'rgba(232, 245, 243, 0.68)',
+    gradientSurface: 'rgba(232, 245, 243, 0.14)',
+    gradientSurfaceHover: 'rgba(232, 245, 243, 0.22)',
+    gradientBorder: 'rgba(232, 245, 243, 0.22)',
 
     // 状态色
     success: '#3d9970',
@@ -340,6 +358,7 @@ const blackGoldTheme: Theme = {
     btnOutlineText: '#F5EBD1',
     btnOutlineHover: 'rgba(212, 175, 55, 0.1)',
     btnDangerBg: '#DC3545',
+    btnDangerText: '#FFFFFF',
     btnDangerHover: '#C82333',
 
     // 输入框
@@ -374,6 +393,11 @@ const blackGoldTheme: Theme = {
     // 渐变
     gradientStart: '#333333',
     gradientEnd: '#000000',
+    gradientText: '#FFF8E7',
+    gradientTextMuted: 'rgba(255, 248, 231, 0.68)',
+    gradientSurface: 'rgba(255, 248, 231, 0.1)',
+    gradientSurfaceHover: 'rgba(255, 248, 231, 0.16)',
+    gradientBorder: 'rgba(229, 193, 88, 0.24)',
 
     // 状态色
     success: '#5B8C5A',
@@ -385,8 +409,111 @@ const blackGoldTheme: Theme = {
   },
 }
 
+// 梦幻粉蓝主题
+// 图片核心取色: #6CB7F0 #A1D1F1 #B1D3ED #E9BCDA #D5ABD2
+// 配色策略: 高明度天蓝负责结构，樱花粉只做情绪点缀，避免粉紫大面积叠加造成割裂。
+const dreamyPinkBlueTheme: Theme = {
+  id: 'dreamy-pink-blue',
+  name: '梦幻粉蓝',
+  colors: {
+    // 主色调
+    primary: '#4279A8',
+    primaryHover: '#346D9C',
+    primaryLight: 'rgba(139, 207, 255, 0.2)',
+    secondary: '#8FD0FF',
+    secondaryHover: '#78C2F4',
+    accent: '#F6C7DC',
+    accentHover: '#EFABC9',
+    accentContrast: '#253B59',
+    background: '#F2FAFF',
+    highlight: '#FFF0F6',
+
+    // 侧边栏
+    sidebarBg: '#D8F0FF',
+    sidebarText: '#2F4E72',
+    sidebarTextMuted: 'rgba(47, 78, 114, 0.68)',
+    sidebarHover: 'rgba(255, 255, 255, 0.46)',
+
+    // 面板/卡片
+    panelBg: '#FFFFFF',
+    cardBg: '#FBFEFF',
+    cardBgHover: 'rgba(226, 244, 255, 0.72)',
+
+    // 文字
+    textMain: '#223B59',
+    textLight: '#FFFFFF',
+    textSecondary: '#5E7D9B',
+    textMuted: 'rgba(34, 59, 89, 0.52)',
+
+    // 边框
+    border: '#D8EEFB',
+    borderLight: '#EDF8FE',
+    borderHover: '#A9DDFB',
+
+    // 按钮
+    btnPrimaryBg: '#8FD0FF',
+    btnPrimaryText: '#173754',
+    btnPrimaryHover: '#78C2F4',
+    btnSecondaryBg: 'rgba(255, 255, 255, 0.68)',
+    btnSecondaryText: '#2F4E72',
+    btnSecondaryHover: 'rgba(226, 244, 255, 0.9)',
+    btnOutlineBorder: '#BFE4FA',
+    btnOutlineText: '#2F4E72',
+    btnOutlineHover: 'rgba(139, 207, 255, 0.14)',
+    btnDangerBg: '#FF7FA8',
+    btnDangerText: '#173754',
+    btnDangerHover: '#F06493',
+
+    // 输入框
+    inputBg: '#FFFFFF',
+    inputBorder: '#D8EEFB',
+    inputFocus: '#78C2F4',
+    inputPlaceholder: '#89AFCB',
+
+    // 开关/选中状态
+    switchActive: '#8FD0FF',
+    switchInactive: '#D8EEFB',
+    checkboxActive: '#8FD0FF',
+
+    // 标签/徽章
+    tagBg: 'rgba(143, 208, 255, 0.2)',
+    tagText: '#356F9E',
+    badgeBg: '#F6C7DC',
+
+    // 阴影基色
+    shadowBase: '82, 134, 178',
+
+    // 滚动条
+    scrollbarThumb: '#BFE4FA',
+    scrollbarThumbHover: '#A9DDFB',
+
+    // 特殊元素
+    iconBg: 'rgba(255, 255, 255, 0.62)',
+    iconColor: '#4279A8',
+    linkColor: '#4279A8',
+    linkHover: '#D878AA',
+
+    // 渐变
+    gradientStart: '#D9F2FF',
+    gradientEnd: '#FFE5F2',
+    gradientText: '#223B59',
+    gradientTextMuted: 'rgba(34, 59, 89, 0.68)',
+    gradientSurface: 'rgba(255, 255, 255, 0.56)',
+    gradientSurfaceHover: 'rgba(255, 255, 255, 0.72)',
+    gradientBorder: 'rgba(66, 121, 168, 0.16)',
+
+    // 状态色
+    success: '#45B8A8',
+    successLight: 'rgba(69, 184, 168, 0.14)',
+    warning: '#F4B860',
+    warningLight: 'rgba(244, 184, 96, 0.16)',
+    warningBorder: 'rgba(244, 184, 96, 0.34)',
+    warningDark: '#A96B18',
+  },
+}
+
 // 所有可用主题
-export const themes: Theme[] = [classicTheme, tealTheme, blackGoldTheme]
+export const themes: Theme[] = [classicTheme, tealTheme, blackGoldTheme, dreamyPinkBlueTheme]
 
 // 获取主题 by ID
 export function getThemeById(id: string): Theme {
@@ -412,6 +539,7 @@ export const useThemeStore = defineStore('theme', () => {
   function applyTheme(theme: Theme) {
     const root = document.documentElement
     const c = theme.colors
+    root.dataset.theme = theme.id
 
     // 主色调
     root.style.setProperty('--color-primary', c.primary)
@@ -465,6 +593,7 @@ export const useThemeStore = defineStore('theme', () => {
     root.style.setProperty('--btn-outline-text', c.btnOutlineText)
     root.style.setProperty('--btn-outline-hover', c.btnOutlineHover)
     root.style.setProperty('--btn-danger-bg', c.btnDangerBg)
+    root.style.setProperty('--btn-danger-text', c.btnDangerText)
     root.style.setProperty('--btn-danger-hover', c.btnDangerHover)
 
     // 输入框
@@ -502,6 +631,11 @@ export const useThemeStore = defineStore('theme', () => {
     // 渐变
     root.style.setProperty('--gradient-start', c.gradientStart)
     root.style.setProperty('--gradient-end', c.gradientEnd)
+    root.style.setProperty('--gradient-text', c.gradientText)
+    root.style.setProperty('--gradient-text-muted', c.gradientTextMuted)
+    root.style.setProperty('--gradient-surface', c.gradientSurface)
+    root.style.setProperty('--gradient-surface-hover', c.gradientSurfaceHover)
+    root.style.setProperty('--gradient-border', c.gradientBorder)
 
     // 状态色
     root.style.setProperty('--color-success', c.success)

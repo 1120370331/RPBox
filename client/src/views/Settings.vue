@@ -412,32 +412,34 @@ watch(() => localeStore.currentLocale, (newLocale) => {
           </span>
         </div>
         <div class="card-body">
-          <div v-if="canUseTheme" class="theme-grid">
-            <div
-              v-for="theme in themes"
-              :key="theme.id"
-              class="theme-item"
-              :class="{ active: themeStore.currentThemeId === theme.id }"
-              @click="themeStore.setTheme(theme.id)"
-            >
-              <div class="theme-preview" :style="getThemePreviewStyle(theme)">
-                <div class="preview-sidebar"></div>
-                <div class="preview-content">
-                  <div class="preview-header"></div>
-                  <div class="preview-card"></div>
+          <div class="theme-preview-shell" :class="{ locked: !canUseTheme }">
+            <div class="theme-grid">
+              <div
+                v-for="theme in themes"
+                :key="theme.id"
+                class="theme-item"
+                :class="{ active: canUseTheme && themeStore.currentThemeId === theme.id }"
+                @click="canUseTheme && themeStore.setTheme(theme.id)"
+              >
+                <div class="theme-preview" :style="getThemePreviewStyle(theme)">
+                  <div class="preview-sidebar"></div>
+                  <div class="preview-content">
+                    <div class="preview-header"></div>
+                    <div class="preview-card"></div>
+                  </div>
                 </div>
+                <span class="theme-name">{{ theme.name }}</span>
+                <i v-if="canUseTheme && themeStore.currentThemeId === theme.id" class="ri-checkbox-circle-fill theme-check"></i>
               </div>
-              <span class="theme-name">{{ theme.name }}</span>
-              <i v-if="themeStore.currentThemeId === theme.id" class="ri-checkbox-circle-fill theme-check"></i>
             </div>
-          </div>
-          <div v-else class="theme-locked">
-            <div class="locked-content">
-              <i class="ri-lock-line"></i>
-              <p>{{ $t('settings.appearance.sponsorHint') }}</p>
-              <button class="btn btn-outline" @click="router.push('/thanks')">
-                <i class="ri-heart-3-line"></i> {{ $t('settings.appearance.learnSponsor') }}
-              </button>
+            <div v-if="!canUseTheme" class="theme-locked">
+              <div class="locked-content">
+                <i class="ri-lock-line"></i>
+                <p>{{ $t('settings.appearance.sponsorHint') }}</p>
+                <button class="btn btn-outline" @click="router.push('/thanks')">
+                  <i class="ri-heart-3-line"></i> {{ $t('settings.appearance.learnSponsor') }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -840,7 +842,9 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-text-secondary));
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   position: relative;
   cursor: pointer;
   overflow: hidden;
@@ -861,7 +865,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   justify-content: center;
   font-size: 32px;
   font-weight: 700;
-  color: #FFF;
+  color: var(--btn-primary-text, var(--color-text-light));
 }
 
 .avatar-overlay {
@@ -1138,7 +1142,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 
 .btn-danger {
   background: var(--btn-danger-bg);
-  color: #FFFFFF;
+  color: var(--btn-danger-text, #FFFFFF);
 }
 
 .btn-danger:hover {
@@ -1165,13 +1169,13 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 }
 
 .btn-about {
-  background: rgba(255, 255, 255, 0.15);
-  color: #FBF5EF;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--gradient-surface);
+  color: var(--gradient-text);
+  border: 1px solid var(--gradient-border);
 }
 
 .btn-about:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--gradient-surface-hover);
 }
 
 .btn-update {
@@ -1198,7 +1202,8 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 .about-logo {
   width: 64px;
   height: 64px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--gradient-surface);
+  border: 1px solid var(--gradient-border);
   border-radius: 16px;
   display: flex;
   align-items: center;
@@ -1207,26 +1212,26 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 
 .about-logo i {
   font-size: 32px;
-  color: #FBF5EF;
+  color: var(--gradient-text);
 }
 
 .about-info h3 {
   margin: 0 0 4px 0;
   font-size: 20px;
   font-weight: 700;
-  color: #FBF5EF;
+  color: var(--gradient-text);
 }
 
 .about-info .version {
   margin: 0 0 4px 0;
   font-size: 13px;
-  color: rgba(251, 245, 239, 0.7);
+  color: var(--gradient-text-muted);
 }
 
 .about-info .desc {
   margin: 0;
   font-size: 13px;
-  color: rgba(251, 245, 239, 0.6);
+  color: var(--gradient-text-muted);
 }
 
 /* 底部按钮区 */
@@ -1260,7 +1265,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 
 .changelog-tag {
   background: var(--badge-bg);
-  color: #FFFFFF;
+  color: var(--btn-primary-text, #FFFFFF);
   font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;
@@ -1385,10 +1390,19 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   font-size: 12px;
 }
 
+.theme-preview-shell {
+  position: relative;
+}
+
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 16px;
+}
+
+.theme-preview-shell.locked .theme-grid {
+  opacity: 1;
+  filter: saturate(0.9);
 }
 
 .theme-item {
@@ -1404,6 +1418,16 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 .theme-item:hover {
   background: rgba(128, 64, 48, 0.05);
   border-color: var(--color-border);
+}
+
+.theme-preview-shell.locked .theme-item {
+  cursor: default;
+  pointer-events: none;
+}
+
+.theme-preview-shell.locked .theme-item:hover {
+  background: #FDFBF9;
+  border-color: transparent;
 }
 
 .theme-item.active {
@@ -1466,26 +1490,71 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 }
 
 .theme-locked {
-  padding: 32px 16px;
+  position: absolute;
+  inset: -8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 16px;
   text-align: center;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.16), transparent 32%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.18));
+  border: 1px solid color-mix(in srgb, var(--color-border-light, #F1E4D7) 70%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  z-index: 2;
 }
 
 .locked-content {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  max-width: min(318px, calc(100% - 16px));
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-panel-bg, #fff) 96%, transparent);
+  border: 1px solid var(--color-border-light, #F1E4D7);
+  box-shadow: 0 12px 28px rgba(var(--shadow-base, 75, 54, 33), 0.14);
 }
 
 .locked-content i {
-  font-size: 40px;
-  color: #D4D4D4;
+  font-size: 22px;
+  color: var(--color-secondary, #804030);
+  flex: 0 0 auto;
 }
 
 .locked-content p {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--color-text-secondary);
-  max-width: 280px;
+  max-width: 132px;
+  margin: 0;
+  text-align: left;
+}
+
+.locked-content .btn {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .theme-locked {
+    align-items: flex-end;
+    justify-content: center;
+    padding: 12px;
+  }
+
+  .locked-content {
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 18px;
+  }
+
+  .locked-content p {
+    text-align: center;
+  }
 }
 
 /* 语言设置样式 */

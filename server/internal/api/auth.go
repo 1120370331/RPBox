@@ -251,6 +251,7 @@ func (s *Server) login(c *gin.Context) {
 			"role":                      user.Role,
 			"is_sponsor":                level > sponsorLevelNone,
 			"sponsor_level":             level,
+			"sponsor_expires_at":        user.SponsorExpiresAt,
 			"sponsor_color":             user.SponsorColor,
 			"sponsor_bold":              user.SponsorBold,
 			"name_color":                nameColor,

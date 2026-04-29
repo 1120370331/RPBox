@@ -43,8 +43,16 @@ func TestNotificationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get notifications: %v", err)
 	}
-	if total != 2 || len(list) != 2 {
-		t.Fatalf("expected 2 comment notifications, got %d", total)
+	if total != 1 || len(list) != 1 {
+		t.Fatalf("expected 1 comment notification, got %d", total)
+	}
+
+	list, total, err = GetNotifications(1, "mention", 1, 10)
+	if err != nil {
+		t.Fatalf("get mention notifications: %v", err)
+	}
+	if total != 1 || len(list) != 1 {
+		t.Fatalf("expected 1 mention notification, got %d", total)
 	}
 
 	if err := MarkAllAsRead(1); err != nil {

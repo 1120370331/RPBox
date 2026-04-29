@@ -70,6 +70,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.UserHiddenContent{},
 		&model.ContentReport{},
 		&model.AdminActionLog{},
+		&model.SponsorRedeemCode{},
 		&model.DailyMetrics{},
 		&model.Notification{},
 		&model.UserDailyActivity{},

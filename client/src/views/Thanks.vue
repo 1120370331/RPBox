@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { listSponsors, type SponsorUser } from '@/api/user'
 
-const router = useRouter()
 const mounted = ref(false)
+const sponsorUrl = 'https://www.ifdian.net/a/nintw'
 
 const sponsors = ref<SponsorUser[]>([])
 const loadingSponsors = ref(false)
@@ -129,9 +128,9 @@ onMounted(() => {
 
       <footer class="thanks-footer anim-item" style="--delay: 4">
         <p class="footer-quote">"Alone we can do so little; together we can do so much."</p>
-        <button class="footer-btn" type="button" @click="router.push('/settings')">
+        <a class="footer-btn" :href="sponsorUrl" target="_blank" rel="noopener noreferrer">
           成为赞助者
-        </button>
+        </a>
       </footer>
     </div>
   </div>
@@ -501,12 +500,16 @@ onMounted(() => {
 
 .footer-btn {
   align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 10px 22px;
   border-radius: 999px;
   border: none;
   background: var(--color-primary, #804030);
-  color: #fff;
+  color: var(--btn-primary-text, #fff);
   font-weight: 600;
+  text-decoration: none;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }

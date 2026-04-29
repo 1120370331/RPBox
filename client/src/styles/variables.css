@@ -50,6 +50,7 @@
   --btn-outline-text: #2C1810;
   --btn-outline-hover: rgba(128, 64, 48, 0.05);
   --btn-danger-bg: #DC3545;
+  --btn-danger-text: #FFFFFF;
   --btn-danger-hover: #C82333;
 
   /* 输入框 */
@@ -87,6 +88,11 @@
   /* 渐变 */
   --gradient-start: #804030;
   --gradient-end: #4B3621;
+  --gradient-text: #FBF5EF;
+  --gradient-text-muted: rgba(251, 245, 239, 0.68);
+  --gradient-surface: rgba(251, 245, 239, 0.14);
+  --gradient-surface-hover: rgba(251, 245, 239, 0.22);
+  --gradient-border: rgba(251, 245, 239, 0.22);
 
   /* 圆角 - 固定值 */
   --border-radius: 16px;
