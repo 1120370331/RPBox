@@ -1195,6 +1195,38 @@ defineExpose({
   font-size: 18px;
 }
 
+.toolbar :deep(.toolbar-slot--featured) {
+  width: auto;
+  min-width: 120px;
+  padding: 0 14px;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--color-secondary) 34%, var(--color-border));
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--color-secondary) 18%, transparent),
+      color-mix(in srgb, var(--color-accent) 14%, transparent));
+  color: var(--color-text-main);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--color-secondary) 16%, transparent);
+}
+
+.toolbar :deep(.toolbar-slot--featured:hover),
+.toolbar :deep(.toolbar-slot--featured.active) {
+  border-color: color-mix(in srgb, var(--color-secondary) 70%, var(--color-border));
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--color-secondary) 30%, transparent),
+      color-mix(in srgb, var(--color-accent) 22%, transparent));
+  color: var(--color-text-main);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--color-secondary) 22%, transparent);
+}
+
+.toolbar :deep(.toolbar-slot--featured span) {
+  white-space: nowrap;
+}
+
 .divider {
   width: 1px;
   height: 24px;

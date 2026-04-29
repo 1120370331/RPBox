@@ -151,7 +151,7 @@ export default {
     eventCalendarGuideTitle: '活动日历关联',
     eventCalendarGuideBody: '请选择活动类型并填写开始时间，发布后会自动同步到活动日历。',
     eventCalendarGuideGuild: '若选择“公会”活动，请先选择对应公会。',
-    quickJump: '快速跳转',
+    quickJump: '添加内部连接',
     preview: '预览',
     cancel: '取消',
     publish: '发布',

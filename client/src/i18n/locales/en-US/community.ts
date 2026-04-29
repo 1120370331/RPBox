@@ -151,7 +151,7 @@ export default {
     eventCalendarGuideTitle: 'Event Calendar Linking',
     eventCalendarGuideBody: 'Choose event type and set the start time. It will sync to the calendar after publishing.',
     eventCalendarGuideGuild: 'If you choose "Guild", please select the guild first.',
-    quickJump: 'Quick Jump',
+    quickJump: 'Add Internal Link',
     preview: 'Preview',
     cancel: 'Cancel',
     publish: 'Publish',
