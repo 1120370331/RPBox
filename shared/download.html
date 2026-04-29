@@ -355,9 +355,10 @@
 
             var hasDownload = !!els.button;
             // cache-bust: 2026-03-23
-            var fallbackVersion = '0.2.28';
+            var fallbackVersion = '0.2.30';
             var fallbackAndroidVersion = '1.0.39';
             var fallbackBase = 'https://ksxvodevhonx.sealosbja.site/releases';
+            var fallbackWindowsUrl = 'https://github.com/1120370331/RPBox/releases/download/v0.2.30/RPBox_0.2.30_x64-setup.exe';
             var fallbackMobileBase = 'https://ksxvodevhonx.sealosbja.site/releases/mobile';
             var fallbackIosUrl = 'https://testflight.apple.com/join/rZ7Va5WA';
 
@@ -369,6 +370,7 @@
                 if (hostname === window.location.hostname) return true;
                 if (hostname === 'api.rpbox.app') return true;
                 if (hostname.endsWith('.rpbox.app')) return true;
+                if (hostname === 'github.com') return true;
                 if (hostname === 'apps.apple.com') return true;
                 if (hostname === 'testflight.apple.com') return true;
                 if (hostname === 'rpbox.com' || hostname.endsWith('.rpbox.com')) return true;
@@ -496,7 +498,7 @@
                     fallbackUrl = sanitizeDownloadUrl(fallbackIosUrl, fallbackMobileBase);
                 } else {
                     fallbackUrl = sanitizeDownloadUrl(
-                        fallbackBase + '/' + fallbackVersion + '/RPBox_' + fallbackVersion + '_x64-setup.exe',
+                        fallbackWindowsUrl || (fallbackBase + '/' + fallbackVersion + '/RPBox_' + fallbackVersion + '_x64-setup.exe'),
                         fallbackBase
                     );
                 }
@@ -519,6 +521,19 @@
                 setDisabled(false);
                 setLoading(false);
                 return true;
+            }
+
+            function compareVersion(left, right) {
+                var leftParts = String(left || '').split(/[.-]/).map(function (part) { return parseInt(part, 10) || 0; });
+                var rightParts = String(right || '').split(/[.-]/).map(function (part) { return parseInt(part, 10) || 0; });
+                var len = Math.max(leftParts.length, rightParts.length, 3);
+                for (var i = 0; i < len; i++) {
+                    var a = leftParts[i] || 0;
+                    var b = rightParts[i] || 0;
+                    if (a > b) return 1;
+                    if (a < b) return -1;
+                }
+                return 0;
             }
 
             function initNav() {
@@ -671,6 +686,11 @@
                     var downloadUrl = sanitizeDownloadUrl(data.url, apiBase);
                     if (!downloadUrl) {
                         throw new Error('Invalid download URL');
+                    }
+                    if (platform.target === 'windows' && compareVersion(data.version, fallbackVersion) < 0) {
+                        if (applyFallbackDownload(platform, apiBase)) {
+                            return;
+                        }
                     }
                     if (platform.target === 'ios' && isCurrentDownloadPageUrl(downloadUrl)) {
                         if (applyFallbackDownload(platform, apiBase)) {
