@@ -53,6 +53,37 @@ func TestApplySensitiveViolationDoesNotBanOnThirdStrike(t *testing.T) {
 	}
 }
 
+func TestEnforcePostCommentHardRulesDoesNotRejectSensitiveText(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.ContentModerationViolation{})
+	database.DB = db
+
+	user := model.User{
+		Username: "tester",
+		Email:    "tester@example.com",
+		PassHash: "hash",
+	}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+
+	server := &Server{}
+	handled := server.enforcePostCommentHardRules(c, user.ID, "post", nil, "这是一张图片 data:image/png;base64,isis")
+	if handled {
+		t.Fatalf("expected sensitive text not to be rejected, response: %s", recorder.Body.String())
+	}
+
+	var violationCount int64
+	if err := db.Model(&model.ContentModerationViolation{}).Count(&violationCount).Error; err != nil {
+		t.Fatalf("count violations: %v", err)
+	}
+	if violationCount != 0 {
+		t.Fatalf("expected no moderation violation records, got %d", violationCount)
+	}
+}
+
 func TestEnsureUserCanPublishClearsLegacySensitiveBan(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.User{})
 	database.DB = db

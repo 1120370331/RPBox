@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
-	"github.com/rpbox/server/internal/service"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -27,43 +26,13 @@ type sensitiveDecision struct {
 	Message        string
 }
 
-// enforcePostCommentHardRules applies hard moderation rules for post/comment publishing.
+// enforcePostCommentHardRules checks whether the user can publish.
 // Returns true when request has been handled and should stop.
 func (s *Server) enforcePostCommentHardRules(c *gin.Context, userID uint, contentType string, contentID *uint, texts ...string) bool {
 	if _, ok := s.ensureUserCanPublish(c, userID); !ok {
 		return true
 	}
-
-	hitKeywords := service.DetectSensitiveKeywords(texts...)
-	if len(hitKeywords) == 0 {
-		return false
-	}
-
-	decision, deletedPost, err := s.applySensitiveViolation(userID, contentType, contentID, hitKeywords)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "敏感词审核处理失败"})
-		return true
-	}
-
-	if deletedPost != nil {
-		s.cleanupPostImages(c, *deletedPost)
-		s.bumpPostListCache(c.Request.Context())
-	}
-
-	_ = service.CreateNotification(&model.Notification{
-		UserID:     userID,
-		Type:       "system",
-		TargetType: "user",
-		TargetID:   userID,
-		Content:    decision.Message,
-	})
-
-	c.JSON(http.StatusForbidden, gin.H{
-		"error":           decision.Message,
-		"action":          decision.Action,
-		"violation_count": decision.ViolationCount,
-	})
-	return true
+	return false
 }
 
 func (s *Server) ensureUserCanPublish(c *gin.Context, userID uint) (*model.User, bool) {
