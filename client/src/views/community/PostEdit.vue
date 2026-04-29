@@ -510,13 +510,15 @@ function toggleQuickJump() {
           <template #toolbar>
             <button
               type="button"
-              class="toolbar-slot"
+              class="toolbar-slot toolbar-slot--featured"
               :class="{ active: quickJumpOpen }"
               :title="t('community.create.quickJump')"
+              :aria-label="t('community.create.quickJump')"
               @mousedown.prevent
               @click="toggleQuickJump"
             >
               <i class="ri-links-line"></i>
+              <span>{{ t('community.create.quickJump') }}</span>
             </button>
           </template>
         </TiptapEditor>

@@ -309,8 +309,18 @@ function escapeHtml(value: string) {
 </script>
 
 <template>
-  <RModal v-model="open" title="快速跳转" width="760px">
+  <RModal v-model="open" title="添加内部连接" width="760px">
     <div class="quick-jump-dialog">
+      <div class="quick-jump__intro">
+        <div class="quick-jump__intro-icon">
+          <i class="ri-links-line"></i>
+        </div>
+        <div>
+          <div class="quick-jump__intro-title">把站内内容插入正文</div>
+          <div class="quick-jump__intro-text">选择公会剧情、公开帖子或公会主页后，会生成可点击的内容卡片，读者可直接跳转查看。</div>
+        </div>
+      </div>
+
       <div class="quick-jump__tabs">
         <button :class="{ active: activeTab === 'guild' }" @click="activeTab = 'guild'">公会剧情</button>
         <button :class="{ active: activeTab === 'post' }" @click="activeTab = 'post'">公开帖子</button>
@@ -329,7 +339,7 @@ function escapeHtml(value: string) {
                 <span>{{ item.story.status === 'draft' ? '草稿' : '已发布' }}</span>
               </div>
             </div>
-            <RButton size="sm" type="primary" @click="insertStory(item.story, item.guild)">插入</RButton>
+            <RButton size="sm" type="primary" @click="insertStory(item.story, item.guild)">插入连接</RButton>
           </div>
         </div>
       </div>
@@ -351,7 +361,7 @@ function escapeHtml(value: string) {
                 <span>{{ formatShortDate(post.created_at) }}</span>
               </div>
             </div>
-            <RButton size="sm" type="primary" @click="insertPost(post)">插入</RButton>
+            <RButton size="sm" type="primary" @click="insertPost(post)">插入连接</RButton>
           </div>
         </div>
       </div>
@@ -367,7 +377,7 @@ function escapeHtml(value: string) {
                 <span>{{ guild.member_count || 0 }} 名成员</span>
               </div>
             </div>
-            <RButton size="sm" type="primary" @click="insertGuild(guild)">插入</RButton>
+            <RButton size="sm" type="primary" @click="insertGuild(guild)">插入连接</RButton>
           </div>
         </div>
       </div>
@@ -384,6 +394,46 @@ function escapeHtml(value: string) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.quick-jump__intro {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-secondary, #B87333) 28%, var(--color-border, #E5D4C1));
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 10% 10%, color-mix(in srgb, var(--color-accent, #B87333) 16%, transparent), transparent 34%),
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--color-secondary, #B87333) 11%, var(--color-card-bg, #fff)),
+      var(--color-panel-bg, #fff));
+}
+
+.quick-jump__intro-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--color-secondary, #B87333) 18%, transparent);
+  color: var(--color-primary, #804030);
+  font-size: 19px;
+}
+
+.quick-jump__intro-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-main, #2C1810);
+  margin-bottom: 4px;
+}
+
+.quick-jump__intro-text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .quick-jump__tabs {
