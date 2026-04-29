@@ -109,7 +109,7 @@ function handleClick(e: MouseEvent) {
 .r-button--danger {
   background: var(--btn-danger-bg);
   border-color: var(--btn-danger-bg);
-  color: var(--color-text-light);
+  color: var(--btn-danger-text, var(--color-text-light));
   box-shadow: 0 1px 3px rgba(var(--shadow-base), 0.2);
 }
 .r-button--danger:hover {

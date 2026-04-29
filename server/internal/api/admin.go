@@ -61,6 +61,7 @@ func (s *Server) listUsers(c *gin.Context) {
 		Role               string     `json:"role"`
 		IsSponsor          bool       `json:"is_sponsor"`
 		SponsorLevel       int        `json:"sponsor_level"`
+		SponsorExpiresAt   *time.Time `json:"sponsor_expires_at"`
 		NameColor          string     `json:"name_color"`
 		NameBold           bool       `json:"name_bold"`
 		IsMuted            bool       `json:"is_muted"`
@@ -70,6 +71,7 @@ func (s *Server) listUsers(c *gin.Context) {
 		BannedUntil        *time.Time `json:"banned_until"`
 		BanReason          string     `json:"ban_reason"`
 		PostCount          int        `json:"post_count"`
+		ActivityPoints     int        `json:"activity_points"`
 		ActivityExperience int        `json:"activity_experience"`
 		ForumLevel         int        `json:"forum_level"`
 		ForumLevelName     string     `json:"forum_level_name"`
@@ -88,6 +90,7 @@ func (s *Server) listUsers(c *gin.Context) {
 			Role:               u.Role,
 			IsSponsor:          level > sponsorLevelNone,
 			SponsorLevel:       level,
+			SponsorExpiresAt:   u.SponsorExpiresAt,
 			NameColor:          nameColor,
 			NameBold:           nameBold,
 			IsMuted:            u.IsMuted,
@@ -97,6 +100,7 @@ func (s *Server) listUsers(c *gin.Context) {
 			BannedUntil:        u.BannedUntil,
 			BanReason:          u.BanReason,
 			PostCount:          u.PostCount,
+			ActivityPoints:     u.ActivityPoints,
 			ActivityExperience: u.ActivityExperience,
 			ForumLevel:         levelInfo.Level,
 			ForumLevelName:     levelInfo.Name,
@@ -188,8 +192,9 @@ func (s *Server) setUserSponsor(c *gin.Context) {
 	}
 
 	updates := map[string]interface{}{
-		"is_sponsor":    level > sponsorLevelNone,
-		"sponsor_level": level,
+		"is_sponsor":         level > sponsorLevelNone,
+		"sponsor_level":      level,
+		"sponsor_expires_at": nil,
 	}
 	if level < sponsorLevelStyle {
 		updates["sponsor_color"] = ""
@@ -211,6 +216,67 @@ func (s *Server) setUserSponsor(c *gin.Context) {
 		"username":      user.Username,
 		"is_sponsor":    level > sponsorLevelNone,
 		"sponsor_level": level,
+	}})
+}
+
+// setUserPoints 设置或增减用户社区积分。
+func (s *Server) setUserPoints(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var user model.User
+	if err := database.DB.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	var req struct {
+		ActivityPoints *int `json:"activity_points"`
+		PointsDelta    *int `json:"points_delta"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if (req.ActivityPoints == nil && req.PointsDelta == nil) || (req.ActivityPoints != nil && req.PointsDelta != nil) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请在设置积分和增减积分中选择一种操作"})
+		return
+	}
+
+	beforePoints := user.ActivityPoints
+	nextPoints := beforePoints
+	action := "set"
+	if req.ActivityPoints != nil {
+		nextPoints = *req.ActivityPoints
+	} else if req.PointsDelta != nil {
+		nextPoints = beforePoints + *req.PointsDelta
+		action = "adjust"
+	}
+	if nextPoints < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "积分不能小于0"})
+		return
+	}
+	if nextPoints == beforePoints {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "积分未变化"})
+		return
+	}
+
+	if err := database.DB.Model(&user).Update("activity_points", nextPoints).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+	s.invalidateUserProfileCache(c.Request.Context(), user.ID)
+
+	logAdminAction(c, "set_points", "user", user.ID, user.Username, map[string]interface{}{
+		"action":        action,
+		"before_points": beforePoints,
+		"after_points":  nextPoints,
+		"points_delta":  nextPoints - beforePoints,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "社区积分已更新", "user": gin.H{
+		"id":              user.ID,
+		"username":        user.Username,
+		"activity_points": nextPoints,
 	}})
 }
 

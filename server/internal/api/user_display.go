@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/rpbox/server/internal/model"
 )
@@ -50,6 +51,9 @@ var forumLevelDefinitions = map[int]forumLevelDefinition{
 }
 
 func resolveSponsorLevel(user model.User) int {
+	if user.SponsorExpiresAt != nil && user.SponsorExpiresAt.Before(time.Now()) {
+		return sponsorLevelNone
+	}
 	if user.SponsorLevel > 0 {
 		return user.SponsorLevel
 	}

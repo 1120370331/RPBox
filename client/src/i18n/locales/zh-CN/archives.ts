@@ -56,6 +56,12 @@ export default {
     noRecords: '暂无剧情记录',
     noStories: '暂无剧情，请先创建一个剧情',
   },
+  setupRequired: {
+    title: '先配置魔兽世界安装目录',
+    desc: '剧情归档需要读取本地插件日志。请先完成路径配置，配置完成后再回到剧情故事即可查看待归档池。',
+    action: '前往配置',
+    guide: '查看教程',
+  },
   filter: {
     search: '综合搜索',
     searchPlaceholder: '搜索标题、简介、地区或地点...',

@@ -818,7 +818,9 @@ async function handleBindEmail() {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-accent, #D4A373), var(--color-text-secondary, #8C7B70));
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #8C7B70));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -826,7 +828,7 @@ async function handleBindEmail() {
   font-weight: 700;
   color: var(--btn-primary-text, var(--color-text-light, #fff));
   border: 4px solid var(--color-panel-bg, #fff);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 8px 22px rgba(var(--shadow-base, 75, 54, 33), 0.16);
 }
 
 .avatar-wrapper.clickable {

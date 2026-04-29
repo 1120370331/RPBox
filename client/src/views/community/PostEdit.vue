@@ -786,7 +786,7 @@ function toggleQuickJump() {
   width: 100%;
   max-width: 400px;
   aspect-ratio: 16 / 9;
-  border: 2px dashed #E5D4C1;
+  border: 2px dashed var(--color-border-hover, #E5D4C1);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -795,27 +795,31 @@ function toggleQuickJump() {
   gap: 8px;
   cursor: pointer;
   transition: all 0.2s;
-  background: #FDFBF9;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.74), transparent 34%),
+    linear-gradient(135deg, var(--color-card-bg, #FDFBF9), var(--color-primary-light, #FFF8F0));
 }
 
 .cover-placeholder:hover {
-  border-color: #B87333;
-  background: #FFF8F0;
+  border-color: var(--color-accent, #B87333);
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.78), transparent 34%),
+    linear-gradient(135deg, var(--color-primary-light, #FFF8F0), var(--color-card-bg-hover, #FFF8F0));
 }
 
 .cover-placeholder i {
   font-size: 32px;
-  color: #B87333;
+  color: var(--color-accent, #B87333);
 }
 
 .cover-placeholder span {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary, #8D7B68);
 }
 
 .cover-hint {
   font-size: 12px !important;
-  color: #A99B8D !important;
+  color: var(--color-text-muted, #A99B8D) !important;
 }
 
 .title-input {

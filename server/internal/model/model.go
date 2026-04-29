@@ -19,6 +19,7 @@ type User struct {
 	Role                string     `gorm:"size:20;default:user" json:"role"`  // user|moderator|admin
 	IsSponsor           bool       `gorm:"default:false" json:"is_sponsor"`   // 赞助者权限
 	SponsorLevel        int        `gorm:"default:0" json:"sponsor_level"`    // 赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
+	SponsorExpiresAt    *time.Time `gorm:"index" json:"sponsor_expires_at"`   // 赞助到期时间（空=永久）
 	SponsorColor        string     `gorm:"size:6" json:"sponsor_color"`       // 赞助者自定义颜色(HEX, 无#)
 	SponsorBold         bool       `gorm:"default:false" json:"sponsor_bold"` // 赞助者名称加粗
 	Password            string     `gorm:"-" json:"-"`
@@ -620,6 +621,20 @@ type AdminActionLog struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+// SponsorRedeemCode 赞助兑换码
+type SponsorRedeemCode struct {
+	ID             uint       `gorm:"primarykey" json:"id"`
+	Code           string     `gorm:"size:32;uniqueIndex;not null" json:"code"`
+	SponsorLevel   int        `gorm:"not null;index" json:"sponsor_level"` // 1=鸣谢, 2=昵称样式, 3=个性化
+	DurationMonths int        `gorm:"default:0" json:"duration_months"`    // 0=永久
+	ExpiresAt      *time.Time `gorm:"index" json:"expires_at"`             // 空=兑换码永久有效
+	UsedBy         *uint      `gorm:"index" json:"used_by"`
+	UsedAt         *time.Time `gorm:"index" json:"used_at"`
+	CreatedBy      uint       `gorm:"index;not null" json:"created_by"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
 // DailyMetrics 每日统计快照（用于历史趋势）
 type DailyMetrics struct {
 	ID          uint      `gorm:"primarykey" json:"id"`
@@ -641,9 +656,9 @@ type DailyMetrics struct {
 type Notification struct {
 	ID         uint      `gorm:"primarykey" json:"id"`
 	UserID     uint      `gorm:"index;not null" json:"user_id"`      // 接收通知的用户ID
-	Type       string    `gorm:"size:20;index;not null" json:"type"` // 通知类型: post_like|post_comment|item_like|item_comment|guild_application|guild_invite|system
+	Type       string    `gorm:"size:20;index;not null" json:"type"` // 通知类型: post_like|post_comment|item_like|item_comment|mention|guild_application|guild_invite|system
 	ActorID    *uint     `gorm:"index" json:"actor_id"`              // 触发通知的用户ID（可空，系统通知无actor）
-	TargetType string    `gorm:"size:20;index" json:"target_type"`   // 目标类型: post|item|comment|guild
+	TargetType string    `gorm:"size:20;index" json:"target_type"`   // 目标类型: post|item|comment|item_comment|guild
 	TargetID   uint      `gorm:"index" json:"target_id"`             // 目标ID
 	Content    string    `gorm:"size:512" json:"content"`            // 通知内容
 	IsRead     bool      `gorm:"default:false;index" json:"is_read"` // 是否已读

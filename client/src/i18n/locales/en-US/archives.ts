@@ -56,6 +56,12 @@ export default {
     noRecords: 'No story records',
     noStories: 'No stories yet, please create one first',
   },
+  setupRequired: {
+    title: 'Configure your WoW install path first',
+    desc: 'Story archiving reads local addon logs. Finish path setup first, then return to Story Archives to view the staging pool.',
+    action: 'Go to Setup',
+    guide: 'View Guide',
+  },
   filter: {
     search: 'Search',
     searchPlaceholder: 'Search titles, summaries, regions, or places...',

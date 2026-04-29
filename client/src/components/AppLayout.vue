@@ -10,6 +10,7 @@ import UserLevelBadge from './UserLevelBadge.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
 import { getUserInfo } from '@/api/user'
+import { getModeratorStats } from '@/api/moderator'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -20,6 +21,7 @@ const mounted = ref(false)
 const jumpReturn = ref<JumpReturnInfo | null>(null)
 const mainContentRef = ref<HTMLElement | null>(null)
 const pendingRestoreMenu = ref<string | null>(null)
+const moderatorPendingCount = ref(0)
 
 interface MenuCacheState {
   path: string
@@ -34,6 +36,9 @@ onMounted(() => {
   if (userStore.token) {
     void refreshCurrentUser()
     notificationStore.loadUnreadCount()
+    if (userStore.isModerator) {
+      void loadModeratorPendingCount()
+    }
   }
   document.addEventListener('click', handleGlobalJumpLink, true)
   refreshJumpReturn()
@@ -47,8 +52,40 @@ onBeforeUnmount(() => {
 function handleMenuClick() {
   if (userStore.token) {
     notificationStore.loadUnreadCount()
+    if (userStore.isModerator) {
+      void loadModeratorPendingCount()
+    }
   }
 }
+
+watch(() => userStore.isModerator, (isModerator) => {
+  if (isModerator) {
+    void loadModeratorPendingCount()
+  } else {
+    moderatorPendingCount.value = 0
+  }
+}, { immediate: true })
+
+async function loadModeratorPendingCount() {
+  try {
+    const stats = await getModeratorStats()
+    moderatorPendingCount.value = stats.total_pending_reviews ?? (
+      (stats.pending_posts || 0)
+      + (stats.pending_items || 0)
+      + (stats.pending_guilds || 0)
+      + (stats.pending_reports || 0)
+      + (stats.pending_post_edits || 0)
+      + (stats.pending_item_edits || 0)
+      + (stats.pending_post_comment_images || 0)
+      + (stats.pending_item_comment_images || 0)
+      + (stats.pending_user_avatars || 0)
+    )
+  } catch (error) {
+    console.error('加载版主待办数量失败:', error)
+  }
+}
+
+const moderatorPendingBadge = computed(() => moderatorPendingCount.value > 99 ? '99+' : String(moderatorPendingCount.value))
 
 function ensureMenuCache(menuId: string, path: string = route.fullPath) {
   if (!menuCache.value[menuId]) {
@@ -202,13 +239,12 @@ function handleMainContentScroll() {
 
 async function handleMenuNavigate(menuId: string, fallbackRoute: string) {
   handleMenuClick()
-  if (activeMenu.value === menuId) return
+  if (activeMenu.value === menuId && route.path === fallbackRoute) return
 
   saveMenuState(activeMenu.value)
 
-  const cache = menuCache.value[menuId]
   pendingRestoreMenu.value = menuId
-  await router.push(cache?.path || fallbackRoute)
+  await router.push(fallbackRoute)
 }
 
 watch(() => route.fullPath, async (newPath, oldPath) => {
@@ -282,6 +318,7 @@ onBeforeUnmount(() => {
         >
           <i :class="moderatorMenuItem.icon"></i>
           <span>{{ moderatorMenuItem.label }}</span>
+          <span v-if="moderatorPendingCount > 0" class="moderator-pending-badge">{{ moderatorPendingBadge }}</span>
         </button>
       </nav>
 
@@ -390,11 +427,12 @@ onBeforeUnmount(() => {
 }
 
 .menu-item {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 14px 16px;
   border-radius: 12px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   width: 100%;
   cursor: pointer;
@@ -403,6 +441,21 @@ onBeforeUnmount(() => {
   text-align: left;
   color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.7));
   text-decoration: none;
+  overflow: hidden;
+}
+
+.menu-item::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 4px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--color-accent, #D4A373);
+  opacity: 0;
+  transform: translateY(-50%) scaleY(0.62);
+  transition: all 0.24s ease;
 }
 
 .menu-item i {
@@ -416,10 +469,21 @@ onBeforeUnmount(() => {
 }
 
 .menu-item.active {
-  background: linear-gradient(135deg, var(--color-accent, #D4A373), var(--color-accent-hover, #B87333));
-  color: var(--btn-primary-text, var(--color-accent-contrast, #2C1810));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-panel-bg, #fff) 72%, var(--color-secondary, #D4A373)),
+      color-mix(in srgb, var(--color-panel-bg, #fff) 82%, var(--color-accent, #B87333))
+    );
+  border-color: color-mix(in srgb, var(--color-secondary, #D4A373) 32%, transparent);
+  color: var(--color-primary, #2C1810);
   font-weight: bold;
-  box-shadow: 0 10px 24px -16px rgba(var(--shadow-base, 75, 54, 33), 0.8);
+  box-shadow: 0 10px 24px -18px rgba(var(--shadow-base, 75, 54, 33), 0.82);
+}
+
+.menu-item.active::before {
+  opacity: 1;
+  transform: translateY(-50%) scaleY(1);
 }
 
 .user-profile {
@@ -433,7 +497,9 @@ onBeforeUnmount(() => {
 .avatar {
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, var(--color-accent, #D4A373), var(--color-text-secondary, #8C7B70));
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #8C7B70));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -576,18 +642,47 @@ onBeforeUnmount(() => {
 
 /* 版主菜单项特殊样式 */
 .menu-item.moderator-item {
+  position: relative;
   margin-top: auto;
-  background: linear-gradient(135deg, rgba(184, 115, 51, 0.2), rgba(128, 64, 48, 0.2));
-  border: 1px solid rgba(184, 115, 51, 0.3);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent, #B87333) 24%, transparent),
+    color-mix(in srgb, var(--color-secondary, #804030) 18%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--color-accent, #B87333) 34%, transparent);
+}
+
+.moderator-pending-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #DC143C;
+  color: #fff;
+  border: 2px solid var(--color-sidebar-bg, #4B3621);
+  box-shadow: 0 4px 10px rgba(220, 20, 60, 0.35);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .menu-item.moderator-item:hover {
-  background: linear-gradient(135deg, rgba(184, 115, 51, 0.3), rgba(128, 64, 48, 0.3));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent, #B87333) 34%, transparent),
+    color-mix(in srgb, var(--color-secondary, #804030) 26%, transparent)
+  );
 }
 
 .menu-item.moderator-item.active {
-  background: linear-gradient(135deg, #B87333, #804030);
-  color: var(--btn-primary-text, #fff);
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-secondary, #804030));
+  color: var(--color-accent-contrast, var(--btn-primary-text, #fff));
 }
 
 /* 主内容区 */

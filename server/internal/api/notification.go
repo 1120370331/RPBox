@@ -36,12 +36,16 @@ func (s *Server) listNotifications(c *gin.Context) {
 	// 获取通知相关的用户信息（actor）
 	actorIDs := make([]uint, 0)
 	commentIDs := make([]uint, 0)
+	itemCommentIDs := make([]uint, 0)
 	for _, notif := range notifications {
 		if notif.ActorID != nil {
 			actorIDs = append(actorIDs, *notif.ActorID)
 		}
 		if notif.TargetType == "comment" || (notif.TargetType == "" && notif.Type == "post_comment") {
 			commentIDs = append(commentIDs, notif.TargetID)
+		}
+		if notif.TargetType == "item_comment" {
+			itemCommentIDs = append(itemCommentIDs, notif.TargetID)
 		}
 	}
 
@@ -63,6 +67,15 @@ func (s *Server) listNotifications(c *gin.Context) {
 		}
 	}
 
+	itemCommentItemMap := make(map[uint]uint)
+	if len(itemCommentIDs) > 0 {
+		var itemCommentRows []model.ItemComment
+		database.DB.Select("id", "item_id").Where("id IN ?", itemCommentIDs).Find(&itemCommentRows)
+		for _, c := range itemCommentRows {
+			itemCommentItemMap[c.ID] = c.ItemID
+		}
+	}
+
 	// 组装响应
 	type NotificationWithActor struct {
 		model.Notification
@@ -71,6 +84,7 @@ func (s *Server) listNotifications(c *gin.Context) {
 		ActorNameColor string `json:"actor_name_color,omitempty"`
 		ActorNameBold  bool   `json:"actor_name_bold,omitempty"`
 		TargetPostID   uint   `json:"target_post_id,omitempty"`
+		TargetItemID   uint   `json:"target_item_id,omitempty"`
 	}
 	result := make([]NotificationWithActor, len(notifications))
 	for i, notif := range notifications {
@@ -80,6 +94,11 @@ func (s *Server) listNotifications(c *gin.Context) {
 		if notif.TargetType == "comment" || (notif.TargetType == "" && notif.Type == "post_comment") {
 			if postID, ok := commentPostMap[notif.TargetID]; ok {
 				item.TargetPostID = postID
+			}
+		}
+		if notif.TargetType == "item_comment" {
+			if itemID, ok := itemCommentItemMap[notif.TargetID]; ok {
+				item.TargetItemID = itemID
 			}
 		}
 		if notif.ActorID != nil {

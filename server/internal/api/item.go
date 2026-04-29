@@ -1229,7 +1229,7 @@ func (s *Server) addItemComment(c *gin.Context) {
 			mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
 		}
 		mentionMessage := "在作品《" + item.Name + "》的评论中提到了你：" + mentionPreview
-		service.CreateMentionNotifications(userID, "item", uint(itemID), mentionMessage, req.Content)
+		service.CreateMentionNotifications(userID, "item_comment", comment.ID, mentionMessage, req.Content)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

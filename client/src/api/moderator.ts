@@ -6,6 +6,12 @@ export interface ModeratorStats {
   pending_items: number
   pending_guilds: number
   pending_reports: number
+  pending_post_edits?: number
+  pending_item_edits?: number
+  pending_post_comment_images?: number
+  pending_item_comment_images?: number
+  pending_user_avatars?: number
+  total_pending_reviews?: number
   total_posts: number
   total_items: number
   total_guilds: number
@@ -288,6 +294,7 @@ export interface SafeUser {
   role: string
   is_sponsor?: boolean
   sponsor_level?: number
+  sponsor_expires_at?: string | null
   name_color?: string
   name_bold?: boolean
   is_muted: boolean
@@ -297,6 +304,7 @@ export interface SafeUser {
   banned_until: string | null
   ban_reason: string
   post_count: number
+  activity_points: number
   activity_experience: number
   forum_level: number
   forum_level_name: string
@@ -319,8 +327,44 @@ export function setUserExperience(id: number, activityExperience: number) {
   return request.put<{ message: string; user: any }>(`/admin/users/${id}/experience`, { activity_experience: activityExperience })
 }
 
+export function setUserPoints(id: number, activityPoints: number) {
+  return request.put<{ message: string; user: any }>(`/admin/users/${id}/points`, { activity_points: activityPoints })
+}
+
+export function adjustUserPoints(id: number, pointsDelta: number) {
+  return request.put<{ message: string; user: any }>(`/admin/users/${id}/points`, { points_delta: pointsDelta })
+}
+
 export function broadcastSystemMessage(content: string) {
   return request.post<{ message: string; count: number }>('/admin/notifications/broadcast', { content })
+}
+
+export interface SponsorRedeemCode {
+  id: number
+  code: string
+  sponsor_level: number
+  duration_months: number
+  expires_at: string | null
+  used_by?: number | null
+  used_at?: string | null
+  created_by: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateSponsorRedeemCodesRequest {
+  count: number
+  sponsor_level: number
+  duration_months: number
+  expires_months: number
+}
+
+export function createSponsorRedeemCodes(data: CreateSponsorRedeemCodesRequest) {
+  return request.post<{ message: string; codes: SponsorRedeemCode[] }>('/admin/sponsor-codes', data)
+}
+
+export function getSponsorRedeemCodes(params?: { page?: number; page_size?: number; status?: 'all' | 'active' | 'used' | 'expired' }) {
+  return request.get<{ codes: SponsorRedeemCode[]; total: number }>('/admin/sponsor-codes', { params })
 }
 
 // ========== 用户管理（版主可用） ==========
@@ -415,6 +459,7 @@ export interface DailyMetrics {
   new_posts: number
   new_items: number
   new_guilds: number
+  new_sign_ins: number
 }
 
 export interface PeriodStats {
@@ -422,6 +467,7 @@ export interface PeriodStats {
   posts: number
   items: number
   guilds: number
+  sign_ins: number
 }
 
 export interface MetricsSummary {

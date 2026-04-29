@@ -25,9 +25,12 @@ func CreateNotification(notification *model.Notification) error {
 	if notificationHub != nil {
 		// 推送新通知事件
 		notificationHub.SendToUser(notification.UserID, ws.MessageTypeNewNotification, map[string]interface{}{
-			"id":      notification.ID,
-			"type":    notification.Type,
-			"content": notification.Content,
+			"id":          notification.ID,
+			"type":        notification.Type,
+			"actor_id":    notification.ActorID,
+			"target_type": notification.TargetType,
+			"target_id":   notification.TargetID,
+			"content":     notification.Content,
 		})
 
 		// 推送未读数量更新
@@ -53,7 +56,7 @@ func GetNotifications(userID uint, notifType string, page, pageSize int) ([]mode
 		case "like":
 			query = query.Where("type IN ?", []string{"post_like", "item_like"})
 		case "comment":
-			query = query.Where("type IN ?", []string{"post_comment", "item_comment", "mention"})
+			query = query.Where("type IN ?", []string{"post_comment", "item_comment"})
 		case "guild":
 			query = query.Where("type IN ?", []string{"guild_application", "guild_invite"})
 		case "system":

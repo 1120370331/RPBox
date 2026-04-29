@@ -216,7 +216,7 @@ function getCategoryLabel(category: string) {
               <LazyBgImage
                 class="item-image"
                 :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80, v: item.preview_image_updated_at || item.updated_at }) : undefined"
-                fallback-gradient="linear-gradient(135deg, #D4A373 0%, #8C7B70 100%)"
+                fallback-gradient="radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.72), transparent 34%), linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%)"
               >
                 <div v-if="!item.preview_image_url" class="placeholder-icon">
                   <i class="ri-box-3-line"></i>
@@ -489,6 +489,9 @@ function getCategoryLabel(category: string) {
 
 .item-image {
   height: 160px;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start, #D4A373) 0%, var(--gradient-end, #8C7B70) 100%);
 }
 
 .placeholder-icon {
@@ -496,7 +499,7 @@ function getCategoryLabel(category: string) {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: rgba(255, 255, 255, 0.8);
+  color: color-mix(in srgb, var(--color-accent-contrast, #fff) 72%, transparent);
   font-size: 36px;
 }
 

@@ -90,22 +90,25 @@ var asciiSensitiveKeywordAllowlist = map[string]struct{}{
 
 // DetectSensitiveKeywords returns matched keywords after normalization.
 func DetectSensitiveKeywords(contents ...string) []string {
-	text := normalizeSensitiveText(strings.Join(contents, " "))
-	if text == "" {
+	rawText := strings.Join(contents, " ")
+	compactText := normalizeSensitiveText(rawText)
+	if compactText == "" {
 		return nil
 	}
+	segmentedText := normalizeSensitiveTextWithBoundaries(rawText)
 
 	keywords := getSensitiveKeywords()
 	matched := make([]string, 0, 4)
 	seen := make(map[string]struct{})
 	for _, kw := range keywords {
-		if strings.Contains(text, kw) {
-			if _, ok := seen[kw]; ok {
-				continue
-			}
-			seen[kw] = struct{}{}
-			matched = append(matched, kw)
+		if !matchesSensitiveKeyword(compactText, segmentedText, kw) {
+			continue
 		}
+		if _, ok := seen[kw]; ok {
+			continue
+		}
+		seen[kw] = struct{}{}
+		matched = append(matched, kw)
 	}
 	return matched
 }
@@ -218,6 +221,67 @@ func normalizeSensitiveText(text string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+func normalizeSensitiveTextWithBoundaries(text string) string {
+	if text == "" {
+		return ""
+	}
+	text = strings.ToLower(strings.TrimSpace(text))
+	var b strings.Builder
+	b.Grow(len(text))
+	lastBoundary := true
+	for _, r := range text {
+		if unicode.IsSpace(r) || unicode.IsPunct(r) || unicode.IsSymbol(r) {
+			if !lastBoundary {
+				b.WriteRune(' ')
+				lastBoundary = true
+			}
+			continue
+		}
+		b.WriteRune(r)
+		lastBoundary = false
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func matchesSensitiveKeyword(compactText, segmentedText, keyword string) bool {
+	if shouldMatchObfuscatedKeyword(keyword) {
+		return strings.Contains(compactText, keyword)
+	}
+	if isASCIIKeyword(keyword) {
+		return containsASCIIKeyword(segmentedText, keyword)
+	}
+	return strings.Contains(segmentedText, keyword)
+}
+
+func shouldMatchObfuscatedKeyword(keyword string) bool {
+	if _, ok := shortSensitiveKeywordAllowlist[keyword]; ok {
+		return true
+	}
+	_, ok := getStrictPoliticalKeywords()[keyword]
+	return ok
+}
+
+func containsASCIIKeyword(text, keyword string) bool {
+	for _, token := range strings.Fields(text) {
+		if token == keyword {
+			return true
+		}
+	}
+	return false
+}
+
+func isASCIIKeyword(keyword string) bool {
+	if keyword == "" {
+		return false
+	}
+	for _, r := range keyword {
+		if r > unicode.MaxASCII || !(unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			return false
+		}
+	}
+	return true
 }
 
 func isUsableKeyword(keyword string) bool {

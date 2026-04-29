@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotificationStore } from '../stores/notification'
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, deleteAllNotifications, type Notification } from '../api/notification'
@@ -19,6 +19,7 @@ const tabs = [
   { id: 'all', label: '全部', icon: 'ri-notification-3-line' },
   { id: 'like', label: '点赞', icon: 'ri-heart-line' },
   { id: 'comment', label: '评论', icon: 'ri-chat-3-line' },
+  { id: 'mention', label: '提及', icon: 'ri-at-line' },
   { id: 'guild', label: '公会', icon: 'ri-shield-line' },
   { id: 'system', label: '系统', icon: 'ri-information-line' },
 ]
@@ -29,6 +30,12 @@ onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   loadNotifications()
   notificationStore.loadUnreadCount()
+})
+
+watch(() => notificationStore.lastNotification?.id, () => {
+  if (!notificationStore.lastNotification) return
+  page.value = 1
+  loadNotifications()
 })
 
 async function loadNotifications(append = false) {
@@ -125,6 +132,13 @@ function handleNotificationClick(notification: Notification) {
     if (notification.target_post_id) {
       router.push({
         path: `/community/post/${notification.target_post_id}`,
+        query: { comment: String(notification.target_id) }
+      })
+    }
+  } else if (notification.target_type === 'item_comment') {
+    if (notification.target_item_id) {
+      router.push({
+        path: `/market/${notification.target_item_id}`,
         query: { comment: String(notification.target_id) }
       })
     }

@@ -8,6 +8,7 @@ export interface Notification {
   target_type: string
   target_id: number
   target_post_id?: number
+  target_item_id?: number
   content: string
   is_read: boolean
   created_at: string

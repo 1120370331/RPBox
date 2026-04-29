@@ -1172,6 +1172,8 @@ func (s *Server) hideItemByMod(c *gin.Context) {
 // getModeratorStats 获取版主统计数据
 func (s *Server) getModeratorStats(c *gin.Context) {
 	var pendingPosts, pendingItems, pendingReports int64
+	var pendingPostEdits, pendingItemEdits int64
+	var pendingPostCommentImages, pendingItemCommentImages, pendingUserAvatars int64
 	var totalPosts, totalItems int64
 	var todayPosts, todayItems int64
 	var pendingGuilds, totalGuilds int64
@@ -1182,6 +1184,20 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Item{}).Where("review_status = ?", "pending").Count(&pendingItems)
 	database.DB.Model(&model.Guild{}).Where("status = ?", "pending").Count(&pendingGuilds)
 	database.DB.Model(&model.ContentReport{}).Where("status = ?", "pending").Count(&pendingReports)
+	database.DB.Model(&model.PostEditRequest{}).Where("status = ?", "pending").Count(&pendingPostEdits)
+	database.DB.Model(&model.ItemPendingEdit{}).Where("review_status = ?", "pending").Count(&pendingItemEdits)
+	database.DB.Model(&model.Comment{}).
+		Where("COALESCE(BTRIM(image_url), '') <> ''").
+		Where("image_review_status = ?", "pending").
+		Count(&pendingPostCommentImages)
+	database.DB.Model(&model.ItemComment{}).
+		Where("COALESCE(BTRIM(image_url), '') <> ''").
+		Where("image_review_status = ?", "pending").
+		Count(&pendingItemCommentImages)
+	database.DB.Model(&model.User{}).
+		Where("COALESCE(BTRIM(avatar), '') <> ''").
+		Where("avatar_review_status = ?", "pending").
+		Count(&pendingUserAvatars)
 
 	// 总数量
 	database.DB.Model(&model.Post{}).Count(&totalPosts)
@@ -1195,18 +1211,26 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", today).Count(&todayItems)
 	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", today).Count(&todayUsers)
 
+	totalPendingReviews := pendingPosts + pendingItems + pendingGuilds + pendingReports + pendingPostEdits + pendingItemEdits + pendingPostCommentImages + pendingItemCommentImages + pendingUserAvatars
+
 	c.JSON(http.StatusOK, gin.H{
-		"pending_posts":   pendingPosts,
-		"pending_items":   pendingItems,
-		"pending_guilds":  pendingGuilds,
-		"pending_reports": pendingReports,
-		"total_posts":     totalPosts,
-		"total_items":     totalItems,
-		"total_guilds":    totalGuilds,
-		"total_users":     totalUsers,
-		"today_posts":     todayPosts,
-		"today_items":     todayItems,
-		"today_users":     todayUsers,
+		"pending_posts":               pendingPosts,
+		"pending_items":               pendingItems,
+		"pending_guilds":              pendingGuilds,
+		"pending_reports":             pendingReports,
+		"pending_post_edits":          pendingPostEdits,
+		"pending_item_edits":          pendingItemEdits,
+		"pending_post_comment_images": pendingPostCommentImages,
+		"pending_item_comment_images": pendingItemCommentImages,
+		"pending_user_avatars":        pendingUserAvatars,
+		"total_pending_reviews":       totalPendingReviews,
+		"total_posts":                 totalPosts,
+		"total_items":                 totalItems,
+		"total_guilds":                totalGuilds,
+		"total_users":                 totalUsers,
+		"today_posts":                 todayPosts,
+		"today_items":                 todayItems,
+		"today_users":                 todayUsers,
 	})
 }
 
@@ -1604,6 +1628,7 @@ func (s *Server) getMetricsHistory(c *gin.Context) {
 		NewPosts    int64  `json:"new_posts"`
 		NewItems    int64  `json:"new_items"`
 		NewGuilds   int64  `json:"new_guilds"`
+		NewSignIns  int64  `json:"new_sign_ins"`
 	}
 
 	var result []DailyData
@@ -1627,6 +1652,7 @@ func (s *Server) getMetricsHistory(c *gin.Context) {
 		database.DB.Model(&model.Post{}).Where("DATE(created_at) = ?", dateStr).Count(&data.NewPosts)
 		database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", dateStr).Count(&data.NewItems)
 		database.DB.Model(&model.Guild{}).Where("DATE(created_at) = ? AND status = ?", dateStr, "approved").Count(&data.NewGuilds)
+		database.DB.Model(&model.UserDailyActivity{}).Where("activity_date = ? AND signed_in_at IS NOT NULL", dateStr).Count(&data.NewSignIns)
 
 		result = append(result, data)
 	}
@@ -1642,10 +1668,11 @@ func (s *Server) getMetricsSummary(c *gin.Context) {
 	monthAgo := time.Now().AddDate(0, -1, 0).Format("2006-01-02")
 
 	type PeriodStats struct {
-		Users  int64 `json:"users"`
-		Posts  int64 `json:"posts"`
-		Items  int64 `json:"items"`
-		Guilds int64 `json:"guilds"`
+		Users   int64 `json:"users"`
+		Posts   int64 `json:"posts"`
+		Items   int64 `json:"items"`
+		Guilds  int64 `json:"guilds"`
+		SignIns int64 `json:"sign_ins"`
 	}
 
 	var todayStats, yesterdayStats, weekStats, monthStats PeriodStats
@@ -1655,24 +1682,28 @@ func (s *Server) getMetricsSummary(c *gin.Context) {
 	database.DB.Model(&model.Post{}).Where("DATE(created_at) = ?", today).Count(&todayStats.Posts)
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", today).Count(&todayStats.Items)
 	database.DB.Model(&model.Guild{}).Where("DATE(created_at) = ? AND status = ?", today, "approved").Count(&todayStats.Guilds)
+	database.DB.Model(&model.UserDailyActivity{}).Where("activity_date = ? AND signed_in_at IS NOT NULL", today).Count(&todayStats.SignIns)
 
 	// 昨日新增
 	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", yesterday).Count(&yesterdayStats.Users)
 	database.DB.Model(&model.Post{}).Where("DATE(created_at) = ?", yesterday).Count(&yesterdayStats.Posts)
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", yesterday).Count(&yesterdayStats.Items)
 	database.DB.Model(&model.Guild{}).Where("DATE(created_at) = ? AND status = ?", yesterday, "approved").Count(&yesterdayStats.Guilds)
+	database.DB.Model(&model.UserDailyActivity{}).Where("activity_date = ? AND signed_in_at IS NOT NULL", yesterday).Count(&yesterdayStats.SignIns)
 
 	// 本周新增（过去7天）
 	database.DB.Model(&model.User{}).Where("DATE(created_at) >= ?", weekAgo).Count(&weekStats.Users)
 	database.DB.Model(&model.Post{}).Where("DATE(created_at) >= ?", weekAgo).Count(&weekStats.Posts)
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) >= ?", weekAgo).Count(&weekStats.Items)
 	database.DB.Model(&model.Guild{}).Where("DATE(created_at) >= ? AND status = ?", weekAgo, "approved").Count(&weekStats.Guilds)
+	database.DB.Model(&model.UserDailyActivity{}).Where("activity_date >= ? AND signed_in_at IS NOT NULL", weekAgo).Count(&weekStats.SignIns)
 
 	// 本月新增（过去30天）
 	database.DB.Model(&model.User{}).Where("DATE(created_at) >= ?", monthAgo).Count(&monthStats.Users)
 	database.DB.Model(&model.Post{}).Where("DATE(created_at) >= ?", monthAgo).Count(&monthStats.Posts)
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) >= ?", monthAgo).Count(&monthStats.Items)
 	database.DB.Model(&model.Guild{}).Where("DATE(created_at) >= ? AND status = ?", monthAgo, "approved").Count(&monthStats.Guilds)
+	database.DB.Model(&model.UserDailyActivity{}).Where("activity_date >= ? AND signed_in_at IS NOT NULL", monthAgo).Count(&monthStats.SignIns)
 
 	c.JSON(http.StatusOK, gin.H{
 		"today":     todayStats,

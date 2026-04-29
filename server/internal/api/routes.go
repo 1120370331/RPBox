@@ -232,6 +232,7 @@ func (s *Server) setupRoutes() {
 			auth.POST("/user/sign-in", s.signInDaily)
 			auth.POST("/user/avatar", s.updateAvatar)
 			auth.POST("/user/bind-email", s.bindEmail)
+			auth.POST("/sponsor-codes/redeem", s.redeemSponsorCode)
 			auth.POST("/reports", s.createContentReport)
 			auth.GET("/sponsors", s.listSponsors)
 			auth.GET("/users/search", s.searchUsers)
@@ -353,7 +354,10 @@ func (s *Server) setupRoutes() {
 				admin.GET("/users", s.listUsers)
 				admin.PUT("/users/:id/role", s.setUserRole)
 				admin.PUT("/users/:id/sponsor", s.setUserSponsor)
+				admin.PUT("/users/:id/points", s.setUserPoints)
 				admin.PUT("/users/:id/experience", s.setUserExperience)
+				admin.GET("/sponsor-codes", s.listSponsorRedeemCodes)
+				admin.POST("/sponsor-codes", s.createSponsorRedeemCodes)
 				admin.POST("/notifications/broadcast", s.broadcastSystemNotification)
 			}
 		}

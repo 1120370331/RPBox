@@ -25,7 +25,7 @@ const computedSize = typeof props.size === 'number' ? props.size : sizeMap[props
       width: `${computedSize}px`,
       height: `${computedSize}px`,
       fontSize: `${computedSize * 0.4}px`,
-      background: color || 'var(--color-accent)',
+      background: color || 'radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%), linear-gradient(135deg, var(--gradient-start), var(--gradient-end))',
     }"
   >
     <img v-if="src" :src="src" :alt="alt" class="r-avatar__img" />
@@ -39,10 +39,11 @@ const computedSize = typeof props.size === 'number' ? props.size : sizeMap[props
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-primary);
+  color: var(--btn-primary-text, var(--color-primary));
   font-weight: 600;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
 }
 .r-avatar--circle { border-radius: 50%; }
 .r-avatar--square { border-radius: var(--radius-sm); }
