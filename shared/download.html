@@ -360,7 +360,7 @@
             var fallbackBase = 'https://ksxvodevhonx.sealosbja.site/releases';
             var fallbackWindowsUrl = 'https://github.com/1120370331/RPBox/releases/download/v0.2.30/RPBox_0.2.30_x64-setup.exe';
             var fallbackMobileBase = 'https://ksxvodevhonx.sealosbja.site/releases/mobile';
-            var fallbackIosUrl = 'https://testflight.apple.com/join/rZ7Va5WA';
+            var fallbackIosUrl = 'https://apps.apple.com/cn/app/rpbox/id6761112311';
 
             function isLocalHost(hostname) {
                 return hostname === 'localhost' || hostname === '127.0.0.1';
@@ -453,6 +453,10 @@
                 return downloadUrl.indexOf('apps.apple.com') !== -1 || downloadUrl.indexOf('testflight.apple.com') !== -1;
             }
 
+            function isTestFlightDownloadUrl(downloadUrl) {
+                return downloadUrl.indexOf('testflight.apple.com') !== -1;
+            }
+
             function isCurrentDownloadPageUrl(downloadUrl) {
                 if (!downloadUrl) return false;
                 try {
@@ -468,7 +472,7 @@
                 if (!downloadUrl || !els.button) return;
                 var filename = downloadUrl.split('/').pop() || 'RPBox-setup.exe';
                 els.button.href = downloadUrl;
-                // 商店/TestFlight 跳转不应带 download 属性，否则部分移动浏览器会忽略点击。
+                // 商店跳转不应带 download 属性，否则部分移动浏览器会忽略点击。
                 if (isStoreDownloadUrl(downloadUrl)) {
                     els.button.removeAttribute('download');
                 } else {
@@ -512,7 +516,7 @@
                     if (platform.target === 'android') {
                         els.badge.textContent = 'Android 最新版现已发布';
                     } else if (platform.target === 'ios') {
-                        els.badge.textContent = 'iOS 版可通过 TestFlight 下载';
+                        els.badge.textContent = 'iOS 版可通过 App Store 下载';
                     } else {
                         els.badge.textContent = 'v' + fallbackVersion + ' Windows 版现已发布';
                     }
@@ -660,7 +664,7 @@
                     } else if (platform.target === 'android') {
                         els.support.textContent = '支持 Android 8.0+';
                     } else if (platform.target === 'ios') {
-                        els.support.textContent = '通过 TestFlight 安装';
+                        els.support.textContent = '通过 App Store 安装';
                     } else {
                         els.support.textContent = '支持 ' + platform.label;
                     }
@@ -697,6 +701,12 @@
                             return;
                         }
                         throw new Error('Invalid iOS download URL');
+                    }
+                    if (platform.target === 'ios' && isTestFlightDownloadUrl(downloadUrl)) {
+                        downloadUrl = sanitizeDownloadUrl(fallbackIosUrl, fallbackMobileBase);
+                        if (!downloadUrl) {
+                            throw new Error('Invalid iOS App Store URL');
+                        }
                     }
                     applyDownloadLink(downloadUrl);
 

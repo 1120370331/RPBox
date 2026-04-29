@@ -24,7 +24,7 @@ env:
   NODE_VERSION: '20'
   XCODE_WORKSPACE: 'mobile/ios/App/App.xcworkspace'
   XCODE_SCHEME: 'App'
-  IOS_DEFAULT_PUBLIC_URL: 'https://testflight.apple.com/join/rZ7Va5WA'
+  IOS_DEFAULT_PUBLIC_URL: 'https://apps.apple.com/cn/app/rpbox/id6761112311'
 
 jobs:
   build-and-upload:
