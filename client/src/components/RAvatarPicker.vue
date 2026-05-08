@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import WowIcon from './WowIcon.vue'
+import ImageCropperDialog from './ImageCropperDialog.vue'
 import RInput from './RInput.vue'
 import RButton from './RButton.vue'
 
@@ -23,6 +24,9 @@ const wowIconName = ref('')
 
 // 上传的图片URL
 const uploadedUrl = ref('')
+const uploadError = ref('')
+const cropperOpen = ref(false)
+const cropperFile = ref<File | null>(null)
 
 // 初始化
 if (props.modelValue) {
@@ -78,19 +82,35 @@ function handleFileChange(e: Event) {
   const file = input.files?.[0]
   if (!file) return
 
-  // 检查文件大小 (最大 500KB)
-  if (file.size > 500 * 1024) {
-    alert('图片大小不能超过 500KB')
+  uploadError.value = ''
+  if (!file.type.startsWith('image/')) {
+    uploadError.value = '请选择图片文件'
+    input.value = ''
+    return
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    uploadError.value = '图片大小不能超过 20MB'
+    input.value = ''
     return
   }
 
-  // 转为 base64
+  cropperFile.value = file
+  cropperOpen.value = true
+  input.value = ''
+}
+
+function handleCroppedAvatar(file: File) {
   const reader = new FileReader()
   reader.onload = () => {
     uploadedUrl.value = reader.result as string
     updateValue()
+    cropperFile.value = null
   }
   reader.readAsDataURL(file)
+}
+
+function handleCropperError(error: Error) {
+  uploadError.value = error.message || '图片处理失败'
 }
 
 function clearAvatar() {
@@ -152,7 +172,20 @@ function clearAvatar() {
       <RButton @click="triggerUpload">
         <i class="ri-upload-2-line"></i> 选择图片
       </RButton>
-      <span class="hint">支持 JPG/PNG，最大 500KB</span>
+      <ImageCropperDialog
+        v-model="cropperOpen"
+        :file="cropperFile"
+        :aspect-ratio="1"
+        :output-width="512"
+        :output-height="512"
+        :max-size-k-b="500"
+        title="调整头像"
+        round-preview
+        @cropped="handleCroppedAvatar"
+        @error="handleCropperError"
+      />
+      <span class="hint">支持 JPG/PNG，裁剪后最大约 500KB</span>
+      <span v-if="uploadError" class="error-hint">{{ uploadError }}</span>
     </div>
   </div>
 </template>
@@ -249,5 +282,10 @@ function clearAvatar() {
 .hint {
   font-size: 12px;
   color: var(--color-secondary);
+}
+
+.error-hint {
+  font-size: 12px;
+  color: var(--btn-danger-bg);
 }
 </style>

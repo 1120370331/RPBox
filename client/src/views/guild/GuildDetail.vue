@@ -8,6 +8,7 @@ import { useDialog } from '@/composables/useDialog'
 import RModal from '@/components/RModal.vue'
 import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import LazyBgImage from '@/components/LazyBgImage.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -46,6 +47,12 @@ const heroBannerInput = ref<HTMLInputElement | null>(null)
 const avatarFile = ref<File | null>(null)
 const avatarPreview = ref('')
 const heroAvatarInput = ref<HTMLInputElement | null>(null)
+const avatarCropperOpen = ref(false)
+const avatarCropperFile = ref<File | null>(null)
+const avatarCropTarget = ref<'settings' | 'hero' | null>(null)
+const bannerCropperOpen = ref(false)
+const bannerCropperFile = ref<File | null>(null)
+const bannerCropTarget = ref<'settings' | 'hero' | null>(null)
 
 const guildId = Number(route.params.id)
 
@@ -163,16 +170,20 @@ function handleBannerSelect(e: Event) {
   const input = e.target as HTMLInputElement
   if (input.files && input.files[0]) {
     const file = input.files[0]
-    if (file.size > 20 * 1024 * 1024) {
-      alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.bannerSizeLimit'), type: 'error' })
+    if (!file.type.startsWith('image/')) {
+      void alert({ title: t('guild.settings.uploadFailed'), message: t('guild.settings.uploadFailed'), type: 'error' })
+      input.value = ''
       return
     }
-    bannerFile.value = file
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      bannerPreview.value = e.target?.result as string
+    if (file.size > 20 * 1024 * 1024) {
+      void alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.bannerSizeLimit'), type: 'error' })
+      input.value = ''
+      return
     }
-    reader.readAsDataURL(file)
+    bannerCropTarget.value = 'settings'
+    bannerCropperFile.value = file
+    bannerCropperOpen.value = true
+    input.value = ''
   }
 }
 
@@ -180,16 +191,20 @@ function handleAvatarSelect(e: Event) {
   const input = e.target as HTMLInputElement
   if (input.files && input.files[0]) {
     const file = input.files[0]
-    if (file.size > 10 * 1024 * 1024) {
-      alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.avatarSizeLimit'), type: 'error' })
+    if (!file.type.startsWith('image/')) {
+      void alert({ title: t('guild.settings.uploadFailed'), message: t('guild.settings.uploadFailed'), type: 'error' })
+      input.value = ''
       return
     }
-    avatarFile.value = file
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      avatarPreview.value = e.target?.result as string
+    if (file.size > 10 * 1024 * 1024) {
+      void alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.avatarSizeLimit'), type: 'error' })
+      input.value = ''
+      return
     }
-    reader.readAsDataURL(file)
+    avatarCropTarget.value = 'settings'
+    avatarCropperFile.value = file
+    avatarCropperOpen.value = true
+    input.value = ''
   }
 }
 
@@ -207,17 +222,20 @@ async function handleHeroBannerSelect(e: Event) {
   if (!input.files || !input.files[0] || !guild.value) return
 
   const file = input.files[0]
+  if (!file.type.startsWith('image/')) {
+    await alert({ title: t('guild.settings.uploadFailed'), message: t('guild.settings.uploadFailed'), type: 'error' })
+    input.value = ''
+    return
+  }
   if (file.size > 20 * 1024 * 1024) {
     await alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.bannerSizeLimit'), type: 'error' })
+    input.value = ''
     return
   }
 
-  try {
-    const res = await uploadGuildBanner(guildId, file)
-    guild.value.banner = res.banner
-  } catch (e: any) {
-    await alert({ title: t('guild.settings.uploadFailed'), message: e.message || t('guild.settings.uploadFailed'), type: 'error' })
-  }
+  bannerCropTarget.value = 'hero'
+  bannerCropperFile.value = file
+  bannerCropperOpen.value = true
   input.value = ''
 }
 
@@ -226,21 +244,78 @@ async function handleHeroAvatarSelect(e: Event) {
   if (!input.files || !input.files[0] || !guild.value) return
 
   const file = input.files[0]
+  if (!file.type.startsWith('image/')) {
+    await alert({ title: t('guild.settings.uploadFailed'), message: t('guild.settings.uploadFailed'), type: 'error' })
+    input.value = ''
+    return
+  }
   if (file.size > 10 * 1024 * 1024) {
     await alert({ title: t('guild.settings.fileTooLarge'), message: t('guild.settings.avatarSizeLimit'), type: 'error' })
+    input.value = ''
     return
   }
 
-  try {
-    const res = await uploadGuildAvatar(guildId, file)
-    guild.value.avatar = res.avatar
-    if (res.avatar_updated_at) {
-      guild.value.avatar_updated_at = res.avatar_updated_at
-    }
-  } catch (e: any) {
-    await alert({ title: t('guild.settings.uploadFailed'), message: e.message || t('guild.settings.uploadFailed'), type: 'error' })
-  }
+  avatarCropTarget.value = 'hero'
+  avatarCropperFile.value = file
+  avatarCropperOpen.value = true
   input.value = ''
+}
+
+async function handleBannerCropped(file: File) {
+  const target = bannerCropTarget.value
+  bannerCropTarget.value = null
+  bannerCropperFile.value = null
+
+  if (target === 'settings') {
+    bannerFile.value = file
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      bannerPreview.value = event.target?.result as string
+    }
+    reader.readAsDataURL(file)
+    return
+  }
+
+  if (target === 'hero' && guild.value) {
+    try {
+      const res = await uploadGuildBanner(guildId, file)
+      guild.value.banner = res.banner
+    } catch (e: any) {
+      await alert({ title: t('guild.settings.uploadFailed'), message: e.message || t('guild.settings.uploadFailed'), type: 'error' })
+    }
+  }
+}
+
+async function handleAvatarCropped(file: File) {
+  const target = avatarCropTarget.value
+  avatarCropTarget.value = null
+  avatarCropperFile.value = null
+
+  if (target === 'settings') {
+    avatarFile.value = file
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      avatarPreview.value = event.target?.result as string
+    }
+    reader.readAsDataURL(file)
+    return
+  }
+
+  if (target === 'hero' && guild.value) {
+    try {
+      const res = await uploadGuildAvatar(guildId, file)
+      guild.value.avatar = res.avatar
+      if (res.avatar_updated_at) {
+        guild.value.avatar_updated_at = res.avatar_updated_at
+      }
+    } catch (e: any) {
+      await alert({ title: t('guild.settings.uploadFailed'), message: e.message || t('guild.settings.uploadFailed'), type: 'error' })
+    }
+  }
+}
+
+function handleImageCropperError(error: Error) {
+  void alert({ title: t('guild.settings.uploadFailed'), message: error.message || t('guild.settings.uploadFailed'), type: 'error' })
 }
 
 async function saveSettings() {
@@ -385,6 +460,29 @@ onMounted(loadGuild)
                   </div>
                   <input ref="heroBannerInput" type="file" accept="image/*" hidden @change="handleHeroBannerSelect" />
                   <input ref="heroAvatarInput" type="file" accept="image/*" hidden @change="handleHeroAvatarSelect" />
+                  <ImageCropperDialog
+                    v-model="avatarCropperOpen"
+                    :file="avatarCropperFile"
+                    :aspect-ratio="1"
+                    :output-width="512"
+                    :output-height="512"
+                    :max-size-k-b="512"
+                    title="调整公会头像"
+                    round-preview
+                    @cropped="handleAvatarCropped"
+                    @error="handleImageCropperError"
+                  />
+                  <ImageCropperDialog
+                    v-model="bannerCropperOpen"
+                    :file="bannerCropperFile"
+                    :aspect-ratio="3"
+                    :output-width="1920"
+                    :output-height="640"
+                    :max-size-k-b="1536"
+                    title="调整公会头图"
+                    @cropped="handleBannerCropped"
+                    @error="handleImageCropperError"
+                  />
                 </div>
               </div>
             </div>

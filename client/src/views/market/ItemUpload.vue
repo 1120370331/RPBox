@@ -7,6 +7,7 @@ import { getPresetTags, type Tag } from '@/api/tag'
 import { addItemToCollection } from '@/api/collection'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import CollectionSelector from '@/components/CollectionSelector.vue'
 
@@ -20,6 +21,8 @@ const uploadingArtwork = ref(false)
 const itemTags = ref<Tag[]>([])
 const previewImageInput = ref<HTMLInputElement | null>(null)
 const artworkImagesInput = ref<HTMLInputElement | null>(null)
+const previewCropperOpen = ref(false)
+const previewCropperFile = ref<File | null>(null)
 
 const DRAFT_KEY = 'item_upload_draft'
 
@@ -201,28 +204,41 @@ function handlePreview() {
 }
 
 // 上传预览图
-async function handlePreviewImageUpload(event: Event) {
+function handlePreviewImageUpload(event: Event) {
   const input = event.target as HTMLInputElement
   if (!input.files || input.files.length === 0) return
 
   const file = input.files[0]
   if (file.size > 5 * 1024 * 1024) {
     toast.info(t('market.upload.form.imageSizeLimit'))
+    input.value = ''
     return
   }
 
+  previewCropperFile.value = file
+  previewCropperOpen.value = true
+  input.value = ''
+}
+
+async function handlePreviewImageCropped(file: File) {
   uploadingImage.value = true
   try {
     const res: any = await uploadImage(file)
-    if (res.code === 0) {
-      form.value.preview_image = res.data.url
+    const url = res?.data?.url || res?.url
+    if (url) {
+      form.value.preview_image = url
       toast.success(t('market.upload.form.previewImageSuccess'))
     }
   } catch (error: any) {
     toast.error(error.message || t('market.upload.messages.uploadFailed'))
   } finally {
     uploadingImage.value = false
+    previewCropperFile.value = null
   }
+}
+
+function handlePreviewCropperError(error: Error) {
+  toast.error(error.message || t('market.upload.messages.uploadFailed'))
 }
 
 // 移除预览图
@@ -322,9 +338,14 @@ loadTags()
           <div class="preview-upload">
             <div v-if="form.preview_image" class="preview-image">
               <img :src="form.preview_image" :alt="t('market.upload.form.previewImageAlt')" />
-              <button type="button" class="remove-btn" @click="removePreviewImage">
-                <i class="ri-close-line"></i>
-              </button>
+              <div class="preview-image-actions">
+                <button type="button" class="edit-btn" @click="previewImageInput?.click()">
+                  <i class="ri-crop-line"></i>
+                </button>
+                <button type="button" class="remove-btn" @click="removePreviewImage">
+                  <i class="ri-close-line"></i>
+                </button>
+              </div>
             </div>
             <div v-else class="upload-area" @click="previewImageInput?.click()">
               <i class="ri-image-add-line"></i>
@@ -338,6 +359,17 @@ loadTags()
               @change="handlePreviewImageUpload"
             />
           </div>
+          <ImageCropperDialog
+            v-model="previewCropperOpen"
+            :file="previewCropperFile"
+            :aspect-ratio="16 / 9"
+            :output-width="1600"
+            :output-height="900"
+            :max-size-k-b="1024"
+            title="调整预览图"
+            @cropped="handlePreviewImageCropped"
+            @error="handlePreviewCropperError"
+          />
           <p class="hint">{{ t('market.upload.form.previewImageHint') }}</p>
         </div>
 
@@ -630,10 +662,16 @@ loadTags()
   object-fit: cover;
 }
 
-.preview-image .remove-btn {
+.preview-image-actions {
   position: absolute;
   top: 8px;
   right: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.preview-image .edit-btn,
+.preview-image .remove-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -647,6 +685,7 @@ loadTags()
   font-size: 18px;
 }
 
+.preview-image .edit-btn:hover,
 .preview-image .remove-btn:hover {
   background: rgba(0,0,0,0.8);
 }

@@ -18,6 +18,7 @@ import {
   type GuildApplication
 } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -36,6 +37,8 @@ const loading = ref(false)
 const activeTab = ref<'members' | 'applications'>('members')
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
+const avatarCropperOpen = ref(false)
+const avatarCropperFile = ref<File | null>(null)
 
 const guildAvatarUrl = computed(() => {
   if (!guild.value || (!guild.value.avatar_url && !guild.value.avatar)) return ''
@@ -91,17 +94,29 @@ function triggerAvatarUpload() {
   avatarInputRef.value?.click()
 }
 
-async function handleAvatarUpload(event: Event) {
+function handleAvatarUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file || !guild.value) return
 
+  if (!file.type.startsWith('image/')) {
+    toast.error(t('guild.manage.avatarFailed'))
+    input.value = ''
+    return
+  }
   if (file.size > 10 * 1024 * 1024) {
     toast.error(t('guild.manage.avatarSizeLimit'))
     input.value = ''
     return
   }
 
+  avatarCropperFile.value = file
+  avatarCropperOpen.value = true
+  input.value = ''
+}
+
+async function handleAvatarCropped(file: File) {
+  if (!guild.value) return
   avatarUploading.value = true
   try {
     const res = await uploadGuildAvatar(guildId.value, file)
@@ -115,8 +130,12 @@ async function handleAvatarUpload(event: Event) {
     toast.error(e.message || t('guild.manage.avatarFailed'))
   } finally {
     avatarUploading.value = false
-    input.value = ''
+    avatarCropperFile.value = null
   }
+}
+
+function handleAvatarCropperError(error: Error) {
+  toast.error(error.message || t('guild.manage.avatarFailed'))
 }
 
 // 加载成员列表
@@ -288,6 +307,18 @@ onMounted(async () => {
           </div>
         </div>
         <input ref="avatarInputRef" type="file" accept="image/*" hidden @change="handleAvatarUpload" />
+        <ImageCropperDialog
+          v-model="avatarCropperOpen"
+          :file="avatarCropperFile"
+          :aspect-ratio="1"
+          :output-width="512"
+          :output-height="512"
+          :max-size-k-b="512"
+          title="调整公会头像"
+          round-preview
+          @cropped="handleAvatarCropped"
+          @error="handleAvatarCropperError"
+        />
       </div>
 
       <!-- 标签页导航 -->
