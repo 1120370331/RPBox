@@ -272,6 +272,10 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 		post.Title = edit.Title
 		post.Content = edit.Content
 		post.ContentType = edit.ContentType
+		if post.CoverImage != edit.CoverImage {
+			post.CoverImage = edit.CoverImage
+			post.CoverImageUpdatedAt = &now
+		}
 		post.Category = edit.Category
 		post.Region = edit.Region
 		post.Address = edit.Address
@@ -286,10 +290,17 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 			post.EventEndTime = nil
 			post.EventColor = ""
 		}
-		database.DB.Save(&post)
+		if err := database.DB.Save(&post).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "应用编辑失败"})
+			return
+		}
 
 		// 删除待审核记录
-		database.DB.Delete(&edit)
+		if err := database.DB.Delete(&edit).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除编辑记录失败"})
+			return
+		}
+		s.bumpPostListCache(c.Request.Context())
 
 		ensurePostCoverUpdatedAt(&post)
 		post.CoverImage = postCoverURL(post)
@@ -844,12 +855,27 @@ func (s *Server) reviewItemEdit(c *gin.Context) {
 
 		item.Name = edit.Name
 		item.Icon = edit.Icon
+		if item.PreviewImage != edit.PreviewImage {
+			item.PreviewImage = edit.PreviewImage
+			item.PreviewImageUpdatedAt = &now
+		}
 		item.Description = edit.Description
+		item.DetailContent = edit.DetailContent
 		item.ImportCode = edit.ImportCode
-		database.DB.Save(&item)
+		item.RawData = edit.RawData
+		item.RequiresPermission = edit.RequiresPermission
+		item.EnableWatermark = edit.EnableWatermark
+		item.IsPublic = edit.IsPublic
+		if err := database.DB.Save(&item).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "应用编辑失败"})
+			return
+		}
 
 		// 删除待审核记录
-		database.DB.Delete(&edit)
+		if err := database.DB.Delete(&edit).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除编辑记录失败"})
+			return
+		}
 
 		ensureItemPreviewUpdatedAt(&item)
 		item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")

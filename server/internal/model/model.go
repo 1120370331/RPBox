@@ -410,19 +410,25 @@ type ItemDownload struct {
 
 // ItemPendingEdit 道具待审核编辑
 type ItemPendingEdit struct {
-	ID            uint       `gorm:"primarykey" json:"id"`
-	ItemID        uint       `gorm:"uniqueIndex;not null" json:"item_id"` // 每个道具只能有一个待审核编辑
-	AuthorID      uint       `gorm:"index;not null" json:"author_id"`
-	Name          string     `gorm:"size:256" json:"name"`
-	Icon          string     `gorm:"size:128" json:"icon"`
-	Description   string     `gorm:"type:text" json:"description"`
-	ImportCode    string     `gorm:"type:text" json:"import_code"`
-	ReviewStatus  string     `gorm:"size:20;default:pending" json:"review_status"` // pending|approved|rejected
-	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`
-	ReviewComment string     `gorm:"size:512" json:"review_comment"`
-	ReviewedAt    *time.Time `json:"reviewed_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID                 uint       `gorm:"primarykey" json:"id"`
+	ItemID             uint       `gorm:"uniqueIndex;not null" json:"item_id"` // 每个道具只能有一个待审核编辑
+	AuthorID           uint       `gorm:"index;not null" json:"author_id"`
+	Name               string     `gorm:"size:256" json:"name"`
+	Icon               string     `gorm:"size:128" json:"icon"`
+	PreviewImage       string     `gorm:"type:text" json:"preview_image"`
+	Description        string     `gorm:"type:text" json:"description"`
+	DetailContent      string     `gorm:"type:text" json:"detail_content"`
+	ImportCode         string     `gorm:"type:text" json:"import_code"`
+	RawData            string     `gorm:"type:text" json:"raw_data"`
+	RequiresPermission bool       `gorm:"default:false" json:"requires_permission"`
+	EnableWatermark    bool       `gorm:"default:true" json:"enable_watermark"`
+	IsPublic           bool       `gorm:"default:true" json:"is_public"`
+	ReviewStatus       string     `gorm:"size:20;default:pending" json:"review_status"` // pending|approved|rejected
+	ReviewerID         *uint      `gorm:"index" json:"reviewer_id"`
+	ReviewComment      string     `gorm:"size:512" json:"review_comment"`
+	ReviewedAt         *time.Time `json:"reviewed_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // ItemImage 画作图片（用于artwork类型的多图）
@@ -481,6 +487,7 @@ type PostEditRequest struct {
 	Title          string     `gorm:"size:256" json:"title"`
 	Content        string     `gorm:"type:text" json:"content"`
 	ContentType    string     `gorm:"size:20" json:"content_type"`
+	CoverImage     string     `gorm:"type:text" json:"cover_image"`
 	Category       string     `gorm:"size:20" json:"category"`
 	Region         string     `gorm:"size:128" json:"region"`
 	Address        string     `gorm:"size:256" json:"address"`

@@ -13,12 +13,14 @@ import TiptapEditor from '@/components/TiptapEditor.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
 import CollectionSelector from '@/components/CollectionSelector.vue'
 import { addPostToCollection } from '@/api/collection'
+import { useDialog } from '@/composables/useDialog'
 
 const DRAFT_KEY = 'post_create_draft'
 
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToastStore()
+const dialog = useDialog()
 const userStore = useUserStore()
 const mounted = ref(false)
 const loading = ref(false)
@@ -68,8 +70,21 @@ const selectedCollectionId = ref<number | null>(null)
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
+function hasDraftContent(formData = form.value, tagIds = selectedTags.value) {
+  return Boolean(
+    formData.title?.trim()
+    || formData.content?.trim()
+    || formData.cover_image
+    || formData.region?.trim()
+    || formData.address?.trim()
+    || tagIds.length > 0
+  )
+}
+
 // 保存草稿到 localStorage
 function saveDraft() {
+  if (!hasDraftContent() || loading.value) return
+
   const draft = {
     form: form.value,
     selectedTags: selectedTags.value,
@@ -84,27 +99,44 @@ function debouncedSaveDraft() {
   debounceTimer = setTimeout(saveDraft, 1000)
 }
 
-// 从 localStorage 恢复草稿
-function loadDraft() {
-  const saved = localStorage.getItem(DRAFT_KEY)
-  if (saved) {
-    try {
-      const draft = JSON.parse(saved)
-      if (draft.form) {
-        form.value = { ...form.value, ...draft.form }
-      }
-      if (draft.selectedTags) {
-        selectedTags.value = draft.selectedTags
-      }
-    } catch (e) {
-      console.error('恢复草稿失败:', e)
-    }
-  }
-}
-
 // 清除草稿
 function clearDraft() {
   localStorage.removeItem(DRAFT_KEY)
+}
+
+async function maybeRestoreDraft() {
+  const saved = localStorage.getItem(DRAFT_KEY)
+  if (!saved) return
+
+  try {
+    const draft = JSON.parse(saved)
+    const draftForm = draft.form || {}
+    const draftTags = Array.isArray(draft.selectedTags) ? draft.selectedTags : []
+    if (!hasDraftContent(draftForm, draftTags)) {
+      clearDraft()
+      return
+    }
+
+    const confirmed = await dialog.confirm({
+      title: '恢复未保存草稿',
+      message: '检测到一份未发布的新帖草稿。是否恢复？取消将丢弃这份本地草稿，避免它覆盖当前新内容。',
+      type: 'warning',
+      confirmText: '恢复',
+      cancelText: '丢弃',
+    })
+
+    if (!confirmed) {
+      clearDraft()
+      return
+    }
+
+    form.value = { ...form.value, ...draftForm }
+    selectedTags.value = draftTags
+    coverImagePreview.value = form.value.cover_image || ''
+  } catch (e) {
+    console.error('恢复草稿失败:', e)
+    clearDraft()
+  }
 }
 
 onMounted(async () => {
@@ -116,7 +148,7 @@ onMounted(async () => {
   }
 
   setTimeout(() => mounted.value = true, 50)
-  loadDraft()
+  await maybeRestoreDraft()
   await loadTags()
   await loadGuilds()
 
@@ -221,6 +253,7 @@ async function handleSubmit(status: 'draft' | 'published') {
 }
 
 function handleCancel() {
+  clearDraft()
   router.back()
 }
 

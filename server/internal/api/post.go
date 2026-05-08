@@ -24,7 +24,7 @@ type CreatePostRequest struct {
 	Title          string  `json:"title" binding:"required"`
 	Content        string  `json:"content" binding:"required"`
 	ContentType    string  `json:"content_type"`
-	CoverImage     string  `json:"cover_image"`
+	CoverImage     *string `json:"cover_image"`
 	Category       string  `json:"category"` // profile|guild|report|novel|item|event|other
 	Region         string  `json:"region"`
 	Address        string  `json:"address"`
@@ -44,7 +44,7 @@ type UpdatePostRequest struct {
 	Title          string  `json:"title"`
 	Content        string  `json:"content"`
 	ContentType    string  `json:"content_type"`
-	CoverImage     string  `json:"cover_image"`
+	CoverImage     *string `json:"cover_image"`
 	Category       string  `json:"category"`
 	Region         *string `json:"region"`
 	Address        *string `json:"address"`
@@ -480,16 +480,24 @@ func (s *Server) createPost(c *gin.Context) {
 	if req.Category == "" {
 		req.Category = "other"
 	}
-	if req.CoverImage != "" {
-		normalizedCover, err := s.normalizeAndStoreImageValue(c, req.CoverImage, fmt.Sprintf("posts/%d/cover", userID))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "封面图格式无效"})
-			return
+	if req.CoverImage != nil {
+		coverImage := strings.TrimSpace(*req.CoverImage)
+		if coverImage != "" {
+			normalizedCover, err := s.normalizeAndStoreImageValue(c, coverImage, fmt.Sprintf("posts/%d/cover", userID))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "封面图格式无效"})
+				return
+			}
+			coverImage = normalizedCover
 		}
-		req.CoverImage = normalizedCover
+		req.CoverImage = &coverImage
 	}
 	if req.Content != "" {
 		req.Content = s.normalizeAndStoreContentImages(c, req.Content, fmt.Sprintf("posts/%d/content", userID))
+	}
+	postCoverImage := ""
+	if req.CoverImage != nil {
+		postCoverImage = *req.CoverImage
 	}
 
 	// 活动分区基础校验
@@ -514,7 +522,7 @@ func (s *Server) createPost(c *gin.Context) {
 		Title:       req.Title,
 		Content:     req.Content,
 		ContentType: req.ContentType,
-		CoverImage:  req.CoverImage,
+		CoverImage:  postCoverImage,
 		Category:    req.Category,
 		Region:      req.Region,
 		Address:     req.Address,
@@ -528,7 +536,7 @@ func (s *Server) createPost(c *gin.Context) {
 	if req.GuildID != nil && req.IsPublic != nil {
 		post.IsPublic = *req.IsPublic
 	}
-	if req.CoverImage != "" {
+	if postCoverImage != "" {
 		now := time.Now()
 		post.CoverImageUpdatedAt = &now
 	}
@@ -773,13 +781,21 @@ func (s *Server) updatePost(c *gin.Context) {
 		return
 	}
 
-	if req.CoverImage != "" {
-		normalizedCover, err := s.normalizeAndStoreImageValue(c, req.CoverImage, fmt.Sprintf("posts/%d/cover", userID))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "封面图格式无效"})
-			return
+	if req.CoverImage != nil {
+		coverImage := strings.TrimSpace(*req.CoverImage)
+		currentCoverURL := postCoverURL(post)
+		currentCoverAbsoluteURL := buildAPIURL(s.cfg.Server.ApiHost, currentCoverURL)
+		if coverImage == currentCoverURL || coverImage == currentCoverAbsoluteURL {
+			coverImage = post.CoverImage
+		} else if coverImage != "" {
+			normalizedCover, err := s.normalizeAndStoreImageValue(c, coverImage, fmt.Sprintf("posts/%d/cover", userID))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "封面图格式无效"})
+				return
+			}
+			coverImage = normalizedCover
 		}
-		req.CoverImage = normalizedCover
+		req.CoverImage = &coverImage
 	}
 	if req.Content != "" {
 		req.Content = s.normalizeAndStoreContentImages(c, req.Content, fmt.Sprintf("posts/%d/content", userID))
@@ -855,6 +871,11 @@ func (s *Server) updatePost(c *gin.Context) {
 		} else {
 			editReq.ContentType = post.ContentType
 		}
+		if req.CoverImage != nil {
+			editReq.CoverImage = *req.CoverImage
+		} else {
+			editReq.CoverImage = post.CoverImage
+		}
 		if req.Category != "" {
 			editReq.Category = req.Category
 		} else {
@@ -929,10 +950,12 @@ func (s *Server) updatePost(c *gin.Context) {
 	if req.ContentType != "" {
 		post.ContentType = req.ContentType
 	}
-	if req.CoverImage != "" {
-		post.CoverImage = req.CoverImage
-		now := time.Now()
-		post.CoverImageUpdatedAt = &now
+	if req.CoverImage != nil {
+		if post.CoverImage != *req.CoverImage {
+			now := time.Now()
+			post.CoverImageUpdatedAt = &now
+		}
+		post.CoverImage = *req.CoverImage
 	}
 	if req.Category != "" {
 		post.Category = req.Category

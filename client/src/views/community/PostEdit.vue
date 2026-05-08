@@ -26,24 +26,28 @@ const mounted = ref(false)
 const loading = ref(false)
 const deleting = ref(false)
 
-// 草稿 key 基于帖子 ID
-const getDraftKey = () => `post_edit_draft_${route.params.id}`
+// 草稿必须绑定到明确的帖子 ID，避免路由复用时把旧帖内容写进新帖草稿。
+const draftKeyForPost = (postId: number) => `post_edit_draft_${postId}`
 
-const form = ref<UpdatePostRequest>({
-  title: '',
-  content: '',
-  content_type: 'html',
-  category: 'other',
-  region: '',
-  address: '',
-  status: 'published',
-  cover_image: '',
-  is_public: true,  // 公会外成员可见（默认开启）
-  event_type: undefined,
-  event_start_time: undefined,
-  event_end_time: undefined,
-  event_color: '#D97706',
-})
+function createEmptyForm(): UpdatePostRequest {
+  return {
+    title: '',
+    content: '',
+    content_type: 'html',
+    category: 'other',
+    region: '',
+    address: '',
+    status: 'published',
+    cover_image: '',
+    is_public: true,  // 公会外成员可见（默认开启）
+    event_type: undefined,
+    event_start_time: undefined,
+    event_end_time: undefined,
+    event_color: '#D97706',
+  }
+}
+
+const form = ref<UpdatePostRequest>(createEmptyForm())
 
 // 封面图相关
 const coverImagePreview = ref('')
@@ -74,31 +78,43 @@ const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let loadToken = 0
+const activePostId = ref<number | null>(null)
+const initializing = ref(false)
 
 // 保存草稿
 function saveDraft() {
+  const postId = activePostId.value
+  if (!postId || initializing.value || loading.value) return
   const draft = {
+    post_id: postId,
     form: form.value,
     selectedTags: selectedTags.value,
     savedAt: Date.now()
   }
-  localStorage.setItem(getDraftKey(), JSON.stringify(draft))
+  localStorage.setItem(draftKeyForPost(postId), JSON.stringify(draft))
 }
 
 // 防抖保存
 function debouncedSaveDraft() {
+  if (initializing.value) return
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(saveDraft, 1000)
 }
 
 // 恢复草稿
-function loadDraft() {
-  const saved = localStorage.getItem(getDraftKey())
+function loadDraft(postId: number) {
+  const saved = localStorage.getItem(draftKeyForPost(postId))
   if (saved) {
     try {
       const draft = JSON.parse(saved)
+      if (draft.post_id !== postId) {
+        localStorage.removeItem(draftKeyForPost(postId))
+        return false
+      }
       if (draft.form) {
         form.value = { ...form.value, ...draft.form }
+        coverImagePreview.value = form.value.cover_image || ''
       }
       if (draft.selectedTags) {
         selectedTags.value = draft.selectedTags
@@ -112,8 +128,69 @@ function loadDraft() {
 }
 
 // 清除草稿
-function clearDraft() {
-  localStorage.removeItem(getDraftKey())
+function clearDraft(postId = activePostId.value) {
+  if (!postId) return
+  localStorage.removeItem(draftKeyForPost(postId))
+}
+
+function stopAutoSave() {
+  if (autoSaveTimer) clearInterval(autoSaveTimer)
+  autoSaveTimer = null
+}
+
+function clearPendingDraftSave() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
+}
+
+function resetEditorState(postId: number) {
+  activePostId.value = postId
+  form.value = createEmptyForm()
+  selectedTags.value = []
+  originalTags.value = []
+  selectedCollectionId.value = null
+  originalCollectionId.value = null
+  coverImagePreview.value = ''
+  coverImageLoading.value = false
+  coverCropperOpen.value = false
+  coverCropperFile.value = null
+}
+
+async function initializePostEditor(postId: number) {
+  if (!postId) {
+    router.back()
+    return
+  }
+
+  stopAutoSave()
+  clearPendingDraftSave()
+  initializing.value = true
+  const token = ++loadToken
+  resetEditorState(postId)
+
+  const hasDraft = loadDraft(postId)
+  if (!hasDraft) {
+    const loaded = await loadPost(postId, token)
+    if (token !== loadToken) return
+    if (!loaded) {
+      initializing.value = false
+      loading.value = false
+      return
+    }
+  }
+  if (token !== loadToken) return
+
+  await Promise.all([
+    loadTags(token),
+    loadGuilds(token),
+    loadPostTags(postId, token),
+    loadPostCollection(postId, token),
+  ])
+  if (token !== loadToken) return
+
+  initializing.value = false
+  loading.value = false
+  autoSaveTimer = setInterval(saveDraft, 10000)
 }
 
 onMounted(async () => {
@@ -125,37 +202,28 @@ onMounted(async () => {
   }
 
   setTimeout(() => mounted.value = true, 50)
+  await initializePostEditor(Number(route.params.id))
+})
 
-  // 先尝试恢复草稿
-  const hasDraft = loadDraft()
-
-  // 如果没有草稿，从服务器加载
-  if (!hasDraft) {
-    await loadPost()
-  }
-
-  await loadTags()
-  await loadGuilds()
-  await loadPostTags()
-  await loadPostCollection()
-
-  // 每 10 秒自动保存
-  autoSaveTimer = setInterval(saveDraft, 10000)
+watch(() => route.params.id, async (id, oldId) => {
+  if (id === oldId) return
+  await initializePostEditor(Number(id))
 })
 
 onUnmounted(() => {
-  if (autoSaveTimer) clearInterval(autoSaveTimer)
-  if (debounceTimer) clearTimeout(debounceTimer)
+  loadToken++
+  stopAutoSave()
+  clearPendingDraftSave()
 })
 
 // 监听表单变化，自动保存
 watch([() => form.value.title, () => form.value.content, () => form.value.region, () => form.value.address, selectedTags], debouncedSaveDraft, { deep: true })
 
-async function loadPost() {
+async function loadPost(postId = Number(route.params.id), token = loadToken) {
   loading.value = true
   try {
-    const id = Number(route.params.id)
-    const res = await getPost(id)
+    const res = await getPost(postId)
+    if (token !== loadToken || activePostId.value !== postId) return false
     form.value.title = res.post.title
     form.value.content = res.post.content
     form.value.content_type = res.post.content_type
@@ -181,38 +249,45 @@ async function loadPost() {
     if (res.post.event_color) {
       form.value.event_color = res.post.event_color
     }
+    return true
   } catch (error) {
+    if (token !== loadToken || activePostId.value !== postId) return false
     console.error('加载帖子失败:', error)
     toast.error(t('community.edit.postNotFound'))
     router.back()
+    return false
   } finally {
-    loading.value = false
+    if (token === loadToken) {
+      loading.value = false
+    }
   }
 }
 
-async function loadTags() {
+async function loadTags(token = loadToken) {
   try {
     // 只加载帖子类型的标签
     const res = await listTags('post')
+    if (token !== loadToken) return
     tags.value = res.tags || []
   } catch (error) {
     console.error('加载标签失败:', error)
   }
 }
 
-async function loadGuilds() {
+async function loadGuilds(token = loadToken) {
   try {
     const res = await listGuilds()
+    if (token !== loadToken) return
     guilds.value = res.guilds || []
   } catch (error) {
     console.error('加载公会失败:', error)
   }
 }
 
-async function loadPostTags() {
+async function loadPostTags(postId = Number(route.params.id), token = loadToken) {
   try {
-    const id = Number(route.params.id)
-    const res = await getPostTags(id)
+    const res = await getPostTags(postId)
+    if (token !== loadToken || activePostId.value !== postId) return
     originalTags.value = res.tags.map((t: any) => t.id)
     selectedTags.value = [...originalTags.value]
   } catch (error) {
@@ -220,10 +295,10 @@ async function loadPostTags() {
   }
 }
 
-async function loadPostCollection() {
+async function loadPostCollection(postId = Number(route.params.id), token = loadToken) {
   try {
-    const id = Number(route.params.id)
-    const res: any = await getPostCollection(id)
+    const res: any = await getPostCollection(postId)
+    if (token !== loadToken || activePostId.value !== postId) return
     if (res.code === 0 && res.data) {
       originalCollectionId.value = res.data.id
       selectedCollectionId.value = res.data.id
@@ -258,7 +333,8 @@ async function handleSubmit(status: 'draft' | 'published') {
 
   loading.value = true
   try {
-    const id = Number(route.params.id)
+    const id = activePostId.value
+    if (!id) return
     const payload: UpdatePostRequest = {
       ...form.value,
       status,
@@ -294,7 +370,7 @@ async function handleSubmit(status: 'draft' | 'published') {
       }
     }
 
-    clearDraft() // 保存成功后清除草稿
+    clearDraft(id) // 保存成功后清除草稿
     toast.success(t('community.edit.updateSuccess'))
     router.push({ name: 'post-detail', params: { id } })
   } catch (error) {
@@ -341,9 +417,9 @@ async function handleDelete() {
 
   deleting.value = true
   try {
-    const id = Number(route.params.id)
+    const id = activePostId.value || Number(route.params.id)
     await deletePost(id)
-    clearDraft()
+    clearDraft(id)
     toast.success(t('community.edit.deleteSuccess'))
     router.push({ name: 'community' })
   } catch (error) {
@@ -372,9 +448,14 @@ function handleCoverImageUpload(event: Event) {
 }
 
 async function handleCoverImageCropped(file: File) {
+  const postId = activePostId.value
+  const token = loadToken
+  if (!postId) return
+
   coverImageLoading.value = true
   try {
     const res: any = await uploadImage(file)
+    if (token !== loadToken || activePostId.value !== postId) return
     const url = res?.data?.url || res?.url
     if (!url) {
       throw new Error(t('community.create.noImageUrl'))
@@ -383,11 +464,14 @@ async function handleCoverImageCropped(file: File) {
     form.value.cover_image = url
     toast.success(t('community.create.coverUploadSuccess'))
   } catch (error: any) {
+    if (token !== loadToken || activePostId.value !== postId) return
     console.error('封面图上传失败:', error)
     toast.error(error?.message || t('community.create.coverUploadFailed'))
   } finally {
-    coverImageLoading.value = false
-    coverCropperFile.value = null
+    if (token === loadToken && activePostId.value === postId) {
+      coverImageLoading.value = false
+      coverCropperFile.value = null
+    }
   }
 }
 
