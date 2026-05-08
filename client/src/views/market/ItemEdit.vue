@@ -24,6 +24,7 @@ const previewImageUploading = ref(false)
 const previewImagePreview = ref('')
 const previewCropperOpen = ref(false)
 const previewCropperFile = ref<File | null>(null)
+const PREVIEW_IMAGE_MAX_BYTES = 20 * 1024 * 1024
 
 const form = ref<UpdateItemRequest>({
   name: '',
@@ -177,7 +178,7 @@ function handlePreviewImageUpload(event: Event) {
     input.value = ''
     return
   }
-  if (file.size > 5 * 1024 * 1024) {
+  if (file.size > PREVIEW_IMAGE_MAX_BYTES) {
     toast.info(t('market.upload.form.imageSizeLimit'))
     input.value = ''
     return
