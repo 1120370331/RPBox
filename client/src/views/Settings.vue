@@ -15,6 +15,7 @@ import { getAddonManifest } from '@/api/addon'
 import { bumpImageCacheVersion } from '@/utils/imageCache'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RModal from '@/components/RModal.vue'
 
 interface WowInstallation {
@@ -62,6 +63,8 @@ const launchOnStartupSupported = ref(true)
 const launchOnStartupLoading = ref(false)
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
+const avatarCropperOpen = ref(false)
+const avatarCropperFile = ref<File | null>(null)
 const appVersion = ref('0.0.0')
 const addonVersion = ref<string | null>(null)
 const addonChecking = ref(false)
@@ -214,16 +217,28 @@ function triggerAvatarUpload() {
   avatarInputRef.value?.click()
 }
 
-async function handleAvatarChange(event: Event) {
+function handleAvatarChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
 
+  if (!file.type.startsWith('image/')) {
+    toast.warning(t('settings.profile.uploadFailed'))
+    input.value = ''
+    return
+  }
   if (file.size > 20 * 1024 * 1024) {
     toast.warning(t('settings.profile.avatarSizeLimit'))
+    input.value = ''
     return
   }
 
+  avatarCropperFile.value = file
+  avatarCropperOpen.value = true
+  input.value = ''
+}
+
+async function handleAvatarCropped(file: File) {
   avatarUploading.value = true
   try {
     const res = await uploadAvatar(file)
@@ -233,8 +248,12 @@ async function handleAvatarChange(event: Event) {
     toast.error(error.message || t('settings.profile.uploadFailed'))
   } finally {
     avatarUploading.value = false
-    input.value = ''
+    avatarCropperFile.value = null
   }
+}
+
+function handleAvatarCropperError(error: Error) {
+  toast.error(error.message || t('settings.profile.uploadFailed'))
 }
 
 async function checkAddonInstalled() {
@@ -371,6 +390,18 @@ watch(() => localeStore.currentLocale, (newLocale) => {
               accept="image/*"
               style="display: none"
               @change="handleAvatarChange"
+            />
+            <ImageCropperDialog
+              v-model="avatarCropperOpen"
+              :file="avatarCropperFile"
+              :aspect-ratio="1"
+              :output-width="512"
+              :output-height="512"
+              :max-size-k-b="512"
+              title="调整头像"
+              round-preview
+              @cropped="handleAvatarCropped"
+              @error="handleAvatarCropperError"
             />
           </div>
         </div>

@@ -8,6 +8,7 @@ import { sendVerificationCode } from '../../api/auth'
 import request from '../../api/request'
 import RColorPicker from '@/components/RColorPicker.vue'
 import RCheckbox from '@/components/RCheckbox.vue'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RModal from '@/components/RModal.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
@@ -41,6 +42,8 @@ const loading = ref(true)
 const editMode = ref(false)
 const showLevelGuide = ref(false)
 const avatarUploading = ref(false)
+const avatarCropperOpen = ref(false)
+const avatarCropperFile = ref<File | null>(null)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const sponsorColor = ref('')
 const sponsorBold = ref(false)
@@ -189,15 +192,27 @@ function triggerAvatarUpload() {
   avatarInputRef.value?.click()
 }
 
-async function handleAvatarChange(event: Event) {
+function handleAvatarChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  if (!file.type.startsWith('image/')) {
+    toast.warning('请选择图片文件')
+    input.value = ''
+    return
+  }
 
   if (file.size > 20 * 1024 * 1024) {
+    input.value = ''
     toast.warning('头像文件不能超过20MB')
     return
   }
+  avatarCropperFile.value = file
+  avatarCropperOpen.value = true
+  input.value = ''
+}
+
+async function handleAvatarCropped(file: File) {
 
   avatarUploading.value = true
   try {
@@ -213,8 +228,12 @@ async function handleAvatarChange(event: Event) {
     toast.error(error.message || '上传失败')
   } finally {
     avatarUploading.value = false
-    input.value = ''
+    avatarCropperFile.value = null
   }
+}
+
+function handleAvatarCropperError(error: Error) {
+  toast.error(error.message || '头像处理失败')
 }
 
 function formatDate(dateStr: string) {
@@ -323,6 +342,18 @@ async function handleBindEmail() {
             </div>
           </div>
           <input ref="avatarInputRef" type="file" accept="image/*" style="display: none" @change="handleAvatarChange" />
+          <ImageCropperDialog
+            v-model="avatarCropperOpen"
+            :file="avatarCropperFile"
+            :aspect-ratio="1"
+            :output-width="512"
+            :output-height="512"
+            :max-size-k-b="512"
+            title="调整头像"
+            round-preview
+            @cropped="handleAvatarCropped"
+            @error="handleAvatarCropperError"
+          />
 
           <h1 class="username" :style="buildNameStyle(userProfile.name_color, userProfile.name_bold)">{{ userProfile.username }}</h1>
           <div class="user-meta">

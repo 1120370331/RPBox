@@ -8,6 +8,7 @@ import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
 import CollectionSelector from '@/components/CollectionSelector.vue'
@@ -43,6 +44,8 @@ const form = ref<CreatePostRequest>({
 const coverImagePreview = ref('')
 const coverImageLoading = ref(false)
 const coverImageInput = ref<HTMLInputElement | null>(null)
+const coverCropperOpen = ref(false)
+const coverCropperFile = ref<File | null>(null)
 const editorRef = ref<InstanceType<typeof TiptapEditor> | null>(null)
 const quickJumpOpen = ref(false)
 
@@ -244,79 +247,27 @@ function handlePreview() {
   router.push({ name: 'post-preview' })
 }
 
-// 压缩图片到指定大小以内
-async function compressImage(file: File, maxSizeKB: number = 1024): Promise<File> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const img = new Image()
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        let { width, height } = img
-
-        // 限制最大尺寸
-        const maxDimension = 1920
-        if (width > maxDimension || height > maxDimension) {
-          if (width > height) {
-            height = (height / width) * maxDimension
-            width = maxDimension
-          } else {
-            width = (width / height) * maxDimension
-            height = maxDimension
-          }
-        }
-
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')!
-        ctx.drawImage(img, 0, 0, width, height)
-
-        const toBlob = (quality: number) => new Promise<Blob>((resolveBlob, rejectBlob) => {
-          canvas.toBlob((blob) => {
-            if (!blob) {
-              rejectBlob(new Error('图片处理失败'))
-              return
-            }
-            resolveBlob(blob)
-          }, 'image/jpeg', quality)
-        })
-
-        void (async () => {
-          // 逐步降低质量直到满足大小要求
-          let quality = 0.9
-          let blob = await toBlob(quality)
-          while (blob.size > maxSizeKB * 1024 && quality > 0.1) {
-            quality -= 0.1
-            blob = await toBlob(quality)
-          }
-
-          const baseName = file.name.replace(/\.[^.]+$/, '') || 'cover'
-          resolve(new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }))
-        })().catch(reject)
-      }
-      img.onerror = reject
-      img.src = e.target?.result as string
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 // 处理封面图上传
-async function handleCoverImageUpload(event: Event) {
+function handleCoverImageUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
 
   if (!file.type.startsWith('image/')) {
     toast.error(t('community.create.selectImageFile'))
+    input.value = ''
     return
   }
 
+  coverCropperFile.value = file
+  coverCropperOpen.value = true
+  input.value = ''
+}
+
+async function handleCoverImageCropped(file: File) {
   coverImageLoading.value = true
   try {
-    const compressed = await compressImage(file, 1024)
-    const res: any = await uploadImage(compressed)
+    const res: any = await uploadImage(file)
     const url = res?.data?.url || res?.url
     if (!url) {
       throw new Error(t('community.create.noImageUrl'))
@@ -329,8 +280,12 @@ async function handleCoverImageUpload(event: Event) {
     toast.error(error?.message || t('community.create.coverUploadFailed'))
   } finally {
     coverImageLoading.value = false
-    input.value = ''
+    coverCropperFile.value = null
   }
+}
+
+function handleCoverCropperError(error: Error) {
+  toast.error(error.message || t('community.create.coverUploadFailed'))
 }
 
 // 移除封面图
@@ -374,9 +329,14 @@ function toggleQuickJump() {
         <div class="cover-upload-area">
           <div v-if="coverImagePreview" class="cover-preview">
             <img :src="coverImagePreview" :alt="t('community.create.coverPreview')" />
-            <button class="remove-cover-btn" @click="removeCoverImage">
-              <i class="ri-close-line"></i>
-            </button>
+            <div class="cover-preview-actions">
+              <button class="edit-cover-btn" @click="coverImageInput?.click()">
+                <i class="ri-crop-line"></i>
+              </button>
+              <button class="remove-cover-btn" @click="removeCoverImage">
+                <i class="ri-close-line"></i>
+              </button>
+            </div>
           </div>
           <div v-else class="cover-placeholder" @click="coverImageInput?.click()">
             <i class="ri-image-add-line"></i>
@@ -392,6 +352,18 @@ function toggleQuickJump() {
           />
         </div>
       </div>
+
+      <ImageCropperDialog
+        v-model="coverCropperOpen"
+        :file="coverCropperFile"
+        :aspect-ratio="16 / 9"
+        :output-width="1600"
+        :output-height="900"
+        :max-size-k-b="1024"
+        title="调整封面图"
+        @cropped="handleCoverImageCropped"
+        @error="handleCoverCropperError"
+      />
 
       <!-- 内容编辑器 -->
       <div class="content-group">
@@ -644,10 +616,16 @@ function toggleQuickJump() {
   display: block;
 }
 
-.remove-cover-btn {
+.cover-preview-actions {
   position: absolute;
   top: 8px;
   right: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.edit-cover-btn,
+.remove-cover-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -662,6 +640,7 @@ function toggleQuickJump() {
   transition: background 0.2s;
 }
 
+.edit-cover-btn:hover,
 .remove-cover-btn:hover {
   background: rgba(0, 0, 0, 0.8);
 }

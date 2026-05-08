@@ -3,11 +3,14 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createGuild } from '@/api/guild'
+import { useDialog } from '@/composables/useDialog'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
 
 const router = useRouter()
 const { t } = useI18n()
+const { alert } = useDialog()
 const name = ref('')
 const description = ref('')
 const slogan = ref('')
@@ -15,24 +18,41 @@ const server = ref('')
 const faction = ref('')
 const color = ref('B87333')
 const bannerPreview = ref('')
-const bannerFile = ref<File | null>(null)
+const bannerCropperOpen = ref(false)
+const bannerCropperFile = ref<File | null>(null)
 const creating = ref(false)
 
 function handleBannerSelect(e: Event) {
   const input = e.target as HTMLInputElement
   if (input.files && input.files[0]) {
     const file = input.files[0]
-    if (file.size > 20 * 1024 * 1024) {
-      alert(t('guild.create.fileTooLarge'))
+    if (!file.type.startsWith('image/')) {
+      void alert({ title: t('guild.settings.uploadFailed'), message: t('guild.settings.uploadFailed'), type: 'error' })
+      input.value = ''
       return
     }
-    bannerFile.value = file
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      bannerPreview.value = e.target?.result as string
+    if (file.size > 20 * 1024 * 1024) {
+      void alert({ title: t('guild.create.fileTooLarge'), message: t('guild.settings.bannerSizeLimit'), type: 'error' })
+      input.value = ''
+      return
     }
-    reader.readAsDataURL(file)
+    bannerCropperFile.value = file
+    bannerCropperOpen.value = true
+    input.value = ''
   }
+}
+
+function handleBannerCropped(file: File) {
+  const reader = new FileReader()
+  reader.onload = (event) => {
+    bannerPreview.value = event.target?.result as string
+    bannerCropperFile.value = null
+  }
+  reader.readAsDataURL(file)
+}
+
+function handleBannerCropperError(error: Error) {
+  void alert({ title: t('guild.settings.uploadFailed'), message: error.message || t('guild.settings.uploadFailed'), type: 'error' })
 }
 
 async function handleCreate() {
@@ -77,6 +97,17 @@ async function handleCreate() {
           </div>
         </div>
         <input ref="bannerInput" type="file" accept="image/*" hidden @change="handleBannerSelect" />
+        <ImageCropperDialog
+          v-model="bannerCropperOpen"
+          :file="bannerCropperFile"
+          :aspect-ratio="3"
+          :output-width="1920"
+          :output-height="640"
+          :max-size-k-b="1536"
+          title="调整公会头图"
+          @cropped="handleBannerCropped"
+          @error="handleBannerCropperError"
+        />
       </div>
 
       <div class="field">

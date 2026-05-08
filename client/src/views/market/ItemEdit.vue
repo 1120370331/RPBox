@@ -2,10 +2,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getItem, updateItem, getItemTags, addItemTag, removeItemTag, getItemImages, uploadItemImages, deleteItemImage, type Item, type UpdateItemRequest, type ItemImage } from '@/api/item'
+import { getItem, updateItem, getItemTags, addItemTag, removeItemTag, getItemImages, uploadImage, uploadItemImages, deleteItemImage, type Item, type UpdateItemRequest, type ItemImage } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
+import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import CollectionSelector from '@/components/CollectionSelector.vue'
 import { getItemCollection, addItemToCollection, removeItemFromCollection } from '@/api/collection'
@@ -18,12 +19,18 @@ const userStore = useUserStore()
 const mounted = ref(false)
 const loading = ref(false)
 const item = ref<Item | null>(null)
+const previewImageInput = ref<HTMLInputElement | null>(null)
+const previewImageUploading = ref(false)
+const previewImagePreview = ref('')
+const previewCropperOpen = ref(false)
+const previewCropperFile = ref<File | null>(null)
 
 const form = ref<UpdateItemRequest>({
   name: '',
   description: '',
   detail_content: '',
   icon: '',
+  preview_image: '',
   import_code: '',
   requires_permission: false,
   enable_watermark: true,
@@ -77,11 +84,13 @@ async function loadItem() {
       form.value.description = res.data.item.description
       form.value.detail_content = res.data.item.detail_content || ''
       form.value.icon = res.data.item.icon
+      form.value.preview_image = res.data.item.preview_image || ''
       form.value.import_code = res.data.item.import_code || ''
       form.value.requires_permission = res.data.item.requires_permission || false
       form.value.enable_watermark = res.data.item.enable_watermark ?? true
       form.value.status = res.data.item.status
       form.value.is_public = res.data.item.is_public ?? true
+      previewImagePreview.value = res.data.item.preview_image || res.data.item.preview_image_url || ''
       hasPendingEdit.value = !!res.data.pending_edit
 
       // 如果是画作类型，加载图片
@@ -156,6 +165,55 @@ function toggleTag(tagId: number) {
   } else {
     selectedTags.value.push(tagId)
   }
+}
+
+function handlePreviewImageUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    toast.info(t('market.editor.invalidImage'))
+    input.value = ''
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast.info(t('market.upload.form.imageSizeLimit'))
+    input.value = ''
+    return
+  }
+
+  previewCropperFile.value = file
+  previewCropperOpen.value = true
+  input.value = ''
+}
+
+async function handlePreviewImageCropped(file: File) {
+  previewImageUploading.value = true
+  try {
+    const res: any = await uploadImage(file)
+    const url = res?.data?.url || res?.url
+    if (!url) {
+      throw new Error(t('market.editor.uploadFailed'))
+    }
+    form.value.preview_image = url
+    previewImagePreview.value = url
+    toast.success(t('market.upload.form.previewImageSuccess'))
+  } catch (error: any) {
+    toast.error(error.message || t('market.editor.uploadFailed'))
+  } finally {
+    previewImageUploading.value = false
+    previewCropperFile.value = null
+  }
+}
+
+function handlePreviewCropperError(error: Error) {
+  toast.error(error.message || t('market.editor.uploadFailed'))
+}
+
+function removePreviewImage() {
+  form.value.preview_image = ''
+  previewImagePreview.value = ''
 }
 
 // 选择新的画作图片
@@ -315,6 +373,7 @@ function handlePreview() {
     description: form.value.description,
     detail_content: form.value.detail_content,
     icon: form.value.icon,
+    preview_image: form.value.preview_image,
     import_code: form.value.import_code,
   }
 
@@ -373,6 +432,47 @@ function getTypeText(type: string) {
           :placeholder="t('market.upload.form.namePlaceholder')"
           class="title-input"
         />
+      </div>
+
+      <!-- 预览图 -->
+      <div class="form-group">
+        <label>{{ t('market.upload.form.previewImage') }}</label>
+        <div class="preview-upload">
+          <div v-if="previewImagePreview" class="preview-image">
+            <img :src="previewImagePreview" :alt="t('market.upload.form.previewImageAlt')" />
+            <div class="preview-image-actions">
+              <button type="button" class="edit-image-btn" @click="previewImageInput?.click()">
+                <i class="ri-crop-line"></i>
+              </button>
+              <button type="button" class="remove-image-btn" @click="removePreviewImage">
+                <i class="ri-close-line"></i>
+              </button>
+            </div>
+          </div>
+          <div v-else class="preview-upload-area" @click="previewImageInput?.click()">
+            <i class="ri-image-add-line"></i>
+            <span>{{ previewImageUploading ? t('market.upload.form.uploading') : t('market.upload.form.clickToUpload') }}</span>
+          </div>
+          <input
+            ref="previewImageInput"
+            type="file"
+            accept="image/*"
+            style="display: none"
+            @change="handlePreviewImageUpload"
+          />
+        </div>
+        <ImageCropperDialog
+          v-model="previewCropperOpen"
+          :file="previewCropperFile"
+          :aspect-ratio="16 / 9"
+          :output-width="1600"
+          :output-height="900"
+          :max-size-k-b="1024"
+          title="调整预览图"
+          @cropped="handlePreviewImageCropped"
+          @error="handlePreviewCropperError"
+        />
+        <p class="hint">{{ t('market.upload.form.previewImageHint') }}</p>
       </div>
 
       <!-- 描述 -->
@@ -728,6 +828,78 @@ function getTypeText(type: string) {
   outline: none;
   border-color: #B87333;
   background: #fff;
+}
+
+.preview-upload {
+  width: 100%;
+}
+
+.preview-upload-area {
+  width: min(420px, 100%);
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 2px dashed #E5D4C1;
+  border-radius: 12px;
+  background: #FDFBF9;
+  color: #8D7B68;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preview-upload-area:hover {
+  border-color: #B87333;
+  background: #FFF8F0;
+}
+
+.preview-upload-area i {
+  font-size: 34px;
+  color: #B87333;
+}
+
+.preview-image {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.preview-image img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+}
+
+.preview-image-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.edit-image-btn,
+.remove-image-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.edit-image-btn:hover,
+.remove-image-btn:hover {
+  background: rgba(0,0,0,0.8);
 }
 
 .tag-list {
