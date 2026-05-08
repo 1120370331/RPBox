@@ -32,7 +32,7 @@ func userAvatarURL(apiHost string, user model.User) string {
 	if user.AvatarReviewStatus != "approved" {
 		return ""
 	}
-	return buildAPIURL(apiHost, fmt.Sprintf("/api/v1/images/user-avatar/%d?w=80&q=80", user.ID))
+	return buildAPIURL(apiHost, fmt.Sprintf("/api/v1/images/user-avatar/%d?w=80&q=80&v=%d", user.ID, user.UpdatedAt.Unix()))
 }
 
 func guildBannerURL(guild model.Guild) string {

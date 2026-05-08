@@ -671,30 +671,39 @@ func (s *Server) updateItem(c *gin.Context) {
 	}
 
 	var req struct {
-		Name               string `json:"name"`
-		Description        string `json:"description"`
-		DetailContent      string `json:"detail_content"`
-		Icon               string `json:"icon"`
-		PreviewImage       string `json:"preview_image"`
-		ImportCode         string `json:"import_code"`
-		RawData            string `json:"raw_data"`
-		RequiresPermission *bool  `json:"requires_permission"`
-		TagIDs             []uint `json:"tag_ids"`
-		Status             string `json:"status"`
-		IsPublic           *bool  `json:"is_public"`
+		Name               string  `json:"name"`
+		Description        string  `json:"description"`
+		DetailContent      string  `json:"detail_content"`
+		Icon               string  `json:"icon"`
+		PreviewImage       *string `json:"preview_image"`
+		ImportCode         string  `json:"import_code"`
+		RawData            string  `json:"raw_data"`
+		RequiresPermission *bool   `json:"requires_permission"`
+		EnableWatermark    *bool   `json:"enable_watermark"`
+		TagIDs             []uint  `json:"tag_ids"`
+		Status             string  `json:"status"`
+		IsPublic           *bool   `json:"is_public"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
-	if req.PreviewImage != "" {
-		normalizedPreview, err := s.normalizeAndStoreImageValue(c, req.PreviewImage, fmt.Sprintf("items/%d/preview", userID))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "预览图格式无效"})
-			return
+	if req.PreviewImage != nil {
+		previewImage := strings.TrimSpace(*req.PreviewImage)
+		currentPreviewURL := buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
+		currentPreviewAbsoluteURL := buildAPIURL(s.cfg.Server.ApiHost, currentPreviewURL)
+		if previewImage == currentPreviewURL || previewImage == currentPreviewAbsoluteURL {
+			previewImage = item.PreviewImage
+		} else if previewImage != "" {
+			normalizedPreview, err := s.normalizeAndStoreImageValue(c, previewImage, fmt.Sprintf("items/%d/preview", userID))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "预览图格式无效"})
+				return
+			}
+			previewImage = normalizedPreview
 		}
-		req.PreviewImage = normalizedPreview
+		req.PreviewImage = &previewImage
 	}
 	if req.DetailContent != "" {
 		req.DetailContent = s.normalizeAndStoreContentImages(c, req.DetailContent, fmt.Sprintf("items/%d/detail", userID))
@@ -717,13 +726,19 @@ func (s *Server) updateItem(c *gin.Context) {
 		if err != nil {
 			// 创建新的待审核编辑
 			pendingEdit = model.ItemPendingEdit{
-				ItemID:       item.ID,
-				AuthorID:     userID,
-				Name:         item.Name,
-				Icon:         item.Icon,
-				Description:  item.Description,
-				ImportCode:   item.ImportCode,
-				ReviewStatus: "pending",
+				ItemID:             item.ID,
+				AuthorID:           userID,
+				Name:               item.Name,
+				Icon:               item.Icon,
+				PreviewImage:       item.PreviewImage,
+				Description:        item.Description,
+				DetailContent:      item.DetailContent,
+				ImportCode:         item.ImportCode,
+				RawData:            item.RawData,
+				RequiresPermission: item.RequiresPermission,
+				EnableWatermark:    item.EnableWatermark,
+				IsPublic:           item.IsPublic,
+				ReviewStatus:       "pending",
 			}
 		}
 
@@ -737,8 +752,26 @@ func (s *Server) updateItem(c *gin.Context) {
 		if req.Icon != "" {
 			pendingEdit.Icon = req.Icon
 		}
+		if req.PreviewImage != nil {
+			pendingEdit.PreviewImage = *req.PreviewImage
+		}
+		if req.DetailContent != "" {
+			pendingEdit.DetailContent = req.DetailContent
+		}
 		if req.ImportCode != "" {
 			pendingEdit.ImportCode = req.ImportCode
+		}
+		if req.RawData != "" {
+			pendingEdit.RawData = req.RawData
+		}
+		if req.RequiresPermission != nil {
+			pendingEdit.RequiresPermission = *req.RequiresPermission
+		}
+		if req.EnableWatermark != nil {
+			pendingEdit.EnableWatermark = *req.EnableWatermark
+		}
+		if req.IsPublic != nil {
+			pendingEdit.IsPublic = *req.IsPublic
 		}
 		pendingEdit.ReviewStatus = "pending"
 		pendingEdit.ReviewerID = nil
@@ -778,10 +811,12 @@ func (s *Server) updateItem(c *gin.Context) {
 	if req.Icon != "" {
 		item.Icon = req.Icon
 	}
-	if req.PreviewImage != "" {
-		item.PreviewImage = req.PreviewImage
-		now := time.Now()
-		item.PreviewImageUpdatedAt = &now
+	if req.PreviewImage != nil {
+		if item.PreviewImage != *req.PreviewImage {
+			now := time.Now()
+			item.PreviewImageUpdatedAt = &now
+		}
+		item.PreviewImage = *req.PreviewImage
 	}
 	if req.ImportCode != "" {
 		item.ImportCode = req.ImportCode
@@ -791,6 +826,9 @@ func (s *Server) updateItem(c *gin.Context) {
 	}
 	if req.RequiresPermission != nil {
 		item.RequiresPermission = *req.RequiresPermission
+	}
+	if req.EnableWatermark != nil {
+		item.EnableWatermark = *req.EnableWatermark
 	}
 	if req.IsPublic != nil {
 		item.IsPublic = *req.IsPublic
