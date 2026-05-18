@@ -623,7 +623,7 @@ func (s *Server) transferGuildOwner(c *gin.Context) {
 			return
 		}
 	} else if req.NewOwnerName != "" {
-		if err := database.DB.Where("username = ? OR email = ?", req.NewOwnerName, req.NewOwnerName).First(&newOwner).Error; err != nil {
+		if err := findGuildOwnerCandidate(database.DB, req.NewOwnerName, &newOwner); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "未找到该用户，请检查用户名或邮箱"})
 			return
 		}
@@ -670,6 +670,49 @@ func (s *Server) transferGuildOwner(c *gin.Context) {
 			"username": newOwner.Username,
 		},
 	})
+}
+
+func normalizeOwnerIdentifier(input string) string {
+	value := strings.TrimSpace(input)
+	value = strings.TrimPrefix(value, "@")
+	value = strings.TrimSpace(value)
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\u200b', '\u200c', '\u200d', '\ufeff':
+			return -1
+		default:
+			return r
+		}
+	}, value)
+}
+
+func findGuildOwnerCandidate(db *gorm.DB, identifier string, user *model.User) error {
+	normalized := normalizeOwnerIdentifier(identifier)
+	if normalized == "" {
+		return gorm.ErrRecordNotFound
+	}
+	if id, err := strconv.ParseUint(normalized, 10, 32); err == nil && id > 0 {
+		return db.First(user, uint(id)).Error
+	}
+
+	if err := db.Where("username = ? OR email = ?", normalized, normalized).First(user).Error; err == nil {
+		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	var users []model.User
+	if err := db.
+		Where("LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)", normalized, normalized).
+		Limit(2).
+		Find(&users).Error; err != nil {
+		return err
+	}
+	if len(users) != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	*user = users[0]
+	return nil
 }
 
 func transferGuildOwnerTx(db *gorm.DB, guildID, currentOwnerID, newOwnerID uint) (model.Guild, error) {

@@ -1457,7 +1457,7 @@ func (s *Server) changeGuildOwner(c *gin.Context) {
 		}
 	} else if req.NewOwnerName != "" {
 		// 通过用户名或邮箱查找
-		if err := database.DB.Where("username = ? OR email = ?", req.NewOwnerName, req.NewOwnerName).First(&newOwner).Error; err != nil {
+		if err := findGuildOwnerCandidate(database.DB, req.NewOwnerName, &newOwner); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "未找到该用户，请检查用户名或邮箱"})
 			return
 		}

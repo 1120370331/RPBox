@@ -6,6 +6,7 @@ import { dialog } from '@/composables/useDialog'
 import { useToast } from '@/composables/useToast'
 import { getPost } from '@/api/post'
 import { getItem, resolveApiUrl } from '@/api/item'
+import { searchUsers, type UserMentionItem } from '@/api/user'
 import { getGuild } from '@/api/guild'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import ImageViewer from '@/components/ImageViewer.vue'
@@ -242,6 +243,11 @@ const imageViewerStartIndex = ref(0)
 const showChangeOwnerModal = ref(false)
 const changeOwnerTarget = ref<{ id: number; name: string; currentOwnerId: number } | null>(null)
 const newOwnerIdentifier = ref('')  // 用户名或邮箱
+const changeOwnerCandidates = ref<UserMentionItem[]>([])
+const changeOwnerSearching = ref(false)
+const changeOwnerSuggestionsOpen = ref(false)
+const selectedChangeOwnerUser = ref<UserMentionItem | null>(null)
+let changeOwnerSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 // 设置角色弹窗
 const showRoleModal = ref(false)
@@ -294,6 +300,10 @@ onMounted(async () => {
 
 onUnmounted(() => {
   disposeMetricsChart()
+  if (changeOwnerSearchTimer) {
+    clearTimeout(changeOwnerSearchTimer)
+    changeOwnerSearchTimer = null
+  }
 })
 
 const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'userAvatars']
@@ -1817,14 +1827,86 @@ async function handleDeleteGuild(id: number) {
 function openChangeOwnerModal(id: number, name: string, currentOwnerId: number) {
   changeOwnerTarget.value = { id, name, currentOwnerId }
   newOwnerIdentifier.value = ''
+  changeOwnerCandidates.value = []
+  changeOwnerSearching.value = false
+  changeOwnerSuggestionsOpen.value = false
+  selectedChangeOwnerUser.value = null
   showChangeOwnerModal.value = true
+}
+
+function closeChangeOwnerModal() {
+  showChangeOwnerModal.value = false
+  changeOwnerCandidates.value = []
+  changeOwnerSearching.value = false
+  changeOwnerSuggestionsOpen.value = false
+  selectedChangeOwnerUser.value = null
+  if (changeOwnerSearchTimer) {
+    clearTimeout(changeOwnerSearchTimer)
+    changeOwnerSearchTimer = null
+  }
+}
+
+function scheduleChangeOwnerSearch(keyword: string) {
+  if (changeOwnerSearchTimer) {
+    clearTimeout(changeOwnerSearchTimer)
+    changeOwnerSearchTimer = null
+  }
+
+  const query = keyword.trim()
+  if (!query) {
+    changeOwnerCandidates.value = []
+    changeOwnerSearching.value = false
+    changeOwnerSuggestionsOpen.value = false
+    return
+  }
+
+  changeOwnerSearching.value = true
+  changeOwnerSuggestionsOpen.value = true
+  changeOwnerSearchTimer = setTimeout(async () => {
+    try {
+      const res = await searchUsers(query, 8)
+      changeOwnerCandidates.value = res.users || []
+    } catch (error) {
+      console.error('搜索会长候选失败:', error)
+      changeOwnerCandidates.value = []
+    } finally {
+      changeOwnerSearching.value = false
+    }
+  }, 220)
+}
+
+function handleChangeOwnerInput() {
+  selectedChangeOwnerUser.value = null
+  scheduleChangeOwnerSearch(newOwnerIdentifier.value)
+}
+
+function selectChangeOwnerCandidate(user: UserMentionItem) {
+  selectedChangeOwnerUser.value = user
+  newOwnerIdentifier.value = user.username
+  changeOwnerCandidates.value = []
+  changeOwnerSearching.value = false
+  changeOwnerSuggestionsOpen.value = false
+  if (changeOwnerSearchTimer) {
+    clearTimeout(changeOwnerSearchTimer)
+    changeOwnerSearchTimer = null
+  }
 }
 
 async function submitChangeOwner() {
   if (!changeOwnerTarget.value || !newOwnerIdentifier.value) return
   try {
-    const result = await changeGuildOwner(changeOwnerTarget.value.id, { new_owner_name: newOwnerIdentifier.value })
-    showChangeOwnerModal.value = false
+    const normalizedIdentifier = newOwnerIdentifier.value.trim().replace(/^@/, '').trim()
+    if (!normalizedIdentifier) return
+    const payload = selectedChangeOwnerUser.value
+      ? { new_owner_id: selectedChangeOwnerUser.value.id }
+      : (() => {
+          const numericOwnerId = Number(normalizedIdentifier)
+          return Number.isInteger(numericOwnerId) && numericOwnerId > 0
+            ? { new_owner_id: numericOwnerId }
+            : { new_owner_name: normalizedIdentifier }
+        })()
+    const result = await changeGuildOwner(changeOwnerTarget.value.id, payload)
+    closeChangeOwnerModal()
     alert(`会长已更换为 ${result.new_owner.username}`)
     await loadAllGuilds()
   } catch (error) {
@@ -4049,32 +4131,53 @@ function formatBanTime(dateStr: string | null) {
       </div>
 
       <!-- 更换会长弹窗 -->
-      <div v-if="showChangeOwnerModal" class="modal-overlay" @click.self="showChangeOwnerModal = false">
+      <div v-if="showChangeOwnerModal" class="modal-overlay" @click.self="closeChangeOwnerModal">
         <div class="modal">
           <div class="modal-header">
             <h3>更换会长</h3>
-            <button class="close-btn" @click="showChangeOwnerModal = false">
+            <button class="close-btn" @click="closeChangeOwnerModal">
               <i class="ri-close-line"></i>
             </button>
           </div>
           <div class="modal-body">
             <p class="review-title">公会: {{ changeOwnerTarget?.name }}</p>
-            <div class="form-group">
-              <label>新会长（用户名或邮箱）</label>
+            <div class="form-group owner-search-group">
+              <label>新会长（用户名、邮箱或 ID）</label>
               <input
                 v-model="newOwnerIdentifier"
                 type="text"
-                placeholder="请输入新会长的用户名或邮箱"
+                placeholder="搜索并选择当前用户"
                 class="form-input"
+                autocomplete="off"
+                @input="handleChangeOwnerInput"
+                @focus="handleChangeOwnerInput"
               />
+              <div v-if="changeOwnerSuggestionsOpen" class="owner-search-results">
+                <div v-if="changeOwnerSearching" class="owner-search-empty">搜索中...</div>
+                <div v-else-if="changeOwnerCandidates.length === 0" class="owner-search-empty">未找到匹配用户</div>
+                <button
+                  v-for="candidate in changeOwnerCandidates"
+                  :key="candidate.id"
+                  type="button"
+                  class="owner-search-item"
+                  @mousedown.prevent="selectChangeOwnerCandidate(candidate)"
+                >
+                  <img v-if="candidate.avatar" :src="candidate.avatar" class="owner-search-avatar" />
+                  <span v-else class="owner-search-avatar owner-search-avatar-fallback">{{ candidate.username?.charAt(0)?.toUpperCase() || 'U' }}</span>
+                  <span class="owner-search-info">
+                    <span class="owner-search-name" :style="buildNameStyle(candidate.name_color, candidate.name_bold)">{{ candidate.username }}</span>
+                    <span class="owner-search-id">#{{ candidate.id }}</span>
+                  </span>
+                </button>
+              </div>
             </div>
             <p class="hint-text">
               <i class="ri-information-line"></i>
-              支持通过用户名或注册邮箱查找用户
+              优先从搜索结果中选择，提交时会使用用户 ID
             </p>
           </div>
           <div class="modal-footer">
-            <button class="btn-cancel" @click="showChangeOwnerModal = false">取消</button>
+            <button class="btn-cancel" @click="closeChangeOwnerModal">取消</button>
             <button class="btn-submit" @click="submitChangeOwner" :disabled="!newOwnerIdentifier">确认</button>
           </div>
         </div>
@@ -5563,6 +5666,81 @@ function formatBanTime(dateStr: string | null) {
   font-size: 13px;
   color: var(--color-text-secondary, #8D7B68);
   margin-top: 8px;
+}
+
+.owner-search-group {
+  position: relative;
+}
+
+.owner-search-results {
+  margin-top: 8px;
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-radius: 10px;
+  background: var(--color-panel-bg, #fff);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.owner-search-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.owner-search-item:hover {
+  background: rgba(128, 64, 48, 0.08);
+}
+
+.owner-search-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex: 0 0 32px;
+  object-fit: cover;
+}
+
+.owner-search-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(128, 64, 48, 0.1);
+  color: var(--color-secondary, #804030);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.owner-search-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.owner-search-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-main, #2C1810);
+}
+
+.owner-search-id {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--color-text-secondary, #8D7B68);
+}
+
+.owner-search-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--color-text-secondary, #8D7B68);
+  text-align: center;
 }
 
 /* 管理标签特殊样式 */
