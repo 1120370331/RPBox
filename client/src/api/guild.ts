@@ -100,6 +100,13 @@ export async function removeMember(guildId: number, userId: number): Promise<voi
   return request.delete(`/guilds/${guildId}/members/${userId}`)
 }
 
+export async function transferGuildOwner(
+  guildId: number,
+  userId: number
+): Promise<{ message: string; guild: Guild; new_owner: { id: number; username: string } }> {
+  return request.put(`/guilds/${guildId}/owner`, { new_owner_id: userId })
+}
+
 // ========== 剧情归档 ==========
 
 export interface GuildStoryWithUploader {

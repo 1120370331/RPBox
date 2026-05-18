@@ -177,6 +177,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/guilds/:id/members", s.listGuildMembers)
 			auth.PUT("/guilds/:id/members/:uid", s.updateMemberRole)
 			auth.DELETE("/guilds/:id/members/:uid", s.removeMember)
+			auth.PUT("/guilds/:id/owner", s.transferGuildOwner)
 			auth.POST("/guilds/:id/banner", s.uploadGuildBanner)
 			auth.POST("/guilds/:id/avatar", s.uploadGuildAvatar)
 

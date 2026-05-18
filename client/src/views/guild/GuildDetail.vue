@@ -444,14 +444,14 @@ onMounted(loadGuild)
 
                   <div class="hero-actions">
                     <div v-if="!myRole" class="apply-action">
-                      <button class="btn-outline" @click="handleApply">
+                      <button class="btn-outline guild-join-btn" @click="handleApply">
                         {{ t('guild.action.applyJoin') }}
                       </button>
                       <span v-if="guild.auto_approve" class="auto-approve-hint">
                         <i class="ri-check-line"></i> {{ t('guild.detail.autoApprove') }}
                       </span>
                     </div>
-                    <button v-else-if="myRole !== 'owner'" class="btn-outline" @click="handleLeave">
+                    <button v-else-if="myRole !== 'owner'" class="btn-outline guild-leave-btn" @click="handleLeave">
                       {{ t('guild.action.leave') }}
                     </button>
                     <button v-if="isAdmin" class="btn-outline" @click="triggerBannerUpload">
@@ -1023,6 +1023,20 @@ onMounted(loadGuild)
 
 .btn-outline:hover {
   background: rgba(0, 0, 0, 0.65);
+}
+
+.guild-join-btn,
+.guild-leave-btn {
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  background: rgba(44, 24, 16, 0.88);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(44, 24, 16, 0.28);
+}
+
+.guild-join-btn:hover,
+.guild-leave-btn:hover {
+  background: #2C1810;
+  border-color: #fff;
 }
 
 .btn-danger {

@@ -1465,45 +1465,36 @@ func (s *Server) changeGuildOwner(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供新会长的ID或用户名/邮箱"})
 		return
 	}
+	if newOwner.ID == guild.OwnerID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该用户已经是会长"})
+		return
+	}
+	if !newOwner.EmailVerified {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "新会长必须完成邮箱验证"})
+		return
+	}
 
 	oldOwnerID := guild.OwnerID
-	guild.OwnerID = newOwner.ID
-	database.DB.Save(&guild)
-
-	// 更新成员角色
-	database.DB.Model(&model.GuildMember{}).
-		Where("guild_id = ? AND user_id = ?", id, oldOwnerID).
-		Update("role", "admin")
-
-	// 检查新会长是否已是成员
-	var member model.GuildMember
-	err := database.DB.Where("guild_id = ? AND user_id = ?", id, newOwner.ID).First(&member).Error
+	updatedGuild, err := transferGuildOwnerTx(database.DB, uint(id), oldOwnerID, newOwner.ID)
 	if err != nil {
-		database.DB.Create(&model.GuildMember{
-			GuildID:  uint(id),
-			UserID:   newOwner.ID,
-			Role:     "owner",
-			JoinedAt: time.Now(),
-		})
-		database.DB.Model(&guild).Update("member_count", guild.MemberCount+1)
-	} else {
-		database.DB.Model(&member).Update("role", "owner")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更换会长失败"})
+		return
 	}
 
 	// 记录日志
-	logAdminAction(c, "change_guild_owner", "guild", uint(id), guild.Name, map[string]interface{}{
+	logAdminAction(c, "change_guild_owner", "guild", uint(id), updatedGuild.Name, map[string]interface{}{
 		"old_owner_id":   oldOwnerID,
 		"new_owner_id":   newOwner.ID,
 		"new_owner_name": newOwner.Username,
 	})
 
-	ensureGuildBannerUpdatedAt(&guild)
-	ensureGuildAvatarUpdatedAt(&guild)
-	guild.Banner = guildBannerURL(guild)
-	guild.Avatar = guildAvatarURL(guild)
+	ensureGuildBannerUpdatedAt(&updatedGuild)
+	ensureGuildAvatarUpdatedAt(&updatedGuild)
+	updatedGuild.Banner = guildBannerURL(updatedGuild)
+	updatedGuild.Avatar = guildAvatarURL(updatedGuild)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "会长已更换",
-		"guild":   guild,
+		"guild":   updatedGuild,
 		"new_owner": gin.H{
 			"id":       newOwner.ID,
 			"username": newOwner.Username,

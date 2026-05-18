@@ -10,6 +10,7 @@ import {
   listGuildMembers,
   updateMemberRole,
   removeMember,
+  transferGuildOwner,
   listGuildApplications,
   reviewGuildApplication,
   uploadGuildAvatar,
@@ -216,6 +217,29 @@ async function handleRemoveMember(member: GuildMember) {
   }
 }
 
+// 转交会长
+async function handleTransferOwner(member: GuildMember) {
+  if (!isOwner.value || member.role === 'owner') return
+
+  const confirmed = await confirm({
+    title: t('guild.manage.members.confirmTransferOwner'),
+    message: t('guild.manage.members.confirmTransferOwnerMsg', { name: member.username })
+  })
+
+  if (!confirmed) return
+
+  try {
+    const res = await transferGuildOwner(guildId.value, member.user_id)
+    guild.value = res.guild
+    myRole.value = 'admin'
+    toast.success(t('guild.manage.members.transferOwnerSuccess', { name: res.new_owner.username }))
+    await Promise.all([loadGuild(), loadMembers()])
+  } catch (e: any) {
+    console.error('转交会长失败:', e)
+    toast.error(e.message || t('guild.manage.members.transferOwnerFailed'))
+  }
+}
+
 // 审批申请
 async function handleReviewApplication(app: GuildApplication, action: 'approve' | 'reject') {
   const isApprove = action === 'approve'
@@ -362,6 +386,13 @@ onMounted(async () => {
                 {{ getRoleLabel(member.role) }}
               </span>
               <template v-if="member.role !== 'owner' && isOwner">
+                <RButton
+                  size="small"
+                  type="secondary"
+                  @click="handleTransferOwner(member)"
+                >
+                  {{ t('guild.manage.members.transferOwner') }}
+                </RButton>
                 <RButton
                   v-if="member.role === 'member'"
                   size="small"

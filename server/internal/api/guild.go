@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/rpbox/server/pkg/validator"
 	"golang.org/x/net/html"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // CreateGuildRequest 创建公会请求
@@ -277,6 +279,10 @@ func (s *Server) listGuilds(c *gin.Context) {
 	}
 	result := make([]GuildWithRole, len(guilds))
 	for i, g := range guilds {
+		myRole := roleMap[g.ID]
+		if g.OwnerID == userID {
+			myRole = "owner"
+		}
 		bannerURL := ""
 		if hasBannerMap[g.ID] {
 			if directURL := directBannerURLMap[g.ID]; directURL != "" {
@@ -295,7 +301,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 				avatarURL = guildAvatarURLFromMeta(g.ID, g.UpdatedAt, g.AvatarUpdatedAt)
 			}
 		}
-		result[i] = GuildWithRole{Guild: g, MyRole: roleMap[g.ID], BannerURL: bannerURL, AvatarURL: avatarURL}
+		result[i] = GuildWithRole{Guild: g, MyRole: myRole, BannerURL: bannerURL, AvatarURL: avatarURL}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"guilds": result})
@@ -425,6 +431,9 @@ func (s *Server) getGuild(c *gin.Context) {
 	myRole := ""
 	if err := database.DB.Where("guild_id = ? AND user_id = ?", id, userID).First(&member).Error; err == nil {
 		myRole = member.Role
+	}
+	if guild.OwnerID == userID {
+		myRole = "owner"
 	}
 	guild.Banner = ""
 	if hasBanner {
@@ -566,11 +575,161 @@ func (s *Server) deleteGuild(c *gin.Context) {
 
 // checkGuildAdmin 检查是否有管理权限
 func checkGuildAdmin(guildID, userID uint) bool {
+	var guild model.Guild
+	if err := database.DB.Select("id, owner_id").First(&guild, guildID).Error; err != nil {
+		return false
+	}
+	if guild.OwnerID == userID {
+		return true
+	}
+
 	var member model.GuildMember
 	if err := database.DB.Where("guild_id = ? AND user_id = ?", guildID, userID).First(&member).Error; err != nil {
 		return false
 	}
 	return member.Role == "owner" || member.Role == "admin"
+}
+
+// transferGuildOwnerRequest 转交会长请求
+type transferGuildOwnerRequest struct {
+	NewOwnerID   *uint  `json:"new_owner_id"`   // 可选：用户ID
+	NewOwnerName string `json:"new_owner_name"` // 可选：用户名或邮箱
+}
+
+func (s *Server) transferGuildOwner(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var guild model.Guild
+	if err := database.DB.First(&guild, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
+		return
+	}
+	if guild.OwnerID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "只有会长可以转交会长"})
+		return
+	}
+
+	var req transferGuildOwnerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	var newOwner model.User
+	if req.NewOwnerID != nil && *req.NewOwnerID > 0 {
+		if err := database.DB.First(&newOwner, *req.NewOwnerID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+			return
+		}
+	} else if req.NewOwnerName != "" {
+		if err := database.DB.Where("username = ? OR email = ?", req.NewOwnerName, req.NewOwnerName).First(&newOwner).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "未找到该用户，请检查用户名或邮箱"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供新会长的ID或用户名/邮箱"})
+		return
+	}
+
+	if newOwner.ID == userID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能将会长转交给自己"})
+		return
+	}
+	if !newOwner.EmailVerified {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "新会长必须完成邮箱验证"})
+		return
+	}
+	var newOwnerMember model.GuildMember
+	if err := database.DB.Where("guild_id = ? AND user_id = ?", id, newOwner.ID).First(&newOwnerMember).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能将会长转交给公会内部成员"})
+		return
+	}
+
+	updatedGuild, err := transferGuildOwnerTx(database.DB, uint(id), userID, newOwner.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "转交会长失败"})
+		return
+	}
+
+	logAdminAction(c, "transfer_guild_owner", "guild", uint(id), updatedGuild.Name, map[string]interface{}{
+		"old_owner_id":   userID,
+		"new_owner_id":   newOwner.ID,
+		"new_owner_name": newOwner.Username,
+	})
+
+	ensureGuildBannerUpdatedAt(&updatedGuild)
+	ensureGuildAvatarUpdatedAt(&updatedGuild)
+	updatedGuild.Banner = guildBannerURL(updatedGuild)
+	updatedGuild.Avatar = guildAvatarURL(updatedGuild)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "会长已转交",
+		"guild":   updatedGuild,
+		"new_owner": gin.H{
+			"id":       newOwner.ID,
+			"username": newOwner.Username,
+		},
+	})
+}
+
+func transferGuildOwnerTx(db *gorm.DB, guildID, currentOwnerID, newOwnerID uint) (model.Guild, error) {
+	var updatedGuild model.Guild
+	err := db.Transaction(func(tx *gorm.DB) error {
+		var guild model.Guild
+		query := tx
+		if tx.Dialector.Name() != "sqlite" {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		if err := query.First(&guild, guildID).Error; err != nil {
+			return err
+		}
+		if guild.OwnerID != currentOwnerID {
+			return fmt.Errorf("current user is not guild owner")
+		}
+		if newOwnerID == currentOwnerID {
+			return fmt.Errorf("new owner is already owner")
+		}
+
+		oldOwnerID := guild.OwnerID
+		guild.OwnerID = newOwnerID
+		if err := tx.Save(&guild).Error; err != nil {
+			return err
+		}
+
+		var oldOwnerMember model.GuildMember
+		if err := tx.Where("guild_id = ? AND user_id = ?", guildID, oldOwnerID).First(&oldOwnerMember).Error; err == nil {
+			if err := tx.Model(&oldOwnerMember).Update("role", "admin").Error; err != nil {
+				return err
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		var newOwnerMember model.GuildMember
+		if err := tx.Where("guild_id = ? AND user_id = ?", guildID, newOwnerID).First(&newOwnerMember).Error; err == nil {
+			if err := tx.Model(&newOwnerMember).Update("role", "owner").Error; err != nil {
+				return err
+			}
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
+			newOwnerMember = model.GuildMember{
+				GuildID:  guildID,
+				UserID:   newOwnerID,
+				Role:     "owner",
+				JoinedAt: time.Now(),
+			}
+			if err := tx.Create(&newOwnerMember).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&guild).Update("member_count", gorm.Expr("member_count + ?", 1)).Error; err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+
+		return tx.First(&updatedGuild, guildID).Error
+	})
+	return updatedGuild, err
 }
 
 // checkGuildContentAccess 检查用户是否有权限查看公会内容
@@ -581,6 +740,9 @@ func checkGuildContentAccess(guildID, userID uint, contentType string) (bool, st
 	var guild model.Guild
 	if err := database.DB.First(&guild, guildID).Error; err != nil {
 		return false, ""
+	}
+	if guild.OwnerID == userID {
+		return true, "owner"
 	}
 
 	// 2. 检查用户是否为成员
@@ -678,11 +840,19 @@ func (s *Server) listGuildMembers(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
+	var guild model.Guild
+	if err := database.DB.Select("id, owner_id").First(&guild, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
+		return
+	}
+
 	// 检查是否是成员
 	var self model.GuildMember
 	if err := database.DB.Where("guild_id = ? AND user_id = ?", id, userID).First(&self).Error; err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "非公会成员"})
-		return
+		if guild.OwnerID != userID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "非公会成员"})
+			return
+		}
 	}
 
 	var members []model.GuildMember
