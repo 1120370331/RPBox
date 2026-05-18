@@ -97,3 +97,46 @@ func TestTransferGuildOwnerUpdatesRolesAndPermissions(t *testing.T) {
 		t.Fatalf("expected update guild 200, got %d body=%s", updateResp.Code, updateResp.Body.String())
 	}
 }
+
+func TestChangeGuildOwnerAcceptsCopiedUsername(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.Guild{}, &model.GuildMember{}, &model.AdminActionLog{})
+	database.DB = db
+
+	moderator := model.User{Username: "moderator", Email: "moderator@example.com", EmailVerified: true, PassHash: "hash", Role: "moderator"}
+	oldOwner := model.User{Username: "old-owner", Email: "old@example.com", EmailVerified: true, PassHash: "hash", Role: "user"}
+	newOwner := model.User{Username: "CopiedName", Email: "new@example.com", EmailVerified: true, PassHash: "hash", Role: "user"}
+	if err := db.Create(&[]*model.User{&moderator, &oldOwner, &newOwner}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	guild := model.Guild{Name: "Copied Username Guild", OwnerID: oldOwner.ID, MemberCount: 2, InviteCode: "invite", Status: "approved"}
+	if err := db.Create(&guild).Error; err != nil {
+		t.Fatalf("create guild: %v", err)
+	}
+	if err := db.Create(&[]model.GuildMember{
+		{GuildID: guild.ID, UserID: oldOwner.ID, Role: "owner"},
+		{GuildID: guild.ID, UserID: newOwner.ID, Role: "member"},
+	}).Error; err != nil {
+		t.Fatalf("create members: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	resp := performRequest(
+		server.router,
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/moderator/manage/guilds/%d/owner", guild.ID),
+		map[string]string{"new_owner_name": " @copiedname\u200b "},
+		newTestToken(t, moderator),
+	)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var refreshed model.Guild
+	if err := db.First(&refreshed, guild.ID).Error; err != nil {
+		t.Fatalf("load guild: %v", err)
+	}
+	if refreshed.OwnerID != newOwner.ID {
+		t.Fatalf("expected owner_id %d, got %d", newOwner.ID, refreshed.OwnerID)
+	}
+}
