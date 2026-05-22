@@ -3,7 +3,17 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@shared/stores/toast'
-import { applyGuild, getGuild, leaveGuild, listGuildMembers, type Guild, type GuildMember } from '@/api/guild'
+import {
+  applyGuild,
+  cancelApplication,
+  getGuild,
+  leaveGuild,
+  listGuildMembers,
+  listMyApplications,
+  type Guild,
+  type GuildApplication,
+  type GuildMember,
+} from '@/api/guild'
 import { resolveApiUrl } from '@/api/image'
 
 const route = useRoute()
@@ -14,17 +24,24 @@ const toast = useToastStore()
 const loading = ref(false)
 const membersLoading = ref(false)
 const applying = ref(false)
+const cancelingApplication = ref(false)
 const leaving = ref(false)
 const showLeaveConfirm = ref(false)
 const guild = ref<Guild | null>(null)
 const myRole = ref<'' | 'owner' | 'admin' | 'member'>('')
 const members = ref<GuildMember[]>([])
+const pendingApplication = ref<GuildApplication | null>(null)
 
 const guildId = computed(() => Number(route.params.id))
 const guildAvatar = computed(() => resolveApiUrl(guild.value?.avatar_url || guild.value?.avatar || ''))
 const guildBanner = computed(() => resolveApiUrl(guild.value?.banner_url || guild.value?.banner || ''))
 const canLeave = computed(() => myRole.value === 'admin' || myRole.value === 'member')
 const isAdmin = computed(() => myRole.value === 'owner' || myRole.value === 'admin')
+const relationshipLabel = computed(() => {
+  if (myRole.value) return roleLabel(myRole.value)
+  if (pendingApplication.value) return t('guild.apply.pending')
+  return '-'
+})
 
 function roleLabel(role?: Guild['my_role'] | '') {
   if (!role) return ''
@@ -36,10 +53,18 @@ function factionLabel(name?: Guild['faction']) {
   return t(`guild.faction.${name}`)
 }
 
+async function loadPendingApplication() {
+  const res = await listMyApplications()
+  pendingApplication.value = res.applications?.find((app) => (
+    app.guild_id === guildId.value && app.status === 'pending'
+  )) || null
+}
+
 async function loadDetail() {
   if (!guildId.value) return
   loading.value = true
   membersLoading.value = false
+  pendingApplication.value = null
   try {
     const res = await getGuild(guildId.value)
     guild.value = res.guild
@@ -57,10 +82,15 @@ async function loadDetail() {
         .finally(() => {
           membersLoading.value = false
         })
+    } else {
+      await loadPendingApplication().catch(() => {
+        pendingApplication.value = null
+      })
     }
   } catch (error) {
     toast.error((error as Error)?.message || t('common.status.loadFailed'))
     members.value = []
+    pendingApplication.value = null
     membersLoading.value = false
   } finally {
     loading.value = false
@@ -73,11 +103,29 @@ async function handleApply() {
   try {
     const res = await applyGuild(guild.value.id)
     toast.success(res.auto_approved ? t('guild.apply.autoApproved') : t('guild.apply.success'))
+    if (!res.auto_approved && res.application?.status === 'pending') {
+      pendingApplication.value = res.application
+    }
     await loadDetail()
   } catch (error) {
     toast.error((error as Error)?.message || t('guild.apply.failed'))
   } finally {
     applying.value = false
+  }
+}
+
+async function handleCancelApplication() {
+  if (!guild.value || !pendingApplication.value || cancelingApplication.value) return
+  cancelingApplication.value = true
+  try {
+    await cancelApplication(guild.value.id, pendingApplication.value.id)
+    pendingApplication.value = null
+    toast.success(t('guild.apply.canceled'))
+    await loadDetail()
+  } catch (error) {
+    toast.error((error as Error)?.message || t('guild.apply.cancelFailed'))
+  } finally {
+    cancelingApplication.value = false
   }
 }
 
@@ -136,8 +184,11 @@ onMounted(loadDetail)
           </div>
 
           <div class="hero-actions">
-            <button v-if="!myRole" class="action-btn primary" :disabled="applying" @click="handleApply">
+            <button v-if="!myRole && !pendingApplication" class="action-btn primary" :disabled="applying" @click="handleApply">
               {{ $t('guild.actions.join') }}
+            </button>
+            <button v-else-if="!myRole && pendingApplication" class="action-btn" :disabled="cancelingApplication" @click="handleCancelApplication">
+              {{ $t('guild.actions.cancelApplication') }}
             </button>
             <button v-else-if="canLeave" class="action-btn" @click="showLeaveConfirm = true">{{ $t('guild.actions.leave') }}</button>
             <span v-else class="role-badge">{{ roleLabel(myRole) }}</span>
@@ -147,7 +198,7 @@ onMounted(loadDetail)
         <section class="info-card">
           <div class="row">
             <span class="label">{{ $t('guild.info.myRole') }}</span>
-            <span class="value">{{ myRole ? roleLabel(myRole) : '-' }}</span>
+            <span class="value" :class="{ pending: pendingApplication }">{{ relationshipLabel }}</span>
           </div>
           <div v-if="isAdmin" class="row">
             <span class="label">{{ $t('guild.info.inviteCode') }}</span>
@@ -336,6 +387,11 @@ onMounted(loadDetail)
 .value {
   font-size: 13px;
   color: var(--text-dark);
+}
+
+.value.pending {
+  color: #B87333;
+  font-weight: 600;
 }
 
 .value.code {

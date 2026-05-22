@@ -130,7 +130,6 @@ watch(
       <button class="preview-close" @click.stop="emit('close')"><i class="ri-close-line" /></button>
       <div
         class="preview-viewport"
-        @click.stop
         @touchstart="onTouchStart"
         @touchmove="onTouchMove"
         @touchend="onTouchEnd"
@@ -142,6 +141,7 @@ watch(
           :src="props.src"
           :alt="alt"
           :style="imageStyle"
+          @click.stop
           @dblclick="onDoubleClick"
         />
       </div>
@@ -163,20 +163,24 @@ watch(
 
 .preview-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 34px;
-  height: 34px;
+  top: calc(var(--safe-top, 0px) + 12px);
+  right: calc(var(--safe-right, 0px) + 12px);
+  z-index: 2;
+  width: 48px;
+  height: 48px;
   border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.35);
   color: #fff;
-  font-size: 20px;
+  font-size: 24px;
+  touch-action: manipulation;
 }
 
 .preview-viewport {
   width: 100%;
   height: 100%;
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;

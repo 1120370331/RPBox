@@ -4,6 +4,17 @@ import type { UserData } from '@shared/stores/user'
 export interface UserInfo extends UserData {
   email: string
   avatar: string
+  post_count?: number
+  story_count?: number
+  profile_count?: number
+  item_count?: number
+  guild_count?: number
+  total_sign_in_days?: number
+  consecutive_sign_in_days?: number
+  total_likes?: number
+  total_item_downloads?: number
+  max_post_views?: number
+  max_item_downloads?: number
 }
 
 export interface SignInDailyResponse {

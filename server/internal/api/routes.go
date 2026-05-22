@@ -16,14 +16,11 @@ func (s *Server) setupRoutes() {
 
 	s.router.GET("/health", s.healthCheck)
 
-	// 静态文件服务 - 更新包下载
-	s.router.Static("/releases", "./releases")
-	// 图片上传访问（本地或 OSS）
-	if s.ossEnabled() {
-		s.router.GET("/uploads/*filepath", s.getUploadObject)
-	} else {
-		s.router.Static("/uploads", filepath.Join(s.cfg.Storage.Path, "uploads"))
-	}
+	// 更新包下载。稳定版公开，测试版文件在 handler 内做资格校验。
+	s.router.GET("/releases/*filepath", s.getReleaseFile)
+	s.router.HEAD("/releases/*filepath", s.getReleaseFile)
+	// 上传对象访问（本地或 OSS），统一处理 ETag、Range 与长缓存。
+	s.router.GET("/uploads/*filepath", s.getUploadObject)
 	// 表情包静态资源
 	s.router.Static("/emotes", filepath.Join(s.cfg.Storage.Path, "emotes"))
 
@@ -37,6 +34,7 @@ func (s *Server) setupRoutes() {
 			authPublic.POST("/send-code", s.sendVerificationCode)
 			authPublic.POST("/register", s.register)
 			authPublic.POST("/login", s.login)
+			authPublic.POST("/switch", s.switchLogin)
 			authPublic.POST("/forgot-password", s.forgotPassword) // 发送重置密码验证码
 			authPublic.POST("/reset-password", s.resetPassword)   // 重置密码
 		}
@@ -48,6 +46,8 @@ func (s *Server) setupRoutes() {
 
 		// 公开剧情（无需登录）
 		v1.GET("/public/stories/:code", s.getPublicStory)
+		v1.GET("/public/music/playlists", s.listPublicStoryMusicPlaylists)
+		v1.GET("/public/music/playlists/:code", s.getPublicStoryMusicPlaylist)
 
 		// 图标服务（公开）
 		v1.GET("/icons/:name", s.getIcon)
@@ -97,6 +97,23 @@ func (s *Server) setupRoutes() {
 			auth.GET("/stories/:id", s.getStory)
 			auth.PUT("/stories/:id", s.updateStory)
 			auth.DELETE("/stories/:id", s.deleteStory)
+			auth.GET("/stories/:id/music", s.getStoryMusic)
+			auth.POST("/stories/:id/music/tracks", s.uploadStoryMusicTrack)
+			auth.PUT("/stories/:id/music/tracks/:trackId", s.updateStoryMusicTrack)
+			auth.DELETE("/stories/:id/music/tracks/:trackId", s.deleteStoryMusicTrack)
+			auth.POST("/stories/:id/music/tracks/:trackId/attach", s.attachStoryMusicTrack)
+			auth.DELETE("/stories/:id/music/tracks/:trackId/attach", s.detachStoryMusicTrack)
+			auth.POST("/stories/:id/music/segments", s.createStoryMusicSegment)
+			auth.PUT("/stories/:id/music/segments/:segmentId", s.updateStoryMusicSegment)
+			auth.DELETE("/stories/:id/music/segments/:segmentId", s.deleteStoryMusicSegment)
+			auth.POST("/stories/:id/music/playlists/:code/import", s.importPublicStoryMusicPlaylist)
+			auth.GET("/music/playlists", s.listStoryMusicPlaylists)
+			auth.POST("/music/playlists", s.createStoryMusicPlaylist)
+			auth.PUT("/music/playlists/:playlistId", s.updateStoryMusicPlaylist)
+			auth.DELETE("/music/playlists/:playlistId", s.deleteStoryMusicPlaylist)
+			auth.POST("/music/playlists/:playlistId/share", s.shareStoryMusicPlaylist)
+			auth.POST("/music/playlists/:playlistId/tracks/:trackId", s.addStoryMusicPlaylistTrack)
+			auth.DELETE("/music/playlists/:playlistId/tracks/:trackId", s.removeStoryMusicPlaylistTrack)
 			auth.POST("/stories/:id/entries", s.addStoryEntries)
 			auth.POST("/stories/:id/entries/batch-background", s.batchUpdateEntryBackgroundColor)
 			auth.POST("/stories/:id/entries/batch-delete", s.batchDeleteEntries)

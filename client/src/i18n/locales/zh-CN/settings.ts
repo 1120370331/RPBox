@@ -74,6 +74,11 @@ export default {
     launchOnStartupEnabled: '已启用开机启动',
     launchOnStartupDisabled: '已关闭开机启动',
     launchOnStartupFailed: '设置开机启动失败',
+    participateTesting: '参与测试',
+    participateTestingDesc: '仅 LV1 及以上赞助者可参与测试，开启后会优先检查测试版客户端更新',
+    participateTestingLockedDesc: '只有 LV1 及以上赞助者可开启参与测试',
+    participateTestingEnabled: '已开启测试版更新检查',
+    participateTestingDisabled: '已关闭测试版更新检查',
   },
   data: {
     title: '数据管理',

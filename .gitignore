@@ -286,3 +286,5 @@ server/data/icons/
 # Temp files
 .tmp_server_pid
 *.bak
+.codex-tmp/
+.codex-release-artifacts/

@@ -54,11 +54,25 @@ export default {
   },
   menu: {
     cloudProfiles: '云端人物卡',
+    achievements: '成就墙',
     favorites: '我的收藏',
     posts: '我的帖子',
     items: '我的道具',
     collections: '我的合集',
     about: '关于 RPBox',
+  },
+  achievements: {
+    title: '成就墙',
+    listTitle: '成就列表',
+    kicker: 'Achievement Wall',
+    subtitle: '展示你在 RPBox 的签到、创作、赞助与等级进度。',
+    earned: '已获得',
+    progress: '进度',
+    viewAll: '查看全部',
+    featured: '代表成就',
+    firstGoal: '首个目标',
+    nextGoal: '下一个目标',
+    close: '关闭',
   },
   blocks: {
     title: '屏蔽用户管理',
@@ -92,6 +106,7 @@ export default {
     failed: '删除账号失败',
   },
   logout: '退出登录',
+  switchAccount: '切换账号',
   myFavorites: {
     title: '我的收藏',
     empty: '暂无收藏',

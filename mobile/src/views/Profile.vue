@@ -6,8 +6,15 @@ import { useUserStore } from '@shared/stores/user'
 import { useRouter } from 'vue-router'
 import { resolveApiUrl } from '@/api/image'
 import { deleteAccount, getUserInfo, signInDaily, type UserInfo } from '@/api/user'
+import AchievementMedal from '@/components/AchievementMedal.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
+import {
+  buildAchievementEntries,
+  buildAchievementProgressContext,
+  buildAchievementWallEntries,
+  pickFeaturedAchievement,
+} from '@/utils/achievementProgress'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -68,6 +75,12 @@ const currentForumLevelName = computed(() => {
 const activityProgressPercent = computed(() => {
   return computeLevelProgressPercent(displayUser.value?.current_level_exp, displayUser.value?.next_level_exp)
 })
+
+const achievementContext = computed(() => buildAchievementProgressContext(displayUser.value as Record<string, unknown> | null))
+const achievementEntries = computed(() => buildAchievementEntries(achievementContext.value))
+const earnedAchievementCount = computed(() => achievementEntries.value.filter((entry) => entry.progress.earned).length)
+const featuredAchievementEntry = computed(() => pickFeaturedAchievement(achievementEntries.value))
+const achievementWallEntries = computed(() => buildAchievementWallEntries(achievementEntries.value, 5))
 
 const signInHint = computed(() => (
   displayUser.value?.signed_in_today
@@ -132,6 +145,11 @@ async function handleDailySignIn() {
 function handleLogout() {
   userStore.logout()
   router.replace({ name: 'login' })
+}
+
+function handleSwitchAccount() {
+  userStore.logout()
+  router.replace({ name: 'login', query: { switch: '1' } })
 }
 
 function openDeleteAccountDialog() {
@@ -301,10 +319,65 @@ onMounted(() => {
         </div>
       </section>
 
+      <section v-if="displayUser" class="achievement-wall-card">
+        <div class="achievement-wall-head">
+          <div>
+            <p>{{ $t('profile.achievements.kicker') }}</p>
+            <h2>{{ $t('profile.achievements.title') }}</h2>
+          </div>
+          <button type="button" class="achievement-link" @click="router.push('/profile/achievements')">
+            {{ $t('profile.achievements.viewAll') }}
+            <i class="ri-arrow-right-s-line" />
+          </button>
+        </div>
+
+        <button
+          v-if="featuredAchievementEntry"
+          type="button"
+          class="achievement-feature"
+          @click="router.push('/profile/achievements')"
+        >
+          <AchievementMedal
+            :achievement="featuredAchievementEntry.definition"
+            :earned="featuredAchievementEntry.progress.earned"
+            size="md"
+          />
+          <span class="achievement-feature-copy">
+            <small>{{ featuredAchievementEntry.progress.earned ? $t('profile.achievements.featured') : $t('profile.achievements.firstGoal') }}</small>
+            <strong>{{ featuredAchievementEntry.definition.title }}</strong>
+            <em>{{ featuredAchievementEntry.progress.label }}</em>
+          </span>
+          <span class="achievement-score">
+            <strong>{{ earnedAchievementCount }}</strong>
+            <small>/{{ achievementEntries.length }}</small>
+          </span>
+        </button>
+
+        <div class="achievement-mini-grid">
+          <span
+            v-for="entry in achievementWallEntries"
+            :key="entry.definition.id"
+            class="achievement-mini"
+            :class="{ earned: entry.progress.earned }"
+          >
+            <AchievementMedal
+              :achievement="entry.definition"
+              :earned="entry.progress.earned"
+              size="sm"
+            />
+          </span>
+        </div>
+      </section>
+
       <div class="menu-section">
         <button class="menu-item" @click="router.push('/profiles')">
           <i class="ri-id-card-line" />
           <span>{{ $t('profile.menu.cloudProfiles') }}</span>
+          <i class="ri-arrow-right-s-line arrow" />
+        </button>
+        <button class="menu-item" @click="router.push('/profile/achievements')">
+          <i class="ri-medal-line" />
+          <span>{{ $t('profile.menu.achievements') }}</span>
           <i class="ri-arrow-right-s-line arrow" />
         </button>
         <button class="menu-item" @click="router.push('/my-favorites')">
@@ -335,6 +408,11 @@ onMounted(() => {
       </div>
 
       <div class="menu-section">
+        <button class="menu-item" @click="handleSwitchAccount">
+          <i class="ri-switch-line" />
+          <span>{{ $t('profile.switchAccount') }}</span>
+          <i class="ri-arrow-right-s-line arrow" />
+        </button>
         <button class="menu-item" @click="router.push('/about')">
           <i class="ri-information-line" />
           <span>{{ $t('profile.menu.about') }}</span>
@@ -650,6 +728,144 @@ onMounted(() => {
   height: 100%;
   border-radius: inherit;
   box-shadow: inset 0 0 0 1px rgba(75, 54, 33, 0.08);
+}
+
+.achievement-wall-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(184, 115, 51, 0.14);
+  padding: 12px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(255, 178, 62, 0.18), transparent 34%),
+    radial-gradient(circle at 92% 16%, rgba(255, 190, 219, 0.24), transparent 32%),
+    var(--color-card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.achievement-wall-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.achievement-wall-head p {
+  font-size: 10px;
+  color: var(--color-accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.achievement-wall-head h2 {
+  margin-top: 2px;
+  color: var(--color-text-main);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.achievement-link {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(75, 54, 33, 0.08);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.achievement-link i {
+  font-size: 14px;
+}
+
+.achievement-feature {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid rgba(184, 115, 51, 0.12);
+  border-radius: 16px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.34);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-main);
+  text-align: left;
+}
+
+.achievement-feature-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.achievement-feature-copy small {
+  color: var(--color-accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.achievement-feature-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-main);
+  font-size: 14px;
+}
+
+.achievement-feature-copy em {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.achievement-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  color: var(--color-text-secondary);
+}
+
+.achievement-score strong {
+  color: var(--color-accent);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.achievement-score small {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.achievement-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.achievement-mini {
+  min-width: 0;
+  min-height: 50px;
+  border: 1px solid rgba(184, 115, 51, 0.1);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.achievement-mini.earned {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 214, 135, 0.18), transparent 42%),
+    rgba(255, 255, 255, 0.46);
 }
 
 .menu-section {

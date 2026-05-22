@@ -74,6 +74,11 @@ export default {
     launchOnStartupEnabled: 'Launch on startup enabled',
     launchOnStartupDisabled: 'Launch on startup disabled',
     launchOnStartupFailed: 'Failed to update launch on startup',
+    participateTesting: 'Participate in testing',
+    participateTestingDesc: 'Only LV1+ sponsors can participate in testing. When enabled, beta client updates are checked first',
+    participateTestingLockedDesc: 'Only LV1+ sponsors can enable testing participation',
+    participateTestingEnabled: 'Beta update checks enabled',
+    participateTestingDisabled: 'Beta update checks disabled',
   },
   data: {
     title: 'Data Management',

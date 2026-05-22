@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { login } from '../api/auth'
+import { login, switchLogin, type LoginResponse } from '../api/auth'
 import { useUserStore } from '../stores/user'
+import type { AccountHistoryItem } from '../stores/user'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const route = useRoute()
@@ -15,10 +17,74 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const mounted = ref(false)
+const selectedAccountId = ref<number | null>(null)
+const switchingAccountId = ref<number | null>(null)
+const usernameInputRef = ref<HTMLInputElement | null>(null)
+const passwordInputRef = ref<HTMLInputElement | null>(null)
+
+const hasRecentAccounts = computed(() => userStore.accountHistory.length > 0)
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 100)
 })
+
+function finishLogin(res: LoginResponse) {
+  userStore.setAuth(res.token, res.user, {
+    switchToken: res.switch_token,
+    switchTokenExpiresAt: res.switch_token_expires_at,
+  })
+  const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+    ? route.query.redirect
+    : '/'
+  router.replace(redirect)
+}
+
+async function selectAccount(account: AccountHistoryItem) {
+  selectedAccountId.value = account.id
+  username.value = account.username
+  password.value = ''
+  error.value = ''
+
+  const switchToken = userStore.getAccountSwitchToken(account.id)
+  if (switchToken) {
+    switchingAccountId.value = account.id
+    loading.value = true
+    try {
+      const res = await switchLogin(switchToken)
+      finishLogin(res)
+      return
+    } catch (e: any) {
+      userStore.clearAccountSwitchSession(account.id)
+      error.value = e.message
+    } finally {
+      loading.value = false
+      switchingAccountId.value = null
+    }
+  }
+
+  nextTick(() => passwordInputRef.value?.focus())
+}
+
+function useAnotherAccount() {
+  selectedAccountId.value = null
+  username.value = ''
+  password.value = ''
+  error.value = ''
+  nextTick(() => usernameInputRef.value?.focus())
+}
+
+function getAccountHint(account: AccountHistoryItem) {
+  return userStore.hasValidAccountSwitchSession(account.id)
+    ? t('auth.login.passwordlessSwitchAvailable')
+    : t('auth.login.passwordRequiredForSwitch')
+}
+
+function removeRecentAccount(id: number) {
+  if (selectedAccountId.value === id) {
+    useAnotherAccount()
+  }
+  userStore.removeAccountHistoryItem(id)
+}
 
 async function handleLogin() {
   error.value = ''
@@ -26,11 +92,7 @@ async function handleLogin() {
 
   try {
     const res = await login(username.value, password.value)
-    userStore.setAuth(res.token, res.user)
-    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
-      ? route.query.redirect
-      : '/'
-    router.replace(redirect)
+    finishLogin(res)
   } catch (e: any) {
     error.value = e.message
   } finally {
@@ -47,9 +109,55 @@ async function handleLogin() {
         <p class="subtitle">{{ t('auth.login.subtitle') }}</p>
       </div>
 
+      <div v-if="hasRecentAccounts" class="account-switcher anim-item" style="--delay: 0.5">
+        <div class="account-switcher-header">
+          <span>{{ t('auth.login.recentAccounts') }}</span>
+          <button type="button" class="use-other-btn" @click="useAnotherAccount">
+            {{ t('auth.login.useAnotherAccount') }}
+          </button>
+        </div>
+        <div class="account-list">
+          <div
+            v-for="account in userStore.accountHistory"
+            :key="account.id"
+            class="account-item"
+            :class="{
+              active: selectedAccountId === account.id || username === account.username,
+              passwordless: userStore.hasValidAccountSwitchSession(account.id),
+            }"
+          >
+            <button type="button" class="account-select" :disabled="loading" @click="selectAccount(account)">
+              <div class="account-avatar">
+                <img v-if="account.avatar" :src="account.avatar" alt="头像" />
+                <span v-else>{{ account.username.charAt(0).toUpperCase() }}</span>
+              </div>
+              <div class="account-meta">
+                <span class="account-name" :style="buildNameStyle(account.name_color, account.name_bold)">
+                  {{ account.username }}
+                </span>
+                <span class="account-hint">
+                  {{ switchingAccountId === account.id ? t('auth.login.passwordlessSwitching') : getAccountHint(account) }}
+                </span>
+              </div>
+            </button>
+            <button
+              type="button"
+              class="remove-account-btn"
+              :title="t('auth.login.removeRecentAccount')"
+              :aria-label="t('auth.login.removeRecentAccount')"
+              :disabled="loading"
+              @click="removeRecentAccount(account.id)"
+            >
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <form class="login-form" @submit.prevent="handleLogin">
         <div class="form-group anim-item" style="--delay: 1">
           <input
+            ref="usernameInputRef"
             v-model="username"
             class="input"
             :placeholder="t('auth.login.usernamePlaceholder')"
@@ -58,6 +166,7 @@ async function handleLogin() {
         </div>
         <div class="form-group anim-item" style="--delay: 2">
           <input
+            ref="passwordInputRef"
             v-model="password"
             type="password"
             class="input"
@@ -117,6 +226,154 @@ async function handleLogin() {
 .subtitle {
   font-size: 14px;
   color: var(--color-secondary);
+}
+
+.account-switcher {
+  margin-bottom: 22px;
+}
+
+.account-switcher-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #7A5C46;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.use-other-btn {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 0;
+  white-space: nowrap;
+}
+
+.use-other-btn:hover {
+  color: #4B3621;
+  text-decoration: underline;
+}
+
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  border: 1px solid #E5D4C1;
+  border-radius: 8px;
+  background: #FFF9F2;
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.account-item:hover,
+.account-item.active {
+  border-color: #B87333;
+  background: #FFF4E8;
+  box-shadow: 0 6px 18px rgba(75, 54, 33, 0.08);
+}
+
+.account-item.passwordless {
+  border-color: var(--color-border-hover);
+}
+
+.account-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 40px 8px 10px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.account-select:disabled,
+.remove-account-btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.account-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #8C7B70));
+  color: #fff;
+  font-weight: 700;
+}
+
+.account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.account-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #3B2418;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 230px;
+}
+
+.account-hint {
+  font-size: 12px;
+  color: #8C7B70;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remove-account-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #A68A79;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.remove-account-btn:hover {
+  background: rgba(184, 115, 51, 0.12);
+  color: #7A3E1D;
 }
 
 .login-form {
@@ -220,5 +477,21 @@ async function handleLogin() {
 
 .login-btn:active:not(:disabled) {
   transform: translateY(0) scale(0.98);
+}
+
+@media (max-width: 480px) {
+  .login-page {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 24px 16px;
+  }
+
+  .login-card {
+    padding: 28px 22px;
+  }
+
+  .account-name {
+    max-width: 180px;
+  }
 }
 </style>

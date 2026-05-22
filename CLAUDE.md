@@ -24,6 +24,7 @@ RPBox 是一个服务于魔兽世界 RP 玩家的工具箱，主要解决 TotalR
 | 层级 | 技术 |
 |------|------|
 | 桌面客户端 | Tauri 2.0 + Vue 3 + TypeScript + Pinia |
+| 手机端 | Capacitor 6 + Vue 3 + TypeScript + Pinia |
 | 后端服务 | Go 1.21 + Gin + GORM |
 | 数据库 | PostgreSQL |
 | 缓存 | Redis |
@@ -42,6 +43,14 @@ RPBox/
 │   │   └── views/        # 页面视图
 │   └── src-tauri/        # Rust 后端
 │
+├── mobile/                 # Capacitor 手机端
+│   ├── src/               # Vue 手机端源码
+│   │   ├── api/          # 手机端 API 与适配
+│   │   ├── components/   # 手机端组件
+│   │   ├── views/        # 手机端页面
+│   │   └── styles/       # 手机端样式
+│   └── resources/         # 原生应用资源
+│
 ├── server/                # Go 后端服务
 │   ├── cmd/server/       # 入口
 │   ├── internal/
@@ -56,6 +65,8 @@ RPBox/
 │       └── storage/     # 存储
 │
 ├── shared/               # 共享定义
+│   ├── api/              # 多端共享 API 请求
+│   ├── stores/           # 多端共享 Pinia 状态
 │   └── proto/           # API 类型定义
 │
 ├── refs/                 # 参考仓库
@@ -208,6 +219,10 @@ WTF/Account/{账号}/SavedVariables/
 ```bash
 # 客户端
 cd client && npm install && npm run tauri dev
+
+# 手机端
+cd mobile && npm install && npm run dev
+cd mobile && npm run build
 
 # 服务端
 cd server && go mod tidy && go run cmd/server/main.go
@@ -543,6 +558,7 @@ git tag addon-v1.1.0 && git push --tags
 | 剧情归档 | STORY | `client/src/views/story/` |
 | 社区分享 | COMM | `client/src/views/community/` |
 | 道具市场 | ITEM | `client/src/views/market/` |
+| 手机端 | MOB | `mobile/src/` |
 | 服务端 | SRV | `server/` |
 
 ### 状态与类型

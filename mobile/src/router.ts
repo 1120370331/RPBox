@@ -151,6 +151,11 @@ const router = createRouter({
       name: 'blocked-users',
       component: () => import('./views/profile/BlockedUsers.vue'),
     },
+    {
+      path: '/profile/achievements',
+      name: 'profile-achievements',
+      component: () => import('./views/profile/Achievements.vue'),
+    },
   ],
 })
 

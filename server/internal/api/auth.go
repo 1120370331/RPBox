@@ -29,6 +29,10 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type SwitchLoginRequest struct {
+	SwitchToken string `json:"switch_token" binding:"required"`
+}
+
 type SendCodeRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
@@ -38,6 +42,8 @@ type ResetPasswordRequest struct {
 	VerificationCode string `json:"verification_code" binding:"required,len=6"`
 	NewPassword      string `json:"new_password" binding:"required,min=6"`
 }
+
+const accountSwitchTokenDays = 60
 
 // sendVerificationCode 发送邮箱验证码
 func (s *Server) sendVerificationCode(c *gin.Context) {
@@ -188,11 +194,6 @@ func (s *Server) login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
-	if user.AccountDeletedAt != nil {
-		log.Printf("[Auth] login failed user=%s ip=%s reason=account_deleted", req.Username, ip)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号已删除"})
-		return
-	}
 
 	if !auth.CheckPassword(req.Password, user.PassHash) {
 		log.Printf("[Auth] login failed user=%s ip=%s reason=bad_password", req.Username, ip)
@@ -200,48 +201,108 @@ func (s *Server) login(c *gin.Context) {
 		return
 	}
 
-	// 检查封禁状态
-	if user.IsBanned {
-		// 检查封禁是否已过期
-		if user.BannedUntil != nil && user.BannedUntil.Before(time.Now()) {
-			// 封禁已过期，自动解除
-			user.IsBanned = false
-			user.BannedUntil = nil
-			user.BanReason = ""
-			database.DB.Save(&user)
-		} else {
-			// 仍在封禁中
-			log.Printf("[Auth] login blocked user_id=%d username=%s ip=%s reason=banned", user.ID, user.Username, ip)
-			msg := "账号已被封禁"
-			if user.BanReason != "" {
-				msg += "，原因：" + user.BanReason
-			}
-			if user.BannedUntil != nil {
-				msg += "，解封时间：" + user.BannedUntil.Format("2006-01-02 15:04")
-			} else {
-				msg += "（永久）"
-			}
-			c.JSON(http.StatusForbidden, gin.H{"error": msg})
-			return
-		}
+	if !s.ensureAuthUserAvailable(c, &user, req.Username, ip) {
+		return
 	}
 
-	nameColor, nameBold := userDisplayStyle(user)
-	level := resolveSponsorLevel(user)
-	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
-	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)
+	payload, err := s.buildAuthPayload(user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
 		return
 	}
 
 	log.Printf("[Auth] login success user_id=%d username=%s ip=%s verified=%t", user.ID, user.Username, ip, user.EmailVerified)
+	c.JSON(http.StatusOK, payload)
+}
+
+func (s *Server) switchLogin(c *gin.Context) {
+	var req SwitchLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+
+	ip := c.ClientIP()
+	claims, err := auth.ParseSwitchToken(req.SwitchToken)
+	if err != nil {
+		log.Printf("[Auth] switch failed ip=%s reason=bad_switch_token", ip)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "免密登录已过期，请输入密码"})
+		return
+	}
+
+	var user model.User
+	if err := database.DB.Where("id = ? AND username = ?", claims.UserID, claims.Username).First(&user).Error; err != nil {
+		log.Printf("[Auth] switch failed user_id=%d ip=%s reason=user_not_found", claims.UserID, ip)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "免密登录已过期，请输入密码"})
+		return
+	}
+	if !s.ensureAuthUserAvailable(c, &user, user.Username, ip) {
+		return
+	}
+
+	payload, err := s.buildAuthPayload(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
+		return
+	}
+
+	log.Printf("[Auth] switch success user_id=%d username=%s ip=%s", user.ID, user.Username, ip)
+	c.JSON(http.StatusOK, payload)
+}
+
+func (s *Server) ensureAuthUserAvailable(c *gin.Context, user *model.User, loginName, ip string) bool {
+	if user.AccountDeletedAt != nil {
+		log.Printf("[Auth] login failed user=%s ip=%s reason=account_deleted", loginName, ip)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号已删除"})
+		return false
+	}
+
+	if !user.IsBanned {
+		return true
+	}
+
+	if user.BannedUntil != nil && user.BannedUntil.Before(time.Now()) {
+		user.IsBanned = false
+		user.BannedUntil = nil
+		user.BanReason = ""
+		database.DB.Save(user)
+		return true
+	}
+
+	log.Printf("[Auth] login blocked user_id=%d username=%s ip=%s reason=banned", user.ID, user.Username, ip)
+	msg := "账号已被封禁"
+	if user.BanReason != "" {
+		msg += "，原因：" + user.BanReason
+	}
+	if user.BannedUntil != nil {
+		msg += "，解封时间：" + user.BannedUntil.Format("2006-01-02 15:04")
+	} else {
+		msg += "（永久）"
+	}
+	c.JSON(http.StatusForbidden, gin.H{"error": msg})
+	return false
+}
+
+func (s *Server) buildAuthPayload(user model.User) (gin.H, error) {
+	nameColor, nameBold := userDisplayStyle(user)
+	level := resolveSponsorLevel(user)
+	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
+	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)
+	if err != nil {
+		return nil, err
+	}
+	switchToken, switchTokenExpiresAt, err := auth.GenerateSwitchToken(user.ID, user.Username, accountSwitchTokenDays)
+	if err != nil {
+		return nil, err
+	}
 
 	// 返回头像 URL 而不是 base64 数据，避免 localStorage 配额超限
 	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
 
-	c.JSON(http.StatusOK, gin.H{
-		"token": token,
+	return gin.H{
+		"token":                   token,
+		"switch_token":            switchToken,
+		"switch_token_expires_at": switchTokenExpiresAt.Format(time.RFC3339),
 		"user": gin.H{
 			"id":                        user.ID,
 			"username":                  user.Username,
@@ -272,7 +333,7 @@ func (s *Server) login(c *gin.Context) {
 			"next_avatar_change_cost":   activity.NextAvatarChangeCost,
 			"next_username_change_cost": activity.NextUsernameChangeCost,
 		},
-	})
+	}, nil
 }
 
 // forgotPassword 发送重置密码验证码

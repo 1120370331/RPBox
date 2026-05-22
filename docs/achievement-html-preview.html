@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPBox 成就勋章 HTML 预览</title>
+  <style>
+    :root {
+      --ink: #26385f;
+      --muted: #6d7fa7;
+      --line: rgba(96, 124, 172, 0.18);
+      --panel: rgba(255, 250, 253, 0.78);
+      --panel-strong: rgba(255, 244, 250, 0.9);
+      --rose: #ff9fc9;
+      --rose-deep: #d85591;
+      --sky: #8bd7ff;
+      --sky-deep: #4f94d8;
+      --cream: #fff4d7;
+      --violet: #c9b4ff;
+      --mint: #a9efd6;
+      --shadow: 0 24px 70px rgba(87, 116, 170, 0.22);
+      font-family: "LXGW WenKai", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 10%, rgba(255, 174, 211, 0.46), transparent 28%),
+        radial-gradient(circle at 80% 5%, rgba(138, 216, 255, 0.54), transparent 30%),
+        radial-gradient(circle at 78% 72%, rgba(201, 180, 255, 0.34), transparent 34%),
+        linear-gradient(135deg, #fff0f8 0%, #eaf8ff 48%, #fff8e8 100%);
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::before {
+      width: 640px;
+      height: 640px;
+      right: -160px;
+      top: -190px;
+      background:
+        linear-gradient(45deg, transparent 48%, rgba(255, 255, 255, 0.52) 49%, rgba(255, 255, 255, 0.52) 51%, transparent 52%),
+        radial-gradient(circle, rgba(255, 255, 255, 0.4), transparent 66%);
+      border-radius: 50%;
+      animation: drift 14s ease-in-out infinite alternate;
+    }
+
+    body::after {
+      width: 420px;
+      height: 420px;
+      left: -90px;
+      bottom: -120px;
+      background: radial-gradient(circle, rgba(255, 206, 228, 0.5), transparent 68%);
+      border-radius: 50%;
+      animation: floaty 12s ease-in-out infinite alternate;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      width: min(1320px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 32px 0 54px;
+    }
+
+    .hero {
+      min-height: 330px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+      gap: 30px;
+      align-items: stretch;
+      animation: rise 0.78s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    }
+
+    .hero-copy {
+      padding: clamp(28px, 5vw, 56px);
+      border: 1px solid rgba(255, 255, 255, 0.64);
+      border-radius: 34px;
+      background:
+        linear-gradient(145deg, rgba(255, 252, 253, 0.86), rgba(231, 247, 255, 0.76)),
+        linear-gradient(90deg, rgba(255, 159, 201, 0.12), rgba(139, 215, 255, 0.14));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 18px;
+      padding: 8px 12px;
+      color: #52678f;
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.74);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--rose), var(--sky));
+      box-shadow: 0 0 18px rgba(255, 159, 201, 0.8);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(44px, 7vw, 88px);
+      line-height: 0.94;
+      letter-spacing: -0.065em;
+      color: #26385f;
+    }
+
+    .hero-copy p {
+      max-width: 610px;
+      margin: 24px 0 0;
+      color: #5d6f9a;
+      font-size: 17px;
+      line-height: 1.8;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      color: #28405f;
+      background: linear-gradient(135deg, #ffd8eb, #bce9ff);
+      box-shadow: 0 12px 28px rgba(87, 116, 170, 0.2);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .btn.secondary {
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(112, 140, 188, 0.18);
+      box-shadow: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 34px rgba(87, 116, 170, 0.24);
+    }
+
+    .sprite-panel {
+      position: relative;
+      min-height: 330px;
+      border-radius: 34px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.78), transparent 38%),
+        linear-gradient(145deg, rgba(255, 226, 240, 0.72), rgba(205, 238, 255, 0.72));
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      box-shadow: var(--shadow);
+    }
+
+    .sprite-panel::before {
+      content: "";
+      position: absolute;
+      inset: -60px;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.28) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.28) 1px, transparent 1px);
+      background-size: 72px 72px;
+      transform: rotate(-8deg);
+      opacity: 0.6;
+    }
+
+    .orbital {
+      position: absolute;
+      width: 390px;
+      height: 390px;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.58);
+      animation: spin 20s linear infinite;
+    }
+
+    .orbital::before,
+    .orbital::after {
+      content: "";
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #fff2a7, #ff9fc9);
+      box-shadow: 0 0 26px rgba(255, 159, 201, 0.72);
+    }
+
+    .orbital::before {
+      left: 22px;
+      top: 86px;
+    }
+
+    .orbital::after {
+      right: 46px;
+      bottom: 44px;
+      background: linear-gradient(135deg, #bce9ff, #c9b4ff);
+    }
+
+    .hero-medal {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 180px;
+      height: 180px;
+    }
+
+    .hero-caption {
+      position: absolute;
+      left: 28px;
+      right: 28px;
+      bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 18px;
+      color: #415a86;
+      font-weight: 700;
+    }
+
+    .hero-caption strong {
+      display: block;
+      color: #26385f;
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 22px;
+      margin: 34px 0 18px;
+      animation: rise 0.78s 0.08s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 48px);
+      letter-spacing: -0.04em;
+    }
+
+    .section-head p {
+      max-width: 560px;
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      justify-content: flex-end;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      color: #52678f;
+      background: rgba(255, 255, 255, 0.52);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .chip i {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--dot);
+      box-shadow: 0 0 14px var(--glow);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 22px;
+      align-items: start;
+    }
+
+    .board {
+      border-radius: 34px;
+      padding: clamp(18px, 3vw, 30px);
+      background:
+        linear-gradient(180deg, rgba(255, 253, 254, 0.86), rgba(235, 249, 255, 0.8)),
+        radial-gradient(circle at 28% 8%, rgba(255, 159, 201, 0.2), transparent 30%);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+      animation: rise 0.78s 0.14s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      position: relative;
+      min-height: 184px;
+      padding: 18px 12px 14px;
+      border: 1px solid rgba(107, 134, 183, 0.14);
+      border-radius: 26px;
+      color: inherit;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.78), transparent 42%),
+        rgba(255, 255, 255, 0.48);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+      cursor: pointer;
+      overflow: hidden;
+      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      animation: pop 0.55s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      animation-delay: calc(var(--i) * 22ms);
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.46) 42%, transparent 58%);
+      opacity: 0;
+      transform: translateX(-55%);
+      transition: opacity 0.2s ease, transform 0.45s ease;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      border-color: var(--edge);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.92), transparent 44%),
+        rgba(255, 252, 254, 0.72);
+    }
+
+    .card:hover::after {
+      opacity: 0.72;
+      transform: translateX(40%);
+    }
+
+    .card.is-locked {
+      background:
+        radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--edge) 14%, white), transparent 44%),
+        rgba(255, 255, 255, 0.42);
+    }
+
+    .medal {
+      --size: 84px;
+      position: relative;
+      width: var(--size);
+      height: var(--size);
+      margin: 0 auto 12px;
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 14px 20px var(--glow));
+      transition: transform 0.25s ease, filter 0.25s ease, opacity 0.25s ease;
+    }
+
+    .card:hover .medal {
+      transform: translateY(-2px) scale(1.04) rotate(-1deg);
+      filter: drop-shadow(0 18px 26px var(--glow));
+    }
+
+    .medal::before,
+    .medal::after,
+    .medal .core {
+      content: "";
+      position: absolute;
+      inset: 0;
+      clip-path: inherit;
+    }
+
+    .medal::before {
+      background:
+        radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.95), transparent 18%),
+        linear-gradient(145deg, rgba(255, 255, 255, 0.7), transparent 30%),
+        linear-gradient(135deg, var(--edge), color-mix(in srgb, var(--edge) 52%, #5f4a73));
+      box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, 0.56),
+        inset 0 -9px 18px rgba(65, 55, 90, 0.22);
+    }
+
+    .medal::after {
+      inset: 7px;
+      background:
+        radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.9), transparent 20%),
+        linear-gradient(145deg, #fffaf1, color-mix(in srgb, var(--edge) 30%, #fff2fb) 48%, color-mix(in srgb, var(--edge) 58%, #a6dfff));
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.58),
+        inset 0 -6px 12px rgba(86, 91, 132, 0.16);
+    }
+
+    .medal .core {
+      z-index: 2;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--text);
+      font-size: calc(var(--size) * 0.36);
+      font-weight: 900;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+    }
+
+    .is-locked .medal {
+      opacity: 0.68;
+      filter: saturate(0.52) drop-shadow(0 10px 16px rgba(87, 116, 170, 0.14));
+    }
+
+    .is-locked .medal::before {
+      background:
+        radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.88), transparent 18%),
+        linear-gradient(135deg, color-mix(in srgb, var(--edge) 34%, #d9e8f8), #cad6e5);
+    }
+
+    .shape-round {
+      clip-path: circle(50% at 50% 50%);
+    }
+
+    .shape-calendar {
+      clip-path: polygon(18% 8%, 82% 8%, 92% 26%, 86% 88%, 50% 100%, 14% 88%, 8% 26%);
+    }
+
+    .shape-hex {
+      clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%);
+    }
+
+    .shape-shield {
+      clip-path: polygon(50% 2%, 92% 16%, 86% 66%, 50% 100%, 14% 66%, 8% 16%);
+    }
+
+    .shape-diamond {
+      clip-path: polygon(50% 0%, 96% 50%, 50% 100%, 4% 50%);
+    }
+
+    .shape-heart {
+      clip-path: polygon(50% 92%, 12% 56%, 6% 30%, 22% 10%, 44% 18%, 50% 30%, 56% 18%, 78% 10%, 94% 30%, 88% 56%);
+    }
+
+    .shape-scroll {
+      clip-path: polygon(18% 8%, 82% 8%, 94% 20%, 84% 34%, 92% 50%, 84% 66%, 94% 80%, 82% 92%, 18% 92%, 6% 80%, 16% 66%, 8% 50%, 16% 34%, 6% 20%);
+    }
+
+    .shape-oval {
+      clip-path: ellipse(42% 50% at 50% 50%);
+    }
+
+    .shape-crown {
+      clip-path: polygon(8% 28%, 26% 48%, 38% 12%, 50% 44%, 62% 12%, 74% 48%, 92% 28%, 84% 92%, 16% 92%);
+    }
+
+    .shape-star {
+      clip-path: polygon(50% 0%, 62% 32%, 96% 32%, 69% 52%, 80% 90%, 50% 68%, 20% 90%, 31% 52%, 4% 32%, 38% 32%);
+    }
+
+    .card-title {
+      display: block;
+      margin: 0;
+      color: #26385f;
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    .card-meta {
+      margin-top: 5px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .progress {
+      height: 6px;
+      margin-top: 12px;
+      border-radius: 999px;
+      background: rgba(88, 111, 152, 0.13);
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      width: var(--p);
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--edge), #ffd7ea);
+    }
+
+    .aside {
+      position: sticky;
+      top: 18px;
+      display: grid;
+      gap: 16px;
+      animation: rise 0.78s 0.2s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    }
+
+    .panel {
+      border-radius: 30px;
+      padding: 22px;
+      background: rgba(255, 251, 254, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      box-shadow: 0 18px 50px rgba(87, 116, 170, 0.16);
+      backdrop-filter: blur(20px);
+    }
+
+    .panel h3 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .stat {
+      padding: 14px;
+      border-radius: 20px;
+      background: rgba(236, 249, 255, 0.72);
+      border: 1px solid rgba(128, 172, 222, 0.16);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .rule-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: #536892;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+
+    .rule-list li {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 9px;
+      align-items: start;
+    }
+
+    .rule-list li::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      margin-top: 7px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--rose), var(--sky));
+    }
+
+    .drawer {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(113, 156, 203, 0.36);
+      backdrop-filter: blur(12px);
+    }
+
+    .drawer.is-open {
+      display: grid;
+      animation: fade 0.16s ease both;
+    }
+
+    .modal {
+      width: min(560px, 100%);
+      border-radius: 34px;
+      padding: 28px;
+      background:
+        linear-gradient(145deg, rgba(255, 252, 254, 0.96), rgba(237, 249, 255, 0.94)),
+        radial-gradient(circle at 12% 10%, rgba(255, 159, 201, 0.22), transparent 30%);
+      box-shadow: 0 28px 90px rgba(54, 74, 120, 0.32);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      animation: modalIn 0.22s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    }
+
+    .modal-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .modal-close {
+      width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 50%;
+      color: #5f7195;
+      background: rgba(255, 255, 255, 0.58);
+      cursor: pointer;
+    }
+
+    .modal-body {
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      gap: 22px;
+      margin-top: 20px;
+      align-items: center;
+    }
+
+    .modal .medal {
+      --size: 112px;
+      margin: 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 8px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: var(--text);
+      background: color-mix(in srgb, var(--edge) 18%, white);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .modal h3 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+    }
+
+    .modal p {
+      margin: 9px 0 0;
+      color: #5f7195;
+      line-height: 1.7;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      top: 26px;
+      z-index: 20;
+      display: none;
+      transform: translateX(-50%);
+      min-width: min(420px, calc(100% - 42px));
+      padding: 16px 18px;
+      border-radius: 22px;
+      color: #28395e;
+      background:
+        linear-gradient(135deg, rgba(255, 226, 240, 0.98), rgba(199, 238, 255, 0.98)),
+        radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.8), transparent 50%);
+      box-shadow: 0 18px 48px rgba(74, 99, 150, 0.26);
+      border: 1px solid rgba(255, 255, 255, 0.78);
+    }
+
+    .toast.is-on {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: toast 3s ease both;
+    }
+
+    .toast-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #ffe9a8, #ff9fc9);
+      box-shadow: 0 0 22px rgba(255, 159, 201, 0.62);
+    }
+
+    .toast strong {
+      display: block;
+    }
+
+    .toast span {
+      display: block;
+      margin-top: 2px;
+      color: #5f7195;
+      font-size: 13px;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: #7080a5;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(22px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes pop {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes spin {
+      to {
+        transform: translate(-50%, -50%) rotate(360deg);
+      }
+    }
+
+    @keyframes drift {
+      to {
+        transform: translate(-40px, 30px) rotate(8deg);
+      }
+    }
+
+    @keyframes floaty {
+      to {
+        transform: translate(40px, -30px);
+      }
+    }
+
+    @keyframes fade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes toast {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -16px);
+      }
+      12%, 84% {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -16px);
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .hero,
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .aside {
+        position: static;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        width: min(100% - 24px, 1320px);
+        padding-top: 18px;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+
+      .sprite-panel {
+        min-height: 270px;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .section-head {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .legend {
+        justify-content: flex-start;
+      }
+
+      .modal-body {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toast" id="toast" aria-live="polite">
+    <div class="toast-mark">✦</div>
+    <div>
+      <strong>成就解锁：初入 RPBox</strong>
+      <span>完成注册并登录</span>
+    </div>
+  </div>
+
+  <main class="page">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">RPBox Achievement Preview</div>
+        <h1>成就勋章<br>HTML 预览</h1>
+        <p>类别决定勋章轮廓，稀有度决定边缘材质，中心图案代表成就本身。此页用于快速评审 5x5 总图切图前的视觉规则和交互层级。</p>
+        <div class="actions">
+          <button class="btn" id="toggleEarned">点亮全部勋章</button>
+          <button class="btn secondary" id="previewToast">预览获得通知</button>
+        </div>
+      </div>
+      <div class="sprite-panel" aria-label="勋章视觉锚点">
+        <div class="orbital"></div>
+        <div class="hero-medal" id="heroMedal"></div>
+        <div class="hero-caption">
+          <div>
+            <strong>5 x 5</strong>
+            25 枚成就勋章
+          </div>
+          <div>512px 单格 · 透明背景 · 无文字</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-head">
+      <div>
+        <h2>勋章矩阵</h2>
+        <p>锁定态不再完全灰化，而是降低饱和度并保留稀有度边缘色，用户仍能预览未来奖励的形状与方向。</p>
+      </div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <section class="workspace">
+      <div class="board">
+        <div class="grid" id="grid"></div>
+        <div class="footer-note">点击任意勋章查看详情。实际成就图可按此顺序生成 2560 x 2560 总图后切片替换。</div>
+      </div>
+
+      <aside class="aside">
+        <div class="panel">
+          <h3>当前演示状态</h3>
+          <div class="stat-grid">
+            <div class="stat">
+              <strong id="earnedCount">1</strong>
+              <span>已获得</span>
+            </div>
+            <div class="stat">
+              <strong>25</strong>
+              <span>成就总数</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>生成规范</h3>
+          <ul class="rule-list">
+            <li>总图 5 列 5 行，画布 2560 x 2560 px。</li>
+            <li>单格 512 x 512 px，勋章居中，至少 48 px 安全边距。</li>
+            <li>不在图内放文字、数字、水印或 UI 边框。</li>
+            <li>边缘材质按稀有度，中心符号按具体成就。</li>
+          </ul>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal" id="modalCard">
+      <div class="modal-top">
+        <div>
+          <span class="badge" id="modalBadge">普通</span>
+          <h3 id="modalTitle">初入 RPBox</h3>
+        </div>
+        <button class="modal-close" id="modalClose" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="modalMedal"></div>
+        <div>
+          <p id="modalCondition">完成注册并登录</p>
+          <p id="modalProgress">进度：1 / 1</p>
+          <p id="modalCell">总图位置：第 1 行，第 1 列</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const rarity = {
+      common: { label: "普通", edge: "#c9b79f", glow: "rgba(201, 183, 159, 0.34)", text: "#6c5d50" },
+      rare: { label: "稀有", edge: "#77caff", glow: "rgba(119, 202, 255, 0.46)", text: "#236aa6" },
+      fine: { label: "精良", edge: "#7fe6a6", glow: "rgba(127, 230, 166, 0.42)", text: "#2b7d52" },
+      epic: { label: "史诗", edge: "#c7a0ff", glow: "rgba(199, 160, 255, 0.46)", text: "#6c49b4" },
+      legendary: { label: "传说", edge: "#ffc45e", glow: "rgba(255, 196, 94, 0.56)", text: "#9b6208" }
+    };
+
+    const category = {
+      account: { label: "账号", shape: "round" },
+      checkin: { label: "签到", shape: "calendar" },
+      community: { label: "社区", shape: "hex" },
+      guild: { label: "公会", shape: "shield" },
+      market: { label: "创意市场", shape: "diamond" },
+      social: { label: "声望", shape: "heart" },
+      story: { label: "剧情归档", shape: "scroll" },
+      profile: { label: "人物卡", shape: "oval" },
+      sponsor: { label: "赞助", shape: "crown" },
+      level: { label: "等级", shape: "star" }
+    };
+
+    const achievements = [
+      ["初入 RPBox", "完成注册并登录", "account", "common", "registered", 1, "✧", "open account seal", 1, 1],
+      ["一周问候", "累计签到 7 天", "checkin", "common", "totalSignIns", 7, "✓", "seven stamped calendar pages", 1, 2],
+      ["月度常驻", "累计签到 31 天", "checkin", "rare", "totalSignIns", 31, "☾", "lunar calendar with crescent mark", 1, 3],
+      ["四季巡礼", "累计签到 365 天", "checkin", "epic", "totalSignIns", 365, "✿", "four season wheel around a calendar", 1, 4],
+      ["不熄灯塔", "连续签到 30 天", "checkin", "fine", "signInStreak", 30, "♨", "steady lantern flame with thirty sparks", 1, 5],
+      ["永续星轨", "连续签到 365 天", "checkin", "legendary", "signInStreak", 365, "☀", "golden orbit ring with unbroken star trail", 2, 1],
+      ["第一张公告", "第一次发布帖子", "community", "common", "postCount", 1, "▤", "fresh parchment post pinned with wax", 2, 2],
+      ["同盟之约", "第一次加入公会", "guild", "common", "guildCount", 1, "♜", "joined guild shield with handshake rune", 2, 3],
+      ["造物上架", "第一次发布道具", "market", "common", "itemCount", 1, "◇", "crafted item crate with tiny magic spark", 2, 4],
+      ["小有围观", "帖子浏览量达到 20", "community", "rare", "maxPostViews", 20, "◎", "watchful eye over twenty small dots", 2, 5],
+      ["被人带走", "道具下载量达到 10", "market", "rare", "maxItemDownloads", 10, "⇩", "download arrow entering a glowing satchel", 3, 1],
+      ["百赞回响", "账号累计获得 100 个点赞", "social", "rare", "totalLikes", 100, "♡", "heart echo with one hundred tiny sparks", 3, 2],
+      ["千赞声望", "账号累计获得 1000 个点赞", "social", "epic", "totalLikes", 1000, "♥", "radiant heart crown with applause waves", 3, 3],
+      ["百次流通", "账号累计道具下载量达到 100", "market", "fine", "totalItemDownloads", 100, "⇲", "stack of shared item scrolls with download mark", 3, 4],
+      ["千人收藏", "账号累计道具下载量达到 1000", "market", "epic", "totalItemDownloads", 1000, "⇱", "treasure vault sending item trails outward", 3, 5],
+      ["第一卷归档", "归档第一条剧情", "story", "common", "storyCount", 1, "▥", "first open storybook with bookmark ribbon", 4, 1],
+      ["千卷书库", "归档一千条剧情", "story", "fine", "storyCount", 1000, "▧", "library shelf of one thousand glowing volumes", 4, 2],
+      ["万卷编年", "归档一万条剧情", "story", "epic", "storyCount", 10000, "▣", "ancient archive tower filled with floating books", 4, 3],
+      ["十万史诗", "归档十万条剧情", "story", "legendary", "storyCount", 100000, "▦", "mythic archive gate opening to endless manuscripts", 4, 4],
+      ["亮出名牌", "第一次上传人物卡", "profile", "common", "profileCount", 1, "▨", "character card portrait frame with quill", 4, 5],
+      ["炉火赞助 Lv1", "成为 LV1 赞助", "sponsor", "rare", "sponsorLevel", 1, "♛", "small bronze patron crown", 5, 1],
+      ["星辉赞助 Lv2", "成为 LV2 赞助", "sponsor", "fine", "sponsorLevel", 2, "♕", "silver patron crown with twin gems", 5, 2],
+      ["王冠赞助 Lv3", "成为 LV3 赞助", "sponsor", "epic", "sponsorLevel", 3, "♔", "ornate purple-gold patron crown", 5, 3],
+      ["传说账号", "账号等级达到 7 级", "level", "fine", "forumLevel", 7, "☆", "level seven star crest with gold plume", 5, 4],
+      ["神话账号", "账号等级达到 10 级", "level", "legendary", "forumLevel", 10, "✦", "mythic crimson star with haloed wings", 5, 5]
+    ].map(([title, condition, cat, rar, metric, threshold, icon, motif, row, col]) => ({
+      title, condition, cat, rar, metric, threshold, icon, motif, row, col
+    }));
+
+    const demoProgress = {
+      registered: 1,
+      totalSignIns: 0,
+      signInStreak: 0,
+      postCount: 0,
+      guildCount: 0,
+      itemCount: 0,
+      maxPostViews: 0,
+      maxItemDownloads: 0,
+      totalLikes: 0,
+      totalItemDownloads: 0,
+      storyCount: 0,
+      profileCount: 0,
+      sponsorLevel: 0,
+      forumLevel: 3
+    };
+
+    let allEarned = false;
+
+    const grid = document.getElementById("grid");
+    const legend = document.getElementById("legend");
+    const earnedCount = document.getElementById("earnedCount");
+    const drawer = document.getElementById("drawer");
+    const modalCard = document.getElementById("modalCard");
+    const heroMedal = document.getElementById("heroMedal");
+
+    function formatNumber(value) {
+      if (value >= 10000) return `${Number((value / 10000).toFixed(value >= 100000 ? 0 : 1))}万`;
+      return String(value);
+    }
+
+    function styleVars(item) {
+      const meta = rarity[item.rar];
+      return `--edge:${meta.edge};--glow:${meta.glow};--text:${meta.text};--p:${progress(item).percent}%`;
+    }
+
+    function progress(item) {
+      const current = allEarned ? item.threshold : Number(demoProgress[item.metric] || 0);
+      const percent = Math.max(0, Math.min(100, Math.round((current / item.threshold) * 100)));
+      return { current, percent, earned: current >= item.threshold };
+    }
+
+    function medalHTML(item, large = false) {
+      const shape = category[item.cat].shape;
+      return `<div class="medal shape-${shape}" style="${styleVars(item)}${large ? "--size:112px" : ""}">
+        <span class="core">${item.icon}</span>
+      </div>`;
+    }
+
+    function renderLegend() {
+      legend.innerHTML = Object.entries(rarity).map(([key, meta]) => (
+        `<span class="chip" style="--dot:${meta.edge};--glow:${meta.glow}"><i></i>${meta.label}</span>`
+      )).join("");
+    }
+
+    function renderGrid() {
+      let count = 0;
+      grid.innerHTML = achievements.map((item, index) => {
+        const p = progress(item);
+        if (p.earned) count += 1;
+        const meta = rarity[item.rar];
+        return `<button class="card ${p.earned ? "is-earned" : "is-locked"}" data-index="${index}" style="${styleVars(item)}--i:${index}">
+          ${medalHTML(item)}
+          <strong class="card-title">${item.title}</strong>
+          <div class="card-meta">${meta.label} · ${p.earned ? "已获得" : `${formatNumber(p.current)} / ${formatNumber(item.threshold)}`}</div>
+          <div class="progress"><span></span></div>
+        </button>`;
+      }).join("");
+      earnedCount.textContent = String(count);
+      grid.querySelectorAll(".card").forEach((card) => {
+        card.addEventListener("click", () => openModal(achievements[Number(card.dataset.index)]));
+      });
+      heroMedal.innerHTML = medalHTML(achievements[24], true);
+    }
+
+    function openModal(item) {
+      const meta = rarity[item.rar];
+      const p = progress(item);
+      modalCard.style.cssText = styleVars(item);
+      document.getElementById("modalBadge").textContent = `${meta.label} · ${category[item.cat].label}`;
+      document.getElementById("modalTitle").textContent = item.title;
+      document.getElementById("modalCondition").textContent = item.condition;
+      document.getElementById("modalProgress").textContent = `进度：${formatNumber(p.current)} / ${formatNumber(item.threshold)}`;
+      document.getElementById("modalCell").textContent = `总图位置：第 ${item.row} 行，第 ${item.col} 列；中心图案：${item.motif}`;
+      document.getElementById("modalMedal").innerHTML = medalHTML(item, true);
+      drawer.classList.add("is-open");
+    }
+
+    function showToast() {
+      const toast = document.getElementById("toast");
+      toast.classList.remove("is-on");
+      void toast.offsetWidth;
+      toast.classList.add("is-on");
+    }
+
+    document.getElementById("toggleEarned").addEventListener("click", (event) => {
+      allEarned = !allEarned;
+      event.currentTarget.textContent = allEarned ? "恢复真实进度" : "点亮全部勋章";
+      renderGrid();
+    });
+
+    document.getElementById("previewToast").addEventListener("click", showToast);
+    document.getElementById("modalClose").addEventListener("click", () => drawer.classList.remove("is-open"));
+    drawer.addEventListener("click", (event) => {
+      if (event.target === drawer) drawer.classList.remove("is-open");
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") drawer.classList.remove("is-open");
+    });
+
+    renderLegend();
+    renderGrid();
+  </script>
+</body>
+</html>

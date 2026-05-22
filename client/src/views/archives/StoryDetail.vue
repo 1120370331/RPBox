@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
-import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry, deleteStoryEntry, updateEntriesBackgroundColor, batchDeleteEntries, archiveEntriesToStory, listStories, listBookmarks, createBookmark, updateBookmark, deleteBookmark, updateLastViewBookmark, type Story, type StoryEntry, type StoryBookmark } from '@/api/story'
+import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry, deleteStoryEntry, updateEntriesBackgroundColor, batchDeleteEntries, archiveEntriesToStory, listStories, listBookmarks, createBookmark, updateBookmark, deleteBookmark, updateLastViewBookmark, getStoryMusic, createStoryMusicSegment, updateStoryMusicSegment, deleteStoryMusicSegment, type Story, type StoryEntry, type StoryBookmark, type StoryMusicSegment, type StoryMusicTrack, type StoryMusicPlaylist } from '@/api/story'
 import { getCharacter, updateCharacter, listCharacters, type Character } from '@/api/character'
 import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
 import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
@@ -22,6 +22,7 @@ import RColorPicker from '@/components/RColorPicker.vue'
 import RAvatarPicker from '@/components/RAvatarPicker.vue'
 import TagSelector from '@/components/TagSelector.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
+import StoryMusicManager from '@/components/StoryMusicManager.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -149,6 +150,83 @@ const savingBookmark = ref(false)
 const bookmarkColors = ['#E57373', '#F06292', '#BA68C8', '#64B5F6', '#4DB6AC', '#81C784', '#FFD54F', '#FFB74D']
 
 const storyId = computed(() => Number(route.params.id))
+
+// 背景音乐管理
+const showMusicModal = ref(false)
+const musicEditMode = ref(false)
+const musicTracks = ref<StoryMusicTrack[]>([])
+const musicSegments = ref<StoryMusicSegment[]>([])
+const musicPlaylists = ref<StoryMusicPlaylist[]>([])
+const showMusicAnchorMenu = ref(false)
+const musicAnchorEntryId = ref<number | null>(null)
+const musicAnchorPosition = ref({ x: 0, y: 0 })
+const showMusicHoverInfo = ref(false)
+const musicHoverEntryId = ref<number | null>(null)
+const musicHoverSegment = ref<StoryMusicSegment | null>(null)
+const musicHoverPosition = ref({ x: 0, y: 0 })
+const musicControlOpen = ref(false)
+const musicMasterVolume = ref(loadStoredBgmVolume())
+const musicMuted = ref(loadStoredBgmBoolean('muted', false))
+const musicDisabled = ref(loadStoredBgmBoolean('disabled', false))
+const musicMenuMode = ref<'actions' | 'insert' | 'settings'>('actions')
+const editingMusicSegmentId = ref<number | null>(null)
+const musicDraftTrackId = ref<number | null>(null)
+const musicDraftLoop = ref(true)
+const musicDraftAutoPlay = ref(true)
+const musicDraftFadeIn = ref(1)
+const musicDraftFadeOut = ref(1)
+const musicDraftVolume = ref(75)
+const currentMusicSegmentId = ref<number | null>(null)
+let musicAudio: HTMLAudioElement | null = null
+let musicFadeTimer: number | null = null
+let musicScrollRaf = 0
+let musicPlaybackBlockedNotified = false
+let musicScrollContainer: HTMLElement | null = null
+
+const storyMusicTracks = computed(() => {
+  return musicTracks.value.filter(track => (track.storyIds || []).includes(storyId.value))
+})
+
+const entryIndexById = computed(() => {
+  const map = new Map<number, number>()
+  entries.value.forEach((entry, index) => {
+    map.set(entry.id, index)
+  })
+  return map
+})
+
+const sortedMusicSegments = computed(() => {
+  return [...musicSegments.value].sort((a, b) => {
+    const startA = getEntrySortIndex(a.startEntryId)
+    const startB = getEntrySortIndex(b.startEntryId)
+    if (startA !== startB) return startA - startB
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  })
+})
+
+const pendingMusicSegment = computed(() => {
+  let pending: StoryMusicSegment | null = null
+  for (const segment of sortedMusicSegments.value) {
+    if (!segment.endEntryId) {
+      pending = segment
+    }
+  }
+  return pending
+})
+
+const currentPlayingSegment = computed(() => {
+  if (!currentMusicSegmentId.value) return null
+  return musicSegments.value.find(segment => segment.id === currentMusicSegmentId.value) || null
+})
+
+const currentMusicTrack = computed(() => {
+  return currentPlayingSegment.value ? getMusicTrack(currentPlayingSegment.value.trackId) : null
+})
+
+const musicMenuActiveSegment = computed(() => {
+  if (!musicAnchorEntryId.value) return null
+  return getMusicSegmentForEntry(musicAnchorEntryId.value)
+})
 
 // 按条目时间排序的书签（收藏优先）
 const sortedBookmarks = computed(() => {
@@ -1491,6 +1569,679 @@ function scrollToEntry(entryId: number) {
   }
 }
 
+// ========== 背景音乐定位 ==========
+function loadStoredBgmVolume() {
+  const fallback = 80
+  try {
+    const raw = localStorage.getItem('rpbox.storyBgm.volume')
+    const parsed = raw === null ? fallback : Number(raw)
+    return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 100) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function loadStoredBgmBoolean(key: 'muted' | 'disabled', fallback: boolean) {
+  try {
+    const raw = localStorage.getItem(`rpbox.storyBgm.${key}`)
+    return raw === null ? fallback : raw === 'true'
+  } catch {
+    return fallback
+  }
+}
+
+function saveBgmPreference(key: 'volume' | 'muted' | 'disabled', value: string | number | boolean) {
+  try {
+    localStorage.setItem(`rpbox.storyBgm.${key}`, String(value))
+  } catch {
+    // Ignore storage errors; playback controls still work for the current session.
+  }
+}
+
+function getEntrySortIndex(entryId?: number) {
+  if (!entryId) return Number.MAX_SAFE_INTEGER
+  return entryIndexById.value.get(entryId) ?? Number.MAX_SAFE_INTEGER
+}
+
+function getMusicTrack(trackId?: number | null) {
+  if (!trackId) return null
+  return musicTracks.value.find(track => track.id === trackId) || null
+}
+
+function getMusicTrackName(trackId?: number | null) {
+  return getMusicTrack(trackId)?.name || '未找到音乐'
+}
+
+function getMusicTrackColor(trackId?: number | null) {
+  return getMusicTrack(trackId)?.color || '#B87333'
+}
+
+function getMusicColorWithAlpha(color: string, alpha: number) {
+  const match = color.trim().match(/^#?([0-9a-f]{6})$/i)
+  if (!match) return `rgba(184, 115, 51, ${alpha})`
+
+  const value = parseInt(match[1], 16)
+  const r = (value >> 16) & 255
+  const g = (value >> 8) & 255
+  const b = value & 255
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function getMusicAnchorLabel() {
+  if (!musicAnchorEntryId.value) return ''
+  const index = getEntrySortIndex(musicAnchorEntryId.value)
+  return index === Number.MAX_SAFE_INTEGER ? '' : `第 ${index + 1} 条`
+}
+
+function getMusicEntryMarkers(entryId: number) {
+  return sortedMusicSegments.value.filter(segment => {
+    return segment.startEntryId === entryId || segment.endEntryId === entryId
+  })
+}
+
+function getMusicSegmentForEntry(entryId: number) {
+  const entryIndex = getEntrySortIndex(entryId)
+  if (entryIndex === Number.MAX_SAFE_INTEGER) return null
+
+  let matched: StoryMusicSegment | null = null
+  let matchedStart = -1
+  for (const segment of sortedMusicSegments.value) {
+    const startIndex = getEntrySortIndex(segment.startEntryId)
+    if (startIndex > entryIndex) continue
+    const endIndex = segment.endEntryId ? getEntrySortIndex(segment.endEntryId) : entries.value.length - 1
+    if (entryIndex <= endIndex && startIndex >= matchedStart) {
+      matched = segment
+      matchedStart = startIndex
+    }
+  }
+  return matched
+}
+
+function getMusicHoverSegmentForEntry(entryId: number) {
+  return getMusicSegmentForEntry(entryId) || getMusicEntryMarkers(entryId)[0] || null
+}
+
+function getMusicEntryItemClasses(entryId: number) {
+  if (!musicEditMode.value) return {}
+  const segment = getMusicSegmentForEntry(entryId)
+  if (!segment) return {}
+
+  return {
+    'music-covered': true,
+    'music-covered-playing': currentMusicSegmentId.value === segment.id,
+  }
+}
+
+function getMusicEntryAxisClasses(entryId: number) {
+  const segment = getMusicSegmentForEntry(entryId)
+  if (!segment) return {}
+
+  return {
+    'music-axis-start': segment.startEntryId === entryId,
+    'music-axis-end': segment.endEntryId === entryId,
+    'music-axis-open': !segment.endEntryId,
+    'music-axis-playing': currentMusicSegmentId.value === segment.id,
+  }
+}
+
+function getMusicEntryAxisStyle(entryId: number) {
+  const segment = getMusicSegmentForEntry(entryId)
+  if (!segment) return {}
+
+  const color = getMusicTrackColor(segment.trackId)
+  return {
+    '--music-axis-color': color,
+    '--music-axis-glow': getMusicColorWithAlpha(color, 0.28),
+    '--music-axis-fill': getMusicColorWithAlpha(color, 0.08),
+  }
+}
+
+function getMusicEntryAnchorStyle(entryId: number) {
+  const segment = getMusicSegmentForEntry(entryId)
+  const marker = getMusicEntryMarkers(entryId)[0]
+  const trackId = segment?.trackId ?? marker?.trackId
+  if (!trackId) return {}
+
+  const color = getMusicTrackColor(trackId)
+  return {
+    '--music-anchor-color': color,
+    '--music-anchor-glow': getMusicColorWithAlpha(color, 0.24),
+  }
+}
+
+function getMusicEntryAxisTitle(entryId: number) {
+  const segment = getMusicSegmentForEntry(entryId)
+  if (!segment) return '设置此处的背景音乐'
+
+  const states: string[] = []
+  if (segment.startEntryId === entryId) states.push('开始')
+  if (segment.endEntryId === entryId) states.push('结束')
+  const suffix = states.length ? ` · ${states.join(' / ')}` : ''
+  return `音乐覆盖：${getMusicTrackName(segment.trackId)}${suffix}`
+}
+
+function formatMusicSeconds(value: number) {
+  if (!Number.isFinite(value)) return '0s'
+  return `${Number(value.toFixed(1))}s`
+}
+
+function getMusicSegmentRangeLabel(segment: StoryMusicSegment) {
+  const startIndex = getEntrySortIndex(segment.startEntryId)
+  const startLabel = startIndex === Number.MAX_SAFE_INTEGER ? '未知开始' : `第 ${startIndex + 1} 条起`
+  if (!segment.endEntryId) return `${startLabel} · 至剧情结束`
+
+  const endIndex = getEntrySortIndex(segment.endEntryId)
+  const endLabel = endIndex === Number.MAX_SAFE_INTEGER ? '未知结束' : `第 ${endIndex + 1} 条止`
+  return `${startLabel} · ${endLabel}`
+}
+
+function getMusicHoverEntryLabel() {
+  if (!musicHoverEntryId.value) return ''
+  const index = getEntrySortIndex(musicHoverEntryId.value)
+  return index === Number.MAX_SAFE_INTEGER ? '' : `当前第 ${index + 1} 条`
+}
+
+function getMusicSegmentMeta(segment: StoryMusicSegment) {
+  return [
+    `音量 ${Math.round(segment.volume * 100)}%`,
+    segment.loop ? '循环' : '不循环',
+    segment.autoPlay ? '自动播放' : '手动播放',
+    `淡入 ${formatMusicSeconds(segment.fadeInSeconds)}`,
+    `淡出 ${formatMusicSeconds(segment.fadeOutSeconds)}`,
+  ]
+}
+
+function positionMusicHoverAt(x: number, y: number) {
+  const tooltipWidth = 300
+  const tooltipHeight = 126
+  musicHoverPosition.value = {
+    x: Math.min(x + 14, window.innerWidth - tooltipWidth - 12),
+    y: Math.min(y + 14, window.innerHeight - tooltipHeight - 12),
+  }
+}
+
+function showMusicHover(entryId: number, event: MouseEvent) {
+  const segment = getMusicHoverSegmentForEntry(entryId)
+  if (!segment) return
+
+  musicHoverEntryId.value = entryId
+  musicHoverSegment.value = segment
+  positionMusicHoverAt(event.clientX, event.clientY)
+  showMusicHoverInfo.value = true
+}
+
+function moveMusicHover(event: MouseEvent) {
+  if (!showMusicHoverInfo.value) return
+  positionMusicHoverAt(event.clientX, event.clientY)
+}
+
+function showMusicHoverFromFocus(entryId: number, event: FocusEvent) {
+  const segment = getMusicHoverSegmentForEntry(entryId)
+  if (!segment) return
+
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  musicHoverEntryId.value = entryId
+  musicHoverSegment.value = segment
+  positionMusicHoverAt(rect.right, rect.top)
+  showMusicHoverInfo.value = true
+}
+
+function hideMusicHover() {
+  showMusicHoverInfo.value = false
+  musicHoverEntryId.value = null
+  musicHoverSegment.value = null
+}
+
+function getMusicControlTrackLabel() {
+  if (musicDisabled.value) return '已禁用'
+  if (currentMusicTrack.value) return currentMusicTrack.value.name
+  if (musicSegments.value.length) return '等待滚动触发'
+  return '暂无 BGM'
+}
+
+function getMusicEffectiveVolume(segment: StoryMusicSegment) {
+  if (musicDisabled.value || musicMuted.value) return 0
+  const segmentVolume = Math.min(Math.max(segment.volume, 0), 1)
+  return segmentVolume * (musicMasterVolume.value / 100)
+}
+
+function applyMusicVolumePreference(fadeSeconds = 0.12) {
+  if (!musicAudio) return
+  musicAudio.muted = musicMuted.value
+  if (musicDisabled.value) {
+    stopMusicPlayback(0.15)
+    return
+  }
+
+  const segment = currentPlayingSegment.value
+  if (segment && !musicAudio.paused) {
+    fadeMusicAudioTo(getMusicEffectiveVolume(segment), fadeSeconds)
+  }
+}
+
+function updateMusicMasterVolume() {
+  musicMasterVolume.value = Math.min(Math.max(Number(musicMasterVolume.value) || 0, 0), 100)
+  saveBgmPreference('volume', musicMasterVolume.value)
+  applyMusicVolumePreference()
+}
+
+function toggleMusicMuted() {
+  musicMuted.value = !musicMuted.value
+  saveBgmPreference('muted', musicMuted.value)
+  applyMusicVolumePreference()
+}
+
+function toggleMusicDisabled() {
+  musicDisabled.value = !musicDisabled.value
+  saveBgmPreference('disabled', musicDisabled.value)
+  if (musicDisabled.value) {
+    stopMusicPlayback(0.15)
+  } else {
+    scheduleMusicScrollCheck()
+  }
+}
+
+function getEntryItemStyle(entry: StoryEntry) {
+  const style: Record<string, string> = {}
+  if (entry.background_color) {
+    style.backgroundColor = entry.background_color
+  }
+
+  if (musicEditMode.value) {
+    const segment = getMusicSegmentForEntry(entry.id)
+    if (segment) {
+      const color = getMusicTrackColor(segment.trackId)
+      style['--music-axis-color'] = color
+      style['--music-axis-fill'] = getMusicColorWithAlpha(color, 0.08)
+      style['--music-axis-border'] = getMusicColorWithAlpha(color, 0.22)
+    }
+  }
+
+  return style
+}
+
+function syncMusicDraftTrack(trackId: string) {
+  const parsedTrackId = trackId ? Number(trackId) : null
+  musicDraftTrackId.value = parsedTrackId
+  const track = getMusicTrack(parsedTrackId)
+  if (track) {
+    musicDraftVolume.value = Math.round(track.volume * 100)
+  }
+}
+
+function resetMusicDraft(segment?: StoryMusicSegment | null) {
+  if (segment) {
+    musicDraftTrackId.value = segment.trackId
+    musicDraftLoop.value = segment.loop
+    musicDraftAutoPlay.value = segment.autoPlay
+    musicDraftFadeIn.value = segment.fadeInSeconds
+    musicDraftFadeOut.value = segment.fadeOutSeconds
+    musicDraftVolume.value = Math.round(segment.volume * 100)
+    return
+  }
+
+  const firstTrack = storyMusicTracks.value[0]
+  musicDraftTrackId.value = firstTrack?.id || null
+  musicDraftLoop.value = true
+  musicDraftAutoPlay.value = true
+  musicDraftFadeIn.value = 1
+  musicDraftFadeOut.value = 1
+  musicDraftVolume.value = firstTrack ? Math.round(firstTrack.volume * 100) : 75
+}
+
+async function loadStoryMusic() {
+  try {
+    const res = await getStoryMusic(storyId.value)
+    musicTracks.value = res.tracks || []
+    musicSegments.value = res.segments || []
+    musicPlaylists.value = res.playlists || []
+
+    if (musicDraftTrackId.value && !storyMusicTracks.value.some(track => track.id === musicDraftTrackId.value)) {
+      resetMusicDraft()
+    }
+  } catch (e) {
+    console.error('加载背景音乐失败:', e)
+  }
+}
+
+function openMusicManager() {
+  showMusicModal.value = true
+}
+
+function enterMusicEditMode() {
+  musicEditMode.value = true
+  resetMusicDraft()
+  toast.info('已进入背景音乐编辑模式')
+}
+
+function exitMusicEditMode() {
+  musicEditMode.value = false
+  closeMusicAnchorMenu()
+}
+
+function closeMusicAnchorMenu() {
+  showMusicAnchorMenu.value = false
+  musicAnchorEntryId.value = null
+  editingMusicSegmentId.value = null
+  musicMenuMode.value = 'actions'
+}
+
+function positionMusicMenu(event: MouseEvent) {
+  const menuWidth = 340
+  const menuHeight = 420
+  musicAnchorPosition.value = {
+    x: Math.min(event.clientX + 10, window.innerWidth - menuWidth - 12),
+    y: Math.min(event.clientY + 10, window.innerHeight - menuHeight - 12),
+  }
+}
+
+function openMusicAnchorMenu(entryId: number, event: MouseEvent) {
+  if (!musicEditMode.value) return
+  hideMusicHover()
+  musicAnchorEntryId.value = entryId
+  const activeSegment = getMusicSegmentForEntry(entryId)
+  musicMenuMode.value = 'actions'
+  editingMusicSegmentId.value = activeSegment?.id || null
+  resetMusicDraft(activeSegment)
+  positionMusicMenu(event)
+  showMusicAnchorMenu.value = true
+}
+
+function openMusicInsertForm() {
+  musicMenuMode.value = 'insert'
+  editingMusicSegmentId.value = null
+  resetMusicDraft()
+}
+
+function openMusicSettingsForm(segment: StoryMusicSegment) {
+  musicMenuMode.value = 'settings'
+  editingMusicSegmentId.value = segment.id
+  resetMusicDraft(segment)
+}
+
+function openActiveMusicSettings() {
+  if (musicMenuActiveSegment.value) {
+    openMusicSettingsForm(musicMenuActiveSegment.value)
+  }
+}
+
+function getEditingMusicSegment() {
+  return editingMusicSegmentId.value
+    ? musicSegments.value.find(item => item.id === editingMusicSegmentId.value) || null
+    : musicMenuActiveSegment.value
+}
+
+function normalizeMusicFade(value: number) {
+  if (!Number.isFinite(value)) return 1
+  return Math.min(Math.max(Number(value), 0), 20)
+}
+
+function normalizeMusicVolume(value: number) {
+  if (!Number.isFinite(value)) return 0.75
+  return Math.min(Math.max(value / 100, 0), 1)
+}
+
+async function saveMusicSegment() {
+  if (!musicAnchorEntryId.value) return
+  if (!musicDraftTrackId.value) {
+    toast.error('请先选择音乐')
+    return
+  }
+
+  const trackId = musicDraftTrackId.value
+  const payload = {
+    trackId,
+    loop: musicDraftLoop.value,
+    autoPlay: musicDraftAutoPlay.value,
+    fadeInSeconds: normalizeMusicFade(musicDraftFadeIn.value),
+    fadeOutSeconds: normalizeMusicFade(musicDraftFadeOut.value),
+    volume: normalizeMusicVolume(musicDraftVolume.value),
+  }
+
+  try {
+    if (musicMenuMode.value === 'settings' && editingMusicSegmentId.value) {
+      const segment = musicSegments.value.find(item => item.id === editingMusicSegmentId.value)
+      if (!segment) return
+      await updateStoryMusicSegment(storyId.value, segment.id, payload)
+      toast.success('音乐设置已保存')
+    } else {
+      await createStoryMusicSegment(storyId.value, {
+        ...payload,
+        startEntryId: musicAnchorEntryId.value,
+      })
+      toast.success('音乐定位已插入')
+    }
+    await loadStoryMusic()
+    closeMusicAnchorMenu()
+    scheduleMusicScrollCheck()
+  } catch (e) {
+    console.error('保存音乐定位失败:', e)
+    toast.error('保存音乐定位失败')
+  }
+}
+
+async function setPendingMusicEndPoint() {
+  if (!pendingMusicSegment.value || !musicAnchorEntryId.value) return
+  const startIndex = getEntrySortIndex(pendingMusicSegment.value.startEntryId)
+  const endIndex = getEntrySortIndex(musicAnchorEntryId.value)
+  if (endIndex < startIndex) {
+    toast.error('结束点不能早于开始点')
+    return
+  }
+
+  try {
+    await updateStoryMusicSegment(storyId.value, pendingMusicSegment.value.id, {
+      endEntryId: musicAnchorEntryId.value,
+    })
+    await loadStoryMusic()
+    closeMusicAnchorMenu()
+    toast.success('已设置音乐结束点')
+    scheduleMusicScrollCheck()
+  } catch (e) {
+    console.error('设置结束点失败:', e)
+    toast.error('设置结束点失败')
+  }
+}
+
+async function clearActiveMusicEndPoint() {
+  const segment = getEditingMusicSegment()
+  if (!segment?.endEntryId) return
+
+  try {
+    await updateStoryMusicSegment(storyId.value, segment.id, {
+      endEntryId: null,
+    })
+    await loadStoryMusic()
+    if (musicAnchorEntryId.value) {
+      const updatedSegment = musicSegments.value.find(item => item.id === segment.id)
+      if (updatedSegment && musicMenuMode.value === 'settings') {
+        resetMusicDraft(updatedSegment)
+      }
+    }
+    toast.success('已取消结束点')
+    scheduleMusicScrollCheck()
+  } catch (e) {
+    console.error('取消结束点失败:', e)
+    toast.error('取消结束点失败')
+  }
+}
+
+async function deleteActiveMusicSegment() {
+  const segment = getEditingMusicSegment()
+  if (!segment) return
+
+  const ok = await confirm({
+    title: '删除音乐定位',
+    message: `确定要删除「${getMusicTrackName(segment.trackId)}」的这段定位吗？`,
+    type: 'warning',
+  })
+  if (!ok) return
+
+  try {
+    await deleteStoryMusicSegment(storyId.value, segment.id)
+    if (currentMusicSegmentId.value === segment.id) {
+      stopMusicPlayback(0)
+    }
+    await loadStoryMusic()
+    closeMusicAnchorMenu()
+    toast.success('音乐定位已删除')
+  } catch (e) {
+    console.error('删除音乐定位失败:', e)
+    toast.error('删除音乐定位失败')
+  }
+}
+
+function getMusicAudio() {
+  if (!musicAudio) {
+    musicAudio = new Audio()
+    musicAudio.preload = 'auto'
+  }
+  return musicAudio
+}
+
+function getMusicTrackUrl(track: StoryMusicTrack) {
+  return track.url
+}
+
+function clearMusicFadeTimer() {
+  if (musicFadeTimer !== null) {
+    window.clearTimeout(musicFadeTimer)
+    musicFadeTimer = null
+  }
+}
+
+function fadeMusicAudioTo(targetVolume: number, seconds: number, done?: () => void) {
+  const audio = getMusicAudio()
+  clearMusicFadeTimer()
+
+  if (seconds <= 0) {
+    audio.volume = targetVolume
+    done?.()
+    return
+  }
+
+  const startVolume = audio.volume
+  const startedAt = performance.now()
+  const duration = seconds * 1000
+
+  const step = () => {
+    const progress = Math.min((performance.now() - startedAt) / duration, 1)
+    audio.volume = startVolume + (targetVolume - startVolume) * progress
+    if (progress < 1) {
+      musicFadeTimer = window.setTimeout(step, 40)
+    } else {
+      musicFadeTimer = null
+      done?.()
+    }
+  }
+
+  step()
+}
+
+function stopMusicPlayback(fadeSeconds = 1) {
+  if (!musicAudio) return
+  const audio = musicAudio
+  const stop = () => {
+    audio.pause()
+    audio.currentTime = 0
+    currentMusicSegmentId.value = null
+  }
+
+  if (audio.paused || fadeSeconds <= 0) {
+    stop()
+  } else {
+    fadeMusicAudioTo(0, fadeSeconds, stop)
+  }
+}
+
+async function playMusicSegment(segment: StoryMusicSegment) {
+  if (musicDisabled.value) return
+  const track = getMusicTrack(segment.trackId)
+  if (!track) return
+
+  const audio = getMusicAudio()
+  const targetVolume = getMusicEffectiveVolume(segment)
+
+  if (currentMusicSegmentId.value === segment.id && !audio.paused) {
+    audio.loop = segment.loop
+    audio.muted = musicMuted.value
+    fadeMusicAudioTo(targetVolume, 0.2)
+    return
+  }
+
+  clearMusicFadeTimer()
+  audio.pause()
+  audio.src = getMusicTrackUrl(track)
+  audio.currentTime = 0
+  audio.loop = segment.loop
+  audio.muted = musicMuted.value
+  audio.volume = 0
+  currentMusicSegmentId.value = segment.id
+
+  try {
+    await audio.play()
+    fadeMusicAudioTo(targetVolume, segment.fadeInSeconds)
+  } catch (e) {
+    currentMusicSegmentId.value = null
+    if (!musicPlaybackBlockedNotified) {
+      musicPlaybackBlockedNotified = true
+      toast.info('浏览器阻止了自动播放，请先点击页面后再滚动预览音乐')
+    }
+    console.warn('音乐自动播放失败:', e)
+  }
+}
+
+function updateMusicPlaybackByScroll() {
+  if (musicDisabled.value) return
+  if (!musicSegments.value.some(segment => segment.autoPlay)) return
+
+  const entryId = getLastVisibleEntryId()
+  const segment = entryId ? getMusicSegmentForEntry(entryId) : null
+  if (segment?.autoPlay) {
+    playMusicSegment(segment)
+    return
+  }
+
+  if (currentPlayingSegment.value?.autoPlay) {
+    stopMusicPlayback(currentPlayingSegment.value.fadeOutSeconds)
+  }
+}
+
+function scheduleMusicScrollCheck() {
+  if (musicScrollRaf) return
+  musicScrollRaf = window.requestAnimationFrame(() => {
+    musicScrollRaf = 0
+    updateMusicPlaybackByScroll()
+  })
+}
+
+function handleMusicDocumentClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (target.closest('.music-anchor-popover') || target.closest('.music-entry-anchor')) return
+  if (target.closest('.story-bgm-control')) return
+
+  if (showMusicAnchorMenu.value) {
+    closeMusicAnchorMenu()
+  }
+  if (musicControlOpen.value) {
+    musicControlOpen.value = false
+  }
+}
+
+function attachMusicScrollListeners() {
+  window.addEventListener('scroll', scheduleMusicScrollCheck, { passive: true })
+  window.addEventListener('resize', scheduleMusicScrollCheck)
+  musicScrollContainer = document.querySelector<HTMLElement>('.main-content')
+  musicScrollContainer?.addEventListener('scroll', scheduleMusicScrollCheck, { passive: true })
+}
+
+function detachMusicScrollListeners() {
+  window.removeEventListener('scroll', scheduleMusicScrollCheck)
+  window.removeEventListener('resize', scheduleMusicScrollCheck)
+  musicScrollContainer?.removeEventListener('scroll', scheduleMusicScrollCheck)
+  musicScrollContainer = null
+}
+
 // 获取当前可见的最后一个条目ID
 function getLastVisibleEntryId(): number | null {
   const entriesEl = document.querySelectorAll('.entry-item[data-entry-id]')
@@ -1527,11 +2278,21 @@ onMounted(() => {
   loadGuilds()
   loadAvailableCharacters()
   loadBookmarks()
+  loadStoryMusic()
+  attachMusicScrollListeners()
+  document.addEventListener('click', handleMusicDocumentClick)
 })
 
 onBeforeUnmount(() => {
   // 离开页面时保存浏览位置
   saveLastViewPosition()
+  detachMusicScrollListeners()
+  document.removeEventListener('click', handleMusicDocumentClick)
+  if (musicScrollRaf) {
+    window.cancelAnimationFrame(musicScrollRaf)
+  }
+  stopMusicPlayback(0)
+  clearMusicFadeTimer()
 })
 </script>
 
@@ -1632,6 +2393,10 @@ onBeforeUnmount(() => {
                 <i class="ri-archive-line"></i> 归档到公会
               </button>
 
+              <button v-if="canEdit" class="action-btn action-btn--secondary" @click="openMusicManager">
+                <i class="ri-music-2-line"></i> 背景音乐
+              </button>
+
               <!-- Icon button group -->
               <div class="icon-button-group">
                 <button class="icon-btn" @click="copyAITextPack" :title="t('archives.aiPack.copyBtn')">
@@ -1682,11 +2447,19 @@ onBeforeUnmount(() => {
       </RCard>
 
       <!-- 剧情条目列表 -->
-      <div class="entries-section">
+      <div class="entries-section" :class="{ 'music-editing': musicEditMode }">
         <div class="entries-main">
           <div class="entries-header">
             <h2>剧情内容 ({{ entries.length }} 条)</h2>
             <div v-if="canEdit && entries.length > 0" class="entries-header-actions">
+              <span v-if="musicEditMode" class="music-edit-status">
+                <i class="ri-music-2-line"></i>
+                {{ musicSegments.length }} 段 · {{ storyMusicTracks.length }} 首
+              </span>
+              <RButton v-if="musicEditMode" size="small" type="secondary" @click="exitMusicEditMode">
+                <i class="ri-close-line"></i>
+                退出音乐编辑
+              </RButton>
               <template v-if="!entryManageMode">
                 <RButton @click="enterEntryManageMode">
                   <i class="ri-checkbox-multiple-line"></i>
@@ -1710,10 +2483,55 @@ onBeforeUnmount(() => {
             :key="entry.id"
             :data-entry-id="entry.id"
             class="entry-item"
-            :class="[entry.type, { 'entry-selected': entryManageMode && selectedEntryIds.includes(entry.id) }]"
-            :style="entry.background_color ? { backgroundColor: entry.background_color } : {}"
+            :class="[entry.type, getMusicEntryItemClasses(entry.id), { 'entry-selected': entryManageMode && selectedEntryIds.includes(entry.id) }]"
+            :style="getEntryItemStyle(entry)"
             @click="entryManageMode ? toggleEntrySelect(entry.id) : null"
           >
+            <button
+              v-if="musicEditMode && getMusicSegmentForEntry(entry.id)"
+              type="button"
+              class="music-entry-axis"
+              :class="getMusicEntryAxisClasses(entry.id)"
+              :style="getMusicEntryAxisStyle(entry.id)"
+              :aria-label="getMusicEntryAxisTitle(entry.id)"
+              @mouseenter="showMusicHover(entry.id, $event)"
+              @mousemove="moveMusicHover"
+              @mouseleave="hideMusicHover"
+              @mouseover="showMusicHover(entry.id, $event)"
+              @mouseout="hideMusicHover"
+              @pointerenter="showMusicHover(entry.id, $event)"
+              @pointermove="moveMusicHover"
+              @pointerleave="hideMusicHover"
+              @focus="showMusicHoverFromFocus(entry.id, $event)"
+              @blur="hideMusicHover"
+              @click.stop="openMusicAnchorMenu(entry.id, $event)"
+            ></button>
+            <button
+              v-if="musicEditMode"
+              type="button"
+              class="music-entry-anchor"
+              :class="{
+                active: !!getMusicSegmentForEntry(entry.id),
+                marked: getMusicEntryMarkers(entry.id).length > 0
+              }"
+              :style="getMusicEntryAnchorStyle(entry.id)"
+              aria-label="设置此处的背景音乐"
+              @mouseenter="showMusicHover(entry.id, $event)"
+              @mousemove="moveMusicHover"
+              @mouseleave="hideMusicHover"
+              @mouseover="showMusicHover(entry.id, $event)"
+              @mouseout="hideMusicHover"
+              @pointerenter="showMusicHover(entry.id, $event)"
+              @pointermove="moveMusicHover"
+              @pointerleave="hideMusicHover"
+              @focus="showMusicHoverFromFocus(entry.id, $event)"
+              @blur="hideMusicHover"
+              @click.stop="openMusicAnchorMenu(entry.id, $event)"
+            >
+              <span v-if="getMusicEntryMarkers(entry.id).length > 0" class="music-anchor-marker-count">
+                {{ getMusicEntryMarkers(entry.id).length }}
+              </span>
+            </button>
             <!-- 管理模式下的复选框 -->
             <div v-if="entryManageMode" class="entry-checkbox">
               <input
@@ -1921,6 +2739,226 @@ onBeforeUnmount(() => {
         </Transition>
       </div>
     </template>
+
+    <div v-if="musicSegments.length > 0" class="story-bgm-control" :class="{ open: musicControlOpen }" @click.stop>
+      <Transition name="story-bgm-panel">
+        <div v-if="musicControlOpen" class="story-bgm-panel">
+          <div class="story-bgm-panel-head">
+            <div>
+              <strong>BGM</strong>
+              <span>{{ getMusicControlTrackLabel() }}</span>
+            </div>
+            <span
+              v-if="currentMusicTrack"
+              class="story-bgm-track-dot"
+              :style="{ backgroundColor: currentMusicTrack.color }"
+            ></span>
+          </div>
+          <label class="story-bgm-volume">
+            <span>音量 {{ musicMasterVolume }}%</span>
+            <input
+              v-model.number="musicMasterVolume"
+              type="range"
+              min="0"
+              max="100"
+              :disabled="musicDisabled"
+              @input="updateMusicMasterVolume"
+            />
+          </label>
+          <div class="story-bgm-actions">
+            <button type="button" :disabled="musicDisabled" @click="toggleMusicMuted">
+              <i :class="musicMuted ? 'ri-volume-mute-line' : 'ri-volume-up-line'"></i>
+              {{ musicMuted ? '取消静音' : '静音' }}
+            </button>
+            <button type="button" class="danger" @click="toggleMusicDisabled">
+              <i :class="musicDisabled ? 'ri-play-circle-line' : 'ri-forbid-2-line'"></i>
+              {{ musicDisabled ? '启用 BGM' : '禁用 BGM' }}
+            </button>
+          </div>
+        </div>
+      </Transition>
+      <button
+        type="button"
+        class="story-bgm-fab"
+        :class="{ disabled: musicDisabled, muted: musicMuted }"
+        :title="musicDisabled ? 'BGM 已禁用' : 'BGM 控制'"
+        @click="musicControlOpen = !musicControlOpen"
+      >
+        <i class="ri-music-2-line"></i>
+      </button>
+    </div>
+
+    <StoryMusicManager
+      v-if="story"
+      v-model="showMusicModal"
+      :story-id="storyId"
+      :tracks="musicTracks"
+      :segments="musicSegments"
+      :playlists="musicPlaylists"
+      @refresh="loadStoryMusic"
+      @enter-edit-mode="enterMusicEditMode"
+    />
+
+    <Teleport to="body">
+      <Transition name="music-anchor-popover">
+        <div
+          v-if="showMusicAnchorMenu"
+          class="music-anchor-popover"
+          :style="{ left: `${musicAnchorPosition.x}px`, top: `${musicAnchorPosition.y}px` }"
+          @click.stop
+        >
+          <div class="music-popover-header">
+            <div>
+              <strong>音乐锚点</strong>
+              <span>{{ getMusicAnchorLabel() }}</span>
+            </div>
+            <button type="button" @click="closeMusicAnchorMenu">
+              <i class="ri-close-line"></i>
+            </button>
+          </div>
+
+          <div v-if="musicMenuMode === 'actions'" class="music-popover-actions">
+            <button
+              type="button"
+              :disabled="storyMusicTracks.length === 0"
+              @click="openMusicInsertForm"
+            >
+              <i class="ri-play-list-add-line"></i>
+              <span>
+                插入音乐
+                <small>从此条开始播放一段背景音乐</small>
+              </span>
+            </button>
+            <button
+              v-if="pendingMusicSegment"
+              type="button"
+              @click="setPendingMusicEndPoint"
+            >
+              <i class="ri-stop-circle-line"></i>
+              <span>
+                设置为结束点
+                <small>结束「{{ getMusicTrackName(pendingMusicSegment.trackId) }}」</small>
+              </span>
+            </button>
+            <button
+              v-if="musicMenuActiveSegment"
+              type="button"
+              @click="openActiveMusicSettings"
+            >
+              <i class="ri-equalizer-3-line"></i>
+              <span>
+                音乐设置
+                <small>{{ getMusicTrackName(musicMenuActiveSegment.trackId) }}</small>
+              </span>
+            </button>
+            <button
+              v-if="musicMenuActiveSegment?.endEntryId"
+              type="button"
+              @click="clearActiveMusicEndPoint"
+            >
+              <i class="ri-close-circle-line"></i>
+              <span>
+                取消结束点
+                <small>让「{{ getMusicTrackName(musicMenuActiveSegment.trackId) }}」继续播放</small>
+              </span>
+            </button>
+            <p v-if="storyMusicTracks.length === 0" class="music-popover-hint">
+              请先在背景音乐管理中导入或加入一首音乐。
+            </p>
+          </div>
+
+          <div v-else class="music-segment-form">
+            <div class="form-field">
+              <label>音乐</label>
+              <select
+                :value="musicDraftTrackId ?? ''"
+                @change="syncMusicDraftTrack(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="">-- 请选择音乐 --</option>
+                <option v-for="track in storyMusicTracks" :key="track.id" :value="track.id">
+                  {{ track.name }}
+                </option>
+              </select>
+            </div>
+            <div class="music-form-grid">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="musicDraftLoop" />
+                <span>循环播放</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="musicDraftAutoPlay" />
+                <span>滚动自动开始</span>
+              </label>
+            </div>
+            <div class="music-form-grid">
+              <div class="form-field">
+                <label>淡入（秒）</label>
+                <input type="number" min="0" max="20" step="0.1" v-model.number="musicDraftFadeIn" />
+              </div>
+              <div class="form-field">
+                <label>淡出（秒）</label>
+                <input type="number" min="0" max="20" step="0.1" v-model.number="musicDraftFadeOut" />
+              </div>
+            </div>
+            <div class="form-field">
+              <label>段落音量 {{ musicDraftVolume }}%</label>
+              <input type="range" min="0" max="100" v-model.number="musicDraftVolume" />
+            </div>
+            <div class="music-popover-footer">
+              <RButton size="small" type="ghost" @click="musicMenuMode = 'actions'">返回</RButton>
+              <RButton
+                v-if="musicMenuMode === 'settings' && getEditingMusicSegment()?.endEntryId"
+                size="small"
+                type="secondary"
+                @click="clearActiveMusicEndPoint"
+              >
+                取消结束点
+              </RButton>
+              <RButton
+                v-if="musicMenuMode === 'settings'"
+                size="small"
+                type="danger"
+                @click="deleteActiveMusicSegment"
+              >
+                删除定位
+              </RButton>
+              <RButton size="small" type="primary" :disabled="!musicDraftTrackId" @click="saveMusicSegment">
+                {{ musicMenuMode === 'settings' ? '保存设置' : '插入音乐' }}
+              </RButton>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="music-bgm-tooltip">
+        <div
+          v-if="showMusicHoverInfo && musicHoverSegment"
+          class="music-bgm-tooltip"
+          :style="{
+            left: `${musicHoverPosition.x}px`,
+            top: `${musicHoverPosition.y}px`,
+            '--music-tooltip-color': getMusicTrackColor(musicHoverSegment.trackId),
+          }"
+        >
+          <div class="music-bgm-tooltip-title">
+            <span class="music-bgm-tooltip-dot"></span>
+            <div>
+              <strong>{{ getMusicTrackName(musicHoverSegment.trackId) }}</strong>
+              <span>{{ getMusicHoverEntryLabel() }}</span>
+            </div>
+            <em>BGM</em>
+          </div>
+          <div class="music-bgm-tooltip-range">
+            {{ getMusicSegmentRangeLabel(musicHoverSegment) }}
+          </div>
+          <div class="music-bgm-tooltip-meta">
+            <span v-for="item in getMusicSegmentMeta(musicHoverSegment)" :key="item">{{ item }}</span>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- 添加条目对话框 -->
     <RModal v-model="showAddModal" title="添加条目" width="500px">
@@ -2924,8 +3962,7 @@ onBeforeUnmount(() => {
 }
 
 .entries-section {
-  display: flex;
-  gap: 24px;
+  display: block;
   background: var(--color-panel-bg, rgba(255, 255, 255, 0.85));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -2962,7 +3999,21 @@ onBeforeUnmount(() => {
 
 .entries-header-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.music-edit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.8));
+  border-radius: 999px;
+  background: rgba(184, 115, 51, 0.08);
+  color: var(--color-secondary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .empty-entries {
@@ -2996,6 +4047,18 @@ onBeforeUnmount(() => {
 .entry-item.entry-selected {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.2);
+}
+
+.entry-item.music-covered {
+  border-color: var(--music-axis-border, rgba(184, 115, 51, 0.22));
+}
+
+.entry-item.music-covered:hover {
+  border-color: var(--music-axis-color, var(--color-accent));
+}
+
+.entry-item.music-covered-playing {
+  box-shadow: 0 0 0 1px var(--music-axis-border, rgba(184, 115, 51, 0.22)), 0 2px 10px rgba(44, 24, 16, 0.08);
 }
 
 .entry-checkbox {
@@ -3077,6 +4140,121 @@ onBeforeUnmount(() => {
   align-items: center;
   margin-bottom: 6px;
   gap: 6px;
+}
+
+.music-entry-axis {
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: -9px;
+  z-index: 2;
+  width: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.music-entry-axis::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 9px;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--music-axis-color, var(--color-accent));
+  box-shadow: 0 0 0 1px var(--music-axis-glow, rgba(184, 115, 51, 0.28));
+  opacity: 0.9;
+  transition: left 0.2s, width 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.music-entry-axis.music-axis-start::before {
+  top: 10px;
+}
+
+.music-entry-axis.music-axis-end::before {
+  bottom: 10px;
+}
+
+.music-entry-axis:hover::before,
+.music-entry-axis.music-axis-playing::before {
+  left: 8px;
+  width: 6px;
+  opacity: 1;
+  box-shadow: 0 0 0 4px var(--music-axis-fill, rgba(184, 115, 51, 0.08)), 0 0 14px var(--music-axis-glow, rgba(184, 115, 51, 0.28));
+}
+
+.music-entry-axis:focus-visible {
+  outline: none;
+}
+
+.music-entry-axis:focus-visible::before {
+  left: 7px;
+  width: 8px;
+  box-shadow: 0 0 0 4px var(--color-panel-bg, #fff), 0 0 0 7px var(--music-axis-color, var(--color-accent));
+}
+
+.music-entry-anchor {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-panel-bg, #fff);
+  border-radius: 50%;
+  background: var(--color-card-bg, #f5efe7);
+  color: var(--color-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(44, 24, 16, 0.18);
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.music-entry-anchor:hover,
+.music-entry-anchor.active {
+  border-color: var(--color-panel-bg, #fff);
+  background: var(--music-anchor-color, var(--color-accent));
+  color: var(--btn-primary-text, #fff);
+  transform: scale(1.08);
+}
+
+.music-entry-anchor.marked {
+  background: var(--music-anchor-color, var(--color-accent));
+  color: var(--btn-primary-text, #fff);
+  box-shadow: 0 0 0 3px var(--music-anchor-glow, rgba(184, 115, 51, 0.18)), 0 4px 12px rgba(44, 24, 16, 0.2);
+}
+
+.music-entry-anchor::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.music-entry-anchor.active::before,
+.music-entry-anchor.marked::before {
+  background: currentColor;
+}
+
+.music-anchor-marker-count {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--color-primary, #4B3621);
+  color: var(--color-text-light, #fff);
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+  font-weight: 700;
 }
 
 .entry-header .speaker {
@@ -4129,6 +5307,156 @@ onBeforeUnmount(() => {
   padding: 0 4px;
 }
 
+.story-bgm-control {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 110;
+}
+
+.story-bgm-fab {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-primary, #4B3621);
+  color: var(--color-text-light, #fff);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  box-shadow: 0 5px 14px rgba(44, 24, 16, 0.28);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s, opacity 0.2s;
+}
+
+.story-bgm-fab:hover,
+.story-bgm-control.open .story-bgm-fab {
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(44, 24, 16, 0.34);
+}
+
+.story-bgm-fab.muted {
+  background: var(--color-secondary, #856a52);
+}
+
+.story-bgm-fab.disabled {
+  background: var(--color-text-muted, #9b8b7d);
+  opacity: 0.82;
+}
+
+.story-bgm-panel {
+  position: absolute;
+  right: 0;
+  bottom: 60px;
+  width: 260px;
+  padding: 12px;
+  border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.8));
+  border-radius: 12px;
+  background: var(--color-panel-bg, #fff);
+  box-shadow: 0 12px 36px rgba(44, 24, 16, 0.22);
+}
+
+.story-bgm-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.story-bgm-panel-head div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.story-bgm-panel-head strong {
+  color: var(--color-primary);
+  font-size: 14px;
+}
+
+.story-bgm-panel-head span {
+  color: var(--color-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-bgm-track-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(184, 115, 51, 0.14);
+}
+
+.story-bgm-volume {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-primary);
+  font-size: 12px;
+}
+
+.story-bgm-volume input {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.story-bgm-volume input:disabled {
+  opacity: 0.45;
+}
+
+.story-bgm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.story-bgm-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.85));
+  border-radius: 8px;
+  background: var(--color-card-bg, #f5f0eb);
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.story-bgm-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.story-bgm-actions button:not(:disabled):hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.story-bgm-actions button.danger:not(:disabled):hover {
+  border-color: var(--btn-danger-bg, #e74c3c);
+  color: var(--btn-danger-bg, #e74c3c);
+}
+
+.story-bgm-panel-enter-active,
+.story-bgm-panel-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.story-bgm-panel-enter-from,
+.story-bgm-panel-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+
 .bookmarks-panel {
   position: absolute;
   right: 0;
@@ -4200,6 +5528,253 @@ onBeforeUnmount(() => {
 .bookmarks-panel-leave-to {
   opacity: 0;
   transform: translateY(10px) scale(0.95);
+}
+
+/* BGM 悬浮信息 */
+.music-bgm-tooltip {
+  position: fixed;
+  z-index: 1450;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.8));
+  border-left: 4px solid var(--music-tooltip-color, var(--color-accent));
+  border-radius: 10px;
+  background: var(--color-panel-bg, #fff);
+  box-shadow: 0 10px 28px rgba(44, 24, 16, 0.2);
+  pointer-events: none;
+}
+
+.music-bgm-tooltip-title {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.music-bgm-tooltip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--music-tooltip-color, var(--color-accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--music-tooltip-color, var(--color-accent)) 18%, transparent);
+}
+
+.music-bgm-tooltip-title div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.music-bgm-tooltip-title strong {
+  color: var(--color-primary);
+  font-size: 13px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-bgm-tooltip-title span,
+.music-bgm-tooltip-range {
+  color: var(--color-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.music-bgm-tooltip-title em {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--color-card-bg, #f5f0eb);
+  color: var(--color-secondary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.music-bgm-tooltip-range {
+  margin-top: 8px;
+}
+
+.music-bgm-tooltip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.music-bgm-tooltip-meta span {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--color-card-bg, #f5f0eb);
+  color: var(--color-primary);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.music-bgm-tooltip-enter-active,
+.music-bgm-tooltip-leave-active {
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.music-bgm-tooltip-enter-from,
+.music-bgm-tooltip-leave-to {
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+}
+
+/* 背景音乐锚点弹窗 */
+.music-anchor-popover {
+  position: fixed;
+  z-index: 1400;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.8));
+  border-radius: 12px;
+  background: var(--color-panel-bg, #fff);
+  box-shadow: 0 12px 36px rgba(44, 24, 16, 0.22);
+  padding: 14px;
+}
+
+.music-popover-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.music-popover-header div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.music-popover-header strong {
+  color: var(--color-primary);
+  font-size: 15px;
+}
+
+.music-popover-header span {
+  color: var(--color-secondary);
+  font-size: 12px;
+}
+
+.music-popover-header button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-secondary);
+  cursor: pointer;
+}
+
+.music-popover-header button:hover {
+  background: var(--btn-outline-hover);
+}
+
+.music-popover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.music-popover-actions button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.85));
+  border-radius: 8px;
+  background: var(--color-card-bg, #f5f0eb);
+  color: var(--color-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.music-popover-actions button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: rgba(184, 115, 51, 0.08);
+}
+
+.music-popover-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.music-popover-actions i {
+  color: var(--color-accent);
+  font-size: 18px;
+  margin-top: 2px;
+}
+
+.music-popover-actions span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.music-popover-actions small,
+.music-popover-hint {
+  color: var(--color-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.music-popover-hint {
+  margin: 4px 0 0;
+}
+
+.music-segment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.music-segment-form select,
+.music-segment-form input[type="number"] {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--input-bg, #fff);
+  color: var(--color-primary);
+  font: inherit;
+}
+
+.music-segment-form input[type="range"] {
+  width: 100%;
+}
+
+.music-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.music-popover-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.music-anchor-popover-enter-active,
+.music-anchor-popover-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.music-anchor-popover-enter-from,
+.music-anchor-popover-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
 }
 
 /* AI 文本包引导弹窗 */

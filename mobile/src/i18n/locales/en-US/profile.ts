@@ -54,11 +54,25 @@ export default {
   },
   menu: {
     cloudProfiles: 'Cloud Profiles',
+    achievements: 'Achievements',
     favorites: 'My Favorites',
     posts: 'My Posts',
     items: 'My Items',
     collections: 'My Collections',
     about: 'About RPBox',
+  },
+  achievements: {
+    title: 'Achievement Wall',
+    listTitle: 'Achievements',
+    kicker: 'Achievement Wall',
+    subtitle: 'Track your RPBox sign-ins, creation, sponsor, and level milestones.',
+    earned: 'Earned',
+    progress: 'Progress',
+    viewAll: 'View all',
+    featured: 'Featured',
+    firstGoal: 'First goal',
+    nextGoal: 'Next goal',
+    close: 'Close',
   },
   blocks: {
     title: 'Blocked Users',
@@ -92,6 +106,7 @@ export default {
     failed: 'Failed to delete account',
   },
   logout: 'Logout',
+  switchAccount: 'Switch account',
   myFavorites: {
     title: 'My Favorites',
     empty: 'No favorites yet',

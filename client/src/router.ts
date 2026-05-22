@@ -75,6 +75,7 @@ const router = createRouter({
         // 版主中心
         { path: 'moderator', name: 'moderator', component: () => import('./views/moderator/ModeratorMain.vue') },
         // 用户主页
+        { path: 'user/:id/achievements', name: 'user-achievements', component: () => import('./views/user/UserAchievements.vue') },
         { path: 'user/:id', name: 'user-profile', component: () => import('./views/user/UserProfile.vue') },
         // 合集
         { path: 'collection/:id', name: 'collection-detail', component: () => import('./views/collection/CollectionDetail.vue') },
@@ -86,6 +87,7 @@ const router = createRouter({
     { path: '/legal/terms', name: 'terms-of-service', component: () => import('./views/legal/TermsOfService.vue') },
     { path: '/legal/privacy', name: 'privacy-policy', component: () => import('./views/legal/PrivacyPolicy.vue') },
     { path: '/story/:code', name: 'story-playback', component: () => import('./views/archives/StoryPlayback.vue') },
+    { path: '/music/playlist/:code', name: 'music-playlist-public', component: () => import('./views/archives/StoryMusicPlaylistPublic.vue') },
   ],
 })
 
@@ -94,6 +96,7 @@ const publicRoutes = new Set([
   'register',
   'forgot-password',
   'story-playback',
+  'music-playlist-public',
   'terms-of-service',
   'privacy-policy',
 ])

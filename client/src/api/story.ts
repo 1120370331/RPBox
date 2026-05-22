@@ -164,11 +164,193 @@ export async function publishStory(id: number, isPublic: boolean): Promise<Story
   return request.post(`/stories/${id}/publish`, { is_public: isPublic })
 }
 
+export interface StoryMusicTrack {
+  id: number
+  userId: number
+  name: string
+  fileName: string
+  mimeType: string
+  size: number
+  url: string
+  color: string
+  volume: number
+  tags: string[]
+  storyIds: number[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StoryMusicSegment {
+  id: number
+  storyId: number
+  trackId: number
+  startEntryId: number
+  endEntryId?: number | null
+  loop: boolean
+  autoPlay: boolean
+  fadeInSeconds: number
+  fadeOutSeconds: number
+  volume: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StoryMusicPlaylist {
+  id: number
+  userId: number
+  name: string
+  description: string
+  color: string
+  isPublic: boolean
+  shareCode: string
+  viewCount: number
+  trackCount: number
+  trackIds: number[]
+  authorName?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StoryMusicResponse {
+  tracks: StoryMusicTrack[]
+  segments: StoryMusicSegment[]
+  playlists: StoryMusicPlaylist[]
+}
+
+export interface StoryMusicTrackUpdate {
+  name?: string
+  color?: string
+  volume?: number
+  tags?: string[]
+}
+
+export interface StoryMusicPlaylistCreate {
+  name: string
+  description?: string
+  color?: string
+  trackIds?: number[]
+}
+
+export interface StoryMusicPlaylistUpdate {
+  name?: string
+  description?: string
+  color?: string
+  isPublic?: boolean
+}
+
+export interface StoryMusicSegmentCreate {
+  trackId: number
+  startEntryId: number
+  endEntryId?: number | null
+  loop?: boolean
+  autoPlay?: boolean
+  fadeInSeconds?: number
+  fadeOutSeconds?: number
+  volume?: number
+}
+
+export interface StoryMusicSegmentUpdate {
+  trackId?: number
+  startEntryId?: number
+  endEntryId?: number | null
+  loop?: boolean
+  autoPlay?: boolean
+  fadeInSeconds?: number
+  fadeOutSeconds?: number
+  volume?: number
+}
+
+export async function getStoryMusic(storyId: number): Promise<StoryMusicResponse> {
+  return request.get(`/stories/${storyId}/music`)
+}
+
+export async function uploadStoryMusicTrack(storyId: number, file: File, metadata?: StoryMusicTrackUpdate): Promise<StoryMusicTrack> {
+  const form = new FormData()
+  form.append('audio', file)
+  if (metadata?.name) form.append('name', metadata.name)
+  if (metadata?.color) form.append('color', metadata.color)
+  if (typeof metadata?.volume === 'number') form.append('volume', String(metadata.volume))
+  if (metadata?.tags) form.append('tags', JSON.stringify(metadata.tags))
+  return request.post(`/stories/${storyId}/music/tracks`, form)
+}
+
+export async function updateStoryMusicTrack(storyId: number, trackId: number, data: StoryMusicTrackUpdate): Promise<StoryMusicTrack> {
+  return request.put(`/stories/${storyId}/music/tracks/${trackId}`, data)
+}
+
+export async function deleteStoryMusicTrack(storyId: number, trackId: number): Promise<void> {
+  return request.delete(`/stories/${storyId}/music/tracks/${trackId}`)
+}
+
+export async function attachStoryMusicTrack(storyId: number, trackId: number): Promise<StoryMusicTrack> {
+  return request.post(`/stories/${storyId}/music/tracks/${trackId}/attach`)
+}
+
+export async function detachStoryMusicTrack(storyId: number, trackId: number): Promise<void> {
+  return request.delete(`/stories/${storyId}/music/tracks/${trackId}/attach`)
+}
+
+export async function createStoryMusicSegment(storyId: number, data: StoryMusicSegmentCreate): Promise<StoryMusicSegment> {
+  return request.post(`/stories/${storyId}/music/segments`, data)
+}
+
+export async function updateStoryMusicSegment(storyId: number, segmentId: number, data: StoryMusicSegmentUpdate): Promise<StoryMusicSegment> {
+  return request.put(`/stories/${storyId}/music/segments/${segmentId}`, data)
+}
+
+export async function deleteStoryMusicSegment(storyId: number, segmentId: number): Promise<void> {
+  return request.delete(`/stories/${storyId}/music/segments/${segmentId}`)
+}
+
+export async function listStoryMusicPlaylists(search?: string): Promise<{ playlists: StoryMusicPlaylist[] }> {
+  const query = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''
+  return request.get(`/music/playlists${query}`)
+}
+
+export async function createStoryMusicPlaylist(data: StoryMusicPlaylistCreate): Promise<StoryMusicPlaylist> {
+  return request.post('/music/playlists', data)
+}
+
+export async function updateStoryMusicPlaylist(playlistId: number, data: StoryMusicPlaylistUpdate): Promise<StoryMusicPlaylist> {
+  return request.put(`/music/playlists/${playlistId}`, data)
+}
+
+export async function deleteStoryMusicPlaylist(playlistId: number): Promise<void> {
+  return request.delete(`/music/playlists/${playlistId}`)
+}
+
+export async function shareStoryMusicPlaylist(playlistId: number, isPublic?: boolean): Promise<StoryMusicPlaylist> {
+  return request.post(`/music/playlists/${playlistId}/share`, typeof isPublic === 'boolean' ? { isPublic } : {})
+}
+
+export async function addStoryMusicPlaylistTrack(playlistId: number, trackId: number): Promise<void> {
+  return request.post(`/music/playlists/${playlistId}/tracks/${trackId}`)
+}
+
+export async function removeStoryMusicPlaylistTrack(playlistId: number, trackId: number): Promise<void> {
+  return request.delete(`/music/playlists/${playlistId}/tracks/${trackId}`)
+}
+
+export async function listPublicStoryMusicPlaylists(search?: string): Promise<{ playlists: StoryMusicPlaylist[] }> {
+  const query = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''
+  return request.get(`/public/music/playlists${query}`)
+}
+
+export async function getPublicStoryMusicPlaylist(code: string): Promise<{ playlist: StoryMusicPlaylist; tracks: StoryMusicTrack[] }> {
+  return request.get(`/public/music/playlists/${code}`)
+}
+
+export async function importPublicStoryMusicPlaylist(storyId: number, code: string): Promise<{ tracks: StoryMusicTrack[] }> {
+  return request.post(`/stories/${storyId}/music/playlists/${code}/import`)
+}
+
 export interface PublicStoryResponse {
   story: Story
   entries: StoryEntry[]
   characters: Record<number, import('./character').Character>
   author: string
+  music_tracks?: StoryMusicTrack[]
+  music_segments?: StoryMusicSegment[]
 }
 
 export async function getPublicStory(code: string): Promise<PublicStoryResponse> {

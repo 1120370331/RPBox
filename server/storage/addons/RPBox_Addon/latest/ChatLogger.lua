@@ -34,29 +34,45 @@ local CHANNEL_SHORT = {
     CHAT_MSG_GUILD = "GUILD",
 }
 
--- 去重缓存（基于秒级时间戳）
+-- 去重缓存（基于 chat lineID / 消息指纹）
+local MESSAGE_DEDUPE_WINDOW = 5
 local messageCache = {}
 
--- 检查消息是否重复
-local function IsDuplicateMessage(sender, msg, timestamp)
-    local secondTimestamp = math.floor(timestamp)
-    local signature = sender .. "|" .. msg .. "|" .. secondTimestamp
+local function NormalizeMessageForSignature(msg)
+    if not msg or msg == "" then return "" end
+    return msg:gsub("^%s+", ""):gsub("%s+$", "")
+end
 
-    -- 清理超过5秒的旧缓存
-    local currentTime = time()
-    for sig, cachedTime in pairs(messageCache) do
-        if (currentTime - cachedTime) > 5 then
-            messageCache[sig] = nil
+local function CleanupMessageCache(now)
+    for signature, cachedTime in pairs(messageCache) do
+        if (now - cachedTime) > MESSAGE_DEDUPE_WINDOW then
+            messageCache[signature] = nil
         end
     end
+end
 
-    -- 检查是否存在
+local function BuildMessageSignature(sender, channelShort, msg, lineID)
+    if lineID and lineID ~= 0 and tostring(lineID) ~= "" then
+        return "line:" .. tostring(lineID)
+    end
+    return table.concat({
+        sender or "",
+        channelShort or "",
+        NormalizeMessageForSignature(msg),
+    }, "\31")
+end
+
+-- 检查消息是否重复
+local function IsDuplicateMessage(sender, channelShort, msg, lineID)
+    local now = GetTimePreciseSec and GetTimePreciseSec() or time()
+    CleanupMessageCache(now)
+
+    local signature = BuildMessageSignature(sender, channelShort, msg, lineID)
     if messageCache[signature] then
         return true
     end
 
-    -- 添加到缓存
-    messageCache[signature] = secondTimestamp
+    messageCache[signature] = now
     return false
 end
 
@@ -166,6 +182,8 @@ end
 
 -- 判断是否应该记录
 local function ShouldRecord(unitID, isFromSelf, channelShort)
+    if not unitID or unitID == "" then return false end
+
     -- 检查总开关
     if RPBox_Config.enabled == false then return false end
 
@@ -292,21 +310,27 @@ end
 -- 聊天消息处理
 local function OnChatMessage(self, event, msg, sender, ...)
     local playerID = ns.GetPlayerID()
-    local senderID = sender
+    local senderID = sender or ""
 
-    if not senderID:find("-") then
+    if senderID ~= "" and not senderID:find("-") then
         senderID = senderID .. "-" .. GetRealmName()
     end
 
     local isFromSelf = (senderID == playerID)
     local channelShort = CHANNEL_SHORT[event] or event
+    local lineID = select(9, ...)
 
     if not ShouldRecord(senderID, isFromSelf, channelShort) then
         return false
     end
 
+    -- 用 lineID 优先去重；没有 lineID 时退回到 sender + channel + 文本指纹
+    if IsDuplicateMessage(senderID, channelShort, msg, lineID) then
+        return false
+    end
+
     -- 获取发送者GUID和职业
-    local senderGUID = select(12, ...)
+    local senderGUID = select(10, ...)
     local senderClass = nil
     if senderGUID then
         local _, classFilename = GetPlayerInfoByGUID(senderGUID)
@@ -380,16 +404,17 @@ local function OnChatMessage(self, event, msg, sender, ...)
         if npcType then record.nt = npcType end
     end
 
-    -- 去重检查：基于秒级时间戳
-    if IsDuplicateMessage(senderID, msg, record.t) then
-        return false
-    end
-
     SaveChatLog(record)
     return false
 end
 
 -- 注册聊天事件监听
+-- 使用独立事件帧，避免多聊天窗口同时挂过滤器时重复记录同一条消息
+local chatEventFrame = CreateFrame("Frame")
 for _, event in ipairs(CHAT_EVENTS) do
-    ChatFrame_AddMessageEventFilter(event, OnChatMessage)
+    chatEventFrame:RegisterEvent(event)
 end
+
+chatEventFrame:SetScript("OnEvent", function(self, event, ...)
+    OnChatMessage(self, event, ...)
+end)
