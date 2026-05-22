@@ -11,8 +11,21 @@ import RCheckbox from '@/components/RCheckbox.vue'
 import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RModal from '@/components/RModal.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import AchievementMedal from '@/components/AchievementMedal.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import {
+  ACHIEVEMENT_CATEGORY_META,
+  ACHIEVEMENT_RARITY_META,
+  type AchievementDefinition,
+} from '@/data/achievements'
+import {
+  buildAchievementEntries,
+  buildAchievementProgressContext,
+  buildAchievementWallEntries,
+  pickFeaturedAchievement,
+  summarizeAchievementRarities,
+} from '@/utils/achievementProgress'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,10 +54,12 @@ const userGuilds = ref<any[]>([])
 const loading = ref(true)
 const editMode = ref(false)
 const showLevelGuide = ref(false)
+const showAchievementDetail = ref(false)
+const selectedAchievementId = ref<string | null>(null)
 const avatarUploading = ref(false)
+const avatarInputRef = ref<HTMLInputElement | null>(null)
 const avatarCropperOpen = ref(false)
 const avatarCropperFile = ref<File | null>(null)
-const avatarInputRef = ref<HTMLInputElement | null>(null)
 const sponsorColor = ref('')
 const sponsorBold = ref(false)
 const nameStylePreference = ref<'default' | 'sponsor'>('default')
@@ -107,6 +122,26 @@ const activityProgressPercent = computed(() => {
   }
   return computeLevelProgressPercent(userProfile.value?.current_level_exp, userProfile.value?.next_level_exp)
 })
+
+const achievementProgressContext = computed(() => buildAchievementProgressContext({
+  profile: userProfile.value,
+  guilds: userGuilds.value,
+  sponsorLevel: sponsorLevel.value,
+}))
+
+const achievementEntries = computed(() => buildAchievementEntries(achievementProgressContext.value))
+
+const earnedAchievementCount = computed(() => achievementEntries.value.filter((entry) => entry.progress.earned).length)
+
+const achievementRaritySummary = computed(() => summarizeAchievementRarities(achievementEntries.value))
+const achievementWallEntries = computed(() => buildAchievementWallEntries(achievementEntries.value, 6))
+
+const selectedAchievementEntry = computed(() => {
+  if (!selectedAchievementId.value) return null
+  return achievementEntries.value.find((entry) => entry.definition.id === selectedAchievementId.value) || null
+})
+
+const featuredAchievementEntry = computed(() => pickFeaturedAchievement(achievementEntries.value))
 
 onMounted(async () => {
   await loadUserProfile()
@@ -196,24 +231,24 @@ function handleAvatarChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+
   if (!file.type.startsWith('image/')) {
     toast.warning('请选择图片文件')
     input.value = ''
     return
   }
-
   if (file.size > 20 * 1024 * 1024) {
-    input.value = ''
     toast.warning('头像文件不能超过20MB')
+    input.value = ''
     return
   }
+
   avatarCropperFile.value = file
   avatarCropperOpen.value = true
   input.value = ''
 }
 
 async function handleAvatarCropped(file: File) {
-
   avatarUploading.value = true
   try {
     const res = await uploadAvatar(file)
@@ -306,6 +341,28 @@ async function handleBindEmail() {
   } catch (error: any) {
     toast.error(error.message || '绑定失败')
   }
+}
+
+function openAchievementDetail(achievement: AchievementDefinition) {
+  selectedAchievementId.value = achievement.id
+  showAchievementDetail.value = true
+}
+
+function openAchievementList() {
+  router.push({ name: 'user-achievements', params: { id: userId.value } })
+}
+
+function previewAchievementNotification() {
+  const entry = featuredAchievementEntry.value
+  if (!entry) return
+  toast.achievement(
+    `成就解锁：${entry.definition.title}`,
+    entry.definition.condition,
+    {
+      icon: entry.definition.icon,
+      rarity: entry.definition.rarity,
+    },
+  )
 }
 </script>
 
@@ -659,6 +716,90 @@ async function handleBindEmail() {
             设置
           </button>
         </div>
+
+        <!-- 5. 成就墙 -->
+        <div class="achievements-card achievement-wall-card">
+          <div class="achievements-hero achievement-wall-hero">
+            <div>
+              <span class="achievements-kicker">Achievement Wall</span>
+              <h2>{{ isOwnProfile ? '我的成就墙' : '成就墙' }}</h2>
+              <p>展示已解锁的代表勋章和下一阶段目标，完整成就列表可单独查看。</p>
+            </div>
+            <div class="achievements-score">
+              <strong>{{ earnedAchievementCount }}</strong>
+              <span>/ {{ achievementEntries.length }}</span>
+              <small>已获得</small>
+            </div>
+          </div>
+
+          <button
+            v-if="featuredAchievementEntry"
+            type="button"
+            class="achievement-featured"
+            :class="{ earned: featuredAchievementEntry.progress.earned }"
+            @click="openAchievementDetail(featuredAchievementEntry.definition)"
+          >
+            <AchievementMedal
+              :achievement="featuredAchievementEntry.definition"
+              :earned="featuredAchievementEntry.progress.earned"
+              size="lg"
+            />
+            <span class="achievement-featured__copy">
+              <small>{{ featuredAchievementEntry.progress.earned ? '代表成就' : '首个目标' }}</small>
+              <strong>{{ featuredAchievementEntry.definition.title }}</strong>
+              <span>{{ featuredAchievementEntry.definition.condition }}</span>
+            </span>
+            <i class="ri-arrow-right-s-line"></i>
+          </button>
+
+          <div class="achievement-wall-strip">
+            <button
+              v-for="entry in achievementWallEntries"
+              :key="entry.definition.id"
+              type="button"
+              class="achievement-wall-medal"
+              :class="{ earned: entry.progress.earned }"
+              @click="openAchievementDetail(entry.definition)"
+            >
+              <AchievementMedal
+                :achievement="entry.definition"
+                :earned="entry.progress.earned"
+                size="sm"
+              />
+              <span>{{ entry.definition.title }}</span>
+            </button>
+          </div>
+
+          <div class="achievement-rarity-strip achievement-wall-rarity-strip">
+            <div
+              v-for="summary in achievementRaritySummary"
+              :key="summary.rarity"
+              class="achievement-rarity-pill"
+              :style="{
+                '--rarity-edge': ACHIEVEMENT_RARITY_META[summary.rarity].edge,
+                '--rarity-glow': ACHIEVEMENT_RARITY_META[summary.rarity].glow,
+              }"
+            >
+              <span>{{ summary.label }}</span>
+              <strong>{{ summary.earned }}/{{ summary.total }}</strong>
+            </div>
+          </div>
+
+          <div class="achievement-card-foot">
+            <span>
+              <i class="ri-medal-line"></i>
+              成就按签到、社区、道具、剧情、赞助与等级进度自动点亮。
+            </span>
+            <div class="achievement-card-actions">
+              <button v-if="isOwnProfile" type="button" class="achievement-preview-btn ghost" @click="previewAchievementNotification">
+                预览通知
+              </button>
+              <button type="button" class="achievement-preview-btn" @click="openAchievementList">
+                查看全部成就
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -701,6 +842,48 @@ async function handleBindEmail() {
             </div>
           </div>
         </section>
+      </div>
+    </RModal>
+
+    <RModal
+      v-model="showAchievementDetail"
+      :title="selectedAchievementEntry ? selectedAchievementEntry.definition.title : '成就详情'"
+      width="560px"
+    >
+      <div v-if="selectedAchievementEntry" class="achievement-detail">
+        <AchievementMedal
+          :achievement="selectedAchievementEntry.definition"
+          :earned="selectedAchievementEntry.progress.earned"
+          size="lg"
+        />
+        <div class="achievement-detail__body">
+          <div class="achievement-detail__tags">
+            <span
+              class="achievement-detail__rarity"
+              :style="{ '--rarity-edge': ACHIEVEMENT_RARITY_META[selectedAchievementEntry.definition.rarity].edge }"
+            >
+              {{ ACHIEVEMENT_RARITY_META[selectedAchievementEntry.definition.rarity].label }}
+            </span>
+            <span>{{ ACHIEVEMENT_CATEGORY_META[selectedAchievementEntry.definition.category].label }}</span>
+          </div>
+          <h3>{{ selectedAchievementEntry.definition.title }}</h3>
+          <p>{{ selectedAchievementEntry.definition.condition }}</p>
+          <div class="achievement-detail__progress">
+            <div class="achievement-detail__progress-meta">
+              <span>{{ selectedAchievementEntry.progress.earned ? '已获得' : '进度' }}</span>
+              <strong>{{ selectedAchievementEntry.progress.label }}</strong>
+            </div>
+            <div class="achievement-detail__track">
+              <div
+                class="achievement-detail__fill"
+                :style="{ width: `${selectedAchievementEntry.progress.percent}%` }"
+              ></div>
+            </div>
+          </div>
+          <p class="achievement-detail__prompt">
+            总图位置：第 {{ selectedAchievementEntry.definition.spriteCell.row }} 行，第 {{ selectedAchievementEntry.definition.spriteCell.col }} 列；中心图案：{{ selectedAchievementEntry.definition.centerMotif }}。
+          </p>
+        </div>
       </div>
     </RModal>
   </div>
@@ -1989,5 +2172,499 @@ async function handleBindEmail() {
 
 .settings-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* 5. 成就陈列 */
+.achievements-card {
+  grid-column: span 12;
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 28px;
+  border: 1px solid color-mix(in srgb, var(--color-border, #E8DCC8) 72%, transparent);
+  background:
+    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--color-accent, #B87333) 18%, transparent), transparent 28%),
+    radial-gradient(circle at 88% 18%, rgba(255, 178, 62, 0.16), transparent 30%),
+    linear-gradient(135deg, var(--color-panel-bg, #FFF9F0), var(--color-card-bg, #F8EEDF));
+  box-shadow: var(--shadow-md, 0 20px 42px -30px rgba(75, 54, 33, 0.32));
+}
+
+.achievements-card::before {
+  content: '';
+  position: absolute;
+  inset: 16px;
+  pointer-events: none;
+  border: 1px solid rgba(184, 115, 51, 0.12);
+  border-radius: 14px;
+}
+
+.achievements-hero,
+.achievement-card-foot {
+  position: relative;
+  z-index: 1;
+}
+
+.achievements-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.achievements-kicker {
+  display: inline-flex;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-accent, #B87333);
+}
+
+.achievements-hero h2 {
+  margin: 0;
+  font-size: 28px;
+  color: var(--color-text-main, #4B3621);
+  letter-spacing: -0.02em;
+}
+
+.achievements-hero p {
+  max-width: 700px;
+  margin: 10px 0 0;
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.achievements-score {
+  min-width: 132px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  text-align: right;
+  background: rgba(75, 54, 33, 0.08);
+  border: 1px solid rgba(184, 115, 51, 0.16);
+}
+
+.achievements-score strong {
+  font-size: 36px;
+  line-height: 1;
+  color: var(--color-accent, #B87333);
+}
+
+.achievements-score span {
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.achievements-score small {
+  display: block;
+  margin-top: 5px;
+  color: var(--color-text-muted, #9C8E82);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.achievement-wall-card {
+  background:
+    radial-gradient(circle at 10% 10%, color-mix(in srgb, var(--color-accent, #B87333) 20%, transparent), transparent 26%),
+    radial-gradient(circle at 84% 22%, rgba(255, 190, 219, 0.26), transparent 28%),
+    linear-gradient(135deg, var(--color-panel-bg, #FFF9F0), var(--color-card-bg, #F8EEDF));
+}
+
+.achievement-wall-hero {
+  margin-bottom: 14px;
+}
+
+.achievement-featured {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border: 1px solid rgba(184, 115, 51, 0.16);
+  border-radius: 20px;
+  padding: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.28)),
+    radial-gradient(circle at 0% 50%, rgba(255, 178, 62, 0.14), transparent 34%);
+  color: var(--color-text-main, #4B3621);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.achievement-featured:hover {
+  transform: translateY(-2px);
+  border-color: rgba(184, 115, 51, 0.32);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.38)),
+    radial-gradient(circle at 0% 50%, rgba(255, 178, 62, 0.2), transparent 36%);
+}
+
+.achievement-featured__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.achievement-featured__copy small {
+  color: var(--color-accent, #B87333);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.achievement-featured__copy strong {
+  color: var(--color-text-main, #4B3621);
+  font-size: 18px;
+}
+
+.achievement-featured__copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 13px;
+}
+
+.achievement-featured > i {
+  color: var(--color-accent, #B87333);
+  font-size: 22px;
+}
+
+.achievement-wall-strip {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.achievement-wall-medal {
+  min-width: 0;
+  border: 1px solid rgba(184, 115, 51, 0.12);
+  border-radius: 16px;
+  padding: 12px 8px 10px;
+  background: rgba(255, 255, 255, 0.38);
+  color: var(--color-text-main, #4B3621);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.achievement-wall-medal:hover {
+  transform: translateY(-2px);
+  border-color: rgba(184, 115, 51, 0.28);
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.achievement-wall-medal.earned {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 214, 135, 0.18), transparent 44%),
+    rgba(255, 255, 255, 0.54);
+}
+
+.achievement-wall-medal span {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 12px;
+  text-align: center;
+}
+
+.achievement-wall-rarity-strip {
+  margin: 14px 0 0;
+}
+
+.achievement-rarity-strip {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.achievement-rarity-pill {
+  --rarity-edge: #B87333;
+  --rarity-glow: rgba(184, 115, 51, 0.18);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rarity-edge) 12%, rgba(255, 255, 255, 0.72));
+  border: 1px solid color-mix(in srgb, var(--rarity-edge) 42%, transparent);
+  color: var(--color-text-main, #4B3621);
+  box-shadow: 0 8px 18px -16px var(--rarity-glow);
+  font-size: 12px;
+}
+
+.achievement-rarity-pill strong {
+  color: var(--rarity-edge);
+}
+
+.achievement-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.achievement-tile {
+  min-width: 0;
+  border: 1px solid rgba(184, 115, 51, 0.12);
+  border-radius: 16px;
+  padding: 16px 10px 12px;
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--color-text-main, #4B3621);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.achievement-tile:hover {
+  transform: translateY(-3px);
+  border-color: rgba(184, 115, 51, 0.28);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.achievement-tile.earned {
+  border-color: rgba(184, 115, 51, 0.26);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 214, 135, 0.18), transparent 42%),
+    rgba(255, 255, 255, 0.64);
+}
+
+.achievement-tile__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: center;
+  min-width: 0;
+}
+
+.achievement-tile__meta strong {
+  font-size: 13px;
+  color: var(--color-text-main, #4B3621);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.achievement-tile__meta span {
+  font-size: 11px;
+  color: var(--color-text-secondary, #8C7B70);
+}
+
+.achievement-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(184, 115, 51, 0.14);
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.achievement-card-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.achievement-card-foot i {
+  color: var(--color-accent, #B87333);
+}
+
+.achievement-preview-btn {
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(184, 115, 51, 0.28);
+  background: rgba(75, 54, 33, 0.08);
+  color: var(--color-accent, #B87333);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.achievement-preview-btn:hover {
+  background: var(--color-accent, #B87333);
+  color: var(--color-accent-contrast, #fff);
+}
+
+.achievement-preview-btn.ghost {
+  background: transparent;
+}
+
+.achievement-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.achievement-detail {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 22px;
+  align-items: start;
+}
+
+.achievement-detail__body {
+  min-width: 0;
+}
+
+.achievement-detail__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.achievement-detail__tags span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--color-card-bg, #F2E6D8);
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.achievement-detail__rarity {
+  --rarity-edge: #B87333;
+  background: color-mix(in srgb, var(--rarity-edge) 14%, #fff) !important;
+  color: var(--rarity-edge) !important;
+}
+
+.achievement-detail h3 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  color: var(--color-text-main, #4B3621);
+}
+
+.achievement-detail p {
+  margin: 0;
+  color: var(--color-text-secondary, #8C7B70);
+  line-height: 1.7;
+}
+
+.achievement-detail__progress {
+  margin: 16px 0;
+}
+
+.achievement-detail__progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 12px;
+}
+
+.achievement-detail__progress-meta strong {
+  color: var(--color-accent, #B87333);
+}
+
+.achievement-detail__track {
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(75, 54, 33, 0.1);
+  overflow: hidden;
+}
+
+.achievement-detail__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #D4A373, #FFB23E);
+}
+
+.achievement-detail__prompt {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(184, 115, 51, 0.08);
+  border: 1px dashed rgba(184, 115, 51, 0.18);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .achievement-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .achievement-wall-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .achievements-card {
+    padding: 20px 14px;
+  }
+
+  .achievements-hero,
+  .achievement-card-foot,
+  .achievement-detail {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .achievement-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .achievement-featured {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .achievement-featured > i {
+    display: none;
+  }
+
+  .achievement-wall-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .achievements-score {
+    width: 100%;
+    text-align: left;
+  }
+
+  .achievement-card-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>

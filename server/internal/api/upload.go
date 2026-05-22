@@ -1,12 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"crypto/md5"
 	"fmt"
+	"mime"
 	"net/http"
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,6 +47,11 @@ func (s *Server) getUploadObject(c *gin.Context) {
 	if contentType == "" {
 		contentType = http.DetectContentType(data)
 	}
+	if contentType == "application/octet-stream" {
+		if byExt := mime.TypeByExtension(path.Ext(rawPath)); byExt != "" {
+			contentType = strings.TrimSpace(strings.Split(byExt, ";")[0])
+		}
+	}
 
 	cacheControl := "public, max-age=86400"
 	if c.Query("v") != "" || immutableUploadFilePattern.MatchString(path.Base(rawPath)) {
@@ -60,5 +68,5 @@ func (s *Server) getUploadObject(c *gin.Context) {
 	c.Header("Cache-Control", cacheControl)
 	c.Header("ETag", etag)
 	c.Header("Content-Type", contentType)
-	c.Data(http.StatusOK, contentType, data)
+	http.ServeContent(c.Writer, c.Request, path.Base(rawPath), time.Time{}, bytes.NewReader(data))
 }

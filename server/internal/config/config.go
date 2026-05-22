@@ -23,12 +23,20 @@ type Config struct {
 }
 
 type UpdaterConfig struct {
-	LatestVersion string              `mapstructure:"latest_version"`
-	BaseURL       string              `mapstructure:"base_url"`
-	ReleaseNotes  string              `mapstructure:"release_notes"`
-	PubDate       string              `mapstructure:"pub_date"`
-	SignatureDir  string              `mapstructure:"signature_dir"`
-	Mobile        MobileUpdaterConfig `mapstructure:"mobile"`
+	LatestVersion string               `mapstructure:"latest_version"`
+	BaseURL       string               `mapstructure:"base_url"`
+	ReleaseNotes  string               `mapstructure:"release_notes"`
+	PubDate       string               `mapstructure:"pub_date"`
+	SignatureDir  string               `mapstructure:"signature_dir"`
+	Beta          DesktopUpdaterConfig `mapstructure:"beta"`
+	Mobile        MobileUpdaterConfig  `mapstructure:"mobile"`
+}
+
+type DesktopUpdaterConfig struct {
+	LatestVersion string `mapstructure:"latest_version"`
+	BaseURL       string `mapstructure:"base_url"`
+	ReleaseNotes  string `mapstructure:"release_notes"`
+	PubDate       string `mapstructure:"pub_date"`
 }
 
 type MobileUpdaterConfig struct {

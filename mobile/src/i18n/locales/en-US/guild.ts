@@ -46,6 +46,7 @@ export default {
     success: 'Application submitted',
     autoApproved: 'Joined guild automatically',
     failed: 'Failed to apply',
+    pending: 'Application pending',
     canceled: 'Application canceled',
     cancelFailed: 'Failed to cancel application',
   },

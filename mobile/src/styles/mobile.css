@@ -121,7 +121,11 @@ input, textarea {
 }
 .sub-header {
   display: flex; align-items: center; gap: 10px;
-  padding: calc(var(--safe-top, 0px) + 10px) var(--page-gutter) 12px;
+  padding:
+    calc(var(--safe-top, 0px) + 8px)
+    calc(var(--safe-right, 0px) + var(--page-gutter))
+    10px
+    calc(var(--safe-left, 0px) + var(--page-gutter));
   position: sticky;
   top: 0;
   background: rgba(238, 217, 196, 0.92);
@@ -130,10 +134,13 @@ input, textarea {
 }
 .sub-header h1 { font-size: 18px; }
 .back-btn {
-  width: 36px; height: 36px; border: none; border-radius: 50%;
+  width: 44px; height: 44px; flex: 0 0 44px; border: none; border-radius: 50%;
   background: var(--color-primary-light); display: flex;
   align-items: center; justify-content: center; cursor: pointer;
-  font-size: 18px; color: var(--text-dark);
+  font-size: 20px; color: var(--text-dark);
+  touch-action: manipulation;
+  position: relative;
+  z-index: 1;
 }
 .sub-body { padding: 0 var(--page-gutter) calc(24px + var(--safe-bottom, 0px)); }
 .sub-body .hint {

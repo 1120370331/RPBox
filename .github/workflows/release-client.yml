@@ -4,14 +4,88 @@ on:
   push:
     tags:
       - 'v*'  # 触发条件：推送 v 开头的 tag，如 v0.2.0
+      - 'beta-v*'  # 测试版 tag，如 beta-v0.2.1-beta.1
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Client version, for example 0.2.1 or 0.2.1-beta.1'
+        required: true
+        type: string
+      channel:
+        description: 'Release channel'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+          - beta
 
 env:
   NODE_VERSION: '20'
 
 jobs:
+  release-meta:
+    name: Resolve Release Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      channel: ${{ steps.meta.outputs.channel }}
+      metadata_file: ${{ steps.meta.outputs.metadata_file }}
+    steps:
+      - name: Resolve version and channel
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            CHANNEL="${{ inputs.channel }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            CHANNEL="stable"
+
+            if [[ "$TAG" == beta-v* ]]; then
+              VERSION="${TAG#beta-v}"
+              CHANNEL="beta"
+            else
+              VERSION="${TAG#v}"
+            fi
+
+            if [[ "$VERSION" == *"-beta"* || "$VERSION" == *"-alpha"* || "$VERSION" == *"-rc"* ]]; then
+              CHANNEL="beta"
+            fi
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
+          fi
+
+          if [ "$CHANNEL" != "stable" ] && [ "$CHANNEL" != "beta" ]; then
+            echo "Invalid channel: $CHANNEL" >&2
+            exit 1
+          fi
+
+          if [ "$CHANNEL" = "beta" ] && [[ "$VERSION" != *"-"* ]]; then
+            echo "Beta client releases must use a prerelease version, for example 0.2.1-beta.1" >&2
+            exit 1
+          fi
+
+          METADATA_FILE="latest.json"
+          if [ "$CHANNEL" = "beta" ]; then
+            METADATA_FILE="latest-beta.json"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "metadata_file=$METADATA_FILE" >> "$GITHUB_OUTPUT"
+          echo "Resolved client release: version=$VERSION channel=$CHANNEL metadata_file=$METADATA_FILE"
+
   build-windows:
     name: Build Windows Client
     runs-on: windows-latest
+    needs: release-meta
 
     steps:
       - name: Checkout code
@@ -31,13 +105,8 @@ jobs:
         run: npm ci
         working-directory: client
 
-      - name: Get version from tag
-        id: version
-        shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-
       - name: Sync client version files
-        run: node scripts/sync-client-version.mjs "${{ steps.version.outputs.VERSION }}"
+        run: node scripts/sync-client-version.mjs "${{ needs.release-meta.outputs.version }}"
 
       - name: Show synced versions
         shell: pwsh
@@ -72,7 +141,9 @@ jobs:
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
-    needs: build-windows
+    needs:
+      - release-meta
+      - build-windows
 
     steps:
       - name: Checkout code
@@ -93,17 +164,17 @@ jobs:
           echo "=== Looking for SIG files ==="
           find artifacts -name "*.sig" -type f
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
       - name: Prepare updater metadata
         env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
+          VERSION: ${{ needs.release-meta.outputs.version }}
+          CHANNEL: ${{ needs.release-meta.outputs.channel }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
           DEFAULT_NOTES="修复若干已知问题，优化使用体验并提升稳定性。"
           NOTES_FILE="client/release-notes/${VERSION}.txt"
+          if [ "$CHANNEL" = "beta" ] && [ -f "client/release-notes/beta/${VERSION}.txt" ]; then
+            NOTES_FILE="client/release-notes/beta/${VERSION}.txt"
+          fi
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           NOTES_FROM_FILE=""
           if [ -f "$NOTES_FILE" ]; then
@@ -116,11 +187,13 @@ jobs:
           fi
 
           export VERSION PUB_DATE NOTES_FROM_FILE TAG_NOTES
+          export CHANNEL
           python3 - <<'PY'
           import json
           import os
 
           version = os.environ["VERSION"]
+          channel = os.environ["CHANNEL"]
           pub_date = os.environ["PUB_DATE"]
           notes = (os.environ.get("NOTES_FROM_FILE") or "").strip()
           if not notes:
@@ -132,6 +205,7 @@ jobs:
               "latest_version": version,
               "notes": notes,
               "pub_date": pub_date,
+              "channel": channel,
           }
 
           with open("latest.json", "w", encoding="utf-8") as f:
@@ -151,7 +225,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION="${{ needs.release-meta.outputs.version }}"
+          CHANNEL="${{ needs.release-meta.outputs.channel }}"
+          METADATA_FILE="${{ needs.release-meta.outputs.metadata_file }}"
           REMOTE_BASE="${{ secrets.RELEASE_PATH }}"
           REMOTE_DIR="$REMOTE_BASE/$VERSION"
 
@@ -193,7 +269,7 @@ jobs:
           REMOTE_SIG_TMP="$REMOTE_SIG_FINAL.part"
           REMOTE_META_VER_FINAL="$REMOTE_DIR/latest.json"
           REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
-          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/latest.json"
+          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/$METADATA_FILE"
           REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
 
           upload_with_retry "$EXE_PATH" "$REMOTE_EXE_TMP"
@@ -208,10 +284,15 @@ jobs:
           upload_with_retry latest.json "$REMOTE_META_LATEST_TMP"
           ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
 
+          echo "Uploaded $CHANNEL client release metadata to $REMOTE_META_LATEST_FINAL"
+
   update-pages:
     name: Update GitHub Pages
     runs-on: ubuntu-latest
-    needs: deploy
+    needs:
+      - release-meta
+      - deploy
+    if: needs.release-meta.outputs.channel == 'stable'
     permissions:
       contents: write
     steps:
@@ -220,13 +301,9 @@ jobs:
         with:
           ref: main
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
       - name: Update fallback version in download.html
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
+          VERSION=${{ needs.release-meta.outputs.version }}
           sed -i "s/var fallbackVersion = '.*'/var fallbackVersion = '${VERSION}'/" shared/download.html
           echo "Updated fallbackVersion to ${VERSION}"
           grep fallbackVersion shared/download.html
@@ -237,5 +314,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add shared/download.html
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: update download page fallback version to v${{ steps.version.outputs.VERSION }}"
+          git commit -m "chore: update download page fallback version to v${{ needs.release-meta.outputs.version }}"
           git push origin main

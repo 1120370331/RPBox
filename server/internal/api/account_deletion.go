@@ -19,15 +19,17 @@ type deleteAccountRequest struct {
 }
 
 type accountDeletionCleanupPlan struct {
-	user         model.User
-	posts        []model.Post
-	items        []accountDeletionItemCleanup
-	comments     []model.Comment
-	itemComments []model.ItemComment
-	storyEntries []model.StoryEntry
-	guilds       []model.Guild
-	collections  []model.Collection
-	characters   []model.Character
+	user                model.User
+	posts               []model.Post
+	items               []accountDeletionItemCleanup
+	comments            []model.Comment
+	itemComments        []model.ItemComment
+	storyEntries        []model.StoryEntry
+	storyMusicTracks    []model.StoryMusicTrack
+	storyMusicPlaylists []model.StoryMusicPlaylist
+	guilds              []model.Guild
+	collections         []model.Collection
+	characters          []model.Character
 }
 
 type accountDeletionItemCleanup struct {
@@ -88,6 +90,14 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		return err
 	}
 	ownedStoryIDs, err := pluckUintIDs(tx, &model.Story{}, "id", "user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+	storyMusicTrackIDs, err := pluckUintIDs(tx, &model.StoryMusicTrack{}, "id", "user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+	storyMusicPlaylistIDs, err := pluckUintIDs(tx, &model.StoryMusicPlaylist{}, "id", "user_id = ?", userID)
 	if err != nil {
 		return err
 	}
@@ -192,6 +202,16 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	}
 	if len(ownedStoryIDs) > 0 {
 		if err := tx.Where("story_id IN ?", ownedStoryIDs).Find(&cleanupPlan.storyEntries).Error; err != nil {
+			return err
+		}
+	}
+	if len(storyMusicTrackIDs) > 0 {
+		if err := tx.Where("id IN ?", storyMusicTrackIDs).Find(&cleanupPlan.storyMusicTracks).Error; err != nil {
+			return err
+		}
+	}
+	if len(storyMusicPlaylistIDs) > 0 {
+		if err := tx.Where("id IN ?", storyMusicPlaylistIDs).Find(&cleanupPlan.storyMusicPlaylists).Error; err != nil {
 			return err
 		}
 	}
@@ -346,6 +366,12 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	}
 
 	if len(ownedStoryIDs) > 0 {
+		if err := tx.Where("story_id IN ?", ownedStoryIDs).Delete(&model.StoryMusicSegment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("story_id IN ?", ownedStoryIDs).Delete(&model.StoryMusicTrackStory{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("story_id IN ?", ownedStoryIDs).Delete(&model.StoryBookmark{}).Error; err != nil {
 			return err
 		}
@@ -359,6 +385,30 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 			return err
 		}
 		if err := tx.Where("id IN ?", ownedStoryIDs).Delete(&model.Story{}).Error; err != nil {
+			return err
+		}
+	}
+
+	if len(storyMusicTrackIDs) > 0 {
+		if err := tx.Where("track_id IN ?", storyMusicTrackIDs).Delete(&model.StoryMusicSegment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("track_id IN ?", storyMusicTrackIDs).Delete(&model.StoryMusicPlaylistTrack{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("track_id IN ?", storyMusicTrackIDs).Delete(&model.StoryMusicTrackStory{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", storyMusicTrackIDs).Delete(&model.StoryMusicTrack{}).Error; err != nil {
+			return err
+		}
+	}
+
+	if len(storyMusicPlaylistIDs) > 0 {
+		if err := tx.Where("playlist_id IN ?", storyMusicPlaylistIDs).Delete(&model.StoryMusicPlaylistTrack{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", storyMusicPlaylistIDs).Delete(&model.StoryMusicPlaylist{}).Error; err != nil {
 			return err
 		}
 	}
@@ -571,6 +621,10 @@ func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeleti
 	for _, entry := range plan.storyEntries {
 		collectUploadKeysFromValue(c, entry.Content, keys)
 		collectUploadKeysFromContent(c, entry.Content, keys)
+	}
+
+	for _, track := range plan.storyMusicTracks {
+		collectUploadKeysFromValue(c, track.URL, keys)
 	}
 
 	for _, guild := range plan.guilds {

@@ -11,6 +11,7 @@ export default {
   },
   user: {
     login: 'Login',
+    switchAccount: 'Switch account',
     logout: 'Logout',
     notifications: 'Notifications',
     avatar: 'Avatar',

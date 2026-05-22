@@ -8,6 +8,12 @@ export default {
     submit: '登录',
     submitting: '登录中...',
     noAccount: '没有账号? 立即注册',
+    recentAccounts: '最近登录',
+    useAnotherAccount: '使用其他账号',
+    passwordRequiredForSwitch: '输入密码后切换',
+    passwordlessSwitchAvailable: '60天内免密切换',
+    passwordlessSwitching: '切换中...',
+    removeRecentAccount: '移除这个账号',
   },
   register: {
     title: 'RPBox',

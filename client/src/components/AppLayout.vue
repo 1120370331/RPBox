@@ -112,6 +112,11 @@ function handleLogout() {
   router.push('/login')
 }
 
+function handleSwitchAccount() {
+  userStore.logout()
+  router.push({ name: 'login', query: { switch: '1' } })
+}
+
 function handleGlobalJumpLink(event: MouseEvent) {
   const returnTo = resolvePostReturnTarget(event)
   handleJumpLinkClick(event, router, { ignoreEditor: true, returnTo })
@@ -344,7 +349,16 @@ onBeforeUnmount(() => {
               />
             </div>
             <span class="user-points">积分 {{ userStore.user?.activity_points ?? 0 }}</span>
-            <p class="logout-link" @click="handleLogout">{{ t('nav.user.logout') }}</p>
+            <div class="account-actions">
+              <button type="button" class="account-action" @click="handleSwitchAccount">
+                <i class="ri-switch-line"></i>
+                <span>{{ t('nav.user.switchAccount') }}</span>
+              </button>
+              <button type="button" class="account-action muted" @click="handleLogout">
+                <i class="ri-logout-box-r-line"></i>
+                <span>{{ t('nav.user.logout') }}</span>
+              </button>
+            </div>
           </div>
         </template>
         <router-link v-else to="/login" class="login-btn">
@@ -615,15 +629,41 @@ onBeforeUnmount(() => {
   color: var(--color-accent, #D4A373);
 }
 
-.logout-link {
-  font-size: 12px;
-  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.5));
-  margin: 0;
-  cursor: pointer;
-  transition: color 0.3s;
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
-.logout-link:hover {
+.account-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.72));
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: color 0.3s;
+  white-space: nowrap;
+}
+
+.account-action i {
+  font-size: 13px;
+}
+
+.account-action:hover {
+  color: var(--color-sidebar-text, rgba(251, 245, 239, 0.9));
+}
+
+.account-action.muted {
+  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.5));
+}
+
+.account-action.muted:hover {
   color: var(--color-sidebar-text, rgba(251, 245, 239, 0.8));
 }
 
@@ -753,8 +793,12 @@ onBeforeUnmount(() => {
   }
 
   .user-points,
-  .logout-link {
+  .account-action {
     font-size: 11px;
+  }
+
+  .account-actions {
+    gap: 7px;
   }
 }
 </style>

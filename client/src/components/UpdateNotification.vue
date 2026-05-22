@@ -53,9 +53,11 @@ async function handleInstall() {
           </div>
 
           <!-- 标题 -->
-          <h2 class="update-title">发现新版本</h2>
+          <h2 class="update-title">{{ updateInfo?.channel === 'beta' ? '发现测试版' : '发现新版本' }}</h2>
           <div class="update-version">
-            <span class="version-badge">v{{ updateInfo?.version }}</span>
+            <span class="version-badge" :class="{ beta: updateInfo?.channel === 'beta' }">
+              {{ updateInfo?.channel === 'beta' ? 'Beta v' : 'v' }}{{ updateInfo?.version }}
+            </span>
           </div>
 
           <!-- 更新说明 -->
@@ -159,6 +161,11 @@ async function handleInstall() {
   border-radius: 20px;
   font-size: 16px;
   font-weight: 600;
+}
+
+.version-badge.beta {
+  background: rgba(32, 110, 108, 0.12);
+  color: #206e6c;
 }
 
 .update-notes {

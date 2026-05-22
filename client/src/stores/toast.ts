@@ -3,16 +3,24 @@ import { defineStore } from 'pinia'
 
 export interface ToastItem {
   id: number
-  type: 'success' | 'error' | 'warning' | 'info'
+  type: 'success' | 'error' | 'warning' | 'info' | 'achievement'
   message: string
+  title?: string
+  icon?: string
+  rarity?: string
 }
 
 export const useToastStore = defineStore('toast', () => {
   const toasts = ref<ToastItem[]>([])
   let id = 0
 
-  function show(type: ToastItem['type'], message: string, duration = 3000) {
-    const toast = { id: ++id, type, message }
+  function show(
+    type: ToastItem['type'],
+    message: string,
+    duration = 3000,
+    meta: Pick<ToastItem, 'title' | 'icon' | 'rarity'> = {},
+  ) {
+    const toast = { id: ++id, type, message, ...meta }
     toasts.value.push(toast)
     setTimeout(() => remove(toast.id), duration)
   }
@@ -38,6 +46,10 @@ export const useToastStore = defineStore('toast', () => {
     show('info', message, duration)
   }
 
+  function achievement(title: string, message: string, meta: Pick<ToastItem, 'icon' | 'rarity'> = {}, duration = 7000) {
+    show('achievement', message, duration, { ...meta, title })
+  }
+
   return {
     toasts,
     show,
@@ -46,5 +58,6 @@ export const useToastStore = defineStore('toast', () => {
     error,
     warning,
     info,
+    achievement,
   }
 })

@@ -423,6 +423,9 @@ func (s *Server) deleteStory(c *gin.Context) {
 
 	// 删除剧情条目
 	database.DB.Where("story_id = ?", id).Delete(&model.StoryEntry{})
+	// 删除剧情音乐定位和关联（音频文件保留在用户历史音乐中）
+	database.DB.Where("story_id = ?", id).Delete(&model.StoryMusicSegment{})
+	database.DB.Where("story_id = ?", id).Delete(&model.StoryMusicTrackStory{})
 	// 删除剧情标签关联
 	database.DB.Where("story_id = ?", id).Delete(&model.StoryTag{})
 	// 删除剧情
@@ -464,6 +467,9 @@ func (s *Server) batchDeleteStories(c *gin.Context) {
 
 	// 删除剧情条目
 	database.DB.Where("story_id IN ?", req.IDs).Delete(&model.StoryEntry{})
+	// 删除剧情音乐定位和关联（音频文件保留在用户历史音乐中）
+	database.DB.Where("story_id IN ?", req.IDs).Delete(&model.StoryMusicSegment{})
+	database.DB.Where("story_id IN ?", req.IDs).Delete(&model.StoryMusicTrackStory{})
 	// 删除剧情标签关联
 	database.DB.Where("story_id IN ?", req.IDs).Delete(&model.StoryTag{})
 	// 删除剧情
@@ -531,6 +537,9 @@ func (s *Server) batchMoveStories(c *gin.Context) {
 
 	// 删除源剧情的标签关联
 	database.DB.Where("story_id IN ?", req.SourceIDs).Delete(&model.StoryTag{})
+	// 删除源剧情音乐定位和关联
+	database.DB.Where("story_id IN ?", req.SourceIDs).Delete(&model.StoryMusicSegment{})
+	database.DB.Where("story_id IN ?", req.SourceIDs).Delete(&model.StoryMusicTrackStory{})
 	// 删除源剧情
 	database.DB.Where("id IN ? AND user_id = ?", req.SourceIDs, userID).Delete(&model.Story{})
 
@@ -968,11 +977,15 @@ func (s *Server) getPublicStory(c *gin.Context) {
 	var user model.User
 	database.DB.First(&user, story.UserID)
 
+	musicTracks, musicSegments := s.loadPublicStoryMusic(story.ID)
+
 	c.JSON(http.StatusOK, gin.H{
-		"story":      story,
-		"entries":    entries,
-		"characters": charactersMap,
-		"author":     user.Username,
+		"story":          story,
+		"entries":        entries,
+		"characters":     charactersMap,
+		"author":         user.Username,
+		"music_tracks":   musicTracks,
+		"music_segments": musicSegments,
 	})
 }
 

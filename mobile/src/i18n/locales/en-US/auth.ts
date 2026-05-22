@@ -8,6 +8,12 @@ export default {
     submit: 'Login',
     submitting: 'Logging in...',
     noAccount: "Don't have an account? Sign up",
+    recentAccounts: 'Recent accounts',
+    useAnotherAccount: 'Use another account',
+    passwordRequiredForSwitch: 'Enter password to switch',
+    passwordlessSwitchAvailable: 'Password-free for 60 days',
+    passwordlessSwitching: 'Switching...',
+    removeRecentAccount: 'Remove this account',
   },
   register: {
     title: 'RPBox',

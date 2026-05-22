@@ -42,6 +42,10 @@ const {
   downloading,
   downloadProgress,
   lastError,
+  participateTesting,
+  betaUpdatesAvailable,
+  betaUpdatesEnabled,
+  setParticipateTesting,
 } = useUpdater()
 
 // 检查是否为 LV3+ 赞助者
@@ -160,6 +164,17 @@ async function toggleLaunchOnStartup() {
   } finally {
     launchOnStartupLoading.value = false
   }
+}
+
+function toggleParticipateTesting() {
+  if (!betaUpdatesAvailable.value) return
+
+  const nextValue = !participateTesting.value
+  setParticipateTesting(nextValue)
+  toast.success(nextValue
+    ? t('settings.system.participateTestingEnabled')
+    : t('settings.system.participateTestingDisabled'))
+  void fetchLatestRelease(true)
 }
 
 async function clearCache() {
@@ -604,6 +619,23 @@ watch(() => localeStore.currentLocale, (newLocale) => {
               </span>
             </div>
             <div class="switch" :class="{ active: launchOnStartup && launchOnStartupSupported }">
+              <div class="switch-thumb"></div>
+            </div>
+          </label>
+          <label
+            class="switch-item"
+            :class="{ disabled: !betaUpdatesAvailable }"
+            @click="toggleParticipateTesting"
+          >
+            <div class="switch-info">
+              <span class="switch-label">{{ $t('settings.system.participateTesting') }}</span>
+              <span class="switch-desc">
+                {{ betaUpdatesAvailable
+                  ? $t('settings.system.participateTestingDesc')
+                  : $t('settings.system.participateTestingLockedDesc') }}
+              </span>
+            </div>
+            <div class="switch" :class="{ active: betaUpdatesEnabled }">
               <div class="switch-thumb"></div>
             </div>
           </label>

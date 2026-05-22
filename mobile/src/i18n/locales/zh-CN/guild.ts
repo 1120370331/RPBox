@@ -46,6 +46,7 @@ export default {
     success: '申请已提交',
     autoApproved: '已自动加入公会',
     failed: '申请失败',
+    pending: '申请待审核',
     canceled: '申请已取消',
     cancelFailed: '取消申请失败',
   },

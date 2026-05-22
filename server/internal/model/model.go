@@ -162,6 +162,75 @@ type StoryEntry struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+// StoryMusicTrack stores a reusable user-owned audio asset for story BGM.
+type StoryMusicTrack struct {
+	ID         uint      `gorm:"primarykey" json:"id"`
+	UserID     uint      `gorm:"index;not null" json:"userId"`
+	Name       string    `gorm:"size:128;not null" json:"name"`
+	FileName   string    `gorm:"size:255" json:"fileName"`
+	MimeType   string    `gorm:"size:100" json:"mimeType"`
+	Size       int64     `json:"size"`
+	URL        string    `gorm:"type:text;not null" json:"url"`
+	StorageKey string    `gorm:"size:512" json:"-"`
+	Color      string    `gorm:"size:16;default:#B87333" json:"color"`
+	Volume     float64   `gorm:"default:0.75" json:"volume"`
+	Tags       string    `gorm:"type:text" json:"-"`
+	TagsList   []string  `gorm:"-" json:"tags"`
+	StoryIDs   []uint    `gorm:"-" json:"storyIds"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+// StoryMusicPlaylist groups reusable BGM tracks for sharing and material discovery.
+type StoryMusicPlaylist struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	UserID      uint      `gorm:"index;not null" json:"userId"`
+	Name        string    `gorm:"size:128;not null" json:"name"`
+	Description string    `gorm:"size:512" json:"description"`
+	Color       string    `gorm:"size:16;default:#B87333" json:"color"`
+	IsPublic    bool      `gorm:"default:false;index" json:"isPublic"`
+	ShareCode   string    `gorm:"size:16;index" json:"shareCode"`
+	ViewCount   int       `gorm:"default:0" json:"viewCount"`
+	TrackCount  int       `gorm:"-" json:"trackCount"`
+	TrackIDs    []uint    `gorm:"-" json:"trackIds"`
+	AuthorName  string    `gorm:"-" json:"authorName,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+// StoryMusicPlaylistTrack attaches a reusable track to a playlist.
+type StoryMusicPlaylistTrack struct {
+	ID         uint      `gorm:"primarykey" json:"id"`
+	PlaylistID uint      `gorm:"uniqueIndex:idx_story_music_playlist_track;not null" json:"playlistId"`
+	TrackID    uint      `gorm:"uniqueIndex:idx_story_music_playlist_track;index;not null" json:"trackId"`
+	SortOrder  int       `gorm:"default:0" json:"sortOrder"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// StoryMusicTrackStory attaches a reusable music track to a story.
+type StoryMusicTrackStory struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	StoryID   uint      `gorm:"uniqueIndex:idx_story_music_track_story;not null" json:"storyId"`
+	TrackID   uint      `gorm:"uniqueIndex:idx_story_music_track_story;index;not null" json:"trackId"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// StoryMusicSegment defines where a BGM track starts and optionally ends in a story.
+type StoryMusicSegment struct {
+	ID             uint      `gorm:"primarykey" json:"id"`
+	StoryID        uint      `gorm:"index;not null" json:"storyId"`
+	TrackID        uint      `gorm:"index;not null" json:"trackId"`
+	StartEntryID   uint      `gorm:"index;not null" json:"startEntryId"`
+	EndEntryID     *uint     `gorm:"index" json:"endEntryId"`
+	Loop           bool      `gorm:"default:true" json:"loop"`
+	AutoPlay       bool      `gorm:"default:true" json:"autoPlay"`
+	FadeInSeconds  float64   `gorm:"default:1" json:"fadeInSeconds"`
+	FadeOutSeconds float64   `gorm:"default:1" json:"fadeOutSeconds"`
+	Volume         float64   `gorm:"default:0.75" json:"volume"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
 // StoryBookmark 剧情书签
 type StoryBookmark struct {
 	ID         uint      `gorm:"primarykey" json:"id"`

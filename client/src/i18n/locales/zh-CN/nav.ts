@@ -11,6 +11,7 @@ export default {
   },
   user: {
     login: '登录',
+    switchAccount: '切换账号',
     logout: '退出登录',
     notifications: '消息中心',
     avatar: '头像',

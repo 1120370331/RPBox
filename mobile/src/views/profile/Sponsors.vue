@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import { resolveApiUrl } from '@/api/image'
 import { listSponsors, type SponsorUser } from '@/api/user'
 
 const router = useRouter()
-const { t } = useI18n()
 
 const loading = ref(false)
 const sponsors = ref<SponsorUser[]>([])

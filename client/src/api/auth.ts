@@ -3,6 +3,8 @@ import type { UserData } from '@/types/user'
 
 export interface LoginResponse {
   token: string
+  switch_token?: string
+  switch_token_expires_at?: string
   user: UserData
 }
 
@@ -16,6 +18,13 @@ export function login(username: string, password: string) {
   return request<LoginResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
+  })
+}
+
+export function switchLogin(switchToken: string) {
+  return request<LoginResponse>('/auth/switch', {
+    method: 'POST',
+    body: JSON.stringify({ switch_token: switchToken }),
   })
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { getPublicStory, type Story, type StoryEntry } from '@/api/story'
+import { getPublicStory, type Story, type StoryEntry, type StoryMusicSegment, type StoryMusicTrack } from '@/api/story'
 import { type Character } from '@/api/character'
 import WowIcon from '@/components/WowIcon.vue'
 import CharacterCard from '@/components/CharacterCard.vue'
@@ -15,6 +15,14 @@ const story = ref<Story | null>(null)
 const entries = ref<StoryEntry[]>([])
 const characters = ref<Record<number, Character>>({})
 const author = ref('')
+const musicTracks = ref<StoryMusicTrack[]>([])
+const musicSegments = ref<StoryMusicSegment[]>([])
+const currentMusicSegmentId = ref<number | null>(null)
+const musicBlocked = ref(false)
+const musicControlOpen = ref(false)
+const musicMasterVolume = ref(loadStoredBgmVolume())
+const musicMuted = ref(loadStoredBgmBoolean('muted', false))
+const musicDisabled = ref(loadStoredBgmBoolean('disabled', false))
 
 // 角色卡片弹窗
 const showCharacterCard = ref(false)
@@ -42,14 +50,71 @@ const isPlaying = ref(false)
 const currentIndex = ref(0)
 const playSpeed = ref(1)
 const playTimer = ref<number | null>(null)
+let musicAudio: HTMLAudioElement | null = null
+let musicFadeTimer: number | null = null
+let musicScrollRaf = 0
 
 const shareCode = computed(() => route.params.code as string)
+
+function loadStoredBgmVolume() {
+  const fallback = 80
+  try {
+    const raw = localStorage.getItem('rpbox.storyBgm.volume')
+    const parsed = raw === null ? fallback : Number(raw)
+    return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 100) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function loadStoredBgmBoolean(key: 'muted' | 'disabled', fallback: boolean) {
+  try {
+    const raw = localStorage.getItem(`rpbox.storyBgm.${key}`)
+    return raw === null ? fallback : raw === 'true'
+  } catch {
+    return fallback
+  }
+}
+
+function saveBgmPreference(key: 'volume' | 'muted' | 'disabled', value: string | number | boolean) {
+  try {
+    localStorage.setItem(`rpbox.storyBgm.${key}`, String(value))
+  } catch {
+    // Keep session-level control even if localStorage is unavailable.
+  }
+}
 
 const visibleEntries = computed(() => {
   if (isPlaying.value) {
     return entries.value.slice(0, currentIndex.value + 1)
   }
   return entries.value
+})
+
+const entryIndexById = computed(() => {
+  const map = new Map<number, number>()
+  entries.value.forEach((entry, index) => {
+    map.set(entry.id, index)
+  })
+  return map
+})
+
+const sortedMusicSegments = computed(() => {
+  return [...musicSegments.value].sort((a, b) => {
+    const startA = getEntrySortIndex(a.startEntryId)
+    const startB = getEntrySortIndex(b.startEntryId)
+    if (startA !== startB) return startA - startB
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  })
+})
+
+const currentMusicSegment = computed(() => {
+  if (!currentMusicSegmentId.value) return null
+  return musicSegments.value.find(segment => segment.id === currentMusicSegmentId.value) || null
+})
+
+const currentMusicTrack = computed(() => {
+  return currentMusicSegment.value ? getMusicTrack(currentMusicSegment.value.trackId) : null
 })
 
 async function loadStory() {
@@ -61,6 +126,9 @@ async function loadStory() {
     entries.value = res.entries || []
     characters.value = res.characters || {}
     author.value = res.author
+    musicTracks.value = res.music_tracks || []
+    musicSegments.value = res.music_segments || []
+    scheduleMusicScrollCheck()
     console.log('[StoryPlayback] entries:', entries.value)
     console.log('[StoryPlayback] characters:', characters.value)
     console.log('[StoryPlayback] 第一条entry:', entries.value[0])
@@ -124,6 +192,231 @@ function getParticipants(): string[] {
     return JSON.parse(story.value.participants)
   } catch {
     return []
+  }
+}
+
+function getEntrySortIndex(entryId?: number) {
+  if (!entryId) return Number.MAX_SAFE_INTEGER
+  return entryIndexById.value.get(entryId) ?? Number.MAX_SAFE_INTEGER
+}
+
+function getMusicTrack(trackId?: number | null) {
+  if (!trackId) return null
+  return musicTracks.value.find(track => track.id === trackId) || null
+}
+
+function getMusicControlTrackLabel() {
+  if (musicDisabled.value) return '已禁用'
+  if (musicBlocked.value) return '点击启用播放'
+  if (currentMusicTrack.value) return currentMusicTrack.value.name
+  if (musicSegments.value.length) return '等待滚动触发'
+  return '暂无 BGM'
+}
+
+function getMusicEffectiveVolume(segment: StoryMusicSegment) {
+  if (musicDisabled.value || musicMuted.value) return 0
+  const segmentVolume = Math.min(Math.max(segment.volume, 0), 1)
+  return segmentVolume * (musicMasterVolume.value / 100)
+}
+
+function applyMusicVolumePreference(fadeSeconds = 0.12) {
+  if (!musicAudio) return
+  musicAudio.muted = musicMuted.value
+  if (musicDisabled.value) {
+    stopMusicPlayback(0.15)
+    return
+  }
+
+  const segment = currentMusicSegment.value
+  if (segment && !musicAudio.paused) {
+    fadeMusicAudioTo(getMusicEffectiveVolume(segment), fadeSeconds)
+  }
+}
+
+function updateMusicMasterVolume() {
+  musicMasterVolume.value = Math.min(Math.max(Number(musicMasterVolume.value) || 0, 0), 100)
+  saveBgmPreference('volume', musicMasterVolume.value)
+  applyMusicVolumePreference()
+}
+
+function toggleMusicMuted() {
+  musicMuted.value = !musicMuted.value
+  saveBgmPreference('muted', musicMuted.value)
+  applyMusicVolumePreference()
+}
+
+function toggleMusicDisabled() {
+  musicDisabled.value = !musicDisabled.value
+  saveBgmPreference('disabled', musicDisabled.value)
+  if (musicDisabled.value) {
+    musicBlocked.value = false
+    stopMusicPlayback(0.15)
+  } else {
+    enableStoryMusic()
+  }
+}
+
+function getMusicSegmentForEntry(entryId: number) {
+  const entryIndex = getEntrySortIndex(entryId)
+  if (entryIndex === Number.MAX_SAFE_INTEGER) return null
+
+  let matched: StoryMusicSegment | null = null
+  let matchedStart = -1
+  for (const segment of sortedMusicSegments.value) {
+    const startIndex = getEntrySortIndex(segment.startEntryId)
+    if (startIndex > entryIndex) continue
+    const endIndex = segment.endEntryId ? getEntrySortIndex(segment.endEntryId) : entries.value.length - 1
+    if (entryIndex <= endIndex && startIndex >= matchedStart) {
+      matched = segment
+      matchedStart = startIndex
+    }
+  }
+  return matched
+}
+
+function getLastVisibleEntryId(): number | null {
+  const nodes = document.querySelectorAll<HTMLElement>('.entry-item[data-entry-id]')
+  if (!nodes.length) return null
+
+  const viewportBottom = window.innerHeight
+  let lastVisibleId: number | null = null
+  for (const node of nodes) {
+    const rect = node.getBoundingClientRect()
+    if (rect.top < viewportBottom && rect.bottom > 0) {
+      lastVisibleId = Number(node.dataset.entryId)
+    }
+  }
+  return lastVisibleId
+}
+
+function getMusicAudio() {
+  if (!musicAudio) {
+    musicAudio = new Audio()
+    musicAudio.preload = 'auto'
+  }
+  return musicAudio
+}
+
+function clearMusicFadeTimer() {
+  if (musicFadeTimer !== null) {
+    window.clearTimeout(musicFadeTimer)
+    musicFadeTimer = null
+  }
+}
+
+function fadeMusicAudioTo(targetVolume: number, seconds: number, done?: () => void) {
+  const audio = getMusicAudio()
+  clearMusicFadeTimer()
+
+  if (seconds <= 0) {
+    audio.volume = targetVolume
+    done?.()
+    return
+  }
+
+  const startVolume = audio.volume
+  const startedAt = performance.now()
+  const duration = seconds * 1000
+
+  const step = () => {
+    const progress = Math.min((performance.now() - startedAt) / duration, 1)
+    audio.volume = startVolume + (targetVolume - startVolume) * progress
+    if (progress < 1) {
+      musicFadeTimer = window.setTimeout(step, 40)
+    } else {
+      musicFadeTimer = null
+      done?.()
+    }
+  }
+
+  step()
+}
+
+function stopMusicPlayback(fadeSeconds = 1) {
+  if (!musicAudio) return
+  const audio = musicAudio
+  const stop = () => {
+    audio.pause()
+    audio.currentTime = 0
+    currentMusicSegmentId.value = null
+  }
+
+  if (audio.paused || fadeSeconds <= 0) {
+    stop()
+  } else {
+    fadeMusicAudioTo(0, fadeSeconds, stop)
+  }
+}
+
+async function playMusicSegment(segment: StoryMusicSegment) {
+  if (musicDisabled.value) return
+  const track = getMusicTrack(segment.trackId)
+  if (!track?.url) return
+
+  const audio = getMusicAudio()
+  const targetVolume = getMusicEffectiveVolume(segment)
+
+  if (currentMusicSegmentId.value === segment.id && !audio.paused) {
+    audio.loop = segment.loop
+    audio.muted = musicMuted.value
+    fadeMusicAudioTo(targetVolume, 0.2)
+    return
+  }
+
+  clearMusicFadeTimer()
+  audio.pause()
+  audio.src = track.url
+  audio.currentTime = 0
+  audio.loop = segment.loop
+  audio.muted = musicMuted.value
+  audio.volume = 0
+  currentMusicSegmentId.value = segment.id
+
+  try {
+    await audio.play()
+    musicBlocked.value = false
+    fadeMusicAudioTo(targetVolume, segment.fadeInSeconds)
+  } catch (e) {
+    currentMusicSegmentId.value = null
+    musicBlocked.value = true
+    console.warn('背景音乐自动播放失败:', e)
+  }
+}
+
+function updateMusicPlaybackByScroll() {
+  if (musicDisabled.value) return
+  if (!musicSegments.value.some(segment => segment.autoPlay)) return
+
+  const entryId = getLastVisibleEntryId()
+  const segment = entryId ? getMusicSegmentForEntry(entryId) : null
+  if (segment?.autoPlay) {
+    playMusicSegment(segment)
+    return
+  }
+
+  if (currentMusicSegment.value?.autoPlay) {
+    stopMusicPlayback(currentMusicSegment.value.fadeOutSeconds)
+  }
+}
+
+function scheduleMusicScrollCheck() {
+  if (musicScrollRaf) return
+  musicScrollRaf = window.requestAnimationFrame(() => {
+    musicScrollRaf = 0
+    updateMusicPlaybackByScroll()
+  })
+}
+
+function enableStoryMusic() {
+  musicDisabled.value = false
+  saveBgmPreference('disabled', false)
+  musicBlocked.value = false
+  const entryId = getLastVisibleEntryId()
+  const segment = entryId ? getMusicSegmentForEntry(entryId) : null
+  if (segment?.autoPlay) {
+    playMusicSegment(segment)
+  } else {
+    scheduleMusicScrollCheck()
   }
 }
 
@@ -269,8 +562,30 @@ function showCharacterInfo(entry: StoryEntry, event: MouseEvent) {
   showCharacterCard.value = true
 }
 
-onMounted(loadStory)
-onUnmounted(stopPlay)
+function handleMusicControlDocumentClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (target.closest('.story-bgm-control')) return
+  musicControlOpen.value = false
+}
+
+onMounted(() => {
+  loadStory()
+  window.addEventListener('scroll', scheduleMusicScrollCheck, { passive: true })
+  window.addEventListener('resize', scheduleMusicScrollCheck)
+  document.addEventListener('click', handleMusicControlDocumentClick)
+})
+
+onUnmounted(() => {
+  stopPlay()
+  window.removeEventListener('scroll', scheduleMusicScrollCheck)
+  window.removeEventListener('resize', scheduleMusicScrollCheck)
+  document.removeEventListener('click', handleMusicControlDocumentClick)
+  if (musicScrollRaf) {
+    window.cancelAnimationFrame(musicScrollRaf)
+  }
+  stopMusicPlayback(0)
+  clearMusicFadeTimer()
+})
 </script>
 
 <template>
@@ -305,6 +620,7 @@ onUnmounted(stopPlay)
         <div
           v-for="(entry, idx) in visibleEntries"
           :key="entry.id"
+          :data-entry-id="entry.id"
           class="entry-item"
           :class="[entry.type, { 'fade-in': isPlaying && idx === currentIndex }]"
         >
@@ -351,6 +667,10 @@ onUnmounted(stopPlay)
 
       <!-- 播放控制 -->
       <div class="playback-controls">
+        <div v-if="currentMusicTrack" class="bgm-now-playing">
+          <span :style="{ backgroundColor: currentMusicTrack.color }"></span>
+          {{ currentMusicTrack.name }}
+        </div>
         <button class="ctrl-btn" @click="skipToStart" title="跳到开头">
           <i class="ri-skip-back-line"></i>
         </button>
@@ -372,6 +692,58 @@ onUnmounted(stopPlay)
         <div class="progress-info">
           {{ currentIndex + 1 }} / {{ entries.length }}
         </div>
+      </div>
+
+      <div v-if="musicSegments.length > 0" class="story-bgm-control" :class="{ open: musicControlOpen }" @click.stop>
+        <Transition name="story-bgm-panel">
+          <div v-if="musicControlOpen" class="story-bgm-panel">
+            <div class="story-bgm-panel-head">
+              <div>
+                <strong>BGM</strong>
+                <span>{{ getMusicControlTrackLabel() }}</span>
+              </div>
+              <span
+                v-if="currentMusicTrack"
+                class="story-bgm-track-dot"
+                :style="{ backgroundColor: currentMusicTrack.color }"
+              ></span>
+            </div>
+            <label class="story-bgm-volume">
+              <span>音量 {{ musicMasterVolume }}%</span>
+              <input
+                v-model.number="musicMasterVolume"
+                type="range"
+                min="0"
+                max="100"
+                :disabled="musicDisabled"
+                @input="updateMusicMasterVolume"
+              />
+            </label>
+            <div class="story-bgm-actions">
+              <button v-if="musicBlocked && !musicDisabled" type="button" class="primary" @click="enableStoryMusic">
+                <i class="ri-play-circle-line"></i>
+                开启
+              </button>
+              <button type="button" :disabled="musicDisabled" @click="toggleMusicMuted">
+                <i :class="musicMuted ? 'ri-volume-mute-line' : 'ri-volume-up-line'"></i>
+                {{ musicMuted ? '取消静音' : '静音' }}
+              </button>
+              <button type="button" class="danger" @click="toggleMusicDisabled">
+                <i :class="musicDisabled ? 'ri-play-circle-line' : 'ri-forbid-2-line'"></i>
+                {{ musicDisabled ? '启用 BGM' : '禁用 BGM' }}
+              </button>
+            </div>
+          </div>
+        </Transition>
+        <button
+          type="button"
+          class="story-bgm-fab"
+          :class="{ disabled: musicDisabled, muted: musicMuted || musicBlocked }"
+          :title="musicDisabled ? 'BGM 已禁用' : 'BGM 控制'"
+          @click="musicControlOpen = !musicControlOpen"
+        >
+          <i class="ri-music-2-line"></i>
+        </button>
       </div>
     </template>
   </div>
@@ -657,6 +1029,184 @@ onUnmounted(stopPlay)
   justify-content: center;
   gap: 16px;
   box-shadow: 0 -4px 20px rgba(75, 54, 33, 0.1);
+}
+
+.bgm-now-playing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 180px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #f5f0e8;
+  color: #665242;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bgm-now-playing span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.story-bgm-control {
+  position: fixed;
+  right: 20px;
+  bottom: 92px;
+  z-index: 80;
+}
+
+.story-bgm-fab {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: #4B3621;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  box-shadow: 0 8px 24px rgba(75, 54, 33, 0.24);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s, opacity 0.2s;
+}
+
+.story-bgm-fab:hover,
+.story-bgm-control.open .story-bgm-fab {
+  transform: scale(1.05);
+  box-shadow: 0 10px 28px rgba(75, 54, 33, 0.3);
+}
+
+.story-bgm-fab.muted {
+  background: #856a52;
+}
+
+.story-bgm-fab.disabled {
+  background: #9b8b7d;
+  opacity: 0.82;
+}
+
+.story-bgm-panel {
+  position: absolute;
+  right: 0;
+  bottom: 60px;
+  width: 260px;
+  padding: 12px;
+  border: 1px solid #e5d4c1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(75, 54, 33, 0.22);
+}
+
+.story-bgm-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.story-bgm-panel-head div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.story-bgm-panel-head strong {
+  color: #4B3621;
+  font-size: 14px;
+}
+
+.story-bgm-panel-head span {
+  color: #856a52;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-bgm-track-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(184, 115, 51, 0.14);
+}
+
+.story-bgm-volume {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #4B3621;
+  font-size: 12px;
+}
+
+.story-bgm-volume input {
+  width: 100%;
+  accent-color: #B87333;
+}
+
+.story-bgm-volume input:disabled {
+  opacity: 0.45;
+}
+
+.story-bgm-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.story-bgm-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid #e5d4c1;
+  border-radius: 8px;
+  background: #f5f0e8;
+  color: #4B3621;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.story-bgm-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.story-bgm-actions button:not(:disabled):hover {
+  border-color: #B87333;
+  color: #B87333;
+}
+
+.story-bgm-actions button.primary:not(:disabled) {
+  border-color: #B87333;
+  background: #B87333;
+  color: #fff;
+}
+
+.story-bgm-actions button.danger:not(:disabled):hover {
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.story-bgm-panel-enter-active,
+.story-bgm-panel-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.story-bgm-panel-enter-from,
+.story-bgm-panel-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
 }
 
 .ctrl-btn {

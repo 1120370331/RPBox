@@ -43,7 +43,18 @@ export const useNotificationStore = defineStore('notification', () => {
         console.log('[Notification] 收到新通知:', message.data)
         lastNotification.value = message.data
         const toastStore = useToastStore()
-        toastStore.info(message.data?.content ? `新消息：${message.data.content}` : '你有一条新消息', 5000)
+        if (message.data?.type === 'achievement' || message.data?.target_type === 'achievement') {
+          toastStore.achievement(
+            message.data?.title || '成就解锁',
+            message.data?.content || message.data?.achievement_name || '新的成就已加入你的个人资料',
+            {
+              icon: message.data?.icon,
+              rarity: message.data?.rarity,
+            },
+          )
+        } else {
+          toastStore.info(message.data?.content ? `新消息：${message.data.content}` : '你有一条新消息', 5000)
+        }
         // 新通知到达时，未读数量会通过 UnreadCountUpdate 消息更新
       })
 
