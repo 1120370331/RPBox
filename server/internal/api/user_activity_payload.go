@@ -19,6 +19,8 @@ type userActivityPayload struct {
 	NextLevelExp           int    `json:"next_level_exp"`
 	LevelProgressPercent   int    `json:"level_progress_percent"`
 	SignedInToday          bool   `json:"signed_in_today"`
+	TotalSignInDays        int    `json:"total_sign_in_days"`
+	ConsecutiveSignInDays  int    `json:"consecutive_sign_in_days"`
 	NameStylePreference    string `json:"name_style_preference"`
 	AvatarChangeCount      int    `json:"avatar_change_count"`
 	UsernameChangeCount    int    `json:"username_change_count"`
@@ -26,7 +28,7 @@ type userActivityPayload struct {
 	NextUsernameChangeCost int    `json:"next_username_change_cost"`
 }
 
-func buildUserActivityPayload(user model.User, snapshot service.DailyActivitySnapshot) userActivityPayload {
+func buildUserActivityPayload(user model.User, snapshot service.DailyActivitySnapshot, signInStats service.SignInStats) userActivityPayload {
 	levelInfo := resolveForumLevelInfo(user.ActivityExperience)
 
 	nextAvatarCost := 0
@@ -49,6 +51,8 @@ func buildUserActivityPayload(user model.User, snapshot service.DailyActivitySna
 		NextLevelExp:           levelInfo.NextLevelExp,
 		LevelProgressPercent:   levelInfo.ProgressPercent,
 		SignedInToday:          snapshot.SignedInToday,
+		TotalSignInDays:        signInStats.TotalDays,
+		ConsecutiveSignInDays:  signInStats.ConsecutiveDays,
 		NameStylePreference:    normalizedNameStylePreference(user),
 		AvatarChangeCount:      user.AvatarChangeCount,
 		UsernameChangeCount:    user.UsernameChangeCount,
@@ -57,10 +61,22 @@ func buildUserActivityPayload(user model.User, snapshot service.DailyActivitySna
 	}
 }
 
+func loadUserActivityPayload(user model.User, now time.Time) userActivityPayload {
+	return buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, now), loadUserSignInStats(user.ID, now))
+}
+
 func loadUserActivitySnapshot(userID uint, now time.Time) service.DailyActivitySnapshot {
 	snapshot, err := service.GetDailyActivitySnapshot(database.DB, userID, now)
 	if err != nil {
 		return service.DailyActivitySnapshot{}
 	}
 	return snapshot
+}
+
+func loadUserSignInStats(userID uint, now time.Time) service.SignInStats {
+	stats, err := service.GetSignInStats(database.DB, userID, now)
+	if err != nil {
+		return service.SignInStats{}
+	}
+	return stats
 }

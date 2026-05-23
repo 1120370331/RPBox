@@ -10,7 +10,7 @@ import (
 const postListCacheName = "post:list"
 
 func (s *Server) userProfileCacheKey(userID string) string {
-	return cache.Key("user", "public", userID)
+	return cache.Key("user", "public", "v2", userID)
 }
 
 func (s *Server) invalidateUserProfileCache(ctx context.Context, userID uint) {

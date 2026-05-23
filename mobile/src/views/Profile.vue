@@ -112,6 +112,8 @@ async function loadProfile() {
         current_level_exp: res.current_level_exp,
         next_level_exp: res.next_level_exp,
         signed_in_today: res.signed_in_today,
+        total_sign_in_days: res.total_sign_in_days,
+        consecutive_sign_in_days: res.consecutive_sign_in_days,
       })
     }
   } catch (e) {

@@ -43,7 +43,7 @@ export function buildAchievementProgressContext({
     maxItemDownloads: readProfileNumber(profile, 'max_item_downloads', 'max_item_download_count'),
     totalLikes: readProfileNumber(profile, 'total_likes', 'like_count', 'received_likes'),
     totalItemDownloads: readProfileNumber(profile, 'total_item_downloads', 'item_download_count', 'download_count'),
-    storyCount: readProfileNumber(profile, 'story_count'),
+    storyCount: readProfileNumber(profile, 'story_entry_count', 'story_archive_line_count', 'story_count'),
     profileCount: readProfileNumber(profile, 'profile_count'),
     sponsorLevel,
     forumLevel: readProfileNumber(profile, 'forum_level'),
@@ -95,8 +95,11 @@ export function compareAchievementPriority(a: AchievementEntry, b: AchievementEn
 function readProfileNumber(profile: Record<string, unknown> | null | undefined, ...keys: string[]) {
   for (const key of keys) {
     const value = profile?.[key]
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
     const numberValue = Number(value)
-    if (Number.isFinite(numberValue) && numberValue > 0) {
+    if (Number.isFinite(numberValue) && numberValue >= 0) {
       return numberValue
     }
   }

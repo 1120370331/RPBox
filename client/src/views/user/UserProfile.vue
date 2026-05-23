@@ -173,6 +173,8 @@ async function loadUserProfile() {
         sponsor_level: level,
         sponsor_color: res.sponsor_color,
         sponsor_bold: res.sponsor_bold,
+        total_sign_in_days: res.total_sign_in_days,
+        consecutive_sign_in_days: res.consecutive_sign_in_days,
       })
     }
   } catch (error: any) {

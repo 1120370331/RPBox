@@ -6,6 +6,7 @@ export interface UserInfo extends UserData {
   avatar: string
   post_count?: number
   story_count?: number
+  story_entry_count?: number
   profile_count?: number
   item_count?: number
   guild_count?: number
@@ -26,6 +27,8 @@ export interface SignInDailyResponse {
   forum_level_bold?: boolean
   current_level_exp?: number
   next_level_exp?: number
+  total_sign_in_days?: number
+  consecutive_sign_in_days?: number
   signed_in_today?: boolean
   message: string
   granted: boolean
