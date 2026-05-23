@@ -332,6 +332,7 @@ func (s *Server) createStory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 		return
 	}
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusCreated, story)
 }
@@ -430,6 +431,7 @@ func (s *Server) deleteStory(c *gin.Context) {
 	database.DB.Where("story_id = ?", id).Delete(&model.StoryTag{})
 	// 删除剧情
 	database.DB.Delete(&story)
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
@@ -474,6 +476,7 @@ func (s *Server) batchDeleteStories(c *gin.Context) {
 	database.DB.Where("story_id IN ?", req.IDs).Delete(&model.StoryTag{})
 	// 删除剧情
 	database.DB.Where("id IN ? AND user_id = ?", req.IDs, userID).Delete(&model.Story{})
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功", "count": len(req.IDs)})
 }
@@ -563,6 +566,7 @@ func (s *Server) batchMoveStories(c *gin.Context) {
 		updates["end_time"] = *stat.MaxTime
 	}
 	database.DB.Model(&targetStory).Updates(updates)
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "移动成功", "count": len(req.SourceIDs)})
 }
@@ -684,6 +688,7 @@ func (s *Server) batchDeleteEntries(c *gin.Context) {
 
 	// 更新剧情的更新时间
 	database.DB.Model(&story).Update("updated_at", time.Now())
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功", "count": result.RowsAffected})
 }
@@ -785,6 +790,7 @@ func (s *Server) archiveEntriesToStory(c *gin.Context) {
 
 	// 更新目标剧情的更新时间
 	database.DB.Model(&targetStory).Update("updated_at", time.Now())
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "归档成功", "count": len(entries)})
 }
@@ -904,6 +910,7 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "添加失败"})
 		return
 	}
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusCreated, gin.H{"message": "添加成功", "count": len(entries)})
 }
@@ -1093,6 +1100,7 @@ func (s *Server) deleteStoryEntry(c *gin.Context) {
 
 	// 更新剧情的更新时间
 	database.DB.Model(&story).Update("updated_at", time.Now())
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }

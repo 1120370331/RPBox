@@ -37,12 +37,18 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	var storyCount int64
 	database.DB.Model(&model.Story{}).Where("user_id = ?", userID).Count(&storyCount)
 
+	var storyEntryCount int64
+	database.DB.Model(&model.StoryEntry{}).
+		Joins("JOIN stories ON stories.id = story_entries.story_id").
+		Where("stories.user_id = ?", userID).
+		Count(&storyEntryCount)
+
 	var profileCount int64
 	database.DB.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&profileCount)
 
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
-	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
+	activity := loadUserActivityPayload(user, time.Now())
 
 	// 返回头像 URL 而不是 base64 数据
 	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
@@ -66,6 +72,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		Website            string     `json:"website"`
 		PostCount          int64      `json:"post_count"`
 		StoryCount         int64      `json:"story_count"`
+		StoryEntryCount    int64      `json:"story_entry_count"`
 		ProfileCount       int64      `json:"profile_count"`
 		CreatedAt          time.Time  `json:"created_at"`
 		userActivityPayload
@@ -88,6 +95,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		Website:             user.Website,
 		PostCount:           postCount,
 		StoryCount:          storyCount,
+		StoryEntryCount:     storyEntryCount,
 		ProfileCount:        profileCount,
 		CreatedAt:           user.CreatedAt,
 		userActivityPayload: activity,
@@ -117,6 +125,7 @@ func (s *Server) signInDaily(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "签到失败"})
 		return
 	}
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 
 	var user model.User
 	if err := database.DB.First(&user, userID).Error; err != nil {
@@ -124,22 +133,24 @@ func (s *Server) signInDaily(c *gin.Context) {
 		return
 	}
 
-	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, now))
+	activity := loadUserActivityPayload(user, now)
 	c.JSON(http.StatusOK, gin.H{
-		"message":                map[bool]string{true: "签到成功", false: "今天已经签到过了"}[result.Granted],
-		"granted":                result.Granted,
-		"points_delta":           result.PointsDelta,
-		"experience_delta":       result.ExperienceDelta,
-		"activity_points":        activity.ActivityPoints,
-		"activity_experience":    activity.ActivityExperience,
-		"forum_level":            activity.ForumLevel,
-		"forum_level_name":       activity.ForumLevelName,
-		"forum_level_color":      activity.ForumLevelColor,
-		"forum_level_bold":       activity.ForumLevelBold,
-		"current_level_exp":      activity.CurrentLevelExp,
-		"next_level_exp":         activity.NextLevelExp,
-		"level_progress_percent": activity.LevelProgressPercent,
-		"signed_in_today":        activity.SignedInToday,
+		"message":                  map[bool]string{true: "签到成功", false: "今天已经签到过了"}[result.Granted],
+		"granted":                  result.Granted,
+		"points_delta":             result.PointsDelta,
+		"experience_delta":         result.ExperienceDelta,
+		"activity_points":          activity.ActivityPoints,
+		"activity_experience":      activity.ActivityExperience,
+		"forum_level":              activity.ForumLevel,
+		"forum_level_name":         activity.ForumLevelName,
+		"forum_level_color":        activity.ForumLevelColor,
+		"forum_level_bold":         activity.ForumLevelBold,
+		"current_level_exp":        activity.CurrentLevelExp,
+		"next_level_exp":           activity.NextLevelExp,
+		"level_progress_percent":   activity.LevelProgressPercent,
+		"signed_in_today":          activity.SignedInToday,
+		"total_sign_in_days":       activity.TotalSignInDays,
+		"consecutive_sign_in_days": activity.ConsecutiveSignInDays,
 	})
 }
 
@@ -213,7 +224,7 @@ func (s *Server) updateAvatar(c *gin.Context) {
 
 	var refreshed model.User
 	_ = database.DB.First(&refreshed, userID).Error
-	activity := buildUserActivityPayload(refreshed, loadUserActivitySnapshot(refreshed.ID, time.Now()))
+	activity := loadUserActivityPayload(refreshed, time.Now())
 	c.JSON(http.StatusOK, gin.H{
 		"message":                 "头像已提交审核",
 		"avatar":                  avatarURL,
@@ -415,35 +426,41 @@ func (s *Server) bindEmail(c *gin.Context) {
 }
 
 type userProfileCounts struct {
-	PostCount    int64
-	StoryCount   int64
-	ProfileCount int64
+	PostCount             int64
+	StoryCount            int64
+	StoryEntryCount       int64
+	ProfileCount          int64
+	TotalSignInDays       int
+	ConsecutiveSignInDays int
 }
 
 type publicUserProfileResponse struct {
-	ID                   uint      `json:"id"`
-	Username             string    `json:"username"`
-	Avatar               string    `json:"avatar"`
-	Role                 string    `json:"role"`
-	IsSponsor            bool      `json:"is_sponsor"`
-	SponsorLevel         int       `json:"sponsor_level"`
-	NameColor            string    `json:"name_color"`
-	NameBold             bool      `json:"name_bold"`
-	Bio                  string    `json:"bio"`
-	Location             string    `json:"location"`
-	Website              string    `json:"website"`
-	PostCount            int64     `json:"post_count"`
-	StoryCount           int64     `json:"story_count"`
-	ProfileCount         int64     `json:"profile_count"`
-	CreatedAt            time.Time `json:"created_at"`
-	Email                string    `json:"email,omitempty"`
-	ForumLevel           int       `json:"forum_level"`
-	ForumLevelName       string    `json:"forum_level_name"`
-	ForumLevelColor      string    `json:"forum_level_color"`
-	ForumLevelBold       bool      `json:"forum_level_bold"`
-	CurrentLevelExp      int       `json:"current_level_exp"`
-	NextLevelExp         int       `json:"next_level_exp"`
-	LevelProgressPercent int       `json:"level_progress_percent"`
+	ID                    uint      `json:"id"`
+	Username              string    `json:"username"`
+	Avatar                string    `json:"avatar"`
+	Role                  string    `json:"role"`
+	IsSponsor             bool      `json:"is_sponsor"`
+	SponsorLevel          int       `json:"sponsor_level"`
+	NameColor             string    `json:"name_color"`
+	NameBold              bool      `json:"name_bold"`
+	Bio                   string    `json:"bio"`
+	Location              string    `json:"location"`
+	Website               string    `json:"website"`
+	PostCount             int64     `json:"post_count"`
+	StoryCount            int64     `json:"story_count"`
+	StoryEntryCount       int64     `json:"story_entry_count"`
+	ProfileCount          int64     `json:"profile_count"`
+	TotalSignInDays       int       `json:"total_sign_in_days"`
+	ConsecutiveSignInDays int       `json:"consecutive_sign_in_days"`
+	CreatedAt             time.Time `json:"created_at"`
+	Email                 string    `json:"email,omitempty"`
+	ForumLevel            int       `json:"forum_level"`
+	ForumLevelName        string    `json:"forum_level_name"`
+	ForumLevelColor       string    `json:"forum_level_color"`
+	ForumLevelBold        bool      `json:"forum_level_bold"`
+	CurrentLevelExp       int       `json:"current_level_exp"`
+	NextLevelExp          int       `json:"next_level_exp"`
+	LevelProgressPercent  int       `json:"level_progress_percent"`
 }
 
 func fetchUserProfileData(ctx context.Context, userID string) (model.User, userProfileCounts, error) {
@@ -456,7 +473,15 @@ func fetchUserProfileData(ctx context.Context, userID string) (model.User, userP
 	var counts userProfileCounts
 	db.Model(&model.Post{}).Where("author_id = ? AND status = ? AND review_status = ?", userID, "published", "approved").Count(&counts.PostCount)
 	db.Model(&model.Story{}).Where("user_id = ?", userID).Count(&counts.StoryCount)
+	db.Model(&model.StoryEntry{}).
+		Joins("JOIN stories ON stories.id = story_entries.story_id").
+		Where("stories.user_id = ?", userID).
+		Count(&counts.StoryEntryCount)
 	db.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&counts.ProfileCount)
+	if stats, err := service.GetSignInStats(db, user.ID, time.Now()); err == nil {
+		counts.TotalSignInDays = stats.TotalDays
+		counts.ConsecutiveSignInDays = stats.ConsecutiveDays
+	}
 
 	return user, counts, nil
 }
@@ -466,28 +491,31 @@ func buildPublicUserProfile(apiHost string, user model.User, counts userProfileC
 	level := resolveSponsorLevel(user)
 	levelInfo := resolveForumLevelInfo(user.ActivityExperience)
 	response := publicUserProfileResponse{
-		ID:                   user.ID,
-		Username:             user.Username,
-		Avatar:               userAvatarURL(apiHost, user),
-		Role:                 user.Role,
-		IsSponsor:            level > sponsorLevelNone,
-		SponsorLevel:         level,
-		NameColor:            nameColor,
-		NameBold:             nameBold,
-		Bio:                  user.Bio,
-		Location:             user.Location,
-		Website:              user.Website,
-		PostCount:            counts.PostCount,
-		StoryCount:           counts.StoryCount,
-		ProfileCount:         counts.ProfileCount,
-		CreatedAt:            user.CreatedAt,
-		ForumLevel:           levelInfo.Level,
-		ForumLevelName:       levelInfo.Name,
-		ForumLevelColor:      levelInfo.Color,
-		ForumLevelBold:       levelInfo.Bold,
-		CurrentLevelExp:      levelInfo.CurrentLevelExp,
-		NextLevelExp:         levelInfo.NextLevelExp,
-		LevelProgressPercent: levelInfo.ProgressPercent,
+		ID:                    user.ID,
+		Username:              user.Username,
+		Avatar:                userAvatarURL(apiHost, user),
+		Role:                  user.Role,
+		IsSponsor:             level > sponsorLevelNone,
+		SponsorLevel:          level,
+		NameColor:             nameColor,
+		NameBold:              nameBold,
+		Bio:                   user.Bio,
+		Location:              user.Location,
+		Website:               user.Website,
+		PostCount:             counts.PostCount,
+		StoryCount:            counts.StoryCount,
+		StoryEntryCount:       counts.StoryEntryCount,
+		ProfileCount:          counts.ProfileCount,
+		TotalSignInDays:       counts.TotalSignInDays,
+		ConsecutiveSignInDays: counts.ConsecutiveSignInDays,
+		CreatedAt:             user.CreatedAt,
+		ForumLevel:            levelInfo.Level,
+		ForumLevelName:        levelInfo.Name,
+		ForumLevelColor:       levelInfo.Color,
+		ForumLevelBold:        levelInfo.Bold,
+		CurrentLevelExp:       levelInfo.CurrentLevelExp,
+		NextLevelExp:          levelInfo.NextLevelExp,
+		LevelProgressPercent:  levelInfo.ProgressPercent,
 	}
 
 	if maskedEmail := user.MaskedEmail(); maskedEmail != "" {
@@ -535,7 +563,7 @@ func (s *Server) getUserProfile(c *gin.Context) {
 
 	// 如果是查看自己的资料，返回敏感信息
 	if isOwnProfile {
-		activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
+		activity := loadUserActivityPayload(user, time.Now())
 		response := gin.H{
 			"id":                        publicProfile.ID,
 			"username":                  publicProfile.Username,
@@ -550,7 +578,10 @@ func (s *Server) getUserProfile(c *gin.Context) {
 			"website":                   publicProfile.Website,
 			"post_count":                publicProfile.PostCount,
 			"story_count":               publicProfile.StoryCount,
+			"story_entry_count":         publicProfile.StoryEntryCount,
 			"profile_count":             publicProfile.ProfileCount,
+			"total_sign_in_days":        publicProfile.TotalSignInDays,
+			"consecutive_sign_in_days":  publicProfile.ConsecutiveSignInDays,
 			"created_at":                publicProfile.CreatedAt,
 			"email":                     user.Email,
 			"email_verified":            user.EmailVerified,

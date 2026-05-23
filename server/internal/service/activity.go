@@ -65,6 +65,12 @@ type DailyActivitySnapshot struct {
 	StoryArchiveExpAwarded int
 }
 
+// SignInStats summarizes lifetime and current-streak sign-in progress.
+type SignInStats struct {
+	TotalDays       int
+	ConsecutiveDays int
+}
+
 // DayStart normalizes a timestamp to the start of the local day.
 func DayStart(now time.Time) time.Time {
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -81,6 +87,50 @@ func GetDailyActivitySnapshot(db *gorm.DB, userID uint, now time.Time) (DailyAct
 		LikeBonusAwardedToday:  state.LikeBonusAwardedAt != nil,
 		StoryArchiveEntries:    state.StoryArchiveEntries,
 		StoryArchiveExpAwarded: state.StoryArchiveExpAwarded,
+	}, nil
+}
+
+// GetSignInStats loads cumulative sign-in days and the active consecutive streak.
+func GetSignInStats(db *gorm.DB, userID uint, now time.Time) (SignInStats, error) {
+	var states []model.UserDailyActivity
+	if err := db.
+		Select("activity_date").
+		Where("user_id = ? AND signed_in_at IS NOT NULL", userID).
+		Order("activity_date DESC").
+		Find(&states).Error; err != nil {
+		return SignInStats{}, err
+	}
+	if len(states) == 0 {
+		return SignInStats{}, nil
+	}
+
+	signedDays := make(map[string]struct{}, len(states))
+	for _, state := range states {
+		signedDays[activityDateKey(state.ActivityDate)] = struct{}{}
+	}
+
+	today := DayStart(now)
+	latestKey := activityDateKey(states[0].ActivityDate)
+	if latestKey != activityDateKey(today) && latestKey != activityDateKey(today.AddDate(0, 0, -1)) {
+		return SignInStats{TotalDays: len(signedDays)}, nil
+	}
+
+	latestDay, err := time.ParseInLocation("2006-01-02", latestKey, now.Location())
+	if err != nil {
+		return SignInStats{TotalDays: len(signedDays)}, nil
+	}
+
+	streak := 0
+	for day := latestDay; ; day = day.AddDate(0, 0, -1) {
+		if _, ok := signedDays[activityDateKey(day)]; !ok {
+			break
+		}
+		streak++
+	}
+
+	return SignInStats{
+		TotalDays:       len(signedDays),
+		ConsecutiveDays: streak,
 	}, nil
 }
 
@@ -121,6 +171,10 @@ func AwardActivityReward(tx *gorm.DB, userID uint, action, referenceKey string, 
 		PointsDelta:     pointsDelta,
 		ExperienceDelta: experienceDelta,
 	}, nil
+}
+
+func activityDateKey(day time.Time) string {
+	return day.Format("2006-01-02")
 }
 
 // SpendActivityPoints spends points once for a unique action reference.

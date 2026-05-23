@@ -9,6 +9,8 @@ export interface UserActivityInfo {
   next_level_exp?: number
   level_progress_percent?: number
   signed_in_today?: boolean
+  total_sign_in_days?: number
+  consecutive_sign_in_days?: number
   name_style_preference?: 'default' | 'sponsor'
   avatar_change_count?: number
   username_change_count?: number

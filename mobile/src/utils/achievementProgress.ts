@@ -35,7 +35,7 @@ export function buildAchievementProgressContext(profile?: Record<string, unknown
     maxItemDownloads: readUserNumber(profile, 'max_item_downloads', 'max_item_download_count'),
     totalLikes: readUserNumber(profile, 'total_likes', 'like_count', 'received_likes'),
     totalItemDownloads: readUserNumber(profile, 'total_item_downloads', 'item_download_count', 'download_count'),
-    storyCount: readUserNumber(profile, 'story_count'),
+    storyCount: readUserNumber(profile, 'story_entry_count', 'story_archive_line_count', 'story_count'),
     profileCount: readUserNumber(profile, 'profile_count'),
     sponsorLevel,
     forumLevel: readUserNumber(profile, 'forum_level'),
@@ -85,8 +85,11 @@ function compareAchievementPriority(a: AchievementEntry, b: AchievementEntry) {
 function readUserNumber(profile: Record<string, unknown> | null | undefined, ...keys: string[]) {
   for (const key of keys) {
     const value = profile?.[key]
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
     const numberValue = Number(value)
-    if (Number.isFinite(numberValue) && numberValue > 0) {
+    if (Number.isFinite(numberValue) && numberValue >= 0) {
       return numberValue
     }
   }

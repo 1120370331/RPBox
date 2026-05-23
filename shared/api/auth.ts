@@ -25,6 +25,8 @@ export interface LoginResponse {
     current_level_exp?: number
     next_level_exp?: number
     signed_in_today?: boolean
+    total_sign_in_days?: number
+    consecutive_sign_in_days?: number
   }
 }
 

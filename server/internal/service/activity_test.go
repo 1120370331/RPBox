@@ -112,6 +112,42 @@ func TestApplyDailySignInOnlyAwardsOncePerDay(t *testing.T) {
 	}
 }
 
+func TestGetSignInStatsCountsTotalAndCurrentStreak(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.UserDailyActivity{})
+	user := model.User{Username: "sign-in-stats-user"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	now := time.Date(2026, 4, 10, 9, 30, 0, 0, time.FixedZone("CST", 8*3600))
+	signedAt := now
+	days := []time.Time{
+		DayStart(now),
+		DayStart(now).AddDate(0, 0, -1),
+		DayStart(now).AddDate(0, 0, -3),
+	}
+	for _, day := range days {
+		if err := db.Create(&model.UserDailyActivity{
+			UserID:       user.ID,
+			ActivityDate: day,
+			SignedInAt:   &signedAt,
+		}).Error; err != nil {
+			t.Fatalf("create daily activity: %v", err)
+		}
+	}
+
+	stats, err := GetSignInStats(db, user.ID, now)
+	if err != nil {
+		t.Fatalf("get sign-in stats: %v", err)
+	}
+	if stats.TotalDays != 3 {
+		t.Fatalf("expected total sign-in days 3, got %d", stats.TotalDays)
+	}
+	if stats.ConsecutiveDays != 2 {
+		t.Fatalf("expected current streak 2, got %d", stats.ConsecutiveDays)
+	}
+}
+
 func TestApplyStoryArchiveProgressBucketsAndCaps(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.User{}, &model.UserDailyActivity{}, &model.UserActivityLog{})
 	user := model.User{Username: "story-user"}

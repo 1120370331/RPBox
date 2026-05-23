@@ -286,7 +286,7 @@ func (s *Server) ensureAuthUserAvailable(c *gin.Context, user *model.User, login
 func (s *Server) buildAuthPayload(user model.User) (gin.H, error) {
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
-	activity := buildUserActivityPayload(user, loadUserActivitySnapshot(user.ID, time.Now()))
+	activity := loadUserActivityPayload(user, time.Now())
 	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)
 	if err != nil {
 		return nil, err
@@ -327,6 +327,8 @@ func (s *Server) buildAuthPayload(user model.User) (gin.H, error) {
 			"next_level_exp":            activity.NextLevelExp,
 			"level_progress_percent":    activity.LevelProgressPercent,
 			"signed_in_today":           activity.SignedInToday,
+			"total_sign_in_days":        activity.TotalSignInDays,
+			"consecutive_sign_in_days":  activity.ConsecutiveSignInDays,
 			"name_style_preference":     activity.NameStylePreference,
 			"avatar_change_count":       activity.AvatarChangeCount,
 			"username_change_count":     activity.UsernameChangeCount,

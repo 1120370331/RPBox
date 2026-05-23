@@ -9,7 +9,10 @@ export interface UserInfo extends UserData {
   website?: string
   post_count?: number
   story_count?: number
+  story_entry_count?: number
   profile_count?: number
+  total_sign_in_days?: number
+  consecutive_sign_in_days?: number
   created_at?: string
 }
 
