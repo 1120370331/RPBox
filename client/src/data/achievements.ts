@@ -37,11 +37,6 @@ export interface AchievementDefinition {
   metric: AchievementMetric
   threshold: number
   icon: string
-  centerMotif: string
-  spriteCell: {
-    row: number
-    col: number
-  }
 }
 
 export interface AchievementProgressContext {
@@ -133,8 +128,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'registered',
     threshold: 1,
     icon: 'ri-user-add-line',
-    centerMotif: 'open account seal',
-    spriteCell: { row: 1, col: 1 },
   },
   {
     id: 'checkin.total.7',
@@ -145,8 +138,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'totalSignIns',
     threshold: 7,
     icon: 'ri-calendar-check-line',
-    centerMotif: 'seven stamped calendar pages',
-    spriteCell: { row: 1, col: 2 },
   },
   {
     id: 'checkin.total.31',
@@ -157,8 +148,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'totalSignIns',
     threshold: 31,
     icon: 'ri-calendar-event-line',
-    centerMotif: 'lunar calendar with crescent mark',
-    spriteCell: { row: 1, col: 3 },
   },
   {
     id: 'checkin.total.365',
@@ -169,8 +158,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'totalSignIns',
     threshold: 365,
     icon: 'ri-calendar-2-line',
-    centerMotif: 'four season wheel around a calendar',
-    spriteCell: { row: 1, col: 4 },
   },
   {
     id: 'checkin.streak.30',
@@ -181,8 +168,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'signInStreak',
     threshold: 30,
     icon: 'ri-fire-line',
-    centerMotif: 'steady lantern flame with thirty sparks',
-    spriteCell: { row: 1, col: 5 },
   },
   {
     id: 'checkin.streak.365',
@@ -193,8 +178,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'signInStreak',
     threshold: 365,
     icon: 'ri-sun-line',
-    centerMotif: 'golden orbit ring with unbroken star trail',
-    spriteCell: { row: 2, col: 1 },
   },
   {
     id: 'post.first',
@@ -205,8 +188,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'postCount',
     threshold: 1,
     icon: 'ri-article-line',
-    centerMotif: 'fresh parchment post pinned with wax',
-    spriteCell: { row: 2, col: 2 },
   },
   {
     id: 'guild.first',
@@ -217,8 +198,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'guildCount',
     threshold: 1,
     icon: 'ri-shield-star-line',
-    centerMotif: 'joined guild shield with handshake rune',
-    spriteCell: { row: 2, col: 3 },
   },
   {
     id: 'item.first',
@@ -229,8 +208,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'itemCount',
     threshold: 1,
     icon: 'ri-box-3-line',
-    centerMotif: 'crafted item crate with tiny magic spark',
-    spriteCell: { row: 2, col: 4 },
   },
   {
     id: 'post.views.20',
@@ -241,8 +218,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'maxPostViews',
     threshold: 20,
     icon: 'ri-eye-line',
-    centerMotif: 'watchful eye over twenty small dots',
-    spriteCell: { row: 2, col: 5 },
   },
   {
     id: 'item.downloads.10',
@@ -253,8 +228,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'maxItemDownloads',
     threshold: 10,
     icon: 'ri-download-cloud-line',
-    centerMotif: 'download arrow entering a glowing satchel',
-    spriteCell: { row: 3, col: 1 },
   },
   {
     id: 'likes.total.100',
@@ -265,8 +238,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'totalLikes',
     threshold: 100,
     icon: 'ri-heart-3-line',
-    centerMotif: 'heart echo with one hundred tiny sparks',
-    spriteCell: { row: 3, col: 2 },
   },
   {
     id: 'likes.total.1000',
@@ -277,8 +248,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'totalLikes',
     threshold: 1000,
     icon: 'ri-heart-3-fill',
-    centerMotif: 'radiant heart crown with applause waves',
-    spriteCell: { row: 3, col: 3 },
   },
   {
     id: 'downloads.total.100',
@@ -289,8 +258,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'totalItemDownloads',
     threshold: 100,
     icon: 'ri-download-2-line',
-    centerMotif: 'stack of shared item scrolls with download mark',
-    spriteCell: { row: 3, col: 4 },
   },
   {
     id: 'downloads.total.1000',
@@ -301,8 +268,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'totalItemDownloads',
     threshold: 1000,
     icon: 'ri-download-cloud-2-line',
-    centerMotif: 'treasure vault sending item trails outward',
-    spriteCell: { row: 3, col: 5 },
   },
   {
     id: 'story.archive.1',
@@ -313,8 +278,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'storyCount',
     threshold: 1,
     icon: 'ri-book-open-line',
-    centerMotif: 'first open storybook with bookmark ribbon',
-    spriteCell: { row: 4, col: 1 },
   },
   {
     id: 'story.archive.1000',
@@ -325,8 +288,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'storyCount',
     threshold: 1000,
     icon: 'ri-bookmark-3-line',
-    centerMotif: 'library shelf of one thousand glowing volumes',
-    spriteCell: { row: 4, col: 2 },
   },
   {
     id: 'story.archive.10000',
@@ -337,8 +298,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'storyCount',
     threshold: 10000,
     icon: 'ri-book-2-line',
-    centerMotif: 'ancient archive tower filled with floating books',
-    spriteCell: { row: 4, col: 3 },
   },
   {
     id: 'story.archive.100000',
@@ -349,8 +308,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'storyCount',
     threshold: 100000,
     icon: 'ri-ancient-gate-line',
-    centerMotif: 'mythic archive gate opening to endless manuscripts',
-    spriteCell: { row: 4, col: 4 },
   },
   {
     id: 'profile.first',
@@ -361,8 +318,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'profileCount',
     threshold: 1,
     icon: 'ri-id-card-line',
-    centerMotif: 'character card portrait frame with quill',
-    spriteCell: { row: 4, col: 5 },
   },
   {
     id: 'sponsor.lv1',
@@ -373,8 +328,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'sponsorLevel',
     threshold: 1,
     icon: 'ri-vip-crown-line',
-    centerMotif: 'small bronze patron crown',
-    spriteCell: { row: 5, col: 1 },
   },
   {
     id: 'sponsor.lv2',
@@ -385,8 +338,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'sponsorLevel',
     threshold: 2,
     icon: 'ri-vip-crown-2-line',
-    centerMotif: 'silver patron crown with twin gems',
-    spriteCell: { row: 5, col: 2 },
   },
   {
     id: 'sponsor.lv3',
@@ -397,8 +348,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'sponsorLevel',
     threshold: 3,
     icon: 'ri-vip-diamond-line',
-    centerMotif: 'ornate purple-gold patron crown',
-    spriteCell: { row: 5, col: 3 },
   },
   {
     id: 'level.7',
@@ -409,8 +358,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'forumLevel',
     threshold: 7,
     icon: 'ri-star-smile-line',
-    centerMotif: 'level seven star crest with gold plume',
-    spriteCell: { row: 5, col: 4 },
   },
   {
     id: 'level.10',
@@ -421,8 +368,6 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     metric: 'forumLevel',
     threshold: 10,
     icon: 'ri-sparkling-2-line',
-    centerMotif: 'mythic crimson star with haloed wings',
-    spriteCell: { row: 5, col: 5 },
   },
 ]
 

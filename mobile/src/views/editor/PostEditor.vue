@@ -1,25 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from '@shared/stores/toast'
 import {
   POST_CATEGORIES,
+  addPostTag,
   createPost,
   deletePost,
   getPost,
+  getPostTags,
+  removePostTag,
   type PostCategory,
   updatePost,
 } from '@/api/post'
 import { listGuilds, type Guild } from '@/api/guild'
 import { resolveApiUrl } from '@/api/image'
 import { uploadImage } from '@/api/item'
+import { getPresetTags, type Tag } from '@/api/tag'
 import {
   addPostToCollection,
   getPostCollection,
   removePostFromCollection,
 } from '@/api/collection'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
+import MobileQuickJump from '@/components/MobileQuickJump.vue'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
 import NativeImageSourceDialog from '@/components/NativeImageSourceDialog.vue'
 import {
@@ -36,8 +41,13 @@ interface PostEditorForm {
   region: string
   address: string
   guild_id?: number
+  story_id?: number
   cover_image?: string
   is_public: boolean
+  event_type?: 'server' | 'guild'
+  event_start_time?: string
+  event_end_time?: string
+  event_color?: string
 }
 
 const route = useRoute()
@@ -53,6 +63,11 @@ const guilds = ref<Guild[]>([])
 const coverUploading = ref(false)
 const coverInput = ref<HTMLInputElement | null>(null)
 const coverPreview = ref('')
+const editorRef = ref<InstanceType<typeof MobileRichEditor> | null>(null)
+const quickJumpOpen = ref(false)
+const tags = ref<Tag[]>([])
+const selectedTags = ref<number[]>([])
+const originalTags = ref<number[]>([])
 const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
 const useNativeImagePicker = canUseNativeImagePicker()
@@ -66,13 +81,27 @@ const form = ref<PostEditorForm>({
   region: '',
   address: '',
   guild_id: undefined,
+  story_id: undefined,
   cover_image: '',
   is_public: true,
+  event_type: undefined,
+  event_start_time: undefined,
+  event_end_time: undefined,
+  event_color: '#D97706',
 })
 
 const postId = computed(() => Number(route.params.id))
 const isEdit = computed(() => Number.isFinite(postId.value) && postId.value > 0)
 const pageTitle = computed(() => isEdit.value ? t('community.editor.editTitle') : t('community.editor.createTitle'))
+const isEventCategory = computed(() => form.value.category === 'event')
+
+watch(() => form.value.category, (category) => {
+  if (category !== 'event') {
+    form.value.event_type = undefined
+    form.value.event_start_time = undefined
+    form.value.event_end_time = undefined
+  }
+})
 
 async function loadGuilds() {
   try {
@@ -80,6 +109,15 @@ async function loadGuilds() {
     guilds.value = res.guilds || []
   } catch (error) {
     console.error('Failed to load guilds', error)
+  }
+}
+
+async function loadTags() {
+  try {
+    const res = await getPresetTags('post')
+    tags.value = res.tags || []
+  } catch (error) {
+    console.error('Failed to load tags', error)
   }
 }
 
@@ -95,6 +133,11 @@ async function loadPostForEdit() {
     form.value.region = res.post.region || ''
     form.value.address = res.post.address || ''
     form.value.guild_id = res.post.guild_id
+    form.value.story_id = res.post.story_id
+    form.value.event_type = res.post.event_type
+    form.value.event_start_time = res.post.event_start_time?.slice(0, 16)
+    form.value.event_end_time = res.post.event_end_time?.slice(0, 16)
+    form.value.event_color = res.post.event_color || '#D97706'
     form.value.cover_image = res.post.cover_image || ''
     form.value.is_public = res.post.is_public ?? true
     coverPreview.value = resolveApiUrl(res.post.cover_image || '')
@@ -103,6 +146,10 @@ async function loadPostForEdit() {
     const collectionId = collectionRes.collection?.id ?? null
     originalCollectionId.value = collectionId
     selectedCollectionId.value = collectionId
+
+    const tagRes = await getPostTags(postId.value)
+    originalTags.value = tagRes.tags?.map((tag) => tag.id) || []
+    selectedTags.value = [...originalTags.value]
   } catch (error) {
     console.error('Failed to load post detail', error)
     toast.error((error as Error)?.message || t('community.editor.loadFailed'))
@@ -110,6 +157,15 @@ async function loadPostForEdit() {
   } finally {
     loading.value = false
   }
+}
+
+function toggleTag(tagId: number) {
+  const index = selectedTags.value.indexOf(tagId)
+  if (index >= 0) {
+    selectedTags.value.splice(index, 1)
+    return
+  }
+  selectedTags.value.push(tagId)
 }
 
 async function uploadCoverFile(file: File) {
@@ -189,6 +245,21 @@ async function syncPostCollection(targetPostId: number) {
   originalCollectionId.value = selectedCollectionId.value
 }
 
+async function syncPostTags(targetPostId: number) {
+  if (!isEdit.value) return
+  const addedTags = selectedTags.value.filter((tagId) => !originalTags.value.includes(tagId))
+  const removedTags = originalTags.value.filter((tagId) => !selectedTags.value.includes(tagId))
+
+  for (const tagId of addedTags) {
+    await addPostTag(targetPostId, tagId)
+  }
+  for (const tagId of removedTags) {
+    await removePostTag(targetPostId, tagId)
+  }
+
+  originalTags.value = [...selectedTags.value]
+}
+
 function validateForm() {
   if (!form.value.title.trim()) {
     toast.warning(t('community.editor.titleRequired'))
@@ -196,6 +267,10 @@ function validateForm() {
   }
   if (!form.value.content.trim()) {
     toast.warning(t('community.editor.contentRequired'))
+    return false
+  }
+  if (form.value.category === 'event' && form.value.event_type === 'guild' && !form.value.guild_id) {
+    toast.warning(t('community.editor.guildRequired'))
     return false
   }
   return true
@@ -218,7 +293,14 @@ async function submit(status: 'draft' | 'published') {
       region: form.value.region.trim(),
       address: form.value.address.trim(),
       content_type: 'html' as const,
+      tag_ids: selectedTags.value,
       status,
+    }
+    if (payload.event_start_time) {
+      payload.event_start_time = new Date(payload.event_start_time).toISOString()
+    }
+    if (payload.event_end_time) {
+      payload.event_end_time = new Date(payload.event_end_time).toISOString()
     }
 
     let targetId = postId.value
@@ -230,6 +312,7 @@ async function submit(status: 'draft' | 'published') {
     }
 
     await syncPostCollection(targetId)
+    await syncPostTags(targetId)
 
     toast.success(status === 'published' ? t('community.editor.publishSuccess') : t('community.editor.draftSuccess'))
     router.replace(isEdit.value
@@ -241,6 +324,11 @@ async function submit(status: 'draft' | 'published') {
   } finally {
     saving.value = false
   }
+}
+
+function handleQuickInsert(html: string) {
+  editorRef.value?.insertContent(html)
+  quickJumpOpen.value = false
 }
 
 function openDeleteDialog() {
@@ -264,7 +352,7 @@ async function confirmDelete() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadGuilds(), loadPostForEdit()])
+  await Promise.all([loadGuilds(), loadTags(), loadPostForEdit()])
 })
 </script>
 
@@ -293,7 +381,7 @@ onMounted(async () => {
             </select>
           </label>
 
-          <label class="field">
+          <label v-if="!isEventCategory" class="field">
             <span>{{ $t('community.editor.guild') }}</span>
             <select v-model="form.guild_id">
               <option :value="undefined">{{ $t('community.editor.guildNone') }}</option>
@@ -316,6 +404,46 @@ onMounted(async () => {
             <input v-model="form.is_public" type="checkbox">
           </label>
 
+          <div v-if="isEventCategory" class="field">
+            <span>{{ $t('community.editor.eventType') }}</span>
+            <div class="segmented-control">
+              <button
+                type="button"
+                :class="{ active: form.event_type === 'server' }"
+                @click="form.event_type = 'server'"
+              >{{ $t('community.editor.eventTypeServer') }}</button>
+              <button
+                type="button"
+                :class="{ active: form.event_type === 'guild' }"
+                @click="form.event_type = 'guild'"
+              >{{ $t('community.editor.eventTypeGuild') }}</button>
+            </div>
+          </div>
+
+          <label v-if="isEventCategory && form.event_type === 'guild'" class="field">
+            <span>{{ $t('community.editor.guild') }}</span>
+            <select v-model="form.guild_id">
+              <option :value="undefined">{{ $t('community.editor.guildSelect') }}</option>
+              <option v-for="guild in guilds" :key="guild.id" :value="guild.id">{{ guild.name }}</option>
+            </select>
+          </label>
+
+          <div v-if="isEventCategory && form.event_type" class="field">
+            <span>{{ $t('community.editor.eventTime') }}</span>
+            <div class="time-grid">
+              <input v-model="form.event_start_time" type="datetime-local" :aria-label="$t('community.editor.eventStartTime')">
+              <input v-model="form.event_end_time" type="datetime-local" :aria-label="$t('community.editor.eventEndTime')">
+            </div>
+          </div>
+
+          <label v-if="isEventCategory && form.event_type" class="field">
+            <span>{{ $t('community.editor.eventColor') }}</span>
+            <div class="color-input-row">
+              <input v-model="form.event_color" type="color">
+              <span>{{ form.event_color }}</span>
+            </div>
+          </label>
+
           <div class="field">
             <span>{{ $t('community.editor.cover') }}</span>
             <div class="cover-box">
@@ -333,11 +461,41 @@ onMounted(async () => {
           <label class="field">
             <span>{{ $t('community.editor.content') }}</span>
             <MobileRichEditor
+              ref="editorRef"
               :model-value="form.content"
               :placeholder="$t('community.editor.contentPlaceholder')"
               @update:modelValue="handleContentChange"
-            />
+            >
+              <template #toolbar>
+                <button
+                  type="button"
+                  class="toolbar-slot toolbar-slot--featured"
+                  :class="{ active: quickJumpOpen }"
+                  :title="$t('community.editor.quickJump')"
+                  :aria-label="$t('community.editor.quickJump')"
+                  @mousedown.prevent
+                  @click="quickJumpOpen = !quickJumpOpen"
+                >
+                  <i class="ri-links-line" />
+                  <span>{{ $t('community.editor.quickJump') }}</span>
+                </button>
+              </template>
+            </MobileRichEditor>
           </label>
+
+          <div v-if="tags.length" class="field">
+            <span>{{ $t('community.editor.tags') }}</span>
+            <div class="tag-list">
+              <button
+                v-for="tag in tags"
+                :key="tag.id"
+                type="button"
+                class="tag-chip"
+                :class="{ selected: selectedTags.includes(tag.id) }"
+                @click="toggleTag(tag.id)"
+              >{{ tag.name }}</button>
+            </div>
+          </div>
 
           <MobileCollectionSelector
             v-model="selectedCollectionId"
@@ -376,6 +534,11 @@ onMounted(async () => {
       :model-value="showImageSourceDialog"
       @update:modelValue="showImageSourceDialog = $event"
       @select="handleImageSourceSelect"
+    />
+    <MobileQuickJump
+      v-model="quickJumpOpen"
+      :on-insert="handleQuickInsert"
+      :exclude-post-id="isEdit ? postId : undefined"
     />
   </div>
 </template>
@@ -432,6 +595,78 @@ onMounted(async () => {
 
 .switch-field input {
   width: auto;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.segmented-control button {
+  min-height: 38px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.segmented-control button.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--text-light);
+}
+
+.time-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.color-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+}
+
+.color-input-row input {
+  width: 54px;
+  height: 36px;
+  padding: 0;
+}
+
+.color-input-row span {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-family: monospace;
+  text-transform: uppercase;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-chip {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-dark);
+  font-size: 12px;
+}
+
+.tag-chip.selected {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--text-light);
 }
 
 .cover-box {

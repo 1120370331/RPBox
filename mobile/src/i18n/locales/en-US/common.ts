@@ -3,6 +3,7 @@ export default {
     back: 'Back',
     prev: 'Previous',
     next: 'Next',
+    close: 'Close',
   },
   status: {
     loading: 'Loading...',

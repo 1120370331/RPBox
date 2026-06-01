@@ -30,25 +30,12 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		return
 	}
 
-	// 动态计算统计数据
-	var postCount int64
-	database.DB.Model(&model.Post{}).Where("author_id = ? AND status = ? AND review_status = ?", userID, "published", "approved").Count(&postCount)
-
-	var storyCount int64
-	database.DB.Model(&model.Story{}).Where("user_id = ?", userID).Count(&storyCount)
-
-	var storyEntryCount int64
-	database.DB.Model(&model.StoryEntry{}).
-		Joins("JOIN stories ON stories.id = story_entries.story_id").
-		Where("stories.user_id = ?", userID).
-		Count(&storyEntryCount)
-
-	var profileCount int64
-	database.DB.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&profileCount)
+	now := time.Now()
+	counts := loadUserProfileCounts(database.DB, userID, now)
 
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
-	activity := loadUserActivityPayload(user, time.Now())
+	activity := loadUserActivityPayload(user, now)
 
 	// 返回头像 URL 而不是 base64 数据
 	avatarURL := userAvatarURL(s.cfg.Server.ApiHost, user)
@@ -71,9 +58,15 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		Location           string     `json:"location"`
 		Website            string     `json:"website"`
 		PostCount          int64      `json:"post_count"`
+		GuildCount         int64      `json:"guild_count"`
+		ItemCount          int64      `json:"item_count"`
 		StoryCount         int64      `json:"story_count"`
 		StoryEntryCount    int64      `json:"story_entry_count"`
 		ProfileCount       int64      `json:"profile_count"`
+		MaxPostViews       int64      `json:"max_post_views"`
+		MaxItemDownloads   int64      `json:"max_item_downloads"`
+		TotalLikes         int64      `json:"total_likes"`
+		TotalItemDownloads int64      `json:"total_item_downloads"`
 		CreatedAt          time.Time  `json:"created_at"`
 		userActivityPayload
 	}{
@@ -93,10 +86,16 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		Bio:                 user.Bio,
 		Location:            user.Location,
 		Website:             user.Website,
-		PostCount:           postCount,
-		StoryCount:          storyCount,
-		StoryEntryCount:     storyEntryCount,
-		ProfileCount:        profileCount,
+		PostCount:           counts.PostCount,
+		GuildCount:          counts.GuildCount,
+		ItemCount:           counts.ItemCount,
+		StoryCount:          counts.StoryCount,
+		StoryEntryCount:     counts.StoryEntryCount,
+		ProfileCount:        counts.ProfileCount,
+		MaxPostViews:        counts.MaxPostViews,
+		MaxItemDownloads:    counts.MaxItemDownloads,
+		TotalLikes:          counts.TotalLikes,
+		TotalItemDownloads:  counts.TotalItemDownloads,
 		CreatedAt:           user.CreatedAt,
 		userActivityPayload: activity,
 	}
@@ -427,11 +426,60 @@ func (s *Server) bindEmail(c *gin.Context) {
 
 type userProfileCounts struct {
 	PostCount             int64
+	GuildCount            int64
+	ItemCount             int64
 	StoryCount            int64
 	StoryEntryCount       int64
 	ProfileCount          int64
+	MaxPostViews          int64
+	MaxItemDownloads      int64
+	TotalLikes            int64
+	TotalItemDownloads    int64
 	TotalSignInDays       int
 	ConsecutiveSignInDays int
+}
+
+func loadUserProfileCounts(db *gorm.DB, userID uint, now time.Time) userProfileCounts {
+	var counts userProfileCounts
+
+	postStats := func() *gorm.DB {
+		return db.Model(&model.Post{}).
+			Where("author_id = ? AND status = ? AND review_status = ?", userID, "published", "approved")
+	}
+	postStats().Count(&counts.PostCount)
+	postStats().Select("COALESCE(MAX(view_count), 0)").Scan(&counts.MaxPostViews)
+	var postLikes int64
+	postStats().Select("COALESCE(SUM(like_count), 0)").Scan(&postLikes)
+
+	itemStats := func() *gorm.DB {
+		return db.Model(&model.Item{}).
+			Where("author_id = ? AND status = ? AND review_status = ?", userID, "published", "approved")
+	}
+	itemStats().Count(&counts.ItemCount)
+	itemStats().Select("COALESCE(MAX(downloads), 0)").Scan(&counts.MaxItemDownloads)
+	var itemLikes int64
+	itemStats().Select("COALESCE(SUM(like_count), 0)").Scan(&itemLikes)
+	itemStats().Select("COALESCE(SUM(downloads), 0)").Scan(&counts.TotalItemDownloads)
+	counts.TotalLikes = postLikes + itemLikes
+
+	db.Model(&model.GuildMember{}).
+		Joins("JOIN guilds ON guilds.id = guild_members.guild_id").
+		Where("guild_members.user_id = ? AND guilds.status = ?", userID, "approved").
+		Count(&counts.GuildCount)
+
+	db.Model(&model.Story{}).Where("user_id = ?", userID).Count(&counts.StoryCount)
+	db.Model(&model.StoryEntry{}).
+		Joins("JOIN stories ON stories.id = story_entries.story_id").
+		Where("stories.user_id = ?", userID).
+		Count(&counts.StoryEntryCount)
+	db.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&counts.ProfileCount)
+
+	if stats, err := service.GetSignInStats(db, userID, now); err == nil {
+		counts.TotalSignInDays = stats.TotalDays
+		counts.ConsecutiveSignInDays = stats.ConsecutiveDays
+	}
+
+	return counts
 }
 
 type publicUserProfileResponse struct {
@@ -447,9 +495,15 @@ type publicUserProfileResponse struct {
 	Location              string    `json:"location"`
 	Website               string    `json:"website"`
 	PostCount             int64     `json:"post_count"`
+	GuildCount            int64     `json:"guild_count"`
+	ItemCount             int64     `json:"item_count"`
 	StoryCount            int64     `json:"story_count"`
 	StoryEntryCount       int64     `json:"story_entry_count"`
 	ProfileCount          int64     `json:"profile_count"`
+	MaxPostViews          int64     `json:"max_post_views"`
+	MaxItemDownloads      int64     `json:"max_item_downloads"`
+	TotalLikes            int64     `json:"total_likes"`
+	TotalItemDownloads    int64     `json:"total_item_downloads"`
 	TotalSignInDays       int       `json:"total_sign_in_days"`
 	ConsecutiveSignInDays int       `json:"consecutive_sign_in_days"`
 	CreatedAt             time.Time `json:"created_at"`
@@ -470,18 +524,7 @@ func fetchUserProfileData(ctx context.Context, userID string) (model.User, userP
 		return user, userProfileCounts{}, err
 	}
 
-	var counts userProfileCounts
-	db.Model(&model.Post{}).Where("author_id = ? AND status = ? AND review_status = ?", userID, "published", "approved").Count(&counts.PostCount)
-	db.Model(&model.Story{}).Where("user_id = ?", userID).Count(&counts.StoryCount)
-	db.Model(&model.StoryEntry{}).
-		Joins("JOIN stories ON stories.id = story_entries.story_id").
-		Where("stories.user_id = ?", userID).
-		Count(&counts.StoryEntryCount)
-	db.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&counts.ProfileCount)
-	if stats, err := service.GetSignInStats(db, user.ID, time.Now()); err == nil {
-		counts.TotalSignInDays = stats.TotalDays
-		counts.ConsecutiveSignInDays = stats.ConsecutiveDays
-	}
+	counts := loadUserProfileCounts(db, user.ID, time.Now())
 
 	return user, counts, nil
 }
@@ -503,9 +546,15 @@ func buildPublicUserProfile(apiHost string, user model.User, counts userProfileC
 		Location:              user.Location,
 		Website:               user.Website,
 		PostCount:             counts.PostCount,
+		GuildCount:            counts.GuildCount,
+		ItemCount:             counts.ItemCount,
 		StoryCount:            counts.StoryCount,
 		StoryEntryCount:       counts.StoryEntryCount,
 		ProfileCount:          counts.ProfileCount,
+		MaxPostViews:          counts.MaxPostViews,
+		MaxItemDownloads:      counts.MaxItemDownloads,
+		TotalLikes:            counts.TotalLikes,
+		TotalItemDownloads:    counts.TotalItemDownloads,
 		TotalSignInDays:       counts.TotalSignInDays,
 		ConsecutiveSignInDays: counts.ConsecutiveSignInDays,
 		CreatedAt:             user.CreatedAt,
@@ -577,9 +626,15 @@ func (s *Server) getUserProfile(c *gin.Context) {
 			"location":                  publicProfile.Location,
 			"website":                   publicProfile.Website,
 			"post_count":                publicProfile.PostCount,
+			"guild_count":               publicProfile.GuildCount,
+			"item_count":                publicProfile.ItemCount,
 			"story_count":               publicProfile.StoryCount,
 			"story_entry_count":         publicProfile.StoryEntryCount,
 			"profile_count":             publicProfile.ProfileCount,
+			"max_post_views":            publicProfile.MaxPostViews,
+			"max_item_downloads":        publicProfile.MaxItemDownloads,
+			"total_likes":               publicProfile.TotalLikes,
+			"total_item_downloads":      publicProfile.TotalItemDownloads,
 			"total_sign_in_days":        publicProfile.TotalSignInDays,
 			"consecutive_sign_in_days":  publicProfile.ConsecutiveSignInDays,
 			"created_at":                publicProfile.CreatedAt,

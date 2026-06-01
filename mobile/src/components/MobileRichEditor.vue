@@ -19,6 +19,7 @@ const emit = defineEmits<{
 
 const useNativeImagePicker = canUseNativeImagePicker()
 const showImageSourceDialog = ref(false)
+const editorRef = ref<InstanceType<typeof DesktopTiptapEditor> | null>(null)
 let pendingSourceResolver: ((source: NativeImageSource | null) => void) | null = null
 
 async function handlePickImages() {
@@ -54,6 +55,14 @@ function resolvePendingSource(source: NativeImageSource | null) {
   resolve?.(source)
 }
 
+function insertContent(html: string) {
+  editorRef.value?.insertContent(html)
+}
+
+defineExpose({
+  insertContent,
+})
+
 onBeforeUnmount(() => {
   resolvePendingSource(null)
 })
@@ -62,6 +71,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="mobile-rich-editor">
     <DesktopTiptapEditor
+      ref="editorRef"
       :model-value="modelValue"
       :placeholder="placeholder"
       :pick-images="useNativeImagePicker ? handlePickImages : undefined"

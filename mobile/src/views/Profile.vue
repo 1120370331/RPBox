@@ -14,6 +14,7 @@ import {
   buildAchievementProgressContext,
   buildAchievementWallEntries,
   pickFeaturedAchievement,
+  type AchievementEntry,
 } from '@/utils/achievementProgress'
 
 const { t } = useI18n()
@@ -114,19 +115,35 @@ async function loadProfile() {
         signed_in_today: res.signed_in_today,
         total_sign_in_days: res.total_sign_in_days,
         consecutive_sign_in_days: res.consecutive_sign_in_days,
+        post_count: res.post_count,
+        guild_count: res.guild_count,
+        item_count: res.item_count,
+        story_count: res.story_count,
+        story_entry_count: res.story_entry_count,
+        profile_count: res.profile_count,
+        max_post_views: res.max_post_views,
+        max_item_downloads: res.max_item_downloads,
+        total_likes: res.total_likes,
+        total_item_downloads: res.total_item_downloads,
       })
     }
+    return res
   } catch (e) {
     console.error('Failed to load profile', e)
+    return null
   }
 }
 
 async function handleDailySignIn() {
   if (signingIn.value || displayUser.value?.signed_in_today) return
+  const beforeEarnedIds = getEarnedAchievementIds(displayUser.value as Record<string, unknown> | null)
   signingIn.value = true
   try {
     const result = await signInDaily()
-    userInfo.value = userInfo.value ? { ...userInfo.value, ...result } : userInfo.value
+    const optimisticProfile = userInfo.value
+      ? { ...userInfo.value, ...result }
+      : null
+    userInfo.value = optimisticProfile || userInfo.value
     userStore.mergeUser(result)
     if (result.granted) {
       toast.success(t('profile.activity.signInSuccess', {
@@ -136,11 +153,44 @@ async function handleDailySignIn() {
     } else {
       toast.info(result.message)
     }
+    const refreshed = await loadProfile()
+    showNewAchievementToasts(
+      beforeEarnedIds,
+      (refreshed || userInfo.value || displayUser.value) as Record<string, unknown> | null,
+    )
   } catch (error) {
     console.error('Failed to sign in daily', error)
     toast.error((error as Error)?.message || t('profile.activity.signInFailed'))
   } finally {
     signingIn.value = false
+  }
+}
+
+function buildEntriesForProfile(profile: Record<string, unknown> | null): AchievementEntry[] {
+  return buildAchievementEntries(buildAchievementProgressContext(profile))
+}
+
+function getEarnedAchievementIds(profile: Record<string, unknown> | null) {
+  return new Set(
+    buildEntriesForProfile(profile)
+      .filter((entry) => entry.progress.earned)
+      .map((entry) => entry.definition.id),
+  )
+}
+
+function showNewAchievementToasts(beforeEarnedIds: Set<string>, profile: Record<string, unknown> | null) {
+  const newlyEarned = buildEntriesForProfile(profile)
+    .filter((entry) => entry.progress.earned && !beforeEarnedIds.has(entry.definition.id))
+
+  for (const entry of newlyEarned.slice(0, 3)) {
+    toast.achievement(
+      t('profile.achievements.unlockedTitle', { title: entry.definition.title }),
+      entry.definition.condition,
+      {
+        icon: entry.definition.icon,
+        rarity: entry.definition.rarity,
+      },
+    )
   }
 }
 

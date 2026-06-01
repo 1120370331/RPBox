@@ -166,7 +166,8 @@ const filterRole = ref('')
 const filterGuildStatus = ref('')
 const filterSponsorLevel = ref('')
 const reportStatus = ref<'pending' | 'resolved' | 'rejected' | 'all'>('pending')
-const reportScope = ref<'user' | 'content' | 'comment'>('content')
+type ReportScope = 'user' | 'content' | 'comment' | 'story'
+const reportScope = ref<ReportScope>('content')
 const reportSort = ref<'report_count' | 'latest_reported_at'>('report_count')
 const reportOrder = ref<'asc' | 'desc'>('desc')
 type ReportReviewAction = ReportReviewRequest['action']
@@ -924,6 +925,7 @@ function getReportTargetLabel(type: string) {
   if (type === 'user') return '用户'
   if (type === 'comment') return '帖子评论'
   if (type === 'item_comment') return '作品评论'
+  if (type === 'story') return '剧情'
   return type
 }
 
@@ -933,9 +935,10 @@ function getReportStatusLabel(status: string) {
   return '待处理'
 }
 
-function getReportScopeLabel(scope: 'user' | 'content' | 'comment') {
+function getReportScopeLabel(scope: ReportScope) {
   if (scope === 'user') return '举报用户'
   if (scope === 'comment') return '举报评论'
+  if (scope === 'story') return '剧情举报'
   return '举报帖子/道具'
 }
 
@@ -943,7 +946,7 @@ function getReportEmptyText() {
   return `暂无${getReportScopeLabel(reportScope.value)}记录`
 }
 
-function switchReportScope(scope: 'user' | 'content' | 'comment') {
+function switchReportScope(scope: ReportScope) {
   if (reportScope.value === scope) return
   reportScope.value = scope
   selectedReportIds.value = []
@@ -968,6 +971,8 @@ function formatReportReason(reason: string) {
     illegal: '违法违规内容',
     other: '其他问题',
     block_user: '用户已执行屏蔽',
+    story_content: '剧情内容违规',
+    story_audio: '剧情音频违规',
   }
   return reasonMap[reason] || reason
 }
@@ -1124,6 +1129,14 @@ function openReportActionModal(action: ReportReviewAction, report?: ReportReview
 }
 
 function openReportTarget(report: ReportReviewItem) {
+  if (report.target_type === 'story') {
+    if (report.target_url) {
+      router.push(report.target_url)
+      return
+    }
+    toast.error('该剧情未公开或分享链接不可用')
+    return
+  }
   if (report.target_type === 'post' || report.target_type === 'item') {
     openPreview(report.target_type, report.target_id)
     return
@@ -2746,6 +2759,9 @@ function formatBanTime(dateStr: string | null) {
             </button>
             <button :class="{ active: reportScope === 'comment' }" @click="switchReportScope('comment')">
               <i class="ri-message-3-line"></i> 举报评论
+            </button>
+            <button :class="{ active: reportScope === 'story' }" @click="switchReportScope('story')">
+              <i class="ri-book-open-line"></i> 剧情举报
             </button>
             <button :class="{ active: reportScope === 'user' }" @click="switchReportScope('user')">
               <i class="ri-user-shared-line"></i> 举报用户

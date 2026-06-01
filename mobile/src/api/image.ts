@@ -21,3 +21,15 @@ export function resolveApiUrl(url: string | undefined | null): string {
   }
   return API_ORIGIN ? `${API_ORIGIN}/${url}` : url
 }
+
+export function getImageUrl(type: string, id: number, options?: { w?: number; q?: number; v?: string | number }) {
+  const params = new URLSearchParams()
+  if (options?.w) params.set('w', String(options.w))
+  if (options?.q) params.set('q', String(options.q))
+  if (options?.v !== undefined && options?.v !== null && options.v !== '') {
+    params.set('v', String(options.v))
+  }
+  const query = params.toString()
+  const path = `/api/v1/images/${type}/${id}${query ? `?${query}` : ''}`
+  return API_ORIGIN ? `${API_ORIGIN}${path}` : path
+}

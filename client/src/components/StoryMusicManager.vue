@@ -505,10 +505,10 @@ async function handleImportAudio(event: Event) {
   }
 }
 
-async function attachToStory(track: StoryMusicTrack) {
+async function attachToStory(track: StoryMusicTrack, stayInCurrentTab = false) {
   try {
     await attachStoryMusicTrack(props.storyId, track.id)
-    activeTab.value = 'story'
+    if (!stayInCurrentTab) activeTab.value = 'story'
     emit('refresh')
     toast.success('已加入本剧情音乐')
   } catch (e) {
@@ -936,6 +936,22 @@ onBeforeUnmount(() => {
                         </button>
                       </div>
 
+                      <RButton
+                        v-if="!isTrackInStory(track)"
+                        size="small"
+                        type="secondary"
+                        @click="attachToStory(track, true)"
+                      >
+                        加入本剧情
+                      </RButton>
+                      <RButton
+                        v-else
+                        size="small"
+                        type="ghost"
+                        disabled
+                      >
+                        已在本剧情
+                      </RButton>
                       <RButton
                         size="small"
                         type="danger"

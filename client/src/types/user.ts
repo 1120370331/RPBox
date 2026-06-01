@@ -16,6 +16,16 @@ export interface UserActivityInfo {
   username_change_count?: number
   next_avatar_change_cost?: number
   next_username_change_cost?: number
+  post_count?: number
+  guild_count?: number
+  item_count?: number
+  story_count?: number
+  story_entry_count?: number
+  profile_count?: number
+  max_post_views?: number
+  max_item_downloads?: number
+  total_likes?: number
+  total_item_downloads?: number
 }
 
 export interface UserData extends UserActivityInfo {

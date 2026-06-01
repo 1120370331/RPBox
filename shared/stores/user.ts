@@ -23,6 +23,16 @@ export interface UserData {
   signed_in_today?: boolean
   total_sign_in_days?: number
   consecutive_sign_in_days?: number
+  post_count?: number
+  guild_count?: number
+  item_count?: number
+  story_count?: number
+  story_entry_count?: number
+  profile_count?: number
+  max_post_views?: number
+  max_item_downloads?: number
+  total_likes?: number
+  total_item_downloads?: number
 }
 
 const ACCOUNT_HISTORY_KEY = 'account_history'

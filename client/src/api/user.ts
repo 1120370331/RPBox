@@ -8,9 +8,15 @@ export interface UserInfo extends UserData {
   location?: string
   website?: string
   post_count?: number
+  guild_count?: number
+  item_count?: number
   story_count?: number
   story_entry_count?: number
   profile_count?: number
+  max_post_views?: number
+  max_item_downloads?: number
+  total_likes?: number
+  total_item_downloads?: number
   total_sign_in_days?: number
   consecutive_sign_in_days?: number
   created_at?: string

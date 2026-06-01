@@ -239,9 +239,6 @@ function openAchievementDetail(achievement: AchievementDefinition) {
               ></div>
             </div>
           </div>
-          <p class="achievement-detail__prompt">
-            总图位置：第 {{ selectedAchievementEntry.definition.spriteCell.row }} 行，第 {{ selectedAchievementEntry.definition.spriteCell.col }} 列；中心图案：{{ selectedAchievementEntry.definition.centerMotif }}。
-          </p>
         </div>
       </div>
     </RModal>
@@ -617,14 +614,6 @@ function openAchievementDetail(achievement: AchievementDefinition) {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #D4A373, #FFB23E);
-}
-
-.achievement-detail__prompt {
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(184, 115, 51, 0.08);
-  border: 1px dashed rgba(184, 115, 51, 0.18);
-  font-size: 12px;
 }
 
 @media (max-width: 1100px) {

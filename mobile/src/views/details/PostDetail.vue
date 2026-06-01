@@ -9,6 +9,7 @@ import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
+import { handleJumpLinkClick, sanitizeJumpLinks } from '@/utils/jumpLink'
 import { shareRouteLink } from '@/utils/mobileShare'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useToastStore } from '@shared/stores/toast'
@@ -61,6 +62,7 @@ const reportContext = ref<{
   title: string
   dialogTitle: string
 } | null>(null)
+const articleContentRef = ref<HTMLElement | null>(null)
 
 const postId = computed(() => Number(route.params.id))
 const postCoverUrl = computed(() => {
@@ -129,6 +131,8 @@ async function loadPostDetail() {
     authorForumLevelName.value = postRes.author_forum_level_name || ''
     authorForumLevelColor.value = postRes.author_forum_level_color || ''
     authorForumLevelBold.value = !!postRes.author_forum_level_bold
+    await nextTick()
+    sanitizeJumpLinks(articleContentRef.value)
   } catch (error) {
     toast.error((error as Error)?.message || t('community.actionFailed'))
     console.error('Failed to load post detail', error)
@@ -374,6 +378,7 @@ function normalizePostContentHtml(raw: string) {
     }
   })
 
+  sanitizeJumpLinks(doc.body)
   return doc.body.innerHTML
 }
 
@@ -401,6 +406,8 @@ function mapContentUrl(url: string) {
 }
 
 function handleContentClick(event: MouseEvent) {
+  if (handleJumpLinkClick(event, router)) return
+
   const target = event.target as HTMLElement | null
   const image = target?.closest('img')
   if (image) {
@@ -517,7 +524,7 @@ onMounted(async () => {
             </span>
             <time>{{ formatTime(post.created_at) }}</time>
           </div>
-          <div class="content" v-html="postContentHtml" @click="handleContentClick" />
+          <div ref="articleContentRef" class="content" v-html="postContentHtml" @click="handleContentClick" />
         </article>
 
         <section class="action-row" :class="{ 'with-edit': canEdit }">

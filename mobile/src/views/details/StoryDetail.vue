@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
 import { resolveApiUrl } from '@/api/image'
 import { getCharacter, type Character } from '@/api/character'
+import { createContentReport } from '@/api/safety'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import {
   createBookmark,
@@ -15,6 +16,7 @@ import {
   listBookmarks,
   updateEntriesBackgroundColor,
   updateBookmark,
+  updateLastViewBookmark,
   updateStoryEntry,
   type Story,
   type StoryBookmark,
@@ -44,6 +46,7 @@ const showBatchDeleteDialog = ref(false)
 const showBookmarkDialog = ref(false)
 const showDeleteBookmarkDialog = ref(false)
 const showGroupDialog = ref(false)
+const showReportSheet = ref(false)
 
 const editingEntry = ref<StoryEntry | null>(null)
 const deletingEntryId = ref<number | null>(null)
@@ -57,6 +60,7 @@ const batchDeleting = ref(false)
 const updatingGroup = ref(false)
 const bookmarkSaving = ref(false)
 const bookmarkDeleting = ref(false)
+const reportSubmitting = ref(false)
 
 const editType = ref<StoryEntry['type']>('dialogue')
 const editSpeaker = ref('')
@@ -77,6 +81,14 @@ const defaultColors = [
 const selectedEntryColor = ref('')
 const selectedGroupName = ref('')
 const emoteVersion = ref(0)
+type StoryReportReason = 'story_content' | 'story_audio'
+const reportReason = ref<StoryReportReason>('story_content')
+const reportEntryId = ref<number>(0)
+const reportDetail = ref('')
+const reportReasonOptions: { value: StoryReportReason; label: string }[] = [
+  { value: 'story_content', label: '剧情内容违规' },
+  { value: 'story_audio', label: '音频违规' },
+]
 
 const storyId = computed(() => Number(route.params.id))
 const locationRegionText = computed(() => story.value?.region?.trim() || '')
@@ -84,8 +96,22 @@ const locationAddressText = computed(() => story.value?.address?.trim() || '')
 const locationText = computed(() => locationAddressText.value || locationRegionText.value)
 const locationContext = computed(() => locationRegionText.value && locationAddressText.value ? locationRegionText.value : '')
 const canManage = computed(() => !!story.value && !!userStore.user && (story.value.user_id === userStore.user.id || userStore.isAdmin || userStore.isModerator))
+const canReportStory = computed(() => !!story.value && !!userStore.user && story.value.user_id !== userStore.user.id)
 const isAllSelected = computed(() => entries.value.length > 0 && selectedEntryIds.value.length === entries.value.length)
-const sortedBookmarks = computed(() => [...bookmarks.value].sort((a, b) => Number(b.is_favorite) - Number(a.is_favorite) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime()))
+const sortedBookmarks = computed(() => {
+  const entryMap = new Map(entries.value.map((entry) => [entry.id, entry]))
+  return [...bookmarks.value].sort((a, b) => {
+    if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1
+    if (a.is_auto !== b.is_auto) return a.is_auto ? 1 : -1
+
+    const entryA = entryMap.get(a.entry_id)
+    const entryB = entryMap.get(b.entry_id)
+    const timeA = getEntrySortTime(entryA)
+    const timeB = getEntrySortTime(entryB)
+    if (timeA !== timeB) return timeA - timeB
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+})
 const publicBookmarks = computed(() => sortedBookmarks.value.filter((b) => b.is_public))
 const myBookmarks = computed(() => sortedBookmarks.value.filter((b) => !b.is_public))
 const usedColorGroups = computed(() => {
@@ -114,6 +140,18 @@ const normalizedEntries = computed(() => entries.value.map((entry) => {
     imageDescription: imageEntry?.description || '',
   }
 }))
+
+const reportableEntries = computed(() => entries.value.map((entry, index) => ({
+  entry,
+  label: buildReportEntryLabel(entry, index),
+})))
+
+const selectedReportEntry = computed(() => {
+  if (!reportEntryId.value) return null
+  return entries.value.find((entry) => entry.id === reportEntryId.value) || null
+})
+
+const canSubmitReport = computed(() => reportEntryId.value > 0 || reportDetail.value.trim().length > 0)
 
 const groupedEntries = computed(() => {
   const groups = new Map<string, { key: string; title: string; color: string; items: typeof normalizedEntries.value }>()
@@ -349,12 +387,148 @@ function scrollToEntry(entryId: number) {
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
+function jumpToBookmark(entryId: number) {
+  scrollToEntry(entryId)
+  bookmarkPanelOpen.value = false
+}
+
 function getBookmarkPreview(entryId: number) {
   const entry = entries.value.find((e) => e.id === entryId)
   if (!entry) return ''
-  if (entry.type === 'image') return '[Image]'
+  if (entry.type === 'image') return '[图片]'
   const text = String(entry.content || '').replace(/<[^>]+>/g, '').trim()
   return text.length > 22 ? `${text.slice(0, 22)}...` : text
+}
+
+function getEntrySortTime(entry?: StoryEntry) {
+  if (!entry) return Number.MAX_SAFE_INTEGER
+  const time = new Date(entry.timestamp || entry.created_at || '').getTime()
+  return Number.isFinite(time) ? time : entry.sort_order
+}
+
+function getBookmarkTime(entryId: number) {
+  const entry = entries.value.find((e) => e.id === entryId)
+  if (!entry) return ''
+  return formatTime(entry.timestamp || entry.created_at || '')
+}
+
+function getLastVisibleEntryId() {
+  const entryElements = document.querySelectorAll<HTMLElement>('.entry-item[data-entry-id]')
+  if (!entryElements.length) return null
+
+  const viewportBottom = window.innerHeight
+  let lastVisibleId: number | null = null
+
+  entryElements.forEach((el) => {
+    const rect = el.getBoundingClientRect()
+    if (rect.top < viewportBottom && rect.bottom > 0) {
+      const parsed = Number(el.dataset.entryId)
+      if (Number.isFinite(parsed) && parsed > 0) lastVisibleId = parsed
+    }
+  })
+
+  return lastVisibleId
+}
+
+async function saveLastViewBookmark() {
+  if (!storyId.value) return
+  const entryId = getLastVisibleEntryId()
+  if (!entryId) return
+
+  try {
+    await updateLastViewBookmark(storyId.value, entryId)
+  } catch (error) {
+    console.error('Failed to save story last-view bookmark', error)
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    void saveLastViewBookmark()
+  }
+}
+
+function truncateText(text: string, limit: number) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim()
+  const chars = Array.from(normalized)
+  if (chars.length <= limit) return normalized
+  return `${chars.slice(0, limit).join('')}...`
+}
+
+function getReportEntryText(entry: StoryEntry) {
+  if (entry.type === 'image') {
+    const parsed = parseImageEntry(entry)
+    return parsed?.description || '图片条目'
+  }
+  return entry.content || ''
+}
+
+function buildReportEntryLabel(entry: StoryEntry, index: number) {
+  const channel = entry.channel && entry.type !== 'narration' && entry.type !== 'image' ? `[${getChannelLabel(entry.channel)}] ` : ''
+  const speaker = getEntrySpeakerName(entry)
+  const text = truncateText(getReportEntryText(entry), 56)
+  return `第 ${index + 1} 条 #${entry.id} ${channel}${speaker}${text ? `：${text}` : ''}`
+}
+
+function resetReportForm() {
+  reportReason.value = 'story_content'
+  reportEntryId.value = 0
+  reportDetail.value = ''
+}
+
+function openReportSheet() {
+  if (!story.value) return
+  if (!userStore.token) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (story.value.user_id === userStore.user?.id) {
+    toast.error('不能举报自己的剧情')
+    return
+  }
+  resetReportForm()
+  showReportSheet.value = true
+}
+
+function closeReportSheet() {
+  if (reportSubmitting.value) return
+  showReportSheet.value = false
+}
+
+function buildStoryReportDetail() {
+  const parts = [
+    `违规类型：${reportReasonOptions.find((option) => option.value === reportReason.value)?.label || '剧情内容违规'}`,
+  ]
+  const entry = selectedReportEntry.value
+  if (entry) {
+    const entryIndex = entries.value.findIndex((item) => item.id === entry.id)
+    parts.push(`辅助条目：${buildReportEntryLabel(entry, entryIndex >= 0 ? entryIndex : 0)}`)
+  }
+  const note = reportDetail.value.trim()
+  if (note) {
+    parts.push(`补充说明：${note}`)
+  }
+  return parts.join('\n')
+}
+
+async function submitStoryReport() {
+  if (!story.value || !canSubmitReport.value || reportSubmitting.value) return
+  reportSubmitting.value = true
+  try {
+    await createContentReport({
+      target_type: 'story',
+      target_id: story.value.id,
+      reason: reportReason.value,
+      detail: buildStoryReportDetail(),
+    })
+    showReportSheet.value = false
+    resetReportForm()
+    toast.success('举报已提交，版主会尽快处理')
+  } catch (error) {
+    toast.error((error as Error)?.message || '举报提交失败')
+  } finally {
+    reportSubmitting.value = false
+  }
 }
 
 function renderEntryTextHtml(content: string) {
@@ -366,6 +540,12 @@ onMounted(async () => {
   await loadDetail()
   await ensureEmoteMapLoaded()
   emoteVersion.value += 1
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  void saveLastViewBookmark()
 })
 </script>
 
@@ -374,6 +554,7 @@ onMounted(async () => {
     <header class="sub-header">
       <button class="back-btn" @click="router.back()"><i class="ri-arrow-left-line" /></button>
       <h1>{{ $t('stories.detailTitle') }}</h1>
+      <button v-if="canReportStory" class="report-btn" @click="openReportSheet"><i class="ri-alarm-warning-line" /> 举报</button>
       <button v-if="canManage" class="manage-btn" @click="toggleManageMode">{{ manageMode ? $t('stories.detail.exitManage') : $t('stories.detail.manage') }}</button>
     </header>
 
@@ -434,6 +615,7 @@ onMounted(async () => {
               :key="entry.id"
               class="entry-item"
               :class="{ selected: manageMode && selectedEntryIds.includes(entry.id) }"
+              :data-entry-id="entry.id"
               :style="entry.background_color ? { backgroundColor: entry.background_color } : undefined"
               @click="manageMode ? toggleEntrySelection(entry.id) : null"
             >
@@ -488,22 +670,24 @@ onMounted(async () => {
 
         <div class="bookmark-list">
           <div v-if="publicBookmarks.length > 0" class="bookmark-group-title">{{ $t('stories.detail.publicBookmarks') }}</div>
-          <button v-for="bookmark in publicBookmarks" :key="`pub-${bookmark.id}`" class="bookmark-item" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="scrollToEntry(bookmark.entry_id)">
+          <button v-for="bookmark in publicBookmarks" :key="`pub-${bookmark.id}`" class="bookmark-item" :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite, 'is-public': bookmark.is_public }" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="jumpToBookmark(bookmark.entry_id)">
             <div class="bookmark-main">
-              <strong>{{ bookmark.name }}</strong>
+              <strong><i v-if="bookmark.is_auto" class="ri-time-line" />{{ bookmark.name }}</strong>
               <p>{{ getBookmarkPreview(bookmark.entry_id) }}</p>
+              <small v-if="getBookmarkTime(bookmark.entry_id)">{{ getBookmarkTime(bookmark.entry_id) }}</small>
             </div>
-            <div class="bookmark-actions">
+            <div v-if="canManage" class="bookmark-actions">
               <button class="icon-btn" @click.stop="openEditBookmark(bookmark)"><i class="ri-edit-line" /></button>
               <button class="icon-btn danger" @click.stop="openDeleteBookmark(bookmark.id)"><i class="ri-delete-bin-line" /></button>
             </div>
           </button>
 
           <div class="bookmark-group-title">{{ $t('stories.detail.myBookmarks') }}</div>
-          <button v-for="bookmark in myBookmarks" :key="`mine-${bookmark.id}`" class="bookmark-item" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="scrollToEntry(bookmark.entry_id)">
+          <button v-for="bookmark in myBookmarks" :key="`mine-${bookmark.id}`" class="bookmark-item" :class="{ 'is-auto': bookmark.is_auto, 'is-favorite': bookmark.is_favorite }" :style="bookmark.color ? { borderLeftColor: bookmark.color } : {}" @click="jumpToBookmark(bookmark.entry_id)">
             <div class="bookmark-main">
-              <strong>{{ bookmark.name }}</strong>
+              <strong><i v-if="bookmark.is_auto" class="ri-time-line" />{{ bookmark.name }}</strong>
               <p>{{ getBookmarkPreview(bookmark.entry_id) }}</p>
+              <small v-if="getBookmarkTime(bookmark.entry_id)">{{ getBookmarkTime(bookmark.entry_id) }}</small>
             </div>
             <div class="bookmark-actions">
               <button v-if="!bookmark.is_auto" class="icon-btn" @click.stop="toggleBookmarkFavorite(bookmark)">
@@ -517,6 +701,61 @@ onMounted(async () => {
         </div>
       </section>
     </div>
+
+    <Teleport to="body">
+      <Transition name="sheet-fade">
+        <div v-if="showReportSheet" class="report-sheet-mask" @click.self="closeReportSheet">
+          <Transition name="sheet-slide">
+            <section class="report-sheet">
+              <div class="report-sheet-handle"></div>
+              <header class="report-sheet-head">
+                <div>
+                  <h3>举报剧情</h3>
+                  <p>{{ story?.title }}</p>
+                </div>
+                <button type="button" class="icon-btn" @click="closeReportSheet"><i class="ri-close-line" /></button>
+              </header>
+
+              <label class="report-field">
+                <span>违规类型</span>
+                <select v-model="reportReason">
+                  <option v-for="option in reportReasonOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+
+              <label class="report-field">
+                <span>辅助定位条目</span>
+                <select v-model.number="reportEntryId">
+                  <option :value="0">不指定具体条目</option>
+                  <option v-for="item in reportableEntries" :key="item.entry.id" :value="item.entry.id">{{ item.label }}</option>
+                </select>
+              </label>
+
+              <label class="report-field">
+                <span>补充说明</span>
+                <textarea
+                  v-model="reportDetail"
+                  rows="4"
+                  maxlength="500"
+                  placeholder="请说明违规位置或问题表现，选择条目后也可以只填写简短说明"
+                />
+              </label>
+
+              <p class="report-hint" :class="{ error: !canSubmitReport }">
+                请选择具体条目或填写补充说明；音频违规建议选择触发音频的剧情条目。
+              </p>
+
+              <div class="report-actions">
+                <button type="button" class="action-btn" :disabled="reportSubmitting" @click="closeReportSheet">取消</button>
+                <button type="button" class="action-btn primary" :disabled="reportSubmitting || !canSubmitReport" @click="submitStoryReport">
+                  {{ reportSubmitting ? '提交中...' : '提交举报' }}
+                </button>
+              </div>
+            </section>
+          </Transition>
+        </div>
+      </Transition>
+    </Teleport>
 
     <div v-if="showEditDialog" class="dialog-mask"><div class="dialog"><h3>{{ $t('stories.detail.editEntry') }}</h3><div class="form-grid">
       <label v-if="editType !== 'image'"><span>{{ $t('stories.detail.speaker') }}</span><input v-model="editSpeaker" /></label>
@@ -573,6 +812,7 @@ onMounted(async () => {
 .sub-header { gap: 8px; }
 .sub-header h1 { flex: 1; }
 .manage-btn { border: 1px solid var(--color-border); background: var(--color-panel-bg); color: var(--text-dark); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+.report-btn { border: 1px solid rgba(220,53,69,0.36); background: rgba(220,53,69,0.08); color: var(--btn-danger-bg); border-radius: 999px; padding: 4px 9px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .story-summary, .batch-bar, .group-block { background: var(--color-card-bg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding: 12px; margin-bottom: 12px; }
 .story-summary h2 { font-size: 17px; margin-bottom: 8px; }
 .story-summary p { font-size: 14px; color: var(--color-text-secondary); line-height: 1.6; }
@@ -697,8 +937,14 @@ onMounted(async () => {
 .bookmark-list { display: flex; flex-direction: column; gap: 8px; }
 .bookmark-group-title { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; margin-bottom: 2px; }
 .bookmark-item { border: 1px solid var(--color-border-light); border-left: 4px solid var(--color-border); border-radius: 8px; background: var(--color-panel-bg); padding: 8px; display: flex; justify-content: space-between; gap: 8px; text-align: left; }
-.bookmark-main strong { font-size: 12px; }
+.bookmark-item.is-public { background: rgba(184, 115, 51, 0.08); }
+.bookmark-item.is-auto { opacity: 0.86; border-style: dashed; }
+.bookmark-item.is-favorite { border-color: rgba(255, 178, 62, 0.62); box-shadow: inset 0 0 0 1px rgba(255, 178, 62, 0.1); }
+.bookmark-main { min-width: 0; }
+.bookmark-main strong { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; font-size: 12px; }
+.bookmark-main strong i { color: var(--color-accent); font-size: 13px; }
 .bookmark-main p { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; }
+.bookmark-main small { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: 11px; }
 .bookmark-empty { font-size: 12px; color: var(--color-text-secondary); text-align: center; padding: 8px; }
 .batch-bar { display: flex; flex-direction: column; gap: 8px; }
 .batch-top { display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: wrap; }
@@ -746,6 +992,100 @@ onMounted(async () => {
 .bookmark-color.none { display: inline-flex; align-items: center; justify-content: center; font-size: 12px; background: #f3f3f3; }
 .group-color { width: 24px; height: 24px; }
 .group-hint { margin-top: 4px; font-size: 11px; color: var(--color-text-secondary); }
+.report-sheet-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.52);
+}
+.report-sheet {
+  width: 100%;
+  max-width: 640px;
+  border-radius: 22px 22px 0 0;
+  background: var(--color-card-bg);
+  padding: 10px 16px calc(20px + var(--safe-bottom, 0px));
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.18);
+}
+.report-sheet-handle {
+  width: 54px;
+  height: 5px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.45);
+}
+.report-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.report-sheet-head h3 {
+  font-size: 17px;
+  margin: 0;
+}
+.report-sheet-head p {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  word-break: break-word;
+}
+.report-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.report-field span {
+  font-size: 13px;
+  font-weight: 600;
+}
+.report-field select,
+.report-field textarea {
+  width: 100%;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-dark);
+  padding: 12px;
+  font: inherit;
+}
+.report-field textarea {
+  resize: vertical;
+}
+.report-hint {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+.report-hint.error {
+  color: #c2410c;
+}
+.report-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sheet-fade-enter-active,
+.sheet-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.sheet-fade-enter-from,
+.sheet-fade-leave-to {
+  opacity: 0;
+}
+.sheet-slide-enter-active,
+.sheet-slide-leave-active {
+  transition: transform 0.2s ease;
+}
+.sheet-slide-enter-from,
+.sheet-slide-leave-to {
+  transform: translateY(100%);
+}
 .dialog-actions { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
 .action-btn { border: 1px solid var(--color-border); background: var(--color-panel-bg); color: var(--text-dark); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 .action-btn.primary { border-color: var(--color-primary); background: var(--color-primary); color: var(--text-light); }

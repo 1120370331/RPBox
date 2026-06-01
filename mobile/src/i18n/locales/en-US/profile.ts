@@ -72,6 +72,7 @@ export default {
     featured: 'Featured',
     firstGoal: 'First goal',
     nextGoal: 'Next goal',
+    unlockedTitle: 'Achievement unlocked: {title}',
     close: 'Close',
   },
   blocks: {

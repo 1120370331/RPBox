@@ -2,7 +2,7 @@ export interface ForumLevelDefinition {
   level: number
 }
 
-export interface ForumLevelGuideEntry<T extends ForumLevelDefinition> extends T {
+export type ForumLevelGuideEntry<T extends ForumLevelDefinition> = T & {
   currentBase: number
   nextBase: number | null
 }

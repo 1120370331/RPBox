@@ -68,7 +68,7 @@ async function loadPosts() {
       status: 'published',
       guild_id: guildId.value,
     }
-    if (filterCategory.value) params.category = filterCategory.value
+    if (filterCategory.value) params.category = filterCategory.value as ListPostsParams['category']
     const res = await listPosts(params)
     if (serial !== requestSerial.value) return
     posts.value = res.posts || []

@@ -23,6 +23,7 @@ const (
 	reportTargetUser        = "user"
 	reportTargetComment     = "comment"
 	reportTargetItemComment = "item_comment"
+	reportTargetStory       = "story"
 )
 
 type createUserBlockRequest struct {
@@ -46,12 +47,12 @@ type reviewContentReportRequest struct {
 }
 
 type contentReportGroupRow struct {
-	ID               uint      `json:"id"`
-	TargetType       string    `json:"target_type"`
-	TargetID         uint      `json:"target_id"`
-	Status           string    `json:"status"`
-	ReportCount      int64     `json:"report_count"`
-	LatestReportedAt time.Time `json:"latest_reported_at"`
+	ID               uint   `json:"id"`
+	TargetType       string `json:"target_type"`
+	TargetID         uint   `json:"target_id"`
+	Status           string `json:"status"`
+	ReportCount      int64  `json:"report_count"`
+	LatestReportedAt string `json:"latest_reported_at"`
 }
 
 var reportHTMLTagPattern = regexp.MustCompile(`<[^>]+>`)
@@ -177,6 +178,12 @@ func resolveReportTarget(targetType string, targetID uint) (string, uint, error)
 			return "", 0, err
 		}
 		return buildCommentReportTitle(comment.Content), comment.UserID, nil
+	case reportTargetStory:
+		var story model.Story
+		if err := database.DB.Select("id", "user_id", "title").First(&story, targetID).Error; err != nil {
+			return "", 0, err
+		}
+		return story.Title, story.UserID, nil
 	default:
 		return "", 0, errors.New("unsupported report target")
 	}
@@ -248,6 +255,10 @@ func translateReportReason(reason string) string {
 		return "其他问题"
 	case "block_user":
 		return "用户已执行屏蔽"
+	case "story_content":
+		return "剧情内容违规"
+	case "story_audio":
+		return "剧情音频违规"
 	default:
 		return strings.TrimSpace(reason)
 	}
@@ -338,7 +349,7 @@ func validateReportReviewAction(targetType, action string) error {
 		default:
 			return errors.New("该举报目标不支持此处理动作")
 		}
-	case reportTargetPost, reportTargetItem, reportTargetComment, reportTargetItemComment:
+	case reportTargetPost, reportTargetItem, reportTargetComment, reportTargetItemComment, reportTargetStory:
 		switch action {
 		case "delete_content", "delete_and_mute_user", "delete_and_ban_user", "reject":
 			return nil
@@ -478,6 +489,29 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		}).Error
 
 		return targetName, comment.UserID, false, nil
+	case reportTargetStory:
+		var story model.Story
+		if err := database.DB.First(&story, targetID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return buildMissingReportTitle(targetType, targetID), 0, true, nil
+			}
+			return "", 0, false, err
+		}
+
+		targetName := strings.TrimSpace(story.Title)
+		if targetName == "" {
+			targetName = buildMissingReportTitle(targetType, targetID)
+		}
+
+		database.DB.Where("story_id = ?", targetID).Delete(&model.StoryEntry{})
+		database.DB.Where("story_id = ?", targetID).Delete(&model.StoryMusicSegment{})
+		database.DB.Where("story_id = ?", targetID).Delete(&model.StoryMusicTrackStory{})
+		database.DB.Where("story_id = ?", targetID).Delete(&model.StoryTag{})
+		if err := database.DB.Delete(&story).Error; err != nil {
+			return "", 0, false, err
+		}
+		s.invalidateUserProfileCache(c.Request.Context(), story.UserID)
+		return targetName, story.UserID, false, nil
 	default:
 		return "", 0, false, errors.New("unsupported report target")
 	}
@@ -563,6 +597,8 @@ func buildMissingReportTitle(targetType string, targetID uint) string {
 		return fmt.Sprintf("帖子评论 #%d", targetID)
 	case reportTargetItemComment:
 		return fmt.Sprintf("作品评论 #%d", targetID)
+	case reportTargetStory:
+		return fmt.Sprintf("剧情 #%d", targetID)
 	default:
 		return fmt.Sprintf("目标 #%d", targetID)
 	}
@@ -863,6 +899,8 @@ func (s *Server) listContentReports(c *gin.Context) {
 		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetPost, reportTargetItem})
 	case "comment":
 		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetComment, reportTargetItemComment})
+	case "story":
+		baseQuery = baseQuery.Where("target_type = ?", reportTargetStory)
 	}
 	if targetTypeFilter != "" {
 		baseQuery = baseQuery.Where("target_type = ?", targetTypeFilter)
@@ -890,6 +928,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 	itemIDs := make([]uint, 0)
 	commentIDs := make([]uint, 0)
 	itemCommentIDs := make([]uint, 0)
+	storyIDs := make([]uint, 0)
 	userIDs := make([]uint, 0)
 	for _, row := range rows {
 		var reports []model.ContentReport
@@ -913,6 +952,8 @@ func (s *Server) listContentReports(c *gin.Context) {
 			commentIDs = append(commentIDs, row.TargetID)
 		case reportTargetItemComment:
 			itemCommentIDs = append(itemCommentIDs, row.TargetID)
+		case reportTargetStory:
+			storyIDs = append(storyIDs, row.TargetID)
 		}
 
 		for _, report := range reports {
@@ -963,6 +1004,16 @@ func (s *Server) listContentReports(c *gin.Context) {
 		userIDs = append(userIDs, comment.UserID)
 	}
 
+	var stories []model.Story
+	if len(storyIDs) > 0 {
+		_ = database.DB.Select("id", "user_id", "title", "description", "share_code", "is_public").Where("id IN ?", storyIDs).Find(&stories).Error
+	}
+	storyMap := make(map[uint]model.Story, len(stories))
+	for _, story := range stories {
+		storyMap[story.ID] = story
+		userIDs = append(userIDs, story.UserID)
+	}
+
 	if len(postIDs) > 0 {
 		var extraPosts []model.Post
 		_ = database.DB.Select("id", "title", "author_id", "content", "cover_image").Where("id IN ?", postIDs).Find(&extraPosts).Error
@@ -995,6 +1046,10 @@ func (s *Server) listContentReports(c *gin.Context) {
 		if len(groupReports) > 0 {
 			latestReport = groupReports[0]
 		}
+		latestReportedAt := any(row.LatestReportedAt)
+		if !latestReport.CreatedAt.IsZero() {
+			latestReportedAt = latestReport.CreatedAt
+		}
 
 		targetTitle := buildMissingReportTitle(row.TargetType, row.TargetID)
 		targetAuthorName := ""
@@ -1003,6 +1058,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 		parentTargetTitle := ""
 		targetPreviewText := ""
 		targetPreviewImage := ""
+		targetURL := ""
 
 		switch row.TargetType {
 		case reportTargetPost:
@@ -1061,6 +1117,18 @@ func (s *Server) listContentReports(c *gin.Context) {
 			if targetUserID == 0 {
 				targetUserID = comment.UserID
 			}
+		case reportTargetStory:
+			story := storyMap[row.TargetID]
+			if strings.TrimSpace(story.Title) != "" {
+				targetTitle = story.Title
+			}
+			targetPreviewText = normalizeReportPreviewText(story.Description, 220)
+			if story.IsPublic && strings.TrimSpace(story.ShareCode) != "" {
+				targetURL = "/story/" + story.ShareCode
+			}
+			if targetUserID == 0 {
+				targetUserID = story.UserID
+			}
 		}
 		if targetUserID != 0 {
 			targetAuthorName = userMap[targetUserID].Username
@@ -1097,9 +1165,10 @@ func (s *Server) listContentReports(c *gin.Context) {
 			"parent_target_title":  parentTargetTitle,
 			"target_preview_text":  targetPreviewText,
 			"target_preview_image": targetPreviewImage,
+			"target_url":           targetURL,
 			"status":               row.Status,
 			"report_count":         row.ReportCount,
-			"latest_reported_at":   row.LatestReportedAt,
+			"latest_reported_at":   latestReportedAt,
 			"reasons":              reasons,
 			"review_comment":       latestReport.ReviewComment,
 			"reviewed_at":          latestReport.ReviewedAt,

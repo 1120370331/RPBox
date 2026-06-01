@@ -6,22 +6,36 @@ import { listItems, type Item, type ListItemsParams } from '@/api/item'
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import MobilePagination from '@/components/MobilePagination.vue'
+import { getCachedListState, restoreScrollTop, useListStateCache } from '@/utils/listState'
 
 const { t } = useI18n()
 const router = useRouter()
+const LIST_STATE_KEY = 'market'
+
+interface MarketListState {
+  currentPage: number
+  activeType: string
+  searchText: string
+  authorName: string
+  sortBy: 'created_at' | 'downloads' | 'rating'
+  scrollTop: number
+}
+
+const cachedState = getCachedListState<MarketListState>(LIST_STATE_KEY)
 
 const items = ref<Item[]>([])
 const loading = ref(false)
-const currentPage = ref(1)
+const currentPage = ref(cachedState?.currentPage || 1)
 const total = ref(0)
 const pageSize = 12
 const requestSerial = ref(0)
 const switchingPage = ref(false)
 
-const activeType = ref('')
-const searchText = ref('')
-const authorName = ref('')
-const sortBy = ref<'created_at' | 'downloads' | 'rating'>('downloads')
+const activeType = ref(cachedState?.activeType || '')
+const searchText = ref(cachedState?.searchText || '')
+const authorName = ref(cachedState?.authorName || '')
+const sortBy = ref<'created_at' | 'downloads' | 'rating'>(cachedState?.sortBy || 'downloads')
+let shouldRestoreInitialScroll = !!cachedState?.scrollTop
 
 const typeOptions = computed(() => [
   { key: '', label: t('market.types.all') },
@@ -106,7 +120,25 @@ function renderStars(rating: number) {
 }
 
 watch([activeType, sortBy, currentPage], loadItems)
-onMounted(loadItems)
+const { save: saveListState } = useListStateCache<MarketListState>({
+  key: LIST_STATE_KEY,
+  getState: () => ({
+    currentPage: currentPage.value,
+    activeType: activeType.value,
+    searchText: searchText.value,
+    authorName: authorName.value,
+    sortBy: sortBy.value,
+    scrollTop: 0,
+  }),
+})
+
+onMounted(async () => {
+  await loadItems()
+  if (shouldRestoreInitialScroll) {
+    shouldRestoreInitialScroll = false
+    restoreScrollTop(cachedState?.scrollTop || 0)
+  }
+})
 onUnmounted(() => {
   if (searchTimer) {
     clearTimeout(searchTimer)
@@ -171,7 +203,7 @@ onUnmounted(() => {
           v-for="item in items"
           :key="item.id"
           class="item-card"
-          @click="router.push({ name: 'item-detail', params: { id: item.id } })"
+          @click="saveListState(); router.push({ name: 'item-detail', params: { id: item.id } })"
         >
           <div class="item-preview">
             <CachedImage
