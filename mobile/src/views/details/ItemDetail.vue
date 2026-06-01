@@ -9,6 +9,7 @@ import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
+import { handleJumpLinkClick, sanitizeJumpLinks } from '@/utils/jumpLink'
 import { shareRouteLink, shareTextFile } from '@/utils/mobileShare'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useUserStore } from '@shared/stores/user'
@@ -55,6 +56,7 @@ const reportContext = ref<{
   title: string
   dialogTitle: string
 } | null>(null)
+const detailContentRef = ref<HTMLElement | null>(null)
 
 const itemId = computed(() => Number(route.params.id))
 const exportableImportCode = computed(() => item.value?.import_code?.trim() || item.value?.raw_data?.trim() || '')
@@ -142,6 +144,7 @@ function normalizeRichContentHtml(raw: string) {
     }
   })
 
+  sanitizeJumpLinks(doc.body)
   return doc.body.innerHTML
 }
 
@@ -178,6 +181,8 @@ function normalizeAppHref(href: string) {
 }
 
 function handleDetailContentClick(event: MouseEvent) {
+  if (handleJumpLinkClick(event, router)) return
+
   const target = event.target as HTMLElement | null
   const image = target?.closest('img')
   if (image) {
@@ -233,6 +238,8 @@ async function loadItemDetail() {
     liked.value = itemRes.liked
     favorited.value = itemRes.favorited
     comments.value = Array.isArray(commentRes) ? commentRes : ((commentRes as any)?.comments || [])
+    await nextTick()
+    sanitizeJumpLinks(detailContentRef.value)
   } catch (error) {
     console.error('Failed to load item detail', error)
   } finally {
@@ -519,6 +526,7 @@ onMounted(async () => {
           <p v-html="itemDescriptionHtml"></p>
           <div
             v-if="item.detail_content"
+            ref="detailContentRef"
             class="detail-content"
             v-html="itemDetailContentHtml"
             @click="handleDetailContentClick"

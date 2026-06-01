@@ -286,7 +286,9 @@ func (s *Server) ensureAuthUserAvailable(c *gin.Context, user *model.User, login
 func (s *Server) buildAuthPayload(user model.User) (gin.H, error) {
 	nameColor, nameBold := userDisplayStyle(user)
 	level := resolveSponsorLevel(user)
-	activity := loadUserActivityPayload(user, time.Now())
+	now := time.Now()
+	activity := loadUserActivityPayload(user, now)
+	counts := loadUserProfileCounts(database.DB, user.ID, now)
 	token, err := auth.GenerateToken(user.ID, user.Username, s.cfg.JWT.Expire)
 	if err != nil {
 		return nil, err
@@ -329,6 +331,16 @@ func (s *Server) buildAuthPayload(user model.User) (gin.H, error) {
 			"signed_in_today":           activity.SignedInToday,
 			"total_sign_in_days":        activity.TotalSignInDays,
 			"consecutive_sign_in_days":  activity.ConsecutiveSignInDays,
+			"post_count":                counts.PostCount,
+			"guild_count":               counts.GuildCount,
+			"item_count":                counts.ItemCount,
+			"story_count":               counts.StoryCount,
+			"story_entry_count":         counts.StoryEntryCount,
+			"profile_count":             counts.ProfileCount,
+			"max_post_views":            counts.MaxPostViews,
+			"max_item_downloads":        counts.MaxItemDownloads,
+			"total_likes":               counts.TotalLikes,
+			"total_item_downloads":      counts.TotalItemDownloads,
 			"name_style_preference":     activity.NameStylePreference,
 			"avatar_change_count":       activity.AvatarChangeCount,
 			"username_change_count":     activity.UsernameChangeCount,

@@ -175,6 +175,16 @@ async function loadUserProfile() {
         sponsor_bold: res.sponsor_bold,
         total_sign_in_days: res.total_sign_in_days,
         consecutive_sign_in_days: res.consecutive_sign_in_days,
+        post_count: res.post_count,
+        guild_count: res.guild_count,
+        item_count: res.item_count,
+        story_count: res.story_count,
+        story_entry_count: res.story_entry_count,
+        profile_count: res.profile_count,
+        max_post_views: res.max_post_views,
+        max_item_downloads: res.max_item_downloads,
+        total_likes: res.total_likes,
+        total_item_downloads: res.total_item_downloads,
       })
     }
   } catch (error: any) {
@@ -882,9 +892,6 @@ function previewAchievementNotification() {
               ></div>
             </div>
           </div>
-          <p class="achievement-detail__prompt">
-            总图位置：第 {{ selectedAchievementEntry.definition.spriteCell.row }} 行，第 {{ selectedAchievementEntry.definition.spriteCell.col }} 列；中心图案：{{ selectedAchievementEntry.definition.centerMotif }}。
-          </p>
         </div>
       </div>
     </RModal>
@@ -2610,14 +2617,6 @@ function previewAchievementNotification() {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #D4A373, #FFB23E);
-}
-
-.achievement-detail__prompt {
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(184, 115, 51, 0.08);
-  border: 1px dashed rgba(184, 115, 51, 0.18);
-  font-size: 12px;
 }
 
 @media (max-width: 980px) {

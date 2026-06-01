@@ -6,22 +6,35 @@ import { listPosts, type PostWithAuthor, type ListPostsParams } from '@/api/post
 import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import MobilePagination from '@/components/MobilePagination.vue'
+import { getCachedListState, restoreScrollTop, useListStateCache } from '@/utils/listState'
 
 const { t } = useI18n()
 const router = useRouter()
+const LIST_STATE_KEY = 'community'
+
+interface CommunityListState {
+  currentPage: number
+  activeCategory: string
+  sortBy: 'created_at' | 'like_count' | 'view_count'
+  searchText: string
+  scrollTop: number
+}
+
+const cachedState = getCachedListState<CommunityListState>(LIST_STATE_KEY)
 
 const posts = ref<PostWithAuthor[]>([])
 const loading = ref(false)
-const currentPage = ref(1)
+const currentPage = ref(cachedState?.currentPage || 1)
 const total = ref(0)
 const pageSize = 12
 const requestSerial = ref(0)
 const switchingPage = ref(false)
 
-const activeCategory = ref('')
-const sortBy = ref<'created_at' | 'like_count' | 'view_count'>('created_at')
-const searchText = ref('')
+const activeCategory = ref(cachedState?.activeCategory || '')
+const sortBy = ref<'created_at' | 'like_count' | 'view_count'>(cachedState?.sortBy || 'created_at')
+const searchText = ref(cachedState?.searchText || '')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+let shouldRestoreInitialScroll = !!cachedState?.scrollTop
 
 const categories = computed(() => [
   { key: '', label: t('community.categories.all') },
@@ -63,7 +76,7 @@ async function loadPosts() {
       sort: sortBy.value,
       order: 'desc',
     }
-    if (activeCategory.value) params.category = activeCategory.value
+    if (activeCategory.value) params.category = activeCategory.value as ListPostsParams['category']
     if (searchText.value.trim()) params.search = searchText.value.trim()
     const res = await listPosts(params)
     if (serial !== requestSerial.value) return
@@ -139,8 +152,25 @@ function formatLocation(region?: string, address?: string) {
 
 const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize))
 
+const { save: saveListState } = useListStateCache<CommunityListState>({
+  key: LIST_STATE_KEY,
+  getState: () => ({
+    currentPage: currentPage.value,
+    activeCategory: activeCategory.value,
+    sortBy: sortBy.value,
+    searchText: searchText.value,
+    scrollTop: 0,
+  }),
+})
+
 watch([activeCategory, sortBy, currentPage], loadPosts)
-onMounted(loadPosts)
+onMounted(async () => {
+  await loadPosts()
+  if (shouldRestoreInitialScroll) {
+    shouldRestoreInitialScroll = false
+    restoreScrollTop(cachedState?.scrollTop || 0)
+  }
+})
 onUnmounted(() => {
   if (searchTimer) {
     clearTimeout(searchTimer)
@@ -206,7 +236,7 @@ onUnmounted(() => {
           v-for="post in posts"
           :key="post.id"
           class="post-card"
-          @click="router.push({ name: 'post-detail', params: { id: post.id } })"
+          @click="saveListState(); router.push({ name: 'post-detail', params: { id: post.id } })"
         >
           <div v-if="postCoverUrl(post)" class="post-cover">
             <CachedImage :src="postCoverUrl(post)" alt="" />

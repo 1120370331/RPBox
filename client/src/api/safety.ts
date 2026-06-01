@@ -1,6 +1,6 @@
 import request from './request'
 
-export type ReportTargetType = 'post' | 'item' | 'user' | 'comment' | 'item_comment'
+export type ReportTargetType = 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story'
 
 export interface CreateContentReportRequest {
   target_type: ReportTargetType

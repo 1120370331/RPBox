@@ -158,6 +158,18 @@ export function createItemComment(id: number, content: string, rating = 0) {
   return request.post(`/items/${id}/comments`, { content, rating })
 }
 
+export function getItemTags(id: number) {
+  return request.get<Array<{ id: number; name: string; color?: string }> | { data?: Array<{ id: number; name: string; color?: string }> }>(`/items/${id}/tags`)
+}
+
+export function addItemTag(id: number, tagId: number) {
+  return request.post<void>(`/items/${id}/tags`, { tag_id: tagId })
+}
+
+export function removeItemTag(id: number, tagId: number) {
+  return request.delete<void>(`/items/${id}/tags/${tagId}`)
+}
+
 export function uploadImage(file: File) {
   const formData = new FormData()
   formData.append('image', file)

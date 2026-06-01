@@ -72,6 +72,7 @@ export default {
     featured: '代表成就',
     firstGoal: '首个目标',
     nextGoal: '下一个目标',
+    unlockedTitle: '成就解锁：{title}',
     close: '关闭',
   },
   blocks: {

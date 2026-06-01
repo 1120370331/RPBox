@@ -178,3 +178,15 @@ export function createPostComment(postId: number, content: string, parentId?: nu
     parent_id: parentId,
   })
 }
+
+export function getPostTags(postId: number) {
+  return request.get<{ tags: Array<{ id: number; name: string; color?: string }> }>(`/posts/${postId}/tags`)
+}
+
+export function addPostTag(postId: number, tagId: number) {
+  return request.post<void>(`/posts/${postId}/tags`, { tag_id: tagId })
+}
+
+export function removePostTag(postId: number, tagId: number) {
+  return request.delete<void>(`/posts/${postId}/tags/${tagId}`)
+}

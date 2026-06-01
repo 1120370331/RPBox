@@ -101,9 +101,10 @@ export function resolveInAppPathFromUrl(rawUrl: string) {
   if (!rawUrl) return null
 
   if (rawUrl.startsWith('intent://')) {
-    const match = rawUrl.match(/^intent:\/\/([^#]+)#Intent;.*(?:^|;)scheme=([^;]+);/i)
-    if (!match) return null
-    const [, route, scheme] = match
+    const [routePart, intentPart = ''] = rawUrl.slice('intent://'.length).split('#Intent;')
+    const scheme = intentPart.match(/(?:^|;)scheme=([^;]+)/i)?.[1]
+    if (!routePart || !scheme) return null
+    const route = routePart.replace(/^\/+/, '')
     return resolveInAppPathFromUrl(`${scheme}://${route}`)
   }
 

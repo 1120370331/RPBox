@@ -111,8 +111,8 @@ export interface ReportReviewQueryParams {
   page?: number
   page_size?: number
   status?: 'pending' | 'resolved' | 'rejected' | 'all'
-  target_scope?: 'user' | 'content' | 'comment'
-  target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment'
+  target_scope?: 'user' | 'content' | 'comment' | 'story'
+  target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story'
   sort?: 'report_count' | 'latest_reported_at'
   order?: 'asc' | 'desc'
 }
@@ -128,7 +128,7 @@ export interface ReportReasonItem {
 
 export interface ReportReviewItem {
   id: number
-  target_type: 'post' | 'item' | 'user' | 'comment' | 'item_comment'
+  target_type: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story'
   target_id: number
   target_user_id: number
   target_title: string
@@ -137,6 +137,7 @@ export interface ReportReviewItem {
   parent_target_title?: string
   target_preview_text?: string
   target_preview_image?: string
+  target_url?: string
   status: 'pending' | 'resolved' | 'rejected'
   report_count: number
   latest_reported_at: string

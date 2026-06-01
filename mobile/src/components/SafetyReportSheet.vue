@@ -5,7 +5,7 @@ const props = defineProps<{
   open: boolean
   title?: string
   targetLabel?: string
-  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'user'
+  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'user' | 'story'
   submitting?: boolean
 }>()
 
@@ -28,6 +28,9 @@ const hideTargetLabel = computed(() => {
   }
   if (props.targetType === 'user') {
     return '提交后同时隐藏该用户相关内容'
+  }
+  if (props.targetType === 'story') {
+    return '提交后同时隐藏这条剧情'
   }
   return '提交后同时隐藏这条内容'
 })

@@ -207,6 +207,70 @@ input, textarea {
 .sub-body .pagination button:disabled { opacity: 0.4; }
 .sub-body .pagination span { font-size: 13px; color: var(--color-text-secondary); }
 
+.content .attachment-card,
+.detail-content .attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  margin: 12px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+}
+
+.content .attachment-card__icon,
+.detail-content .attachment-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--color-primary-light);
+  color: var(--color-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.content .attachment-card__info,
+.detail-content .attachment-card__info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.content .attachment-card__name,
+.detail-content .attachment-card__name {
+  font-size: 13px;
+  color: var(--color-text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content .attachment-card__size,
+.detail-content .attachment-card__size {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.content .attachment-card__download,
+.detail-content .attachment-card__download {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--color-secondary);
+  color: var(--btn-primary-text);
+  text-decoration: none;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 360px) {
   :root {
     --tab-bar-height: 58px;

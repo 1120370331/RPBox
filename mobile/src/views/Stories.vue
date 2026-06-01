@@ -1,15 +1,26 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { listStories, type Story } from '@/api/story'
+import { getCachedListState, restoreScrollTop, useListStateCache } from '@/utils/listState'
 
 const { t } = useI18n()
 const router = useRouter()
+const LIST_STATE_KEY = 'stories'
+
+interface StoriesListState {
+  searchText: string
+  sortBy: string
+  scrollTop: number
+}
+
+const cachedState = getCachedListState<StoriesListState>(LIST_STATE_KEY)
 const stories = ref<Story[]>([])
 const loading = ref(false)
-const searchText = ref('')
-const sortBy = ref('updated_at')
+const searchText = ref(cachedState?.searchText || '')
+const sortBy = ref(cachedState?.sortBy || 'updated_at')
+let shouldRestoreInitialScroll = !!cachedState?.scrollTop
 
 const sortOptions = computed(() => [
   { key: 'updated_at', label: t('stories.sort.recentUpdate') },
@@ -51,7 +62,26 @@ function onSearchInput() {
 }
 
 watch(sortBy, loadStories)
-onMounted(loadStories)
+const { save: saveListState } = useListStateCache<StoriesListState>({
+  key: LIST_STATE_KEY,
+  getState: () => ({
+    searchText: searchText.value,
+    sortBy: sortBy.value,
+    scrollTop: 0,
+  }),
+})
+
+onMounted(async () => {
+  await loadStories()
+  if (shouldRestoreInitialScroll) {
+    shouldRestoreInitialScroll = false
+    restoreScrollTop(cachedState?.scrollTop || 0)
+  }
+})
+
+onUnmounted(() => {
+  clearTimeout(searchTimer)
+})
 </script>
 
 <template>
@@ -85,7 +115,7 @@ onMounted(loadStories)
           v-for="story in stories"
           :key="story.id"
           class="story-card"
-          @click="router.push({ name: 'story-detail', params: { id: story.id } })"
+          @click="saveListState(); router.push({ name: 'story-detail', params: { id: story.id } })"
         >
           <div class="story-header">
             <h3 class="story-title">{{ story.title }}</h3>

@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
+import { Keyboard, KeyboardResize } from '@capacitor/keyboard'
 import { useThemeStore } from '@shared/stores/theme'
 import { useUserStore } from '@shared/stores/user'
 import { useToastStore } from '@shared/stores/toast'
@@ -21,6 +22,16 @@ let backButtonHandle: PluginListenerHandle | null = null
 let appUrlOpenHandle: PluginListenerHandle | null = null
 let lastBackPressAt = 0
 let viewportHandler: (() => void) | null = null
+let keyboardWillShowHandle: PluginListenerHandle | null = null
+let keyboardDidShowHandle: PluginListenerHandle | null = null
+let keyboardWillHideHandle: PluginListenerHandle | null = null
+let keyboardDidHideHandle: PluginListenerHandle | null = null
+let keyboardVisible = false
+let stableViewportWidth = 0
+let stableViewportHeight = 0
+let viewportRestoreTimers: Array<ReturnType<typeof setTimeout>> = []
+let focusInHandler: ((event: FocusEvent) => void) | null = null
+let focusOutHandler: ((event: FocusEvent) => void) | null = null
 
 function handleOffline() {
   if (!userStore.token) return
@@ -35,13 +46,46 @@ function isHomeRoute(path: string) {
 
 function updateViewportVariables() {
   const viewport = window.visualViewport
-  const baseWidth = viewport?.width && viewport.width > 200 ? viewport.width : window.innerWidth
-  const baseHeight = viewport?.height && viewport.height > 300 ? viewport.height : window.innerHeight
+  const visualWidth = viewport?.width && viewport.width > 200 ? viewport.width : window.innerWidth
+  const visualHeight = viewport?.height && viewport.height > 300 ? viewport.height : window.innerHeight
+  const layoutWidth = window.innerWidth || visualWidth
+  const layoutHeight = window.innerHeight || visualHeight
+  const baseWidth = Math.max(visualWidth, layoutWidth)
+  const baseHeight = keyboardVisible
+    ? Math.max(visualHeight, 320)
+    : Math.max(visualHeight, layoutHeight, stableViewportHeight)
   const width = Math.max(240, Math.round(baseWidth))
   const height = Math.max(320, Math.round(baseHeight))
+  if (!keyboardVisible) {
+    stableViewportWidth = Math.max(stableViewportWidth, width)
+    stableViewportHeight = Math.max(stableViewportHeight, height)
+  }
   const root = document.documentElement
   root.style.setProperty('--app-width', `${width}px`)
   root.style.setProperty('--app-height', `${height}px`)
+}
+
+function scheduleViewportRestore() {
+  viewportRestoreTimers.forEach((timer) => clearTimeout(timer))
+  viewportRestoreTimers = []
+
+  const restore = () => {
+    keyboardVisible = false
+    document.body.style.height = ''
+    document.documentElement.style.height = ''
+    updateViewportVariables()
+  }
+
+  restore()
+  viewportRestoreTimers = [60, 180, 360].map((delay) => {
+    return setTimeout(restore, delay)
+  })
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  const element = target instanceof HTMLElement ? target : null
+  if (!element) return false
+  return Boolean(element.closest('input, textarea, [contenteditable="true"]'))
 }
 
 async function bindNativeBackButton() {
@@ -93,6 +137,27 @@ async function bindAppUrlOpen() {
   }
 }
 
+async function bindKeyboardHandlers() {
+  if (!Capacitor.isNativePlatform()) return
+
+  try {
+    await Keyboard.setResizeMode({ mode: KeyboardResize.Native })
+  } catch {
+    // Android ignores this API; config still applies resizeOnFullScreen there.
+  }
+
+  keyboardWillShowHandle = await Keyboard.addListener('keyboardWillShow', () => {
+    keyboardVisible = true
+    updateViewportVariables()
+  })
+  keyboardDidShowHandle = await Keyboard.addListener('keyboardDidShow', () => {
+    keyboardVisible = true
+    updateViewportVariables()
+  })
+  keyboardWillHideHandle = await Keyboard.addListener('keyboardWillHide', scheduleViewportRestore)
+  keyboardDidHideHandle = await Keyboard.addListener('keyboardDidHide', scheduleViewportRestore)
+}
+
 onMounted(() => {
   themeStore.initTheme()
   updateViewportVariables()
@@ -100,6 +165,18 @@ onMounted(() => {
   window.addEventListener('resize', viewportHandler)
   window.addEventListener('orientationchange', viewportHandler)
   window.visualViewport?.addEventListener('resize', viewportHandler)
+  window.visualViewport?.addEventListener('scroll', viewportHandler)
+  focusInHandler = (event: FocusEvent) => {
+    if (!isEditableTarget(event.target)) return
+    keyboardVisible = true
+    updateViewportVariables()
+  }
+  focusOutHandler = (event: FocusEvent) => {
+    if (!isEditableTarget(event.target)) return
+    scheduleViewportRestore()
+  }
+  document.addEventListener('focusin', focusInHandler)
+  document.addEventListener('focusout', focusOutHandler)
 
   if (!navigator.onLine && userStore.token) {
     handleOffline()
@@ -113,6 +190,7 @@ onMounted(() => {
 
   void bindNativeBackButton()
   void bindAppUrlOpen()
+  void bindKeyboardHandlers()
 })
 
 onBeforeUnmount(() => {
@@ -121,12 +199,31 @@ onBeforeUnmount(() => {
     window.removeEventListener('resize', viewportHandler)
     window.removeEventListener('orientationchange', viewportHandler)
     window.visualViewport?.removeEventListener('resize', viewportHandler)
+    window.visualViewport?.removeEventListener('scroll', viewportHandler)
     viewportHandler = null
+  }
+  viewportRestoreTimers.forEach((timer) => clearTimeout(timer))
+  viewportRestoreTimers = []
+  if (focusInHandler) {
+    document.removeEventListener('focusin', focusInHandler)
+    focusInHandler = null
+  }
+  if (focusOutHandler) {
+    document.removeEventListener('focusout', focusOutHandler)
+    focusOutHandler = null
   }
   backButtonHandle?.remove()
   backButtonHandle = null
   appUrlOpenHandle?.remove()
   appUrlOpenHandle = null
+  keyboardWillShowHandle?.remove()
+  keyboardWillShowHandle = null
+  keyboardDidShowHandle?.remove()
+  keyboardDidShowHandle = null
+  keyboardWillHideHandle?.remove()
+  keyboardWillHideHandle = null
+  keyboardDidHideHandle?.remove()
+  keyboardDidHideHandle = null
 })
 </script>
 

@@ -44,6 +44,7 @@ export default {
     detailContent: 'Detail Content',
     importCode: 'Import Code',
     importCodeRequired: 'Import code is required for non-artwork types',
+    tags: 'Item Tags',
     publicVisible: 'Public visible',
     enableWatermark: 'Enable watermark',
     cover: 'Preview Image',

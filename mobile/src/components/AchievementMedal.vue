@@ -24,6 +24,7 @@ const categoryMeta = computed(() => ACHIEVEMENT_CATEGORY_META[props.achievement.
     class="achievement-medal"
     :class="[
       `achievement-medal--${size}`,
+      `achievement-medal--${achievement.rarity}`,
       `achievement-medal--shape-${categoryMeta.shape}`,
       { 'achievement-medal--locked': !earned },
     ]"
@@ -32,11 +33,13 @@ const categoryMeta = computed(() => ACHIEVEMENT_CATEGORY_META[props.achievement.
       '--achievement-glow': rarityMeta.glow,
       '--achievement-text': rarityMeta.text,
     }"
+    :title="`${achievement.title} · ${rarityMeta.label}`"
   >
     <span class="achievement-medal__edge"></span>
     <span class="achievement-medal__core">
       <i :class="achievement.icon"></i>
     </span>
+    <span class="achievement-medal__shine"></span>
   </span>
 </template>
 
@@ -62,7 +65,8 @@ const categoryMeta = computed(() => ACHIEVEMENT_CATEGORY_META[props.achievement.
 }
 
 .achievement-medal__edge,
-.achievement-medal__core {
+.achievement-medal__core,
+.achievement-medal__shine {
   position: absolute;
   inset: 0;
   clip-path: inherit;
@@ -94,6 +98,24 @@ const categoryMeta = computed(() => ACHIEVEMENT_CATEGORY_META[props.achievement.
 
 .achievement-medal__core i {
   font-size: calc(var(--achievement-size) * 0.36);
+  position: relative;
+  z-index: 2;
+}
+
+.achievement-medal__shine {
+  background:
+    linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.46) 42%, transparent 58%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transform: translateX(-28%);
+  transition:
+    opacity 0.22s ease,
+    transform 0.35s ease;
+}
+
+.achievement-medal:active .achievement-medal__shine {
+  opacity: 0.72;
+  transform: translateX(18%);
 }
 
 .achievement-medal--locked {

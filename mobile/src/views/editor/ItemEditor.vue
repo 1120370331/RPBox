@@ -10,9 +10,13 @@ import {
 } from '@/api/collection'
 import {
   createItem,
+  type CreateItemRequest,
   deleteItem,
   deleteItemImage,
+  addItemTag,
   getItem,
+  getItemTags,
+  removeItemTag,
   type ItemImage,
   type UpdateItemRequest,
   updateItem,
@@ -20,6 +24,7 @@ import {
   uploadItemImages,
 } from '@/api/item'
 import { resolveApiUrl } from '@/api/image'
+import { getPresetTags, type Tag } from '@/api/tag'
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
 import NativeImageSourceDialog from '@/components/NativeImageSourceDialog.vue'
@@ -57,6 +62,9 @@ const coverPreview = ref('')
 const existingImages = ref<ItemImage[]>([])
 const deletedImageIds = ref<number[]>([])
 const newImages = ref<Array<{ file: File; preview: string }>>([])
+const itemTags = ref<Tag[]>([])
+const selectedTags = ref<number[]>([])
+const originalTags = ref<number[]>([])
 const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
 const useNativeImagePicker = canUseNativeImagePicker()
@@ -105,12 +113,26 @@ async function loadItemForEdit() {
     const collectionId = collectionRes.collection?.id ?? null
     originalCollectionId.value = collectionId
     selectedCollectionId.value = collectionId
+
+    const tagRes = await getItemTags(itemId.value)
+    const tags = Array.isArray(tagRes) ? tagRes : (tagRes.data || [])
+    originalTags.value = tags.map((tag) => tag.id)
+    selectedTags.value = [...originalTags.value]
   } catch (error) {
     console.error('Failed to load item detail', error)
     toast.error((error as Error)?.message || t('market.editor.loadFailed'))
     router.replace({ name: 'my-items' })
   } finally {
     loading.value = false
+  }
+}
+
+async function loadTags() {
+  try {
+    const res = await getPresetTags('item')
+    itemTags.value = res.tags || []
+  } catch (error) {
+    console.error('Failed to load item tags', error)
   }
 }
 
@@ -222,6 +244,15 @@ function restoreExistingImage(imageId: number) {
   deletedImageIds.value = deletedImageIds.value.filter((id) => id !== imageId)
 }
 
+function toggleTag(tagId: number) {
+  const index = selectedTags.value.indexOf(tagId)
+  if (index >= 0) {
+    selectedTags.value.splice(index, 1)
+    return
+  }
+  selectedTags.value.push(tagId)
+}
+
 async function syncItemCollection(targetItemId: number) {
   if (selectedCollectionId.value === originalCollectionId.value) return
 
@@ -240,6 +271,21 @@ async function syncItemCollection(targetItemId: number) {
   originalCollectionId.value = selectedCollectionId.value
 }
 
+async function syncItemTags(targetItemId: number) {
+  if (!isEdit.value) return
+  const addedTags = selectedTags.value.filter((tagId) => !originalTags.value.includes(tagId))
+  const removedTags = originalTags.value.filter((tagId) => !selectedTags.value.includes(tagId))
+
+  for (const tagId of addedTags) {
+    await addItemTag(targetItemId, tagId)
+  }
+  for (const tagId of removedTags) {
+    await removeItemTag(targetItemId, tagId)
+  }
+
+  originalTags.value = [...selectedTags.value]
+}
+
 function validateForm() {
   if (!form.value.name.trim()) {
     toast.warning(t('market.editor.nameRequired'))
@@ -256,7 +302,7 @@ function validateForm() {
   return true
 }
 
-function buildPayload(status: 'draft' | 'published'): UpdateItemRequest {
+function buildPayload(status: 'draft' | 'published'): UpdateItemRequest & Pick<CreateItemRequest, 'name'> {
   return {
     name: form.value.name.trim(),
     description: form.value.description.trim(),
@@ -266,6 +312,7 @@ function buildPayload(status: 'draft' | 'published'): UpdateItemRequest {
     status,
     is_public: form.value.is_public,
     enable_watermark: form.value.enable_watermark,
+    tag_ids: selectedTags.value,
   }
 }
 
@@ -299,6 +346,7 @@ async function submit(status: 'draft' | 'published') {
     }
 
     await syncItemCollection(targetId)
+    await syncItemTags(targetId)
 
     toast.success(status === 'published' ? t('market.editor.publishSuccess') : t('market.editor.draftSuccess'))
     router.replace(isEdit.value
@@ -357,7 +405,9 @@ function handleImageSourceDialogToggle(next: boolean) {
   }
 }
 
-onMounted(loadItemForEdit)
+onMounted(async () => {
+  await Promise.all([loadTags(), loadItemForEdit()])
+})
 </script>
 
 <template>
@@ -427,6 +477,20 @@ onMounted(loadItemForEdit)
             <span>{{ $t('market.editor.importCode') }}</span>
             <textarea v-model="form.import_code" rows="6" />
           </label>
+
+          <div v-if="itemTags.length" class="field">
+            <span>{{ $t('market.editor.tags') }}</span>
+            <div class="tag-list">
+              <button
+                v-for="tag in itemTags"
+                :key="tag.id"
+                type="button"
+                class="tag-chip"
+                :class="{ selected: selectedTags.includes(tag.id) }"
+                @click="toggleTag(tag.id)"
+              >{{ tag.name }}</button>
+            </div>
+          </div>
 
           <div v-if="isArtwork" class="field">
             <span>{{ $t('market.editor.artworkImages') }}</span>
@@ -561,6 +625,28 @@ onMounted(loadItemForEdit)
 
 .switch-field input {
   width: auto;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-chip {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-dark);
+  font-size: 12px;
+}
+
+.tag-chip.selected {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--text-light);
 }
 
 .cover-box {

@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getPublicStory, type Story, type StoryEntry, type StoryMusicSegment, type StoryMusicTrack } from '@/api/story'
+import { createContentReport } from '@/api/safety'
 import { type Character } from '@/api/character'
+import { useUserStore } from '@/stores/user'
+import { useToast } from '@/composables/useToast'
+import RModal from '@/components/RModal.vue'
 import WowIcon from '@/components/WowIcon.vue'
 import CharacterCard from '@/components/CharacterCard.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 
 const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
+const toast = useToast()
 
 const loading = ref(true)
 const error = ref('')
@@ -32,6 +39,16 @@ const characterCardPosition = ref({ x: 0, y: 0 })
 const showImageViewer = ref(false)
 const viewerImages = ref<string[]>([])
 const viewerStartIndex = ref(0)
+type StoryReportReason = 'story_content' | 'story_audio'
+const showStoryReportModal = ref(false)
+const storyReportReason = ref<StoryReportReason>('story_content')
+const storyReportEntryId = ref(0)
+const storyReportDetail = ref('')
+const storyReportSubmitting = ref(false)
+const storyReportReasonOptions: { value: StoryReportReason; label: string }[] = [
+  { value: 'story_content', label: '剧情内容违规' },
+  { value: 'story_audio', label: '音频违规' },
+]
 
 const imageEntries = computed(() => {
   const result: { id: number; image: string }[] = []
@@ -44,6 +61,21 @@ const imageEntries = computed(() => {
   }
   return result
 })
+
+const reportableEntries = computed(() => entries.value.map((entry, index) => ({
+  entry,
+  index,
+  label: buildStoryReportEntryLabel(entry, index),
+})))
+
+const selectedStoryReportEntry = computed(() => {
+  if (!storyReportEntryId.value) return null
+  return entries.value.find(entry => entry.id === storyReportEntryId.value) || null
+})
+
+const storyReportCanSubmit = computed(() => (
+  storyReportDetail.value.trim().length > 0 || storyReportEntryId.value > 0
+))
 
 // 播放控制
 const isPlaying = ref(false)
@@ -439,6 +471,99 @@ function openImageViewer(entryId: number) {
   showImageViewer.value = true
 }
 
+function truncateText(text: string, limit: number) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  const chars = Array.from(normalized)
+  if (chars.length <= limit) return normalized
+  return `${chars.slice(0, limit).join('')}...`
+}
+
+function getEntryReportText(entry: StoryEntry) {
+  if (entry.type === 'image') {
+    const parsed = parseImageEntry(entry)
+    return parsed?.description || '图片条目'
+  }
+  return entry.content || ''
+}
+
+function buildStoryReportEntryLabel(entry: StoryEntry, index: number) {
+  const speaker = getEntrySpeakerName(entry)
+  const channel = entry.channel ? `[${getChannelLabel(entry.channel)}]` : ''
+  const text = truncateText(getEntryReportText(entry), 64)
+  return `第 ${index + 1} 条 #${entry.id} ${channel} ${speaker}${text ? `：${text}` : ''}`
+}
+
+function resetStoryReportForm() {
+  storyReportReason.value = 'story_content'
+  storyReportEntryId.value = 0
+  storyReportDetail.value = ''
+}
+
+function openStoryReportModal() {
+  if (!story.value) return
+  if (!userStore.token) {
+    toast.error('请先登录后再举报剧情')
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (userStore.user?.id === story.value.user_id) {
+    toast.error('不能举报自己的剧情')
+    return
+  }
+  resetStoryReportForm()
+  showStoryReportModal.value = true
+}
+
+function closeStoryReportModal() {
+  if (storyReportSubmitting.value) return
+  showStoryReportModal.value = false
+}
+
+function buildStoryReportDetail() {
+  const parts = [
+    `违规类型：${storyReportReasonOptions.find(option => option.value === storyReportReason.value)?.label || '剧情内容违规'}`,
+  ]
+  const entry = selectedStoryReportEntry.value
+  if (entry) {
+    const entryIndex = entryIndexById.value.get(entry.id) ?? entries.value.findIndex(item => item.id === entry.id)
+    parts.push(`辅助条目：${buildStoryReportEntryLabel(entry, entryIndex >= 0 ? entryIndex : 0)}`)
+    if (storyReportReason.value === 'story_audio') {
+      const segment = getMusicSegmentForEntry(entry.id)
+      const track = segment ? getMusicTrack(segment.trackId) : null
+      if (track) {
+        parts.push(`关联音频：${track.name}`)
+      }
+    }
+  } else if (storyReportReason.value === 'story_audio' && musicTracks.value.length > 0) {
+    parts.push(`剧情音频数量：${musicTracks.value.length}`)
+  }
+  const note = storyReportDetail.value.trim()
+  if (note) {
+    parts.push(`补充说明：${note}`)
+  }
+  return parts.join('\n')
+}
+
+async function submitStoryReport() {
+  if (!story.value || !storyReportCanSubmit.value || storyReportSubmitting.value) return
+  storyReportSubmitting.value = true
+  try {
+    await createContentReport({
+      target_type: 'story',
+      target_id: story.value.id,
+      reason: storyReportReason.value,
+      detail: buildStoryReportDetail(),
+    })
+    toast.success('举报已提交，版主会尽快处理')
+    showStoryReportModal.value = false
+    resetStoryReportForm()
+  } catch (e: any) {
+    toast.error(e?.message || '举报提交失败')
+  } finally {
+    storyReportSubmitting.value = false
+  }
+}
+
 // 获取条目对应的角色
 function getEntryCharacter(entry: StoryEntry): Character | undefined {
   if (entry.character_id) {
@@ -605,6 +730,10 @@ onUnmounted(() => {
     <template v-else-if="story">
       <!-- 头部 -->
       <div class="playback-header">
+        <button class="story-report-button" type="button" title="举报剧情" @click="openStoryReportModal">
+          <i class="ri-alarm-warning-line"></i>
+          <span>举报</span>
+        </button>
         <h1>{{ story.title }}</h1>
         <div class="story-meta">
           <span>作者: {{ author }}</span>
@@ -762,6 +891,58 @@ onUnmounted(() => {
     :images="viewerImages"
     :start-index="viewerStartIndex"
   />
+
+  <RModal
+    v-model="showStoryReportModal"
+    title="举报剧情"
+    width="560px"
+    :mask-closable="!storyReportSubmitting"
+  >
+    <div class="story-report-form">
+      <label class="story-report-field">
+        <span>违规类型</span>
+        <select v-model="storyReportReason">
+          <option v-for="option in storyReportReasonOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+      <label class="story-report-field">
+        <span>辅助定位条目</span>
+        <select v-model.number="storyReportEntryId">
+          <option :value="0">不指定具体条目</option>
+          <option v-for="item in reportableEntries" :key="item.entry.id" :value="item.entry.id">
+            {{ item.label }}
+          </option>
+        </select>
+      </label>
+      <label class="story-report-field">
+        <span>补充说明</span>
+        <textarea
+          v-model="storyReportDetail"
+          rows="4"
+          maxlength="500"
+          placeholder="请说明违规位置或问题表现，选择条目后也可以只填写简短说明"
+        ></textarea>
+      </label>
+      <p class="story-report-hint" :class="{ error: !storyReportCanSubmit }">
+        请选择具体条目或填写补充说明；音频违规建议选择触发音频的剧情条目。
+      </p>
+    </div>
+    <template #footer>
+      <button class="story-report-modal-btn ghost" type="button" :disabled="storyReportSubmitting" @click="closeStoryReportModal">
+        取消
+      </button>
+      <button
+        class="story-report-modal-btn primary"
+        type="button"
+        :disabled="storyReportSubmitting || !storyReportCanSubmit"
+        @click="submitStoryReport"
+      >
+        {{ storyReportSubmitting ? '提交中...' : '提交举报' }}
+      </button>
+    </template>
+  </RModal>
 </template>
 
 <style scoped>
@@ -796,12 +977,40 @@ onUnmounted(() => {
   max-width: 800px;
   margin: 0 auto 32px;
   text-align: center;
+  position: relative;
+  padding: 0 96px;
 }
 
 .playback-header h1 {
   font-size: 32px;
   color: #4B3621;
   margin: 0 0 12px 0;
+}
+
+.story-report-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(133, 106, 82, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #6f5846;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.story-report-button:hover {
+  background: #fff;
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.32);
 }
 
 .story-meta {
@@ -1015,6 +1224,76 @@ onUnmounted(() => {
 .entry-item.narration {
   background: rgba(184, 115, 51, 0.08);
   border-left: 3px solid #B87333;
+}
+
+.story-report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.story-report-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.story-report-field span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-main);
+}
+
+.story-report-field select,
+.story-report-field textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.story-report-field textarea {
+  resize: vertical;
+}
+
+.story-report-hint {
+  margin: -4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.story-report-hint.error {
+  color: #b45309;
+}
+
+.story-report-modal-btn {
+  min-width: 96px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.story-report-modal-btn.ghost {
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
+}
+
+.story-report-modal-btn.primary {
+  border-color: var(--color-secondary);
+  background: var(--color-secondary);
+  color: var(--btn-primary-text, #fff);
+}
+
+.story-report-modal-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .playback-controls {
@@ -1253,5 +1532,25 @@ onUnmounted(() => {
 .progress-info {
   font-size: 14px;
   color: #856a52;
+}
+
+@media (max-width: 640px) {
+  .playback-header {
+    padding: 0;
+  }
+
+  .playback-header h1 {
+    font-size: 26px;
+  }
+
+  .story-report-button {
+    position: static;
+    margin: 0 auto 14px;
+  }
+
+  .story-meta {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
 }
 </style>

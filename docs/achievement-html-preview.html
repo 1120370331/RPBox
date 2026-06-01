@@ -859,7 +859,7 @@
       <div class="hero-copy">
         <div class="eyebrow">RPBox Achievement Preview</div>
         <h1>成就勋章<br>HTML 预览</h1>
-        <p>类别决定勋章轮廓，稀有度决定边缘材质，中心图案代表成就本身。此页用于快速评审 5x5 总图切图前的视觉规则和交互层级。</p>
+        <p>类别决定勋章轮廓，稀有度决定边缘材质。此页用于快速评审 5x5 总图切图前的视觉规则和交互层级。</p>
         <div class="actions">
           <button class="btn" id="toggleEarned">点亮全部勋章</button>
           <button class="btn secondary" id="previewToast">预览获得通知</button>
@@ -933,7 +933,6 @@
         <div>
           <p id="modalCondition">完成注册并登录</p>
           <p id="modalProgress">进度：1 / 1</p>
-          <p id="modalCell">总图位置：第 1 行，第 1 列</p>
         </div>
       </div>
     </div>
@@ -962,33 +961,33 @@
     };
 
     const achievements = [
-      ["初入 RPBox", "完成注册并登录", "account", "common", "registered", 1, "✧", "open account seal", 1, 1],
-      ["一周问候", "累计签到 7 天", "checkin", "common", "totalSignIns", 7, "✓", "seven stamped calendar pages", 1, 2],
-      ["月度常驻", "累计签到 31 天", "checkin", "rare", "totalSignIns", 31, "☾", "lunar calendar with crescent mark", 1, 3],
-      ["四季巡礼", "累计签到 365 天", "checkin", "epic", "totalSignIns", 365, "✿", "four season wheel around a calendar", 1, 4],
-      ["不熄灯塔", "连续签到 30 天", "checkin", "fine", "signInStreak", 30, "♨", "steady lantern flame with thirty sparks", 1, 5],
-      ["永续星轨", "连续签到 365 天", "checkin", "legendary", "signInStreak", 365, "☀", "golden orbit ring with unbroken star trail", 2, 1],
-      ["第一张公告", "第一次发布帖子", "community", "common", "postCount", 1, "▤", "fresh parchment post pinned with wax", 2, 2],
-      ["同盟之约", "第一次加入公会", "guild", "common", "guildCount", 1, "♜", "joined guild shield with handshake rune", 2, 3],
-      ["造物上架", "第一次发布道具", "market", "common", "itemCount", 1, "◇", "crafted item crate with tiny magic spark", 2, 4],
-      ["小有围观", "帖子浏览量达到 20", "community", "rare", "maxPostViews", 20, "◎", "watchful eye over twenty small dots", 2, 5],
-      ["被人带走", "道具下载量达到 10", "market", "rare", "maxItemDownloads", 10, "⇩", "download arrow entering a glowing satchel", 3, 1],
-      ["百赞回响", "账号累计获得 100 个点赞", "social", "rare", "totalLikes", 100, "♡", "heart echo with one hundred tiny sparks", 3, 2],
-      ["千赞声望", "账号累计获得 1000 个点赞", "social", "epic", "totalLikes", 1000, "♥", "radiant heart crown with applause waves", 3, 3],
-      ["百次流通", "账号累计道具下载量达到 100", "market", "fine", "totalItemDownloads", 100, "⇲", "stack of shared item scrolls with download mark", 3, 4],
-      ["千人收藏", "账号累计道具下载量达到 1000", "market", "epic", "totalItemDownloads", 1000, "⇱", "treasure vault sending item trails outward", 3, 5],
-      ["第一卷归档", "归档第一条剧情", "story", "common", "storyCount", 1, "▥", "first open storybook with bookmark ribbon", 4, 1],
-      ["千卷书库", "归档一千条剧情", "story", "fine", "storyCount", 1000, "▧", "library shelf of one thousand glowing volumes", 4, 2],
-      ["万卷编年", "归档一万条剧情", "story", "epic", "storyCount", 10000, "▣", "ancient archive tower filled with floating books", 4, 3],
-      ["十万史诗", "归档十万条剧情", "story", "legendary", "storyCount", 100000, "▦", "mythic archive gate opening to endless manuscripts", 4, 4],
-      ["亮出名牌", "第一次上传人物卡", "profile", "common", "profileCount", 1, "▨", "character card portrait frame with quill", 4, 5],
-      ["炉火赞助 Lv1", "成为 LV1 赞助", "sponsor", "rare", "sponsorLevel", 1, "♛", "small bronze patron crown", 5, 1],
-      ["星辉赞助 Lv2", "成为 LV2 赞助", "sponsor", "fine", "sponsorLevel", 2, "♕", "silver patron crown with twin gems", 5, 2],
-      ["王冠赞助 Lv3", "成为 LV3 赞助", "sponsor", "epic", "sponsorLevel", 3, "♔", "ornate purple-gold patron crown", 5, 3],
-      ["传说账号", "账号等级达到 7 级", "level", "fine", "forumLevel", 7, "☆", "level seven star crest with gold plume", 5, 4],
-      ["神话账号", "账号等级达到 10 级", "level", "legendary", "forumLevel", 10, "✦", "mythic crimson star with haloed wings", 5, 5]
-    ].map(([title, condition, cat, rar, metric, threshold, icon, motif, row, col]) => ({
-      title, condition, cat, rar, metric, threshold, icon, motif, row, col
+      ["初入 RPBox", "完成注册并登录", "account", "common", "registered", 1, "✧"],
+      ["一周问候", "累计签到 7 天", "checkin", "common", "totalSignIns", 7, "✓"],
+      ["月度常驻", "累计签到 31 天", "checkin", "rare", "totalSignIns", 31, "☾"],
+      ["四季巡礼", "累计签到 365 天", "checkin", "epic", "totalSignIns", 365, "✿"],
+      ["不熄灯塔", "连续签到 30 天", "checkin", "fine", "signInStreak", 30, "♨"],
+      ["永续星轨", "连续签到 365 天", "checkin", "legendary", "signInStreak", 365, "☀"],
+      ["第一张公告", "第一次发布帖子", "community", "common", "postCount", 1, "▤"],
+      ["同盟之约", "第一次加入公会", "guild", "common", "guildCount", 1, "♜"],
+      ["造物上架", "第一次发布道具", "market", "common", "itemCount", 1, "◇"],
+      ["小有围观", "帖子浏览量达到 20", "community", "rare", "maxPostViews", 20, "◎"],
+      ["被人带走", "道具下载量达到 10", "market", "rare", "maxItemDownloads", 10, "⇩"],
+      ["百赞回响", "账号累计获得 100 个点赞", "social", "rare", "totalLikes", 100, "♡"],
+      ["千赞声望", "账号累计获得 1000 个点赞", "social", "epic", "totalLikes", 1000, "♥"],
+      ["百次流通", "账号累计道具下载量达到 100", "market", "fine", "totalItemDownloads", 100, "⇲"],
+      ["千人收藏", "账号累计道具下载量达到 1000", "market", "epic", "totalItemDownloads", 1000, "⇱"],
+      ["第一卷归档", "归档第一条剧情", "story", "common", "storyCount", 1, "▥"],
+      ["千卷书库", "归档一千条剧情", "story", "fine", "storyCount", 1000, "▧"],
+      ["万卷编年", "归档一万条剧情", "story", "epic", "storyCount", 10000, "▣"],
+      ["十万史诗", "归档十万条剧情", "story", "legendary", "storyCount", 100000, "▦"],
+      ["亮出名牌", "第一次上传人物卡", "profile", "common", "profileCount", 1, "▨"],
+      ["炉火赞助 Lv1", "成为 LV1 赞助", "sponsor", "rare", "sponsorLevel", 1, "♛"],
+      ["星辉赞助 Lv2", "成为 LV2 赞助", "sponsor", "fine", "sponsorLevel", 2, "♕"],
+      ["王冠赞助 Lv3", "成为 LV3 赞助", "sponsor", "epic", "sponsorLevel", 3, "♔"],
+      ["传说账号", "账号等级达到 7 级", "level", "fine", "forumLevel", 7, "☆"],
+      ["神话账号", "账号等级达到 10 级", "level", "legendary", "forumLevel", 10, "✦"]
+    ].map(([title, condition, cat, rar, metric, threshold, icon]) => ({
+      title, condition, cat, rar, metric, threshold, icon
     }));
 
     const demoProgress = {
@@ -1074,7 +1073,6 @@
       document.getElementById("modalTitle").textContent = item.title;
       document.getElementById("modalCondition").textContent = item.condition;
       document.getElementById("modalProgress").textContent = `进度：${formatNumber(p.current)} / ${formatNumber(item.threshold)}`;
-      document.getElementById("modalCell").textContent = `总图位置：第 ${item.row} 行，第 ${item.col} 列；中心图案：${item.motif}`;
       document.getElementById("modalMedal").innerHTML = medalHTML(item, true);
       drawer.classList.add("is-open");
     }

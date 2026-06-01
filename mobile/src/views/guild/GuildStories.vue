@@ -125,7 +125,7 @@ function durationText(story: GuildStoryWithUploader) {
 function getTags(story: GuildStoryWithUploader) {
   if (story.tag_list?.length) return story.tag_list
   const names = String(story.tags || '').split(',').map((v) => v.trim()).filter(Boolean)
-  return names.map((name) => ({ name }))
+  return names.map((name) => ({ name, color: '' }))
 }
 
 function askRemove(storyId: number) {

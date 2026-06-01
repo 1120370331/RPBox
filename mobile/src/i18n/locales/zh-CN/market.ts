@@ -44,6 +44,7 @@ export default {
     detailContent: '详细内容',
     importCode: '导入代码',
     importCodeRequired: '非画作类型必须填写导入代码',
+    tags: '作品分类标签',
     publicVisible: '公开可见',
     enableWatermark: '启用水印',
     cover: '预览图',
