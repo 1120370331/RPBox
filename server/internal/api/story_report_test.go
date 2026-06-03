@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -182,5 +183,172 @@ func TestStoryReportCanBeListedAndDeletedByModerator(t *testing.T) {
 	}
 	if storedReport.Status != "resolved" {
 		t.Fatalf("expected report resolved, got %q", storedReport.Status)
+	}
+}
+
+func TestModeratorCanArchiveReportWithReporterInfo(t *testing.T) {
+	db := testutil.NewTestDB(
+		t,
+		&model.User{},
+		&model.Story{},
+		&model.ContentReport{},
+		&model.AdminActionLog{},
+	)
+
+	author := model.User{Username: "archive-author", Email: "archive-author@example.com", PassHash: "hash", Role: "user"}
+	reporter := model.User{
+		Username:           "archive-reporter",
+		Email:              "archive-reporter@example.com",
+		PassHash:           "hash",
+		Role:               "user",
+		Avatar:             "/uploads/users/reporter.png",
+		AvatarReviewStatus: "approved",
+	}
+	moderator := model.User{Username: "archive-moderator", Email: "archive-mod@example.com", PassHash: "hash", Role: "moderator"}
+	if err := db.Create(&[]*model.User{&author, &reporter, &moderator}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	now := time.Now()
+	story := model.Story{
+		UserID:      author.ID,
+		Title:       "可归档剧情",
+		Description: "低质量举报不应删除的剧情",
+		StartTime:   now,
+		EndTime:     now,
+		IsPublic:    true,
+		ShareCode:   "archiveabc",
+	}
+	if err := db.Create(&story).Error; err != nil {
+		t.Fatalf("create story: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	reportResp := performRequest(
+		server.router,
+		http.MethodPost,
+		"/api/v1/reports",
+		map[string]interface{}{
+			"target_type": "story",
+			"target_id":   story.ID,
+			"reason":      "story_content",
+			"detail":      "证据不足的剧情举报",
+		},
+		newTestToken(t, reporter),
+	)
+	if reportResp.Code != http.StatusOK {
+		t.Fatalf("expected create report 200, got %d body=%s", reportResp.Code, reportResp.Body.String())
+	}
+
+	listResp := performRequest(
+		server.router,
+		http.MethodGet,
+		"/api/v1/moderator/reports?target_scope=story",
+		nil,
+		newTestToken(t, moderator),
+	)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("expected list reports 200, got %d body=%s", listResp.Code, listResp.Body.String())
+	}
+
+	var listPayload struct {
+		Reports []struct {
+			ID      uint   `json:"id"`
+			Status  string `json:"status"`
+			Reasons []struct {
+				ReporterID     uint   `json:"reporter_id"`
+				ReporterName   string `json:"reporter_name"`
+				ReporterAvatar string `json:"reporter_avatar"`
+				Reason         string `json:"reason"`
+			} `json:"reasons"`
+			ReportDetails []struct {
+				ReporterID     uint   `json:"reporter_id"`
+				ReporterName   string `json:"reporter_name"`
+				ReporterAvatar string `json:"reporter_avatar"`
+			} `json:"reports"`
+		} `json:"reports"`
+		Total int64 `json:"total"`
+	}
+	if err := json.Unmarshal(listResp.Body.Bytes(), &listPayload); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if listPayload.Total != 1 || len(listPayload.Reports) != 1 {
+		t.Fatalf("expected one report, got total=%d len=%d", listPayload.Total, len(listPayload.Reports))
+	}
+	report := listPayload.Reports[0]
+	if len(report.Reasons) != 1 {
+		t.Fatalf("expected one reason, got %#v", report.Reasons)
+	}
+	reason := report.Reasons[0]
+	if reason.ReporterID != reporter.ID || reason.ReporterName != reporter.Username {
+		t.Fatalf("unexpected reporter fields: %#v", reason)
+	}
+	if !strings.Contains(reason.ReporterAvatar, fmt.Sprintf("/api/v1/images/user-avatar/%d", reporter.ID)) {
+		t.Fatalf("expected safe reporter avatar URL, got %q", reason.ReporterAvatar)
+	}
+	if len(report.ReportDetails) != 1 || report.ReportDetails[0].ReporterID != reporter.ID {
+		t.Fatalf("expected reports alias to include reporter info, got %#v", report.ReportDetails)
+	}
+
+	reviewResp := performRequest(
+		server.router,
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/moderator/reports/%d/review", report.ID),
+		map[string]interface{}{"action": "archive", "comment": "证据不足，忽略归档"},
+		newTestToken(t, moderator),
+	)
+	if reviewResp.Code != http.StatusOK {
+		t.Fatalf("expected archive 200, got %d body=%s", reviewResp.Code, reviewResp.Body.String())
+	}
+
+	if err := db.First(&model.Story{}, story.ID).Error; err != nil {
+		t.Fatalf("expected story to remain after archive: %v", err)
+	}
+
+	var authorAfter model.User
+	if err := db.First(&authorAfter, author.ID).Error; err != nil {
+		t.Fatalf("load author: %v", err)
+	}
+	if authorAfter.IsMuted || authorAfter.IsBanned {
+		t.Fatalf("expected archive not to punish author, muted=%v banned=%v", authorAfter.IsMuted, authorAfter.IsBanned)
+	}
+
+	var storedReport model.ContentReport
+	if err := db.First(&storedReport, report.ID).Error; err != nil {
+		t.Fatalf("load stored report: %v", err)
+	}
+	if storedReport.Status != "archived" {
+		t.Fatalf("expected report archived, got %q", storedReport.Status)
+	}
+	if !strings.Contains(storedReport.ReviewComment, "忽略归档举报") {
+		t.Fatalf("expected archive review comment, got %q", storedReport.ReviewComment)
+	}
+
+	archivedListResp := performRequest(
+		server.router,
+		http.MethodGet,
+		"/api/v1/moderator/reports?target_scope=story&status=archived",
+		nil,
+		newTestToken(t, moderator),
+	)
+	if archivedListResp.Code != http.StatusOK {
+		t.Fatalf("expected archived list 200, got %d body=%s", archivedListResp.Code, archivedListResp.Body.String())
+	}
+
+	var archivedListPayload struct {
+		Reports []struct {
+			ID     uint   `json:"id"`
+			Status string `json:"status"`
+		} `json:"reports"`
+		Total int64 `json:"total"`
+	}
+	if err := json.Unmarshal(archivedListResp.Body.Bytes(), &archivedListPayload); err != nil {
+		t.Fatalf("decode archived list response: %v", err)
+	}
+	if archivedListPayload.Total != 1 || len(archivedListPayload.Reports) != 1 {
+		t.Fatalf("expected one archived report, got total=%d len=%d", archivedListPayload.Total, len(archivedListPayload.Reports))
+	}
+	if archivedListPayload.Reports[0].ID != report.ID || archivedListPayload.Reports[0].Status != "archived" {
+		t.Fatalf("unexpected archived report: %#v", archivedListPayload.Reports[0])
 	}
 }

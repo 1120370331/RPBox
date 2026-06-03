@@ -14,6 +14,7 @@ import {
   listGuildApplications,
   reviewGuildApplication,
   uploadGuildAvatar,
+  sortGuildMembers,
   type Guild,
   type GuildMember,
   type GuildApplication
@@ -144,7 +145,7 @@ async function loadMembers() {
   try {
     loadingMembers.value = true
     const res = await listGuildMembers(guildId.value)
-    members.value = res.members || []
+    members.value = sortGuildMembers(res.members || [])
   } catch (e: any) {
     console.error('加载成员列表失败:', e)
     toast.error(e.message || t('guild.manage.loadFailed'))

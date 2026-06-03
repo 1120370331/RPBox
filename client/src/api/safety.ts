@@ -9,6 +9,7 @@ export interface CreateContentReportRequest {
   detail?: string
   hide_target?: boolean
   block_author?: boolean
+  submit_report?: boolean
 }
 
 export interface UserBlockItem {
@@ -25,9 +26,10 @@ export function listUserBlocks() {
 }
 
 export function createUserBlock(blockedUserId: number, reason?: string) {
-  return request.post<{ message: string }>('/user/blocks', {
+  return request.post<{ message: string; submitted_report: boolean }>('/user/blocks', {
     blocked_user_id: blockedUserId,
     reason,
+    submit_report: false,
   })
 }
 
@@ -36,5 +38,8 @@ export function deleteUserBlock(blockedUserId: number) {
 }
 
 export function createContentReport(data: CreateContentReportRequest) {
-  return request.post<{ message: string; report_id: number }>('/reports', data)
+  return request.post<{ message: string; report_id: number; submitted_report: boolean }>('/reports', {
+    ...data,
+    submit_report: data.submit_report ?? false,
+  })
 }

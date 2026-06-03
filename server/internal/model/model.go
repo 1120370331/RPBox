@@ -672,7 +672,7 @@ type ContentReport struct {
 	TargetUserID  uint       `gorm:"index" json:"target_user_id"`
 	Reason        string     `gorm:"size:64;not null" json:"reason"`
 	Detail        string     `gorm:"type:text" json:"detail"`
-	Status        string     `gorm:"size:20;default:pending;index" json:"status"` // pending|resolved|rejected
+	Status        string     `gorm:"size:20;default:pending;index" json:"status"` // pending|resolved|rejected|archived
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`
 	ReviewComment string     `gorm:"size:512" json:"review_comment"`
 	ReviewedAt    *time.Time `json:"reviewed_at"`

@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, type Guild, type GuildMember } from '@/api/guild'
+import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
 import { useDialog } from '@/composables/useDialog'
 import RModal from '@/components/RModal.vue'
@@ -76,7 +76,7 @@ async function loadGuild() {
     // 只有成员才能查看成员列表
     if (myRole.value) {
       const membersRes = await listGuildMembers(guildId)
-      members.value = membersRes.members || []
+      members.value = sortGuildMembers(membersRes.members || [])
     }
 
     // 如果是管理员，加载待处理申请数量
@@ -748,9 +748,9 @@ onMounted(loadGuild)
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: rgba(255, 255, 255, 0.8);
+  background: color-mix(in srgb, var(--color-panel-bg, #fff) 82%, transparent);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--color-border, #E8DCCF);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border, #E8DCCF) 78%, transparent);
 }
 
 .breadcrumb {
@@ -794,7 +794,7 @@ onMounted(loadGuild)
 }
 
 .icon-btn:hover {
-  background: var(--color-primary-light, rgba(128, 64, 48, 0.1));
+  background: color-mix(in srgb, var(--color-card-bg, #f5f0eb) 70%, transparent);
   color: var(--color-secondary, #804030);
 }
 

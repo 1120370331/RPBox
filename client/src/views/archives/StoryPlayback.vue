@@ -553,6 +553,7 @@ async function submitStoryReport() {
       target_id: story.value.id,
       reason: storyReportReason.value,
       detail: buildStoryReportDetail(),
+      submit_report: true,
     })
     toast.success('举报已提交，版主会尽快处理')
     showStoryReportModal.value = false
