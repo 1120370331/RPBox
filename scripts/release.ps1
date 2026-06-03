@@ -15,7 +15,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
 $ClientDir = Join-Path $ProjectRoot "client"
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -74,7 +74,10 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 # Windows NSIS 安装包
 $NsisDir = Join-Path $BuildDir "nsis"
-$NsisFiles = Get-ChildItem -Path $NsisDir -Filter "*.zip" -ErrorAction SilentlyContinue
+$NsisFiles = Get-ChildItem -Path $NsisDir -Filter "RPBox_${Version}_x64-setup.exe" -ErrorAction SilentlyContinue
+if (-not $NsisFiles) {
+    throw "未找到 NSIS 安装包: $NsisDir\RPBox_${Version}_x64-setup.exe"
+}
 foreach ($file in $NsisFiles) {
     Copy-Item $file.FullName $OutputDir
     $SigFile = "$($file.FullName).sig"
@@ -88,7 +91,7 @@ foreach ($file in $NsisFiles) {
 $UpdateInfo = @{
     version = $Version
     notes = $Notes
-    pub_date = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 }
 $UpdateInfo | ConvertTo-Json | Set-Content (Join-Path $OutputDir "update.json") -Encoding UTF8
 Write-Host "  update.json 已生成" -ForegroundColor Green

@@ -110,7 +110,7 @@ export function reviewItemEdit(id: number, data: ReviewRequest) {
 export interface ReportReviewQueryParams {
   page?: number
   page_size?: number
-  status?: 'pending' | 'resolved' | 'rejected' | 'all'
+  status?: 'pending' | 'resolved' | 'rejected' | 'archived' | 'all'
   target_scope?: 'user' | 'content' | 'comment' | 'story'
   target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story'
   sort?: 'report_count' | 'latest_reported_at'
@@ -121,6 +121,7 @@ export interface ReportReasonItem {
   id: number
   reporter_id: number
   reporter_name?: string
+  reporter_avatar?: string
   reason: string
   detail?: string
   created_at: string
@@ -138,7 +139,7 @@ export interface ReportReviewItem {
   target_preview_text?: string
   target_preview_image?: string
   target_url?: string
-  status: 'pending' | 'resolved' | 'rejected'
+  status: 'pending' | 'resolved' | 'rejected' | 'archived'
   report_count: number
   latest_reported_at: string
   reasons: ReportReasonItem[]
@@ -147,7 +148,7 @@ export interface ReportReviewItem {
 }
 
 export interface ReportReviewRequest {
-  action: 'delete_content' | 'delete_and_mute_user' | 'delete_and_ban_user' | 'mute_user' | 'ban_user' | 'reject'
+  action: 'delete_content' | 'delete_and_mute_user' | 'delete_and_ban_user' | 'mute_user' | 'ban_user' | 'reject' | 'archive'
   duration?: number
   comment?: string
 }

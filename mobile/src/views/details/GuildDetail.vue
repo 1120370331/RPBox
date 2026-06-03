@@ -43,6 +43,36 @@ const relationshipLabel = computed(() => {
   return '-'
 })
 
+const guildRoleOrder: Record<GuildMember['role'], number> = {
+  owner: 0,
+  admin: 1,
+  member: 2,
+}
+
+function hasValidMemberRole(member: GuildMember): boolean {
+  return member.role === 'owner' || member.role === 'admin' || member.role === 'member'
+}
+
+function hasMemberIdentity(member: GuildMember): boolean {
+  return Boolean(member.id && member.guild_id && member.user_id && member.username)
+}
+
+function sortGuildMembers(memberList: GuildMember[]): GuildMember[] {
+  return memberList
+    .map((member, index) => ({ member, index }))
+    .sort((a, b) => {
+      const aActive = hasValidMemberRole(a.member) && hasMemberIdentity(a.member)
+      const bActive = hasValidMemberRole(b.member) && hasMemberIdentity(b.member)
+      if (aActive !== bActive) return aActive ? -1 : 1
+
+      const roleDiff = (guildRoleOrder[a.member.role] ?? 99) - (guildRoleOrder[b.member.role] ?? 99)
+      if (roleDiff !== 0) return roleDiff
+
+      return a.index - b.index
+    })
+    .map(({ member }) => member)
+}
+
 function roleLabel(role?: Guild['my_role'] | '') {
   if (!role) return ''
   return t(`guild.role.${role}`)
@@ -74,7 +104,7 @@ async function loadDetail() {
       membersLoading.value = true
       void listGuildMembers(guildId.value)
         .then((membersRes) => {
-          members.value = membersRes.members || []
+          members.value = sortGuildMembers(membersRes.members || [])
         })
         .catch(() => {
           members.value = []

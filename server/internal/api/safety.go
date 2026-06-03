@@ -29,19 +29,21 @@ const (
 type createUserBlockRequest struct {
 	BlockedUserID uint   `json:"blocked_user_id" binding:"required"`
 	Reason        string `json:"reason"`
+	SubmitReport  *bool  `json:"submit_report"`
 }
 
 type createContentReportRequest struct {
-	TargetType  string `json:"target_type" binding:"required"`
-	TargetID    uint   `json:"target_id" binding:"required"`
-	Reason      string `json:"reason" binding:"required"`
-	Detail      string `json:"detail"`
-	HideTarget  bool   `json:"hide_target"`
-	BlockAuthor bool   `json:"block_author"`
+	TargetType   string `json:"target_type" binding:"required"`
+	TargetID     uint   `json:"target_id" binding:"required"`
+	Reason       string `json:"reason"`
+	Detail       string `json:"detail"`
+	HideTarget   bool   `json:"hide_target"`
+	BlockAuthor  bool   `json:"block_author"`
+	SubmitReport *bool  `json:"submit_report"`
 }
 
 type reviewContentReportRequest struct {
-	Action   string `json:"action" binding:"required"` // delete_content|delete_and_mute_user|delete_and_ban_user|mute_user|ban_user|reject
+	Action   string `json:"action" binding:"required"` // delete_content|delete_and_mute_user|delete_and_ban_user|mute_user|ban_user|reject|archive
 	Duration int    `json:"duration"`
 	Comment  string `json:"comment"`
 }
@@ -239,6 +241,21 @@ func buildSafetyActionReason(reason, detail string) string {
 	return combined
 }
 
+func contentReportShouldSubmit(req createContentReportRequest) bool {
+	if req.SubmitReport == nil {
+		return true
+	}
+	return *req.SubmitReport
+}
+
+func buildLocalSafetyActionReason(reason, detail string) string {
+	actionReason := buildSafetyActionReason(reason, detail)
+	if strings.TrimSpace(actionReason) == "" {
+		return "仅屏蔽/隐藏，未提交举报"
+	}
+	return actionReason
+}
+
 func translateReportReason(reason string) string {
 	switch strings.TrimSpace(strings.ToLower(reason)) {
 	case "spam":
@@ -335,6 +352,8 @@ func buildReportReviewActionLabel(action string, duration int) string {
 		return "封禁用户（" + formatReportActionDuration(duration) + "）"
 	case "reject":
 		return "驳回举报"
+	case "archive":
+		return "忽略归档举报"
 	default:
 		return action
 	}
@@ -344,14 +363,14 @@ func validateReportReviewAction(targetType, action string) error {
 	switch targetType {
 	case reportTargetUser:
 		switch action {
-		case "mute_user", "ban_user", "reject":
+		case "mute_user", "ban_user", "reject", "archive":
 			return nil
 		default:
 			return errors.New("该举报目标不支持此处理动作")
 		}
 	case reportTargetPost, reportTargetItem, reportTargetComment, reportTargetItemComment, reportTargetStory:
 		switch action {
-		case "delete_content", "delete_and_mute_user", "delete_and_ban_user", "reject":
+		case "delete_content", "delete_and_mute_user", "delete_and_ban_user", "reject", "archive":
 			return nil
 		default:
 			return errors.New("该举报目标不支持此处理动作")
@@ -753,11 +772,15 @@ func (s *Server) createUserBlock(c *gin.Context) {
 		Reason:        req.Reason,
 	}
 
+	submitReport := req.SubmitReport != nil && *req.SubmitReport
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := upsertUserBlockRecord(tx, block.BlockerID, block.BlockedUserID, block.Reason); err != nil {
 			return err
 		}
 
+		if !submitReport {
+			return nil
+		}
 		reportReq := createContentReportRequest{
 			TargetType: reportTargetUser,
 			TargetID:   req.BlockedUserID,
@@ -775,7 +798,10 @@ func (s *Server) createUserBlock(c *gin.Context) {
 	if alreadyBlocked {
 		message = "该用户已在屏蔽列表中"
 	}
-	c.JSON(http.StatusOK, gin.H{"message": message})
+	c.JSON(http.StatusOK, gin.H{
+		"message":          message,
+		"submitted_report": submitReport,
+	})
 }
 
 func (s *Server) deleteUserBlock(c *gin.Context) {
@@ -807,8 +833,13 @@ func (s *Server) createContentReport(c *gin.Context) {
 	req.TargetType = strings.TrimSpace(strings.ToLower(req.TargetType))
 	req.Reason = strings.TrimSpace(req.Reason)
 	req.Detail = strings.TrimSpace(req.Detail)
-	if req.Reason == "" || req.Detail == "" {
+	submitReport := contentReportShouldSubmit(req)
+	if submitReport && (req.Reason == "" || req.Detail == "") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择举报原因并填写备注说明"})
+		return
+	}
+	if !submitReport && !req.HideTarget && !req.BlockAuthor {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择隐藏、屏蔽，或勾选同时举报"})
 		return
 	}
 
@@ -822,14 +853,16 @@ func (s *Server) createContentReport(c *gin.Context) {
 		return
 	}
 
-	actionReason := buildSafetyActionReason(req.Reason, req.Detail)
+	actionReason := buildLocalSafetyActionReason(req.Reason, req.Detail)
 	var report *model.ContentReport
 	var updated bool
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		var txErr error
-		report, updated, txErr = upsertPendingReport(tx, userID, req, targetUserID)
-		if txErr != nil {
-			return txErr
+		if submitReport {
+			var txErr error
+			report, updated, txErr = upsertPendingReport(tx, userID, req, targetUserID)
+			if txErr != nil {
+				return txErr
+			}
 		}
 		if req.HideTarget {
 			if err := upsertHiddenContentRecord(tx, userID, req.TargetType, req.TargetID, actionReason); err != nil {
@@ -843,20 +876,34 @@ func (s *Server) createContentReport(c *gin.Context) {
 		}
 		return nil
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "提交举报失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "安全操作失败"})
 		return
 	}
 
-	message := "举报已提交"
-	if updated {
-		message = "已更新你的举报信息"
+	message := "已完成安全操作"
+	reportID := uint(0)
+	if submitReport {
+		message = "举报已提交"
+		if updated {
+			message = "已更新你的举报信息"
+		}
+		if report != nil {
+			reportID = report.ID
+		}
+	} else if req.HideTarget && req.BlockAuthor {
+		message = "已隐藏内容并屏蔽作者"
+	} else if req.HideTarget {
+		message = "已隐藏该内容"
+	} else if req.BlockAuthor {
+		message = "已屏蔽该作者"
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"message":      message,
-		"report_id":    report.ID,
-		"target":       targetName,
-		"hide_target":  req.HideTarget,
-		"block_author": req.BlockAuthor,
+		"message":          message,
+		"report_id":        reportID,
+		"target":           targetName,
+		"hide_target":      req.HideTarget,
+		"block_author":     req.BlockAuthor,
+		"submitted_report": submitReport,
 	})
 	if req.HideTarget && req.TargetType == reportTargetPost || req.BlockAuthor {
 		s.bumpPostListCache(c.Request.Context())
@@ -1145,12 +1192,13 @@ func (s *Server) listContentReports(c *gin.Context) {
 				}
 			}
 			reasons = append(reasons, gin.H{
-				"id":            report.ID,
-				"reporter_id":   report.ReporterID,
-				"reporter_name": reporterName,
-				"reason":        report.Reason,
-				"detail":        report.Detail,
-				"created_at":    report.CreatedAt,
+				"id":              report.ID,
+				"reporter_id":     report.ReporterID,
+				"reporter_name":   reporterName,
+				"reporter_avatar": userAvatarURL(s.cfg.Server.ApiHost, userMap[report.ReporterID]),
+				"reason":          report.Reason,
+				"detail":          report.Detail,
+				"created_at":      report.CreatedAt,
 			})
 		}
 
@@ -1170,6 +1218,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 			"report_count":         row.ReportCount,
 			"latest_reported_at":   latestReportedAt,
 			"reasons":              reasons,
+			"reports":              reasons,
 			"review_comment":       latestReport.ReviewComment,
 			"reviewed_at":          latestReport.ReviewedAt,
 		})
@@ -1227,6 +1276,8 @@ func (s *Server) reviewContentReport(c *gin.Context) {
 	nextStatus := "resolved"
 	if req.Action == "reject" {
 		nextStatus = "rejected"
+	} else if req.Action == "archive" {
+		nextStatus = "archived"
 	}
 
 	targetName := buildMissingReportTitle(report.TargetType, report.TargetID)
@@ -1334,6 +1385,7 @@ func (s *Server) reviewContentReport(c *gin.Context) {
 			reviewNotes = append(reviewNotes, "目标用户已不存在")
 		}
 	case "reject":
+	case "archive":
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的处理动作"})
 		return

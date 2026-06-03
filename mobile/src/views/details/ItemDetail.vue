@@ -341,20 +341,22 @@ async function shareItemFile() {
   await shareImportCodeFile()
 }
 
-async function submitSafetyReport(payload: { reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean }) {
+async function submitSafetyReport(payload: { reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean; submitReport: boolean }) {
   if (safetySubmitting.value || !reportContext.value) return
   safetySubmitting.value = true
   try {
     const context = reportContext.value
-    await createContentReport({
+    const res = await createContentReport({
       target_type: context.targetType,
       target_id: context.targetId,
       reason: payload.reason,
       detail: payload.detail,
       hide_target: payload.hideTarget,
       block_author: payload.blockAuthor,
+      submit_report: payload.submitReport,
     })
     closeReportSheet()
+    toast.success(res.message || (payload.submitReport ? '举报已提交，版主会尽快处理' : '已按你的设置完成处理'))
     if (context.targetType === 'item' && (payload.hideTarget || payload.blockAuthor)) {
       router.replace({ name: 'market' })
       return
@@ -362,7 +364,6 @@ async function submitSafetyReport(payload: { reason: string; detail: string; hid
     if (context.targetType === 'item_comment' && (payload.hideTarget || payload.blockAuthor)) {
       await loadItemDetail()
     }
-    toast.success('举报已提交，版主会尽快处理')
   } catch (error) {
     toast.error((error as Error)?.message || '举报提交失败')
   } finally {

@@ -87,6 +87,7 @@ interface VisibleReportReason {
   id: number
   reporter_id?: number
   reporter_name?: string
+  reporter_avatar?: string
   reason: string
   detail?: string
   created_at?: string
@@ -165,7 +166,7 @@ const filterPostFlag = ref('')
 const filterRole = ref('')
 const filterGuildStatus = ref('')
 const filterSponsorLevel = ref('')
-const reportStatus = ref<'pending' | 'resolved' | 'rejected' | 'all'>('pending')
+const reportStatus = ref<'pending' | 'resolved' | 'rejected' | 'archived' | 'all'>('pending')
 type ReportScope = 'user' | 'content' | 'comment' | 'story'
 const reportScope = ref<ReportScope>('content')
 const reportSort = ref<'report_count' | 'latest_reported_at'>('report_count')
@@ -932,6 +933,7 @@ function getReportTargetLabel(type: string) {
 function getReportStatusLabel(status: string) {
   if (status === 'resolved') return '已处置'
   if (status === 'rejected') return '已驳回'
+  if (status === 'archived') return '已归档'
   return '待处理'
 }
 
@@ -986,6 +988,7 @@ function normalizeVisibleReportReason(reason: Partial<VisibleReportReason> & { r
     id: typeof reason.id === 'number' ? reason.id : 0,
     reporter_id: reporterId,
     reporter_name: reason.reporter_name?.trim() || '',
+    reporter_avatar: reason.reporter_avatar?.trim() || '',
     reason: reason.reason || 'other',
     detail: reason.detail || '',
     created_at: reason.created_at || fallbackCreatedAt,
@@ -998,6 +1001,7 @@ function getVisibleReportReasons(report: ReportReviewItem): VisibleReportReason[
     detail?: string
     reporter_id?: number
     reporter_name?: string
+    reporter_avatar?: string
     created_at?: string
     reporterId?: number
     reports?: Array<VisibleReportReason & { reporterId?: number }>
@@ -1015,6 +1019,7 @@ function getVisibleReportReasons(report: ReportReviewItem): VisibleReportReason[
       reporter_id: reportAny.reporter_id,
       reporterId: reportAny.reporterId,
       reporter_name: reportAny.reporter_name,
+      reporter_avatar: reportAny.reporter_avatar,
       reason: reportAny.reason || 'other',
       detail: reportAny.detail || '',
       created_at: reportAny.created_at || report.latest_reported_at,
@@ -1028,6 +1033,11 @@ function getReportReporterLabel(reason: VisibleReportReason) {
   if (reporterName) return reporterName
   if (typeof reason.reporter_id === 'number' && reason.reporter_id > 0) return `用户#${reason.reporter_id}`
   return '未知用户'
+}
+
+function openReporterProfile(reason: VisibleReportReason) {
+  if (!reason.reporter_id) return
+  router.push({ name: 'user-profile', params: { id: reason.reporter_id } })
 }
 
 function isBlockUserReason(reason: string) {
@@ -1083,6 +1093,7 @@ function getReportActionTitle(action: ReportReviewAction = reportActionType.valu
   if (action === 'delete_and_ban_user') return '删除并封禁用户'
   if (action === 'mute_user') return '禁言用户'
   if (action === 'ban_user') return '封禁用户'
+  if (action === 'archive') return '忽略归档举报'
   return '驳回举报'
 }
 
@@ -1093,6 +1104,7 @@ function getReportActionDescription(action: ReportReviewAction = reportActionTyp
   if (action === 'delete_and_ban_user') return `将删除选中的 ${count} 条被举报内容，并对对应作者执行封禁。`
   if (action === 'mute_user') return `将对选中的 ${count} 位被举报用户执行禁言。`
   if (action === 'ban_user') return `将对选中的 ${count} 位被举报用户执行封禁。`
+  if (action === 'archive') return `将忽略并归档选中的 ${count} 条举报，不会删除内容，也不会处罚用户。`
   return `将驳回选中的 ${count} 条举报，不会删除内容，也不会处罚用户。`
 }
 
@@ -1102,6 +1114,7 @@ function getReportActionWarning() {
   if (reportActionType.value === 'delete_and_ban_user') return '删除内容后，作者将被禁止登录；如果选择永久，需谨慎执行。'
   if (reportActionType.value === 'mute_user') return '禁言用户后，对方将无法继续发帖和评论。'
   if (reportActionType.value === 'ban_user') return '封禁用户后，对方将无法继续登录。'
+  if (reportActionType.value === 'archive') return '归档后举报将被关闭，内容与账号状态不会发生变化。'
   return '驳回后举报将被关闭，内容与账号状态不会发生变化。'
 }
 
@@ -1228,6 +1241,7 @@ function formatLogDetails(log: AdminActionLog): string {
         delete_and_ban_user: '删除并封禁用户',
         mute_user: '禁言用户',
         ban_user: '封禁用户',
+        archive: '忽略归档举报',
       }
       parts.push(actionMap[d.action] || d.action)
     }
@@ -2772,6 +2786,7 @@ function formatBanTime(dateStr: string | null) {
               <option value="pending">待处理</option>
               <option value="resolved">已处置</option>
               <option value="rejected">已驳回</option>
+              <option value="archived">已归档</option>
               <option value="all">全部状态</option>
             </select>
             <select v-model="reportSort" @change="handleReportFilterChange">
@@ -2826,6 +2841,13 @@ function formatBanTime(dateStr: string | null) {
               >
                 <i class="ri-close-circle-line"></i> 驳回举报
               </button>
+              <button
+                class="btn-archive"
+                :disabled="!hasSelectedReports"
+                @click="openReportActionModal('archive')"
+              >
+                <i class="ri-archive-line"></i> 忽略归档
+              </button>
             </div>
           </div>
         <div v-if="loading" class="loading">
@@ -2876,9 +2898,18 @@ function formatBanTime(dateStr: string | null) {
               <div v-for="reason in getVisibleReportReasons(report)" :key="reason.id" class="report-reason-item">
                 <div class="report-reason-head">
                   <div class="report-reason-main">
-                    <span class="report-reason-meta">
-                      举报人：{{ getReportReporterLabel(reason) }}
-                    </span>
+                    <button
+                      class="report-reporter-link"
+                      type="button"
+                      :disabled="!reason.reporter_id"
+                      @click="openReporterProfile(reason)"
+                    >
+                      <span class="reporter-avatar">
+                        <img v-if="reason.reporter_avatar" :src="resolveImageUrl(reason.reporter_avatar)" alt="" />
+                        <span v-else>{{ getReportReporterLabel(reason).charAt(0) }}</span>
+                      </span>
+                      <span class="report-reason-meta">举报人：{{ getReportReporterLabel(reason) }}</span>
+                    </button>
                     <div class="report-reason-summary">
                       {{ getReportReasonSummaryLabel(reason) }}：{{ getReportReasonSummaryValue(reason) }}
                     </div>
@@ -2937,6 +2968,9 @@ function formatBanTime(dateStr: string | null) {
               </button>
               <button v-if="report.status === 'pending'" class="btn-reject" @click="openReportActionModal('reject', report)">
                 <i class="ri-close-circle-line"></i> 驳回举报
+              </button>
+              <button v-if="report.status === 'pending'" class="btn-archive" @click="openReportActionModal('archive', report)">
+                <i class="ri-archive-line"></i> 忽略归档
               </button>
             </div>
           </div>
@@ -4809,6 +4843,11 @@ function formatBanTime(dateStr: string | null) {
   color: var(--btn-danger-bg, #C62828);
 }
 
+.status-badge.archived {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
 .item-meta {
   display: flex;
   gap: 16px;
@@ -5252,6 +5291,29 @@ function formatBanTime(dateStr: string | null) {
 
 .btn-reject:hover {
   background: var(--btn-danger-hover, #E64A19);
+}
+
+.btn-archive {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #64748b;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-archive:hover {
+  background: #475569;
+}
+
+.btn-archive:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-delete {
@@ -6431,6 +6493,49 @@ function formatBanTime(dateStr: string | null) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.report-reporter-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.report-reporter-link:disabled {
+  cursor: default;
+}
+
+.reporter-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.reporter-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.report-reporter-link:not(:disabled):hover .report-reason-meta {
+  color: var(--color-secondary, #804030);
+  text-decoration: underline;
 }
 
 .report-reason-meta {

@@ -520,6 +520,7 @@ async function submitStoryReport() {
       target_id: story.value.id,
       reason: reportReason.value,
       detail: buildStoryReportDetail(),
+      submit_report: true,
     })
     showReportSheet.value = false
     resetReportForm()

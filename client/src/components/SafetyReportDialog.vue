@@ -5,31 +5,49 @@ const props = defineProps<{
   visible: boolean
   title?: string
   targetLabel?: string
-  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'user'
+  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'user' | 'story'
   submitting?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  submit: [{ reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean }]
+  submit: [{ reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean; submitReport: boolean }]
 }>()
 
 const reason = ref('spam')
 const detail = ref('')
-const hideTarget = ref(false)
+const hideTarget = ref(true)
 const blockAuthor = ref(false)
-const canSubmit = computed(() => detail.value.trim().length > 0)
+const submitReport = ref(false)
+const canSubmit = computed(() => {
+  if (submitReport.value) {
+    return detail.value.trim().length > 0
+  }
+  return hideTarget.value || blockAuthor.value
+})
 const hideTargetLabel = computed(() => {
   if (props.targetType === 'comment' || props.targetType === 'item_comment') {
-    return '提交后同时隐藏这条评论'
+    return '隐藏这条评论'
   }
   if (props.targetType === 'item') {
-    return '提交后同时隐藏这个道具'
+    return '隐藏这个道具'
   }
   if (props.targetType === 'user') {
-    return '提交后同时隐藏该用户相关内容'
+    return '隐藏该用户相关内容'
   }
-  return '提交后同时隐藏这条内容'
+  if (props.targetType === 'story') {
+    return '隐藏这个剧情'
+  }
+  return '隐藏这条内容'
+})
+const blockAuthorLabel = computed(() => {
+  if (props.targetType === 'user') return '屏蔽该用户'
+  return '同时屏蔽该作者'
+})
+const hintText = computed(() => {
+  if (submitReport.value) return '同时举报需要选择原因并填写备注说明。'
+  if (!canSubmit.value) return '请选择至少一个本地处理动作。'
+  return '默认只对你隐藏或屏蔽，不进入版主审核队列。'
 })
 
 const reasonOptions = [
@@ -41,12 +59,17 @@ const reasonOptions = [
   { value: 'other', label: '其他问题' },
 ]
 
+function resetForm() {
+  reason.value = 'spam'
+  detail.value = ''
+  submitReport.value = false
+  hideTarget.value = props.targetType !== 'user'
+  blockAuthor.value = props.targetType === 'user'
+}
+
 watch(() => props.visible, (visible) => {
-  if (!visible) {
-    reason.value = 'spam'
-    detail.value = ''
-    hideTarget.value = false
-    blockAuthor.value = false
+  if (visible) {
+    resetForm()
   }
 })
 
@@ -61,6 +84,7 @@ function submit() {
     detail: detail.value.trim(),
     hideTarget: hideTarget.value,
     blockAuthor: blockAuthor.value,
+    submitReport: submitReport.value,
   })
 }
 </script>
@@ -80,7 +104,21 @@ function submit() {
             </button>
           </div>
           <div class="report-dialog__body">
-            <label class="report-dialog__label">
+            <div class="report-dialog__local-actions">
+              <label class="report-dialog__check">
+                <input v-model="hideTarget" type="checkbox">
+                <span>{{ hideTargetLabel }}</span>
+              </label>
+              <label class="report-dialog__check">
+                <input v-model="blockAuthor" type="checkbox">
+                <span>{{ blockAuthorLabel }}</span>
+              </label>
+            </div>
+            <label class="report-dialog__check report-dialog__report-check">
+              <input v-model="submitReport" type="checkbox">
+              <span>同时提交给版主审核</span>
+            </label>
+            <label v-if="submitReport" class="report-dialog__label">
               <span>举报原因</span>
               <select v-model="reason">
                 <option v-for="option in reasonOptions" :key="option.value" :value="option.value">
@@ -88,7 +126,7 @@ function submit() {
                 </option>
               </select>
             </label>
-            <label class="report-dialog__label">
+            <label v-if="submitReport" class="report-dialog__label">
               <span>补充说明</span>
               <textarea
                 v-model="detail"
@@ -97,22 +135,14 @@ function submit() {
                 placeholder="请填写备注说明，帮助版主判断处理"
               ></textarea>
             </label>
-            <label class="report-dialog__check">
-              <input v-model="hideTarget" type="checkbox">
-              <span>{{ hideTargetLabel }}</span>
-            </label>
-            <label class="report-dialog__check">
-              <input v-model="blockAuthor" type="checkbox">
-              <span>提交后同时屏蔽该作者</span>
-            </label>
-            <p class="report-dialog__hint" :class="{ error: !canSubmit }">举报需选择原因并填写备注说明。</p>
+            <p class="report-dialog__hint" :class="{ error: !canSubmit }">{{ hintText }}</p>
           </div>
           <div class="report-dialog__footer">
             <button class="report-dialog__btn report-dialog__btn--ghost" type="button" @click="close">
               取消
             </button>
             <button class="report-dialog__btn report-dialog__btn--primary" type="button" :disabled="submitting || !canSubmit" @click="submit">
-              {{ submitting ? '提交中...' : '提交举报' }}
+              {{ submitting ? '提交中...' : (submitReport ? '提交举报' : '确认处理') }}
             </button>
           </div>
         </div>
@@ -178,6 +208,16 @@ function submit() {
   gap: 16px;
 }
 
+.report-dialog__local-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card-bg);
+}
+
 .report-dialog__label {
   display: flex;
   flex-direction: column;
@@ -217,6 +257,10 @@ function submit() {
   width: 16px;
   height: 16px;
   accent-color: var(--color-secondary);
+}
+
+.report-dialog__report-check {
+  padding-top: 2px;
 }
 
 .report-dialog__footer {

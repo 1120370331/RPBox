@@ -39,8 +39,39 @@ export interface GuildMember {
   username: string
   role: 'owner' | 'admin' | 'member'
   joined_at: string
+  avatar?: string
   name_color?: string
   name_bold?: boolean
+}
+
+const guildMemberRoleOrder: Record<GuildMember['role'], number> = {
+  owner: 0,
+  admin: 1,
+  member: 2,
+}
+
+function hasValidMemberRole(member: GuildMember): boolean {
+  return member.role === 'owner' || member.role === 'admin' || member.role === 'member'
+}
+
+function hasMemberIdentity(member: GuildMember): boolean {
+  return Boolean(member.id && member.guild_id && member.user_id && member.username)
+}
+
+export function sortGuildMembers(members: GuildMember[]): GuildMember[] {
+  return members
+    .map((member, index) => ({ member, index }))
+    .sort((a, b) => {
+      const aActive = hasValidMemberRole(a.member) && hasMemberIdentity(a.member)
+      const bActive = hasValidMemberRole(b.member) && hasMemberIdentity(b.member)
+      if (aActive !== bActive) return aActive ? -1 : 1
+
+      const roleDiff = (guildMemberRoleOrder[a.member.role] ?? 99) - (guildMemberRoleOrder[b.member.role] ?? 99)
+      if (roleDiff !== 0) return roleDiff
+
+      return a.index - b.index
+    })
+    .map(({ member }) => member)
 }
 
 export interface CreateGuildRequest {

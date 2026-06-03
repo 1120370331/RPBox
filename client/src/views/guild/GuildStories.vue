@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listStories, type Story, type StoryFilterParams } from '@/api/story'
-import { getGuild, listGuildMembers, removeStoryFromGuild, type Guild, type GuildStoryWithUploader } from '@/api/guild'
+import { getGuild, listGuildMembers, removeStoryFromGuild, sortGuildMembers, type Guild, type GuildMember, type GuildStoryWithUploader } from '@/api/guild'
 import { listGuildTags, listTags, type Tag } from '@/api/tag'
 import { useDialog } from '@/composables/useDialog'
 import RButton from '@/components/RButton.vue'
@@ -63,7 +63,7 @@ async function loadGuild() {
 async function loadMembers() {
   try {
     const res = await listGuildMembers(guildId)
-    members.value = res.members || []
+    members.value = sortGuildMembers(res.members || [])
   } catch (error) {
     console.error('加载成员列表失败:', error)
   }

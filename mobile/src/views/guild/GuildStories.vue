@@ -36,6 +36,36 @@ const removing = ref(false)
 
 const isAdmin = computed(() => myRole.value === 'owner' || myRole.value === 'admin')
 
+const guildRoleOrder: Record<GuildMember['role'], number> = {
+  owner: 0,
+  admin: 1,
+  member: 2,
+}
+
+function hasValidMemberRole(member: GuildMember): boolean {
+  return member.role === 'owner' || member.role === 'admin' || member.role === 'member'
+}
+
+function hasMemberIdentity(member: GuildMember): boolean {
+  return Boolean(member.id && member.guild_id && member.user_id && member.username)
+}
+
+function sortGuildMembers(memberList: GuildMember[]): GuildMember[] {
+  return memberList
+    .map((member, index) => ({ member, index }))
+    .sort((a, b) => {
+      const aActive = hasValidMemberRole(a.member) && hasMemberIdentity(a.member)
+      const bActive = hasValidMemberRole(b.member) && hasMemberIdentity(b.member)
+      if (aActive !== bActive) return aActive ? -1 : 1
+
+      const roleDiff = (guildRoleOrder[a.member.role] ?? 99) - (guildRoleOrder[b.member.role] ?? 99)
+      if (roleDiff !== 0) return roleDiff
+
+      return a.index - b.index
+    })
+    .map(({ member }) => member)
+}
+
 const filteredStories = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
   if (!keyword) return stories.value
@@ -65,7 +95,7 @@ async function loadMembers() {
   if (!guildId.value) return
   try {
     const res = await listGuildMembers(guildId.value)
-    members.value = res.members || []
+    members.value = sortGuildMembers(res.members || [])
   } catch {
     members.value = []
   }
