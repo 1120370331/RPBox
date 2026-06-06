@@ -4,11 +4,11 @@ on:
   push:
     tags:
       - 'v*'  # 触发条件：推送 v 开头的 tag，如 v0.2.0
-      - 'beta-v*'  # 测试版 tag，如 beta-v0.2.1-beta.1
+      - 'beta-v*'  # 测试版 tag，如 beta-v0.2.1-1
   workflow_dispatch:
     inputs:
       version:
-        description: 'Client version, for example 0.2.1 or 0.2.1-beta.1'
+        description: 'Client version, for example 0.2.1 or 0.2.1-1'
         required: true
         type: string
       channel:
@@ -68,7 +68,12 @@ jobs:
           fi
 
           if [ "$CHANNEL" = "beta" ] && [[ "$VERSION" != *"-"* ]]; then
-            echo "Beta client releases must use a prerelease version, for example 0.2.1-beta.1" >&2
+            echo "Beta client releases must use a numeric prerelease version for MSI, for example 0.2.1-1" >&2
+            exit 1
+          fi
+
+          if [ "$CHANNEL" = "beta" ] && ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            echo "Beta client releases must use numeric-only prerelease identifiers for MSI, for example 0.2.1-1" >&2
             exit 1
           fi
 
