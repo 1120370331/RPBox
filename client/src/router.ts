@@ -41,6 +41,7 @@ const router = createRouter({
       component: AppLayout,
       children: [
         { path: '', name: 'home', component: () => import('./views/Home.vue') },
+        { path: 'warcraft', name: 'warcraft', component: () => import('./views/WarcraftFeatures.vue') },
         { path: 'sync', name: 'sync', component: () => import('./views/sync/SyncMain.vue') },
         { path: 'sync/setup', name: 'sync-setup', component: () => import('./views/sync/SetupWizard.vue') },
         { path: 'sync/profile/:id', name: 'profile-detail', component: () => import('./views/sync/ProfileDetail.vue') },

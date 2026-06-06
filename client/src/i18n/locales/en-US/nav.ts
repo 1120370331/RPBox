@@ -3,6 +3,7 @@ export default {
     home: 'Home',
     sync: 'Profile Backup',
     archives: 'Story Archives',
+    warcraft: 'Warcraft Tools',
     market: 'Creative Market',
     community: 'Community',
     guild: 'Guild',

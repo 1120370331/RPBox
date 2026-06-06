@@ -351,7 +351,7 @@ watch([viewMode, selectedAccount], ([mode]) => {
 onMounted(async () => {
   const savedPath = localStorage.getItem('wow_path')
   if (!savedPath) {
-    router.push('/sync/setup')
+    router.push({ path: '/sync/setup', query: { redirect: '/sync' } })
     return
   }
   if (!isAuthed.value) {
@@ -830,7 +830,7 @@ const workflowSteps = computed(() => [
           <div v-else-if="currentProfiles.length === 0" class="empty-state">
             <div class="empty-icon">👤</div>
             <p>{{ $t('sync.panel.noProfilesFound') }}</p>
-            <button class="btn-secondary small" @click="router.push('/sync/setup')">{{ $t('sync.panel.reconfigure') }}</button>
+            <button class="btn-secondary small" @click="router.push({ path: '/sync/setup', query: { redirect: '/sync' } })">{{ $t('sync.panel.reconfigure') }}</button>
           </div>
 
           <div v-else class="task-list">

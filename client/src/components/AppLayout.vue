@@ -158,8 +158,7 @@ function handleReturnToPost() {
 
 const menuItems = computed(() => [
   { id: 'home', icon: 'ri-home-4-line', label: t('nav.menu.home'), route: '/' },
-  { id: 'sync', icon: 'ri-user-star-line', label: t('nav.menu.sync'), route: '/sync' },
-  { id: 'archives', icon: 'ri-book-open-line', label: t('nav.menu.archives'), route: '/archives' },
+  { id: 'warcraft', icon: 'ri-gamepad-line', label: t('nav.menu.warcraft'), route: '/warcraft' },
   { id: 'market', icon: 'ri-sword-line', label: t('nav.menu.market'), route: '/market' },
   { id: 'community', icon: 'ri-chat-smile-2-line', label: t('nav.menu.community'), route: '/community' },
   { id: 'guild', icon: 'ri-shield-line', label: t('nav.menu.guild'), route: '/guild' },
@@ -177,8 +176,7 @@ const moderatorMenuItem = computed(() => {
 const lastMainMenu = ref<string>('home')
 
 function resolveMenu(path: string): string | null {
-  if (path.startsWith('/sync')) return 'sync'
-  if (path.startsWith('/archives')) return 'archives'
+  if (path.startsWith('/warcraft') || path.startsWith('/sync') || path.startsWith('/archives')) return 'warcraft'
   if (path.startsWith('/market')) return 'market'
   if (path.startsWith('/community')) return 'community'
   if (path.startsWith('/guild')) return 'guild'

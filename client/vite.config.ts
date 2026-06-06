@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
-const devApiTarget = process.env.RPBOX_DEV_API_TARGET || 'http://localhost:8080'
+const devApiTarget = process.env.RPBOX_DEV_API_TARGET || 'http://127.0.0.1:9010'
 
 export default defineConfig({
   plugins: [vue()],
@@ -13,6 +13,7 @@ export default defineConfig({
   },
   clearScreen: false,
   server: {
+    host: '127.0.0.1',
     port: 3101,
     strictPort: true,
     proxy: {

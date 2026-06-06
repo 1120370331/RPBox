@@ -18,15 +18,21 @@ import (
 )
 
 type Server struct {
-	cfg                 *config.Config
-	router              *gin.Engine
-	wsHub               *ws.Hub
-	emailClient         *email.SMTPClient
-	verificationService *service.VerificationService
-	cache               cache.Cache
-	ossBucket           *oss.Bucket
-	ossInitOnce         sync.Once
-	ossInitErr          error
+	cfg                  *config.Config
+	router               *gin.Engine
+	wsHub                *ws.Hub
+	emailClient          *email.SMTPClient
+	verificationService  *service.VerificationService
+	cache                cache.Cache
+	ossBucket            *oss.Bucket
+	ossInitOnce          sync.Once
+	ossInitErr           error
+	trp3LatestMu         sync.Mutex
+	trp3LatestCache      *TRP3LatestResponse
+	trp3LatestCacheUntil time.Time
+	trp3CacheLocksMu     sync.Mutex
+	trp3CacheLocks       map[string]*sync.Mutex
+	trp3MirrorManifestMu sync.Mutex
 }
 
 func NewServer(cfg *config.Config) *Server {

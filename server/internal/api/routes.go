@@ -42,6 +42,8 @@ func (s *Server) setupRoutes() {
 		// 插件版本管理（公开）
 		v1.GET("/addon/manifest", s.getAddonManifest)
 		v1.GET("/addon/latest", s.getAddonLatest)
+		v1.GET("/addon/trp3/latest", s.getTRP3Latest)
+		v1.GET("/addon/trp3/download/:id", s.downloadTRP3Addon)
 		v1.GET("/addon/download/:version", s.downloadAddon)
 
 		// 公开剧情（无需登录）
@@ -354,6 +356,14 @@ func (s *Server) setupRoutes() {
 				mod.DELETE("/users/:id/ban", s.unbanUser)
 				mod.POST("/users/:id/posts/disable", s.disableUserPosts)
 				mod.DELETE("/users/:id/posts", s.deleteUserPosts)
+
+				// 赞助者兑换码
+				mod.GET("/sponsor-codes", s.listSponsorRedeemCodes)
+				mod.POST("/sponsor-codes", s.createSponsorRedeemCodes)
+
+				// 插件镜像分发
+				mod.GET("/addons/trp3/mirror", s.listTRP3MirrorAddons)
+				mod.POST("/addons/trp3/mirror", s.uploadTRP3MirrorAddon)
 
 				// 操作日志
 				mod.GET("/action-logs", s.listActionLogs)

@@ -9,17 +9,19 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server"`
-	Database  DatabaseConfig  `mapstructure:"database"`
-	JWT       JWTConfig       `mapstructure:"jwt"`
-	Storage   StorageConfig   `mapstructure:"storage"`
-	OSS       OSSConfig       `mapstructure:"oss"`
-	Backup    BackupConfig    `mapstructure:"backup"`
-	Updater   UpdaterConfig   `mapstructure:"updater"`
-	Redis     RedisConfig     `mapstructure:"redis"`
-	SMTP      SMTPConfig      `mapstructure:"smtp"`
-	CORS      CORSConfig      `mapstructure:"cors"`
-	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Database   DatabaseConfig   `mapstructure:"database"`
+	JWT        JWTConfig        `mapstructure:"jwt"`
+	Storage    StorageConfig    `mapstructure:"storage"`
+	OSS        OSSConfig        `mapstructure:"oss"`
+	Backup     BackupConfig     `mapstructure:"backup"`
+	Updater    UpdaterConfig    `mapstructure:"updater"`
+	CurseForge CurseForgeConfig `mapstructure:"curseforge"`
+	TRP3Addons TRP3AddonsConfig `mapstructure:"trp3_addons"`
+	Redis      RedisConfig      `mapstructure:"redis"`
+	SMTP       SMTPConfig       `mapstructure:"smtp"`
+	CORS       CORSConfig       `mapstructure:"cors"`
+	RateLimit  RateLimitConfig  `mapstructure:"rate_limit"`
 }
 
 type UpdaterConfig struct {
@@ -50,6 +52,27 @@ type MobilePlatformUpdaterConfig struct {
 	ReleaseNotes  string `mapstructure:"release_notes"`
 	PubDate       string `mapstructure:"pub_date"`
 	Mandatory     bool   `mapstructure:"mandatory"`
+}
+
+type CurseForgeConfig struct {
+	Enabled         bool   `mapstructure:"enabled"`
+	APIKey          string `mapstructure:"api_key"`
+	BaseURL         string `mapstructure:"base_url"`
+	TimeoutSeconds  int    `mapstructure:"timeout_seconds"`
+	CacheTTLMinutes int    `mapstructure:"cache_ttl_minutes"`
+}
+
+type TRP3AddonsConfig struct {
+	Enabled                     bool   `mapstructure:"enabled"`
+	GitHubAPIBaseURL            string `mapstructure:"github_api_base_url"`
+	GitHubDownloadMirrorBaseURL string `mapstructure:"github_download_mirror_base_url"`
+	GitHubToken                 string `mapstructure:"github_token"`
+	ProxyURL                    string `mapstructure:"proxy_url"`
+	CacheEnabled                bool   `mapstructure:"cache_enabled"`
+	CacheSubdir                 string `mapstructure:"cache_subdir"`
+	MaxDownloadMB               int    `mapstructure:"max_download_mb"`
+	TimeoutSeconds              int    `mapstructure:"timeout_seconds"`
+	CacheTTLMinutes             int    `mapstructure:"cache_ttl_minutes"`
 }
 
 var globalConfig *Config
@@ -156,6 +179,16 @@ func Load() (*Config, error) {
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
 
+	if err := loadDotEnv(".env"); err != nil {
+		return nil, err
+	}
+	if err := loadDotEnv(filepath.Join("config", ".env")); err != nil {
+		return nil, err
+	}
+	if err := loadDotEnv(filepath.Join("server", ".env")); err != nil {
+		return nil, err
+	}
+
 	// 默认值 - 使用相对于当前工作目录的路径
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
@@ -186,9 +219,28 @@ func Load() (*Config, error) {
 	viper.SetDefault("rate_limit.auth.burst", 3)
 	viper.SetDefault("rate_limit.api.rps", 30)
 	viper.SetDefault("rate_limit.api.burst", 60)
+	viper.SetDefault("curseforge.enabled", true)
+	viper.SetDefault("curseforge.api_key", "")
+	viper.SetDefault("curseforge.base_url", "https://api.curseforge.com")
+	viper.SetDefault("curseforge.timeout_seconds", 10)
+	viper.SetDefault("curseforge.cache_ttl_minutes", 360)
+	viper.SetDefault("trp3_addons.enabled", true)
+	viper.SetDefault("trp3_addons.github_api_base_url", "https://api.github.com")
+	viper.SetDefault("trp3_addons.github_download_mirror_base_url", "")
+	viper.SetDefault("trp3_addons.github_token", "")
+	viper.SetDefault("trp3_addons.proxy_url", "")
+	viper.SetDefault("trp3_addons.cache_enabled", true)
+	viper.SetDefault("trp3_addons.cache_subdir", "cache/addons/trp3")
+	viper.SetDefault("trp3_addons.max_download_mb", 256)
+	viper.SetDefault("trp3_addons.timeout_seconds", 15)
+	viper.SetDefault("trp3_addons.cache_ttl_minutes", 360)
 
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("curseforge.api_key", "CURSEFORGE_API_KEY")
+	_ = viper.BindEnv("trp3_addons.github_token", "TRP3_ADDONS_GITHUB_TOKEN", "GITHUB_TOKEN")
+	_ = viper.BindEnv("trp3_addons.github_download_mirror_base_url", "TRP3_ADDONS_GITHUB_DOWNLOAD_MIRROR_BASE_URL")
+	_ = viper.BindEnv("trp3_addons.proxy_url", "TRP3_ADDONS_PROXY_URL", "HTTPS_PROXY", "HTTP_PROXY")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -210,6 +262,41 @@ func Load() (*Config, error) {
 
 	globalConfig = &cfg
 	return &cfg, nil
+}
+
+func loadDotEnv(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mergeLocalConfig(path string) error {

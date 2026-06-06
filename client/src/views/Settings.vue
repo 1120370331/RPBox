@@ -9,7 +9,7 @@ import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { useThemeStore, themes, type Theme } from '@/stores/theme'
 import { useLocaleStore, type LocaleType } from '@/stores/locale'
-import { uploadAvatar } from '@/api/user'
+import { redeemSponsorCode, uploadAvatar } from '@/api/user'
 import { useUpdater } from '@/composables/useUpdater'
 import { getAddonManifest } from '@/api/addon'
 import { bumpImageCacheVersion } from '@/utils/imageCache'
@@ -65,6 +65,9 @@ const syncOnStartup = ref(true)
 const launchOnStartup = ref(false)
 const launchOnStartupSupported = ref(true)
 const launchOnStartupLoading = ref(false)
+const sponsorRedeemCode = ref('')
+const sponsorRedeeming = ref(false)
+const sponsorRedeemCodeTrimmed = computed(() => sponsorRedeemCode.value.trim())
 const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const avatarCropperOpen = ref(false)
@@ -177,6 +180,26 @@ function toggleParticipateTesting() {
   void fetchLatestRelease(true)
 }
 
+async function handleRedeemSponsorCode() {
+  const code = sponsorRedeemCodeTrimmed.value
+  if (!code) {
+    toast.warning(t('settings.system.redeemCodeEmpty'))
+    return
+  }
+
+  sponsorRedeeming.value = true
+  try {
+    const res = await redeemSponsorCode(code)
+    userStore.mergeUser(res.user)
+    sponsorRedeemCode.value = ''
+    toast.success(t('settings.system.redeemCodeSuccess', { level: res.user.sponsor_level ?? sponsorLevel.value }))
+  } catch (error: any) {
+    toast.error(`${t('settings.system.redeemCodeFailed')}: ${error.message}`)
+  } finally {
+    sponsorRedeeming.value = false
+  }
+}
+
 async function clearCache() {
   if (confirm(t('settings.data.confirmClearCache'))) {
     await invoke('clear_sync_cache')
@@ -193,7 +216,7 @@ function clearImageCache() {
 
 function resetSetup() {
   localStorage.removeItem('wow_path')
-  router.push('/sync/setup')
+  router.push({ path: '/sync/setup', query: { redirect: '/warcraft' } })
 }
 
 async function handleCheckUpdate() {
@@ -639,6 +662,26 @@ watch(() => localeStore.currentLocale, (newLocale) => {
               <div class="switch-thumb"></div>
             </div>
           </label>
+          <form class="redeem-code-box" @submit.prevent="handleRedeemSponsorCode">
+            <div class="redeem-code-info">
+              <span class="switch-label">{{ $t('settings.system.redeemCodeTitle') }}</span>
+              <span class="switch-desc">{{ $t('settings.system.redeemCodeDesc') }}</span>
+            </div>
+            <div class="redeem-code-row">
+              <input
+                v-model="sponsorRedeemCode"
+                class="redeem-code-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                :placeholder="$t('settings.system.redeemCodePlaceholder')"
+              />
+              <button class="btn btn-primary" type="submit" :disabled="sponsorRedeeming || !sponsorRedeemCodeTrimmed">
+                <i :class="sponsorRedeeming ? 'ri-loader-4-line spin' : 'ri-coupon-3-line'"></i>
+                {{ sponsorRedeeming ? $t('settings.system.redeemCodeRedeeming') : $t('settings.system.redeemCodeAction') }}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -1110,6 +1153,49 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 .switch-desc {
   font-size: 12px;
   color: var(--color-text-secondary);
+}
+
+.redeem-code-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-card-bg);
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  border-radius: 10px;
+}
+
+.redeem-code-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.redeem-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.redeem-code-input {
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  font-family: "Fira Code", "Cascadia Code", monospace;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.redeem-code-input:focus {
+  outline: none;
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(var(--shadow-base), 0.1);
 }
 
 /* 开关组件 */
@@ -1603,6 +1689,14 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 }
 
 @media (max-width: 640px) {
+  .redeem-code-row {
+    grid-template-columns: 1fr;
+  }
+
+  .redeem-code-row .btn {
+    justify-content: center;
+  }
+
   .theme-locked {
     align-items: flex-end;
     justify-content: center;

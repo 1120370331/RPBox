@@ -1,11 +1,12 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
 
 env:
-  GO_VERSION: '1.22'
+  GO_VERSION: '1.24.x'
 
 jobs:
   # 后端构建
@@ -66,6 +67,17 @@ jobs:
               cp -r /tmp/rpbox_addons_backup/* server/storage/addons/
               rm -rf /tmp/rpbox_addons_backup
             fi
+
+            # 写入生产后端运行时密钥。文件不进仓库，config.Load 会在启动时读取。
+            tmp_env="$(mktemp)"
+            cat > "$tmp_env" <<'RPBOX_ENV'
+            TRP3_ADDONS_PROXY_URL=${{ secrets.TRP3_ADDONS_PROXY_URL }}
+            GITHUB_TOKEN=${{ secrets.TRP3_GITHUB_TOKEN }}
+            RPBOX_ENV
+            mkdir -p server
+            sed -e 's/^[[:space:]]*//' "$tmp_env" | grep -v -E '^[A-Z0-9_]+=$' > server/.env || true
+            chmod 600 server/.env
+            rm -f "$tmp_env"
 
             cd server
             echo "Building server..."

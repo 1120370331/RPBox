@@ -72,6 +72,31 @@ oss:
   access_key_secret: ""
   prefix: "images"
 
+curseforge:
+  enabled: true
+  api_key: "" # 建议生产环境使用 CURSEFORGE_API_KEY 环境变量注入
+  base_url: "https://api.curseforge.com"
+  timeout_seconds: 10
+  cache_ttl_minutes: 360
+
+trp3_addons:
+  enabled: true
+  github_api_base_url: "https://api.github.com"
+  # 可选：GitHub 下载镜像。支持两种形式：
+  # 1. "https://mirror.example.com/{raw_url}" 直接替换原始 URL
+  # 2. "https://gh-proxy.example.com/" 拼接原始 GitHub URL
+  github_download_mirror_base_url: ""
+  github_token: "" # 可选，生产环境建议使用 GITHUB_TOKEN 环境变量提高 API 限额
+  # 可选：Roxy 等代理，支持 http/https/socks5/socks5h。推荐用 TRP3_ADDONS_PROXY_URL 环境变量注入。
+  # 示例：socks5://username:password@192.0.2.10:5782
+  proxy_url: ""
+  cache_enabled: true
+  # TRP3/TRPEx zip 首次下载后会缓存到 storage/cache/addons/trp3，并在 OSS 启用时同步到 OSS。
+  cache_subdir: "cache/addons/trp3"
+  max_download_mb: 256
+  timeout_seconds: 15
+  cache_ttl_minutes: 360
+
 redis:
   host: "localhost"
   port: "6379"
