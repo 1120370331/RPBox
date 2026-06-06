@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 interface DetectedPath {
@@ -10,6 +10,7 @@ interface DetectedPath {
 }
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const currentStep = ref(1)
 const isLoading = ref(false)
@@ -108,7 +109,11 @@ async function validateAndNext() {
 
 function complete() {
   localStorage.setItem('wow_path', selectedPath.value)
-  router.push('/sync')
+  const rawRedirect = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
+  const redirect = typeof rawRedirect === 'string' && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+    ? rawRedirect
+    : '/warcraft'
+  router.push(redirect)
 }
 </script>
 

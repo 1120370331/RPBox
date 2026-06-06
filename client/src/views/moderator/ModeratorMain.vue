@@ -64,6 +64,8 @@ import {
   getMetricsBasic,
   getMetricsBasicHistory,
   broadcastSystemMessage,
+  getTRP3MirrorAddons,
+  uploadTRP3MirrorAddon,
   type ModeratorStats,
   type ReviewRequest,
   type ReportReviewItem,
@@ -80,7 +82,8 @@ import {
   type DailyMetrics,
   type MetricsSummary,
   type BasicMetrics,
-  type BasicDailyMetrics
+  type BasicDailyMetrics,
+  type TRP3MirrorAddonInfo
 } from '@/api/moderator'
 
 interface VisibleReportReason {
@@ -103,12 +106,13 @@ const hasAccess = computed(() => userStore.isModerator)
 const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
-const activeTab = ref<'review' | 'manage' | 'admin' | 'logs' | 'metrics'>('review')
+const activeTab = ref<'review' | 'manage' | 'sponsorCodes' | 'addons' | 'admin' | 'logs' | 'metrics'>('review')
 type ReviewSubTab = 'posts' | 'items' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
 type AdminSubTab = 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'
 type SponsorAdminSubTab = 'users' | 'codes'
+type SponsorCodePreset = 'oneMonth' | 'customMonths' | 'oneYear' | 'customYears' | 'thanksForever' | 'levelForever'
 const activeSubTab = ref<ModeratorSubTab>('posts')
 const adminSubTab = ref<AdminSubTab>('guilds')
 const sponsorAdminSubTab = ref<SponsorAdminSubTab>('users')
@@ -124,17 +128,56 @@ const systemMessageTrimmed = computed(() => systemMessage.value.trim())
 const sponsorCodeForm = ref({
   count: 10,
   sponsor_level: 2,
-  duration_mode: 'months' as 'months' | 'permanent',
+  duration_mode: 'months' as 'months' | 'years' | 'permanent',
   duration_months: 1,
+  duration_years: 1,
   expires_mode: 'months' as 'months' | 'permanent',
   expires_months: 1
 })
+const sponsorCodePreset = ref<SponsorCodePreset>('oneMonth')
+const sponsorCodePresets: Array<{ value: SponsorCodePreset; label: string; desc: string }> = [
+  { value: 'oneMonth', label: '1月赞助 LVx', desc: '当前等级，持续1个月' },
+  { value: 'customMonths', label: 'X月赞助 LVx', desc: '当前等级，自定义月份' },
+  { value: 'oneYear', label: '1年赞助 LVx', desc: '当前等级，持续12个月' },
+  { value: 'customYears', label: 'X年赞助 LVx', desc: '当前等级，自定义年数' },
+  { value: 'thanksForever', label: '特别鸣谢赞助 永久', desc: 'Lv1 鸣谢，永久有效' },
+  { value: 'levelForever', label: 'LvX赞助 永久', desc: '当前等级，永久有效' }
+]
 const sponsorCodeGenerating = ref(false)
 const sponsorCodeListLoading = ref(false)
 const generatedSponsorCodes = ref<SponsorRedeemCode[]>([])
 const recentSponsorCodes = ref<SponsorRedeemCode[]>([])
 const sponsorCodeTotal = ref(0)
 const generatedSponsorCodeText = computed(() => generatedSponsorCodes.value.map(item => item.code).join('\n'))
+
+// 插件镜像
+const trp3MirrorAddons = ref<TRP3MirrorAddonInfo[]>([])
+const trp3MirrorLoading = ref(false)
+const trp3MirrorUploading = ref(false)
+const trp3MirrorNote = ref('')
+const trp3MirrorUpdatedAt = ref('')
+const trp3MirrorForm = ref({
+  addonId: 'total-rp-3',
+  version: ''
+})
+const trp3MirrorFile = ref<File | null>(null)
+const trp3MirrorFileInput = ref<HTMLInputElement | null>(null)
+const fallbackTRP3MirrorOptions = [
+  { id: 'total-rp-3', name: 'Total RP 3' },
+  { id: 'total-rp-3-extended', name: 'Total RP 3: Extended' }
+]
+const trp3MirrorUploadOptions = computed(() => (
+  trp3MirrorAddons.value.length > 0
+    ? trp3MirrorAddons.value.map(addon => ({ id: addon.id, name: addon.name }))
+    : fallbackTRP3MirrorOptions
+))
+const selectedTRP3MirrorAddon = computed(() => trp3MirrorAddons.value.find(addon => addon.id === trp3MirrorForm.value.addonId))
+const trp3MirrorCanUpload = computed(() => (
+  !!trp3MirrorForm.value.addonId
+  && !!trp3MirrorForm.value.version.trim()
+  && !!trp3MirrorFile.value
+  && !trp3MirrorUploading.value
+))
 
 // 数据
 const stats = ref<ModeratorStats | null>(null)
@@ -658,7 +701,7 @@ function loadSponsorAdminSubTab(subTab: SponsorAdminSubTab) {
   else loadSponsorCodes()
 }
 
-function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
+function switchTab(tab: 'review' | 'manage' | 'sponsorCodes' | 'addons' | 'admin' | 'logs' | 'metrics') {
   if (tab === 'metrics' && !isAdmin.value) return
   const previousTab = activeTab.value
   activeTab.value = tab
@@ -676,6 +719,8 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
       activeSubTab.value = 'posts'
     }
     loadManageSubTab(activeSubTab.value)
+  } else if (tab === 'addons') {
+    loadTRP3Mirror()
   } else if (tab === 'admin') {
     if (adminSubTab.value === 'moderators' || adminSubTab.value === 'experience') {
       loadUsers()
@@ -684,6 +729,8 @@ function switchTab(tab: 'review' | 'manage' | 'admin' | 'logs' | 'metrics') {
     } else if (adminSubTab.value === 'guilds') {
       loadAllGuilds()
     }
+  } else if (tab === 'sponsorCodes') {
+    loadSponsorCodes()
   } else if (tab === 'logs') {
     loadActionLogs()
   } else if (tab === 'metrics') {
@@ -735,6 +782,86 @@ function switchSponsorAdminSubTab(subTab: SponsorAdminSubTab) {
   loadSponsorAdminSubTab(subTab)
 }
 
+async function loadTRP3Mirror() {
+  trp3MirrorLoading.value = true
+  try {
+    const res = await getTRP3MirrorAddons()
+    trp3MirrorAddons.value = res.addons || []
+    trp3MirrorNote.value = res.note || ''
+    trp3MirrorUpdatedAt.value = res.updatedAt || ''
+    if (!trp3MirrorAddons.value.some(addon => addon.id === trp3MirrorForm.value.addonId)) {
+      trp3MirrorForm.value.addonId = trp3MirrorAddons.value[0]?.id || 'total-rp-3'
+    }
+  } catch (error) {
+    console.error('加载插件镜像失败:', error)
+    toast.error('加载插件镜像失败: ' + (error as Error).message)
+  } finally {
+    trp3MirrorLoading.value = false
+  }
+}
+
+function selectTRP3MirrorFile() {
+  trp3MirrorFileInput.value?.click()
+}
+
+function handleTRP3MirrorFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] || null
+  if (!file) {
+    trp3MirrorFile.value = null
+    return
+  }
+  if (!file.name.toLowerCase().endsWith('.zip')) {
+    toast.error('请选择 zip 插件包')
+    input.value = ''
+    trp3MirrorFile.value = null
+    return
+  }
+  trp3MirrorFile.value = file
+  const versionFromName = guessTRP3VersionFromFileName(file.name)
+  if (!trp3MirrorForm.value.version && versionFromName) {
+    trp3MirrorForm.value.version = versionFromName
+  }
+}
+
+function clearTRP3MirrorFile() {
+  trp3MirrorFile.value = null
+  if (trp3MirrorFileInput.value) {
+    trp3MirrorFileInput.value.value = ''
+  }
+}
+
+function fillTRP3MirrorForm(addon: TRP3MirrorAddonInfo) {
+  trp3MirrorForm.value.addonId = addon.id
+  trp3MirrorForm.value.version = addon.latestVersion || ''
+}
+
+function guessTRP3VersionFromFileName(fileName: string) {
+  const match = fileName.match(/(\d+(?:[._-]\d+){1,4})/)
+  return match?.[1]?.replace(/_/g, '.') || ''
+}
+
+async function submitTRP3MirrorUpload() {
+  if (!trp3MirrorCanUpload.value || !trp3MirrorFile.value) return
+  trp3MirrorUploading.value = true
+  try {
+    const res = await uploadTRP3MirrorAddon(
+      trp3MirrorForm.value.addonId,
+      trp3MirrorForm.value.version.trim(),
+      trp3MirrorFile.value
+    )
+    toast.success(res.message || '插件镜像包已发布')
+    trp3MirrorForm.value.version = ''
+    clearTRP3MirrorFile()
+    await loadTRP3Mirror()
+  } catch (error) {
+    console.error('上传插件镜像失败:', error)
+    toast.error('上传失败: ' + (error as Error).message)
+  } finally {
+    trp3MirrorUploading.value = false
+  }
+}
+
 async function sendSystemMessage() {
   if (!isAdmin.value) return
   const content = systemMessageTrimmed.value
@@ -767,8 +894,40 @@ function normalizeMonthValue(value: number, fallback: number) {
   return Math.max(0, Math.floor(value))
 }
 
+function applySponsorCodePreset(preset: SponsorCodePreset) {
+  sponsorCodePreset.value = preset
+  if (preset === 'oneMonth') {
+    sponsorCodeForm.value.duration_mode = 'months'
+    sponsorCodeForm.value.duration_months = 1
+  } else if (preset === 'customMonths') {
+    sponsorCodeForm.value.duration_mode = 'months'
+    sponsorCodeForm.value.duration_months = Math.max(1, sponsorCodeForm.value.duration_months || 1)
+  } else if (preset === 'oneYear') {
+    sponsorCodeForm.value.duration_mode = 'years'
+    sponsorCodeForm.value.duration_years = 1
+  } else if (preset === 'customYears') {
+    sponsorCodeForm.value.duration_mode = 'years'
+    sponsorCodeForm.value.duration_years = Math.max(1, sponsorCodeForm.value.duration_years || 1)
+  } else if (preset === 'thanksForever') {
+    sponsorCodeForm.value.sponsor_level = 1
+    sponsorCodeForm.value.duration_mode = 'permanent'
+  } else {
+    sponsorCodeForm.value.duration_mode = 'permanent'
+  }
+}
+
+function getSponsorCodeDurationMonths() {
+  if (sponsorCodeForm.value.duration_mode === 'permanent') return 0
+  if (sponsorCodeForm.value.duration_mode === 'years') {
+    return normalizeMonthValue(sponsorCodeForm.value.duration_years, 1) * 12
+  }
+  return normalizeMonthValue(sponsorCodeForm.value.duration_months, 1)
+}
+
 function formatSponsorCodeDuration(months: number) {
-  return months > 0 ? `${months}个月` : '永久'
+  if (months <= 0) return '永久'
+  if (months % 12 === 0) return `${months / 12}年`
+  return `${months}个月`
 }
 
 function formatSponsorCodeExpiry(expiresAt?: string | null) {
@@ -788,7 +947,7 @@ function getSponsorCodeStatusClass(code: SponsorRedeemCode) {
 }
 
 async function loadSponsorCodes() {
-  if (!isAdmin.value) return
+  if (!hasAccess.value) return
   sponsorCodeListLoading.value = true
   try {
     const res = await getSponsorRedeemCodes({ page: 1, page_size: 20, status: 'all' })
@@ -825,18 +984,20 @@ async function copySponsorCodeText(text: string, message = '已复制兑换码')
 }
 
 async function generateSponsorCodes() {
-  if (!isAdmin.value || sponsorCodeGenerating.value) return
+  if (!hasAccess.value || sponsorCodeGenerating.value) return
 
   const count = normalizeMonthValue(sponsorCodeForm.value.count, 10)
-  const durationMonths = sponsorCodeForm.value.duration_mode === 'permanent'
-    ? 0
-    : normalizeMonthValue(sponsorCodeForm.value.duration_months, 1)
+  const durationMonths = getSponsorCodeDurationMonths()
   const expiresMonths = sponsorCodeForm.value.expires_mode === 'permanent'
     ? 0
     : normalizeMonthValue(sponsorCodeForm.value.expires_months, 1)
 
   sponsorCodeForm.value.count = count
-  sponsorCodeForm.value.duration_months = durationMonths || 1
+  if (sponsorCodeForm.value.duration_mode === 'years') {
+    sponsorCodeForm.value.duration_years = normalizeMonthValue(sponsorCodeForm.value.duration_years, 1) || 1
+  } else {
+    sponsorCodeForm.value.duration_months = durationMonths || 1
+  }
   sponsorCodeForm.value.expires_months = expiresMonths || 1
 
   if (count < 1 || count > 100) {
@@ -847,8 +1008,20 @@ async function generateSponsorCodes() {
     toast.error('按月持续时间至少为1个月')
     return
   }
+  if (sponsorCodeForm.value.duration_mode === 'years' && durationMonths < 12) {
+    toast.error('按年持续时间至少为1年')
+    return
+  }
+  if (durationMonths > 120) {
+    toast.error('赞助持续时间不能超过120个月')
+    return
+  }
   if (sponsorCodeForm.value.expires_mode === 'months' && expiresMonths < 1) {
     toast.error('按月过期时间至少为1个月')
+    return
+  }
+  if (expiresMonths > 120) {
+    toast.error('兑换码过期时间不能超过120个月')
     return
   }
 
@@ -2096,7 +2269,42 @@ async function applyUserPointsDelta(user: SafeUser) {
 }
 
 function formatDate(dateStr: string) {
+  if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+function formatBytes(bytes?: number) {
+  if (!bytes || bytes <= 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex++
+  }
+  return unitIndex === 0 ? `${bytes} ${units[unitIndex]}` : `${value.toFixed(1)} ${units[unitIndex]}`
+}
+
+function getTRP3MirrorSourceLabel(source?: string) {
+  if (source === 'mirror') return '自有镜像'
+  if (source === 'github') return 'GitHub'
+  if (source === 'fallback') return '内置兜底'
+  return source || '未知'
+}
+
+function getTRP3MirrorCacheLabel(cacheSource?: string) {
+  if (cacheSource === 'local') return '本地缓存'
+  if (cacheSource === 'oss') return 'OSS'
+  if (cacheSource === 'missing') return '包缺失'
+  if (cacheSource === 'not_mirrored') return '未镜像'
+  return cacheSource || '未知'
+}
+
+function getTRP3MirrorStatusClass(addon: TRP3MirrorAddonInfo) {
+  if (addon.source === 'mirror' && addon.cacheSource === 'missing') return 'rejected'
+  if (addon.source === 'mirror') return 'approved'
+  if (addon.source === 'github') return 'pending'
+  return 'draft'
 }
 
 function formatEditPreview(content?: string | null, limit = 140) {
@@ -2375,6 +2583,22 @@ function formatBanTime(dateStr: string | null) {
         >
           <i class="ri-settings-3-line"></i>
           <span>社区管理</span>
+        </div>
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'sponsorCodes' }"
+          @click="switchTab('sponsorCodes')"
+        >
+          <i class="ri-coupon-3-line"></i>
+          <span>赞助者兑换码</span>
+        </div>
+        <div
+          class="tab-item"
+          :class="{ active: activeTab === 'addons' }"
+          @click="switchTab('addons')"
+        >
+          <i class="ri-plug-2-line"></i>
+          <span>插件镜像</span>
         </div>
         <div
           v-if="isAdmin"
@@ -3415,6 +3639,301 @@ function formatBanTime(dateStr: string | null) {
         </div>
       </div>
 
+      <!-- 赞助者兑换码 -->
+      <div v-if="activeTab === 'sponsorCodes'" class="content-list anim-item" style="--delay: 3">
+        <div class="item-card sponsor-code-card">
+          <div class="item-header">
+            <div>
+              <span class="item-title">批量生成赞助者兑换码</span>
+              <p class="sponsor-code-desc">生成后复制给赞助者，用户可在系统设置里兑换并获得对应赞助权限。</p>
+            </div>
+            <span class="system-message-hint">版主可用</span>
+          </div>
+
+          <div class="sponsor-code-presets">
+            <button
+              v-for="preset in sponsorCodePresets"
+              :key="preset.value"
+              type="button"
+              class="sponsor-code-preset"
+              :class="{ active: sponsorCodePreset === preset.value }"
+              @click="applySponsorCodePreset(preset.value)"
+            >
+              <span>{{ preset.label }}</span>
+              <small>{{ preset.desc }}</small>
+            </button>
+          </div>
+
+          <div class="sponsor-code-form">
+            <label class="sponsor-code-field">
+              <span>生成数量</span>
+              <input
+                v-model.number="sponsorCodeForm.count"
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+              />
+            </label>
+
+            <label class="sponsor-code-field">
+              <span>赞助等级</span>
+              <select v-model.number="sponsorCodeForm.sponsor_level">
+                <option value="1">Lv1 特别鸣谢</option>
+                <option value="2">Lv2 昵称样式</option>
+                <option value="3">Lv3 个性化</option>
+              </select>
+            </label>
+
+            <div class="sponsor-code-field wide">
+              <span>赞助持续时间</span>
+              <div class="sponsor-code-duration">
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.duration_mode === 'months' }"
+                  @click="applySponsorCodePreset('customMonths')"
+                >
+                  按月
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.duration_mode === 'years' }"
+                  @click="applySponsorCodePreset('customYears')"
+                >
+                  按年
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.duration_mode === 'permanent' }"
+                  @click="applySponsorCodePreset('levelForever')"
+                >
+                  永久
+                </button>
+                <input
+                  v-if="sponsorCodeForm.duration_mode === 'months'"
+                  v-model.number="sponsorCodeForm.duration_months"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="1"
+                />
+                <span v-if="sponsorCodeForm.duration_mode === 'months'" class="duration-unit">个月</span>
+                <input
+                  v-if="sponsorCodeForm.duration_mode === 'years'"
+                  v-model.number="sponsorCodeForm.duration_years"
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="1"
+                />
+                <span v-if="sponsorCodeForm.duration_mode === 'years'" class="duration-unit">年</span>
+              </div>
+            </div>
+
+            <div class="sponsor-code-field wide">
+              <span>兑换码过期时间</span>
+              <div class="sponsor-code-duration">
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.expires_mode === 'months' }"
+                  @click="sponsorCodeForm.expires_mode = 'months'"
+                >
+                  按月
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: sponsorCodeForm.expires_mode === 'permanent' }"
+                  @click="sponsorCodeForm.expires_mode = 'permanent'"
+                >
+                  永久
+                </button>
+                <input
+                  v-if="sponsorCodeForm.expires_mode === 'months'"
+                  v-model.number="sponsorCodeForm.expires_months"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="1"
+                />
+                <span v-if="sponsorCodeForm.expires_mode === 'months'" class="duration-unit">个月</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="sponsor-code-actions">
+            <button class="btn-sponsor" :disabled="sponsorCodeGenerating" @click="generateSponsorCodes">
+              <i :class="sponsorCodeGenerating ? 'ri-loader-4-line loading-spinner' : 'ri-coupon-3-line'"></i>
+              {{ sponsorCodeGenerating ? '生成中...' : '生成兑换码' }}
+            </button>
+            <div class="warning-box compact">
+              <i class="ri-information-line"></i>
+              <span>数量上限100个；赞助持续时间最长10年；持续时间为永久时用户兑换后不会自动到期。</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="generatedSponsorCodes.length > 0" class="item-card sponsor-code-result-card">
+          <div class="item-header">
+            <span class="item-title">刚生成的兑换码</span>
+            <button class="btn-preview" @click="copySponsorCodeText(generatedSponsorCodeText, '已复制全部兑换码')">
+              <i class="ri-file-copy-line"></i> 复制全部
+            </button>
+          </div>
+          <textarea class="sponsor-code-textarea" readonly :value="generatedSponsorCodeText"></textarea>
+          <div class="sponsor-code-chip-grid">
+            <button
+              v-for="code in generatedSponsorCodes"
+              :key="code.id"
+              type="button"
+              class="sponsor-code-chip"
+              @click="copySponsorCodeText(code.code)"
+            >
+              <span>{{ code.code }}</span>
+              <i class="ri-file-copy-line"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="item-card sponsor-code-history-card">
+          <div class="item-header">
+            <span class="item-title">最近兑换码</span>
+            <button class="btn-preview" :disabled="sponsorCodeListLoading" @click="loadSponsorCodes">
+              <i :class="sponsorCodeListLoading ? 'ri-loader-4-line loading-spinner' : 'ri-refresh-line'"></i>
+              刷新
+            </button>
+          </div>
+          <div v-if="sponsorCodeListLoading" class="loading compact-loading">
+            <i class="ri-loader-4-line loading-spinner"></i>
+            <span>加载中...</span>
+          </div>
+          <div v-else-if="recentSponsorCodes.length === 0" class="empty-state compact-empty">
+            <i class="ri-coupon-3-line"></i>
+            <p>暂无兑换码</p>
+          </div>
+          <div v-else class="sponsor-code-list">
+            <div v-for="code in recentSponsorCodes" :key="code.id" class="sponsor-code-row">
+              <div class="sponsor-code-main">
+                <code>{{ code.code }}</code>
+                <span class="sponsor-code-meta">
+                  {{ formatSponsorLevel(code.sponsor_level) }} · 持续 {{ formatSponsorCodeDuration(code.duration_months) }} · 有效期 {{ formatSponsorCodeExpiry(code.expires_at) }}
+                </span>
+              </div>
+              <span class="sponsor-code-status" :class="getSponsorCodeStatusClass(code)">
+                {{ getSponsorCodeStatus(code) }}
+              </span>
+              <button class="btn-preview" @click="copySponsorCodeText(code.code)">
+                <i class="ri-file-copy-line"></i> 复制
+              </button>
+            </div>
+          </div>
+          <p v-if="sponsorCodeTotal > recentSponsorCodes.length" class="sponsor-code-desc">
+            仅显示最近 {{ recentSponsorCodes.length }} 个，共 {{ sponsorCodeTotal }} 个。
+          </p>
+        </div>
+      </div>
+
+      <!-- 插件镜像 -->
+      <div v-if="activeTab === 'addons'" class="content-list anim-item" style="--delay: 3">
+        <div class="item-card addon-mirror-card">
+          <div class="item-header addon-mirror-header">
+            <div>
+              <span class="item-title">TRP3 插件镜像分发</span>
+              <p class="sponsor-code-desc">上传官方 release zip 后，玩家客户端会优先从 RPBox 后端安装。</p>
+            </div>
+            <button class="btn-preview" :disabled="trp3MirrorLoading" @click="loadTRP3Mirror">
+              <i :class="trp3MirrorLoading ? 'ri-loader-4-line loading-spinner' : 'ri-refresh-line'"></i>
+              刷新
+            </button>
+          </div>
+
+          <div class="addon-mirror-upload">
+            <label class="addon-mirror-field">
+              <span>插件</span>
+              <select v-model="trp3MirrorForm.addonId">
+                <option v-for="addon in trp3MirrorUploadOptions" :key="addon.id" :value="addon.id">
+                  {{ addon.name }}
+                </option>
+              </select>
+            </label>
+            <label class="addon-mirror-field">
+              <span>版本号</span>
+              <input v-model.trim="trp3MirrorForm.version" placeholder="例如 3.3.6" />
+            </label>
+            <div class="addon-mirror-file">
+              <span>zip 包</span>
+              <button type="button" class="btn-preview addon-file-button" @click="selectTRP3MirrorFile">
+                <i class="ri-folder-zip-line"></i>
+                {{ trp3MirrorFile ? trp3MirrorFile.name : '选择文件' }}
+              </button>
+              <button v-if="trp3MirrorFile" type="button" class="btn-cancel addon-clear-button" @click="clearTRP3MirrorFile">
+                清除
+              </button>
+              <input
+                ref="trp3MirrorFileInput"
+                type="file"
+                accept=".zip,application/zip"
+                hidden
+                @change="handleTRP3MirrorFileChange"
+              />
+            </div>
+            <button class="btn-submit addon-upload-button" :disabled="!trp3MirrorCanUpload" @click="submitTRP3MirrorUpload">
+              <i :class="trp3MirrorUploading ? 'ri-loader-4-line loading-spinner' : 'ri-upload-cloud-2-line'"></i>
+              {{ trp3MirrorUploading ? '发布中...' : '发布镜像' }}
+            </button>
+          </div>
+
+          <div class="warning-box compact addon-mirror-note">
+            <i class="ri-information-line"></i>
+            <span>{{ trp3MirrorNote || '未上传镜像包时，后端会继续使用 GitHub Releases 作为兜底来源。' }}</span>
+          </div>
+        </div>
+
+        <div v-if="trp3MirrorLoading" class="loading compact-loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="trp3MirrorAddons.length === 0" class="empty-state compact-empty">
+          <i class="ri-plug-2-line"></i>
+          <p>暂无插件镜像状态</p>
+        </div>
+        <div v-else class="addon-mirror-grid">
+          <div v-for="addon in trp3MirrorAddons" :key="addon.id" class="item-card addon-mirror-status">
+            <div class="item-header">
+              <div>
+                <span class="item-title">{{ addon.name }}</span>
+                <p class="sponsor-code-desc">{{ addon.repository }}</p>
+              </div>
+              <span class="status-badge" :class="getTRP3MirrorStatusClass(addon)">
+                {{ getTRP3MirrorSourceLabel(addon.source) }}
+              </span>
+            </div>
+            <div class="addon-mirror-meta">
+              <span><i class="ri-price-tag-3-line"></i> 最新版本 {{ addon.latestVersion || '-' }}</span>
+              <span><i class="ri-file-zip-line"></i> {{ addon.fileName || '-' }}</span>
+              <span><i class="ri-hard-drive-3-line"></i> {{ getTRP3MirrorCacheLabel(addon.cacheSource) }}</span>
+              <span><i class="ri-database-2-line"></i> {{ formatBytes(addon.sizeBytes) }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(addon.uploadedAt || addon.fileDate || '') }}</span>
+            </div>
+            <div class="addon-mirror-package">
+              <span>期望目录：{{ addon.expectedRoot || '-' }}</span>
+              <span>TOC：{{ addon.expectedToc || '-' }}</span>
+              <span v-if="addon.uploadedByName">上传者：{{ addon.uploadedByName }}</span>
+            </div>
+            <div class="item-actions">
+              <a v-if="addon.downloadUrl" class="btn-preview" :href="addon.downloadUrl" target="_blank" rel="noopener">
+                <i class="ri-download-2-line"></i> 下载验证
+              </a>
+              <button class="btn-sponsor" @click="fillTRP3MirrorForm(addon)">
+                <i class="ri-upload-line"></i> 上传此插件
+              </button>
+            </div>
+          </div>
+        </div>
+        <p v-if="trp3MirrorUpdatedAt" class="addon-mirror-updated">
+          镜像清单更新时间：{{ formatDate(trp3MirrorUpdatedAt) }}
+        </p>
+      </div>
+
       <!-- 管理标签 - 版主管理 -->
       <div v-if="activeTab === 'admin' && adminSubTab === 'moderators'" class="content-list anim-item" style="--delay: 4">
         <div class="filter-bar">
@@ -3540,165 +4059,21 @@ function formatBanTime(dateStr: string | null) {
         </div>
         </template>
         <template v-else>
-        <div class="item-card sponsor-code-card">
-          <div class="item-header">
-            <div>
-              <span class="item-title">批量生成赞助兑换码</span>
-              <p class="sponsor-code-desc">生成后可复制给赞助者，兑换时自动写入对应赞助等级和持续时间。</p>
-            </div>
-            <span class="system-message-hint">管理员可用</span>
-          </div>
-
-          <div class="sponsor-code-form">
-            <label class="sponsor-code-field">
-              <span>生成数量</span>
-              <input
-                v-model.number="sponsorCodeForm.count"
-                type="number"
-                min="1"
-                max="100"
-                step="1"
-              />
-            </label>
-
-            <label class="sponsor-code-field">
-              <span>赞助类型</span>
-              <select v-model.number="sponsorCodeForm.sponsor_level">
-                <option value="1">Lv1 仅鸣谢</option>
-                <option value="2">Lv2 昵称样式</option>
-                <option value="3">Lv3 个性化</option>
-              </select>
-            </label>
-
-            <div class="sponsor-code-field wide">
-              <span>赞助持续时间</span>
-              <div class="sponsor-code-duration">
-                <button
-                  type="button"
-                  :class="{ active: sponsorCodeForm.duration_mode === 'months' }"
-                  @click="sponsorCodeForm.duration_mode = 'months'"
-                >
-                  按月
-                </button>
-                <button
-                  type="button"
-                  :class="{ active: sponsorCodeForm.duration_mode === 'permanent' }"
-                  @click="sponsorCodeForm.duration_mode = 'permanent'"
-                >
-                  永久
-                </button>
-                <input
-                  v-if="sponsorCodeForm.duration_mode === 'months'"
-                  v-model.number="sponsorCodeForm.duration_months"
-                  type="number"
-                  min="1"
-                  max="120"
-                  step="1"
-                />
-                <span v-if="sponsorCodeForm.duration_mode === 'months'" class="duration-unit">个月</span>
+          <div class="item-card sponsor-code-card">
+            <div class="item-header">
+              <div>
+                <span class="item-title">赞助者兑换码已迁移到独立标签</span>
+                <p class="sponsor-code-desc">批量生成、复制和查看最近兑换码都在版主中心的“赞助者兑换码”标签中统一处理。</p>
               </div>
+              <span class="system-message-hint">版主可用</span>
             </div>
-
-            <div class="sponsor-code-field wide">
-              <span>兑换码过期时间</span>
-              <div class="sponsor-code-duration">
-                <button
-                  type="button"
-                  :class="{ active: sponsorCodeForm.expires_mode === 'months' }"
-                  @click="sponsorCodeForm.expires_mode = 'months'"
-                >
-                  按月
-                </button>
-                <button
-                  type="button"
-                  :class="{ active: sponsorCodeForm.expires_mode === 'permanent' }"
-                  @click="sponsorCodeForm.expires_mode = 'permanent'"
-                >
-                  永久
-                </button>
-                <input
-                  v-if="sponsorCodeForm.expires_mode === 'months'"
-                  v-model.number="sponsorCodeForm.expires_months"
-                  type="number"
-                  min="1"
-                  max="120"
-                  step="1"
-                />
-                <span v-if="sponsorCodeForm.expires_mode === 'months'" class="duration-unit">个月</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="sponsor-code-actions">
-            <button class="btn-sponsor" :disabled="sponsorCodeGenerating" @click="generateSponsorCodes">
-              <i :class="sponsorCodeGenerating ? 'ri-loader-4-line loading-spinner' : 'ri-coupon-3-line'"></i>
-              {{ sponsorCodeGenerating ? '生成中...' : '生成兑换码' }}
-            </button>
-            <div class="warning-box compact">
-              <i class="ri-information-line"></i>
-              <span>数量上限100个；持续时间或过期时间选择永久时，后端会保存为空到期时间。</span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="generatedSponsorCodes.length > 0" class="item-card sponsor-code-result-card">
-          <div class="item-header">
-            <span class="item-title">刚生成的兑换码</span>
-            <button class="btn-preview" @click="copySponsorCodeText(generatedSponsorCodeText, '已复制全部兑换码')">
-              <i class="ri-file-copy-line"></i> 复制全部
-            </button>
-          </div>
-          <textarea class="sponsor-code-textarea" readonly :value="generatedSponsorCodeText"></textarea>
-          <div class="sponsor-code-chip-grid">
-            <button
-              v-for="code in generatedSponsorCodes"
-              :key="code.id"
-              type="button"
-              class="sponsor-code-chip"
-              @click="copySponsorCodeText(code.code)"
-            >
-              <span>{{ code.code }}</span>
-              <i class="ri-file-copy-line"></i>
-            </button>
-          </div>
-        </div>
-
-        <div class="item-card sponsor-code-history-card">
-          <div class="item-header">
-            <span class="item-title">最近兑换码</span>
-            <button class="btn-preview" :disabled="sponsorCodeListLoading" @click="loadSponsorCodes">
-              <i :class="sponsorCodeListLoading ? 'ri-loader-4-line loading-spinner' : 'ri-refresh-line'"></i>
-              刷新
-            </button>
-          </div>
-          <div v-if="sponsorCodeListLoading" class="loading compact-loading">
-            <i class="ri-loader-4-line loading-spinner"></i>
-            <span>加载中...</span>
-          </div>
-          <div v-else-if="recentSponsorCodes.length === 0" class="empty-state compact-empty">
-            <i class="ri-coupon-3-line"></i>
-            <p>暂无兑换码</p>
-          </div>
-          <div v-else class="sponsor-code-list">
-            <div v-for="code in recentSponsorCodes" :key="code.id" class="sponsor-code-row">
-              <div class="sponsor-code-main">
-                <code>{{ code.code }}</code>
-                <span class="sponsor-code-meta">
-                  {{ formatSponsorLevel(code.sponsor_level) }} · 持续 {{ formatSponsorCodeDuration(code.duration_months) }} · 有效期 {{ formatSponsorCodeExpiry(code.expires_at) }}
-                </span>
-              </div>
-              <span class="sponsor-code-status" :class="getSponsorCodeStatusClass(code)">
-                {{ getSponsorCodeStatus(code) }}
-              </span>
-              <button class="btn-preview" @click="copySponsorCodeText(code.code)">
-                <i class="ri-file-copy-line"></i> 复制
+            <div class="sponsor-code-actions">
+              <button class="btn-sponsor" @click="switchTab('sponsorCodes')">
+                <i class="ri-coupon-3-line"></i>
+                前往赞助者兑换码
               </button>
             </div>
           </div>
-          <p v-if="sponsorCodeTotal > recentSponsorCodes.length" class="sponsor-code-desc">
-            仅显示最近 {{ recentSponsorCodes.length }} 个，共 {{ sponsorCodeTotal }} 个。
-          </p>
-        </div>
         </template>
       </div>
 
@@ -4685,10 +5060,11 @@ function formatBanTime(dateStr: string | null) {
   padding: 8px;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tab-item {
-  flex: 1;
+  flex: 1 1 140px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5086,6 +5462,51 @@ function formatBanTime(dateStr: string | null) {
   line-height: 1.6;
 }
 
+.sponsor-code-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.sponsor-code-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid var(--color-border, #E2D3C3);
+  border-radius: 12px;
+  background: var(--color-panel-bg, #fff);
+  color: var(--color-text-main, #2C1810);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.sponsor-code-preset:hover {
+  border-color: rgba(214, 166, 69, 0.5);
+  background: rgba(214, 166, 69, 0.08);
+}
+
+.sponsor-code-preset.active {
+  border-color: var(--color-accent, #D6A645);
+  background: rgba(214, 166, 69, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(214, 166, 69, 0.2);
+}
+
+.sponsor-code-preset span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sponsor-code-preset small {
+  color: var(--color-text-secondary, #8D7B68);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .sponsor-code-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -5264,9 +5685,127 @@ function formatBanTime(dateStr: string | null) {
   padding: 20px;
 }
 
+.addon-mirror-card,
+.addon-mirror-status {
+  border: 1px solid rgba(128, 64, 48, 0.16);
+}
+
+.addon-mirror-header {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.addon-mirror-upload {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 0.8fr) minmax(220px, 1.4fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.addon-mirror-field,
+.addon-mirror-file {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-text-secondary, #6D5B48);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.addon-mirror-field input,
+.addon-mirror-field select {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, #E2D3C3);
+  background: var(--input-bg, #FFFDFB);
+  color: var(--color-text-main, #2C1810);
+  font-size: 14px;
+}
+
+.addon-file-button {
+  max-width: 100%;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addon-clear-button {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.addon-upload-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.addon-mirror-note {
+  margin-top: 14px;
+}
+
+.addon-mirror-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.addon-mirror-status {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.addon-mirror-meta,
+.addon-mirror-package {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  color: var(--color-text-secondary, #6D5B48);
+  font-size: 13px;
+}
+
+.addon-mirror-meta span,
+.addon-mirror-package span {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.addon-mirror-meta i {
+  margin-right: 4px;
+  color: var(--color-secondary, #804030);
+}
+
+.addon-mirror-package {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(128, 64, 48, 0.06);
+}
+
+.addon-mirror-updated {
+  margin: -4px 0 0;
+  color: var(--color-text-secondary, #8D7B68);
+  font-size: 12px;
+  text-align: right;
+}
+
 @media (max-width: 768px) {
+  .sponsor-code-presets,
   .sponsor-code-form,
-  .sponsor-code-row {
+  .sponsor-code-row,
+  .addon-mirror-upload,
+  .addon-mirror-grid,
+  .addon-mirror-meta,
+  .addon-mirror-package {
     grid-template-columns: 1fr;
   }
 
@@ -5854,6 +6393,11 @@ function formatBanTime(dateStr: string | null) {
 
 .btn-preview:hover {
   background: var(--color-secondary-hover, #651FFF);
+}
+
+.btn-preview:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 /* 编辑按钮 */

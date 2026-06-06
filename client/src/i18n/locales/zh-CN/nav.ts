@@ -3,6 +3,7 @@ export default {
     home: '首页',
     sync: '人物卡备份',
     archives: '剧情故事',
+    warcraft: '魔兽功能',
     market: '创意市场',
     community: '社区广场',
     guild: '公会',

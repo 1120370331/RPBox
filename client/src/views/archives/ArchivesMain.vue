@@ -47,6 +47,11 @@ interface ChatRecord {
   listeners?: Listener[]  // 收听者列表（新增字段，向前兼容）
 }
 
+interface InstalledAddonInfo {
+  installed: boolean
+  version?: string | null
+}
+
 const mounted = ref(false)
 const router = useRouter()
 const route = useRoute()
@@ -100,46 +105,58 @@ function dismissUsageTips() {
   localStorage.setItem('rpbox_usage_tips_dismissed', '1')
 }
 
-async function checkAddonStatus() {
+function normalizeAddonVersion(version: string | null | undefined) {
+  return (version || '').trim().replace(/^v/i, '')
+}
+
+async function checkAddonStatus(): Promise<InstalledAddonInfo | null> {
   console.log('[ArchivesMain] checkAddonStatus 被调用')
-  if (!wowPath.value) return
+  if (!wowPath.value) return null
   try {
-    const info = await invoke<{ installed: boolean; version?: string }>('check_addon_installed', {
+    const info = await invoke<InstalledAddonInfo>('check_addon_installed', {
       wowPath: wowPath.value,
       flavor: selectedFlavor.value,
     })
     console.log('[ArchivesMain] 检查插件结果:', info)
     addonInstalled.value = info.installed
-    addonVersion.value = info.installed ? (info.version || '未知') : null
+    addonVersion.value = info.installed ? (normalizeAddonVersion(info.version) || '未知') : null
     console.log('[ArchivesMain] 更新后的版本号:', addonVersion.value)
+    return info
   } catch (e) {
     console.error('检测插件失败:', e)
+    return null
   }
 }
 
 // 检查插件更新（自动）
 async function checkAddonUpdate() {
   try {
+    if (!wowPath.value) return
+
+    const installedInfo = await checkAddonStatus()
+    if (!installedInfo?.installed) return
+
     const manifest = await getAddonManifest()
-    const latestVersion = manifest.latest
+    const latestVersion = normalizeAddonVersion(manifest.latest)
+    const currentVersion = normalizeAddonVersion(installedInfo.version)
 
-    // 从 localStorage 读取上次检查的版本
-    const lastCheckedVersion = localStorage.getItem('addon_last_checked_version')
+    if (!latestVersion || !currentVersion) return
 
-    // 如果有新版本，显示更新提示
-    if (!lastCheckedVersion || lastCheckedVersion !== latestVersion) {
-      // 使用上次检查的版本作为"当前版本"，如果没有则使用 "未知"
-      const currentVersion = lastCheckedVersion || '未知'
-
-      // 查找最新版本的详细信息（包括 changelog）
-      const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
-      const changelog = latestVersionInfo?.changelog || '暂无更新说明'
-
-      addonUpdateDialogRef.value?.show(currentVersion, latestVersion, changelog, wowPath.value, selectedFlavor.value)
-
-      // 记录本次检查的版本
+    if (currentVersion === latestVersion) {
       localStorage.setItem('addon_last_checked_version', latestVersion)
+      localStorage.removeItem('addon_update_prompt_key')
+      return
     }
+
+    const promptKey = `${currentVersion}->${latestVersion}`
+    if (localStorage.getItem('addon_update_prompt_key') === promptKey) return
+
+    // 查找最新版本的详细信息（包括 changelog）
+    const latestVersionInfo = manifest.versions.find(v => normalizeAddonVersion(v.version) === latestVersion)
+    const changelog = latestVersionInfo?.changelog || '暂无更新说明'
+
+    addonUpdateDialogRef.value?.show(currentVersion, latestVersion, changelog, wowPath.value, selectedFlavor.value)
+    localStorage.setItem('addon_update_prompt_key', promptKey)
   } catch (e) {
     console.error('检查插件更新失败:', e)
   }
@@ -153,16 +170,20 @@ async function handleCheckAddonUpdate() {
 
   addonChecking.value = true
   try {
-    const manifest = await getAddonManifest()
-    const latestVersion = manifest.latest
+    const installedInfo = await checkAddonStatus()
+    const currentVersion = normalizeAddonVersion(installedInfo?.version || addonVersion.value)
+    if (!currentVersion) return
 
-    if (addonVersion.value === latestVersion) {
+    const manifest = await getAddonManifest()
+    const latestVersion = normalizeAddonVersion(manifest.latest)
+
+    if (currentVersion === latestVersion) {
       // 使用 toast 提示（需要导入 toast）
       console.log('当前已是最新版本')
     } else {
-      const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
+      const latestVersionInfo = manifest.versions.find(v => normalizeAddonVersion(v.version) === latestVersion)
       const changelog = latestVersionInfo?.changelog || '暂无更新说明'
-      addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog, wowPath.value, selectedFlavor.value)
+      addonUpdateDialogRef.value?.show(currentVersion, latestVersion, changelog, wowPath.value, selectedFlavor.value)
     }
   } catch (e) {
     console.error('检查插件更新失败:', e)
@@ -188,7 +209,6 @@ onMounted(() => {
   }
   wowPath.value = savedPath
   setTimeout(() => mounted.value = true, 50)
-  checkAddonStatus()
   checkAddonUpdate()  // 检查插件更新
   loadTags()
 })
@@ -409,7 +429,7 @@ function handleViewStory(id: number) {
         <h2>{{ $t('archives.setupRequired.title') }}</h2>
         <p>{{ $t('archives.setupRequired.desc') }}</p>
         <div class="setup-actions">
-          <RButton type="primary" @click="router.push('/sync/setup')">
+          <RButton type="primary" @click="router.push({ path: '/sync/setup', query: { redirect: '/archives' } })">
             <i class="ri-settings-3-line"></i>
             {{ $t('archives.setupRequired.action') }}
           </RButton>

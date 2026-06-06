@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -102,6 +103,59 @@ func (s *Server) uploadToOSS(key string, data []byte, contentType string) error 
 		options = append(options, oss.ContentType(contentType))
 	}
 	return bucket.PutObject(normalized, bytes.NewReader(data), options...)
+}
+
+func (s *Server) uploadFileToOSS(key string, filePath string, contentType string) error {
+	normalized := normalizeOSSKey(key)
+	if normalized == "" {
+		return errors.New("empty object key")
+	}
+
+	bucket, err := s.getOSSBucket()
+	if err != nil {
+		return err
+	}
+
+	options := make([]oss.Option, 0, 1)
+	if contentType != "" {
+		options = append(options, oss.ContentType(contentType))
+	}
+	return bucket.PutObjectFromFile(normalized, filePath, options...)
+}
+
+func (s *Server) readObjectFromOSS(key string) (io.ReadCloser, string, int64, error) {
+	normalized := normalizeOSSKey(key)
+	if normalized == "" {
+		return nil, "", 0, errors.New("empty object key")
+	}
+
+	bucket, err := s.getOSSBucket()
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	meta, err := bucket.GetObjectMeta(normalized)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	contentType := strings.TrimSpace(strings.Split(meta.Get("Content-Type"), ";")[0])
+	size := int64(-1)
+	if rawSize := strings.TrimSpace(meta.Get("Content-Length")); rawSize != "" {
+		if parsedSize, parseErr := strconv.ParseInt(rawSize, 10, 64); parseErr == nil {
+			size = parsedSize
+		}
+	}
+
+	body, err := bucket.GetObject(normalized)
+	if err != nil {
+		return nil, "", 0, err
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	return body, contentType, size, nil
 }
 
 func (s *Server) readImageFromOSS(key string) ([]byte, string, error) {

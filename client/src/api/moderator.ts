@@ -416,11 +416,11 @@ export interface CreateSponsorRedeemCodesRequest {
 }
 
 export function createSponsorRedeemCodes(data: CreateSponsorRedeemCodesRequest) {
-  return request.post<{ message: string; codes: SponsorRedeemCode[] }>('/admin/sponsor-codes', data)
+  return request.post<{ message: string; codes: SponsorRedeemCode[] }>('/moderator/sponsor-codes', data)
 }
 
 export function getSponsorRedeemCodes(params?: { page?: number; page_size?: number; status?: 'all' | 'active' | 'used' | 'expired' }) {
-  return request.get<{ codes: SponsorRedeemCode[]; total: number }>('/admin/sponsor-codes', { params })
+  return request.get<{ codes: SponsorRedeemCode[]; total: number }>('/moderator/sponsor-codes', { params })
 }
 
 // ========== 用户管理（版主可用） ==========
@@ -501,6 +501,47 @@ export interface ActionLogQueryParams {
 
 export function getActionLogs(params?: ActionLogQueryParams) {
   return request.get<{ logs: AdminActionLog[]; total: number }>('/moderator/action-logs', { params })
+}
+
+// ========== 插件镜像分发 ==========
+
+export interface TRP3MirrorAddonInfo {
+  id: string
+  name: string
+  projectId: number
+  repository: string
+  latestVersion: string
+  fileName: string
+  fileDate?: string
+  source: 'mirror' | 'github' | 'fallback' | string
+  uploadedBy?: number
+  uploadedByName?: string
+  uploadedAt?: string
+  sizeBytes?: number
+  downloadUrl?: string
+  cacheKey?: string
+  cacheSource?: 'local' | 'oss' | 'missing' | 'not_mirrored' | string
+  expectedRoot?: string
+  expectedToc?: string
+  originalFileName?: string
+}
+
+export interface TRP3MirrorListResponse {
+  updatedAt?: string
+  addons: TRP3MirrorAddonInfo[]
+  note?: string
+}
+
+export function getTRP3MirrorAddons() {
+  return request.get<TRP3MirrorListResponse>('/moderator/addons/trp3/mirror')
+}
+
+export function uploadTRP3MirrorAddon(addonId: string, version: string, file: File) {
+  const form = new FormData()
+  form.append('addon_id', addonId)
+  form.append('version', version)
+  form.append('file', file)
+  return request.post<{ message: string; addon: TRP3MirrorAddonInfo }>('/moderator/addons/trp3/mirror', form)
 }
 
 // ========== 数据统计 ==========

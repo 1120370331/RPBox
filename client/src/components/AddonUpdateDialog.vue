@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
 import { useToastStore } from '@/stores/toast'
@@ -16,9 +16,18 @@ const error = ref('')
 
 const emit = defineEmits(['installed'])
 
+const displayCurrentVersion = computed(() => currentVersion.value ? `v${currentVersion.value}` : '未读取')
+const displayLatestVersion = computed(() => latestVersion.value ? `v${latestVersion.value}` : '未知')
+
+function normalizeAddonVersion(version: string | null | undefined) {
+  const normalized = (version || '').trim().replace(/^v/i, '')
+  if (!normalized || normalized === '未知' || normalized.toLowerCase() === 'unknown') return ''
+  return normalized
+}
+
 function show(current: string, latest: string, changelogText: string = '', path: string = '', flavorValue: string = '_retail_') {
-  currentVersion.value = current
-  latestVersion.value = latest
+  currentVersion.value = normalizeAddonVersion(current)
+  latestVersion.value = normalizeAddonVersion(latest)
   changelog.value = changelogText
   wowPath.value = path || localStorage.getItem('wow_path') || ''
   flavor.value = flavorValue
@@ -48,21 +57,15 @@ async function handleDownload() {
     const url = getAddonDownloadUrl(latestVersion.value)
     console.log('[AddonUpdateDialog] 下载 URL:', url)
 
-    const response = await fetch(url)
-    console.log('[AddonUpdateDialog] fetch 响应状态:', response.status)
-
-    if (!response.ok) throw new Error('下载失败')
-
-    const arrayBuffer = await response.arrayBuffer()
-    const zipData = Array.from(new Uint8Array(arrayBuffer))
-    console.log('[AddonUpdateDialog] 下载完成，大小:', zipData.length)
-
-    await invoke('install_addon', {
+    await invoke('install_addon_from_url', {
       wowPath: wowPath.value,
       flavor: flavor.value,
-      zipData,
+      downloadUrl: url,
+      pluginId: 'rpbox',
     })
     console.log('[AddonUpdateDialog] 安装成功')
+    localStorage.setItem('addon_last_checked_version', latestVersion.value)
+    localStorage.removeItem('addon_update_prompt_key')
 
     // 显示成功提示
     toast.success('插件安装成功')
@@ -103,12 +106,12 @@ defineExpose({
           <div class="version-info">
             <div class="version-item">
               <span class="label">当前版本：</span>
-              <span class="version current">v{{ currentVersion }}</span>
+              <span class="version current">{{ displayCurrentVersion }}</span>
             </div>
             <i class="ri-arrow-right-line arrow-icon"></i>
             <div class="version-item">
               <span class="label">最新版本：</span>
-              <span class="version latest">v{{ latestVersion }}</span>
+              <span class="version latest">{{ displayLatestVersion }}</span>
             </div>
           </div>
 
