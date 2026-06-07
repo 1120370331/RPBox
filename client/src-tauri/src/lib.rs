@@ -9,6 +9,7 @@ mod writer;
 use crate::writer::replace_trp3_profiles;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -265,6 +266,7 @@ pub fn run() {
             install_trp3_addon_zip,
             install_all_trp3_addons,
             uninstall_trp3_addon,
+            open_addons_folder,
             install_addon,
             install_addon_from_url,
             uninstall_addon,
@@ -516,6 +518,52 @@ async fn uninstall_trp3_addon(
     })
     .await
     .map_err(|e| format!("TRP3 插件卸载任务失败: {}", e))?
+}
+
+#[tauri::command]
+async fn open_addons_folder(wow_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if wow_path.trim().is_empty() {
+            return Err("未选择魔兽目录".to_string());
+        }
+
+        let addons_dir = addon_installer::get_addons_dir(&wow_path);
+        std::fs::create_dir_all(&addons_dir)
+            .map_err(|e| format!("创建 AddOns 目录失败: {}", e))?;
+
+        open_folder_in_file_manager(&addons_dir)?;
+        Ok(addons_dir.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("打开 AddOns 目录任务失败: {}", e))?
+}
+
+fn open_folder_in_file_manager(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer.exe");
+        command.arg(path);
+        command
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(path);
+        command
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+
+    command
+        .spawn()
+        .map_err(|e| format!("启动系统文件管理器失败: {}", e))?;
+    Ok(())
 }
 
 #[tauri::command]

@@ -122,7 +122,6 @@ const featureEntries = [
 ]
 
 const hasWowPath = computed(() => !!wowPath.value)
-const addonsDir = computed(() => trp3Status.value?.addonsDir || '')
 
 const trp3AddonsById = computed(() => {
   const entries = (trp3Status.value?.addons || []).map(addon => [addon.id, addon] as const)
@@ -689,11 +688,13 @@ async function openSourcePage(card: PluginCard) {
 }
 
 async function openAddonFolder() {
-  if (!addonsDir.value) return
+  if (!wowPath.value) return
   try {
-    await openExternal(addonsDir.value)
+    await invoke<string>('open_addons_folder', {
+      wowPath: wowPath.value,
+    })
   } catch (e: any) {
-    toast.error(e?.message || '打开 AddOns 目录失败')
+    toast.error(getNativeErrorMessage(e, '打开 AddOns 目录失败'))
   }
 }
 </script>
@@ -719,7 +720,7 @@ async function openAddonFolder() {
           <p>需要定位到包含 WTF/Account 的魔兽世界版本目录。</p>
         </div>
         <div class="directory-actions">
-          <button v-if="addonsDir" type="button" class="icon-btn" title="打开 AddOns 目录" @click="openAddonFolder">
+          <button v-if="hasWowPath" type="button" class="icon-btn" title="打开 AddOns 目录" @click="openAddonFolder">
             <i class="ri-folder-open-line"></i>
           </button>
           <button
