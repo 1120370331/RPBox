@@ -95,10 +95,11 @@ const TRP3_ADDONS: &[Trp3AddonDefinition] = &[
 /// - WTF 目录: D:\World of Warcraft\_retail_\WTF
 /// - 版本目录: D:\World of Warcraft\_retail_
 pub fn get_addon_path(wow_path: &str, _flavor: &str) -> PathBuf {
-    get_version_dir(wow_path)
-        .join("Interface")
-        .join("AddOns")
-        .join("RPBox_Addon")
+    get_addons_dir(wow_path).join("RPBox_Addon")
+}
+
+pub fn get_addons_dir(wow_path: &str) -> PathBuf {
+    get_version_dir(wow_path).join("Interface").join("AddOns")
 }
 
 fn get_version_dir(wow_path: &str) -> PathBuf {
