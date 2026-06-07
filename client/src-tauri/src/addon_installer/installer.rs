@@ -303,6 +303,36 @@ pub fn install_all_trp3_addons(
     Ok(check_trp3_addons(wow_path))
 }
 
+/// 卸载指定 TRP3 插件目录；只删除 AddOns 下的插件本体，不触碰 WTF/SavedVariables。
+pub fn uninstall_trp3_addon(
+    wow_path: &str,
+    addon_id: &str,
+) -> Result<Trp3AddonCheckResult, String> {
+    let addon = TRP3_ADDONS
+        .iter()
+        .find(|addon| addon.id == addon_id)
+        .ok_or_else(|| format!("未知的 TRP3 插件: {}", addon_id))?;
+
+    let version_dir = get_version_dir(wow_path);
+    let addons_dir = version_dir.join("Interface").join("AddOns");
+
+    for folder in addon.folders {
+        let addon_path = addons_dir.join(folder);
+        if !addon_path.exists() {
+            continue;
+        }
+        if addon_path.is_dir() {
+            fs::remove_dir_all(&addon_path)
+                .map_err(|e| format!("删除 {} 失败: {}", folder, e))?;
+        } else {
+            fs::remove_file(&addon_path)
+                .map_err(|e| format!("删除 {} 失败: {}", folder, e))?;
+        }
+    }
+
+    Ok(check_trp3_addons(wow_path))
+}
+
 fn validate_trp3_download_url(url: &str, addon: &Trp3AddonDefinition) -> Result<(), String> {
     let parsed = reqwest::Url::parse(url).map_err(|_| "下载地址格式无效".to_string())?;
 

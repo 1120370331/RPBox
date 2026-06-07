@@ -264,6 +264,7 @@ pub fn run() {
             install_trp3_addon_with_progress,
             install_trp3_addon_zip,
             install_all_trp3_addons,
+            uninstall_trp3_addon,
             install_addon,
             install_addon_from_url,
             uninstall_addon,
@@ -503,6 +504,18 @@ async fn install_all_trp3_addons(
     })
     .await
     .map_err(|e| format!("TRP3 插件安装任务失败: {}", e))?
+}
+
+#[tauri::command]
+async fn uninstall_trp3_addon(
+    wow_path: String,
+    addon_id: String,
+) -> Result<addon_installer::Trp3AddonCheckResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        addon_installer::uninstall_trp3_addon(&wow_path, &addon_id)
+    })
+    .await
+    .map_err(|e| format!("TRP3 插件卸载任务失败: {}", e))?
 }
 
 #[tauri::command]
