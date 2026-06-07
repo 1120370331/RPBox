@@ -10,6 +10,7 @@ import {
   getTRP3Latest,
   type TRP3LatestResponse,
 } from '@/api/addon'
+import { dialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 
 interface WowInstallation {
@@ -61,6 +62,7 @@ interface PluginCard {
   sourceUrl?: string
   action: string
   canInstall: boolean
+  canUninstall: boolean
   busy: boolean
   progressLabel: string
   progressDetail: string
@@ -154,7 +156,7 @@ const activeInstallCount = computed(() => installingPluginIds.value.length)
 const pluginStatusSummary = computed(() => {
   if (!hasWowPath.value) return '等待目录'
   if (checkingPlugins.value) return '检测中'
-  if (activeInstallCount.value) return `${activeInstallCount.value} 个安装中`
+  if (activeInstallCount.value) return `${activeInstallCount.value} 个处理中`
   if (pluginReadyCount.value === pluginCards.value.length) return '全部就绪'
   return `${pluginReadyCount.value}/${pluginCards.value.length} 就绪`
 })
@@ -265,8 +267,15 @@ function getActionText(state: PluginState, installed: boolean, busy: boolean) {
   if (state === 'checking') return '检测中'
   if (!installed) return '安装'
   if (state === 'update') return '更新'
-  if (state === 'ready') return '重装'
+  if (state === 'ready') return '已最新'
   return '安装'
+}
+
+function getActionIcon(card: PluginCard) {
+  if (card.busy) return 'ri-loader-4-line spinning'
+  if (card.state === 'ready') return 'ri-checkbox-circle-line'
+  if (card.state === 'update') return 'ri-arrow-up-circle-line'
+  return 'ri-download-cloud-2-line'
 }
 
 function isPluginInstalling(id: PluginCardId) {
@@ -341,7 +350,8 @@ function buildTrp3Card(
     latestVersion: addon?.latestVersion || (hasWowPath.value ? '待获取' : '选择目录后检测'),
     sourceUrl: addon?.sourceUrl,
     action: progress?.label || getActionText(state, installed, busy),
-    canInstall: hasWowPath.value && !checkingPlugins.value && !busy && !!addon?.downloadUrl,
+    canInstall: hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
+    canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
     busy,
     progressLabel: progress?.label || '',
     progressDetail: progress?.detail || '',
@@ -365,7 +375,8 @@ function buildRpboxCard(): PluginCard {
     currentVersion: installed ? rpboxInstalledInfo.value?.version || '未知' : '未安装',
     latestVersion: rpboxLatestVersion.value || (hasWowPath.value ? '待获取' : '选择目录后检测'),
     action: progress?.label || getActionText(state, installed, busy),
-    canInstall: hasWowPath.value && !checkingPlugins.value && !busy && !!rpboxLatestVersion.value,
+    canInstall: hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!rpboxLatestVersion.value,
+    canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
     busy,
     progressLabel: progress?.label || '',
     progressDetail: progress?.detail || '',
@@ -498,9 +509,71 @@ async function installPlugin(card: PluginCard) {
   await installTrp3Addon(addon)
 }
 
+async function uninstallPlugin(card: PluginCard) {
+  if (!card.canUninstall || !wowPath.value) return
+
+  const confirmed = await dialog.confirm({
+    title: `卸载 ${card.title}`,
+    message: `确定要卸载 ${card.title} 吗？\n\n此操作只会删除 Interface/AddOns 里的插件本体，不会删除人物卡、道具、剧本或 RP 记录数据。这些数据保存在 WTF 文件夹中，不会丢失。`,
+    type: 'warning',
+    confirmText: '卸载',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  startPluginInstall(card.id)
+  pluginError.value = ''
+  installNotice.value = ''
+  let succeeded = false
+  try {
+    setPluginProgress(card.id, {
+      label: '卸载中',
+      detail: '正在删除 AddOns 目录中的插件本体',
+      percent: null,
+      downloadedBytes: 0,
+      totalBytes: null,
+    })
+
+    if (card.id === 'rpbox') {
+      await invoke('uninstall_addon', {
+        wowPath: wowPath.value,
+        flavor: selectedFlavor.value,
+      })
+      await checkRpboxAddon()
+    } else {
+      const localStatus = await invoke<Trp3AddonCheckResult>('uninstall_trp3_addon', {
+        wowPath: wowPath.value,
+        addonId: card.id,
+      })
+      trp3Status.value = mergeTrp3Latest(localStatus, trp3Latest.value)
+    }
+
+    setPluginProgress(card.id, {
+      label: '已卸载',
+      detail: '插件本体已移除，WTF 数据已保留',
+      percent: 100,
+    })
+    installNotice.value = `${card.title} 已卸载；人物卡、道具数据仍保留在 WTF 文件夹中。`
+    toast.success(`${card.title} 已卸载`)
+    succeeded = true
+  } catch (e: any) {
+    pluginError.value = getNativeErrorMessage(e, `${card.title} 卸载失败`)
+    setPluginProgress(card.id, {
+      label: '卸载失败',
+      detail: pluginError.value,
+      percent: null,
+    })
+    toast.error('插件卸载失败')
+  } finally {
+    finishPluginInstall(card.id)
+    if (succeeded) clearPluginProgressSoon(card.id)
+  }
+}
+
 async function installTrp3Addon(addon: Trp3AddonInfo) {
   if (!wowPath.value || isPluginInstalling(addon.id) || !addon.downloadUrl) return
 
+  const operation = addon.installed ? '更新' : '安装'
   startPluginInstall(addon.id)
   pluginError.value = ''
   installNotice.value = ''
@@ -527,14 +600,14 @@ async function installTrp3Addon(addon: Trp3AddonInfo) {
     trp3Status.value = mergeTrp3Latest(localStatus, trp3Latest.value)
     setPluginProgress(addon.id, {
       label: '已完成',
-      detail: '安装完成，检测已更新',
+      detail: `${operation}完成，检测已更新`,
       percent: 100,
     })
-    installNotice.value = `${addon.name} 已安装到 AddOns 目录`
+    installNotice.value = `${addon.name} 已${operation}到 AddOns 目录`
     toast.success(installNotice.value)
     succeeded = true
   } catch (e: any) {
-    pluginError.value = getNativeErrorMessage(e, `${addon.name} 自动安装失败`)
+    pluginError.value = getNativeErrorMessage(e, `${addon.name} 自动${operation}失败`)
     setPluginProgress(addon.id, {
       label: '失败',
       detail: pluginError.value,
@@ -550,6 +623,7 @@ async function installTrp3Addon(addon: Trp3AddonInfo) {
 async function installRpboxAddon() {
   if (!wowPath.value || isPluginInstalling('rpbox')) return
 
+  const operation = rpboxInstalledInfo.value?.installed ? '更新' : '安装'
   startPluginInstall('rpbox')
   pluginError.value = ''
   installNotice.value = ''
@@ -585,14 +659,14 @@ async function installRpboxAddon() {
     await checkRpboxAddon()
     setPluginProgress('rpbox', {
       label: '已完成',
-      detail: '安装完成，检测已更新',
+      detail: `${operation}完成，检测已更新`,
       percent: 100,
     })
-    installNotice.value = 'RPBox Addon 已安装到 AddOns 目录'
+    installNotice.value = `RPBox Addon 已${operation}到 AddOns 目录`
     toast.success(installNotice.value)
     succeeded = true
   } catch (e: any) {
-    pluginError.value = getNativeErrorMessage(e, 'RPBox Addon 自动安装失败')
+    pluginError.value = getNativeErrorMessage(e, `RPBox Addon 自动${operation}失败`)
     setPluginProgress('rpbox', {
       label: '失败',
       detail: pluginError.value,
@@ -755,8 +829,18 @@ async function openAddonFolder() {
                 :disabled="!card.canInstall"
                 @click="installPlugin(card)"
               >
-                <i :class="card.busy ? 'ri-loader-4-line spinning' : 'ri-download-cloud-2-line'"></i>
+                <i :class="getActionIcon(card)"></i>
                 {{ card.action }}
+              </button>
+              <button
+                v-if="card.canUninstall"
+                type="button"
+                class="danger-btn compact"
+                :disabled="card.busy"
+                @click="uninstallPlugin(card)"
+              >
+                <i class="ri-delete-bin-line"></i>
+                卸载
               </button>
               <button
                 v-if="card.sourceUrl"
@@ -1007,7 +1091,8 @@ h3 {
 .primary-btn,
 .ghost-btn,
 .icon-btn,
-.text-btn {
+.text-btn,
+.danger-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1044,6 +1129,19 @@ h3 {
 
 .ghost-btn:hover:not(:disabled) {
   background: rgba(128, 64, 48, 0.12);
+}
+
+.danger-btn {
+  min-height: 38px;
+  padding: 9px 14px;
+  color: #9B1C31;
+  background: rgba(155, 28, 49, 0.07);
+  border-color: rgba(155, 28, 49, 0.2);
+}
+
+.danger-btn:hover:not(:disabled) {
+  background: rgba(155, 28, 49, 0.12);
+  transform: translateY(-1px);
 }
 
 .icon-btn {
@@ -1097,6 +1195,7 @@ h3 {
 .primary-btn:disabled,
 .ghost-btn:disabled,
 .icon-btn:disabled,
+.danger-btn:disabled,
 .feature-card:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -1472,7 +1571,8 @@ h3 {
   .directory-actions .primary-btn,
   .directory-actions .ghost-btn,
   .path-tools .ghost-btn,
-  .plugin-actions .primary-btn {
+  .plugin-actions .primary-btn,
+  .plugin-actions .danger-btn {
     flex: 1;
   }
 
