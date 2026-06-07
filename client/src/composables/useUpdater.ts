@@ -36,8 +36,14 @@ export function canAccessBetaUpdates(user?: UserData | null): boolean {
   return sponsorLevel >= 1
 }
 
-function resolveRawUpdateChannel(rawJson: Record<string, unknown> | undefined, fallback: UpdateChannel): UpdateChannel {
-  return rawJson?.channel === 'beta' ? 'beta' : fallback
+function hasPrereleaseVersion(version: string): boolean {
+  return version.trim().replace(/^v/i, '').split('+')[0].includes('-')
+}
+
+function resolveRawUpdateChannel(rawJson: Record<string, unknown> | undefined, version: string): UpdateChannel {
+  if (rawJson?.channel === 'beta') return 'beta'
+  if (rawJson?.channel === 'stable') return 'stable'
+  return hasPrereleaseVersion(version) ? 'beta' : 'stable'
 }
 
 function setParticipateTesting(value: boolean) {
@@ -104,12 +110,11 @@ export function useUpdater() {
       console.log('[Updater] 当前更新通道:', betaUpdatesEnabled.value ? 'beta' : 'stable')
 
       const checkOptions = buildCheckOptions()
-      const requestedChannel: UpdateChannel = checkOptions ? 'beta' : 'stable'
       const update = await check(checkOptions)
       console.log('[Updater] 检查结果:', update)
 
       if (update) {
-        const channel = resolveRawUpdateChannel(update.rawJson, requestedChannel)
+        const channel = resolveRawUpdateChannel(update.rawJson, update.version)
         updateAvailable.value = true
         updateInfo.value = {
           version: update.version,
