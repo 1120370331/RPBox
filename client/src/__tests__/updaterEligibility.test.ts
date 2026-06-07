@@ -77,4 +77,38 @@ describe('desktop beta update eligibility', () => {
 
     expect(mockedCheck).toHaveBeenCalledWith(undefined)
   })
+
+  it('treats a stable semver update as stable even when requested through beta headers', async () => {
+    const userStore = useUserStore()
+    userStore.setAuth('sponsor-token', user({ sponsor_level: 1 }))
+    mockedCheck.mockResolvedValue({
+      version: '0.2.39',
+      body: '',
+      date: '',
+      rawJson: {},
+    } as any)
+
+    const updater = useUpdater()
+    updater.setParticipateTesting(true)
+    await updater.checkForUpdate()
+
+    expect(updater.updateInfo.value?.channel).toBe('stable')
+  })
+
+  it('falls back to beta only for prerelease update versions when channel metadata is missing', async () => {
+    const userStore = useUserStore()
+    userStore.setAuth('sponsor-token', user({ sponsor_level: 1 }))
+    mockedCheck.mockResolvedValue({
+      version: '0.2.40-1',
+      body: '',
+      date: '',
+      rawJson: {},
+    } as any)
+
+    const updater = useUpdater()
+    updater.setParticipateTesting(true)
+    await updater.checkForUpdate()
+
+    expect(updater.updateInfo.value?.channel).toBe('beta')
+  })
 })
