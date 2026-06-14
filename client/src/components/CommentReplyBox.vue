@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 
 const props = defineProps<{
   modelValue: string
   placeholder?: string
   disabled?: boolean
+  autoFocus?: boolean
   cancelLabel: string
   submitLabel: string
 }>()
@@ -25,6 +26,12 @@ function updateValue(event: Event) {
 function focus() {
   void nextTick(() => textareaRef.value?.focus())
 }
+
+onMounted(() => {
+  if (props.autoFocus) {
+    focus()
+  }
+})
 
 function insertToken(token: string) {
   if (props.disabled) return

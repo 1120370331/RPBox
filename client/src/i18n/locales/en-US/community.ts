@@ -195,7 +195,7 @@ export default {
     deleteCommentMessage: 'Are you sure you want to delete this comment?',
     deleteCommentFailed: 'Delete failed: ',
     likeFailed: 'Like failed',
-    replyTo: 'Reply to @{name}',
+    replyTo: 'Reply to {name}',
     replyToLabel: 'Reply to',
   },
   preview: {

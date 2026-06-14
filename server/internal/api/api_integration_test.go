@@ -270,6 +270,106 @@ func TestCreateReplyCommentNotifiesParentAndPostAuthor(t *testing.T) {
 	}
 }
 
+func TestCreateItemReplyCommentNotifiesParentAndItemAuthor(t *testing.T) {
+	db := testutil.NewTestDB(t,
+		&model.User{},
+		&model.Item{},
+		&model.ItemComment{},
+		&model.Notification{},
+		&model.UserActivityLog{},
+	)
+
+	itemAuthor := model.User{Username: "item-author", Email: "item-author@example.com", PassHash: "hash"}
+	parentAuthor := model.User{Username: "parent-author", Email: "parent-author@example.com", PassHash: "hash"}
+	replier := model.User{Username: "replier", Email: "replier@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&itemAuthor, &parentAuthor, &replier}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	item := model.Item{
+		AuthorID:     itemAuthor.ID,
+		Name:         "Reply target item",
+		Type:         "item",
+		Status:       "published",
+		ReviewStatus: "approved",
+		IsPublic:     true,
+	}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatalf("create item: %v", err)
+	}
+
+	parentComment := model.ItemComment{
+		ItemID:            item.ID,
+		UserID:            parentAuthor.ID,
+		Rating:            0,
+		Content:           "parent comment",
+		ImageReviewStatus: "none",
+	}
+	if err := db.Create(&parentComment).Error; err != nil {
+		t.Fatalf("create parent comment: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	token := newTestToken(t, replier)
+	resp := performRequest(server.router, http.MethodPost, "/api/v1/items/"+strconv.FormatUint(uint64(item.ID), 10)+"/comments", map[string]interface{}{
+		"rating":    0,
+		"content":   "reply content",
+		"parent_id": parentComment.ID,
+	}, token)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var replyPayload struct {
+		Data model.ItemComment `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &replyPayload); err != nil {
+		t.Fatalf("decode reply: %v", err)
+	}
+	reply := replyPayload.Data
+	if reply.ParentID == nil || *reply.ParentID != parentComment.ID {
+		t.Fatalf("expected parent_id %d, got %#v", parentComment.ID, reply.ParentID)
+	}
+
+	var notifications []model.Notification
+	if err := db.Where("type = ?", "item_comment").Order("user_id ASC").Find(&notifications).Error; err != nil {
+		t.Fatalf("load notifications: %v", err)
+	}
+	if len(notifications) != 2 {
+		t.Fatalf("expected 2 notifications, got %d", len(notifications))
+	}
+	recipients := map[uint]model.Notification{}
+	for _, notification := range notifications {
+		recipients[notification.UserID] = notification
+	}
+	for _, userID := range []uint{itemAuthor.ID, parentAuthor.ID} {
+		notification, ok := recipients[userID]
+		if !ok {
+			t.Fatalf("missing notification for user %d", userID)
+		}
+		if notification.TargetType != "item_comment" || notification.TargetID != reply.ID {
+			t.Fatalf("expected item_comment target %d, got type=%q id=%d", reply.ID, notification.TargetType, notification.TargetID)
+		}
+	}
+
+	parentToken := newTestToken(t, parentAuthor)
+	notifResp := performRequest(server.router, http.MethodGet, "/api/v1/notifications?type=comment", nil, parentToken)
+	if notifResp.Code != http.StatusOK {
+		t.Fatalf("expected notifications 200, got %d body=%s", notifResp.Code, notifResp.Body.String())
+	}
+	var payload struct {
+		Notifications []struct {
+			TargetItemID uint `json:"target_item_id"`
+		} `json:"notifications"`
+	}
+	if err := json.Unmarshal(notifResp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode notifications: %v", err)
+	}
+	if len(payload.Notifications) != 1 || payload.Notifications[0].TargetItemID != item.ID {
+		t.Fatalf("expected target_item_id %d, got %#v", item.ID, payload.Notifications)
+	}
+}
+
 func newTestServer(t *testing.T, db *gorm.DB) *Server {
 	t.Helper()
 
