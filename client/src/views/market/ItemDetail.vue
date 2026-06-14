@@ -8,6 +8,7 @@ import { useDialog } from '@/composables/useDialog'
 import ImageViewer from '@/components/ImageViewer.vue'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
+import CommentReplyBox from '@/components/CommentReplyBox.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
@@ -35,12 +36,18 @@ const newRating = ref(0)
 const hoverRating = ref(0)
 const newComment = ref('')
 const showEmojiPicker = ref(false)
+const showReplyEmojiPicker = ref(false)
 const emojiButtonRef = ref<HTMLElement | null>(null)
+const replyEmojiTrigger = ref<HTMLElement | null>(null)
 const commentEditorRef = ref<any>(null)
+const replyEditorRef = ref<{ insertToken?: (token: string) => void } | null>(null)
+const replyingTo = ref<ItemComment | null>(null)
+const replyContent = ref('')
 const showImportCode = ref(false)
 const isLiked = ref(false)
 const isFavorited = ref(false)
 const submitting = ref(false)
+const submittingReply = ref(false)
 const detailContentRef = ref<HTMLElement | null>(null)
 const showImportTutorial = ref(false)
 const dontShowTutorialAgain = ref(false)
@@ -116,6 +123,54 @@ const canSubmit = computed(() => {
     return commentLength.value >= 10
   }
   return commentLength.value > 0
+})
+
+interface ItemCommentReply extends ItemComment {
+  replyToName?: string
+}
+
+interface ItemCommentWithReplies extends ItemComment {
+  replies: ItemCommentReply[]
+  replyToName?: string
+}
+
+const organizedComments = computed(() => {
+  const commentMap = new Map<number, ItemComment>()
+  comments.value.forEach(comment => commentMap.set(comment.id, comment))
+
+  const topLevel: ItemCommentWithReplies[] = []
+  const replies: ItemCommentReply[] = []
+
+  comments.value.forEach(comment => {
+    if (!comment.parent_id) {
+      topLevel.push({ ...comment, replies: [] })
+    } else {
+      replies.push(comment)
+    }
+  })
+
+  replies.forEach(reply => {
+    const parentComment = commentMap.get(reply.parent_id!)
+    const replyToName = parentComment?.username || t('market.detail.comments.anonymous')
+
+    let topLevelParent = topLevel.find(comment => comment.id === reply.parent_id)
+    if (!topLevelParent) {
+      for (const comment of topLevel) {
+        if (comment.replies.some(child => child.id === reply.parent_id)) {
+          topLevelParent = comment
+          break
+        }
+      }
+    }
+
+    if (topLevelParent) {
+      topLevelParent.replies.push({ ...reply, replyToName })
+    } else {
+      topLevel.push({ ...reply, replies: [], replyToName })
+    }
+  })
+
+  return topLevel
 })
 
 onMounted(() => {
@@ -259,6 +314,7 @@ async function handleDownload() {
 
 // 添加评论（可选评分）
 async function handleAddComment() {
+  if (submitting.value) return
   if (!canSubmit.value) {
     if (newRating.value > 0 && commentLength.value < 10) {
       toast.error(t('market.detail.messages.ratingMinChars'))
@@ -274,8 +330,8 @@ async function handleAddComment() {
     await addItemComment(id, newRating.value, newComment.value)
     newComment.value = ''
     newRating.value = 0
-    loadComments()
-    loadItemDetail()
+    await loadComments()
+    await loadItemDetail()
     toast.success(t('market.detail.messages.commentSuccess'))
   } catch (error: any) {
     console.error('添加评论失败:', error)
@@ -396,6 +452,20 @@ function handleEmojiSelect(token: string) {
   showEmojiPicker.value = false
 }
 
+function handleReplyEmojiSelect(token: string) {
+  if (replyEditorRef.value?.insertToken) {
+    replyEditorRef.value.insertToken(token)
+  } else {
+    appendEmoteToken(replyContent, token)
+  }
+  showReplyEmojiPicker.value = false
+}
+
+function openReplyEmojiPicker(event: MouseEvent) {
+  replyEmojiTrigger.value = event.currentTarget as HTMLElement
+  showReplyEmojiPicker.value = true
+}
+
 function appendEmoteToken(target: { value: string }, token: string) {
   const trimmed = target.value.trimEnd()
   const spacer = trimmed.length > 0 ? ' ' : ''
@@ -462,6 +532,46 @@ async function submitSafetyReport(payload: { reason: string; detail: string; hid
     toast.error(error?.message || '举报提交失败')
   } finally {
     safetySubmitting.value = false
+  }
+}
+
+async function startReply(comment: ItemComment) {
+  replyingTo.value = comment
+  replyContent.value = ''
+  replyEditorRef.value = null
+  showReplyEmojiPicker.value = false
+  await nextTick()
+}
+
+function cancelReply() {
+  replyingTo.value = null
+  replyContent.value = ''
+  showReplyEmojiPicker.value = false
+  replyEmojiTrigger.value = null
+  replyEditorRef.value = null
+}
+
+function setReplyEditorRef(instance: any, commentId: number) {
+  if (replyingTo.value?.id === commentId) {
+    replyEditorRef.value = instance
+  }
+}
+
+async function submitReply() {
+  const content = replyContent.value.trim()
+  if (!content || !replyingTo.value || submittingReply.value) return
+  submittingReply.value = true
+  try {
+    const id = Number(route.params.id)
+    await addItemComment(id, 0, content, replyingTo.value.id)
+    cancelReply()
+    await loadComments()
+    toast.success('回复已发布')
+  } catch (error: any) {
+    console.error('回复失败:', error)
+    toast.error(error.message || t('market.detail.messages.commentFailed'))
+  } finally {
+    submittingReply.value = false
   }
 }
 
@@ -761,10 +871,10 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
         <!-- 评论列表 -->
         <div class="comments-list">
-          <div v-if="comments.length === 0" class="empty-comments">
+          <div v-if="organizedComments.length === 0" class="empty-comments">
             {{ t('market.detail.comments.empty') }}
           </div>
-          <div v-else v-for="comment in comments" :key="comment.id" class="comment-item" :id="`item-comment-${comment.id}`">
+          <div v-else v-for="comment in organizedComments" :key="comment.id" class="comment-item" :id="`item-comment-${comment.id}`">
             <div class="comment-avatar">
               <img v-if="comment.avatar" :src="comment.avatar" alt="" />
               <span v-else>{{ comment.username?.charAt(0) || 'U' }}</span>
@@ -789,13 +899,81 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
                 <span class="comment-time">{{ new Date(comment.created_at).toLocaleDateString() }}</span>
               </div>
               <div class="comment-content" v-html="renderCommentContent(comment.content)"></div>
-              <div v-if="canUseCommentSafetyActions(comment)" class="comment-actions">
-                <button class="comment-safety-btn" @click="openCommentReport(comment)">
+              <div class="comment-actions">
+                <button class="comment-reply-btn" type="button" @click="startReply(comment)">
+                  <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
+                </button>
+                <button v-if="canUseCommentSafetyActions(comment)" class="comment-safety-btn" @click="openCommentReport(comment)">
                   <i class="ri-alarm-warning-line"></i> 举报评论
                 </button>
-                <button class="comment-safety-btn danger" @click="handleBlockCommentAuthor(comment)">
+                <button v-if="canUseCommentSafetyActions(comment)" class="comment-safety-btn danger" @click="handleBlockCommentAuthor(comment)">
                   <i class="ri-forbid-2-line"></i> 屏蔽作者
                 </button>
+              </div>
+              <CommentReplyBox
+                v-if="replyingTo?.id === comment.id"
+                :ref="(instance) => setReplyEditorRef(instance, comment.id)"
+                v-model="replyContent"
+                :placeholder="t('community.detail.replyTo', { name: comment.username || t('market.detail.comments.anonymous') })"
+                :disabled="submittingReply"
+                :auto-focus="true"
+                :cancel-label="t('community.create.cancel')"
+                :submit-label="t('community.action.reply')"
+                @open-emoji="openReplyEmojiPicker"
+                @cancel="cancelReply"
+                @submit="submitReply"
+              />
+
+              <div v-if="comment.replies.length > 0" class="replies-list">
+                <div v-for="reply in comment.replies" :key="reply.id" class="reply-item" :id="`item-comment-${reply.id}`">
+                  <div class="reply-avatar">
+                    <img v-if="reply.avatar" :src="reply.avatar" alt="" />
+                    <span v-else>{{ reply.username?.charAt(0) || 'U' }}</span>
+                  </div>
+                  <div class="reply-body">
+                    <div class="reply-header">
+                      <div class="comment-author-row">
+                        <span class="reply-author" :style="buildNameStyle(reply.name_color, reply.name_bold)">{{ reply.username || t('market.detail.comments.anonymous') }}</span>
+                        <UserLevelBadge
+                          :level="reply.forum_level"
+                          :name="reply.forum_level_name"
+                          :color="reply.forum_level_color"
+                          :bold="reply.forum_level_bold"
+                          size="xs"
+                        />
+                        <span v-if="reply.replyToName" class="reply-to">
+                          {{ t('community.detail.replyToLabel') }} <span class="reply-to-name">@{{ reply.replyToName }}</span>
+                        </span>
+                      </div>
+                      <span class="comment-time">{{ new Date(reply.created_at).toLocaleDateString() }}</span>
+                    </div>
+                    <div class="comment-content reply-content" v-html="renderCommentContent(reply.content)"></div>
+                    <div class="comment-actions">
+                      <button class="comment-reply-btn" type="button" @click="startReply(reply)">
+                        <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
+                      </button>
+                      <button v-if="canUseCommentSafetyActions(reply)" class="comment-safety-btn" @click="openCommentReport(reply)">
+                        <i class="ri-alarm-warning-line"></i> 举报评论
+                      </button>
+                      <button v-if="canUseCommentSafetyActions(reply)" class="comment-safety-btn danger" @click="handleBlockCommentAuthor(reply)">
+                        <i class="ri-forbid-2-line"></i> 屏蔽作者
+                      </button>
+                    </div>
+                    <CommentReplyBox
+                      v-if="replyingTo?.id === reply.id"
+                      :ref="(instance) => setReplyEditorRef(instance, reply.id)"
+                      v-model="replyContent"
+                      :placeholder="t('community.detail.replyTo', { name: reply.username || t('market.detail.comments.anonymous') })"
+                      :disabled="submittingReply"
+                      :auto-focus="true"
+                      :cancel-label="t('community.create.cancel')"
+                      :submit-label="t('community.action.reply')"
+                      @open-emoji="openReplyEmojiPicker"
+                      @cancel="cancelReply"
+                      @submit="submitReply"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -839,6 +1017,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
     </Teleport>
 
     <EmojiPicker :show="showEmojiPicker" :trigger-element="emojiButtonRef" @select="handleEmojiSelect" @close="showEmojiPicker = false" />
+    <EmojiPicker :show="showReplyEmojiPicker" :trigger-element="replyEmojiTrigger" @select="handleReplyEmojiSelect" @close="showReplyEmojiPicker = false" />
 
     <ImageViewer
       v-model="showImageViewer"
@@ -1689,6 +1868,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   margin-top: 10px;
 }
 
+.comment-reply-btn,
 .comment-safety-btn {
   display: inline-flex;
   align-items: center;
@@ -1701,6 +1881,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   cursor: pointer;
 }
 
+.comment-reply-btn:hover,
 .comment-safety-btn:hover {
   color: var(--color-secondary);
 }
@@ -1731,6 +1912,77 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   color: var(--color-secondary);
   font-weight: 600;
   margin: 0 2px;
+}
+
+.replies-list {
+  margin-top: 12px;
+  padding-left: 12px;
+  border-left: 2px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reply-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  background: var(--color-panel-bg);
+  border-radius: 8px;
+}
+
+.reply-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-primary));
+  color: var(--btn-primary-text, var(--color-text-light));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 12px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.reply-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reply-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.reply-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.reply-author {
+  font-weight: 600;
+  color: var(--color-text-main);
+  font-size: 13px;
+}
+
+.reply-to {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.reply-to-name {
+  color: var(--color-secondary);
+  font-weight: 600;
+}
+
+.reply-content {
+  font-size: 13px;
 }
 
 /* 画作图片画廊样式 */

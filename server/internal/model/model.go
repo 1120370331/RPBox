@@ -440,6 +440,7 @@ type ItemComment struct {
 	ImageReviewerID    *uint      `gorm:"index" json:"image_reviewer_id"`
 	ImageReviewedAt    *time.Time `json:"image_reviewed_at"`
 	ImageReviewComment string     `gorm:"size:512" json:"image_review_comment"`
+	ParentID           *uint      `gorm:"index" json:"parent_id"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }

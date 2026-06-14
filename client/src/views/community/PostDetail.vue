@@ -58,7 +58,7 @@ const showReplyEmojiPicker = ref(false)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const replyEmojiTrigger = ref<HTMLElement | null>(null)
 const commentEditorRef = ref<any>(null)
-const replyEditorRef = ref<{ insertToken?: (token: string) => void; focus?: () => void } | null>(null)
+const replyEditorRef = ref<{ insertToken?: (token: string) => void } | null>(null)
 
 const errorMessage = ref('')
 const commentError = ref('')
@@ -307,9 +307,9 @@ async function handleComment() {
 async function startReply(comment: CommentWithAuthor) {
   replyingTo.value = comment
   replyContent.value = ''
+  replyEditorRef.value = null
   showReplyEmojiPicker.value = false
   await nextTick()
-  replyEditorRef.value?.focus?.()
 }
 
 function cancelReply() {
@@ -321,12 +321,6 @@ function cancelReply() {
 }
 
 function setReplyEditorRef(instance: any, commentId: number) {
-  if (!instance) {
-    if (replyingTo.value?.id === commentId) {
-      replyEditorRef.value = null
-    }
-    return
-  }
   if (replyingTo.value?.id === commentId) {
     replyEditorRef.value = instance
   }
@@ -829,6 +823,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                   v-model="replyContent"
                   :placeholder="t('community.detail.replyTo', { name: comment.author_name })"
                   :disabled="submittingReply"
+                  :auto-focus="true"
                   :cancel-label="t('community.create.cancel')"
                   :submit-label="t('community.action.reply')"
                   @open-emoji="openReplyEmojiPicker"
@@ -884,6 +879,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                         v-model="replyContent"
                         :placeholder="t('community.detail.replyTo', { name: reply.author_name })"
                         :disabled="submittingReply"
+                        :auto-focus="true"
                         :cancel-label="t('community.create.cancel')"
                         :submit-label="t('community.action.reply')"
                         @open-emoji="openReplyEmojiPicker"

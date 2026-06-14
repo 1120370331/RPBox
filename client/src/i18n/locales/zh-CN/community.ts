@@ -195,7 +195,7 @@ export default {
     deleteCommentMessage: '确定要删除这条评论吗？',
     deleteCommentFailed: '删除失败：',
     likeFailed: '点赞失败',
-    replyTo: '回复 @{name}',
+    replyTo: '回复 {name}',
     replyToLabel: '回复',
   },
   preview: {

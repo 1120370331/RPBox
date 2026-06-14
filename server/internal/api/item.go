@@ -1049,7 +1049,7 @@ func (s *Server) getItemComments(c *gin.Context) {
 	}
 	var comments []model.ItemComment
 
-	if err := database.DB.Where("item_id = ?", id).Order("created_at desc").Find(&comments).Error; err != nil {
+	if err := database.DB.Where("item_id = ?", id).Order("created_at ASC").Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1145,6 +1145,7 @@ func (s *Server) addItemComment(c *gin.Context) {
 		Rating   int    `json:"rating" binding:"min=0,max=5"`
 		Content  string `json:"content"`
 		ImageURL string `json:"image_url"`
+		ParentID *uint  `json:"parent_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1185,10 +1186,26 @@ func (s *Server) addItemComment(c *gin.Context) {
 		return
 	}
 
+	var parent model.ItemComment
+	if req.ParentID != nil {
+		if req.Rating > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "回复不能携带评分"})
+			return
+		}
+		if err := database.DB.First(&parent, *req.ParentID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "父评论不存在"})
+			return
+		}
+		if parent.ItemID != item.ID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "父评论不属于该作品"})
+			return
+		}
+	}
+
 	// 检查用户是否已发表过评分评论（只在提交评分时检查）
-	if req.Rating > 0 {
+	if req.Rating > 0 && req.ParentID == nil {
 		var existingRatingComment model.ItemComment
-		if err := database.DB.Where("item_id = ? AND user_id = ? AND rating > 0", id, userID).First(&existingRatingComment).Error; err == nil {
+		if err := database.DB.Where("item_id = ? AND user_id = ? AND rating > 0 AND parent_id IS NULL", id, userID).First(&existingRatingComment).Error; err == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "您已经对此道具发表过评分评价，每个用户只能发表一次评分"})
 			return
 		}
@@ -1202,9 +1219,15 @@ func (s *Server) addItemComment(c *gin.Context) {
 		Content:           req.Content,
 		ImageURL:          req.ImageURL,
 		ImageReviewStatus: "none",
+		ParentID:          req.ParentID,
 	}
 	if req.ImageURL != "" {
 		comment.ImageReviewStatus = "pending"
+	}
+
+	commentOwnerID := item.AuthorID
+	if req.ParentID != nil {
+		commentOwnerID = parent.UserID
 	}
 
 	var avgRating float64
@@ -1214,8 +1237,8 @@ func (s *Server) addItemComment(c *gin.Context) {
 			return err
 		}
 
-		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Count(&count)
-		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", id).Select("AVG(rating)").Scan(&avgRating)
+		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0 AND parent_id IS NULL", id).Count(&count)
+		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0 AND parent_id IS NULL", id).Select("COALESCE(AVG(rating), 0)").Scan(&avgRating)
 
 		if err := tx.Model(&item).Updates(map[string]interface{}{
 			"rating":       avgRating,
@@ -1226,8 +1249,12 @@ func (s *Server) addItemComment(c *gin.Context) {
 		if _, err := service.AwardActivityReward(tx, userID, "item_comment_create", fmt.Sprintf("item-comment:%d", comment.ID), 0, service.CommentCreateExperience); err != nil {
 			return err
 		}
-		if item.AuthorID != userID {
-			if _, err := service.AwardActivityReward(tx, item.AuthorID, "item_comment_received", fmt.Sprintf("item:%d:comment:%d", item.ID, comment.ID), 0, service.CommentReceivedExperience); err != nil {
+		if commentOwnerID != userID {
+			rewardReference := fmt.Sprintf("item:%d:comment:%d", item.ID, comment.ID)
+			if req.ParentID != nil {
+				rewardReference = fmt.Sprintf("item-comment:%d:owner:%d", comment.ID, commentOwnerID)
+			}
+			if _, err := service.AwardActivityReward(tx, commentOwnerID, "item_comment_received", rewardReference, 0, service.CommentReceivedExperience); err != nil {
 				return err
 			}
 		}
@@ -1238,17 +1265,34 @@ func (s *Server) addItemComment(c *gin.Context) {
 	}
 
 	// 创建通知（不给自己发通知）
-	if item.AuthorID != userID {
-		// 构建通知内容：包含道具名称和评论片段
-		commentPreview := req.Content
-		if commentPreview == "" {
-			commentPreview = "[图片评论]"
+	notificationPreview := buildCommentNotificationPreview(req.Content)
+	if req.ParentID != nil {
+		if parent.UserID != userID {
+			content := "在作品《" + item.Name + "》中回复了你的评论：" + notificationPreview
+			notification := model.Notification{
+				UserID:     parent.UserID,
+				Type:       "item_comment",
+				ActorID:    &userID,
+				TargetType: "item_comment",
+				TargetID:   comment.ID,
+				Content:    content,
+			}
+			service.CreateNotification(&notification)
 		}
-		if len([]rune(commentPreview)) > 50 {
-			commentPreview = string([]rune(commentPreview)[:50]) + "..."
+		if item.AuthorID != userID && item.AuthorID != parent.UserID {
+			content := "在你的作品《" + item.Name + "》中回复了评论：" + notificationPreview
+			notification := model.Notification{
+				UserID:     item.AuthorID,
+				Type:       "item_comment",
+				ActorID:    &userID,
+				TargetType: "item_comment",
+				TargetID:   comment.ID,
+				Content:    content,
+			}
+			service.CreateNotification(&notification)
 		}
-		content := "评论了你的道具《" + item.Name + "》：" + commentPreview
-
+	} else if item.AuthorID != userID {
+		content := "评论了你的作品《" + item.Name + "》：" + notificationPreview
 		notification := model.Notification{
 			UserID:     item.AuthorID,
 			Type:       "item_comment",

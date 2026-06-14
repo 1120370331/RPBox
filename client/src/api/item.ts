@@ -55,6 +55,7 @@ export interface ItemComment {
   user_id: number
   rating: number
   content: string
+  parent_id?: number
   created_at: string
   updated_at: string
   username?: string
@@ -152,8 +153,8 @@ export function getItemComments(id: number) {
 }
 
 // 添加评论（带评分）
-export function addItemComment(id: number, rating: number, content: string) {
-  return request.post(`/items/${id}/comments`, { rating, content })
+export function addItemComment(id: number, rating: number, content: string, parentId?: number) {
+  return request.post(`/items/${id}/comments`, { rating, content, parent_id: parentId })
 }
 
 // 获取道具标签
