@@ -6,6 +6,7 @@ import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost
 import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
+import CommentReplyBox from '@/components/CommentReplyBox.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
@@ -822,23 +823,18 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                 </div>
 
                 <!-- 回复输入框 -->
-                <div v-if="replyingTo?.id === comment.id" class="reply-input-box">
-                  <EmoteEditor
-                    :ref="(instance) => setReplyEditorRef(instance, comment.id)"
-                    v-model="replyContent"
-                    :placeholder="t('community.detail.replyTo', { name: comment.author_name })"
-                    :disabled="submittingReply"
-                  />
-                  <div class="reply-actions">
-                    <button class="emoji-btn-small" @click="openReplyEmojiPicker" type="button">
-                      <i class="ri-emotion-line"></i>
-                    </button>
-                    <div class="reply-actions-right">
-                      <button class="cancel-btn" type="button" @click="cancelReply">{{ t('community.create.cancel') }}</button>
-                      <button class="submit-btn" type="button" :disabled="submittingReply || !replyContent.trim()" @click="submitReply">{{ t('community.action.reply') }}</button>
-                    </div>
-                  </div>
-                </div>
+                <CommentReplyBox
+                  v-if="replyingTo?.id === comment.id"
+                  :ref="(instance) => setReplyEditorRef(instance, comment.id)"
+                  v-model="replyContent"
+                  :placeholder="t('community.detail.replyTo', { name: comment.author_name })"
+                  :disabled="submittingReply"
+                  :cancel-label="t('community.create.cancel')"
+                  :submit-label="t('community.action.reply')"
+                  @open-emoji="openReplyEmojiPicker"
+                  @cancel="cancelReply"
+                  @submit="submitReply"
+                />
 
                 <div v-if="comment.replies && comment.replies.length > 0" class="replies-list">
                   <div v-for="reply in comment.replies" :key="reply.id" class="reply-item" :id="`comment-${reply.id}`">
@@ -882,23 +878,18 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                       </div>
 
                       <!-- 回复的回复输入框 -->
-                      <div v-if="replyingTo?.id === reply.id" class="reply-input-box">
-                        <EmoteEditor
-                          :ref="(instance) => setReplyEditorRef(instance, reply.id)"
-                          v-model="replyContent"
-                          :placeholder="t('community.detail.replyTo', { name: reply.author_name })"
-                          :disabled="submittingReply"
-                        />
-                        <div class="reply-actions">
-                          <button class="emoji-btn-small" @click="openReplyEmojiPicker" type="button">
-                            <i class="ri-emotion-line"></i>
-                          </button>
-                          <div class="reply-actions-right">
-                            <button class="cancel-btn" type="button" @click="cancelReply">{{ t('community.create.cancel') }}</button>
-                            <button class="submit-btn" type="button" :disabled="submittingReply || !replyContent.trim()" @click="submitReply">{{ t('community.action.reply') }}</button>
-                          </div>
-                        </div>
-                      </div>
+                      <CommentReplyBox
+                        v-if="replyingTo?.id === reply.id"
+                        :ref="(instance) => setReplyEditorRef(instance, reply.id)"
+                        v-model="replyContent"
+                        :placeholder="t('community.detail.replyTo', { name: reply.author_name })"
+                        :disabled="submittingReply"
+                        :cancel-label="t('community.create.cancel')"
+                        :submit-label="t('community.action.reply')"
+                        @open-emoji="openReplyEmojiPicker"
+                        @cancel="cancelReply"
+                        @submit="submitReply"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1897,89 +1888,6 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 .delete-btn:hover {
   color: #DC2626;
   background: rgba(220, 38, 38, 0.05);
-}
-
-.reply-input-box {
-  margin-top: 12px;
-  padding: 12px;
-  background: var(--color-card-bg);
-  border-radius: 6px;
-}
-
-.reply-input-box :deep(.emote-editor-input) {
-  width: 100%;
-  min-height: 60px;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-size: 13px;
-  resize: none;
-  outline: none;
-}
-
-.reply-input-box :deep(.emote-editor-input:focus) {
-  border-color: var(--color-accent);
-}
-
-.reply-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.reply-actions-right {
-  display: flex;
-  gap: 8px;
-}
-
-.emoji-btn-small {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.emoji-btn-small:hover {
-  background: var(--color-card-bg);
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.emoji-btn-small i {
-  font-size: 14px;
-}
-
-.cancel-btn {
-  padding: 6px 12px;
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.submit-btn {
-  padding: 6px 12px;
-  background: var(--color-secondary);
-  border: none;
-  border-radius: 4px;
-  color: var(--btn-primary-text, var(--color-text-light));
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.submit-btn:disabled {
-  opacity: 0.5;
 }
 
 /* ========== 子回复列表 ========== */
