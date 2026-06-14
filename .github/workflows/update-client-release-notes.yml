@@ -1,0 +1,190 @@
+name: Update Client Release Notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Client version to update, for example 0.2.40 or 0.2.40-3'
+        required: true
+        type: string
+      channel:
+        description: 'Release channel metadata to update'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+          - beta
+      notes:
+        description: 'Optional notes override. If empty, read client/release-notes/<version>.txt or beta/<version>.txt'
+        required: false
+        type: string
+      keep_pub_date:
+        description: 'Keep the existing pub_date when the remote metadata is for the same version'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  update-notes:
+    name: Update Updater Metadata Only
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve metadata target
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ inputs.version }}"
+          CHANNEL="${{ inputs.channel }}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
+          fi
+
+          if [ "$CHANNEL" != "stable" ] && [ "$CHANNEL" != "beta" ]; then
+            echo "Invalid channel: $CHANNEL" >&2
+            exit 1
+          fi
+
+          if [ "$CHANNEL" = "beta" ] && ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            echo "Beta client metadata must use numeric prerelease versions, for example 0.2.40-3" >&2
+            exit 1
+          fi
+
+          METADATA_FILE="latest.json"
+          NOTES_FILE="client/release-notes/${VERSION}.txt"
+          if [ "$CHANNEL" = "beta" ]; then
+            METADATA_FILE="latest-beta.json"
+            if [ -f "client/release-notes/beta/${VERSION}.txt" ]; then
+              NOTES_FILE="client/release-notes/beta/${VERSION}.txt"
+            fi
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "metadata_file=$METADATA_FILE" >> "$GITHUB_OUTPUT"
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          echo "Resolved metadata update: version=$VERSION channel=$CHANNEL metadata_file=$METADATA_FILE notes_file=$NOTES_FILE"
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Read current remote metadata
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          METADATA_FILE: ${{ steps.meta.outputs.metadata_file }}
+          REMOTE_BASE: ${{ secrets.RELEASE_PATH }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          set -euo pipefail
+
+          SSH_HOST="$SERVER_USER@$SERVER_HOST"
+          SSH_OPTS=(-p 2233 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=30)
+          REMOTE_DIR="$REMOTE_BASE/$VERSION"
+          REMOTE_METADATA="$REMOTE_BASE/$METADATA_FILE"
+
+          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "test -d '$REMOTE_DIR'" || {
+            echo "Release directory does not exist: $REMOTE_DIR" >&2
+            echo "Run the full release workflow before updating notes metadata." >&2
+            exit 1
+          }
+
+          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "test -f '$REMOTE_METADATA' && cat '$REMOTE_METADATA' || true" > current-latest.json
+          if [ -s current-latest.json ]; then
+            echo "Downloaded current $METADATA_FILE"
+          else
+            echo "No existing $METADATA_FILE found; a new one will be created"
+          fi
+
+      - name: Prepare updated metadata
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          METADATA_FILE: ${{ steps.meta.outputs.metadata_file }}
+          NOTES_FILE: ${{ steps.meta.outputs.notes_file }}
+          INPUT_NOTES: ${{ inputs.notes }}
+          KEEP_PUB_DATE: ${{ inputs.keep_pub_date }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import datetime
+          import json
+          import os
+          import sys
+
+          version = os.environ["VERSION"].strip()
+          channel = os.environ["CHANNEL"].strip()
+          metadata_file = os.environ["METADATA_FILE"].strip()
+          notes_file = os.environ["NOTES_FILE"].strip()
+          keep_pub_date = os.environ.get("KEEP_PUB_DATE", "true").lower() == "true"
+
+          notes = (os.environ.get("INPUT_NOTES") or "").strip()
+          if not notes and os.path.exists(notes_file):
+              with open(notes_file, "r", encoding="utf-8") as handle:
+                  notes = handle.read().strip()
+
+          if not notes:
+              print("No notes were provided and notes file was not found or empty: " + notes_file, file=sys.stderr)
+              sys.exit(1)
+
+          notes = notes.replace("\r\n", "\n").replace("\r", "\n")
+
+          current = {}
+          if os.path.exists("current-latest.json") and os.path.getsize("current-latest.json") > 0:
+              with open("current-latest.json", "r", encoding="utf-8") as handle:
+                  current = json.load(handle)
+
+          current_version = (current.get("latest_version") or current.get("version") or "").strip()
+          current_pub_date = (current.get("pub_date") or "").strip()
+          if keep_pub_date and current_version == version and current_pub_date:
+              pub_date = current_pub_date
+          else:
+              pub_date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+          data = {
+              "latest_version": version,
+              "version": version,
+              "notes": notes,
+              "pub_date": pub_date,
+              "channel": channel,
+          }
+
+          with open("latest.json", "w", encoding="utf-8") as handle:
+              json.dump(data, handle, ensure_ascii=False)
+
+          print(f"Prepared {metadata_file} for {channel} {version}; pub_date={pub_date}")
+          PY
+
+          echo "Prepared updater metadata:"
+          cat latest.json
+
+      - name: Upload metadata only
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          METADATA_FILE: ${{ steps.meta.outputs.metadata_file }}
+          REMOTE_BASE: ${{ secrets.RELEASE_PATH }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          set -euo pipefail
