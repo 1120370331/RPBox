@@ -318,6 +318,12 @@ function insertToken(token: string) {
   emitValue()
 }
 
+function focus() {
+  if (props.disabled) return
+  editorRef.value?.focus()
+  saveSelection()
+}
+
 function handleKeydown(event: KeyboardEvent) {
   if (mentionOpen.value) {
     if (event.key === 'ArrowDown') {
@@ -370,6 +376,7 @@ function handlePaste(event: ClipboardEvent) {
 
 defineExpose({
   insertToken,
+  focus,
 })
 
 onMounted(async () => {

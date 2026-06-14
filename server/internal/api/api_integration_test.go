@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -170,6 +171,102 @@ func TestListPostsSupportsAuthorNameSearch(t *testing.T) {
 	}
 	if payload.Posts[0].AuthorName != target.Username {
 		t.Fatalf("expected author %q, got %q", target.Username, payload.Posts[0].AuthorName)
+	}
+}
+
+func TestCreateReplyCommentNotifiesParentAndPostAuthor(t *testing.T) {
+	db := testutil.NewTestDB(t,
+		&model.User{},
+		&model.Post{},
+		&model.Comment{},
+		&model.Notification{},
+		&model.UserActivityLog{},
+	)
+
+	postAuthor := model.User{Username: "post-author", Email: "post-author@example.com", PassHash: "hash"}
+	parentAuthor := model.User{Username: "parent-author", Email: "parent-author@example.com", PassHash: "hash"}
+	replier := model.User{Username: "replier", Email: "replier@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&postAuthor, &parentAuthor, &replier}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	post := model.Post{
+		AuthorID:     postAuthor.ID,
+		Title:        "Reply target",
+		Content:      "post content",
+		Status:       "published",
+		ReviewStatus: "approved",
+		IsPublic:     true,
+		Category:     "other",
+	}
+	if err := db.Create(&post).Error; err != nil {
+		t.Fatalf("create post: %v", err)
+	}
+
+	parentComment := model.Comment{
+		PostID:            post.ID,
+		AuthorID:          parentAuthor.ID,
+		Content:           "parent comment",
+		ImageReviewStatus: "none",
+	}
+	if err := db.Create(&parentComment).Error; err != nil {
+		t.Fatalf("create parent comment: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	token := newTestToken(t, replier)
+	resp := performRequest(server.router, http.MethodPost, "/api/v1/posts/"+strconv.FormatUint(uint64(post.ID), 10)+"/comments", map[string]interface{}{
+		"content":   "reply content",
+		"parent_id": parentComment.ID,
+	}, token)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var reply model.Comment
+	if err := json.Unmarshal(resp.Body.Bytes(), &reply); err != nil {
+		t.Fatalf("decode reply: %v", err)
+	}
+	if reply.ParentID == nil || *reply.ParentID != parentComment.ID {
+		t.Fatalf("expected parent_id %d, got %#v", parentComment.ID, reply.ParentID)
+	}
+
+	var notifications []model.Notification
+	if err := db.Where("type = ?", "post_comment").Order("user_id ASC").Find(&notifications).Error; err != nil {
+		t.Fatalf("load notifications: %v", err)
+	}
+	if len(notifications) != 2 {
+		t.Fatalf("expected 2 notifications, got %d", len(notifications))
+	}
+	recipients := map[uint]model.Notification{}
+	for _, notification := range notifications {
+		recipients[notification.UserID] = notification
+	}
+	for _, userID := range []uint{postAuthor.ID, parentAuthor.ID} {
+		notification, ok := recipients[userID]
+		if !ok {
+			t.Fatalf("missing notification for user %d", userID)
+		}
+		if notification.TargetType != "comment" || notification.TargetID != reply.ID {
+			t.Fatalf("expected comment target %d, got type=%q id=%d", reply.ID, notification.TargetType, notification.TargetID)
+		}
+	}
+
+	parentToken := newTestToken(t, parentAuthor)
+	notifResp := performRequest(server.router, http.MethodGet, "/api/v1/notifications?type=comment", nil, parentToken)
+	if notifResp.Code != http.StatusOK {
+		t.Fatalf("expected notifications 200, got %d body=%s", notifResp.Code, notifResp.Body.String())
+	}
+	var payload struct {
+		Notifications []struct {
+			TargetPostID uint `json:"target_post_id"`
+		} `json:"notifications"`
+	}
+	if err := json.Unmarshal(notifResp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode notifications: %v", err)
+	}
+	if len(payload.Notifications) != 1 || payload.Notifications[0].TargetPostID != post.ID {
+		t.Fatalf("expected target_post_id %d, got %#v", post.ID, payload.Notifications)
 	}
 }
 

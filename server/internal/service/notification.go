@@ -23,15 +23,29 @@ func CreateNotification(notification *model.Notification) error {
 
 	// 如果 Hub 已设置，推送 WebSocket 消息
 	if notificationHub != nil {
-		// 推送新通知事件
-		notificationHub.SendToUser(notification.UserID, ws.MessageTypeNewNotification, map[string]interface{}{
+		payload := map[string]interface{}{
 			"id":          notification.ID,
 			"type":        notification.Type,
 			"actor_id":    notification.ActorID,
 			"target_type": notification.TargetType,
 			"target_id":   notification.TargetID,
 			"content":     notification.Content,
-		})
+		}
+		if notification.TargetType == "comment" {
+			var comment model.Comment
+			if err := database.DB.Select("post_id").First(&comment, notification.TargetID).Error; err == nil {
+				payload["target_post_id"] = comment.PostID
+			}
+		}
+		if notification.TargetType == "item_comment" {
+			var comment model.ItemComment
+			if err := database.DB.Select("item_id").First(&comment, notification.TargetID).Error; err == nil {
+				payload["target_item_id"] = comment.ItemID
+			}
+		}
+
+		// 推送新通知事件
+		notificationHub.SendToUser(notification.UserID, ws.MessageTypeNewNotification, payload)
 
 		// 推送未读数量更新
 		count, _ := GetUnreadCount(notification.UserID)

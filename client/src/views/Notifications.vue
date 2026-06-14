@@ -128,25 +128,26 @@ function handleNotificationClick(notification: Notification) {
   handleMarkAsRead(notification)
 
   // 根据通知类型跳转到对应页面
-  if (notification.target_type === 'comment') {
+  const targetType = notification.target_type || (notification.type === 'post_comment' ? 'comment' : '')
+  if (targetType === 'comment') {
     if (notification.target_post_id) {
       router.push({
         path: `/community/post/${notification.target_post_id}`,
         query: { comment: String(notification.target_id) }
       })
     }
-  } else if (notification.target_type === 'item_comment') {
+  } else if (targetType === 'item_comment') {
     if (notification.target_item_id) {
       router.push({
         path: `/market/${notification.target_item_id}`,
         query: { comment: String(notification.target_id) }
       })
     }
-  } else if (notification.target_type === 'post') {
+  } else if (targetType === 'post') {
     router.push(`/community/post/${notification.target_id}`)
-  } else if (notification.target_type === 'item') {
+  } else if (targetType === 'item') {
     router.push(`/market/${notification.target_id}`)
-  } else if (notification.target_type === 'guild') {
+  } else if (targetType === 'guild') {
     router.push(`/guild/${notification.target_id}`)
   }
 }

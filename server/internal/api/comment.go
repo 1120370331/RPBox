@@ -24,6 +24,33 @@ type CreateCommentRequest struct {
 
 const maxPendingCommentReviewRequests = 5
 
+func buildCommentNotificationPreview(content string) string {
+	preview := strings.TrimSpace(content)
+	if preview == "" {
+		return "[图片评论]"
+	}
+	runes := []rune(preview)
+	if len(runes) > 50 {
+		return string(runes[:50]) + "..."
+	}
+	return preview
+}
+
+func createPostCommentNotification(userID, actorID, targetID uint, content string) {
+	if userID == 0 || userID == actorID {
+		return
+	}
+	notification := model.Notification{
+		UserID:     userID,
+		Type:       "post_comment",
+		ActorID:    &actorID,
+		TargetType: "comment",
+		TargetID:   targetID,
+		Content:    content,
+	}
+	_ = service.CreateNotification(&notification)
+}
+
 func pendingCommentReviewRequestCount(userID uint) (int64, error) {
 	var postCommentPending int64
 	if err := database.DB.Model(&model.Comment{}).
@@ -260,51 +287,22 @@ func (s *Server) createComment(c *gin.Context) {
 	}
 
 	// 创建通知
+	notificationPreview := buildCommentNotificationPreview(req.Content)
 	if req.ParentID != nil {
 		// 回复评论：通知被回复的评论作者
 		if parent.AuthorID != userID {
-			// 构建通知内容：包含帖子标题和回复片段
-			replyPreview := req.Content
-			if replyPreview == "" {
-				replyPreview = "[图片评论]"
-			}
-			if len([]rune(replyPreview)) > 50 {
-				replyPreview = string([]rune(replyPreview)[:50]) + "..."
-			}
-			content := "在《" + post.Title + "》中回复了你的评论：" + replyPreview
-
-			notification := model.Notification{
-				UserID:     parent.AuthorID,
-				Type:       "post_comment",
-				ActorID:    &userID,
-				TargetType: "comment",
-				TargetID:   comment.ID,
-				Content:    content,
-			}
-			service.CreateNotification(&notification)
+			content := "在《" + post.Title + "》中回复了你的评论：" + notificationPreview
+			createPostCommentNotification(parent.AuthorID, userID, comment.ID, content)
+		}
+		if post.AuthorID != userID && post.AuthorID != parent.AuthorID {
+			content := "在你的帖子《" + post.Title + "》中回复了评论：" + notificationPreview
+			createPostCommentNotification(post.AuthorID, userID, comment.ID, content)
 		}
 	} else {
 		// 直接评论帖子：通知帖子作者
 		if post.AuthorID != userID {
-			// 构建通知内容：包含帖子标题和评论片段
-			commentPreview := req.Content
-			if commentPreview == "" {
-				commentPreview = "[图片评论]"
-			}
-			if len([]rune(commentPreview)) > 50 {
-				commentPreview = string([]rune(commentPreview)[:50]) + "..."
-			}
-			content := "评论了你的帖子《" + post.Title + "》：" + commentPreview
-
-			notification := model.Notification{
-				UserID:     post.AuthorID,
-				Type:       "post_comment",
-				ActorID:    &userID,
-				TargetType: "post",
-				TargetID:   uint(postID),
-				Content:    content,
-			}
-			service.CreateNotification(&notification)
+			content := "评论了你的帖子《" + post.Title + "》：" + notificationPreview
+			createPostCommentNotification(post.AuthorID, userID, comment.ID, content)
 		}
 	}
 
