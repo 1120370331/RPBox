@@ -59,6 +59,8 @@
     "createUpdaterArtifacts": true,
     "windows": {
       "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "nsis-hooks.nsh",
         "languages": ["SimpChinese"],
         "displayLanguageSelector": false
       }
