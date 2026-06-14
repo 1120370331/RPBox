@@ -57,7 +57,7 @@ const showReplyEmojiPicker = ref(false)
 const emojiButtonRef = ref<HTMLElement | null>(null)
 const replyEmojiTrigger = ref<HTMLElement | null>(null)
 const commentEditorRef = ref<any>(null)
-const replyEditorRef = ref<any>(null)
+const replyEditorRef = ref<{ insertToken?: (token: string) => void; focus?: () => void } | null>(null)
 
 const errorMessage = ref('')
 const commentError = ref('')
@@ -303,28 +303,51 @@ async function handleComment() {
 }
 
 // 回复评论
-function startReply(comment: CommentWithAuthor) {
+async function startReply(comment: CommentWithAuthor) {
   replyingTo.value = comment
   replyContent.value = ''
+  showReplyEmojiPicker.value = false
+  await nextTick()
+  replyEditorRef.value?.focus?.()
 }
 
 function cancelReply() {
   replyingTo.value = null
   replyContent.value = ''
+  showReplyEmojiPicker.value = false
+  replyEmojiTrigger.value = null
+  replyEditorRef.value = null
+}
+
+function setReplyEditorRef(instance: any, commentId: number) {
+  if (!instance) {
+    if (replyingTo.value?.id === commentId) {
+      replyEditorRef.value = null
+    }
+    return
+  }
+  if (replyingTo.value?.id === commentId) {
+    replyEditorRef.value = instance
+  }
 }
 
 async function submitReply() {
-  if (!replyContent.value.trim() || !replyingTo.value) return
+  const content = replyContent.value.trim()
+  if (!content || !replyingTo.value) return
   if (submittingReply.value) return
   submittingReply.value = true
   try {
-    await createComment(post.value.id, replyContent.value, replyingTo.value.id)
+    await createComment(post.value.id, content, replyingTo.value.id)
     replyContent.value = ''
     replyingTo.value = null
+    replyEditorRef.value = null
+    replyEmojiTrigger.value = null
     await loadComments()
     post.value.comment_count++
+    toast.success('回复已发布')
   } catch (error: any) {
     console.error('回复失败:', error)
+    toast.error(error.response?.data?.error || error.message || t('community.detail.commentFailed'))
   } finally {
     submittingReply.value = false
   }
@@ -341,7 +364,7 @@ function handleEmojiSelect(emoji: string) {
 }
 
 function handleReplyEmojiSelect(emoji: string) {
-  const editor = Array.isArray(replyEditorRef.value) ? replyEditorRef.value[0] : replyEditorRef.value
+  const editor = replyEditorRef.value
   if (editor?.insertToken) {
     editor.insertToken(emoji)
   } else {
@@ -784,7 +807,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                 </div>
                 <div class="comment-text" v-html="renderCommentContent(comment.content)"></div>
                 <div class="comment-actions">
-                  <button class="reply-btn" @click="startReply(comment)">
+                  <button class="reply-btn" type="button" @click="startReply(comment)">
                     <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
                   </button>
                   <button v-if="canUseCommentSafetyActions(comment)" class="comment-safety-btn" @click="openCommentReport(comment)">
@@ -801,7 +824,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                 <!-- 回复输入框 -->
                 <div v-if="replyingTo?.id === comment.id" class="reply-input-box">
                   <EmoteEditor
-                    ref="replyEditorRef"
+                    :ref="(instance) => setReplyEditorRef(instance, comment.id)"
                     v-model="replyContent"
                     :placeholder="t('community.detail.replyTo', { name: comment.author_name })"
                     :disabled="submittingReply"
@@ -811,8 +834,8 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                       <i class="ri-emotion-line"></i>
                     </button>
                     <div class="reply-actions-right">
-                      <button class="cancel-btn" @click="cancelReply">{{ t('community.create.cancel') }}</button>
-                      <button class="submit-btn" :disabled="submittingReply" @click="submitReply">{{ t('community.action.reply') }}</button>
+                      <button class="cancel-btn" type="button" @click="cancelReply">{{ t('community.create.cancel') }}</button>
+                      <button class="submit-btn" type="button" :disabled="submittingReply || !replyContent.trim()" @click="submitReply">{{ t('community.action.reply') }}</button>
                     </div>
                   </div>
                 </div>
@@ -844,7 +867,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                       </div>
                       <div class="reply-text" v-html="renderCommentContent(reply.content)"></div>
                       <div class="comment-actions">
-                        <button class="reply-btn" @click="startReply(reply)">
+                        <button class="reply-btn" type="button" @click="startReply(reply)">
                           <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
                         </button>
                         <button v-if="canUseCommentSafetyActions(reply)" class="comment-safety-btn" @click="openCommentReport(reply)">
@@ -861,7 +884,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                       <!-- 回复的回复输入框 -->
                       <div v-if="replyingTo?.id === reply.id" class="reply-input-box">
                         <EmoteEditor
-                          ref="replyEditorRef"
+                          :ref="(instance) => setReplyEditorRef(instance, reply.id)"
                           v-model="replyContent"
                           :placeholder="t('community.detail.replyTo', { name: reply.author_name })"
                           :disabled="submittingReply"
@@ -871,8 +894,8 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                             <i class="ri-emotion-line"></i>
                           </button>
                           <div class="reply-actions-right">
-                            <button class="cancel-btn" @click="cancelReply">{{ t('community.create.cancel') }}</button>
-                            <button class="submit-btn" :disabled="submittingReply" @click="submitReply">{{ t('community.action.reply') }}</button>
+                            <button class="cancel-btn" type="button" @click="cancelReply">{{ t('community.create.cancel') }}</button>
+                            <button class="submit-btn" type="button" :disabled="submittingReply || !replyContent.trim()" @click="submitReply">{{ t('community.action.reply') }}</button>
                           </div>
                         </div>
                       </div>
