@@ -1,8 +1,9 @@
 import { App } from '@capacitor/app'
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { request } from '@shared/api/request'
 
 export type MobileTarget = 'android' | 'ios'
+export type MobileUpdateMode = 'android-in-app' | 'ios-store' | 'external'
 
 export interface MobileUpdateInfo {
   version: string
@@ -13,10 +14,42 @@ export interface MobileUpdateInfo {
   mandatory?: boolean
 }
 
+export interface UpdateDownloadProgress {
+  downloadedBytes: number
+  totalBytes: number
+  percent: number
+  finished: boolean
+}
+
+export interface AndroidInstallPermissionStatus {
+  required: boolean
+  granted: boolean
+}
+
 interface CheckMobileUpdateOptions {
   target?: MobileTarget
   arch?: string
   currentVersion?: string
+}
+
+interface RPBoxUpdaterPlugin {
+  getInstallPermissionStatus(): Promise<AndroidInstallPermissionStatus>
+  requestInstallPermission(): Promise<{ opened: boolean; granted: boolean }>
+  downloadAndInstall(options: { url: string; version: string }): Promise<{ path: string }>
+  addListener(
+    eventName: 'downloadProgress',
+    listenerFunc: (progress: UpdateDownloadProgress) => void,
+  ): Promise<PluginListenerHandle>
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE || '/api/v1'
+const RPBoxUpdater = registerPlugin<RPBoxUpdaterPlugin>('RPBoxUpdater')
+
+function normalizeApiOrigin(apiBase: string): string {
+  if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
+    return apiBase.replace(/\/api\/v1\/?$/, '')
+  }
+  return ''
 }
 
 export function normalizeVersion(version: string): string {
@@ -107,6 +140,96 @@ export function isMobileUpdaterSupported(): boolean {
   return detectMobileTarget() !== null
 }
 
+export function getMobileUpdateMode(target: MobileTarget | null = detectMobileTarget()): MobileUpdateMode {
+  if (target === 'android' && Capacitor.isNativePlatform()) {
+    return 'android-in-app'
+  }
+  if (target === 'ios') {
+    return 'ios-store'
+  }
+  return 'external'
+}
+
+export function resolveUpdateDownloadUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return ''
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed
+  }
+
+  const apiOrigin = normalizeApiOrigin(API_BASE)
+  if (trimmed.startsWith('/')) {
+    if (apiOrigin) return `${apiOrigin}${trimmed}`
+    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+      return new URL(trimmed, window.location.origin).toString()
+    }
+    return trimmed
+  }
+
+  if (apiOrigin) return `${apiOrigin}/${trimmed}`
+  return new URL(trimmed, window.location.href).toString()
+}
+
+export function resolveIOSUpdateUrl(url: string): string {
+  const resolved = resolveUpdateDownloadUrl(url)
+  if (!resolved.startsWith('https://apps.apple.com/')) {
+    return resolved
+  }
+
+  const parsed = new URL(resolved)
+  return `itms-apps://${parsed.host}${parsed.pathname}${parsed.search}`
+}
+
+export async function getAndroidInstallPermissionStatus(): Promise<AndroidInstallPermissionStatus> {
+  if (detectMobileTarget() !== 'android' || !Capacitor.isNativePlatform()) {
+    return { required: false, granted: true }
+  }
+  try {
+    return await RPBoxUpdater.getInstallPermissionStatus()
+  } catch (error) {
+    console.warn('[MobileUpdater] failed to read Android install permission status:', error)
+    return { required: false, granted: true }
+  }
+}
+
+export async function requestAndroidInstallPermission() {
+  if (detectMobileTarget() !== 'android' || !Capacitor.isNativePlatform()) {
+    return { opened: false, granted: true }
+  }
+  try {
+    return await RPBoxUpdater.requestInstallPermission()
+  } catch (error) {
+    console.warn('[MobileUpdater] failed to request Android install permission:', error)
+    return { opened: false, granted: false }
+  }
+}
+
+export async function installAndroidUpdate(
+  update: MobileUpdateInfo,
+  onProgress?: (progress: UpdateDownloadProgress) => void,
+) {
+  if (detectMobileTarget() !== 'android' || !Capacitor.isNativePlatform()) {
+    throw new Error('Android in-app updater is unavailable')
+  }
+
+  const url = resolveUpdateDownloadUrl(update.url)
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error('Update URL must be absolute for Android installation')
+  }
+
+  const listener = onProgress
+    ? await RPBoxUpdater.addListener('downloadProgress', onProgress)
+    : null
+  try {
+    return await RPBoxUpdater.downloadAndInstall({
+      url,
+      version: update.version || update.latest_version || 'latest',
+    })
+  } finally {
+    await listener?.remove()
+  }
+}
+
 export async function checkMobileUpdate(options: CheckMobileUpdateOptions = {}): Promise<MobileUpdateInfo | null> {
   const target = options.target ?? detectMobileTarget()
   if (!target) return null
@@ -133,10 +256,7 @@ export async function checkMobileUpdate(options: CheckMobileUpdateOptions = {}):
   return request.get<MobileUpdateInfo | null>(updaterPath)
 }
 
-export function openUpdateUrl(url: string) {
+export function openUpdateUrl(url: string, target: MobileTarget | null = detectMobileTarget()) {
   if (!url) return
-  const popup = window.open(url, '_blank', 'noopener,noreferrer')
-  if (!popup) {
-    window.location.href = url
-  }
+  window.location.href = target === 'ios' ? resolveIOSUpdateUrl(url) : resolveUpdateDownloadUrl(url)
 }

@@ -15,9 +15,16 @@ const {
   checking,
   updateAvailable,
   updateInfo,
+  updateMode,
+  updating,
+  downloadProgress,
+  downloadedBytes,
+  totalBytes,
+  installPermissionRequired,
+  installPermissionGranted,
   lastError,
   checkForUpdate,
-  openUpdate,
+  installUpdate,
   refreshRuntimeInfo,
 } = useMobileUpdater()
 
@@ -33,6 +40,61 @@ const platformLabel = computed(() => {
 
 const currentVersionText = computed(() => t('profile.about.version', { v: currentVersion.value || '0.0.0' }))
 
+const updateActionLabel = computed(() => {
+  if (updating.value) {
+    return t('profile.about.update.downloading', { percent: downloadProgress.value })
+  }
+  if (updateMode.value === 'android-in-app') {
+    return t('profile.about.update.downloadInstall')
+  }
+  if (updateMode.value === 'ios-store') {
+    return t('profile.about.update.openStore')
+  }
+  return t('profile.about.update.openUpdate')
+})
+
+const updateModeHint = computed(() => {
+  if (!updateAvailable.value) return ''
+  if (
+    updateMode.value === 'android-in-app'
+    && installPermissionRequired.value
+    && !installPermissionGranted.value
+  ) {
+    return t('profile.about.update.installPermissionRequired')
+  }
+  if (updateMode.value === 'android-in-app') {
+    return t('profile.about.update.androidInAppHint')
+  }
+  if (updateMode.value === 'ios-store') {
+    return t('profile.about.update.iosStoreHint')
+  }
+  return t('profile.about.update.externalHint')
+})
+
+const updateProgressText = computed(() => {
+  if (totalBytes.value > 0) {
+    return t('profile.about.update.downloadProgressBytes', {
+      percent: downloadProgress.value,
+      done: formatBytes(downloadedBytes.value),
+      total: formatBytes(totalBytes.value),
+    })
+  }
+  return t('profile.about.update.downloadProgress', { percent: downloadProgress.value })
+})
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  const digits = value >= 10 || unitIndex === 0 ? 0 : 1
+  return `${value.toFixed(digits)} ${units[unitIndex]}`
+}
+
 async function handleCheckUpdate() {
   const update = await checkForUpdate()
   if (lastError.value) {
@@ -46,12 +108,29 @@ async function handleCheckUpdate() {
   toast.info(t('profile.about.update.noUpdate'))
 }
 
-function handleOpenUpdate() {
-  if (openUpdate()) {
-    toast.info(t('profile.about.update.redirecting'))
+async function handleInstallUpdate() {
+  const result = await installUpdate()
+  if (result === 'installer-opened') {
+    toast.success(t('profile.about.update.installerOpening'))
     return
   }
-  toast.error(t('profile.about.update.checkManually'))
+  if (result === 'permission-required') {
+    toast.warning(t('profile.about.update.installPermissionRequired'))
+    return
+  }
+  if (result === 'opened-external') {
+    toast.info(updateMode.value === 'ios-store'
+      ? t('profile.about.update.openingStore')
+      : t('profile.about.update.redirecting'))
+    return
+  }
+  if (result === 'missing-update') {
+    toast.error(t('profile.about.update.checkManually'))
+    return
+  }
+  if (result === 'failed') {
+    toast.error(lastError.value || t('profile.about.update.checkFailed'))
+  }
 }
 
 async function handleClearCache() {
@@ -105,17 +184,26 @@ onMounted(async () => {
         </p>
         <p v-else-if="updateAvailable" class="update-hint">{{ $t('profile.about.update.noNotes') }}</p>
         <p v-else class="update-hint">{{ $t('profile.about.update.noUpdate') }}</p>
+        <p v-if="updateModeHint" class="update-hint">{{ updateModeHint }}</p>
+
+        <div v-if="updating" class="update-progress">
+          <div class="update-progress-track">
+            <span class="update-progress-fill" :style="{ width: `${downloadProgress}%` }" />
+          </div>
+          <p>{{ updateProgressText }}</p>
+        </div>
 
         <div class="update-actions">
-          <button class="action-btn secondary" :disabled="checking" @click="handleCheckUpdate">
+          <button class="action-btn secondary" :disabled="checking || updating" @click="handleCheckUpdate">
             {{ checking ? $t('profile.about.update.checking') : $t('profile.about.update.checkUpdate') }}
           </button>
           <button
             v-if="updateAvailable && updateInfo"
             class="action-btn primary"
-            @click="handleOpenUpdate"
+            :disabled="updating"
+            @click="handleInstallUpdate"
           >
-            {{ $t('profile.about.update.openUpdate') }}
+            {{ updateActionLabel }}
           </button>
         </div>
       </div>
@@ -207,11 +295,37 @@ onMounted(async () => {
   margin-top: 12px;
   color: var(--color-text-muted);
 }
+.update-progress {
+  margin-top: 12px;
+  text-align: left;
+}
+.update-progress-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+}
+.update-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: inherit;
+  background: var(--color-primary);
+  transition: width 160ms ease;
+}
+.update-progress p {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
 .update-actions {
   margin-top: 14px;
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 .action-btn {
   border: none;

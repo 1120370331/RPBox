@@ -102,24 +102,29 @@ onBeforeUnmount(() => {
 }
 
 .mobile-rich-editor :deep(.toolbar) {
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  align-items: center;
+  overflow: visible;
   gap: 6px;
-  padding: 8px;
+  padding: 10px;
   border-bottom-width: 1px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.mobile-rich-editor :deep(.toolbar::-webkit-scrollbar) {
-  display: none;
 }
 
 .mobile-rich-editor :deep(.toolbar button),
-.mobile-rich-editor :deep(.toolbar .toolbar-slot) {
+.mobile-rich-editor :deep(.toolbar .toolbar-slot:not(.toolbar-slot--featured)) {
   width: 34px;
   height: 34px;
   flex: 0 0 auto;
+}
+
+.mobile-rich-editor :deep(.toolbar .toolbar-slot--featured) {
+  width: auto;
+  min-width: 108px;
+  height: 34px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .mobile-rich-editor :deep(.toolbar button i),
@@ -128,7 +133,8 @@ onBeforeUnmount(() => {
 }
 
 .mobile-rich-editor :deep(.divider) {
-  margin: 5px 2px;
+  height: 20px;
+  margin: 7px 2px;
   flex: 0 0 auto;
 }
 
