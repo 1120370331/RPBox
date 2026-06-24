@@ -849,13 +849,11 @@ func (s *Server) updatePost(c *gin.Context) {
 
 	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
 	if post.Status == "published" && post.ReviewStatus == "approved" && !isModerator {
-		// 创建或更新编辑请求
-		var editReq model.PostEditRequest
-		database.DB.Where("post_id = ?", post.ID).First(&editReq)
-
-		editReq.PostID = post.ID
-		editReq.AuthorID = userID
-		editReq.Status = "pending"
+		editReq := model.PostEditRequest{
+			PostID:   post.ID,
+			AuthorID: userID,
+			Status:   "pending",
+		}
 		if req.Title != "" {
 			editReq.Title = req.Title
 		} else {
@@ -919,18 +917,27 @@ func (s *Server) updatePost(c *gin.Context) {
 			editReq.EventColor = ""
 		}
 
-		if req.IsPublic != nil {
-			newPublic := true
-			if post.GuildID != nil {
-				newPublic = *req.IsPublic
+		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostEditRequest{}).Error; err != nil {
+				return err
 			}
-			if post.IsPublic != newPublic {
-				database.DB.Model(&post).Update("is_public", newPublic)
-				post.IsPublic = newPublic
+			if req.IsPublic != nil {
+				newPublic := true
+				if post.GuildID != nil {
+					newPublic = *req.IsPublic
+				}
+				if post.IsPublic != newPublic {
+					if err := tx.Model(&post).Update("is_public", newPublic).Error; err != nil {
+						return err
+					}
+					post.IsPublic = newPublic
+				}
 			}
+			return tx.Create(&editReq).Error
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "提交编辑审核失败"})
+			return
 		}
-
-		database.DB.Save(&editReq)
 		s.bumpPostListCache(c.Request.Context())
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
