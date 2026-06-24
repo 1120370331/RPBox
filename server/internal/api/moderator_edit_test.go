@@ -201,6 +201,137 @@ func TestPostEditReviewUsesOnlyLatestPendingEdit(t *testing.T) {
 	}
 }
 
+func TestPostEditReviewCleansOrphanEditRequest(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.PostEditRequest{})
+	author := model.User{Username: "author", Email: "author-orphan@example.com", PassHash: "hash", Role: "user"}
+	moderator := model.User{Username: "moderator", Email: "mod-orphan@example.com", PassHash: "hash", Role: "moderator"}
+	if err := db.Create(&[]*model.User{&author, &moderator}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	post := model.Post{
+		AuthorID:     author.ID,
+		Title:        "Deleted original",
+		Content:      "Original content",
+		ContentType:  "html",
+		Category:     "other",
+		Status:       "published",
+		ReviewStatus: "approved",
+		IsPublic:     true,
+	}
+	if err := db.Create(&post).Error; err != nil {
+		t.Fatalf("create post: %v", err)
+	}
+
+	edit := model.PostEditRequest{
+		PostID:      post.ID,
+		AuthorID:    author.ID,
+		Title:       "Pending edit for deleted post",
+		Content:     "Pending content",
+		ContentType: "html",
+		Category:    "other",
+		Status:      "pending",
+	}
+	if err := db.Create(&edit).Error; err != nil {
+		t.Fatalf("create edit request: %v", err)
+	}
+	if err := db.Delete(&post).Error; err != nil {
+		t.Fatalf("delete original post: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	token := newTestToken(t, moderator)
+	listResp := performRequest(server.router, http.MethodGet, "/api/v1/moderator/review/post-edits", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("expected list 200, got %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var listPayload struct {
+		Edits []struct {
+			ID uint `json:"id"`
+		} `json:"edits"`
+		Total int64 `json:"total"`
+	}
+	if err := json.Unmarshal(listResp.Body.Bytes(), &listPayload); err != nil {
+		t.Fatalf("decode pending edits: %v", err)
+	}
+	if listPayload.Total != 0 || len(listPayload.Edits) != 0 {
+		t.Fatalf("expected orphan edit to be hidden, got total=%d len=%d", listPayload.Total, len(listPayload.Edits))
+	}
+
+	approveResp := performRequest(
+		server.router,
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/moderator/review/post-edits/%d", edit.ID),
+		map[string]string{"action": "approve"},
+		token,
+	)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("expected orphan cleanup 200, got %d body=%s", approveResp.Code, approveResp.Body.String())
+	}
+
+	var remaining int64
+	if err := db.Model(&model.PostEditRequest{}).Where("post_id = ?", post.ID).Count(&remaining).Error; err != nil {
+		t.Fatalf("count remaining edit requests: %v", err)
+	}
+	if remaining != 0 {
+		t.Fatalf("expected orphan edit requests to be cleared, got %d", remaining)
+	}
+}
+
+func TestDeletePostClearsPostEditRequests(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.PostEditRequest{})
+	author := model.User{Username: "author", Email: "author-delete@example.com", PassHash: "hash", Role: "user"}
+	if err := db.Create(&author).Error; err != nil {
+		t.Fatalf("create author: %v", err)
+	}
+
+	post := model.Post{
+		AuthorID:     author.ID,
+		Title:        "Post to delete",
+		Content:      "Original content",
+		ContentType:  "html",
+		Category:     "other",
+		Status:       "published",
+		ReviewStatus: "approved",
+		IsPublic:     true,
+	}
+	if err := db.Create(&post).Error; err != nil {
+		t.Fatalf("create post: %v", err)
+	}
+	edit := model.PostEditRequest{
+		PostID:      post.ID,
+		AuthorID:    author.ID,
+		Title:       "Pending edit",
+		Content:     "Pending content",
+		ContentType: "html",
+		Category:    "other",
+		Status:      "pending",
+	}
+	if err := db.Create(&edit).Error; err != nil {
+		t.Fatalf("create edit request: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	resp := performRequest(
+		server.router,
+		http.MethodDelete,
+		fmt.Sprintf("/api/v1/posts/%d", post.ID),
+		nil,
+		newTestToken(t, author),
+	)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected delete 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var remaining int64
+	if err := db.Model(&model.PostEditRequest{}).Where("post_id = ?", post.ID).Count(&remaining).Error; err != nil {
+		t.Fatalf("count remaining edit requests: %v", err)
+	}
+	if remaining != 0 {
+		t.Fatalf("expected edit request to be deleted with post, got %d", remaining)
+	}
+}
+
 func TestReviewItemEditAppliesPreviewImage(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.User{}, &model.Item{}, &model.ItemPendingEdit{})
 	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash", Role: "user"}

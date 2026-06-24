@@ -55,22 +55,25 @@ var errStalePostEditReview = errors.New("stale post edit review")
 
 func latestPendingPostEditIDsQuery(db *gorm.DB) *gorm.DB {
 	return db.Model(&model.PostEditRequest{}).
-		Select("MAX(id)").
-		Where("status = ?", "pending").
-		Group("post_id")
+		Joins("JOIN posts ON posts.id = post_edit_requests.post_id").
+		Select("MAX(post_edit_requests.id)").
+		Where("post_edit_requests.status = ?", "pending").
+		Group("post_edit_requests.post_id")
 }
 
 func latestPendingPostEditQuery(db *gorm.DB) *gorm.DB {
 	return db.Model(&model.PostEditRequest{}).
-		Where("status = ?", "pending").
-		Where("id IN (?)", latestPendingPostEditIDsQuery(db))
+		Joins("JOIN posts ON posts.id = post_edit_requests.post_id").
+		Where("post_edit_requests.status = ?", "pending").
+		Where("post_edit_requests.id IN (?)", latestPendingPostEditIDsQuery(db))
 }
 
 func latestPendingPostEditID(db *gorm.DB, postID uint) (uint, error) {
 	var latestID uint
 	err := db.Model(&model.PostEditRequest{}).
-		Select("COALESCE(MAX(id), 0)").
-		Where("post_id = ? AND status = ?", postID, "pending").
+		Joins("JOIN posts ON posts.id = post_edit_requests.post_id").
+		Select("COALESCE(MAX(post_edit_requests.id), 0)").
+		Where("post_edit_requests.post_id = ? AND post_edit_requests.status = ?", postID, "pending").
 		Scan(&latestID).Error
 	return latestID, err
 }
@@ -234,7 +237,7 @@ func (s *Server) listPendingEdits(c *gin.Context) {
 
 	offset := (page - 1) * pageSize
 	var edits []model.PostEditRequest
-	query.Order("created_at ASC").Offset(offset).Limit(pageSize).Find(&edits)
+	query.Order("post_edit_requests.created_at ASC").Offset(offset).Limit(pageSize).Find(&edits)
 
 	// 获取原帖子和作者信息
 	type EditWithInfo struct {
@@ -291,8 +294,18 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 
 	now := time.Now()
 	var reviewedPost *model.Post
+	var orphanEditCleaned bool
 
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		var post model.Post
+		if err := tx.First(&post, edit.PostID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				orphanEditCleaned = true
+				return tx.Where("post_id = ?", edit.PostID).Delete(&model.PostEditRequest{}).Error
+			}
+			return err
+		}
+
 		latestID, err := latestPendingPostEditID(tx, edit.PostID)
 		if err != nil {
 			return err
@@ -306,11 +319,6 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 
 		if req.Action == "approve" {
 			// 审核通过：将最终一次编辑内容应用到原帖子。
-			var post model.Post
-			if err := tx.First(&post, edit.PostID).Error; err != nil {
-				return err
-			}
-
 			post.Title = edit.Title
 			post.Content = edit.Content
 			post.ContentType = edit.ContentType
@@ -347,11 +355,11 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "该帖子已有更新的编辑审核，请刷新后处理最终版本"})
 			return
 		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "原帖子不存在"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "审核失败"})
+		return
+	}
+	if orphanEditCleaned {
+		c.JSON(http.StatusOK, gin.H{"message": "原帖子不存在，已清理遗留编辑审核"})
 		return
 	}
 

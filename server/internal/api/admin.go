@@ -683,6 +683,7 @@ func (s *Server) deleteUserPosts(c *gin.Context) {
 	database.DB.Where("post_id IN ?", postIDs).Delete(&model.Comment{})
 	database.DB.Where("post_id IN ?", postIDs).Delete(&model.PostLike{})
 	database.DB.Where("post_id IN ?", postIDs).Delete(&model.PostFavorite{})
+	database.DB.Where("post_id IN ?", postIDs).Delete(&model.PostEditRequest{})
 
 	// 删除帖子
 	result := database.DB.Where("author_id = ?", id).Delete(&model.Post{})
