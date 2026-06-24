@@ -1065,6 +1065,7 @@ func (s *Server) deletePost(c *gin.Context) {
 	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
+	database.DB.Where("post_id = ?", id).Delete(&model.PostEditRequest{})
 
 	s.cleanupPostImages(c, post)
 	database.DB.Delete(&post)
