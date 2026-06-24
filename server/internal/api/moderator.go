@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -48,6 +49,30 @@ func logAdminAction(c *gin.Context, actionType, targetType string, targetID uint
 type ReviewRequest struct {
 	Action  string `json:"action" binding:"required"` // approve|reject
 	Comment string `json:"comment"`                   // 审核意见
+}
+
+var errStalePostEditReview = errors.New("stale post edit review")
+
+func latestPendingPostEditIDsQuery(db *gorm.DB) *gorm.DB {
+	return db.Model(&model.PostEditRequest{}).
+		Select("MAX(id)").
+		Where("status = ?", "pending").
+		Group("post_id")
+}
+
+func latestPendingPostEditQuery(db *gorm.DB) *gorm.DB {
+	return db.Model(&model.PostEditRequest{}).
+		Where("status = ?", "pending").
+		Where("id IN (?)", latestPendingPostEditIDsQuery(db))
+}
+
+func latestPendingPostEditID(db *gorm.DB, postID uint) (uint, error) {
+	var latestID uint
+	err := db.Model(&model.PostEditRequest{}).
+		Select("COALESCE(MAX(id), 0)").
+		Where("post_id = ? AND status = ?", postID, "pending").
+		Scan(&latestID).Error
+	return latestID, err
 }
 
 func buildModerationNotification(subject, action, comment string) string {
@@ -202,8 +227,7 @@ func (s *Server) listPendingEdits(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	query := database.DB.Model(&model.PostEditRequest{}).
-		Where("status = ?", "pending")
+	query := latestPendingPostEditQuery(database.DB)
 
 	var total int64
 	query.Count(&total)
@@ -256,62 +280,91 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
 		return
 	}
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核操作"})
+		return
+	}
+	if edit.Status != "pending" {
+		c.JSON(http.StatusConflict, gin.H{"error": "该编辑审核已处理，请刷新列表"})
+		return
+	}
 
 	now := time.Now()
-	edit.ReviewerID = &userID
-	edit.ReviewedAt = &now
+	var reviewedPost *model.Post
 
-	if req.Action == "approve" {
-		// 审核通过：将编辑内容应用到原帖子
-		var post model.Post
-		if err := database.DB.First(&post, edit.PostID).Error; err != nil {
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		latestID, err := latestPendingPostEditID(tx, edit.PostID)
+		if err != nil {
+			return err
+		}
+		if latestID != edit.ID {
+			return errStalePostEditReview
+		}
+
+		edit.ReviewerID = &userID
+		edit.ReviewedAt = &now
+
+		if req.Action == "approve" {
+			// 审核通过：将最终一次编辑内容应用到原帖子。
+			var post model.Post
+			if err := tx.First(&post, edit.PostID).Error; err != nil {
+				return err
+			}
+
+			post.Title = edit.Title
+			post.Content = edit.Content
+			post.ContentType = edit.ContentType
+			if post.CoverImage != edit.CoverImage {
+				post.CoverImage = edit.CoverImage
+				post.CoverImageUpdatedAt = &now
+			}
+			post.Category = edit.Category
+			post.Region = edit.Region
+			post.Address = edit.Address
+			if edit.Category == "event" {
+				post.EventType = edit.EventType
+				post.EventStartTime = edit.EventStartTime
+				post.EventEndTime = edit.EventEndTime
+				post.EventColor = edit.EventColor
+			} else {
+				post.EventType = ""
+				post.EventStartTime = nil
+				post.EventEndTime = nil
+				post.EventColor = ""
+			}
+			if err := tx.Save(&post).Error; err != nil {
+				return err
+			}
+			reviewedPost = &post
+		} else {
+			edit.Status = "rejected"
+		}
+
+		return tx.Where("post_id = ?", edit.PostID).Delete(&model.PostEditRequest{}).Error
+	})
+	if err != nil {
+		if errors.Is(err, errStalePostEditReview) {
+			c.JSON(http.StatusConflict, gin.H{"error": "该帖子已有更新的编辑审核，请刷新后处理最终版本"})
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "原帖子不存在"})
 			return
 		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "审核失败"})
+		return
+	}
 
-		post.Title = edit.Title
-		post.Content = edit.Content
-		post.ContentType = edit.ContentType
-		if post.CoverImage != edit.CoverImage {
-			post.CoverImage = edit.CoverImage
-			post.CoverImageUpdatedAt = &now
-		}
-		post.Category = edit.Category
-		post.Region = edit.Region
-		post.Address = edit.Address
-		if edit.Category == "event" {
-			post.EventType = edit.EventType
-			post.EventStartTime = edit.EventStartTime
-			post.EventEndTime = edit.EventEndTime
-			post.EventColor = edit.EventColor
-		} else {
-			post.EventType = ""
-			post.EventStartTime = nil
-			post.EventEndTime = nil
-			post.EventColor = ""
-		}
-		if err := database.DB.Save(&post).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "应用编辑失败"})
-			return
-		}
-
-		// 删除待审核记录
-		if err := database.DB.Delete(&edit).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除编辑记录失败"})
-			return
-		}
+	if req.Action == "approve" {
 		s.bumpPostListCache(c.Request.Context())
 
-		ensurePostCoverUpdatedAt(&post)
-		post.CoverImage = postCoverURL(post)
-		c.JSON(http.StatusOK, gin.H{"message": "编辑已通过并应用", "post": post})
-	} else if req.Action == "reject" {
-		edit.Status = "rejected"
-		database.DB.Save(&edit)
-		c.JSON(http.StatusOK, gin.H{"message": "编辑已拒绝", "edit": edit})
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核操作"})
+		ensurePostCoverUpdatedAt(reviewedPost)
+		reviewedPost.CoverImage = postCoverURL(*reviewedPost)
+		c.JSON(http.StatusOK, gin.H{"message": "编辑已通过并应用", "post": reviewedPost})
+		return
 	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "编辑已拒绝", "edit": edit})
 }
 
 // ========== 道具审核 ==========
@@ -1210,7 +1263,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Item{}).Where("review_status = ?", "pending").Count(&pendingItems)
 	database.DB.Model(&model.Guild{}).Where("status = ?", "pending").Count(&pendingGuilds)
 	database.DB.Model(&model.ContentReport{}).Where("status = ?", "pending").Count(&pendingReports)
-	database.DB.Model(&model.PostEditRequest{}).Where("status = ?", "pending").Count(&pendingPostEdits)
+	latestPendingPostEditQuery(database.DB).Count(&pendingPostEdits)
 	database.DB.Model(&model.ItemPendingEdit{}).Where("review_status = ?", "pending").Count(&pendingItemEdits)
 	database.DB.Model(&model.Comment{}).
 		Where("COALESCE(BTRIM(image_url), '') <> ''").
