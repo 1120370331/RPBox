@@ -23,6 +23,7 @@ const (
 	defaultIntervalMinutes = 60
 	defaultRetentionDays   = 30
 	defaultTimeoutMinutes  = 60
+	runOnStartDelay        = 2 * time.Minute
 )
 
 type Service struct {
@@ -57,7 +58,15 @@ func Start(cfg *config.Config) *Service {
 	)
 
 	if cfg.Backup.RunOnStart {
-		go s.RunOnce()
+		go func() {
+			timer := time.NewTimer(runOnStartDelay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				s.RunOnce()
+			case <-s.stopCh:
+			}
+		}()
 	}
 
 	go s.loop()

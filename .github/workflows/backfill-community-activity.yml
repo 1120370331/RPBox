@@ -30,6 +30,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 2233
+          envs: BACKFILL_BEFORE,BACKFILL_USERNAME,BACKFILL_APPLY
           script: |
             set -e
             cd ~/RPBox
@@ -37,20 +38,20 @@ jobs:
             git reset --hard origin/main
             cd server
 
-            BEFORE='${{ github.event.inputs.before }}'
-            USERNAME='${{ github.event.inputs.username }}'
-            APPLY='${{ github.event.inputs.apply }}'
-
             set --
-            if [ -n "$BEFORE" ]; then
-              set -- "$@" -before "$BEFORE"
+            if [ -n "$BACKFILL_BEFORE" ]; then
+              set -- "$@" -before "$BACKFILL_BEFORE"
             fi
-            if [ -n "$USERNAME" ]; then
-              set -- "$@" -username "$USERNAME"
+            if [ -n "$BACKFILL_USERNAME" ]; then
+              set -- "$@" -username "$BACKFILL_USERNAME"
             fi
-            if [ "$APPLY" = "true" ]; then
+            if [ "$BACKFILL_APPLY" = "true" ]; then
               set -- "$@" -apply
             fi
 
             echo "Running: go run ./cmd/backfillactivity $*"
             go run ./cmd/backfillactivity "$@"
+        env:
+          BACKFILL_BEFORE: ${{ github.event.inputs.before }}
+          BACKFILL_USERNAME: ${{ github.event.inputs.username }}
+          BACKFILL_APPLY: ${{ github.event.inputs.apply }}
