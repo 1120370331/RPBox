@@ -89,7 +89,7 @@ jobs:
             fi
 
             echo "Stopping any stale startup backup before restart..."
-            pkill -TERM -f 'pg_dump .*storage/backups' || true
+            pgrep -af '^pg_dump ' | awk '/storage\/backups/ { print $1 }' | xargs -r kill -TERM
 
             echo "Build successful, restarting service..."
             if ! sudo supervisorctl status >/dev/null 2>&1; then
