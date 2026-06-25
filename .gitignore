@@ -231,6 +231,7 @@ releases/
 # Go
 server/bin/
 server/vendor/
+server/rpbox-server
 *.exe
 *.exe~
 *.dll

@@ -82,11 +82,37 @@ jobs:
             cd server
             echo "Building server..."
             go build -o rpbox-server cmd/server/main.go
-            if [ ! -f rpbox-server ]; then
-              echo "Build failed: rpbox-server not found"
+            chmod 755 rpbox-server
+            if [ ! -x rpbox-server ]; then
+              echo "Build failed: rpbox-server is missing or not executable"
               exit 1
             fi
+
+            echo "Stopping any stale startup backup before restart..."
+            pkill -TERM -f 'pg_dump .*storage/backups' || true
+
             echo "Build successful, restarting service..."
-            sudo supervisorctl restart rpbox
-            sleep 2
+            if ! sudo supervisorctl status >/dev/null 2>&1; then
+              echo "supervisorctl is unavailable, clearing stale supervisor sockets and starting supervisord..."
+              sudo rm -f /run/supervisor.sock /var/run/supervisor.sock /run/supervisord.pid /var/run/supervisord.pid
+              sudo supervisord -c /etc/supervisor/supervisord.conf
+              sleep 3
+            fi
+            sudo supervisorctl restart rpbox || sudo supervisorctl start rpbox
+
+            echo "Waiting for local health check..."
+            server_port="$(awk '/^server:/{in_server=1; next} in_server && /^[^[:space:]]/{exit} in_server && /^[[:space:]]+port:/{print $2; exit}' config.yaml | tr -d '"')"
+            server_port="${server_port:-8080}"
+            for i in $(seq 1 30); do
+              if curl -fsS "http://127.0.0.1:${server_port}/api/v1/updater/windows/x86_64/0.0.0" >/dev/null; then
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "Health check failed"
+                sudo supervisorctl status || true
+                sudo supervisorctl tail -200 rpbox stderr || true
+                exit 1
+              fi
+              sleep 2
+            done
             sudo supervisorctl status rpbox
