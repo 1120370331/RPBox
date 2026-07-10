@@ -12,6 +12,7 @@ import (
 	"github.com/rpbox/server/internal/service"
 	ws "github.com/rpbox/server/internal/websocket"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 )
 
 // listUsers 获取用户列表（支持分页和筛选）
@@ -625,22 +626,29 @@ func (s *Server) disableUserPosts(c *gin.Context) {
 		return
 	}
 
-	// 将用户所有帖子设为removed状态
-	result := database.DB.Model(&model.Post{}).
-		Where("author_id = ?", id).
-		Updates(map[string]interface{}{
-			"status":        "removed",
-			"review_status": "rejected",
-		})
+	var affectedCount int64
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		result := tx.Model(&model.Post{}).
+			Where("author_id = ?", id).
+			Updates(map[string]interface{}{
+				"status":        "removed",
+				"review_status": "rejected",
+			})
+		affectedCount = result.RowsAffected
+		return result.Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "禁用用户帖子失败"})
+		return
+	}
 
 	// 记录日志
 	logAdminAction(c, "disable_posts", "user", uint(id), user.Username, map[string]interface{}{
-		"affected_count": result.RowsAffected,
+		"affected_count": affectedCount,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "已禁用该用户所有帖子",
-		"affected_count": result.RowsAffected,
+		"affected_count": affectedCount,
 	})
 }
 
@@ -674,29 +682,41 @@ func (s *Server) deleteUserPosts(c *gin.Context) {
 
 	var posts []model.Post
 	database.DB.Select("id, content, cover_image").Where("author_id = ?", id).Find(&posts)
+	var affectedCount int64
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Where("post_id IN ?", postIDs).Delete(&model.PostTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id IN ?", postIDs).Delete(&model.Comment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id IN ?", postIDs).Delete(&model.PostLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id IN ?", postIDs).Delete(&model.PostFavorite{}).Error; err != nil {
+			return err
+		}
+		result := tx.Where("author_id = ?", id).Delete(&model.Post{})
+		if result.Error != nil {
+			return result.Error
+		}
+		affectedCount = result.RowsAffected
+		return tx.Model(&user).Update("post_count", 0).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除用户帖子失败"})
+		return
+	}
 	for _, post := range posts {
 		s.cleanupPostImages(c, post)
 	}
 
-	// 删除关联数据
-	database.DB.Where("post_id IN ?", postIDs).Delete(&model.PostTag{})
-	database.DB.Where("post_id IN ?", postIDs).Delete(&model.Comment{})
-	database.DB.Where("post_id IN ?", postIDs).Delete(&model.PostLike{})
-	database.DB.Where("post_id IN ?", postIDs).Delete(&model.PostFavorite{})
-
-	// 删除帖子
-	result := database.DB.Where("author_id = ?", id).Delete(&model.Post{})
-
-	// 更新用户帖子计数
-	database.DB.Model(&user).Update("post_count", 0)
-
 	// 记录日志
 	logAdminAction(c, "delete_posts", "user", uint(id), user.Username, map[string]interface{}{
-		"affected_count": result.RowsAffected,
+		"affected_count": affectedCount,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "已删除该用户所有帖子",
-		"affected_count": result.RowsAffected,
+		"affected_count": affectedCount,
 	})
 }

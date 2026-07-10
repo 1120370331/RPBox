@@ -63,7 +63,7 @@ func (s *Server) deleteAccount(c *gin.Context) {
 	}
 
 	var cleanupPlan accountDeletionCleanupPlan
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 		return s.deleteAccountInTx(tx, user, &cleanupPlan)
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除账号失败"})
@@ -72,7 +72,6 @@ func (s *Server) deleteAccount(c *gin.Context) {
 
 	s.cleanupDeletedAccountUploads(c, cleanupPlan)
 	s.invalidateUserProfileCache(c.Request.Context(), userID)
-	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "账号已删除"})
 }

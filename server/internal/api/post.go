@@ -3,14 +3,12 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
@@ -81,6 +79,8 @@ type postListResponse struct {
 	Total int64          `json:"total"`
 }
 
+const postListSelectColumns = "posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.region, posts.address, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at"
+
 type postListItem struct {
 	model.Post
 	AuthorName            string `json:"author_name"`
@@ -93,6 +93,25 @@ type postListItem struct {
 	AuthorForumLevelColor string `json:"author_forum_level_color"`
 	AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
 	CoverImageURL         string `json:"cover_image_url"`
+}
+
+func (params postListParams) toServiceQuery() service.PostListQuery {
+	return service.PostListQuery{
+		ViewerID:   params.UserID,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		SortBy:     params.SortBy,
+		Order:      params.Order,
+		Search:     params.Search,
+		AuthorName: params.AuthorName,
+		Region:     params.Region,
+		Address:    params.Address,
+		TagID:      params.TagID,
+		AuthorID:   params.AuthorID,
+		Status:     params.Status,
+		Category:   params.Category,
+		IsPinned:   params.IsPinned,
+	}
 }
 
 type apiError struct {
@@ -185,35 +204,26 @@ func (s *Server) listPosts(c *gin.Context) {
 	}
 
 	isSelfView := authorID != "" && authorID == strconv.Itoa(int(userID))
-	if s.cache != nil && params.GuildID == "" && !isSelfView {
-		startTime := time.Now()
-		pinnedValue := "any"
-		if params.IsPinned != nil {
-			pinnedValue = strconv.FormatBool(*params.IsPinned)
-		}
-		filterKey := fmt.Sprintf("search_scope=global_v2|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
-			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.Region, params.Address, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
-		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
-		if err != nil {
-			log.Printf("[Cache] Version error: %v", err)
-		} else {
-			cacheKey := cache.VersionedKey(postListCacheName, version, cache.HashKey(filterKey))
-			var cached postListResponse
-			cacheHit := true
-			if err := s.cache.Fetch(c.Request.Context(), cacheKey, cache.TTL["post:list"], &cached, func(ctx context.Context) (interface{}, error) {
-				cacheHit = false
-				return s.loadPostList(ctx, params)
-			}); err != nil {
-				log.Printf("[Cache] Fetch error for key %s: %v", cacheKey, err)
-			} else {
-				log.Printf("[Cache] %s posts=%d time=%v", map[bool]string{true: "HIT", false: "MISS"}[cacheHit], len(cached.Posts), time.Since(startTime))
-				c.JSON(http.StatusOK, cached)
-				return
+	var response postListResponse
+	var err error
+	if params.GuildID == "" && !isSelfView && s.postLists != nil {
+		query := params.toServiceQuery()
+		var candidates service.PostListCandidatePage
+		candidates, err = s.postLists.Candidates(c.Request.Context(), query)
+		if err == nil {
+			var posts []model.Post
+			posts, err = s.postLists.HydrateCandidates(c.Request.Context(), query, candidates.IDs)
+			if err == nil {
+				if len(posts) != len(candidates.IDs) {
+					response, err = s.loadPostListDirect(c.Request.Context(), params)
+				} else {
+					response, err = s.buildPostListResponse(c.Request.Context(), posts, candidates.Total)
+				}
 			}
 		}
+	} else {
+		response, err = s.loadPostListDirect(c.Request.Context(), params)
 	}
-
-	response, err := s.loadPostList(c.Request.Context(), params)
 	if err != nil {
 		if apiErr, ok := err.(*apiError); ok {
 			c.JSON(apiErr.status, gin.H{"error": apiErr.message})
@@ -226,7 +236,7 @@ func (s *Server) listPosts(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (s *Server) loadPostList(ctx context.Context, params postListParams) (postListResponse, error) {
+func (s *Server) loadPostListDirect(ctx context.Context, params postListParams) (postListResponse, error) {
 	db := database.DB.WithContext(ctx)
 	query := db.Model(&model.Post{})
 	isSelfView := params.AuthorID != "" && params.AuthorID == strconv.Itoa(int(params.UserID))
@@ -358,13 +368,23 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	var posts []model.Post
 	// 列表查询排除大字段（content, cover_image）以提高性能
 	// cover_image 通过独立的图片 API 访问
-	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.region, posts.address, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
+	if err := query.Select(postListSelectColumns).Find(&posts).Error; err != nil {
 		return postListResponse{}, err
 	}
 
+	return s.buildPostListResponse(ctx, posts, total)
+}
+
+func (s *Server) buildPostListResponse(
+	ctx context.Context,
+	posts []model.Post,
+	total int64,
+) (postListResponse, error) {
 	if len(posts) == 0 {
 		return postListResponse{Posts: []postListItem{}, Total: total}, nil
 	}
+
+	db := database.DB.WithContext(ctx)
 
 	// 获取有封面图的帖子 ID 列表
 	var postIDs []uint
@@ -586,7 +606,7 @@ func (s *Server) createPost(c *gin.Context) {
 		post.EventEndTime = parsed
 	}
 
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 		if err := tx.Create(&post).Error; err != nil {
 			return err
 		}
@@ -625,8 +645,6 @@ func (s *Server) createPost(c *gin.Context) {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
-	s.bumpPostListCache(c.Request.Context())
-
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusCreated, post)
@@ -917,7 +935,7 @@ func (s *Server) updatePost(c *gin.Context) {
 			editReq.EventColor = ""
 		}
 
-		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 			if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostEditRequest{}).Error; err != nil {
 				return err
 			}
@@ -938,7 +956,6 @@ func (s *Server) updatePost(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "提交编辑审核失败"})
 			return
 		}
-		s.bumpPostListCache(c.Request.Context())
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
 			"message": "编辑请求已提交，等待审核",
@@ -1017,7 +1034,7 @@ func (s *Server) updatePost(c *gin.Context) {
 		post.EventColor = ""
 	}
 
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 		if err := tx.Save(&post).Error; err != nil {
 			return err
 		}
@@ -1036,7 +1053,6 @@ func (s *Server) updatePost(c *gin.Context) {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
-	s.bumpPostListCache(c.Request.Context())
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": post})
@@ -1060,15 +1076,25 @@ func (s *Server) deletePost(c *gin.Context) {
 		return
 	}
 
-	// 删除关联数据
-	database.DB.Where("post_id = ?", id).Delete(&model.PostTag{})
-	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
-	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
-	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
-
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.Comment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostFavorite{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&post).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
 	s.cleanupPostImages(c, post)
-	database.DB.Delete(&post)
-	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
@@ -1265,13 +1291,17 @@ func (s *Server) addPostTag(c *gin.Context) {
 		AddedBy: userID,
 	}
 
-	if err := database.DB.Create(&postTag).Error; err != nil {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Create(&postTag).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.Tag{}).
+			Where("id = ?", tag.ID).
+			Update("usage_count", gorm.Expr("usage_count + 1")).Error
+	}); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "标签已存在"})
 		return
 	}
-
-	// 更新标签使用次数
-	database.DB.Model(&tag).Update("usage_count", tag.UsageCount+1)
 
 	c.JSON(http.StatusOK, gin.H{"message": "添加成功"})
 }
@@ -1294,14 +1324,27 @@ func (s *Server) removePostTag(c *gin.Context) {
 		return
 	}
 
-	result := database.DB.Where("post_id = ? AND tag_id = ?", id, tagID).Delete(&model.PostTag{})
-	if result.RowsAffected == 0 {
+	var rowsAffected int64
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		result := tx.Where("post_id = ? AND tag_id = ?", id, tagID).Delete(&model.PostTag{})
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		if rowsAffected == 0 {
+			return nil
+		}
+		return tx.Model(&model.Tag{}).
+			Where("id = ? AND usage_count > 0", tagID).
+			Update("usage_count", gorm.Expr("usage_count - 1")).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "移除失败"})
+		return
+	}
+	if rowsAffected == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "标签关联不存在"})
 		return
 	}
-
-	// 更新标签使用次数
-	database.DB.Model(&model.Tag{}).Where("id = ?", tagID).Update("usage_count", database.DB.Raw("usage_count - 1"))
 
 	c.JSON(http.StatusOK, gin.H{"message": "移除成功"})
 }

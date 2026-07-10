@@ -35,6 +35,11 @@ export default {
     history: 'History',
     myPosts: 'My Posts',
   },
+  share: {
+    copied: 'Post link copied',
+    shared: 'Share sheet opened',
+    failed: 'Failed to share. Please try again.',
+  },
   comment: {
     placeholder: 'Write a comment...',
     submit: 'Submit',

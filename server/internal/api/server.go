@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/config"
+	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/middleware"
 	"github.com/rpbox/server/internal/service"
 	ws "github.com/rpbox/server/internal/websocket"
@@ -24,6 +25,8 @@ type Server struct {
 	emailClient          *email.SMTPClient
 	verificationService  *service.VerificationService
 	cache                cache.Cache
+	postLists            *service.PostListService
+	postMutations        *service.PostMutationService
 	ossBucket            *oss.Bucket
 	ossInitOnce          sync.Once
 	ossInitErr           error
@@ -86,6 +89,8 @@ func NewServer(cfg *config.Config) *Server {
 
 	// 初始化验证码服务
 	verificationService := service.NewVerificationService(redisClient)
+	postLists := service.NewPostListService(database.DB, cacheClient)
+	postMutations := service.NewPostMutationService(database.DB, postLists)
 
 	s := &Server{
 		cfg:                 cfg,
@@ -94,6 +99,8 @@ func NewServer(cfg *config.Config) *Server {
 		emailClient:         emailClient,
 		verificationService: verificationService,
 		cache:               cacheClient,
+		postLists:           postLists,
+		postMutations:       postMutations,
 	}
 
 	// 设置通知服务的 Hub 引用

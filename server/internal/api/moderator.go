@@ -195,7 +195,7 @@ func (s *Server) reviewPost(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 		if err := tx.Save(&post).Error; err != nil {
 			return err
 		}
@@ -292,7 +292,7 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 	now := time.Now()
 	var reviewedPost *model.Post
 
-	err := database.DB.Transaction(func(tx *gorm.DB) error {
+	mutate := func(tx *gorm.DB) error {
 		latestID, err := latestPendingPostEditID(tx, edit.PostID)
 		if err != nil {
 			return err
@@ -341,7 +341,13 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 		}
 
 		return tx.Where("post_id = ?", edit.PostID).Delete(&model.PostEditRequest{}).Error
-	})
+	}
+	var err error
+	if req.Action == "approve" {
+		err = s.mutatePostListsGlobal(c.Request.Context(), mutate)
+	} else {
+		err = database.DB.WithContext(c.Request.Context()).Transaction(mutate)
+	}
 	if err != nil {
 		if errors.Is(err, errStalePostEditReview) {
 			c.JSON(http.StatusConflict, gin.H{"error": "该帖子已有更新的编辑审核，请刷新后处理最终版本"})
@@ -356,8 +362,6 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 	}
 
 	if req.Action == "approve" {
-		s.bumpPostListCache(c.Request.Context())
-
 		ensurePostCoverUpdatedAt(reviewedPost)
 		reviewedPost.CoverImage = postCoverURL(*reviewedPost)
 		c.JSON(http.StatusOK, gin.H{"message": "编辑已通过并应用", "post": reviewedPost})
@@ -1043,14 +1047,25 @@ func (s *Server) deletePostByMod(c *gin.Context) {
 
 	postTitle := post.Title // 保存标题用于日志
 
-	// 删除关联数据
-	database.DB.Where("post_id = ?", id).Delete(&model.PostTag{})
-	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
-	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
-	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
-
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.Comment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostFavorite{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&post).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
 	s.cleanupPostImages(c, post)
-	database.DB.Delete(&post)
 
 	// 记录日志
 	logAdminAction(c, "delete_post", "post", uint(id), postTitle, nil)
@@ -1070,7 +1085,12 @@ func (s *Server) hidePostByMod(c *gin.Context) {
 
 	post.ReviewStatus = "pending"
 	post.Status = "pending"
-	database.DB.Save(&post)
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		return tx.Save(&post).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "屏蔽失败"})
+		return
+	}
 
 	// 记录日志
 	logAdminAction(c, "hide_post", "post", uint(id), post.Title, nil)
@@ -1089,7 +1109,12 @@ func (s *Server) pinPost(c *gin.Context) {
 	}
 
 	post.IsPinned = !post.IsPinned
-	database.DB.Save(&post)
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		return tx.Save(&post).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "置顶操作失败"})
+		return
+	}
 
 	// 记录日志
 	logAdminAction(c, "pin_post", "post", uint(id), post.Title, map[string]interface{}{
@@ -1114,7 +1139,12 @@ func (s *Server) featurePost(c *gin.Context) {
 	}
 
 	post.IsFeatured = !post.IsFeatured
-	database.DB.Save(&post)
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		return tx.Save(&post).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "精华操作失败"})
+		return
+	}
 
 	// 记录日志
 	logAdminAction(c, "feature_post", "post", uint(id), post.Title, map[string]interface{}{

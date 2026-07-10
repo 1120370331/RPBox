@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -125,7 +126,7 @@ func (s *Server) applySensitiveViolation(userID uint, contentType string, conten
 	decision := sensitiveDecision{}
 	var deletedPost *model.Post
 
-	err := database.DB.Transaction(func(tx *gorm.DB) error {
+	mutate := func(tx *gorm.DB) error {
 		var user model.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, userID).Error; err != nil {
 			return err
@@ -183,7 +184,13 @@ func (s *Server) applySensitiveViolation(userID uint, contentType string, conten
 			return err
 		}
 		return nil
-	})
+	}
+	var err error
+	if contentID != nil && contentType == "post" {
+		err = s.mutatePostListsGlobal(context.Background(), mutate)
+	} else {
+		err = database.DB.Transaction(mutate)
+	}
 
 	return decision, deletedPost, err
 }
