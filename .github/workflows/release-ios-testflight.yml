@@ -288,9 +288,9 @@ jobs:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
           set -euo pipefail
-          SCHEME="$(xcodebuild -list -json -workspace "${{ env.XCODE_WORKSPACE }}" | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
+          SCHEME="${RESOLVED_XCODE_SCHEME:-}"
           if [ -z "$SCHEME" ]; then
-            echo "No iOS scheme found in workspace after sync."
+            echo "No resolved iOS scheme is available."
             exit 1
           fi
           xcodebuild \

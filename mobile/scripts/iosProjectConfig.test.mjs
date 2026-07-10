@@ -133,6 +133,14 @@ function runPrepare(fixtureRoot) {
   })
 }
 
+function runPrepareResult(fixtureRoot) {
+  return spawnSync(process.execPath, [prepareScript, 'ios'], {
+    cwd: fixtureRoot,
+    env: process.env,
+    encoding: 'utf8',
+  })
+}
+
 function runVerify(fixtureRoot) {
   return spawnSync(process.execPath, [verifyScript], {
     cwd: fixtureRoot,
@@ -167,6 +175,32 @@ test('prepares the generated iOS project idempotently', (t) => {
   assert.equal(fs.readFileSync(fixture.entitlementsPath, 'utf8'), firstEntitlements)
   assert.equal(fs.readFileSync(fixture.privacyManifestPath, 'utf8'), firstPrivacyManifest)
   assert.equal(fs.readFileSync(fixture.pbxprojPath, 'utf8'), firstPbxproj)
+})
+
+test('preserves unrelated URL schemes while adding the RPBox scheme', (t) => {
+  const fixture = createFixture(t)
+  const plistWithExistingScheme = infoPlistFixture.replace(
+    '</dict>',
+    `\t<key>CFBundleURLTypes</key>
+\t<array>
+\t\t<dict>
+\t\t\t<key>CFBundleURLName</key>
+\t\t\t<string>oauth.example</string>
+\t\t\t<key>CFBundleURLSchemes</key>
+\t\t\t<array>
+\t\t\t\t<string>oauth-example</string>
+\t\t\t</array>
+\t\t</dict>
+\t</array>
+</dict>`,
+  )
+  fs.writeFileSync(fixture.infoPlistPath, plistWithExistingScheme, 'utf8')
+
+  runPrepare(fixture.fixtureRoot)
+
+  const plist = fs.readFileSync(fixture.infoPlistPath, 'utf8')
+  assert.match(plist, /<string>oauth-example<\/string>/)
+  assert.match(plist, /<string>app\.rpbox\.mobile<\/string>/)
 })
 
 test('verifies a complete generated iOS project', (t) => {
@@ -204,4 +238,138 @@ test('reports an incomplete privacy manifest', (t) => {
 
   assert.equal(result.status, 1)
   assert.match(result.stderr, /privacy manifest reason/)
+})
+
+test('reports a privacy manifest missing from the resources build phase', (t) => {
+  const fixture = createFixture(t)
+  runPrepare(fixture.fixtureRoot)
+  const pbxproj = fs.readFileSync(fixture.pbxprojPath, 'utf8').replace(
+    /^\s*52B0F1012B00000000000001 \/\* PrivacyInfo\.xcprivacy in Resources \*\/,\s*$/m,
+    '',
+  )
+  fs.writeFileSync(fixture.pbxprojPath, pbxproj, 'utf8')
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Resources build phase/)
+})
+
+test('reports a privacy manifest missing from the App group', (t) => {
+  const fixture = createFixture(t)
+  runPrepare(fixture.fixtureRoot)
+  const pbxproj = fs.readFileSync(fixture.pbxprojPath, 'utf8').replace(
+    /^\s*52B0F1002B00000000000001 \/\* PrivacyInfo\.xcprivacy \*\/,\s*$/m,
+    '',
+  )
+  fs.writeFileSync(fixture.pbxprojPath, pbxproj, 'utf8')
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /App group/)
+})
+
+test('reports a broken privacy manifest build-file relationship', (t) => {
+  const fixture = createFixture(t)
+  runPrepare(fixture.fixtureRoot)
+  const pbxproj = fs.readFileSync(fixture.pbxprojPath, 'utf8').replace(
+    'fileRef = 52B0F1002B00000000000001 /* PrivacyInfo.xcprivacy */;',
+    'fileRef = 000000000000000000000000 /* PrivacyInfo.xcprivacy */;',
+  )
+  fs.writeFileSync(fixture.pbxprojPath, pbxproj, 'utf8')
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /build file relationship/)
+})
+
+test('reports an empty camera permission description', (t) => {
+  const fixture = createFixture(t)
+  runPrepare(fixture.fixtureRoot)
+  const plist = fs.readFileSync(fixture.infoPlistPath, 'utf8').replace(
+    /(<key>NSCameraUsageDescription<\/key>\s*<string>)[\s\S]*?(<\/string>)/,
+    '$1   $2',
+  )
+  fs.writeFileSync(fixture.infoPlistPath, plist, 'utf8')
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /non-empty NSCameraUsageDescription/)
+})
+
+test('reports a missing RPBox URL scheme array', (t) => {
+  const fixture = createFixture(t)
+  runPrepare(fixture.fixtureRoot)
+  const plist = fs.readFileSync(fixture.infoPlistPath, 'utf8').replace(
+    /\s*<key>CFBundleURLSchemes<\/key>\s*<array>[\s\S]*?<\/array>/,
+    '',
+  )
+  fs.writeFileSync(fixture.infoPlistPath, plist, 'utf8')
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /custom URL scheme/)
+})
+
+test('reports associated domains outside the expected entitlement key', (t) => {
+  const fixture = createFixture(t)
+  runPrepare(fixture.fixtureRoot)
+  const entitlements = fs.readFileSync(fixture.entitlementsPath, 'utf8').replace(
+    'com.apple.developer.associated-domains',
+    'rpbox.invalid-associated-domains',
+  )
+  fs.writeFileSync(fixture.entitlementsPath, entitlements, 'utf8')
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /com\.apple\.developer\.associated-domains/)
+})
+
+test('validates every target build configuration independently', (t) => {
+  const fixture = createFixture(t)
+  runPrepare(fixture.fixtureRoot)
+  let pbxproj = fs.readFileSync(fixture.pbxprojPath, 'utf8')
+  pbxproj = pbxproj.replace(
+    /(504EC3171FED79650016851F \/\* Debug \*\/[\s\S]*?PRODUCT_BUNDLE_IDENTIFIER = app\.rpbox\.mobile;)/,
+    '$1\n        PRODUCT_BUNDLE_IDENTIFIER = app.rpbox.mobile;',
+  )
+  pbxproj = pbxproj.replace(
+    /(504EC3181FED79650016851F \/\* Release \*\/[\s\S]*?)PRODUCT_BUNDLE_IDENTIFIER = app\.rpbox\.mobile;/,
+    '$1PRODUCT_BUNDLE_IDENTIFIER = app.rpbox.invalid;',
+  )
+  fs.writeFileSync(fixture.pbxprojPath, pbxproj, 'utf8')
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Release.*PRODUCT_BUNDLE_IDENTIFIER/)
+})
+
+test('fails preparation when the resources build phase is missing', (t) => {
+  const fixture = createFixture(t)
+  const pbxproj = fs.readFileSync(fixture.pbxprojPath, 'utf8').replace(
+    /\/\* Begin PBXResourcesBuildPhase section \*\/[\s\S]*?\/\* End PBXResourcesBuildPhase section \*\//,
+    '',
+  )
+  fs.writeFileSync(fixture.pbxprojPath, pbxproj, 'utf8')
+
+  const result = runPrepareResult(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Missing PBXResourcesBuildPhase/)
+})
+
+test('reports a missing Xcode project file', (t) => {
+  const fixture = createFixture(t)
+  fs.rmSync(fixture.pbxprojPath)
+
+  const result = runVerify(fixture.fixtureRoot)
+
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /ios\/App\/App\.xcodeproj\/project\.pbxproj: missing file/)
 })
