@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getMobileUpdateMode,
+  installAndroidUpdate,
   isNewerVersion,
   normalizeVersion,
   resolveIOSUpdateUrl,
+  resolveMobileTarget,
   resolveUpdateDownloadUrl,
 } from './updater'
 
@@ -51,5 +54,33 @@ describe('updater api helpers', () => {
     expect(resolveIOSUpdateUrl('https://apps.apple.com/cn/app/rpbox/id123456789?mt=8')).toBe(
       'itms-apps://apps.apple.com/cn/app/rpbox/id123456789?mt=8',
     )
+  })
+
+  it('resolves native and browser mobile targets deterministically', () => {
+    expect(resolveMobileTarget('ios', 'Mozilla/5.0')).toBe('ios')
+    expect(resolveMobileTarget('android', 'Mozilla/5.0')).toBe('android')
+    expect(resolveMobileTarget('web', 'Mozilla/5.0 (iPhone)')).toBe('ios')
+    expect(resolveMobileTarget('web', 'Mozilla/5.0 (Linux; Android 15)')).toBe('android')
+    expect(resolveMobileTarget('web', 'Mozilla/5.0 (Windows NT 10.0)')).toBeNull()
+  })
+
+  it('uses the iOS store update mode', () => {
+    expect(getMobileUpdateMode('ios')).toBe('ios-store')
+  })
+
+  it('keeps non-App-Store iOS update links unchanged', () => {
+    expect(resolveIOSUpdateUrl('https://example.com/ios-beta')).toBe('https://example.com/ios-beta')
+  })
+
+  it('compares the synchronized 1.0.41 release correctly', () => {
+    expect(isNewerVersion('1.0.41', '1.0.40')).toBe(true)
+    expect(isNewerVersion('1.0.41', '1.0.41')).toBe(false)
+  })
+
+  it('does not expose Android installation outside Android native mode', async () => {
+    await expect(installAndroidUpdate({
+      version: '1.0.41',
+      url: 'https://example.com/RPBox_1.0.41_android.apk',
+    })).rejects.toThrow('Android in-app updater is unavailable')
   })
 })
