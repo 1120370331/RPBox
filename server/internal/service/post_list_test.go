@@ -213,6 +213,27 @@ func TestPostListCandidatesAppliesVisibilityFilters(t *testing.T) {
 	}
 }
 
+func TestPostListHydrationExcludesLargeContentFields(t *testing.T) {
+	db, lists, redisServer := newPostListTestService(t)
+	defer redisServer.Close()
+
+	post := createPublicPost(t, db, 10, "large content", time.Now())
+	posts, err := lists.HydrateCandidates(
+		context.Background(),
+		PostListQuery{ViewerID: 7, Page: 1, PageSize: 20},
+		[]uint{post.ID},
+	)
+	if err != nil {
+		t.Fatalf("hydrate candidates: %v", err)
+	}
+	if len(posts) != 1 {
+		t.Fatalf("expected one hydrated post, got %d", len(posts))
+	}
+	if posts[0].Content != "" {
+		t.Fatalf("candidate hydration must not load post content")
+	}
+}
+
 func newPostListTestService(t *testing.T) (*gorm.DB, *PostListService, *miniredis.Miniredis) {
 	t.Helper()
 

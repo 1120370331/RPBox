@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -208,10 +207,19 @@ func (s *Server) listPosts(c *gin.Context) {
 	var response postListResponse
 	var err error
 	if params.GuildID == "" && !isSelfView && s.postLists != nil {
+		query := params.toServiceQuery()
 		var candidates service.PostListCandidatePage
-		candidates, err = s.postLists.Candidates(c.Request.Context(), params.toServiceQuery())
+		candidates, err = s.postLists.Candidates(c.Request.Context(), query)
 		if err == nil {
-			response, err = s.hydratePostList(c.Request.Context(), candidates.IDs, candidates.Total)
+			var posts []model.Post
+			posts, err = s.postLists.HydrateCandidates(c.Request.Context(), query, candidates.IDs)
+			if err == nil {
+				if len(posts) != len(candidates.IDs) {
+					response, err = s.loadPostListDirect(c.Request.Context(), params)
+				} else {
+					response, err = s.buildPostListResponse(c.Request.Context(), posts, candidates.Total)
+				}
+			}
 		}
 	} else {
 		response, err = s.loadPostListDirect(c.Request.Context(), params)
@@ -363,35 +371,6 @@ func (s *Server) loadPostListDirect(ctx context.Context, params postListParams) 
 	if err := query.Select(postListSelectColumns).Find(&posts).Error; err != nil {
 		return postListResponse{}, err
 	}
-
-	return s.buildPostListResponse(ctx, posts, total)
-}
-
-func (s *Server) hydratePostList(
-	ctx context.Context,
-	ids []uint,
-	total int64,
-) (postListResponse, error) {
-	if len(ids) == 0 {
-		return postListResponse{Posts: []postListItem{}, Total: total}, nil
-	}
-
-	db := database.DB.WithContext(ctx)
-	var posts []model.Post
-	if err := db.Model(&model.Post{}).
-		Select(postListSelectColumns).
-		Where("posts.id IN ?", ids).
-		Find(&posts).Error; err != nil {
-		return postListResponse{}, err
-	}
-
-	position := make(map[uint]int, len(ids))
-	for index, id := range ids {
-		position[id] = index
-	}
-	sort.SliceStable(posts, func(i, j int) bool {
-		return position[posts[i].ID] < position[posts[j].ID]
-	})
 
 	return s.buildPostListResponse(ctx, posts, total)
 }

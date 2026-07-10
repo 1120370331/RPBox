@@ -131,6 +131,58 @@ func TestPostMutationIgnoresInvalidationErrorAfterCommit(t *testing.T) {
 	}
 }
 
+func TestPostMutationInvalidationFailureBypassesCandidateCache(t *testing.T) {
+	db := testutil.NewTestDB(
+		t,
+		&model.Post{},
+		&model.User{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+		&model.PostTag{},
+	)
+	older := createPublicPost(t, db, 1, "older", time.Now().Add(-time.Minute))
+	versions := &trackingPostListCache{
+		bumpErr: errors.New("redis unavailable"),
+		candidatePage: &PostListCandidatePage{
+			IDs:   []uint{older.ID},
+			Total: 1,
+		},
+	}
+	lists := NewPostListService(db, versions)
+	mutations := NewPostMutationService(db, lists)
+
+	err := mutations.Global(context.Background(), func(tx *gorm.DB) error {
+		return tx.Create(&model.Post{
+			AuthorID:     older.AuthorID,
+			Title:        "newer",
+			Content:      "newer",
+			Status:       "published",
+			ReviewStatus: "approved",
+			IsPublic:     true,
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		}).Error
+	})
+	if err != nil {
+		t.Fatalf("mutation must commit despite invalidation failure: %v", err)
+	}
+
+	page, err := lists.Candidates(context.Background(), PostListQuery{
+		ViewerID: 2,
+		Page:     1,
+		PageSize: 20,
+	})
+	if err != nil {
+		t.Fatalf("load candidates after invalidation failure: %v", err)
+	}
+	if page.Total != 2 || len(page.IDs) != 2 {
+		t.Fatalf("expected database fallback with two posts, got %+v", page)
+	}
+	if versions.fetchCalls != 0 {
+		t.Fatalf("candidate cache must be bypassed, fetch calls=%d", versions.fetchCalls)
+	}
+}
+
 func TestPostMutationAllowsNilListAndCacheServices(t *testing.T) {
 	for _, testCase := range []struct {
 		name  string
@@ -164,9 +216,11 @@ func TestPostMutationAllowsNilListAndCacheServices(t *testing.T) {
 }
 
 type trackingPostListCache struct {
-	globalBumps int
-	viewerBumps []uint
-	bumpErr     error
+	globalBumps   int
+	viewerBumps   []uint
+	bumpErr       error
+	candidatePage *PostListCandidatePage
+	fetchCalls    int
 }
 
 func (c *trackingPostListCache) Get(context.Context, string, interface{}) error {
@@ -193,9 +247,18 @@ func (c *trackingPostListCache) Fetch(
 	ctx context.Context,
 	_ string,
 	_ time.Duration,
-	_ interface{},
+	destination interface{},
 	loader cache.Fetcher,
 ) error {
+	c.fetchCalls++
+	if c.candidatePage != nil {
+		page, ok := destination.(*PostListCandidatePage)
+		if !ok {
+			return fmt.Errorf("unexpected cache destination %T", destination)
+		}
+		*page = *c.candidatePage
+		return nil
+	}
 	_, err := loader(ctx)
 	return err
 }

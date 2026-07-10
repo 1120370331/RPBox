@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/model"
@@ -17,6 +20,7 @@ const (
 	postListGlobalVersionName = "post:list:global"
 	postListViewerVersionName = "post:list:viewer"
 	postListCandidateSchema   = "candidate-v1"
+	postListHydrationColumns  = "posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.region, posts.address, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at"
 )
 
 // PostListQuery describes a public post candidate query.
@@ -45,8 +49,9 @@ type PostListCandidatePage struct {
 
 // PostListService loads and caches public post candidate pages.
 type PostListService struct {
-	db    *gorm.DB
-	cache cache.Cache
+	db               *gorm.DB
+	cache            cache.Cache
+	cacheBypassUntil atomic.Int64
 }
 
 // NewPostListService creates a public post candidate service.
@@ -82,7 +87,7 @@ func (s *PostListService) Candidates(ctx context.Context, query PostListQuery) (
 		return value.(PostListCandidatePage), nil
 	}
 
-	if s.cache == nil || !normalized.Cacheable() {
+	if s.cache == nil || s.cacheBypassed() || !normalized.Cacheable() {
 		return loadDirect()
 	}
 
@@ -116,6 +121,9 @@ func (s *PostListService) InvalidateGlobal(ctx context.Context) error {
 		return nil
 	}
 	_, err := s.cache.BumpVersion(ctx, postListGlobalVersionName)
+	if err != nil {
+		s.bypassCache()
+	}
 	return err
 }
 
@@ -125,10 +133,76 @@ func (s *PostListService) InvalidateViewer(ctx context.Context, viewerID uint) e
 		return nil
 	}
 	_, err := s.cache.BumpVersion(ctx, viewerVersionName(viewerID))
+	if err != nil {
+		s.bypassCache()
+	}
 	return err
 }
 
 func (s *PostListService) loadCandidates(ctx context.Context, query PostListQuery) (PostListCandidatePage, error) {
+	filtered := s.filteredQuery(ctx, query)
+
+	var total int64
+	if err := filtered.Count(&total).Error; err != nil {
+		return PostListCandidatePage{}, err
+	}
+
+	sortColumn := "posts.created_at"
+	switch query.SortBy {
+	case "like_count":
+		sortColumn = "posts.like_count"
+	case "view_count":
+		sortColumn = "posts.view_count"
+	}
+
+	var ids []uint
+	if err := filtered.
+		Order(sortColumn+" "+query.Order).
+		Order("posts.id "+query.Order).
+		Offset((query.Page-1)*query.PageSize).
+		Limit(query.PageSize).
+		Pluck("posts.id", &ids).Error; err != nil {
+		return PostListCandidatePage{}, err
+	}
+	if ids == nil {
+		ids = []uint{}
+	}
+
+	return PostListCandidatePage{IDs: ids, Total: total}, nil
+}
+
+// HydrateCandidates loads cached candidate IDs through the current public filters.
+func (s *PostListService) HydrateCandidates(
+	ctx context.Context,
+	query PostListQuery,
+	ids []uint,
+) ([]model.Post, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("post list service: database is not configured")
+	}
+	if len(ids) == 0 {
+		return []model.Post{}, nil
+	}
+
+	var posts []model.Post
+	if err := s.filteredQuery(ctx, query.normalized()).
+		Select(postListHydrationColumns).
+		Where("posts.id IN ?", ids).
+		Find(&posts).Error; err != nil {
+		return nil, err
+	}
+
+	position := make(map[uint]int, len(ids))
+	for index, id := range ids {
+		position[id] = index
+	}
+	sort.SliceStable(posts, func(i, j int) bool {
+		return position[posts[i].ID] < position[posts[j].ID]
+	})
+	return posts, nil
+}
+
+func (s *PostListService) filteredQuery(ctx context.Context, query PostListQuery) *gorm.DB {
 	db := s.db.WithContext(ctx)
 	filtered := db.Model(&model.Post{}).
 		Where("posts.status = ?", "published").
@@ -185,34 +259,7 @@ func (s *PostListService) loadCandidates(ctx context.Context, query PostListQuer
 	if query.IsPinned != nil {
 		filtered = filtered.Where("posts.is_pinned = ?", *query.IsPinned)
 	}
-
-	var total int64
-	if err := filtered.Count(&total).Error; err != nil {
-		return PostListCandidatePage{}, err
-	}
-
-	sortColumn := "posts.created_at"
-	switch query.SortBy {
-	case "like_count":
-		sortColumn = "posts.like_count"
-	case "view_count":
-		sortColumn = "posts.view_count"
-	}
-
-	var ids []uint
-	if err := filtered.
-		Order(sortColumn+" "+query.Order).
-		Order("posts.id "+query.Order).
-		Offset((query.Page-1)*query.PageSize).
-		Limit(query.PageSize).
-		Pluck("posts.id", &ids).Error; err != nil {
-		return PostListCandidatePage{}, err
-	}
-	if ids == nil {
-		ids = []uint{}
-	}
-
-	return PostListCandidatePage{IDs: ids, Total: total}, nil
+	return filtered
 }
 
 func (q PostListQuery) normalized() PostListQuery {
@@ -276,4 +323,16 @@ func (q PostListQuery) cacheSuffix() string {
 
 func viewerVersionName(viewerID uint) string {
 	return fmt.Sprintf("%s:%d", postListViewerVersionName, viewerID)
+}
+
+func (s *PostListService) bypassCache() {
+	ttl := cache.TTL["post:list"]
+	if ttl <= 0 {
+		ttl = time.Minute
+	}
+	s.cacheBypassUntil.Store(time.Now().Add(ttl).UnixNano())
+}
+
+func (s *PostListService) cacheBypassed() bool {
+	return s != nil && s.cacheBypassUntil.Load() > time.Now().UnixNano()
 }
