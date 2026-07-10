@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { buildPublicPostUrl, shareRouteLink } from '@/utils/share'
+import { buildPostShareText, buildPublicPostUrl, shareRouteLink } from '@/utils/share'
 
 describe('desktop route sharing', () => {
   afterEach(() => {
@@ -22,6 +22,10 @@ describe('desktop route sharing', () => {
 
   it('builds the public post URL', () => {
     expect(buildPublicPostUrl(42)).toBe('https://totalrpbox.com/posts/42')
+  })
+
+  it('builds a compact plain-text post summary', () => {
+    expect(buildPostShareText('<p>Hello <strong>Azeroth</strong></p>', 12)).toBe('Hello Azerot…')
   })
 
   it('uses Web Share when available', async () => {
