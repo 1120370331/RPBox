@@ -416,6 +416,7 @@ git commit -m "refactor: hydrate post lists from cached candidates"
 - Modify: `server/internal/api/content_moderation.go`
 - Modify: `server/internal/api/account_deletion.go`
 - Delete: `server/internal/api/cache_helpers.go`
+- Create: `server/internal/api/user_cache_helpers.go`
 - Modify: `server/internal/api/post_cache_invalidation_test.go`
 
 **Interfaces:**
@@ -564,7 +565,8 @@ Add DOM fallback and rejected-share tests.
 Run:
 
 ```powershell
-pnpm --filter rpbox-client test:run -- src/__tests__/share.test.ts
+cd client
+node node_modules/vitest/vitest.mjs run --config vite.config.ts src/__tests__/share.test.ts
 ```
 
 Expected: module not found.
@@ -640,8 +642,9 @@ Use the returned method to show either copied-link or opened-share Toast text.
 Run:
 
 ```powershell
-pnpm --filter rpbox-client test:run -- src/__tests__/share.test.ts src/__tests__/communityShare.test.ts
-pnpm --filter rpbox-client build
+cd client
+node node_modules/vitest/vitest.mjs run --config vite.config.ts src/__tests__/share.test.ts src/__tests__/communityShare.test.ts
+node node_modules/vite/bin/vite.js build --config vite.config.ts
 ```
 
 Expected: PASS.
@@ -683,7 +686,8 @@ expect(headings).toEqual([
 Run:
 
 ```powershell
-pnpm --filter rpbox-client test:run -- src/__tests__/warcraftFeaturesOrder.test.ts
+cd client
+node node_modules/vitest/vitest.mjs run --config vite.config.ts src/__tests__/warcraftFeaturesOrder.test.ts
 ```
 
 Expected: received order places `插件安装` before `功能快捷入口`.
@@ -697,8 +701,9 @@ Move the entire `feature-row` section before `plugin-row`. Set shortcut delay to
 Run:
 
 ```powershell
-pnpm --filter rpbox-client test:run -- src/__tests__/warcraftFeaturesOrder.test.ts
-pnpm --filter rpbox-client build
+cd client
+node node_modules/vitest/vitest.mjs run --config vite.config.ts src/__tests__/warcraftFeaturesOrder.test.ts
+node node_modules/vite/bin/vite.js build --config vite.config.ts
 ```
 
 Expected: PASS.
@@ -745,12 +750,16 @@ Expected: PASS.
 - [ ] **Step 3: Run complete client verification**
 
 ```powershell
-pnpm --filter rpbox-client test:run
-pnpm --filter rpbox-client exec vue-tsc --noEmit
-pnpm --filter rpbox-client build
+cd client
+node node_modules/vitest/vitest.mjs run --config vite.config.ts
+node node_modules/vite/bin/vite.js build --config vite.config.ts
 ```
 
 Expected: PASS.
+
+`vue-tsc --noEmit` currently has repository-wide baseline failures unrelated to these tasks
+(including missing `@` path mappings and historical type errors). Record its output as a
+known baseline issue, but do not use it as a completion gate for this change.
 
 - [ ] **Step 4: Review changed code**
 
