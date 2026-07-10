@@ -79,6 +79,26 @@ describe('desktop route sharing', () => {
     expect(document.querySelector('textarea')).toBeNull()
   })
 
+  it('falls back to a temporary textarea when Clipboard API rejects', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('clipboard denied'))
+    const execCommand = vi.fn().mockReturnValue(true)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: execCommand,
+    })
+
+    await expect(shareRouteLink({ path: '/posts/42' })).resolves.toEqual({
+      method: 'copied',
+      url: 'https://totalrpbox.com/posts/42',
+    })
+    expect(writeText).toHaveBeenCalledWith('https://totalrpbox.com/posts/42')
+    expect(execCommand).toHaveBeenCalledWith('copy')
+  })
+
   it('propagates a rejected Web Share request without copying', async () => {
     const shareError = new Error('share cancelled')
     const share = vi.fn().mockRejectedValue(shareError)

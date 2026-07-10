@@ -22,8 +22,12 @@ export function buildPostShareText(html: string, maxLength = 120): string {
 
 async function copyTextToClipboard(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      // Continue to the DOM fallback when clipboard permissions are denied.
+    }
   }
 
   const textarea = document.createElement('textarea')
