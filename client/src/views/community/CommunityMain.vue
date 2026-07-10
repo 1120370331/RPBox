@@ -6,11 +6,14 @@ import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPo
 import { getGuild, type Guild } from '@/api/guild'
 import { getImageUrl, resolveApiUrl } from '@/api/item'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { shareRouteLink } from '@/utils/share'
+import { useToast } from '@/composables/useToast'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+const toast = useToast()
 const mounted = ref(false)
 const loading = ref(false)
 const posts = ref<PostWithAuthor[]>([])
@@ -181,6 +184,19 @@ function goToFavorites() {
 
 function goToHistory() {
   router.push('/library/history')
+}
+
+async function handleSharePost(post: PostWithAuthor) {
+  try {
+    const result = await shareRouteLink({
+      path: `/posts/${post.id}`,
+      title: post.title,
+    })
+    toast.success(t(result.method === 'shared' ? 'community.share.shared' : 'community.share.copied'))
+  } catch (error) {
+    console.error('分享帖子失败:', error)
+    toast.error(t('community.share.failed'))
+  }
 }
 
 function formatDate(dateStr: string) {
@@ -847,10 +863,20 @@ function getEventStyle(event: EventItem) {
                   size="xs"
                 />
               </div>
-              <span class="comment-count">
-                <i class="ri-chat-3-line"></i>
-                {{ post.comment_count }}
-              </span>
+              <div class="card-footer-actions">
+                <span class="comment-count">
+                  <i class="ri-chat-3-line"></i>
+                  {{ post.comment_count }}
+                </span>
+                <button
+                  type="button"
+                  class="card-share-btn"
+                  :title="t('community.action.share')"
+                  @click.stop="handleSharePost(post)"
+                >
+                  <i class="ri-share-forward-line"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2201,6 +2227,33 @@ function getEventStyle(event: EventItem) {
   gap: 4px;
   font-size: 12px;
   color: var(--color-text-secondary, #8D7B68);
+}
+
+.card-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary, #8D7B68);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.card-share-btn:hover {
+  border-color: var(--color-border-light, #F5EFE7);
+  background: var(--color-primary-light, rgba(184, 115, 51, 0.12));
+  color: var(--color-secondary, #804030);
 }
 
 /* ========== Empty State ========== */

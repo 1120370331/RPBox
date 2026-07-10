@@ -35,6 +35,11 @@ export default {
     history: '历史记录',
     myPosts: '我的帖子',
   },
+  share: {
+    copied: '帖子链接已复制',
+    shared: '已打开系统分享',
+    failed: '分享失败，请重试',
+  },
   comment: {
     placeholder: '写下你的评论...',
     submit: '发表',
