@@ -16,6 +16,7 @@ import { resolveApiUrl } from '@/api/item'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { handleAttachmentClick } from '@/utils/download'
+import { buildPostShareText, shareRouteLink } from '@/utils/share'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
@@ -283,6 +284,22 @@ async function handleFavorite() {
     console.error('收藏失败:', error)
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function handleShare() {
+  if (!post.value) return
+
+  try {
+    const result = await shareRouteLink({
+      path: `/posts/${post.value.id}`,
+      title: post.value.title,
+      text: buildPostShareText(post.value.content),
+    })
+    toast.success(t(result.method === 'shared' ? 'community.share.shared' : 'community.share.copied'))
+  } catch (error) {
+    console.error('分享帖子失败:', error)
+    toast.error(t('community.share.failed'))
   }
 }
 
@@ -714,6 +731,10 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
               <button class="action-btn" :class="{ active: favorited }" @click="handleFavorite" :disabled="actionLoading">
                 <i :class="favorited ? 'ri-star-fill' : 'ri-star-line'"></i>
                 <span>{{ post.favorite_count }}</span>
+              </button>
+              <button class="action-btn share-btn" type="button" @click="handleShare">
+                <i class="ri-share-forward-line"></i>
+                <span>{{ t('community.action.share') }}</span>
               </button>
               <span class="view-count">
                 <i class="ri-eye-line"></i>
