@@ -408,34 +408,7 @@ func normalizeReviewComment(actionLabel, comment string, notes []string) string 
 func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetID uint) (string, uint, bool, error) {
 	switch targetType {
 	case reportTargetPost:
-		var post model.Post
-		if err := database.DB.First(&post, targetID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return buildMissingReportTitle(targetType, targetID), 0, true, nil
-			}
-			return "", 0, false, err
-		}
-
-		targetName := strings.TrimSpace(post.Title)
-		if targetName == "" {
-			targetName = buildMissingReportTitle(targetType, targetID)
-		}
-
-		if err := database.DB.Where(
-			"comment_id IN (?)",
-			database.DB.Model(&model.Comment{}).Select("id").Where("post_id = ?", targetID),
-		).Delete(&model.CommentLike{}).Error; err != nil {
-			return "", 0, false, err
-		}
-		database.DB.Where("post_id = ?", targetID).Delete(&model.PostTag{})
-		database.DB.Where("post_id = ?", targetID).Delete(&model.Comment{})
-		database.DB.Where("post_id = ?", targetID).Delete(&model.PostLike{})
-		database.DB.Where("post_id = ?", targetID).Delete(&model.PostFavorite{})
-		s.cleanupPostImages(c, post)
-		if err := database.DB.Delete(&post).Error; err != nil {
-			return "", 0, false, err
-		}
-		return targetName, post.AuthorID, false, nil
+		return s.deleteReportedPost(c, targetID)
 	case reportTargetItem:
 		var item model.Item
 		if err := database.DB.First(&item, targetID).Error; err != nil {
@@ -534,6 +507,49 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 	default:
 		return "", 0, false, errors.New("unsupported report target")
 	}
+}
+
+func (s *Server) deleteReportedPost(c *gin.Context, targetID uint) (string, uint, bool, error) {
+	var post model.Post
+	err := database.DB.First(&post, targetID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return buildMissingReportTitle(reportTargetPost, targetID), 0, true, nil
+	}
+	if err != nil {
+		return "", 0, false, err
+	}
+
+	targetName := strings.TrimSpace(post.Title)
+	if targetName == "" {
+		targetName = buildMissingReportTitle(reportTargetPost, targetID)
+	}
+
+	err = s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Where(
+			"comment_id IN (?)",
+			tx.Model(&model.Comment{}).Select("id").Where("post_id = ?", targetID),
+		).Delete(&model.CommentLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", targetID).Delete(&model.PostTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", targetID).Delete(&model.Comment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", targetID).Delete(&model.PostLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", targetID).Delete(&model.PostFavorite{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&post).Error
+	})
+	if err != nil {
+		return "", 0, false, err
+	}
+	s.cleanupPostImages(c, post)
+	return targetName, post.AuthorID, false, nil
 }
 
 func applyReportedUserMute(targetUserID, moderatorID uint, duration int, reason string) (string, bool, error) {
@@ -773,7 +789,7 @@ func (s *Server) createUserBlock(c *gin.Context) {
 	}
 
 	submitReport := req.SubmitReport != nil && *req.SubmitReport
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsViewer(c.Request.Context(), userID, func(tx *gorm.DB) error {
 		if err := upsertUserBlockRecord(tx, block.BlockerID, block.BlockedUserID, block.Reason); err != nil {
 			return err
 		}
@@ -812,8 +828,10 @@ func (s *Server) deleteUserBlock(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Where("blocker_id = ? AND blocked_user_id = ?", userID, uint(blockedUserID)).
-		Delete(&model.UserBlock{}).Error; err != nil {
+	if err := s.mutatePostListsViewer(c.Request.Context(), userID, func(tx *gorm.DB) error {
+		return tx.Where("blocker_id = ? AND blocked_user_id = ?", userID, uint(blockedUserID)).
+			Delete(&model.UserBlock{}).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "取消屏蔽失败"})
 		return
 	}
@@ -856,7 +874,7 @@ func (s *Server) createContentReport(c *gin.Context) {
 	actionReason := buildLocalSafetyActionReason(req.Reason, req.Detail)
 	var report *model.ContentReport
 	var updated bool
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsViewer(c.Request.Context(), userID, func(tx *gorm.DB) error {
 		if submitReport {
 			var txErr error
 			report, updated, txErr = upsertPendingReport(tx, userID, req, targetUserID)
@@ -905,9 +923,6 @@ func (s *Server) createContentReport(c *gin.Context) {
 		"block_author":     req.BlockAuthor,
 		"submitted_report": submitReport,
 	})
-	if req.HideTarget && req.TargetType == reportTargetPost || req.BlockAuthor {
-		s.bumpPostListCache(c.Request.Context())
-	}
 }
 
 func (s *Server) listContentReports(c *gin.Context) {
