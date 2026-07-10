@@ -66,6 +66,36 @@ func TestPostListCandidateCacheHydratesLiveFields(t *testing.T) {
 	assertPostOrder(t, liveLikes, older.ID, newer.ID)
 }
 
+func TestPostListCandidateCacheFailsClosedWhenPostBecomesPrivate(t *testing.T) {
+	db := testutil.NewTestDB(
+		t,
+		&model.User{},
+		&model.Post{},
+		&model.PostTag{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+	)
+	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash"}
+	viewer := model.User{Username: "viewer", Email: "viewer@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&author, &viewer}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	post := createCacheTestPost(t, db, author.ID, "private after cache", time.Now(), 0)
+	server := newCachedPostTestServer(t, db)
+	token := newTestToken(t, viewer)
+	path := "/api/v1/posts?page=1&page_size=20"
+
+	assertPostOrder(t, getPostListPayload(t, server, path, token), post.ID)
+	if err := db.Model(&model.Post{}).
+		Where("id = ?", post.ID).
+		Update("is_public", false).Error; err != nil {
+		t.Fatalf("make post private: %v", err)
+	}
+
+	assertPostOrder(t, getPostListPayload(t, server, path, token))
+}
+
 func TestPostCacheInvalidationModeratorPin(t *testing.T) {
 	db := testutil.NewTestDB(
 		t,
