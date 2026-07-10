@@ -9,6 +9,17 @@ export function buildPublicPostUrl(postId: number): string {
   return `${PUBLIC_SITE_ORIGIN}/posts/${postId}`
 }
 
+export function buildPostShareText(html: string, maxLength = 120): string {
+  const container = document.createElement('div')
+  container.innerHTML = html
+  const text = (container.textContent || container.innerText || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength).trimEnd()}…`
+}
+
 async function copyTextToClipboard(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)

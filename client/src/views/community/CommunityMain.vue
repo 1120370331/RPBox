@@ -6,7 +6,7 @@ import { listPosts, listEvents, type PostWithAuthor, type EventItem, type ListPo
 import { getGuild, type Guild } from '@/api/guild'
 import { getImageUrl, resolveApiUrl } from '@/api/item'
 import { buildNameStyle } from '@/utils/userNameStyle'
-import { shareRouteLink } from '@/utils/share'
+import { buildPostShareText, shareRouteLink } from '@/utils/share'
 import { useToast } from '@/composables/useToast'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 
@@ -191,6 +191,7 @@ async function handleSharePost(post: PostWithAuthor) {
     const result = await shareRouteLink({
       path: `/posts/${post.id}`,
       title: post.title,
+      text: buildPostShareText(post.content),
     })
     toast.success(t(result.method === 'shared' ? 'community.share.shared' : 'community.share.copied'))
   } catch (error) {

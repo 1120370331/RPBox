@@ -38,6 +38,7 @@ vi.mock('vue-i18n', () => ({
 }))
 
 vi.mock('@/utils/share', () => ({
+  buildPostShareText: (html: string) => html.replace(/<[^>]+>/g, '').trim(),
   shareRouteLink: mocks.shareRouteLink,
 }))
 
@@ -192,6 +193,7 @@ describe('community desktop sharing', () => {
     expect(mocks.shareRouteLink).toHaveBeenCalledWith({
       path: '/posts/42',
       title: 'Detail post',
+      text: 'Detail body',
     })
     expect(mocks.toastSuccess).toHaveBeenCalledWith('community.share.copied')
     expect(mocks.push).not.toHaveBeenCalled()
@@ -209,6 +211,7 @@ describe('community desktop sharing', () => {
     expect(mocks.shareRouteLink).toHaveBeenCalledWith({
       path: '/posts/7',
       title: 'List post',
+      text: 'List body',
     })
     expect(mocks.push).not.toHaveBeenCalled()
   })

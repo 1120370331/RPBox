@@ -16,7 +16,7 @@ import { resolveApiUrl } from '@/api/item'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { handleAttachmentClick } from '@/utils/download'
-import { shareRouteLink } from '@/utils/share'
+import { buildPostShareText, shareRouteLink } from '@/utils/share'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
@@ -294,6 +294,7 @@ async function handleShare() {
     const result = await shareRouteLink({
       path: `/posts/${post.value.id}`,
       title: post.value.title,
+      text: buildPostShareText(post.value.content),
     })
     toast.success(t(result.method === 'shared' ? 'community.share.shared' : 'community.share.copied'))
   } catch (error) {
