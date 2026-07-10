@@ -288,3 +288,9 @@ server/data/icons/
 *.bak
 .codex-tmp/
 .codex-release-artifacts/
+.worktrees/
+# Private image-generation credentials and design previews
+.agentonlyenv
+.imagegen.env
+.env.imagegen
+output/imagegen/
