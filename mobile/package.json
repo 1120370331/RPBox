@@ -7,9 +7,11 @@
     "dev": "vite",
     "type-check": "vue-tsc --noEmit",
     "test": "vitest run",
+    "test:native-ios": "node --test ./scripts/iosProjectConfig.test.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "prepare:native-share": "node ./scripts/prepareNativeShare.mjs",
+    "verify:ios-project": "node ./scripts/verifyIosProject.mjs",
     "cap:sync": "cap sync",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios"
