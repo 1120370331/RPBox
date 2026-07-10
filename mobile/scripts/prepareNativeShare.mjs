@@ -429,6 +429,71 @@ function upsertPlistString(plist, key, value) {
   return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${block}\n</dict>\n</plist>\n`)
 }
 
+function findPlistArrayRange(plist, key) {
+  const keyIndex = plist.indexOf(`<key>${key}</key>`)
+  if (keyIndex < 0) return null
+
+  const openTagStart = plist.indexOf('<array>', keyIndex)
+  if (openTagStart < 0) return null
+
+  const tagPattern = /<\/?array>/g
+  tagPattern.lastIndex = openTagStart
+  let depth = 0
+  let match
+  while ((match = tagPattern.exec(plist)) !== null) {
+    if (match[0] === '<array>') {
+      depth += 1
+    } else {
+      depth -= 1
+      if (depth === 0) {
+        return {
+          openTagEnd: openTagStart + '<array>'.length,
+          closeTagStart: match.index,
+          closeTagEnd: match.index + match[0].length,
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+function buildIosUrlTypeDictionary() {
+  return `\t\t<dict>
+\t\t\t<key>CFBundleURLName</key>
+\t\t\t<string>${appId}</string>
+\t\t\t<key>CFBundleURLSchemes</key>
+\t\t\t<array>
+\t\t\t\t<string>${appId}</string>
+\t\t\t</array>
+\t\t</dict>`
+}
+
+function upsertIosUrlType(plist) {
+  const urlTypeDictionary = buildIosUrlTypeDictionary()
+  const escapedAppId = appId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const rpboxDictionaryPattern = new RegExp(
+    `<dict>\\s*<key>CFBundleURLName<\\/key>\\s*<string>${escapedAppId}<\\/string>\\s*` +
+    `<key>CFBundleURLSchemes<\\/key>\\s*<array>[\\s\\S]*?<\\/array>\\s*<\\/dict>`,
+  )
+
+  if (rpboxDictionaryPattern.test(plist)) {
+    return plist.replace(rpboxDictionaryPattern, urlTypeDictionary.trim())
+  }
+
+  const urlTypesRange = findPlistArrayRange(plist, 'CFBundleURLTypes')
+  if (urlTypesRange) {
+    const beforeClose = plist.slice(0, urlTypesRange.closeTagStart).replace(/[ \t]*$/, '')
+    return `${beforeClose}${beforeClose.endsWith('\n') ? '' : '\n'}${urlTypeDictionary}\n\t${plist.slice(urlTypesRange.closeTagStart)}`
+  }
+
+  const urlTypesBlock = `\t<key>CFBundleURLTypes</key>
+\t<array>
+${urlTypeDictionary}
+\t</array>`
+  return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${urlTypesBlock}\n</dict>\n</plist>\n`)
+}
+
 function insertBeforePbxSectionEnd(pbxproj, sectionName, entry, token) {
   if (pbxproj.includes(token)) return pbxproj
 
@@ -523,25 +588,7 @@ function patchIos() {
   }
 
   let plist = fs.readFileSync(infoPlistPath, 'utf8')
-  const urlTypesBlock = `
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>${appId}</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>${appId}</string>
-			</array>
-		</dict>
-	</array>`
-  const urlTypesPattern = /<key>CFBundleURLTypes<\/key>\s*<array>\s*<dict>[\s\S]*?<\/dict>\s*<\/array>/
-
-  if (urlTypesPattern.test(plist)) {
-    plist = plist.replace(urlTypesPattern, urlTypesBlock.trim())
-  } else {
-    plist = plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${urlTypesBlock}\n</dict>\n</plist>\n`)
-  }
+  plist = upsertIosUrlType(plist)
   plist = upsertPlistString(plist, 'NSCameraUsageDescription', 'RPBox 需要访问相机，以便拍摄并上传帖子、道具和评论图片。')
   plist = upsertPlistString(plist, 'NSPhotoLibraryUsageDescription', 'RPBox 需要访问照片，以便选择并上传帖子、道具和评论图片。')
   plist = upsertPlistString(plist, 'NSPhotoLibraryAddUsageDescription', 'RPBox 需要访问照片，以便保存和处理中转图片。')
