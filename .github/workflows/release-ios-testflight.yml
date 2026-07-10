@@ -123,6 +123,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test mobile application
+        run: |
+          pnpm --filter rpbox-mobile test
+          pnpm --filter rpbox-mobile test:native-ios
+          pnpm --filter rpbox-mobile type-check
+
       - name: Build mobile web assets
         shell: bash
         env:
@@ -147,37 +153,6 @@ jobs:
           pnpm exec cap sync ios
           node ./scripts/prepareNativeShare.mjs ios
 
-      - name: Verify iOS camera setup
-        shell: bash
-        run: |
-          set -euo pipefail
-          INFO_PLIST="mobile/ios/App/App/Info.plist"
-          CAP_CONFIG="mobile/ios/App/App/capacitor.config.json"
-
-          grep -q "<key>NSCameraUsageDescription</key>" "$INFO_PLIST"
-          grep -q "<key>NSPhotoLibraryUsageDescription</key>" "$INFO_PLIST"
-          grep -q "<key>NSPhotoLibraryAddUsageDescription</key>" "$INFO_PLIST"
-          grep -q "\"CAPCameraPlugin\"" "$CAP_CONFIG"
-
-      - name: Resolve iOS scheme
-        shell: bash
-        run: |
-          set -euo pipefail
-          SCHEME="${{ env.XCODE_SCHEME }}"
-          if xcodebuild -list -workspace "${{ env.XCODE_WORKSPACE }}" | grep -q " $SCHEME$"; then
-            echo "Using configured scheme: $SCHEME"
-            echo "RESOLVED_XCODE_SCHEME=$SCHEME" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          RESOLVED_SCHEME="$(xcodebuild -list -json -workspace "${{ env.XCODE_WORKSPACE }}" | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
-          if [ -z "$RESOLVED_SCHEME" ]; then
-            echo "No iOS scheme found in workspace."
-            exit 1
-          fi
-          echo "Using detected scheme: $RESOLVED_SCHEME"
-          echo "RESOLVED_XCODE_SCHEME=$RESOLVED_SCHEME" >> "$GITHUB_ENV"
-
       - name: Sync iOS native version
         shell: bash
         env:
@@ -197,13 +172,46 @@ jobs:
 
           perl -0777 -i -pe "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${VERSION};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" "$PBXPROJ"
-          perl -0777 -i -pe "s/DEVELOPMENT_TEAM = [^;]+;/DEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
+          perl -0777 -i -pe "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CODE_SIGN_STYLE = [^;]+;/CODE_SIGN_STYLE = Manual;/g" "$PBXPROJ"
+          if grep -q "DEVELOPMENT_TEAM =" "$PBXPROJ"; then
+            perl -0777 -i -pe "s/DEVELOPMENT_TEAM = [^;]+;/DEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
+          else
+            perl -0777 -i -pe "s/(CODE_SIGN_STYLE = Manual;)/\\1\\n\\t\\t\\t\\tDEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
+          fi
           if grep -q "PROVISIONING_PROFILE_SPECIFIER =" "$PBXPROJ"; then
             perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = [^;]+;/PROVISIONING_PROFILE_SPECIFIER = \"${IOS_PROVISION_PROFILE_NAME}\";/g" "$PBXPROJ"
           else
             perl -0777 -i -pe "s/(PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};)/\\1\\n\\t\\t\\t\\tPROVISIONING_PROFILE_SPECIFIER = \"${IOS_PROVISION_PROFILE_NAME}\";/g" "$PBXPROJ"
           fi
+
+      - name: Verify generated iOS project
+        env:
+          IOS_EXPECTED_VERSION: ${{ steps.version.outputs.VERSION }}
+          IOS_EXPECTED_BUILD_NUMBER: ${{ steps.version.outputs.BUILD_NUMBER }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
+        run: pnpm --filter rpbox-mobile verify:ios-project
+
+      - name: Resolve iOS scheme
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCHEME="${{ env.XCODE_SCHEME }}"
+          if xcodebuild -list -workspace "${{ env.XCODE_WORKSPACE }}" | grep -q " $SCHEME$"; then
+            echo "Using configured scheme: $SCHEME"
+            echo "RESOLVED_XCODE_SCHEME=$SCHEME" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          RESOLVED_SCHEME="$(xcodebuild -list -json -workspace "${{ env.XCODE_WORKSPACE }}" | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
+          if [ -z "$RESOLVED_SCHEME" ]; then
+            echo "No iOS scheme found in workspace."
+            exit 1
+          fi
+          echo "Using detected scheme: $RESOLVED_SCHEME"
+          echo "RESOLVED_XCODE_SCHEME=$RESOLVED_SCHEME" >> "$GITHUB_ENV"
 
       - name: Install signing assets
         shell: bash
