@@ -777,7 +777,38 @@ async function openAddonFolder() {
       </div>
     </section>
 
-    <section class="plugin-row lockable anim-item" :class="{ locked: !hasWowPath }" style="--delay: 2">
+    <section class="feature-row lockable anim-item" :class="{ locked: !hasWowPath }" style="--delay: 2">
+      <div class="row-heading">
+        <div class="heading-copy">
+          <h2>功能快捷入口</h2>
+        </div>
+      </div>
+
+      <div class="locked-content feature-grid">
+        <button
+          v-for="entry in featureEntries"
+          :key="entry.route"
+          type="button"
+          class="feature-card"
+          :disabled="!hasWowPath"
+          @click="goToFeature(entry.route)"
+        >
+          <span class="feature-icon"><i :class="entry.icon"></i></span>
+          <span class="feature-copy">
+            <strong>{{ entry.title }}</strong>
+            <small>{{ entry.desc }}</small>
+          </span>
+          <i class="ri-arrow-right-line"></i>
+        </button>
+      </div>
+
+      <div v-if="!hasWowPath" class="lock-banner feature-lock">
+        <i class="ri-lock-line"></i>
+        <span>目录未设置，快捷入口暂不可用。</span>
+      </div>
+    </section>
+
+    <section class="plugin-row lockable anim-item" :class="{ locked: !hasWowPath }" style="--delay: 3">
       <div class="row-heading">
         <div class="heading-copy">
           <h2>插件安装</h2>
@@ -864,36 +895,6 @@ async function openAddonFolder() {
       </div>
     </section>
 
-    <section class="feature-row lockable anim-item" :class="{ locked: !hasWowPath }" style="--delay: 3">
-      <div class="row-heading">
-        <div class="heading-copy">
-          <h2>功能快捷入口</h2>
-        </div>
-      </div>
-
-      <div class="locked-content feature-grid">
-        <button
-          v-for="entry in featureEntries"
-          :key="entry.route"
-          type="button"
-          class="feature-card"
-          :disabled="!hasWowPath"
-          @click="goToFeature(entry.route)"
-        >
-          <span class="feature-icon"><i :class="entry.icon"></i></span>
-          <span class="feature-copy">
-            <strong>{{ entry.title }}</strong>
-            <small>{{ entry.desc }}</small>
-          </span>
-          <i class="ri-arrow-right-line"></i>
-        </button>
-      </div>
-
-      <div v-if="!hasWowPath" class="lock-banner feature-lock">
-        <i class="ri-lock-line"></i>
-        <span>目录未设置，快捷入口暂不可用。</span>
-      </div>
-    </section>
   </div>
 </template>
 
