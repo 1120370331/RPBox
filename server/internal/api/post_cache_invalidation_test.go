@@ -66,6 +66,147 @@ func TestPostListCandidateCacheHydratesLiveFields(t *testing.T) {
 	assertPostOrder(t, liveLikes, older.ID, newer.ID)
 }
 
+func TestPostCacheInvalidationModeratorPin(t *testing.T) {
+	db := testutil.NewTestDB(
+		t,
+		&model.User{},
+		&model.Post{},
+		&model.PostTag{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+		&model.AdminActionLog{},
+	)
+	moderator := model.User{
+		Username: "moderator",
+		Email:    "moderator@example.com",
+		PassHash: "hash",
+		Role:     "moderator",
+	}
+	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&moderator, &author}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+	post := createCacheTestPost(t, db, author.ID, "pin me", time.Now(), 0)
+	server := newCachedPostTestServer(t, db)
+	token := newTestToken(t, moderator)
+
+	unpinnedPath := "/api/v1/posts?is_pinned=false"
+	assertPostOrder(t, getPostListPayload(t, server, unpinnedPath, token), post.ID)
+
+	response := performRequest(
+		server.router,
+		http.MethodPost,
+		"/api/v1/moderator/manage/posts/"+strconv.FormatUint(uint64(post.ID), 10)+"/pin",
+		nil,
+		token,
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("pin post returned %d: %s", response.Code, response.Body.String())
+	}
+
+	assertPostOrder(t, getPostListPayload(t, server, unpinnedPath, token))
+	assertPostOrder(t, getPostListPayload(t, server, "/api/v1/posts?is_pinned=true", token), post.ID)
+}
+
+func TestPostCacheInvalidationTagChanges(t *testing.T) {
+	db := testutil.NewTestDB(
+		t,
+		&model.User{},
+		&model.Post{},
+		&model.Tag{},
+		&model.PostTag{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+	)
+	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash"}
+	tag := model.Tag{Name: "event"}
+	if err := db.Create(&author).Error; err != nil {
+		t.Fatalf("create author: %v", err)
+	}
+	if err := db.Create(&tag).Error; err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+	post := createCacheTestPost(t, db, author.ID, "tag me", time.Now(), 0)
+	server := newCachedPostTestServer(t, db)
+	token := newTestToken(t, author)
+	tagPath := "/api/v1/posts?tag_id=" + strconv.FormatUint(uint64(tag.ID), 10)
+
+	assertPostOrder(t, getPostListPayload(t, server, tagPath, token))
+	addResponse := performRequest(
+		server.router,
+		http.MethodPost,
+		"/api/v1/posts/"+strconv.FormatUint(uint64(post.ID), 10)+"/tags",
+		map[string]uint{"tag_id": tag.ID},
+		token,
+	)
+	if addResponse.Code != http.StatusOK {
+		t.Fatalf("add tag returned %d: %s", addResponse.Code, addResponse.Body.String())
+	}
+	assertPostOrder(t, getPostListPayload(t, server, tagPath, token), post.ID)
+
+	removeResponse := performRequest(
+		server.router,
+		http.MethodDelete,
+		"/api/v1/posts/"+strconv.FormatUint(uint64(post.ID), 10)+"/tags/"+strconv.FormatUint(uint64(tag.ID), 10),
+		nil,
+		token,
+	)
+	if removeResponse.Code != http.StatusOK {
+		t.Fatalf("remove tag returned %d: %s", removeResponse.Code, removeResponse.Body.String())
+	}
+	assertPostOrder(t, getPostListPayload(t, server, tagPath, token))
+}
+
+func TestPostCacheInvalidationViewerBlockIsolation(t *testing.T) {
+	db := testutil.NewTestDB(
+		t,
+		&model.User{},
+		&model.Post{},
+		&model.PostTag{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+	)
+	viewerOne := model.User{Username: "viewer-one", Email: "viewer-one@example.com", PassHash: "hash"}
+	viewerTwo := model.User{Username: "viewer-two", Email: "viewer-two@example.com", PassHash: "hash"}
+	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&viewerOne, &viewerTwo, &author}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+	post := createCacheTestPost(t, db, author.ID, "block author", time.Now(), 0)
+	server := newCachedPostTestServer(t, db)
+	viewerOneToken := newTestToken(t, viewerOne)
+	viewerTwoToken := newTestToken(t, viewerTwo)
+
+	assertPostOrder(t, getPostListPayload(t, server, "/api/v1/posts", viewerOneToken), post.ID)
+	assertPostOrder(t, getPostListPayload(t, server, "/api/v1/posts", viewerTwoToken), post.ID)
+
+	response := performRequest(
+		server.router,
+		http.MethodPost,
+		"/api/v1/user/blocks",
+		map[string]uint{"blocked_user_id": author.ID},
+		viewerOneToken,
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("block user returned %d: %s", response.Code, response.Body.String())
+	}
+
+	assertPostOrder(t, getPostListPayload(t, server, "/api/v1/posts", viewerOneToken))
+	assertPostOrder(t, getPostListPayload(t, server, "/api/v1/posts", viewerTwoToken), post.ID)
+
+	unblockResponse := performRequest(
+		server.router,
+		http.MethodDelete,
+		"/api/v1/user/blocks/"+strconv.FormatUint(uint64(author.ID), 10),
+		nil,
+		viewerOneToken,
+	)
+	if unblockResponse.Code != http.StatusOK {
+		t.Fatalf("unblock user returned %d: %s", unblockResponse.Code, unblockResponse.Body.String())
+	}
+	assertPostOrder(t, getPostListPayload(t, server, "/api/v1/posts", viewerOneToken), post.ID)
+}
+
 type postListTestPayload struct {
 	Posts []struct {
 		ID        uint `json:"id"`

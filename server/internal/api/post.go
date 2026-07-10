@@ -627,7 +627,7 @@ func (s *Server) createPost(c *gin.Context) {
 		post.EventEndTime = parsed
 	}
 
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 		if err := tx.Create(&post).Error; err != nil {
 			return err
 		}
@@ -666,8 +666,6 @@ func (s *Server) createPost(c *gin.Context) {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
-	s.bumpPostListCache(c.Request.Context())
-
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusCreated, post)
@@ -958,7 +956,7 @@ func (s *Server) updatePost(c *gin.Context) {
 			editReq.EventColor = ""
 		}
 
-		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 			if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostEditRequest{}).Error; err != nil {
 				return err
 			}
@@ -979,7 +977,6 @@ func (s *Server) updatePost(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "提交编辑审核失败"})
 			return
 		}
-		s.bumpPostListCache(c.Request.Context())
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
 			"message": "编辑请求已提交，等待审核",
@@ -1058,7 +1055,7 @@ func (s *Server) updatePost(c *gin.Context) {
 		post.EventColor = ""
 	}
 
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
 		if err := tx.Save(&post).Error; err != nil {
 			return err
 		}
@@ -1077,7 +1074,6 @@ func (s *Server) updatePost(c *gin.Context) {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
-	s.bumpPostListCache(c.Request.Context())
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": post})
@@ -1101,15 +1097,25 @@ func (s *Server) deletePost(c *gin.Context) {
 		return
 	}
 
-	// 删除关联数据
-	database.DB.Where("post_id = ?", id).Delete(&model.PostTag{})
-	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
-	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
-	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
-
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.Comment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("post_id = ?", id).Delete(&model.PostFavorite{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&post).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
 	s.cleanupPostImages(c, post)
-	database.DB.Delete(&post)
-	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
@@ -1306,13 +1312,17 @@ func (s *Server) addPostTag(c *gin.Context) {
 		AddedBy: userID,
 	}
 
-	if err := database.DB.Create(&postTag).Error; err != nil {
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Create(&postTag).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.Tag{}).
+			Where("id = ?", tag.ID).
+			Update("usage_count", gorm.Expr("usage_count + 1")).Error
+	}); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "标签已存在"})
 		return
 	}
-
-	// 更新标签使用次数
-	database.DB.Model(&tag).Update("usage_count", tag.UsageCount+1)
 
 	c.JSON(http.StatusOK, gin.H{"message": "添加成功"})
 }
@@ -1335,14 +1345,27 @@ func (s *Server) removePostTag(c *gin.Context) {
 		return
 	}
 
-	result := database.DB.Where("post_id = ? AND tag_id = ?", id, tagID).Delete(&model.PostTag{})
-	if result.RowsAffected == 0 {
+	var rowsAffected int64
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		result := tx.Where("post_id = ? AND tag_id = ?", id, tagID).Delete(&model.PostTag{})
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		if rowsAffected == 0 {
+			return nil
+		}
+		return tx.Model(&model.Tag{}).
+			Where("id = ? AND usage_count > 0", tagID).
+			Update("usage_count", gorm.Expr("usage_count - 1")).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "移除失败"})
+		return
+	}
+	if rowsAffected == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "标签关联不存在"})
 		return
 	}
-
-	// 更新标签使用次数
-	database.DB.Model(&model.Tag{}).Where("id = ?", tagID).Update("usage_count", database.DB.Raw("usage_count - 1"))
 
 	c.JSON(http.StatusOK, gin.H{"message": "移除成功"})
 }
