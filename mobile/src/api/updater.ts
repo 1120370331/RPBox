@@ -99,16 +99,18 @@ export function isNewerVersion(latestVersion: string, currentVersion: string): b
   return false
 }
 
-export function detectMobileTarget(): MobileTarget | null {
-  const platform = Capacitor.getPlatform()
+export function resolveMobileTarget(platform: string, userAgent: string): MobileTarget | null {
   if (platform === 'android' || platform === 'ios') {
     return platform
   }
 
-  const ua = navigator.userAgent || ''
-  if (/Android/i.test(ua)) return 'android'
-  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
+  if (/Android/i.test(userAgent)) return 'android'
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios'
   return null
+}
+
+export function detectMobileTarget(): MobileTarget | null {
+  return resolveMobileTarget(Capacitor.getPlatform(), navigator.userAgent || '')
 }
 
 export function detectArch(): string {
