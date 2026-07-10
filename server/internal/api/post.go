@@ -3,14 +3,13 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/service"
@@ -81,6 +80,8 @@ type postListResponse struct {
 	Total int64          `json:"total"`
 }
 
+const postListSelectColumns = "posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.region, posts.address, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at"
+
 type postListItem struct {
 	model.Post
 	AuthorName            string `json:"author_name"`
@@ -93,6 +94,25 @@ type postListItem struct {
 	AuthorForumLevelColor string `json:"author_forum_level_color"`
 	AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
 	CoverImageURL         string `json:"cover_image_url"`
+}
+
+func (params postListParams) toServiceQuery() service.PostListQuery {
+	return service.PostListQuery{
+		ViewerID:   params.UserID,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		SortBy:     params.SortBy,
+		Order:      params.Order,
+		Search:     params.Search,
+		AuthorName: params.AuthorName,
+		Region:     params.Region,
+		Address:    params.Address,
+		TagID:      params.TagID,
+		AuthorID:   params.AuthorID,
+		Status:     params.Status,
+		Category:   params.Category,
+		IsPinned:   params.IsPinned,
+	}
 }
 
 type apiError struct {
@@ -185,35 +205,17 @@ func (s *Server) listPosts(c *gin.Context) {
 	}
 
 	isSelfView := authorID != "" && authorID == strconv.Itoa(int(userID))
-	if s.cache != nil && params.GuildID == "" && !isSelfView {
-		startTime := time.Now()
-		pinnedValue := "any"
-		if params.IsPinned != nil {
-			pinnedValue = strconv.FormatBool(*params.IsPinned)
+	var response postListResponse
+	var err error
+	if params.GuildID == "" && !isSelfView && s.postLists != nil {
+		var candidates service.PostListCandidatePage
+		candidates, err = s.postLists.Candidates(c.Request.Context(), params.toServiceQuery())
+		if err == nil {
+			response, err = s.hydratePostList(c.Request.Context(), candidates.IDs, candidates.Total)
 		}
-		filterKey := fmt.Sprintf("search_scope=global_v2|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
-			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.Region, params.Address, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
-		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
-		if err != nil {
-			log.Printf("[Cache] Version error: %v", err)
-		} else {
-			cacheKey := cache.VersionedKey(postListCacheName, version, cache.HashKey(filterKey))
-			var cached postListResponse
-			cacheHit := true
-			if err := s.cache.Fetch(c.Request.Context(), cacheKey, cache.TTL["post:list"], &cached, func(ctx context.Context) (interface{}, error) {
-				cacheHit = false
-				return s.loadPostList(ctx, params)
-			}); err != nil {
-				log.Printf("[Cache] Fetch error for key %s: %v", cacheKey, err)
-			} else {
-				log.Printf("[Cache] %s posts=%d time=%v", map[bool]string{true: "HIT", false: "MISS"}[cacheHit], len(cached.Posts), time.Since(startTime))
-				c.JSON(http.StatusOK, cached)
-				return
-			}
-		}
+	} else {
+		response, err = s.loadPostListDirect(c.Request.Context(), params)
 	}
-
-	response, err := s.loadPostList(c.Request.Context(), params)
 	if err != nil {
 		if apiErr, ok := err.(*apiError); ok {
 			c.JSON(apiErr.status, gin.H{"error": apiErr.message})
@@ -226,7 +228,7 @@ func (s *Server) listPosts(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (s *Server) loadPostList(ctx context.Context, params postListParams) (postListResponse, error) {
+func (s *Server) loadPostListDirect(ctx context.Context, params postListParams) (postListResponse, error) {
 	db := database.DB.WithContext(ctx)
 	query := db.Model(&model.Post{})
 	isSelfView := params.AuthorID != "" && params.AuthorID == strconv.Itoa(int(params.UserID))
@@ -358,13 +360,52 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	var posts []model.Post
 	// 列表查询排除大字段（content, cover_image）以提高性能
 	// cover_image 通过独立的图片 API 访问
-	if err := query.Select("posts.id, posts.author_id, posts.title, posts.content_type, posts.category, posts.region, posts.address, posts.guild_id, posts.story_id, posts.status, posts.is_public, posts.is_pinned, posts.is_featured, posts.view_count, posts.like_count, posts.comment_count, posts.favorite_count, posts.review_status, posts.event_type, posts.event_start_time, posts.event_end_time, posts.event_color, posts.cover_image_updated_at, posts.created_at, posts.updated_at").Find(&posts).Error; err != nil {
+	if err := query.Select(postListSelectColumns).Find(&posts).Error; err != nil {
 		return postListResponse{}, err
 	}
 
+	return s.buildPostListResponse(ctx, posts, total)
+}
+
+func (s *Server) hydratePostList(
+	ctx context.Context,
+	ids []uint,
+	total int64,
+) (postListResponse, error) {
+	if len(ids) == 0 {
+		return postListResponse{Posts: []postListItem{}, Total: total}, nil
+	}
+
+	db := database.DB.WithContext(ctx)
+	var posts []model.Post
+	if err := db.Model(&model.Post{}).
+		Select(postListSelectColumns).
+		Where("posts.id IN ?", ids).
+		Find(&posts).Error; err != nil {
+		return postListResponse{}, err
+	}
+
+	position := make(map[uint]int, len(ids))
+	for index, id := range ids {
+		position[id] = index
+	}
+	sort.SliceStable(posts, func(i, j int) bool {
+		return position[posts[i].ID] < position[posts[j].ID]
+	})
+
+	return s.buildPostListResponse(ctx, posts, total)
+}
+
+func (s *Server) buildPostListResponse(
+	ctx context.Context,
+	posts []model.Post,
+	total int64,
+) (postListResponse, error) {
 	if len(posts) == 0 {
 		return postListResponse{Posts: []postListItem{}, Total: total}, nil
 	}
+
+	db := database.DB.WithContext(ctx)
 
 	// 获取有封面图的帖子 ID 列表
 	var postIDs []uint
