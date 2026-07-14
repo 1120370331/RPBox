@@ -248,23 +248,22 @@ func (s *Server) redeemSponsorCode(c *gin.Context) {
 		}
 
 		var sponsorExpiresAt *time.Time
-		if redeemedCode.DurationMonths > 0 {
-			if activeLevel > sponsorLevelNone && updatedUser.SponsorExpiresAt == nil {
-				sponsorExpiresAt = nil
-			} else {
-				base := now
-				if updatedUser.SponsorExpiresAt != nil && updatedUser.SponsorExpiresAt.After(now) {
-					base = *updatedUser.SponsorExpiresAt
-				}
-				value := base.AddDate(0, redeemedCode.DurationMonths, 0)
-				sponsorExpiresAt = &value
+		if redeemedCode.DurationMonths == 0 {
+			sponsorExpiresAt = nil
+		} else if !(updatedUser.SponsorExpiresAt == nil && activeLevel >= nextLevel) {
+			base := now
+			if updatedUser.SponsorExpiresAt != nil && updatedUser.SponsorExpiresAt.After(now) {
+				base = *updatedUser.SponsorExpiresAt
 			}
+			value := base.AddDate(0, redeemedCode.DurationMonths, 0)
+			sponsorExpiresAt = &value
 		}
 
 		updates := map[string]interface{}{
-			"is_sponsor":         true,
-			"sponsor_level":      nextLevel,
-			"sponsor_expires_at": sponsorExpiresAt,
+			"is_sponsor":                    true,
+			"sponsor_level":                 nextLevel,
+			"sponsor_acknowledgement_level": nextSponsorAcknowledgementLevel(updatedUser, redeemedCode.SponsorLevel),
+			"sponsor_expires_at":            sponsorExpiresAt,
 		}
 		if nextLevel < sponsorLevelStyle {
 			updates["sponsor_color"] = ""

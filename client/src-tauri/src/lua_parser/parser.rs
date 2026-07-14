@@ -1,5 +1,5 @@
-use std::path::Path;
 use serde_json::{json, Value};
+use std::path::Path;
 
 use crate::lua_parser::error::LuaParseError;
 use crate::lua_parser::lexer::{Lexer, Token};
@@ -29,7 +29,10 @@ impl<'a> Parser<'a> {
     fn new(input: &'a str) -> Self {
         let mut lexer = Lexer::new(input);
         let current_token = lexer.next_token().unwrap_or(Token::Eof);
-        Self { lexer, current_token }
+        Self {
+            lexer,
+            current_token,
+        }
     }
 
     fn advance(&mut self) -> Result<(), LuaParseError> {
@@ -179,7 +182,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_table_entry(&mut self, array_index: &mut u64) -> Result<(Option<String>, Value), LuaParseError> {
+    fn parse_table_entry(
+        &mut self,
+        array_index: &mut u64,
+    ) -> Result<(Option<String>, Value), LuaParseError> {
         match &self.current_token {
             // ["key"] = value
             Token::LeftBracket => {

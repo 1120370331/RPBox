@@ -63,6 +63,27 @@ func resolveSponsorLevel(user model.User) int {
 	return sponsorLevelNone
 }
 
+func resolveSponsorAcknowledgementLevel(user model.User) int {
+	if user.SponsorAcknowledgementLevel > sponsorLevelNone {
+		return user.SponsorAcknowledgementLevel
+	}
+	if user.SponsorLevel > sponsorLevelNone {
+		return user.SponsorLevel
+	}
+	if user.IsSponsor {
+		return 1
+	}
+	return sponsorLevelNone
+}
+
+func nextSponsorAcknowledgementLevel(user model.User, level int) int {
+	current := resolveSponsorAcknowledgementLevel(user)
+	if level > current {
+		return level
+	}
+	return current
+}
+
 func normalizeHexValue(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {

@@ -5,6 +5,7 @@ export interface Tag {
   name: string
   color: string
   type: 'preset' | 'custom' | 'guild'
+  category?: 'story' | 'item' | 'post' | 'rpdb'
   guild_id?: number
   creator_id: number
   is_public: boolean
@@ -16,14 +17,15 @@ export interface Tag {
 export interface CreateTagRequest {
   name: string
   color?: string
+  category?: 'story' | 'item' | 'post' | 'rpdb'
 }
 
-export async function listTags(category?: 'story' | 'item' | 'post'): Promise<{ tags: Tag[] }> {
+export async function listTags(category?: 'story' | 'item' | 'post' | 'rpdb'): Promise<{ tags: Tag[] }> {
   const params = category ? { category } : {}
   return request.get('/tags', { params })
 }
 
-export async function getPresetTags(category?: 'story' | 'item' | 'post'): Promise<{ tags: Tag[] }> {
+export async function getPresetTags(category?: 'story' | 'item' | 'post' | 'rpdb'): Promise<{ tags: Tag[] }> {
   const params = category ? { category } : {}
   return request.get('/tags/preset', { params })
 }

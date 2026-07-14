@@ -10,6 +10,7 @@ import { searchUsers, type UserMentionItem } from '@/api/user'
 import { getGuild } from '@/api/guild'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import ImageViewer from '@/components/ImageViewer.vue'
+import RPDBModerationPanel from '@/components/rpdb/RPDBModerationPanel.vue'
 import * as echarts from 'echarts'
 import {
   getModeratorStats,
@@ -107,7 +108,7 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'sponsorCodes' | 'addons' | 'admin' | 'logs' | 'metrics'>('review')
-type ReviewSubTab = 'posts' | 'items' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
+type ReviewSubTab = 'posts' | 'items' | 'rpdb' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
 type AdminSubTab = 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'
@@ -351,7 +352,7 @@ onUnmounted(() => {
   }
 })
 
-const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'userAvatars']
+const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'rpdb', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'userAvatars']
 const manageSubTabs: ManageSubTab[] = ['posts', 'items', 'guilds', 'users']
 
 function isReviewSubTab(subTab: ModeratorSubTab): subTab is ReviewSubTab {
@@ -680,6 +681,7 @@ function formatForumLevel(user: SafeUser): string {
 function loadReviewSubTab(subTab: ReviewSubTab) {
   if (subTab === 'posts') loadPendingPosts()
   else if (subTab === 'items') loadPendingItems()
+  else if (subTab === 'rpdb') return
   else if (subTab === 'postEdits') loadPendingPostEdits()
   else if (subTab === 'itemEdits') loadPendingItemEdits()
   else if (subTab === 'guilds') loadPendingGuilds()
@@ -1096,6 +1098,7 @@ function formatActionType(type: string): string {
 function getReportTargetLabel(type: string) {
   if (type === 'post') return '帖子'
   if (type === 'item') return '作品'
+  if (type === 'rpdb_work') return 'RP 数据库作品'
   if (type === 'user') return '用户'
   if (type === 'comment') return '帖子评论'
   if (type === 'item_comment') return '作品评论'
@@ -1114,7 +1117,7 @@ function getReportScopeLabel(scope: ReportScope) {
   if (scope === 'user') return '举报用户'
   if (scope === 'comment') return '举报评论'
   if (scope === 'story') return '剧情举报'
-  return '举报帖子/道具'
+  return '举报帖子/道具/RP 数据库作品'
 }
 
 function getReportEmptyText() {
@@ -1315,6 +1318,10 @@ function openReportActionModal(action: ReportReviewAction, report?: ReportReview
 }
 
 function openReportTarget(report: ReportReviewItem) {
+  if (report.target_type === 'rpdb_work') {
+    router.push(report.target_url || `/rpdb/${report.target_id}`)
+    return
+  }
   if (report.target_type === 'story') {
     if (report.target_url) {
       router.push(report.target_url)
@@ -2652,6 +2659,21 @@ function formatBanTime(dateStr: string | null) {
         </button>
         <button
           v-if="activeTab === 'review'"
+          data-testid="moderator-tab-rpdb"
+          :class="{ active: activeSubTab === 'rpdb' }"
+          @click="switchSubTab('rpdb')"
+        >
+          <i class="ri-archive-drawer-line"></i>
+          RP 数据库
+          <span
+            v-if="((stats?.pending_rpdb_works || 0) + (stats?.pending_rpdb_media || 0) + (stats?.pending_rpdb_revisions || 0)) > 0"
+            class="review-badge"
+          >
+            {{ (stats?.pending_rpdb_works || 0) + (stats?.pending_rpdb_media || 0) + (stats?.pending_rpdb_revisions || 0) }}
+          </span>
+        </button>
+        <button
+          v-if="activeTab === 'review'"
           :class="{ active: activeSubTab === 'postEdits' }"
           @click="switchSubTab('postEdits')"
         >
@@ -2860,6 +2882,14 @@ function formatBanTime(dateStr: string | null) {
         </div>
       </div>
 
+      <RPDBModerationPanel
+        v-if="activeTab === 'review' && activeSubTab === 'rpdb'"
+        class="content-list anim-item"
+        style="--delay: 4"
+        :stats="stats"
+        @reviewed="loadStats"
+      />
+
       <!-- 审核中心 - 帖子编辑申请 -->
       <div v-if="activeTab === 'review' && activeSubTab === 'postEdits'" class="content-list anim-item" style="--delay: 4">
         <div v-if="loading" class="loading">
@@ -2993,7 +3023,7 @@ function formatBanTime(dateStr: string | null) {
       <div v-if="activeTab === 'review' && activeSubTab === 'reports'" class="content-list anim-item" style="--delay: 4">
           <div class="report-scope-tabs">
             <button :class="{ active: reportScope === 'content' }" @click="switchReportScope('content')">
-              <i class="ri-article-line"></i> 举报帖子/道具
+              <i class="ri-article-line"></i> 举报内容
             </button>
             <button :class="{ active: reportScope === 'comment' }" @click="switchReportScope('comment')">
               <i class="ri-message-3-line"></i> 举报评论

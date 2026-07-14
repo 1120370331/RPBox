@@ -99,7 +99,14 @@ const MentionExtension = Mention.extend({
   },
 })
 
-type JumpVariant = 'story-mine' | 'story-guild' | 'post-public' | 'guild-home'
+type JumpVariant =
+  | 'story-mine'
+  | 'story-guild'
+  | 'post-public'
+  | 'guild-home'
+  | 'rpdb-item'
+  | 'rpdb-transmog'
+  | 'rpdb-home'
 
 function normalizeJumpText(value: unknown) {
   return String(value || '').trim()
@@ -124,6 +131,12 @@ function resolveJumpVariant(attrs: Record<string, any>): JumpVariant | '' {
   const label = normalizeJumpText(attrs.label)
   if (type === 'guild') return 'guild-home'
   if (type === 'post') return 'post-public'
+  if (type === 'rpdb_work') {
+    const rpdbType = normalizeJumpText(attrs.rpdbType)
+    if (rpdbType === 'transmog') return 'rpdb-transmog'
+    if (rpdbType === 'home_showcase') return 'rpdb-home'
+    return 'rpdb-item'
+  }
   if (type === 'story') {
     return label.includes('公会') ? 'story-guild' : 'story-mine'
   }
@@ -143,6 +156,12 @@ function buildJumpBaseAttrs(attrs: Record<string, any>, variant: string, styleVa
   const avatar = normalizeJumpText(attrs.avatar)
   const members = normalizeJumpText(attrs.members)
   const image = normalizeJumpText(attrs.image)
+  const summary = normalizeJumpText(attrs.summary)
+  const rpdbType = normalizeJumpText(attrs.rpdbType)
+  const views = normalizeJumpText(attrs.views)
+  const likes = normalizeJumpText(attrs.likes)
+  const favorites = normalizeJumpText(attrs.favorites)
+  const lists = normalizeJumpText(attrs.lists)
   const classes = ['jump-card']
   const appliedVariant = styleVariant || variant
   if (appliedVariant) classes.push(`jump-card--${appliedVariant}`)
@@ -163,6 +182,12 @@ function buildJumpBaseAttrs(attrs: Record<string, any>, variant: string, styleVa
     'data-jump-avatar': avatar,
     'data-jump-members': members,
     'data-jump-image': image,
+    'data-jump-summary': summary,
+    'data-jump-rpdb-type': rpdbType,
+    'data-jump-views': views,
+    'data-jump-likes': likes,
+    'data-jump-favorites': favorites,
+    'data-jump-lists': lists,
   }
 }
 
@@ -171,7 +196,7 @@ function buildJumpTag(label: string, variant: string) {
   return ['span', { class: `jump-tag ${variant}`.trim() }, label]
 }
 
-function buildJumpCard(attrs: Record<string, any>) {
+function buildJumpCard(attrs: Record<string, any>): any {
   const label = normalizeJumpText(attrs.label) || '跳转'
   const title = normalizeJumpText(attrs.title)
   const status = normalizeJumpText(attrs.status)
@@ -259,6 +284,59 @@ function buildJumpCard(attrs: Record<string, any>) {
     ]
   }
 
+  if (variant === 'rpdb-item' || variant === 'rpdb-transmog' || variant === 'rpdb-home') {
+    const summary = normalizeJumpText(attrs.summary) || '作者尚未填写作品摘要。'
+    const rpdbTitle = title || '未命名作品'
+    const icon = variant === 'rpdb-transmog'
+      ? 'ri-shirt-line'
+      : variant === 'rpdb-home'
+        ? 'ri-home-heart-line'
+        : 'ri-magic-line'
+    const category = variant === 'rpdb-transmog'
+      ? '幻化方案'
+      : variant === 'rpdb-home'
+        ? '家宅分享'
+        : '魔兽物品'
+    const mediaChildren: any[] = image
+      ? [['img', { src: image, alt: '' }]]
+      : [['i', { class: icon }]]
+    const metrics = [
+      { icon: 'ri-eye-line', value: normalizeJumpText(attrs.views) || '0', title: '浏览' },
+      { icon: 'ri-heart-3-line', value: normalizeJumpText(attrs.likes) || '0', title: '点赞' },
+      { icon: 'ri-bookmark-3-line', value: normalizeJumpText(attrs.favorites) || '0', title: '收藏' },
+      { icon: 'ri-list-check-3', value: normalizeJumpText(attrs.lists) || '0', title: '加入清单' },
+    ]
+    return [
+      'span',
+      baseAttrs,
+      ['span', { class: 'jump-card__rpdb-accent' }],
+      ['span', { class: 'jump-card__rpdb-media' }, ...mediaChildren],
+      [
+        'span',
+        { class: 'jump-card__rpdb-body' },
+        [
+          'span',
+          { class: 'jump-card__rpdb-meta' },
+          ['span', { class: 'jump-card__rpdb-kind' }, ['i', { class: icon }], label || category],
+          ['span', { class: 'jump-card__rpdb-author' }, author || '匿名贡献者'],
+        ],
+        ['span', { class: 'jump-card__title' }, rpdbTitle],
+        ['span', { class: 'jump-card__rpdb-summary' }, summary],
+        [
+          'span',
+          { class: 'jump-card__rpdb-metrics', 'aria-label': '作品数据' },
+          ...metrics.map((metric) => [
+            'span',
+            { title: metric.title, 'aria-label': `${metric.title} ${metric.value}` },
+            ['i', { class: metric.icon }],
+            ['b', {}, metric.value],
+          ]),
+        ],
+      ],
+      ['span', { class: 'jump-card__rpdb-open', title: '查看作品' }, ['i', { class: 'ri-arrow-right-line' }]],
+    ]
+  }
+
   if (variant === 'post-public') {
     const authorName = author || '未知作者'
     const postTitle = title || '未命名帖子'
@@ -342,9 +420,15 @@ function parseJumpAttrs(node: HTMLElement) {
   let avatar = node.getAttribute('data-jump-avatar') || ''
   const members = node.getAttribute('data-jump-members') || ''
   let image = node.getAttribute('data-jump-image') || ''
+  const summary = node.getAttribute('data-jump-summary') || ''
+  const rpdbType = node.getAttribute('data-jump-rpdb-type') || ''
+  const views = node.getAttribute('data-jump-views') || ''
+  const likes = node.getAttribute('data-jump-likes') || ''
+  const favorites = node.getAttribute('data-jump-favorites') || ''
+  const lists = node.getAttribute('data-jump-lists') || ''
 
   if (!image) {
-    const img = node.querySelector('.jump-card__bg-image, .jump-card__image, .jump-card__logo-image, .jump-card__thumb img')
+    const img = node.querySelector('.jump-card__bg-image, .jump-card__image, .jump-card__logo-image, .jump-card__thumb img, .jump-card__rpdb-media img')
     if (img) {
       image = img.getAttribute('src') || ''
     }
@@ -389,6 +473,12 @@ function parseJumpAttrs(node: HTMLElement) {
     avatar: avatar.trim(),
     members: members.trim(),
     image: image.trim(),
+    summary: summary.trim(),
+    rpdbType: rpdbType.trim(),
+    views: views.trim(),
+    likes: likes.trim(),
+    favorites: favorites.trim(),
+    lists: lists.trim(),
   }
 }
 
@@ -539,6 +629,12 @@ const JumpLinkExtension = Node.create({
       avatar: { default: '' },
       members: { default: '' },
       image: { default: '' },
+      summary: { default: '' },
+      rpdbType: { default: '' },
+      views: { default: '' },
+      likes: { default: '' },
+      favorites: { default: '' },
+      lists: { default: '' },
     }
   },
   parseHTML() {

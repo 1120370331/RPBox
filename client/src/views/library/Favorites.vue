@@ -5,17 +5,20 @@ import { useI18n } from 'vue-i18n'
 import { listMyFavorites, type PostWithAuthor, POST_CATEGORIES } from '@/api/post'
 import { listMyItemFavorites, type Item, getImageUrl } from '@/api/item'
 import { listMyCollectionFavorites, type CollectionWithAuthor } from '@/api/collection'
+import { listMyRPDBFavorites, type RPDBWork } from '@/api/rpdb'
 import LazyBgImage from '@/components/LazyBgImage.vue'
+import RPDBWorkCard from '@/components/rpdb/RPDBWorkCard.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
 const { t } = useI18n()
 const mounted = ref(false)
 const loading = ref(false)
-const activeTab = ref<'posts' | 'items' | 'collections'>('posts')
+const activeTab = ref<'posts' | 'items' | 'collections' | 'rpdb'>('posts')
 const posts = ref<PostWithAuthor[]>([])
 const items = ref<Item[]>([])
 const collections = ref<CollectionWithAuthor[]>([])
+const rpdbWorks = ref<RPDBWork[]>([])
 const searchText = ref('')
 
 const typeMap = computed(() => ({
@@ -63,6 +66,18 @@ const filteredCollections = computed(() => {
   })
 })
 
+const filteredRPDBWorks = computed(() => {
+  if (!keyword.value) return rpdbWorks.value
+  return rpdbWorks.value.filter((work) => {
+    return [
+      work.title,
+      work.summary,
+      work.author_name,
+      work.type,
+    ].some(value => value && value.toLowerCase().includes(keyword.value))
+  })
+})
+
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   loadFavorites()
@@ -86,6 +101,9 @@ async function loadFavorites() {
     } else if (activeTab.value === 'collections') {
       const res = await listMyCollectionFavorites()
       collections.value = res.collections || []
+    } else if (activeTab.value === 'rpdb') {
+      const res = await listMyRPDBFavorites()
+      rpdbWorks.value = res.works || []
     }
   } catch (error) {
     console.error('加载收藏失败:', error)
@@ -108,6 +126,10 @@ function goToItem(id: number) {
 
 function goToCollection(id: number) {
   router.push({ name: 'collection-detail', params: { id } })
+}
+
+function goToRPDBWork(id: number) {
+  router.push({ name: 'rpdb-detail', params: { id } })
 }
 
 function getCategoryLabel(category: string) {
@@ -153,6 +175,15 @@ function getCategoryLabel(category: string) {
         >
           <i class="ri-book-2-line"></i>
           {{ t('library.favorites.tabs.collections') }}
+        </button>
+        <button
+          data-testid="favorites-tab-rpdb"
+          class="tab-btn"
+          :class="{ active: activeTab === 'rpdb' }"
+          @click="activeTab = 'rpdb'"
+        >
+          <i class="ri-archive-drawer-line"></i>
+          {{ t('library.favorites.tabs.rpdb') }}
         </button>
       </div>
       <div class="search-box">
@@ -264,6 +295,21 @@ function getCategoryLabel(category: string) {
             </div>
           </div>
         </div>
+
+        <div v-else-if="activeTab === 'rpdb'">
+          <div v-if="filteredRPDBWorks.length === 0" class="empty-state">
+            <i class="ri-archive-drawer-line"></i>
+            <p>{{ searchText ? t('library.favorites.empty.rpdbSearch') : t('library.favorites.empty.rpdb') }}</p>
+          </div>
+          <div v-else class="rpdb-grid">
+            <RPDBWorkCard
+              v-for="work in filteredRPDBWorks"
+              :key="work.id"
+              :work="work"
+              @open="goToRPDBWork(work.id)"
+            />
+          </div>
+        </div>
       </template>
     </div>
   </div>
@@ -323,6 +369,7 @@ function getCategoryLabel(category: string) {
 
 .tab-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -543,6 +590,12 @@ function getCategoryLabel(category: string) {
 .collection-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.rpdb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 20px;
 }
 

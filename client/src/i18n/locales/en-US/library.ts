@@ -9,6 +9,7 @@ export default {
       posts: 'Posts',
       items: 'Works',
       collections: 'Collections',
+      rpdb: 'RP Database',
     },
     empty: {
       posts: 'No favorite posts',
@@ -17,6 +18,8 @@ export default {
       itemsSearch: 'No matching favorite works found',
       collections: 'No favorite collections',
       collectionsSearch: 'No matching favorite collections found',
+      rpdb: 'No favorite RP Database works',
+      rpdbSearch: 'No matching RP Database works found',
     },
     itemTypes: {
       item: 'Item',

@@ -4,7 +4,7 @@ import { getGuild, type Guild } from '@/api/guild'
 
 const JUMP_LINK_SELECTOR = '.jump-link, a.jump-card, [data-jump-href], [data-jump-type]'
 const EDITOR_SELECTOR = '.tiptap, [contenteditable="true"]'
-const INTERNAL_PREFIXES = ['/archives/story/', '/community/post/', '/guild/', '/market/']
+const INTERNAL_PREFIXES = ['/archives/story/', '/community/post/', '/guild/', '/market/', '/rpdb/']
 const JUMP_RETURN_KEY = 'jump_return_post'
 const GUILD_ID_REGEX = /\/guild\/(\d+)/i
 const GUILD_IMAGE_REGEX = /\/images\/(?:guild-avatar|guild-banner)\/(\d+)/i

@@ -19,8 +19,8 @@ import (
 
 // CreatePostRequest 创建帖子请求
 type CreatePostRequest struct {
-	Title          string  `json:"title" binding:"required"`
-	Content        string  `json:"content" binding:"required"`
+	Title          string  `json:"title"`
+	Content        string  `json:"content"`
 	ContentType    string  `json:"content_type"`
 	CoverImage     *string `json:"cover_image"`
 	Category       string  `json:"category"` // profile|guild|report|novel|item|event|other
@@ -35,6 +35,26 @@ type CreatePostRequest struct {
 	EventStartTime *string `json:"event_start_time"` // ISO8601格式
 	EventEndTime   *string `json:"event_end_time"`
 	EventColor     string  `json:"event_color"` // 活动标记颜色（十六进制）
+}
+
+// SavePostDraftRequest is a complete editor snapshot for an existing draft.
+// Empty title and content are valid because incomplete drafts must remain saveable.
+type SavePostDraftRequest struct {
+	Title          string  `json:"title"`
+	Content        string  `json:"content"`
+	ContentType    string  `json:"content_type"`
+	CoverImage     *string `json:"cover_image"`
+	Category       string  `json:"category"`
+	Region         string  `json:"region"`
+	Address        string  `json:"address"`
+	GuildID        *uint   `json:"guild_id"`
+	StoryID        *uint   `json:"story_id"`
+	TagIDs         []uint  `json:"tag_ids"`
+	IsPublic       *bool   `json:"is_public"`
+	EventType      string  `json:"event_type"`
+	EventStartTime *string `json:"event_start_time"`
+	EventEndTime   *string `json:"event_end_time"`
+	EventColor     string  `json:"event_color"`
 }
 
 // UpdatePostRequest 更新帖子请求
@@ -161,7 +181,7 @@ func (s *Server) listPosts(c *gin.Context) {
 	// 查询参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	sortBy := c.DefaultQuery("sort", "created_at") // created_at|view_count|like_count
+	sortBy := c.DefaultQuery("sort", "created_at") // created_at|updated_at|view_count|like_count
 	order := c.DefaultQuery("order", "desc")
 	search := strings.TrimSpace(c.Query("search"))
 	if search == "" {
@@ -358,6 +378,8 @@ func (s *Server) loadPostListDirect(ctx context.Context, params postListParams) 
 	offset := (params.Page - 1) * params.PageSize
 	sortColumn := "posts.created_at"
 	switch params.SortBy {
+	case "updated_at":
+		sortColumn = "posts.updated_at"
 	case "view_count":
 		sortColumn = "posts.view_count"
 	case "like_count":
@@ -497,6 +519,14 @@ func (s *Server) createPost(c *gin.Context) {
 	if req.Status == "" {
 		req.Status = "draft"
 	}
+	if req.Status != "draft" && req.Status != "published" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "帖子状态无效"})
+		return
+	}
+	if req.Status == "published" && (req.Title == "" || req.Content == "") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "标题和正文不能为空"})
+		return
+	}
 	if req.Category == "" {
 		req.Category = "other"
 	}
@@ -526,7 +556,7 @@ func (s *Server) createPost(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
 			return
 		}
-		if req.EventType == "guild" && req.GuildID == nil {
+		if req.Status == "published" && req.EventType == "guild" && req.GuildID == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
 			return
 		}
@@ -648,6 +678,167 @@ func (s *Server) createPost(c *gin.Context) {
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
 	c.JSON(http.StatusCreated, post)
+}
+
+// savePostDraft replaces an author's draft with the latest editor snapshot.
+func (s *Server) savePostDraft(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "帖子ID无效"})
+		return
+	}
+
+	var post model.Post
+	if err := database.DB.First(&post, uint(id)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		return
+	}
+	if post.AuthorID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
+		return
+	}
+	if post.Status != "draft" {
+		c.JSON(http.StatusConflict, gin.H{"error": "只有草稿可以自动保存"})
+		return
+	}
+
+	var req SavePostDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Content = strings.TrimSpace(req.Content)
+	req.Region = strings.TrimSpace(req.Region)
+	req.Address = strings.TrimSpace(req.Address)
+	if req.ContentType == "" {
+		req.ContentType = "html"
+	}
+	if req.Category == "" {
+		req.Category = "other"
+	}
+	if req.EventType != "" && req.EventType != "server" && req.EventType != "guild" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
+		return
+	}
+	if req.Category != "event" {
+		req.EventType = ""
+		req.EventStartTime = nil
+		req.EventEndTime = nil
+		req.EventColor = ""
+	}
+	if s.enforcePostCommentHardRules(c, userID, "post", &post.ID, req.Title, req.Content) {
+		return
+	}
+
+	if req.CoverImage != nil {
+		coverImage := strings.TrimSpace(*req.CoverImage)
+		currentCoverURL := postCoverURL(post)
+		currentCoverAbsoluteURL := buildAPIURL(s.cfg.Server.ApiHost, currentCoverURL)
+		if coverImage == currentCoverURL || coverImage == currentCoverAbsoluteURL {
+			coverImage = post.CoverImage
+		} else if coverImage != "" {
+			normalizedCover, err := s.normalizeAndStoreImageValue(c, coverImage, fmt.Sprintf("posts/%d/cover", userID))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "封面图格式无效"})
+				return
+			}
+			coverImage = normalizedCover
+		}
+		req.CoverImage = &coverImage
+	}
+	if req.Content != "" {
+		req.Content = s.normalizeAndStoreContentImages(c, req.Content, fmt.Sprintf("posts/%d/content", userID))
+	}
+
+	var eventStart, eventEnd *time.Time
+	if req.EventStartTime != nil && strings.TrimSpace(*req.EventStartTime) != "" {
+		eventStart, err = parseEventDateTime(*req.EventStartTime)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动开始时间格式无效"})
+			return
+		}
+	}
+	if req.EventEndTime != nil && strings.TrimSpace(*req.EventEndTime) != "" {
+		eventEnd, err = parseEventDateTime(*req.EventEndTime)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动结束时间格式无效"})
+			return
+		}
+	}
+
+	post.Title = req.Title
+	post.Content = req.Content
+	post.ContentType = req.ContentType
+	post.Category = req.Category
+	post.Region = req.Region
+	post.Address = req.Address
+	post.GuildID = req.GuildID
+	post.StoryID = req.StoryID
+	post.EventType = req.EventType
+	post.EventStartTime = eventStart
+	post.EventEndTime = eventEnd
+	post.EventColor = req.EventColor
+	post.ReviewStatus = ""
+	if req.IsPublic != nil {
+		post.IsPublic = *req.IsPublic
+	}
+	if post.GuildID == nil {
+		post.IsPublic = true
+	}
+	if req.CoverImage != nil && post.CoverImage != *req.CoverImage {
+		now := time.Now()
+		post.CoverImageUpdatedAt = &now
+		post.CoverImage = *req.CoverImage
+	}
+
+	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+		if err := tx.Save(&post).Error; err != nil {
+			return err
+		}
+
+		var existing []model.PostTag
+		if err := tx.Where("post_id = ?", post.ID).Find(&existing).Error; err != nil {
+			return err
+		}
+		existingIDs := make(map[uint]struct{}, len(existing))
+		for _, item := range existing {
+			existingIDs[item.TagID] = struct{}{}
+		}
+		requestedIDs := make(map[uint]struct{}, len(req.TagIDs))
+		for _, tagID := range req.TagIDs {
+			requestedIDs[tagID] = struct{}{}
+			if _, ok := existingIDs[tagID]; ok {
+				continue
+			}
+			if err := tx.Create(&model.PostTag{PostID: post.ID, TagID: tagID, AddedBy: userID}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.Tag{}).Where("id = ?", tagID).Update("usage_count", gorm.Expr("usage_count + ?", 1)).Error; err != nil {
+				return err
+			}
+		}
+		for _, item := range existing {
+			if _, ok := requestedIDs[item.TagID]; ok {
+				continue
+			}
+			if err := tx.Delete(&item).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.Tag{}).Where("id = ?", item.TagID).Update("usage_count", gorm.Expr("CASE WHEN usage_count > 0 THEN usage_count - 1 ELSE 0 END")).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "草稿保存失败"})
+		return
+	}
+
+	ensurePostCoverUpdatedAt(&post)
+	post.CoverImage = postCoverURL(post)
+	c.JSON(http.StatusOK, post)
 }
 
 // getPost 获取帖子详情

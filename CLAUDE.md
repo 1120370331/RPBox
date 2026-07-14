@@ -556,6 +556,8 @@ git tag addon-v1.1.0 && git push --tags
 |------|------|------|
 | 人物卡同步 | SYNC | `client/src/views/sync/` |
 | 剧情归档 | STORY | `client/src/views/story/` |
+| RP数据库 | RPDB | `client/src/views/rpdb/` |
+| 家园地图 | HOME | `client/src/views/home/` |
 | 社区分享 | COMM | `client/src/views/community/` |
 | 道具市场 | ITEM | `client/src/views/market/` |
 | 手机端 | MOB | `mobile/src/` |

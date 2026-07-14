@@ -5,6 +5,7 @@ export default {
     archives: '剧情故事',
     warcraft: '魔兽功能',
     market: '创意市场',
+    rpdb: 'RP 数据库',
     community: '社区广场',
     guild: '公会',
     settings: '系统设置',

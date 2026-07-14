@@ -2,7 +2,18 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { createPost, type CreatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
+import {
+  createPost,
+  createPostDraft,
+  deletePost,
+  savePostDraft,
+  updatePost,
+  type CreatePostRequest,
+  type PostWithAuthor,
+  type SavePostDraftRequest,
+  POST_CATEGORIES,
+  type PostCategory,
+} from '@/api/post'
 import { uploadImage } from '@/api/item'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
@@ -11,8 +22,9 @@ import { useUserStore } from '@/stores/user'
 import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
+import PostDraftBox from '@/components/PostDraftBox.vue'
 import CollectionSelector from '@/components/CollectionSelector.vue'
-import { addPostToCollection } from '@/api/collection'
+import { addPostToCollection, removePostFromCollection } from '@/api/collection'
 import { useDialog } from '@/composables/useDialog'
 
 const DRAFT_KEY = 'post_create_draft'
@@ -67,8 +79,14 @@ const tags = ref<Tag[]>([])
 const guilds = ref<Guild[]>([])
 const selectedTags = ref<number[]>([])
 const selectedCollectionId = ref<number | null>(null)
-let autoSaveTimer: ReturnType<typeof setInterval> | null = null
+const draftId = ref<number | null>(null)
+const draftSaveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const draftRefreshKey = ref(0)
+const syncedCollectionId = ref<number | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let cloudSaveRunning = false
+let cloudSaveQueued = false
+let skipUnmountSave = false
 
 function hasDraftContent(formData = form.value, tagIds = selectedTags.value) {
   return Boolean(
@@ -81,22 +99,20 @@ function hasDraftContent(formData = form.value, tagIds = selectedTags.value) {
   )
 }
 
-// 保存草稿到 localStorage
-function saveDraft() {
-  if (!hasDraftContent() || loading.value) return
-
+function saveLocalDraft() {
+  if (!hasDraftContent()) return
   const draft = {
     form: form.value,
     selectedTags: selectedTags.value,
+    draftId: draftId.value,
     savedAt: Date.now()
   }
   localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
 }
 
-// 防抖保存
 function debouncedSaveDraft() {
   if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(saveDraft, 1000)
+  debounceTimer = setTimeout(() => void saveDraftToCloud(), 1400)
 }
 
 // 清除草稿
@@ -132,6 +148,7 @@ async function maybeRestoreDraft() {
 
     form.value = { ...form.value, ...draftForm }
     selectedTags.value = draftTags
+    draftId.value = Number(draft.draftId) || null
     coverImagePreview.value = form.value.cover_image || ''
   } catch (e) {
     console.error('恢复草稿失败:', e)
@@ -152,21 +169,115 @@ onMounted(async () => {
   await loadTags()
   await loadGuilds()
 
-  // 每 10 秒自动保存一次
-  autoSaveTimer = setInterval(saveDraft, 10000)
+  if (hasDraftContent()) debouncedSaveDraft()
 })
 
 onUnmounted(() => {
-  if (autoSaveTimer) {
-    clearInterval(autoSaveTimer)
-  }
   if (debounceTimer) {
     clearTimeout(debounceTimer)
+  }
+  if (!skipUnmountSave) {
+    saveLocalDraft()
+    if (hasDraftContent()) void saveDraftToCloud()
   }
 })
 
 // 监听表单变化，自动保存草稿
-watch([() => form.value.title, () => form.value.content, () => form.value.region, () => form.value.address, selectedTags], debouncedSaveDraft, { deep: true })
+watch([form, selectedTags, selectedCollectionId], debouncedSaveDraft, { deep: true })
+
+function buildDraftPayload(): SavePostDraftRequest {
+  const payload: SavePostDraftRequest = {
+    ...form.value,
+    title: form.value.title.trim(),
+    content: form.value.content.trim(),
+    region: form.value.region?.trim() || '',
+    address: form.value.address?.trim() || '',
+    content_type: 'html',
+    tag_ids: [...selectedTags.value],
+  }
+  if (payload.event_start_time) payload.event_start_time = new Date(payload.event_start_time).toISOString()
+  if (payload.event_end_time) payload.event_end_time = new Date(payload.event_end_time).toISOString()
+  return payload
+}
+
+async function syncDraftCollection(postId: number) {
+  if (syncedCollectionId.value === selectedCollectionId.value) return
+  if (syncedCollectionId.value) await removePostFromCollection(syncedCollectionId.value, postId)
+  if (selectedCollectionId.value) await addPostToCollection(selectedCollectionId.value, postId)
+  syncedCollectionId.value = selectedCollectionId.value
+}
+
+async function saveDraftToCloud(force = false) {
+  saveLocalDraft()
+  if ((!force && !hasDraftContent()) || (loading.value && !force)) return draftId.value
+  if (cloudSaveRunning) {
+    cloudSaveQueued = true
+    return draftId.value
+  }
+
+  cloudSaveRunning = true
+  draftSaveState.value = 'saving'
+  try {
+    const payload = buildDraftPayload()
+    const saved = draftId.value
+      ? await savePostDraft(draftId.value, payload)
+      : await createPostDraft(payload)
+    draftId.value = saved.id
+    await syncDraftCollection(saved.id)
+    localStorage.removeItem(DRAFT_KEY)
+    draftSaveState.value = 'saved'
+    draftRefreshKey.value++
+    return saved.id
+  } catch (error) {
+    console.error('云端草稿保存失败:', error)
+    draftSaveState.value = 'error'
+    return draftId.value
+  } finally {
+    cloudSaveRunning = false
+    if (cloudSaveQueued) {
+      cloudSaveQueued = false
+      void saveDraftToCloud(force)
+    }
+  }
+}
+
+function resetForNewDraft() {
+  form.value = {
+    title: '', content: '', content_type: 'html', category: 'other', region: '', address: '', tag_ids: [],
+    status: 'published', cover_image: '', is_public: true, event_type: undefined,
+    event_start_time: undefined, event_end_time: undefined, event_color: '#D97706',
+  }
+  selectedTags.value = []
+  selectedCollectionId.value = null
+  syncedCollectionId.value = null
+  coverImagePreview.value = ''
+  draftId.value = null
+  draftSaveState.value = 'idle'
+  clearDraft()
+}
+
+async function handleDraftSelect(id: number) {
+  if (id === draftId.value) return
+  await saveDraftToCloud()
+  await router.push({ name: 'post-edit', params: { id } })
+}
+
+async function handleNewDraft() {
+  await saveDraftToCloud()
+  resetForNewDraft()
+}
+
+async function handleDraftDelete(post: PostWithAuthor) {
+  const confirmed = await dialog.confirm({
+    title: t('community.drafts.deleteTitle'),
+    message: t('community.drafts.deleteMessage', { title: post.title || t('community.drafts.untitled') }),
+    type: 'warning',
+  })
+  if (!confirmed) return
+  await deletePost(post.id)
+  if (post.id === draftId.value) resetForNewDraft()
+  draftRefreshKey.value++
+}
 
 async function loadTags() {
   try {
@@ -233,13 +344,31 @@ async function handleSubmit(status: 'draft' | 'published') {
       payload.event_end_time = new Date(payload.event_end_time).toISOString()
     }
 
-    const res: any = await createPost(payload)
-
-    // 添加到合集
-    if (selectedCollectionId.value && res.data?.id) {
-      await addPostToCollection(selectedCollectionId.value, res.data.id)
+    if (status === 'draft') {
+      const savedId = await saveDraftToCloud(true)
+      if (savedId && draftSaveState.value === 'saved') {
+        toast.success(t('community.create.draftSuccess'))
+      } else {
+        toast.error(t('community.drafts.error'))
+      }
+      return
     }
 
+    let res: any
+    if (draftId.value) {
+      await saveDraftToCloud(true)
+      res = await updatePost(draftId.value, payload)
+    } else {
+      res = await createPost(payload)
+    }
+
+    // 添加到合集
+    const publishedPostId = draftId.value || res?.data?.id || res?.id
+    if (selectedCollectionId.value && publishedPostId && !draftId.value) {
+      await addPostToCollection(selectedCollectionId.value, publishedPostId)
+    }
+
+    skipUnmountSave = true
     clearDraft() // 发布成功后清除草稿
     toast.success(status === 'published' ? t('community.create.publishSuccess') : t('community.create.draftSuccess'))
     router.push({ name: 'my-posts' })
@@ -253,13 +382,12 @@ async function handleSubmit(status: 'draft' | 'published') {
 }
 
 function handleCancel() {
-  clearDraft()
+  void saveDraftToCloud()
   router.back()
 }
 
-function handlePreview() {
-  // 先保存草稿
-  saveDraft()
+async function handlePreview() {
+  await saveDraftToCloud()
 
   // 保存预览数据到 sessionStorage
   const previewData = {
@@ -342,6 +470,14 @@ function toggleQuickJump() {
     <!-- 头部 -->
     <div class="page-header anim-item" style="--delay: 0">
       <h1 class="page-title">{{ t('community.create.pageTitle') }}</h1>
+      <PostDraftBox
+        :current-draft-id="draftId"
+        :save-state="draftSaveState"
+        :refresh-key="draftRefreshKey"
+        @select="handleDraftSelect"
+        @create="handleNewDraft"
+        @delete="handleDraftDelete"
+      />
     </div>
 
     <!-- 编辑区域 -->
@@ -565,6 +701,10 @@ function toggleQuickJump() {
 
       <!-- 操作按钮 -->
       <div class="actions-group">
+        <button class="action-btn draft" @click="handleSubmit('draft')" :disabled="loading">
+          <i class="ri-save-line"></i>
+          {{ t('community.create.saveDraft') }}
+        </button>
         <button class="action-btn preview" @click="handlePreview">
           <i class="ri-eye-line"></i>
           {{ t('community.create.preview') }}
@@ -588,6 +728,10 @@ function toggleQuickJump() {
 
 /* ========== Page Header ========== */
 .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
@@ -1195,6 +1339,12 @@ function toggleQuickJump() {
   background: #F5EFE7;
   border: 1px solid #E5D4C1;
   color: #4B3621;
+}
+
+.actions-group .action-btn.draft {
+  color: #76512c;
+  border-color: rgba(118, 81, 44, 0.28);
+  background: #fbf8f3;
 }
 
 .actions-group .action-btn.preview:hover {

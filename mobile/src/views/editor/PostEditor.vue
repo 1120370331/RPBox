@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from '@shared/stores/toast'
@@ -7,10 +7,14 @@ import {
   POST_CATEGORIES,
   addPostTag,
   createPost,
+  createPostDraft,
   deletePost,
   getPost,
   getPostTags,
   removePostTag,
+  savePostDraft,
+  type PostWithAuthor,
+  type SavePostDraftRequest,
   type PostCategory,
   updatePost,
 } from '@/api/post'
@@ -26,6 +30,7 @@ import {
 import MobileCollectionSelector from '@/components/MobileCollectionSelector.vue'
 import MobileQuickJump from '@/components/MobileQuickJump.vue'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
+import MobilePostDraftBox from '@/components/MobilePostDraftBox.vue'
 import NativeImageSourceDialog from '@/components/NativeImageSourceDialog.vue'
 import {
   canUseNativeImagePicker,
@@ -72,6 +77,15 @@ const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
 const useNativeImagePicker = canUseNativeImagePicker()
 const showImageSourceDialog = ref(false)
+const activeDraftId = ref<number | null>(null)
+const loadedStatus = ref<'draft' | 'pending' | 'published' | null>(null)
+const draftSaveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const draftRefreshKey = ref(0)
+let draftTimer: ReturnType<typeof setTimeout> | null = null
+let cloudSaveRunning = false
+let cloudSaveQueued = false
+let initializing = false
+let skipUnmountSave = false
 
 const form = ref<PostEditorForm>({
   title: '',
@@ -92,8 +106,25 @@ const form = ref<PostEditorForm>({
 
 const postId = computed(() => Number(route.params.id))
 const isEdit = computed(() => Number.isFinite(postId.value) && postId.value > 0)
+const currentDraftId = computed(() => activeDraftId.value || (loadedStatus.value === 'draft' && isEdit.value ? postId.value : null))
 const pageTitle = computed(() => isEdit.value ? t('community.editor.editTitle') : t('community.editor.createTitle'))
 const isEventCategory = computed(() => form.value.category === 'event')
+
+function resetEditor() {
+  form.value = {
+    title: '', content: '', content_type: 'html', category: 'other', region: '', address: '',
+    guild_id: undefined, story_id: undefined, cover_image: '', is_public: true,
+    event_type: undefined, event_start_time: undefined, event_end_time: undefined, event_color: '#D97706',
+  }
+  selectedTags.value = []
+  originalTags.value = []
+  selectedCollectionId.value = null
+  originalCollectionId.value = null
+  coverPreview.value = ''
+  activeDraftId.value = null
+  loadedStatus.value = null
+  draftSaveState.value = 'idle'
+}
 
 watch(() => form.value.category, (category) => {
   if (category !== 'event') {
@@ -140,6 +171,9 @@ async function loadPostForEdit() {
     form.value.event_color = res.post.event_color || '#D97706'
     form.value.cover_image = res.post.cover_image || ''
     form.value.is_public = res.post.is_public ?? true
+    loadedStatus.value = res.post.status
+    activeDraftId.value = res.post.status === 'draft' ? res.post.id : null
+    draftSaveState.value = res.post.status === 'draft' ? 'saved' : 'idle'
     coverPreview.value = resolveApiUrl(res.post.cover_image || '')
 
     const collectionRes = await getPostCollection(postId.value)
@@ -157,6 +191,66 @@ async function loadPostForEdit() {
   } finally {
     loading.value = false
   }
+}
+
+function hasDraftContent() {
+  return Boolean(form.value.title.trim() || form.value.content.trim() || form.value.cover_image || form.value.region.trim() || form.value.address.trim() || selectedTags.value.length)
+}
+
+function buildDraftPayload(): SavePostDraftRequest {
+  const payload: SavePostDraftRequest = {
+    ...form.value,
+    title: form.value.title.trim(),
+    content: form.value.content.trim(),
+    region: form.value.region.trim(),
+    address: form.value.address.trim(),
+    content_type: 'html',
+    tag_ids: [...selectedTags.value],
+  }
+  if (payload.event_start_time) payload.event_start_time = new Date(payload.event_start_time).toISOString()
+  if (payload.event_end_time) payload.event_end_time = new Date(payload.event_end_time).toISOString()
+  return payload
+}
+
+async function saveDraftToCloud(force = false) {
+  if (initializing || saving.value || (!force && !hasDraftContent())) return currentDraftId.value
+  if (loadedStatus.value && loadedStatus.value !== 'draft') return null
+  if (cloudSaveRunning) {
+    cloudSaveQueued = true
+    return currentDraftId.value
+  }
+
+  cloudSaveRunning = true
+  draftSaveState.value = 'saving'
+  try {
+    const payload = buildDraftPayload()
+    const saved = currentDraftId.value
+      ? await savePostDraft(currentDraftId.value, payload)
+      : await createPostDraft(payload)
+    activeDraftId.value = saved.id
+    loadedStatus.value = 'draft'
+    await syncPostCollection(saved.id)
+    originalTags.value = [...selectedTags.value]
+    draftSaveState.value = 'saved'
+    draftRefreshKey.value++
+    return saved.id
+  } catch (error) {
+    console.error('Failed to autosave post draft', error)
+    draftSaveState.value = 'error'
+    return currentDraftId.value
+  } finally {
+    cloudSaveRunning = false
+    if (cloudSaveQueued) {
+      cloudSaveQueued = false
+      void saveDraftToCloud(force)
+    }
+  }
+}
+
+function scheduleDraftSave() {
+  if (initializing) return
+  if (draftTimer) clearTimeout(draftTimer)
+  draftTimer = setTimeout(() => void saveDraftToCloud(), 1400)
 }
 
 function toggleTag(tagId: number) {
@@ -246,7 +340,6 @@ async function syncPostCollection(targetPostId: number) {
 }
 
 async function syncPostTags(targetPostId: number) {
-  if (!isEdit.value) return
   const addedTags = selectedTags.value.filter((tagId) => !originalTags.value.includes(tagId))
   const removedTags = originalTags.value.filter((tagId) => !selectedTags.value.includes(tagId))
 
@@ -284,6 +377,16 @@ function handleContentChange(value: string) {
 async function submit(status: 'draft' | 'published') {
   if (!validateForm()) return
 
+  if (status === 'draft') {
+    await saveDraftToCloud(true)
+    if (draftSaveState.value === 'saved') toast.success(t('community.editor.draftSuccess'))
+    return
+  }
+
+  if (loadedStatus.value === 'draft' || (!loadedStatus.value && hasDraftContent())) {
+    await saveDraftToCloud(true)
+  }
+
   saving.value = true
   try {
     const payload = {
@@ -303,8 +406,9 @@ async function submit(status: 'draft' | 'published') {
       payload.event_end_time = new Date(payload.event_end_time).toISOString()
     }
 
-    let targetId = postId.value
-    if (isEdit.value) {
+    let targetId = currentDraftId.value || postId.value
+    const updatingExisting = Boolean(currentDraftId.value || isEdit.value)
+    if (updatingExisting) {
       await updatePost(targetId, payload)
     } else {
       const created = await createPost(payload)
@@ -312,12 +416,11 @@ async function submit(status: 'draft' | 'published') {
     }
 
     await syncPostCollection(targetId)
-    await syncPostTags(targetId)
+    if (updatingExisting) await syncPostTags(targetId)
 
+    skipUnmountSave = true
     toast.success(status === 'published' ? t('community.editor.publishSuccess') : t('community.editor.draftSuccess'))
-    router.replace(isEdit.value
-      ? { name: 'post-detail', params: { id: targetId } }
-      : { name: 'my-posts' })
+    router.replace({ name: 'post-detail', params: { id: targetId } })
   } catch (error) {
     console.error('Failed to submit post', error)
     toast.error((error as Error)?.message || t('community.editor.submitFailed'))
@@ -332,27 +435,74 @@ function handleQuickInsert(html: string) {
 }
 
 function openDeleteDialog() {
+  deletingPost.value = null
+  showDeleteDialog.value = true
+}
+
+const deletingPost = ref<PostWithAuthor | null>(null)
+
+function openDraftDeleteDialog(post: PostWithAuthor) {
+  deletingPost.value = post
   showDeleteDialog.value = true
 }
 
 async function confirmDelete() {
-  if (!isEdit.value || deleting.value) return
+  const targetId = deletingPost.value?.id || currentDraftId.value || (isEdit.value ? postId.value : 0)
+  if (!targetId || deleting.value) return
   deleting.value = true
   try {
-    await deletePost(postId.value)
+    await deletePost(targetId)
     toast.success(t('community.editor.deleteSuccess'))
-    router.replace({ name: 'my-posts' })
+    draftRefreshKey.value++
+    if (targetId === currentDraftId.value || targetId === postId.value) {
+      skipUnmountSave = true
+      resetEditor()
+      await router.replace({ name: 'post-create' })
+    }
   } catch (error) {
     console.error('Failed to delete post', error)
     toast.error((error as Error)?.message || t('community.editor.deleteFailed'))
   } finally {
     deleting.value = false
     showDeleteDialog.value = false
+    deletingPost.value = null
   }
 }
 
+async function handleDraftSelect(id: number) {
+  if (id === currentDraftId.value) return
+  await saveDraftToCloud(true)
+  await router.push({ name: 'post-edit', params: { id } })
+}
+
+async function handleNewDraft() {
+  await saveDraftToCloud()
+  resetEditor()
+  if (route.name !== 'post-create') await router.push({ name: 'post-create' })
+}
+
+async function initializeEditor() {
+  initializing = true
+  skipUnmountSave = false
+  resetEditor()
+  await loadPostForEdit()
+  initializing = false
+}
+
 onMounted(async () => {
-  await Promise.all([loadGuilds(), loadTags(), loadPostForEdit()])
+  await Promise.all([loadGuilds(), loadTags(), initializeEditor()])
+})
+
+watch(() => route.params.id, async (id, oldId) => {
+  if (id === oldId) return
+  await initializeEditor()
+})
+
+watch([form, selectedTags, selectedCollectionId], scheduleDraftSave, { deep: true })
+
+onBeforeUnmount(() => {
+  if (draftTimer) clearTimeout(draftTimer)
+  if (!skipUnmountSave && (loadedStatus.value === 'draft' || (!loadedStatus.value && hasDraftContent()))) void saveDraftToCloud()
 })
 </script>
 
@@ -361,6 +511,14 @@ onMounted(async () => {
     <header class="sub-header">
       <button class="back-btn" @click="router.back()"><i class="ri-arrow-left-line" /></button>
       <h1>{{ pageTitle }}</h1>
+      <MobilePostDraftBox
+        :current-draft-id="currentDraftId"
+        :save-state="draftSaveState"
+        :refresh-key="draftRefreshKey"
+        @select="handleDraftSelect"
+        @create="handleNewDraft"
+        @delete="openDraftDeleteDialog"
+      />
     </header>
 
     <div class="sub-body editor-body">
@@ -504,13 +662,13 @@ onMounted(async () => {
         </section>
 
         <section class="action-bar">
-          <button type="button" class="action-btn" :disabled="saving" @click="submit('draft')">
+          <button v-if="loadedStatus !== 'published' && loadedStatus !== 'pending'" type="button" class="action-btn" :disabled="saving" @click="submit('draft')">
             {{ $t('community.editor.saveDraft') }}
           </button>
           <button type="button" class="action-btn primary" :disabled="saving" @click="submit('published')">
             {{ $t('community.editor.publish') }}
           </button>
-          <button v-if="isEdit" type="button" class="action-btn danger" :disabled="saving" @click="openDeleteDialog">
+          <button v-if="isEdit || currentDraftId" type="button" class="action-btn danger" :disabled="saving" @click="openDeleteDialog">
             {{ $t('community.editor.delete') }}
           </button>
         </section>
@@ -546,6 +704,11 @@ onMounted(async () => {
 <style scoped>
 .editor-body {
   padding-bottom: calc(88px + var(--safe-bottom, 0px));
+}
+
+.sub-header h1 {
+  flex: 1;
+  min-width: 0;
 }
 
 .editor-card {

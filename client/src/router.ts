@@ -54,6 +54,13 @@ const router = createRouter({
         { path: 'market/preview', name: 'item-preview', component: () => import('./views/market/ItemPreview.vue') },
         { path: 'market/:id', name: 'item-detail', component: () => import('./views/market/ItemDetail.vue') },
         { path: 'market/:id/edit', name: 'item-edit', component: () => import('./views/market/ItemEdit.vue') },
+        { path: 'rpdb', name: 'rpdb', component: () => import('./views/rpdb/RPDBMain.vue') },
+        { path: 'rpdb/my-uploads', name: 'rpdb-my-uploads', component: () => import('./views/rpdb/RPDBMyUploads.vue') },
+        { path: 'rpdb/create', name: 'rpdb-create', component: () => import('./views/rpdb/RPDBEditor.vue') },
+        { path: 'rpdb/preview', name: 'rpdb-preview', component: () => import('./views/rpdb/RPDBPreview.vue') },
+        { path: 'rpdb/lists', name: 'rpdb-lists', component: () => import('./views/rpdb/RPDBLists.vue') },
+        { path: 'rpdb/:id/edit', name: 'rpdb-edit', component: () => import('./views/rpdb/RPDBEditor.vue') },
+        { path: 'rpdb/:id', name: 'rpdb-detail', component: () => import('./views/rpdb/RPDBDetail.vue') },
         { path: 'community', name: 'community', component: () => import('./views/community/CommunityMain.vue') },
         { path: 'community/create', name: 'post-create', component: () => import('./views/community/PostCreate.vue') },
         { path: 'community/my-posts', name: 'my-posts', component: () => import('./views/community/MyPosts.vue') },
@@ -100,6 +107,10 @@ const publicRoutes = new Set([
   'music-playlist-public',
   'terms-of-service',
   'privacy-policy',
+  'rpdb',
+  'rpdb-detail',
+  'rpdb-create',
+  'rpdb-preview',
 ])
 
 function parseJwt(token: string): { exp?: number } | null {
