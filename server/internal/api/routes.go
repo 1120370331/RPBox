@@ -59,6 +59,12 @@ func (s *Server) setupRoutes() {
 		// 预设标签（公开）
 		v1.GET("/tags/preset", s.getPresetTags)
 
+		// RP 数据库公开浏览
+		v1.GET("/rpdb/works", s.listRPDBWorks)
+		v1.GET("/rpdb/works/:id/preview", s.getRPDBWorkPreview)
+		v1.GET("/rpdb/works/:id", s.getRPDBWork)
+		v1.GET("/rpdb/works/:id/comments", s.listRPDBComments)
+
 		// 客户端更新检查（公开）
 		v1.GET("/updater/:target/:arch/:current_version", s.checkUpdate)
 		v1.GET("/updater/latest", s.getDesktopLatest)
@@ -226,6 +232,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/posts/events", s.listEvents) // 活动日历
 			auth.GET("/posts/:id", s.getPost)
 			auth.PUT("/posts/:id", s.updatePost)
+			auth.PUT("/posts/:id/draft", s.savePostDraft)
 			auth.DELETE("/posts/:id", s.deletePost)
 			auth.POST("/posts/:id/like", s.likePost)
 			auth.DELETE("/posts/:id/like", s.unlikePost)
@@ -296,6 +303,27 @@ func (s *Server) setupRoutes() {
 			auth.DELETE("/collections/:id/favorite", s.unfavoriteCollection)
 			auth.GET("/user/favorite-collections", s.listMyCollectionFavorites)
 
+			// RP 数据库投稿与个人内容
+			auth.POST("/rpdb/works", s.createRPDBWork)
+			auth.PUT("/rpdb/works/:id", s.updateRPDBWork)
+			auth.DELETE("/rpdb/works/:id", s.deleteRPDBWork)
+			auth.GET("/rpdb/my/works", s.listMyRPDBWorks)
+			auth.PUT("/rpdb/works/:id/visibility", s.updateRPDBWorkVisibility)
+			auth.POST("/rpdb/works/:id/like", s.likeRPDBWork)
+			auth.DELETE("/rpdb/works/:id/like", s.unlikeRPDBWork)
+			auth.POST("/rpdb/works/:id/favorite", s.favoriteRPDBWork)
+			auth.DELETE("/rpdb/works/:id/favorite", s.unfavoriteRPDBWork)
+			auth.GET("/rpdb/my/favorites", s.listMyRPDBFavorites)
+			auth.POST("/rpdb/works/:id/comments", s.createRPDBComment)
+			auth.DELETE("/rpdb/comments/:commentId", s.deleteRPDBComment)
+			auth.POST("/rpdb/works/:id/verify", s.verifyRPDBWork)
+			auth.POST("/rpdb/works/:id/list", s.addRPDBWorkToDefaultList)
+			auth.GET("/rpdb/lists", s.listRPDBLists)
+			auth.POST("/rpdb/lists", s.createRPDBList)
+			auth.PUT("/rpdb/lists/:listId/works/:workId", s.updateRPDBListEntry)
+			auth.DELETE("/rpdb/lists/:listId/works/:workId", s.removeRPDBListEntry)
+			auth.GET("/rpdb/lists/:listId/export", s.exportRPDBList)
+
 			// 版主中心（需要版主权限）
 			mod := auth.Group("/moderator")
 			mod.Use(middleware.ModeratorAuth())
@@ -326,6 +354,12 @@ func (s *Server) setupRoutes() {
 				// 审核中心 - 道具编辑
 				mod.GET("/review/item-edits", s.listPendingItemEdits)
 				mod.POST("/review/item-edits/:id", s.reviewItemEdit)
+				mod.GET("/review/rpdb/works", s.listPendingRPDBWorks)
+				mod.POST("/review/rpdb/works/:id", s.reviewRPDBWork)
+				mod.GET("/review/rpdb/media", s.listPendingRPDBMedia)
+				mod.POST("/review/rpdb/media/:id", s.reviewRPDBMedia)
+				mod.GET("/review/rpdb/revisions", s.listPendingRPDBRevisions)
+				mod.POST("/review/rpdb/revisions/:id", s.reviewRPDBRevision)
 				mod.GET("/reports", s.listContentReports)
 				mod.POST("/reports/:id/review", s.reviewContentReport)
 
@@ -340,6 +374,8 @@ func (s *Server) setupRoutes() {
 				mod.GET("/manage/items", s.listAllItems)
 				mod.DELETE("/manage/items/:id", s.deleteItemByMod)
 				mod.POST("/manage/items/:id/hide", s.hideItemByMod)
+				mod.DELETE("/manage/rpdb/works/:id", s.deleteRPDBWorkByMod)
+				mod.POST("/manage/rpdb/works/:id/hide", s.hideRPDBWorkByMod)
 
 				// 公会管理
 				mod.GET("/review/guilds", s.listPendingGuilds)

@@ -79,7 +79,7 @@ pub struct ConfigSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraDataSummary {
     pub checksum: String,
-    pub raw_data: String,  // JSON 对象，包含所有额外变量
+    pub raw_data: String, // JSON 对象，包含所有额外变量
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,8 +135,7 @@ pub fn scan_profiles(wow_path: &str) -> Result<ScanResult, String> {
     let mut accounts = Vec::new();
     let mut total_profiles = 0;
 
-    let entries = std::fs::read_dir(&account_path)
-        .map_err(|e| format!("读取目录失败: {}", e))?;
+    let entries = std::fs::read_dir(&account_path).map_err(|e| format!("读取目录失败: {}", e))?;
 
     for entry in entries.flatten() {
         if !entry.path().is_dir() {
@@ -235,8 +234,7 @@ fn scan_realm(realm_path: &PathBuf, realm_name: &str) -> Result<RealmInfo, Strin
 }
 
 fn extract_profiles(lua_path: &PathBuf, account_id: &str) -> Result<Vec<ProfileSummary>, String> {
-    let content = fs::read(lua_path)
-        .map_err(|e| format!("读取文件失败: {}", e))?;
+    let content = fs::read(lua_path).map_err(|e| format!("读取文件失败: {}", e))?;
     let content_str = String::from_utf8_lossy(&content);
 
     let modified_at = fs::metadata(lua_path)
@@ -244,8 +242,7 @@ fn extract_profiles(lua_path: &PathBuf, account_id: &str) -> Result<Vec<ProfileS
         .map(|t| DateTime::<Utc>::from(t))
         .unwrap_or_else(|_| Utc::now());
 
-    let data = lua_parser::parse_variable(lua_path, "TRP3_Profiles")
-        .map_err(|e| e.to_string())?;
+    let data = lua_parser::parse_variable(lua_path, "TRP3_Profiles").map_err(|e| e.to_string())?;
 
     let mut profiles = Vec::new();
 
@@ -264,8 +261,8 @@ fn extract_profiles(lua_path: &PathBuf, account_id: &str) -> Result<Vec<ProfileS
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
-            let raw_profile = serde_json::to_string(profile)
-                .unwrap_or_else(|_| content_str.to_string());
+            let raw_profile =
+                serde_json::to_string(profile).unwrap_or_else(|_| content_str.to_string());
             // 使用规范化 JSON 计算 checksum，确保键顺序稳定
             let normalized = normalize_json(profile);
             let checksum = format!("{:x}", md5::compute(normalized.as_bytes()));
@@ -295,8 +292,7 @@ pub fn get_profile_detail(wow_path: &str, profile_id: &str) -> Result<ProfileDet
         return Err("WTF/Account 目录不存在".to_string());
     }
 
-    let entries = fs::read_dir(&account_root)
-        .map_err(|e| format!("读取目录失败: {}", e))?;
+    let entries = fs::read_dir(&account_root).map_err(|e| format!("读取目录失败: {}", e))?;
 
     for entry in entries.flatten() {
         if !entry.path().is_dir() {
@@ -320,9 +316,12 @@ pub fn get_profile_detail(wow_path: &str, profile_id: &str) -> Result<ProfileDet
     Err("未找到指定人物卡".to_string())
 }
 
-fn load_profile_detail(lua_path: &PathBuf, profile_id: &str, account_id: &str) -> Result<ProfileDetail, String> {
-    let data = lua_parser::parse_variable(lua_path, "TRP3_Profiles")
-        .map_err(|e| e.to_string())?;
+fn load_profile_detail(
+    lua_path: &PathBuf,
+    profile_id: &str,
+    account_id: &str,
+) -> Result<ProfileDetail, String> {
+    let data = lua_parser::parse_variable(lua_path, "TRP3_Profiles").map_err(|e| e.to_string())?;
     let obj = data
         .as_object()
         .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
@@ -350,17 +349,11 @@ fn load_profile_detail(lua_path: &PathBuf, profile_id: &str, account_id: &str) -
         .map(|s| s.to_string());
 
     // 直接提取完整的原始数据
-    let characteristics = player
-        .and_then(|p| p.get("characteristics"))
-        .cloned();
+    let characteristics = player.and_then(|p| p.get("characteristics")).cloned();
 
-    let about = player
-        .and_then(|p| p.get("about"))
-        .cloned();
+    let about = player.and_then(|p| p.get("about")).cloned();
 
-    let character = player
-        .and_then(|p| p.get("character"))
-        .cloned();
+    let character = player.and_then(|p| p.get("character")).cloned();
 
     let sv_path = lua_path.display().to_string();
 
@@ -392,7 +385,9 @@ fn scan_tools_db(account_path: &PathBuf) -> Option<ToolsDbSummary> {
 
     // 合并 TRP3_Exchange_DB 的数据（来自其他玩家的道具）
     if let Ok(exchange_data) = lua_parser::parse_variable(&tools_path, "TRP3_Exchange_DB") {
-        if let (Some(tools_map), Some(exchange_map)) = (data.as_object_mut(), exchange_data.as_object()) {
+        if let (Some(tools_map), Some(exchange_map)) =
+            (data.as_object_mut(), exchange_data.as_object())
+        {
             for (key, value) in exchange_map {
                 tools_map.insert(key.clone(), value.clone());
             }
@@ -444,9 +439,7 @@ fn scan_runtime_data(account_path: &PathBuf) -> Option<RuntimeDataSummary> {
 
 /// 扫描 TRP3 配置数据
 fn scan_config(account_path: &PathBuf) -> Option<ConfigSummary> {
-    let config_path = account_path
-        .join("SavedVariables")
-        .join("totalRP3.lua");
+    let config_path = account_path.join("SavedVariables").join("totalRP3.lua");
 
     if !config_path.exists() {
         return None;
@@ -461,10 +454,7 @@ fn scan_config(account_path: &PathBuf) -> Option<ConfigSummary> {
     // 序列化为 JSON
     let raw_data = serde_json::to_string(&data).unwrap_or_default();
 
-    Some(ConfigSummary {
-        checksum,
-        raw_data,
-    })
+    Some(ConfigSummary { checksum, raw_data })
 }
 
 /// 扫描 TRP3 额外数据（角色绑定、伙伴、预设等）

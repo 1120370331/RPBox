@@ -1,9 +1,13 @@
 import request from './request'
+import type { RPDBMedia, RPDBWork } from './rpdb'
 
 // 类型定义
 export interface ModeratorStats {
   pending_posts: number
   pending_items: number
+  pending_rpdb_works?: number
+  pending_rpdb_media?: number
+  pending_rpdb_revisions?: number
   pending_guilds: number
   pending_reports: number
   pending_post_edits?: number
@@ -49,6 +53,59 @@ export function getPendingItems(params?: { page?: number; page_size?: number; ty
 
 export function reviewItem(id: number, data: ReviewRequest) {
   return request.post<{ message: string; item: any }>(`/moderator/review/items/${id}`, data)
+}
+
+// ========== 审核中心 - RP 数据库 ==========
+
+export interface RPDBMediaReviewItem extends RPDBMedia {
+  id: number
+  work_id: number
+  author_id?: number
+  reviewer_id?: number
+  review_comment?: string
+  reviewed_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface RPDBRevisionReviewItem {
+  id: number
+  work_id: number
+  proposer_id: number
+  base_version: number
+  payload: string
+  change_summary: string
+  status: string
+  reviewer_id?: number
+  review_comment?: string
+  reviewed_at?: string
+  applied_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export function getPendingRPDBWorks(params?: { page?: number; page_size?: number }) {
+  return request.get<{ works: RPDBWork[]; total: number }>('/moderator/review/rpdb/works', { params })
+}
+
+export function reviewRPDBWork(id: number, data: ReviewRequest) {
+  return request.post<{ message: string }>(`/moderator/review/rpdb/works/${id}`, data)
+}
+
+export function getPendingRPDBMedia(params?: { page?: number; page_size?: number }) {
+  return request.get<{ media: RPDBMediaReviewItem[]; total: number }>('/moderator/review/rpdb/media', { params })
+}
+
+export function reviewRPDBMedia(id: number, data: ReviewRequest) {
+  return request.post<{ message: string }>(`/moderator/review/rpdb/media/${id}`, data)
+}
+
+export function getPendingRPDBRevisions(params?: { page?: number; page_size?: number }) {
+  return request.get<{ revisions: RPDBRevisionReviewItem[]; total: number }>('/moderator/review/rpdb/revisions', { params })
+}
+
+export function reviewRPDBRevision(id: number, data: ReviewRequest) {
+  return request.post<{ message: string }>(`/moderator/review/rpdb/revisions/${id}`, data)
 }
 
 // ========== 审核中心 - 编辑申请 ==========
@@ -112,7 +169,7 @@ export interface ReportReviewQueryParams {
   page_size?: number
   status?: 'pending' | 'resolved' | 'rejected' | 'archived' | 'all'
   target_scope?: 'user' | 'content' | 'comment' | 'story'
-  target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story'
+  target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story' | 'rpdb_work'
   sort?: 'report_count' | 'latest_reported_at'
   order?: 'asc' | 'desc'
 }
@@ -129,7 +186,7 @@ export interface ReportReasonItem {
 
 export interface ReportReviewItem {
   id: number
-  target_type: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story'
+  target_type: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story' | 'rpdb_work'
   target_id: number
   target_user_id: number
   target_title: string

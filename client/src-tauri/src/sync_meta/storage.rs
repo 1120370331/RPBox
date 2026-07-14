@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -55,7 +55,8 @@ impl SyncStore {
                 last_synced_checksum: row.get(2)?,
                 cloud_version: row.get(3)?,
             })
-        }).ok()
+        })
+        .ok()
     }
 
     pub fn update_metadata(&self, meta: &SyncMetadata) -> Result<(), rusqlite::Error> {

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { getVersion } from '@tauri-apps/api/app'
 import { getDesktopLatestRelease, normalizeUpdaterVersion, type NormalizedDesktopLatestRelease } from '@/api/updater'
 
+const route = useRoute()
 const showChangelog = ref(false)
 const currentVersion = ref('0.0.0')
 const loading = ref(false)
@@ -18,6 +20,11 @@ const displayVersion = computed(() => {
 
 const displayDate = computed(() => latestRelease.value?.pub_date || '')
 const displayNotes = computed(() => latestRelease.value?.notes?.trim() || '暂无更新说明')
+const suppressAutomaticChangelog = computed(() => {
+  if (['rpdb-create', 'rpdb-edit', 'rpdb-preview'].includes(String(route.name || ''))) return true
+  const path = typeof window === 'undefined' ? route.path : window.location.pathname
+  return path === '/rpdb/create' || path === '/rpdb/preview' || /^\/rpdb\/[^/]+\/edit$/.test(path)
+})
 
 onMounted(async () => {
   await loadChangelog()
@@ -42,6 +49,8 @@ async function loadChangelog() {
 }
 
 function checkVersion() {
+  if (suppressAutomaticChangelog.value) return
+
   const lastViewedVersion = localStorage.getItem('last_viewed_version')
   const current = displayVersion.value
 

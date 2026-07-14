@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::path::PathBuf;
 
 use crate::lua_parser;
 use crate::wow_path;
@@ -115,8 +115,8 @@ fn sanitize_npc_whisper_content(content: &str) -> String {
 pub fn scan_chat_logs(wow_path: &str) -> Result<Vec<AccountChatLogs>, String> {
     // eprintln!("[RPBox] scan_chat_logs 输入路径: {}", wow_path);
 
-    let normalized = wow_path::normalize_wow_path(wow_path)
-        .ok_or_else(|| "无效的WoW路径".to_string())?;
+    let normalized =
+        wow_path::normalize_wow_path(wow_path).ok_or_else(|| "无效的WoW路径".to_string())?;
 
     // eprintln!("[RPBox] 规范化后路径: {:?}", normalized);
 
@@ -128,8 +128,7 @@ pub fn scan_chat_logs(wow_path: &str) -> Result<Vec<AccountChatLogs>, String> {
     }
 
     let mut results = Vec::new();
-    let entries = std::fs::read_dir(&account_root)
-        .map_err(|e| format!("读取目录失败: {}", e))?;
+    let entries = std::fs::read_dir(&account_root).map_err(|e| format!("读取目录失败: {}", e))?;
 
     for entry in entries.flatten() {
         if !entry.path().is_dir() {
@@ -150,13 +149,20 @@ pub fn scan_chat_logs(wow_path: &str) -> Result<Vec<AccountChatLogs>, String> {
 }
 
 /// 解析单个账号的聊天记录
-fn parse_account_chat_logs(account_path: &PathBuf, account_id: &str) -> Result<AccountChatLogs, String> {
+fn parse_account_chat_logs(
+    account_path: &PathBuf,
+    account_id: &str,
+) -> Result<AccountChatLogs, String> {
     // WoW 把所有 SavedVariables 合并到一个以插件名命名的文件中
     let addon_file_path = account_path.join("SavedVariables").join("RPBox_Addon.lua");
     // 兼容旧的单独文件格式
-    let chat_log_path = account_path.join("SavedVariables").join("RPBox_ChatLog.lua");
+    let chat_log_path = account_path
+        .join("SavedVariables")
+        .join("RPBox_ChatLog.lua");
     let sync_path = account_path.join("SavedVariables").join("RPBox_Sync.lua");
-    let profile_cache_path = account_path.join("SavedVariables").join("RPBox_ProfileCache.lua");
+    let profile_cache_path = account_path
+        .join("SavedVariables")
+        .join("RPBox_ProfileCache.lua");
 
     // 优先使用合并文件
     let use_addon_file = addon_file_path.exists();
@@ -170,7 +176,11 @@ fn parse_account_chat_logs(account_path: &PathBuf, account_id: &str) -> Result<A
     };
 
     // 读取同步状态
-    let sync_file = if use_addon_file { &addon_file_path } else { &sync_path };
+    let sync_file = if use_addon_file {
+        &addon_file_path
+    } else {
+        &sync_path
+    };
     if sync_file.exists() {
         if let Ok(sync_data) = lua_parser::parse_variable(sync_file, "RPBox_Sync") {
             if let Ok(state) = serde_json::from_value::<SyncState>(sync_data) {
@@ -182,7 +192,11 @@ fn parse_account_chat_logs(account_path: &PathBuf, account_id: &str) -> Result<A
     }
 
     // 读取聊天记录
-    let chat_file = if use_addon_file { &addon_file_path } else { &chat_log_path };
+    let chat_file = if use_addon_file {
+        &addon_file_path
+    } else {
+        &chat_log_path
+    };
     if !chat_file.exists() {
         // eprintln!("[RPBox] 账号 {}: 聊天文件不存在", account_id);
         return Ok(result);
@@ -191,7 +205,13 @@ fn parse_account_chat_logs(account_path: &PathBuf, account_id: &str) -> Result<A
     // eprintln!("[RPBox] 账号 {}: 开始解析聊天记录...", account_id);
     let chat_data = match lua_parser::parse_variable(chat_file, "RPBox_ChatLog") {
         Ok(data) => {
-            let dtype = if data.is_object() { "object" } else if data.is_array() { "array" } else { "other" };
+            let dtype = if data.is_object() {
+                "object"
+            } else if data.is_array() {
+                "array"
+            } else {
+                "other"
+            };
             // eprintln!("[RPBox] 账号 {}: 解析成功, 数据类型={}", account_id, dtype);
             data
         }
@@ -202,7 +222,11 @@ fn parse_account_chat_logs(account_path: &PathBuf, account_id: &str) -> Result<A
     };
 
     // 读取角色卡缓存（新格式需要）
-    let cache_file = if use_addon_file { &addon_file_path } else { &profile_cache_path };
+    let cache_file = if use_addon_file {
+        &addon_file_path
+    } else {
+        &profile_cache_path
+    };
     let profile_cache = if cache_file.exists() {
         lua_parser::parse_variable(cache_file, "RPBox_ProfileCache")
             .unwrap_or(Value::Object(Default::default()))
@@ -232,11 +256,17 @@ fn parse_chat_records(data: &Value, profile_cache: &Value) -> Vec<ChatRecord> {
 
     // 遍历日期
     for (date, hours) in obj {
-        let hours_type = if hours.is_object() { "object" }
-            else if hours.is_array() { "array" }
-            else if hours.is_string() { "string" }
-            else if hours.is_number() { "number" }
-            else { "other" };
+        let hours_type = if hours.is_object() {
+            "object"
+        } else if hours.is_array() {
+            "array"
+        } else if hours.is_string() {
+            "string"
+        } else if hours.is_number() {
+            "number"
+        } else {
+            "other"
+        };
         // eprintln!("[RPBox] 日期: {}, hours类型: {}", date, hours_type);
 
         // 如果是array，打印内容看看
@@ -287,16 +317,37 @@ fn parse_single_record(entry: &Value, profile_cache: &Value) -> Option<ChatRecor
 
     // 尝试新格式 (t, c, m, s, mk, ref, npc)
     // 时间戳可能是整数或浮点数
-    let t = obj.get("t").and_then(|v| {
-        v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))
-    });
+    let t = obj
+        .get("t")
+        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)));
     if let Some(t) = t {
-        let channel = obj.get("c").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let mut content = obj.get("m").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let sender = obj.get("s").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let mark = obj.get("mk").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let npc = obj.get("npc").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let nt = obj.get("nt").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let channel = obj
+            .get("c")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let mut content = obj
+            .get("m")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let sender = obj
+            .get("s")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let mark = obj
+            .get("mk")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let npc = obj
+            .get("npc")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let nt = obj
+            .get("nt")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         let profile_ref = obj.get("ref").and_then(|v| v.as_str());
 
         if mark.as_deref() == Some("N") && nt.as_deref() == Some("whisper") {
@@ -304,41 +355,58 @@ fn parse_single_record(entry: &Value, profile_cache: &Value) -> Option<ChatRecor
         }
 
         // 从ProfileCache获取TRP3信息
-        let (trp3, raw_profile) = profile_ref.map(|ref_id| {
-            // eprintln!("[RPBox] 查找ProfileCache: ref={}", ref_id);
-            if let Some(p) = profile_cache.get(ref_id) {
-                // eprintln!("[RPBox]   找到Profile: {:?}", p);
-                let trp3_info = TRP3Info {
-                    first_name: p.get("FN").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    last_name: p.get("LN").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    title: p.get("TI").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    icon: p.get("IC").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    color: p.get("CH").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                };
-                // 序列化完整的profile JSON
-                let raw = serde_json::to_string(p).ok();
-                (Some(trp3_info), raw)
-            } else {
-                // eprintln!("[RPBox]   未找到Profile");
-                (None, None)
-            }
-        }).unwrap_or((None, None));
+        let (trp3, raw_profile) = profile_ref
+            .map(|ref_id| {
+                // eprintln!("[RPBox] 查找ProfileCache: ref={}", ref_id);
+                if let Some(p) = profile_cache.get(ref_id) {
+                    // eprintln!("[RPBox]   找到Profile: {:?}", p);
+                    let trp3_info = TRP3Info {
+                        first_name: p.get("FN").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        last_name: p.get("LN").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        title: p.get("TI").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        icon: p.get("IC").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        color: p.get("CH").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    };
+                    // 序列化完整的profile JSON
+                    let raw = serde_json::to_string(p).ok();
+                    (Some(trp3_info), raw)
+                } else {
+                    // eprintln!("[RPBox]   未找到Profile");
+                    (None, None)
+                }
+            })
+            .unwrap_or((None, None));
 
         // 解析收听者列表
-        let listeners = obj.get("listeners").and_then(|v| v.as_array()).map(|arr| {
-            arr.iter().filter_map(|item| {
-                let obj = item.as_object()?;
-                let game_id = obj.get("gameID").and_then(|v| v.as_str())?.to_string();
-                let profile_id = obj.get("profileID").and_then(|v| v.as_str()).map(|s| s.to_string());
-                Some(Listener { game_id, profile_id })
-            }).collect::<Vec<_>>()
-        }).filter(|v| !v.is_empty());
+        let listeners = obj
+            .get("listeners")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        let obj = item.as_object()?;
+                        let game_id = obj.get("gameID").and_then(|v| v.as_str())?.to_string();
+                        let profile_id = obj
+                            .get("profileID")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        Some(Listener {
+                            game_id,
+                            profile_id,
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty());
 
         return Some(ChatRecord {
             timestamp: t,
             channel,
             content,
-            sender: ChatSender { game_id: sender, trp3 },
+            sender: ChatSender {
+                game_id: sender,
+                trp3,
+            },
             mark,
             npc,
             nt,
@@ -356,9 +424,9 @@ fn parse_single_record(entry: &Value, profile_cache: &Value) -> Option<ChatRecor
     let sender_obj = obj.get("sender")?.as_object()?;
     let game_id = sender_obj.get("gameID")?.as_str()?.to_string();
 
-    let trp3 = sender_obj.get("trp3").and_then(|t| {
-        serde_json::from_value::<TRP3Info>(t.clone()).ok()
-    });
+    let trp3 = sender_obj
+        .get("trp3")
+        .and_then(|t| serde_json::from_value::<TRP3Info>(t.clone()).ok());
 
     Some(ChatRecord {
         timestamp,

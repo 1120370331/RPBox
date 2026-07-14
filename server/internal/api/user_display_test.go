@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/rpbox/server/internal/model"
 )
@@ -21,6 +22,20 @@ func TestResolveSponsorLevel(t *testing.T) {
 	}
 	if level := resolveSponsorLevel(userFixture(3, false)); level != 3 {
 		t.Fatalf("expected sponsor level 3, got %d", level)
+	}
+}
+
+func TestResolveSponsorAcknowledgementLevelIgnoresExpiry(t *testing.T) {
+	expired := userFixture(3, true)
+	expiresAt := time.Now().Add(-time.Hour)
+	expired.SponsorExpiresAt = &expiresAt
+	expired.SponsorAcknowledgementLevel = 3
+
+	if level := resolveSponsorLevel(expired); level != sponsorLevelNone {
+		t.Fatalf("expected expired sponsor perks to be inactive, got %d", level)
+	}
+	if level := resolveSponsorAcknowledgementLevel(expired); level != 3 {
+		t.Fatalf("expected expired sponsor to remain acknowledged at level 3, got %d", level)
 	}
 }
 

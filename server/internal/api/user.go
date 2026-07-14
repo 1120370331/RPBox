@@ -745,10 +745,10 @@ func (s *Server) listSponsors(c *gin.Context) {
 
 	var users []model.User
 	if err := database.DB.
-		Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "created_at").
+		Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_acknowledgement_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "created_at").
 		Where("account_deleted_at IS NULL").
-		Where("sponsor_level > ? OR is_sponsor = ?", 0, true).
-		Order("sponsor_level DESC, created_at ASC").
+		Where("sponsor_acknowledgement_level > ? OR sponsor_level > ? OR is_sponsor = ?", 0, 0, true).
+		Order("sponsor_acknowledgement_level DESC, sponsor_level DESC, created_at ASC").
 		Find(&users).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
@@ -769,7 +769,7 @@ func (s *Server) listSponsors(c *gin.Context) {
 	nameSet := make(map[string]struct{}, len(users))
 	for _, user := range users {
 		nameColor, nameBold := userDisplayStyle(user)
-		level := resolveSponsorLevel(user)
+		level := resolveSponsorAcknowledgementLevel(user)
 		username := strings.TrimSpace(user.Username)
 		nameKey := sponsorNameKey(username)
 		if nameKey != "" {
@@ -785,7 +785,7 @@ func (s *Server) listSponsors(c *gin.Context) {
 			Username:     user.Username,
 			Avatar:       userAvatarURL(s.cfg.Server.ApiHost, user),
 			Role:         role,
-			IsSponsor:    level > sponsorLevelNone,
+			IsSponsor:    user.IsSponsor || level > sponsorLevelNone,
 			SponsorLevel: level,
 			NameColor:    nameColor,
 			NameBold:     nameBold,

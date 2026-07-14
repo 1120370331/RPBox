@@ -121,12 +121,30 @@ impl<'a> Lexer<'a> {
         match self.chars.peek() {
             None => Ok(Token::Eof),
             Some(&(_, c)) => match c {
-                '{' => { self.chars.next(); Ok(Token::LeftBrace) }
-                '}' => { self.chars.next(); Ok(Token::RightBrace) }
-                '[' => { self.chars.next(); Ok(Token::LeftBracket) }
-                ']' => { self.chars.next(); Ok(Token::RightBracket) }
-                '=' => { self.chars.next(); Ok(Token::Equals) }
-                ',' => { self.chars.next(); Ok(Token::Comma) }
+                '{' => {
+                    self.chars.next();
+                    Ok(Token::LeftBrace)
+                }
+                '}' => {
+                    self.chars.next();
+                    Ok(Token::RightBrace)
+                }
+                '[' => {
+                    self.chars.next();
+                    Ok(Token::LeftBracket)
+                }
+                ']' => {
+                    self.chars.next();
+                    Ok(Token::RightBracket)
+                }
+                '=' => {
+                    self.chars.next();
+                    Ok(Token::Equals)
+                }
+                ',' => {
+                    self.chars.next();
+                    Ok(Token::Comma)
+                }
                 '"' | '\'' => self.read_string(),
                 '0'..='9' | '-' | '.' => self.read_number(),
                 _ if c.is_alphabetic() || c == '_' => self.read_identifier(),
@@ -152,27 +170,25 @@ impl<'a> Lexer<'a> {
                     });
                 }
                 Some((_, c)) if c == quote => break,
-                Some((_, '\\')) => {
-                    match self.chars.next() {
-                        Some((_, 'n')) => result.push('\n'),
-                        Some((_, 't')) => result.push('\t'),
-                        Some((_, 'r')) => result.push('\r'),
-                        Some((_, '\\')) => result.push('\\'),
-                        Some((_, '"')) => result.push('"'),
-                        Some((_, '\'')) => result.push('\''),
-                        Some((_, '\n')) => {
-                            self.current_line += 1;
-                            result.push('\n');
-                        }
-                        Some((_, c)) => result.push(c),
-                        None => {
-                            return Err(LuaParseError::SyntaxError {
-                                line: self.current_line,
-                                message: "字符串中的转义序列不完整".to_string(),
-                            });
-                        }
+                Some((_, '\\')) => match self.chars.next() {
+                    Some((_, 'n')) => result.push('\n'),
+                    Some((_, 't')) => result.push('\t'),
+                    Some((_, 'r')) => result.push('\r'),
+                    Some((_, '\\')) => result.push('\\'),
+                    Some((_, '"')) => result.push('"'),
+                    Some((_, '\'')) => result.push('\''),
+                    Some((_, '\n')) => {
+                        self.current_line += 1;
+                        result.push('\n');
                     }
-                }
+                    Some((_, c)) => result.push(c),
+                    None => {
+                        return Err(LuaParseError::SyntaxError {
+                            line: self.current_line,
+                            message: "字符串中的转义序列不完整".to_string(),
+                        });
+                    }
+                },
                 Some((_, '\n')) => {
                     self.current_line += 1;
                     result.push('\n');
@@ -221,7 +237,8 @@ impl<'a> Lexer<'a> {
         }
 
         let num_str = &self.input[start_pos..end_pos];
-        num_str.parse::<f64>()
+        num_str
+            .parse::<f64>()
             .map(Token::Number)
             .map_err(|_| LuaParseError::SyntaxError {
                 line: self.current_line,
