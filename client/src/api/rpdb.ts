@@ -105,6 +105,7 @@ export interface RPDBWork {
   is_public: boolean
   visibility: RPDBVisibility
   guild_id?: number
+  guild_ids?: number[]
   review_status: string
   review_comment?: string
   version: number
@@ -202,6 +203,7 @@ export interface RPDBWorkPayload {
   is_public?: boolean
   visibility?: RPDBVisibility
   guild_id?: number
+  guild_ids?: number[]
   references?: RPDBReference[]
   media?: RPDBMedia[]
   transmog_slots?: RPDBTransmogSlot[]
@@ -275,10 +277,11 @@ export function addRPDBWorkToList(id: number, status: RPDBListStatus = 'wanted',
   return request.post(`/rpdb/works/${id}/list`, { status, list_id: listId })
 }
 
-export function updateRPDBWorkVisibility(id: number, visibility: RPDBVisibility, guildId?: number) {
+export function updateRPDBWorkVisibility(id: number, visibility: RPDBVisibility, guildIds: number[] = []) {
   return request.put<{ work: RPDBWork }>(`/rpdb/works/${id}/visibility`, {
     visibility,
-    guild_id: visibility === 'guild' ? guildId : undefined,
+    guild_ids: visibility === 'guild' ? guildIds : [],
+    guild_id: visibility === 'guild' ? guildIds[0] : undefined,
   })
 }
 

@@ -85,6 +85,7 @@ type rpdbWorkWriteRequest struct {
 	IsPublic           bool                    `json:"is_public"`
 	Visibility         string                  `json:"visibility"`
 	GuildID            *uint                   `json:"guild_id"`
+	GuildIDs           []uint                  `json:"guild_ids"`
 	References         []rpdbReferenceInput    `json:"references"`
 	Media              []rpdbMediaInput        `json:"media"`
 	TransmogSlots      []rpdbTransmogSlotInput `json:"transmog_slots"`
@@ -114,7 +115,7 @@ func (s *Server) createRPDBWork(c *gin.Context) {
 	}
 	status, reviewStatus, _ := rpdbSubmissionState(request.Status, request.IsPublic, role)
 	visibility := normalizeRPDBVisibility(request.Visibility, request.IsPublic)
-	guildID, err := validateRPDBVisibility(userID, visibility, request.GuildID)
+	guildIDs, err := validateRPDBVisibility(userID, visibility, request.GuildIDs, request.GuildID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -143,7 +144,8 @@ func (s *Server) createRPDBWork(c *gin.Context) {
 		Status:             status,
 		IsPublic:           visibility == model.RPDBVisibilityPublic,
 		Visibility:         visibility,
-		GuildID:            guildID,
+		GuildID:            firstRPDBGuildID(guildIDs),
+		GuildIDs:           guildIDs,
 		ReviewStatus:       reviewStatus,
 		Version:            1,
 	}
@@ -218,7 +220,7 @@ func (s *Server) updateRPDBWork(c *gin.Context) {
 		return
 	}
 	applyRPDBWorkRequest(&work, request)
-	if request.has("visibility") || request.has("guild_id") || request.has("is_public") {
+	if request.has("visibility") || request.has("guild_ids") || request.has("guild_id") || request.has("is_public") {
 		visibility := request.Visibility
 		if !request.has("visibility") {
 			visibility = work.Visibility
@@ -226,13 +228,20 @@ func (s *Server) updateRPDBWork(c *gin.Context) {
 		if strings.TrimSpace(visibility) == "" {
 			visibility = normalizeRPDBVisibility("", request.IsPublic)
 		}
-		guildID, visibilityErr := validateRPDBVisibility(userID, visibility, request.GuildID)
+		requestedGuildIDs := request.GuildIDs
+		legacyGuildID := request.GuildID
+		if !request.has("guild_ids") && !request.has("guild_id") {
+			requestedGuildIDs = work.GuildIDs
+			legacyGuildID = work.GuildID
+		}
+		guildIDs, visibilityErr := validateRPDBVisibility(userID, visibility, requestedGuildIDs, legacyGuildID)
 		if visibilityErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": visibilityErr.Error()})
 			return
 		}
 		work.Visibility = visibility
-		work.GuildID = guildID
+		work.GuildID = firstRPDBGuildID(guildIDs)
+		work.GuildIDs = guildIDs
 		work.IsPublic = visibility == model.RPDBVisibilityPublic
 	}
 	if work.Status != model.RPDBStatusPublished && (request.has("status") || request.has("is_public")) {
@@ -284,12 +293,12 @@ func (s *Server) deleteRPDBWork(c *gin.Context) {
 			return
 		}
 	} else {
-		if err := database.DB.Model(&work).Updates(map[string]interface{}{
-			"status":     model.RPDBStatusArchived,
-			"is_public":  false,
-			"visibility": model.RPDBVisibilityPrivate,
-			"guild_id":   nil,
-		}).Error; err != nil {
+		work.Status = model.RPDBStatusArchived
+		work.IsPublic = false
+		work.Visibility = model.RPDBVisibilityPrivate
+		work.GuildID = nil
+		work.GuildIDs = []uint{}
+		if err := database.DB.Select("status", "is_public", "visibility", "guild_id", "guild_ids").Save(&work).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "归档作品失败"})
 			return
 		}
@@ -316,6 +325,7 @@ func (s *Server) listMyRPDBWorks(c *gin.Context) {
 type rpdbVisibilityRequest struct {
 	Visibility string `json:"visibility" binding:"required"`
 	GuildID    *uint  `json:"guild_id"`
+	GuildIDs   []uint `json:"guild_ids"`
 }
 
 func (s *Server) updateRPDBWorkVisibility(c *gin.Context) {
@@ -347,22 +357,19 @@ func (s *Server) updateRPDBWorkVisibility(c *gin.Context) {
 		return
 	}
 	visibility := normalizeRPDBVisibility(request.Visibility, false)
-	guildID, err := validateRPDBVisibility(userID, visibility, request.GuildID)
+	guildIDs, err := validateRPDBVisibility(userID, visibility, request.GuildIDs, request.GuildID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := database.DB.Model(&work).Updates(map[string]interface{}{
-		"visibility": visibility,
-		"guild_id":   guildID,
-		"is_public":  visibility == model.RPDBVisibilityPublic,
-	}).Error; err != nil {
+	work.Visibility = visibility
+	work.GuildID = firstRPDBGuildID(guildIDs)
+	work.GuildIDs = guildIDs
+	work.IsPublic = visibility == model.RPDBVisibilityPublic
+	if err := database.DB.Select("visibility", "guild_id", "guild_ids", "is_public").Save(&work).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新可见范围失败"})
 		return
 	}
-	work.Visibility = visibility
-	work.GuildID = guildID
-	work.IsPublic = visibility == model.RPDBVisibilityPublic
 	c.JSON(http.StatusOK, gin.H{"work": work})
 }
 
@@ -391,23 +398,52 @@ func isValidRPDBVisibility(value string) bool {
 	}
 }
 
-func validateRPDBVisibility(userID uint, visibility string, guildID *uint) (*uint, error) {
+func validateRPDBVisibility(userID uint, visibility string, guildIDs []uint, legacyGuildID *uint) ([]uint, error) {
 	if visibility != model.RPDBVisibilityGuild {
 		return nil, nil
 	}
-	if guildID == nil || *guildID == 0 {
+	normalizedGuildIDs := normalizeRPDBGuildIDs(guildIDs, legacyGuildID)
+	if len(normalizedGuildIDs) == 0 {
 		return nil, fmt.Errorf("请选择允许查看的公会")
 	}
 	var membershipCount int64
 	if err := database.DB.Model(&model.GuildMember{}).
-		Where("guild_id = ? AND user_id = ?", *guildID, userID).
+		Where("guild_id IN ? AND user_id = ?", normalizedGuildIDs, userID).
+		Distinct("guild_id").
 		Count(&membershipCount).Error; err != nil {
 		return nil, fmt.Errorf("校验公会成员身份失败")
 	}
-	if membershipCount == 0 {
+	if membershipCount != int64(len(normalizedGuildIDs)) {
 		return nil, fmt.Errorf("只能选择你已加入的公会")
 	}
-	return guildID, nil
+	return normalizedGuildIDs, nil
+}
+
+func normalizeRPDBGuildIDs(guildIDs []uint, legacyGuildID *uint) []uint {
+	if len(guildIDs) == 0 && legacyGuildID != nil && *legacyGuildID != 0 {
+		guildIDs = []uint{*legacyGuildID}
+	}
+	seen := make(map[uint]struct{}, len(guildIDs))
+	normalized := make([]uint, 0, len(guildIDs))
+	for _, guildID := range guildIDs {
+		if guildID == 0 {
+			continue
+		}
+		if _, exists := seen[guildID]; exists {
+			continue
+		}
+		seen[guildID] = struct{}{}
+		normalized = append(normalized, guildID)
+	}
+	return normalized
+}
+
+func firstRPDBGuildID(guildIDs []uint) *uint {
+	if len(guildIDs) == 0 {
+		return nil
+	}
+	guildID := guildIDs[0]
+	return &guildID
 }
 
 func validateRPDBWriteRequest(request rpdbWorkWriteRequest, creating bool) error {

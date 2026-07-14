@@ -195,12 +195,16 @@ func canViewRPDBWork(work model.RPDBWork, viewerID uint) bool {
 	if visibility == model.RPDBVisibilityPublic {
 		return true
 	}
-	if visibility != model.RPDBVisibilityGuild || viewerID == 0 || work.GuildID == nil {
+	if visibility != model.RPDBVisibilityGuild || viewerID == 0 {
+		return false
+	}
+	guildIDs := normalizeRPDBGuildIDs(work.GuildIDs, work.GuildID)
+	if len(guildIDs) == 0 {
 		return false
 	}
 	var count int64
 	if err := database.DB.Model(&model.GuildMember{}).
-		Where("guild_id = ? AND user_id = ?", *work.GuildID, viewerID).
+		Where("guild_id IN ? AND user_id = ?", guildIDs, viewerID).
 		Count(&count).Error; err != nil {
 		return false
 	}

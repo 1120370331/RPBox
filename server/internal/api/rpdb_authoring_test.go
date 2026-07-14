@@ -90,18 +90,25 @@ func TestRPDBAuthorCanManageVisibility(t *testing.T) {
 		t.Fatalf("expected private visibility 200, got %d body=%s", privateResp.Code, privateResp.Body.String())
 	}
 
-	guild := model.Guild{Name: "暮色守望", OwnerID: user.ID, Status: "approved"}
+	guild := model.Guild{Name: "暮色守望", OwnerID: user.ID, Status: "approved", InviteCode: "DUSK-WATCH"}
 	if err := database.DB.Create(&guild).Error; err != nil {
 		t.Fatalf("create guild: %v", err)
 	}
 	if err := database.DB.Create(&model.GuildMember{GuildID: guild.ID, UserID: user.ID, Role: "owner"}).Error; err != nil {
 		t.Fatalf("create membership: %v", err)
 	}
+	secondGuild := model.Guild{Name: "夜色议会", OwnerID: user.ID, Status: "approved", InviteCode: "NIGHT-COUNCIL"}
+	if err := database.DB.Create(&secondGuild).Error; err != nil {
+		t.Fatalf("create second guild: %v", err)
+	}
+	if err := database.DB.Create(&model.GuildMember{GuildID: secondGuild.ID, UserID: user.ID, Role: "owner"}).Error; err != nil {
+		t.Fatalf("create second membership: %v", err)
+	}
 	guildResp := performRequest(
 		server.router,
 		http.MethodPut,
 		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(work.ID), 10)+"/visibility",
-		map[string]interface{}{"visibility": model.RPDBVisibilityGuild, "guild_id": guild.ID},
+		map[string]interface{}{"visibility": model.RPDBVisibilityGuild, "guild_ids": []uint{guild.ID, secondGuild.ID}},
 		token,
 	)
 	if guildResp.Code != http.StatusOK {
@@ -112,7 +119,7 @@ func TestRPDBAuthorCanManageVisibility(t *testing.T) {
 	if err := database.DB.First(&stored, work.ID).Error; err != nil {
 		t.Fatalf("load work: %v", err)
 	}
-	if stored.Visibility != model.RPDBVisibilityGuild || stored.GuildID == nil || *stored.GuildID != guild.ID || stored.IsPublic {
+	if stored.Visibility != model.RPDBVisibilityGuild || stored.GuildID == nil || *stored.GuildID != guild.ID || len(stored.GuildIDs) != 2 || stored.GuildIDs[1] != secondGuild.ID || stored.IsPublic {
 		t.Fatalf("unexpected stored visibility: %#v", stored)
 	}
 }
@@ -132,7 +139,7 @@ func TestRPDBAuthorCannotSelectUnjoinedGuild(t *testing.T) {
 		server.router,
 		http.MethodPut,
 		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(work.ID), 10)+"/visibility",
-		map[string]interface{}{"visibility": model.RPDBVisibilityGuild, "guild_id": otherGuild.ID},
+		map[string]interface{}{"visibility": model.RPDBVisibilityGuild, "guild_ids": []uint{otherGuild.ID}},
 		token,
 	)
 	if resp.Code != http.StatusBadRequest {

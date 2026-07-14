@@ -52,8 +52,8 @@ function typeLabel(work: RPDBWork) {
   return '魔兽物品'
 }
 
-function guildName(work: RPDBWork) {
-  return guilds.value.find(guild => guild.id === work.guild_id)?.name || '未选择公会'
+function selectedGuildIDs(work: RPDBWork) {
+  return work.guild_ids?.length ? work.guild_ids : work.guild_id ? [work.guild_id] : []
 }
 
 function formatDate(value: string) {
@@ -75,17 +75,17 @@ async function load() {
 
 async function changeVisibility(work: RPDBWork, visibility: RPDBVisibility) {
   const previousVisibility = resolveVisibility(work)
-  let guildId = work.guild_id
+  let guildIDs = selectedGuildIDs(work)
   if (visibility === 'guild') {
-    guildId = guildId || guilds.value[0]?.id
-    if (!guildId) {
+    guildIDs = guildIDs.length ? guildIDs : guilds.value[0]?.id ? [guilds.value[0].id] : []
+    if (!guildIDs.length) {
       toast.error('你还没有加入公会，无法设置为公会可见')
       return
     }
   }
   busyWorkId.value = work.id
   try {
-    const result = await updateRPDBWorkVisibility(work.id, visibility, guildId)
+    const result = await updateRPDBWorkVisibility(work.id, visibility, guildIDs)
     Object.assign(work, result.work)
     toast.success('可见范围已更新')
   } catch (error) {
@@ -96,13 +96,22 @@ async function changeVisibility(work: RPDBWork, visibility: RPDBVisibility) {
   }
 }
 
-async function changeGuild(work: RPDBWork, guildId: number) {
+async function toggleGuild(work: RPDBWork, guildID: number) {
+  const previousGuildIDs = selectedGuildIDs(work)
+  const nextGuildIDs = new Set(previousGuildIDs)
+  if (nextGuildIDs.has(guildID)) nextGuildIDs.delete(guildID)
+  else nextGuildIDs.add(guildID)
+  if (!nextGuildIDs.size) {
+    toast.error('公会可见至少需要选择一个公会')
+    return
+  }
   busyWorkId.value = work.id
   try {
-    const result = await updateRPDBWorkVisibility(work.id, 'guild', guildId)
+    const result = await updateRPDBWorkVisibility(work.id, 'guild', Array.from(nextGuildIDs))
     Object.assign(work, result.work)
-    toast.success(`已改为「${guilds.value.find(guild => guild.id === guildId)?.name || '所选公会'}」可见`)
+    toast.success('可见公会已更新')
   } catch (error) {
+    work.guild_ids = previousGuildIDs
     toast.error((error as Error).message)
   } finally {
     busyWorkId.value = null
@@ -196,11 +205,13 @@ onMounted(load)
             </select>
           </label>
           <label v-if="resolveVisibility(work) === 'guild'">
-            <span>查看公会</span>
-            <select :value="work.guild_id || ''" :disabled="busyWorkId === work.id" @change="changeGuild(work, Number(($event.target as HTMLSelectElement).value))">
-              <option v-if="!work.guild_id" value="" disabled>{{ guildName(work) }}</option>
-              <option v-for="guild in guilds" :key="guild.id" :value="guild.id">{{ guild.name }}</option>
-            </select>
+            <span>查看公会（可多选）</span>
+            <span class="visibility-guilds">
+              <label v-for="guild in guilds" :key="guild.id" :class="{ selected: selectedGuildIDs(work).includes(guild.id) }">
+                <input type="checkbox" :checked="selectedGuildIDs(work).includes(guild.id)" :disabled="busyWorkId === work.id" @change="toggleGuild(work, guild.id)">
+                {{ guild.name }}
+              </label>
+            </span>
           </label>
         </div>
         <div class="row-actions">
@@ -215,4 +226,5 @@ onMounted(load)
 
 <style scoped>
 .uploads-page{max-width:1260px;margin:auto;color:var(--color-text-main)}.uploads-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-bottom:18px;border-bottom:1px solid var(--color-border)}.back-link{display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:transparent;color:var(--color-accent);font-size:12px}.uploads-header h1{margin:10px 0 4px;font-size:28px}.uploads-header p{margin:0;color:var(--color-text-secondary);font-size:13px}.create-button{display:inline-flex;min-height:40px;align-items:center;gap:6px;padding:0 15px;border:0;border-radius:7px;background:var(--btn-primary-bg);color:var(--btn-primary-text);font-weight:800}.summary-strip{display:grid;grid-template-columns:repeat(5,1fr);margin:16px 0;border:1px solid var(--color-border);border-radius:8px;background:var(--color-panel-bg)}.summary-strip div{display:grid;justify-items:center;gap:3px;padding:14px;border-right:1px solid var(--color-border)}.summary-strip div:last-child{border-right:0}.summary-strip b{font-size:20px}.summary-strip span{color:var(--color-text-secondary);font-size:10px}.status-tabs{display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--color-border)}.status-tabs button{display:inline-flex;min-height:38px;align-items:center;gap:7px;padding:0 12px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--color-text-secondary);font-weight:700}.status-tabs button.active{border-bottom-color:var(--color-accent);color:var(--color-text-main)}.status-tabs b{display:grid;min-width:18px;height:18px;place-items:center;border-radius:9px;background:var(--tag-bg);font-size:9px}.uploads-list{display:grid;border:1px solid var(--color-border);border-radius:8px;background:var(--color-panel-bg)}.upload-row{display:grid;grid-template-columns:150px minmax(260px,1fr) minmax(150px,190px) auto;gap:16px;align-items:center;padding:14px}.upload-row+ .upload-row{border-top:1px solid var(--color-border)}.upload-cover{display:grid;width:150px;aspect-ratio:16/10;place-items:center;overflow:hidden;border-radius:6px;background:var(--color-card-bg);color:var(--icon-color);font-size:28px}.upload-cover img{width:100%;height:100%;object-fit:cover}.upload-main{min-width:0}.upload-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.upload-heading>div{display:flex;gap:6px}.type-label,.status-label{padding:3px 6px;border-radius:4px;background:var(--tag-bg);color:var(--tag-text);font-size:9px;font-weight:800}.status-label.published,.status-label.approved{color:var(--color-success,#2f855a)}.status-label.pending{color:var(--color-warning,#a06010)}.status-label.rejected{color:var(--color-danger,#b83232)}.upload-heading time{color:var(--color-text-muted);font-size:10px}.upload-main h2{margin:8px 0 4px;overflow:hidden;font-size:17px;text-overflow:ellipsis;white-space:nowrap}.upload-main p{display:-webkit-box;overflow:hidden;margin:0;color:var(--color-text-secondary);font-size:11px;line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:2}.upload-metrics{display:flex;gap:12px;margin-top:9px;color:var(--color-text-secondary);font-size:10px}.upload-metrics span{display:inline-flex;align-items:center;gap:3px}.visibility-control{display:grid;gap:8px}.visibility-control label{display:grid;gap:5px}.visibility-control label>span{color:var(--color-text-secondary);font-size:10px;font-weight:700}.visibility-control select{width:100%;height:34px;padding:0 8px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--color-text-main)}.row-actions{display:flex;gap:5px}.row-actions button{display:grid;width:44px;height:42px;place-items:center;gap:1px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-card-bg);color:var(--color-text-secondary)}.row-actions button:hover{border-color:var(--color-accent);color:var(--color-accent)}.row-actions button.danger:hover{border-color:var(--color-danger,#b83232);color:var(--color-danger,#b83232)}.row-actions button:disabled{opacity:.5}.row-actions i{font-size:15px}.row-actions span{font-size:8px}.page-state{display:grid;min-height:280px;place-items:center;align-content:center;gap:10px;color:var(--color-text-secondary)}.page-state>i{font-size:36px}.page-state h2{margin:0;font-size:18px}.page-state button{padding:9px 12px;border:0;border-radius:6px;background:var(--btn-primary-bg);color:var(--btn-primary-text)}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:980px){.upload-row{grid-template-columns:120px minmax(220px,1fr) 160px}.upload-cover{width:120px}.row-actions{grid-column:2/-1;justify-content:flex-end}}@media(max-width:700px){.uploads-header{align-items:flex-start;flex-direction:column}.summary-strip{grid-template-columns:repeat(3,1fr)}.summary-strip div:nth-child(3){border-right:0}.upload-row{grid-template-columns:90px minmax(0,1fr)}.upload-cover{width:90px}.visibility-control,.row-actions{grid-column:1/-1}.status-tabs{overflow-x:auto}}
+.visibility-guilds{display:flex!important;flex-wrap:wrap;gap:5px}.visibility-guilds label{display:inline-flex;align-items:center;gap:4px;padding:5px 7px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-card-bg);font-size:9px;cursor:pointer}.visibility-guilds label.selected{border-color:var(--color-accent);background:var(--tag-bg)}.visibility-guilds input{width:auto}
 </style>

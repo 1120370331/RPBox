@@ -5,6 +5,7 @@ import { createPinia } from 'pinia'
 import RPDBEditor from './RPDBEditor.vue'
 import { createRPDBWork } from '@/api/rpdb'
 import { uploadImage } from '@/api/item'
+import i18n from '@/i18n'
 
 enableAutoUnmount(afterEach)
 
@@ -34,6 +35,15 @@ vi.mock('@/api/item', () => ({
   uploadImage: vi.fn(),
 }))
 
+vi.mock('@/api/guild', () => ({
+  listGuilds: vi.fn().mockResolvedValue({
+    guilds: [
+      { id: 7, name: '银月议会', my_role: 'member' },
+      { id: 8, name: '远行者公会', my_role: 'admin' },
+    ],
+  }),
+}))
+
 function mountEditor() {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -41,7 +51,7 @@ function mountEditor() {
   })
   return router.push('/').then(() => mount(RPDBEditor, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [createPinia(), router, i18n],
       stubs: {
         TiptapEditor: {
           props: ['modelValue'],
@@ -66,6 +76,7 @@ function mountEditor() {
 
 describe('RPDBEditor', () => {
   beforeEach(() => {
+    i18n.global.locale.value = 'zh-CN'
     localStorage.clear()
     sessionStorage.clear()
     vi.clearAllMocks()
@@ -94,6 +105,56 @@ describe('RPDBEditor', () => {
     expect(wrapper.text()).toContain('内部链接')
   })
 
+  it('places required visibility above content type and defaults to public', async () => {
+    const wrapper = await mountEditor()
+    const visibilityField = wrapper.find('[data-testid="visibility-field"]')
+    const typeCards = wrapper.find('.type-cards')
+
+    expect(visibilityField.exists()).toBe(true)
+    expect(visibilityField.text()).toContain('可见度')
+    expect(visibilityField.text()).toContain('公开可见')
+    expect(visibilityField.find('.required-mark').exists()).toBe(true)
+    expect(visibilityField.element.compareDocumentPosition(typeCards.element)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+
+    await visibilityField.find('.rpdb-select__trigger').trigger('click')
+    await wrapper.vm.$nextTick()
+    const labels = Array.from(document.body.querySelectorAll('.rpdb-select__option')).map(option => option.textContent)
+    expect(labels.some(label => label?.includes('公开可见'))).toBe(true)
+    expect(labels.some(label => label?.includes('公会可见'))).toBe(true)
+    expect(labels.some(label => label?.includes('仅自己'))).toBe(true)
+  })
+
+  it('submits multiple guilds selected for guild visibility', async () => {
+    localStorage.setItem('token', 'test-token')
+    const wrapper = await mountEditor()
+    const visibilityField = wrapper.find('[data-testid="visibility-field"]')
+
+    await visibilityField.find('.rpdb-select__trigger').trigger('click')
+    await wrapper.vm.$nextTick()
+    const guildOption = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.rpdb-select__option'))
+      .find(option => option.textContent?.includes('公会可见'))
+    expect(guildOption).toBeDefined()
+    guildOption!.click()
+    await wrapper.vm.$nextTick()
+
+    const guildSelect = wrapper.find('[data-testid="visibility-guild-select"]')
+    expect(guildSelect.text()).toContain('可多选')
+    const guildCheckboxes = guildSelect.findAll('input[type="checkbox"]')
+    expect(guildCheckboxes).toHaveLength(2)
+    await guildCheckboxes[0].setValue(true)
+    await guildCheckboxes[1].setValue(true)
+    await wrapper.find('input[placeholder="例如：月光灯笼的巡夜用法"]').setValue('银月议会收藏')
+    await wrapper.find('[data-testid="publish-work"]').trigger('click')
+
+    await vi.waitFor(() => expect(vi.mocked(createRPDBWork)).toHaveBeenCalled())
+    expect(vi.mocked(createRPDBWork).mock.calls.at(-1)?.[0]).toMatchObject({
+      visibility: 'guild',
+      guild_id: 7,
+      guild_ids: [7, 8],
+      is_public: false,
+    })
+  })
+
   it('validates the required title inline without an editor navigation bar', async () => {
     const wrapper = await mountEditor()
 
@@ -104,7 +165,7 @@ describe('RPDBEditor', () => {
     await wrapper.find('[data-testid="publish-work"]').trigger('click')
 
     expect(wrapper.find('.field-control').classes()).toContain('invalid')
-    expect(wrapper.text()).toContain('请填写作品标题后再发布')
+    expect(wrapper.text()).toContain('请填写内容标题后再发布')
     expect(createRPDBWork).not.toHaveBeenCalled()
 
     await wrapper.find('#rpdb-title').setValue('暮色森林巡林灯')
@@ -181,6 +242,9 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('[data-testid="transmog-editor-fields"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('护甲类型')
     expect(wrapper.text()).toContain('幻化部位')
+    expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).not.toContain('外观主题')
+    expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).not.toContain('主体来源')
+    expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).not.toContain('套装链接')
     expect(wrapper.find('[data-testid="add-guide-step-bottom"]').exists()).toBe(true)
 
     await wrapper.findAll('.type-cards button')[2].trigger('click')
@@ -251,10 +315,37 @@ describe('RPDBEditor', () => {
     await wrapper.findAll('.type-cards button')[2].trigger('click')
     const homeChecklist = wrapper.find('[data-testid="home-content-checklist"]')
     expect(homeChecklist.exists()).toBe(true)
+    const furniturePanels = wrapper.findAll('[data-testid="furniture-reference-panel"]')
+    expect(furniturePanels.length).toBeGreaterThan(0)
+    expect(furniturePanels[0].attributes('open')).toBeUndefined()
+    expect(furniturePanels[0].find('summary').text()).toContain('家具 1')
+    await furniturePanels[0].find('summary').trigger('click')
+    expect(furniturePanels[0].attributes('open')).toBeDefined()
+    expect(furniturePanels[0].find('.slot-row__body').isVisible()).toBe(true)
     expect(wrapper.text()).toContain('家具名称')
     expect(homeChecklist.text()).toContain('图标')
     expect(homeChecklist.text()).not.toContain('放置位置')
     expect(wrapper.text()).toContain('获取途径')
+  })
+
+  it('switches all editor-specific labels to English', async () => {
+    i18n.global.locale.value = 'en-US'
+    const wrapper = await mountEditor()
+
+    expect(wrapper.text()).toContain('Publish content')
+    expect(wrapper.text()).toContain('WoW Item')
+    expect(wrapper.find('[data-testid="publish-work"]').text()).toContain('Publish')
+
+    await wrapper.findAll('.type-cards button')[1].trigger('click')
+    expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).toContain('Armor type')
+    expect(wrapper.find('[data-testid="transmog-content-checklist"]').text()).toContain('Head')
+
+    await wrapper.findAll('.type-cards button')[2].trigger('click')
+    const furniturePanel = wrapper.find('[data-testid="furniture-reference-panel"]')
+    expect(furniturePanel.find('summary').text()).toContain('Furniture 1')
+    await furniturePanel.find('summary').trigger('click')
+    expect(furniturePanel.text()).toContain('Furniture name')
+    expect(furniturePanel.find('[data-testid="furniture-icon-url"]').attributes('placeholder')).toBe('Paste an image URL')
   })
 
   it('lets housing authors paste, upload and clear furniture icons', async () => {
@@ -264,6 +355,7 @@ describe('RPDBEditor', () => {
 
     await wrapper.findAll('.type-cards button')[2].trigger('click')
     const checklist = wrapper.find('[data-testid="home-content-checklist"]')
+    await checklist.find('[data-testid="furniture-reference-panel"] summary').trigger('click')
     const iconURL = checklist.find('[data-testid="furniture-icon-url"]')
     expect(iconURL.attributes('placeholder')).toBe('粘贴图片链接')
     expect(checklist.text()).not.toContain('放置位置')
@@ -324,6 +416,8 @@ describe('RPDBEditor', () => {
     expect(vi.mocked(createRPDBWork).mock.calls.at(-1)?.[0]).toMatchObject({
       bind_type: 'no',
       faction: 'neutral',
+      visibility: 'public',
+      is_public: true,
       references: [{
         external_type: 'item',
         external_id: 'rpbox-1',
