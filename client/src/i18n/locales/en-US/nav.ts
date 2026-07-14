@@ -5,6 +5,7 @@ export default {
     archives: 'Story Archives',
     warcraft: 'Warcraft Tools',
     market: 'Creative Market',
+    rpdb: 'RP Database',
     community: 'Community',
     guild: 'Guild',
     settings: 'Settings',

@@ -9,6 +9,7 @@ export default {
       posts: '帖子',
       items: '作品',
       collections: '合集',
+      rpdb: 'RP 数据库',
     },
     empty: {
       posts: '暂无收藏帖子',
@@ -17,6 +18,8 @@ export default {
       itemsSearch: '未找到匹配的收藏作品',
       collections: '暂无收藏合集',
       collectionsSearch: '未找到匹配的收藏合集',
+      rpdb: '暂无收藏的 RP 数据库作品',
+      rpdbSearch: '未找到匹配的 RP 数据库作品',
     },
     itemTypes: {
       item: '道具',

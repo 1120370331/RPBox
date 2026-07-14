@@ -12,6 +12,51 @@ import (
 
 var DB *gorm.DB
 
+func migrateLegacyRPDBLikes(db *gorm.DB) error {
+	const (
+		canonicalTable = "rpdb_likes"
+		legacyTable    = "rpdb_entry_likes_legacy"
+	)
+
+	tables, err := db.Migrator().GetTables()
+	if err != nil {
+		return fmt.Errorf("list tables before RPDB likes migration: %w", err)
+	}
+
+	existingTables := make(map[string]bool, len(tables))
+	for _, table := range tables {
+		existingTables[table] = true
+	}
+	if !existingTables[canonicalTable] {
+		return nil
+	}
+
+	columnTypes, err := db.Migrator().ColumnTypes(canonicalTable)
+	if err != nil {
+		return fmt.Errorf("inspect legacy RPDB likes columns: %w", err)
+	}
+	hasLegacyEntryID := false
+	for _, columnType := range columnTypes {
+		if columnType.Name() == "entry_id" {
+			hasLegacyEntryID = true
+			break
+		}
+	}
+	if !hasLegacyEntryID {
+		return nil
+	}
+
+	targetTable := legacyTable
+	for suffix := 2; existingTables[targetTable]; suffix++ {
+		targetTable = fmt.Sprintf("%s_%d", legacyTable, suffix)
+	}
+	if err := db.Migrator().RenameTable(canonicalTable, targetTable); err != nil {
+		return fmt.Errorf("rename legacy RPDB likes table to %s: %w", targetTable, err)
+	}
+
+	return nil
+}
+
 func Init(cfg *config.DatabaseConfig) error {
 	sslmode := cfg.SSLMode
 	if sslmode == "" {
@@ -29,6 +74,10 @@ func Init(cfg *config.DatabaseConfig) error {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("connect database with sslmode=%s: %w", sslmode, err)
+	}
+
+	if err := migrateLegacyRPDBLikes(db); err != nil {
+		return fmt.Errorf("prepare RPDB likes schema migration: %w", err)
 	}
 
 	// 自动迁移
@@ -85,6 +134,23 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.CollectionItem{},
 		&model.CollectionFavorite{},
 		&model.StoryBookmark{},
+		&model.RPDBWork{},
+		&model.RPDBReference{},
+		&model.RPDBMedia{},
+		&model.RPDBTransmogSlot{},
+		&model.RPDBGuideStep{},
+		&model.RPDBTag{},
+		&model.RPDBLike{},
+		&model.RPDBFavorite{},
+		&model.RPDBView{},
+		&model.RPDBComment{},
+		&model.RPDBCommentLike{},
+		&model.RPDBList{},
+		&model.RPDBListEntry{},
+		&model.RPDBRevision{},
+		&model.RPDBVerification{},
+		&model.RPDBSet{},
+		&model.RPDBSetWork{},
 	); err != nil {
 		return err
 	}
@@ -99,6 +165,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		"UPDATE comments SET image_review_status = 'none' WHERE COALESCE(BTRIM(image_url), '') = '' AND COALESCE(BTRIM(image_review_status), '') = ''",
 		"UPDATE item_comments SET image_review_status = 'approved' WHERE COALESCE(BTRIM(image_url), '') <> '' AND COALESCE(BTRIM(image_review_status), '') IN ('', 'none')",
 		"UPDATE item_comments SET image_review_status = 'none' WHERE COALESCE(BTRIM(image_url), '') = '' AND COALESCE(BTRIM(image_review_status), '') = ''",
+		"UPDATE rpdb_works SET visibility = CASE WHEN is_public = true THEN 'public' ELSE 'private' END WHERE COALESCE(BTRIM(visibility), '') = ''",
 	}
 	for _, sql := range migrations {
 		if err := db.Exec(sql).Error; err != nil {
@@ -107,6 +174,9 @@ func Init(cfg *config.DatabaseConfig) error {
 	}
 	if err := db.Exec("UPDATE users SET sponsor_level = 2 WHERE is_sponsor = true AND (sponsor_level IS NULL OR sponsor_level = 0)").Error; err != nil {
 		log.Printf("[DB Migration] update sponsor_level from is_sponsor - %v", err)
+	}
+	if err := db.Exec("UPDATE users SET sponsor_acknowledgement_level = GREATEST(COALESCE(sponsor_acknowledgement_level, 0), COALESCE(sponsor_level, 0), CASE WHEN is_sponsor = true THEN 1 ELSE 0 END) WHERE COALESCE(sponsor_level, 0) > 0 OR is_sponsor = true").Error; err != nil {
+		log.Printf("[DB Migration] backfill sponsor acknowledgement level - %v", err)
 	}
 	if err := db.Exec("UPDATE users SET name_style_preference = 'sponsor' WHERE (sponsor_level >= 2 OR is_sponsor = true) AND COALESCE(NULLIF(BTRIM(name_style_preference), ''), '') = ''").Error; err != nil {
 		log.Printf("[DB Migration] update sponsor name style preference - %v", err)
@@ -133,6 +203,13 @@ func Init(cfg *config.DatabaseConfig) error {
 		"CREATE INDEX IF NOT EXISTS idx_posts_is_public ON posts(is_public)",
 		// guilds 表限制同一 owner 只能存在一个待审核公会
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_guilds_owner_pending_unique ON guilds(owner_id) WHERE status = 'pending'",
+		"CREATE INDEX IF NOT EXISTS idx_rpdb_works_public_list ON rpdb_works(status, review_status, is_public, type, updated_at)",
+		"CREATE INDEX IF NOT EXISTS idx_rpdb_works_visibility ON rpdb_works(visibility, guild_id, status, review_status, updated_at)",
+		"CREATE INDEX IF NOT EXISTS idx_rpdb_works_discovery ON rpdb_works(type, verification_status, availability_status, expansion)",
+		"CREATE INDEX IF NOT EXISTS idx_rpdb_media_work_review ON rpdb_media(work_id, review_status, sort_order)",
+		"CREATE INDEX IF NOT EXISTS idx_rpdb_guide_steps_work_order ON rpdb_guide_steps(work_id, sort_order)",
+		"CREATE INDEX IF NOT EXISTS idx_rpdb_list_entries_work ON rpdb_list_entries(work_id)",
+		"CREATE INDEX IF NOT EXISTS idx_rpdb_verifications_work_result ON rpdb_verifications(work_id, result)",
 	}
 	for _, sql := range indexMigrations {
 		if err := db.Exec(sql).Error; err != nil {

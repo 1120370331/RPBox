@@ -6,6 +6,12 @@ import type { Story } from '@/api/story'
 import { listGuilds, listGuildStories, type Guild, type GuildStoryWithUploader } from '@/api/guild'
 import { listPosts, type PostWithAuthor, POST_CATEGORIES } from '@/api/post'
 import { getImageUrl, resolveApiUrl } from '@/api/item'
+import {
+  listRPDBWorks,
+  resolveRPDBMediaURL,
+  type RPDBWork,
+  type RPDBWorkType,
+} from '@/api/rpdb'
 
 const props = defineProps<{
   modelValue: boolean
@@ -22,16 +28,20 @@ type GuildStoryCard = {
   story: GuildStoryWithUploader
 }
 
-const activeTab = ref<'guild' | 'post' | 'guildHome'>('guild')
+const activeTab = ref<'guild' | 'post' | 'rpdb' | 'guildHome'>('guild')
 const loadingGuildStories = ref(false)
 const loadingPosts = ref(false)
+const loadingRPDBWorks = ref(false)
 const loadingGuilds = ref(false)
 const hasLoaded = ref(false)
 
 const guilds = ref<Guild[]>([])
 const guildStories = ref<GuildStoryCard[]>([])
 const publicPosts = ref<PostWithAuthor[]>([])
+const publicRPDBWorks = ref<RPDBWork[]>([])
 const postSearch = ref('')
+const rpdbSearch = ref('')
+const rpdbType = ref<RPDBWorkType | ''>('')
 
 const open = computed({
   get: () => props.modelValue,
@@ -59,6 +69,23 @@ const filteredPosts = computed(() => {
   })
 })
 
+const rpdbTypes: Array<{ value: RPDBWorkType | ''; label: string; icon: string }> = [
+  { value: '', label: '全部', icon: 'ri-layout-grid-line' },
+  { value: 'item_showcase', label: '魔兽物品', icon: 'ri-magic-line' },
+  { value: 'transmog', label: '幻化方案', icon: 'ri-shirt-line' },
+  { value: 'home_showcase', label: '家宅分享', icon: 'ri-home-heart-line' },
+]
+
+const filteredRPDBWorks = computed(() => {
+  const keyword = rpdbSearch.value.trim().toLowerCase()
+  return publicRPDBWorks.value.filter((work) => {
+    if (rpdbType.value && work.type !== rpdbType.value) return false
+    if (!keyword) return true
+    return [work.title, work.summary, work.effect_description, work.author_name, getRPDBTypeLabel(work.type)]
+      .some((value) => String(value || '').toLowerCase().includes(keyword))
+  })
+})
+
 watch(() => props.modelValue, (isOpen) => {
   if (isOpen) {
     void loadAll()
@@ -68,8 +95,11 @@ watch(() => props.modelValue, (isOpen) => {
 async function loadAll() {
   if (hasLoaded.value) return
   hasLoaded.value = true
-  await loadGuildsAndStories()
-  await loadPublicPosts()
+  await Promise.all([
+    loadGuildsAndStories(),
+    loadPublicPosts(),
+    loadPublicRPDBWorks(),
+  ])
 }
 
 async function loadGuildsAndStories() {
@@ -143,6 +173,38 @@ async function loadPublicPosts() {
   }
 }
 
+async function loadPublicRPDBWorks() {
+  loadingRPDBWorks.value = true
+  try {
+    const pageSize = 12
+    const maxPages = 20
+    let page = 1
+    let total = 0
+    const allWorks: RPDBWork[] = []
+
+    while (page <= maxPages) {
+      const res = await listRPDBWorks({
+        page,
+        page_size: pageSize,
+        sort: 'updated_at',
+      })
+      const batch = res.works || []
+      if (!batch.length) break
+      allWorks.push(...batch)
+      total = res.total || allWorks.length
+      if (allWorks.length >= total) break
+      page += 1
+    }
+
+    publicRPDBWorks.value = allWorks
+  } catch (error) {
+    console.error('加载 RP 数据库作品失败:', error)
+    publicRPDBWorks.value = []
+  } finally {
+    loadingRPDBWorks.value = false
+  }
+}
+
 type JumpCardAttrs = {
   href: string
   label: string
@@ -157,6 +219,12 @@ type JumpCardAttrs = {
   avatar?: string
   members?: string
   image?: string
+  summary?: string
+  rpdbType?: string
+  views?: string
+  likes?: string
+  favorites?: string
+  lists?: string
 }
 
 function buildJumpCard(attrs: JumpCardAttrs) {
@@ -178,6 +246,12 @@ function buildJumpCard(attrs: JumpCardAttrs) {
     ['data-jump-avatar', attrs.avatar],
     ['data-jump-members', attrs.members],
     ['data-jump-image', attrs.image],
+    ['data-jump-summary', attrs.summary],
+    ['data-jump-rpdb-type', attrs.rpdbType],
+    ['data-jump-views', attrs.views],
+    ['data-jump-likes', attrs.likes],
+    ['data-jump-favorites', attrs.favorites],
+    ['data-jump-lists', attrs.lists],
   ]
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => ` ${key}="${escapeHtml(String(value))}"`)
@@ -294,6 +368,53 @@ function insertGuild(guild: Guild) {
   emit('update:modelValue', false)
 }
 
+function getRPDBTypeLabel(type: RPDBWorkType) {
+  const labels: Record<RPDBWorkType, string> = {
+    item_showcase: '魔兽物品',
+    transmog: '幻化方案',
+    home_showcase: '家宅分享',
+  }
+  return labels[type]
+}
+
+function getRPDBTypeIcon(type: RPDBWorkType) {
+  const icons: Record<RPDBWorkType, string> = {
+    item_showcase: 'ri-magic-line',
+    transmog: 'ri-shirt-line',
+    home_showcase: 'ri-home-heart-line',
+  }
+  return icons[type]
+}
+
+function getRPDBVariant(type: RPDBWorkType) {
+  const variants: Record<RPDBWorkType, string> = {
+    item_showcase: 'rpdb-item',
+    transmog: 'rpdb-transmog',
+    home_showcase: 'rpdb-home',
+  }
+  return variants[type]
+}
+
+function insertRPDBWork(work: RPDBWork) {
+  props.onInsert(buildJumpCard({
+    href: `/rpdb/${work.id}`,
+    label: getRPDBTypeLabel(work.type),
+    title: work.title || '未命名作品',
+    type: 'rpdb_work',
+    variant: getRPDBVariant(work.type),
+    rpdbType: work.type,
+    author: work.author_name || '匿名贡献者',
+    avatar: resolveApiUrl(work.author_avatar),
+    image: resolveRPDBMediaURL(work.cover_image),
+    summary: work.summary || work.effect_description || '作者尚未填写作品摘要。',
+    views: String(work.view_count || 0),
+    likes: String(work.like_count || 0),
+    favorites: String(work.favorite_count || 0),
+    lists: String(work.list_count || 0),
+  }))
+  emit('update:modelValue', false)
+}
+
 function closeDialog() {
   emit('update:modelValue', false)
 }
@@ -309,7 +430,7 @@ function escapeHtml(value: string) {
 </script>
 
 <template>
-  <RModal v-model="open" title="添加内部连接" width="760px">
+  <RModal v-model="open" title="添加内部链接" width="820px">
     <div class="quick-jump-dialog">
       <div class="quick-jump__intro">
         <div class="quick-jump__intro-icon">
@@ -317,13 +438,14 @@ function escapeHtml(value: string) {
         </div>
         <div>
           <div class="quick-jump__intro-title">把站内内容插入正文</div>
-          <div class="quick-jump__intro-text">选择公会剧情、公开帖子或公会主页后，会生成可点击的内容卡片，读者可直接跳转查看。</div>
+          <div class="quick-jump__intro-text">选择公会剧情、公开帖子、RP 数据库作品或公会主页，生成可点击的站内内容卡片。</div>
         </div>
       </div>
 
       <div class="quick-jump__tabs">
         <button :class="{ active: activeTab === 'guild' }" @click="activeTab = 'guild'">公会剧情</button>
         <button :class="{ active: activeTab === 'post' }" @click="activeTab = 'post'">公开帖子</button>
+        <button :class="{ active: activeTab === 'rpdb' }" @click="activeTab = 'rpdb'">RP数据库</button>
         <button :class="{ active: activeTab === 'guildHome' }" @click="activeTab = 'guildHome'">公会主页</button>
       </div>
 
@@ -339,7 +461,7 @@ function escapeHtml(value: string) {
                 <span>{{ item.story.status === 'draft' ? '草稿' : '已发布' }}</span>
               </div>
             </div>
-            <RButton size="sm" type="primary" @click="insertStory(item.story, item.guild)">插入连接</RButton>
+            <RButton size="sm" type="primary" @click="insertStory(item.story, item.guild)">插入链接</RButton>
           </div>
         </div>
       </div>
@@ -361,7 +483,51 @@ function escapeHtml(value: string) {
                 <span>{{ formatShortDate(post.created_at) }}</span>
               </div>
             </div>
-            <RButton size="sm" type="primary" @click="insertPost(post)">插入连接</RButton>
+            <RButton size="sm" type="primary" @click="insertPost(post)">插入链接</RButton>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="activeTab === 'rpdb'" class="quick-jump__body">
+        <div class="jump-search">
+          <i class="ri-search-line"></i>
+          <input v-model="rpdbSearch" type="text" placeholder="搜索 RP 数据库作品或作者..." />
+        </div>
+        <div class="rpdb-type-filter" aria-label="RP数据库分类">
+          <button
+            v-for="item in rpdbTypes"
+            :key="item.value || 'all'"
+            type="button"
+            :class="{ active: rpdbType === item.value }"
+            @click="rpdbType = item.value"
+          >
+            <i :class="item.icon"></i>{{ item.label }}
+          </button>
+        </div>
+        <div v-if="loadingRPDBWorks" class="jump-loading">加载中...</div>
+        <div v-else-if="filteredRPDBWorks.length === 0" class="jump-empty">暂无匹配作品</div>
+        <div v-else class="jump-list jump-list--rpdb">
+          <div
+            v-for="work in filteredRPDBWorks"
+            :key="work.id"
+            class="jump-item jump-item--rpdb"
+            :class="`jump-item--${getRPDBVariant(work.type)}`"
+          >
+            <div class="jump-item__cover" :class="{ empty: !work.cover_image }">
+              <img v-if="work.cover_image" :src="resolveRPDBMediaURL(work.cover_image)" alt="" loading="lazy" />
+              <i v-else :class="getRPDBTypeIcon(work.type)"></i>
+            </div>
+            <div class="jump-item__info">
+              <div class="jump-item__eyebrow"><i :class="getRPDBTypeIcon(work.type)"></i>{{ getRPDBTypeLabel(work.type) }}</div>
+              <div class="jump-item__title">{{ work.title || '未命名作品' }}</div>
+              <div class="jump-item__summary">{{ work.summary || work.effect_description || '作者尚未填写作品摘要。' }}</div>
+              <div class="jump-item__meta">
+                <span>{{ work.author_name || '匿名贡献者' }}</span>
+                <span><i class="ri-eye-line"></i>{{ work.view_count || 0 }}</span>
+                <span><i class="ri-heart-3-line"></i>{{ work.like_count || 0 }}</span>
+              </div>
+            </div>
+            <RButton size="sm" type="primary" @click="insertRPDBWork(work)">插入链接</RButton>
           </div>
         </div>
       </div>
@@ -377,7 +543,7 @@ function escapeHtml(value: string) {
                 <span>{{ guild.member_count || 0 }} 名成员</span>
               </div>
             </div>
-            <RButton size="sm" type="primary" @click="insertGuild(guild)">插入连接</RButton>
+            <RButton size="sm" type="primary" @click="insertGuild(guild)">插入链接</RButton>
           </div>
         </div>
       </div>
@@ -487,6 +653,12 @@ function escapeHtml(value: string) {
   gap: 12px;
 }
 
+.jump-list--rpdb {
+  max-height: 430px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .jump-item {
   display: flex;
   align-items: center;
@@ -496,6 +668,97 @@ function escapeHtml(value: string) {
   border: 1px solid #F1E6DB;
   border-radius: 10px;
   background: #fff;
+}
+
+.jump-item--rpdb {
+  --rpdb-accent: #A65F2A;
+  position: relative;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  min-height: 92px;
+  overflow: hidden;
+  padding: 0 12px 0 0;
+  border-left: 3px solid var(--rpdb-accent);
+}
+
+.jump-item--rpdb-transmog { --rpdb-accent: #55758B; }
+.jump-item--rpdb-home { --rpdb-accent: #4F7A62; }
+
+.jump-item__cover {
+  align-self: stretch;
+  min-height: 92px;
+  background: color-mix(in srgb, var(--rpdb-accent) 12%, #F5EFE7);
+}
+
+.jump-item__cover img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  object-fit: cover;
+}
+
+.jump-item__cover.empty {
+  display: grid;
+  place-items: center;
+  color: var(--rpdb-accent);
+  font-size: 26px;
+}
+
+.jump-item--rpdb .jump-item__info {
+  padding: 10px 12px;
+}
+
+.jump-item__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--rpdb-accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.jump-item__summary {
+  overflow: hidden;
+  color: #8D7B68;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jump-item--rpdb .jump-item__meta i {
+  margin-right: 3px;
+  color: var(--rpdb-accent);
+}
+
+.rpdb-type-filter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.rpdb-type-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #E5D4C1;
+  border-radius: 6px;
+  background: #fff;
+  color: #8D7B68;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rpdb-type-filter button:hover,
+.rpdb-type-filter button.active {
+  border-color: #B87333;
+  background: rgba(184, 115, 51, 0.08);
+  color: #804030;
 }
 
 .jump-item__info {
@@ -525,5 +788,17 @@ function escapeHtml(value: string) {
   color: #8D7B68;
   padding: 12px 0;
   text-align: center;
+}
+
+@media (max-width: 640px) {
+  .jump-item--rpdb {
+    grid-template-columns: 64px minmax(0, 1fr);
+    padding-right: 8px;
+  }
+
+  .jump-item--rpdb :deep(.r-button) {
+    grid-column: 1 / -1;
+    margin: 0 8px 8px;
+  }
 }
 </style>

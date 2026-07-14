@@ -7,6 +7,7 @@ import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
 import UserLevelBadge from './UserLevelBadge.vue'
+import RPDBJumpPreview from './rpdb/RPDBJumpPreview.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
 import { getUserInfo } from '@/api/user'
@@ -79,6 +80,9 @@ async function loadModeratorPendingCount() {
       + (stats.pending_post_comment_images || 0)
       + (stats.pending_item_comment_images || 0)
       + (stats.pending_user_avatars || 0)
+      + (stats.pending_rpdb_works || 0)
+      + (stats.pending_rpdb_media || 0)
+      + (stats.pending_rpdb_revisions || 0)
     )
   } catch (error) {
     console.error('加载版主待办数量失败:', error)
@@ -160,6 +164,7 @@ const menuItems = computed(() => [
   { id: 'home', icon: 'ri-home-4-line', label: t('nav.menu.home'), route: '/' },
   { id: 'warcraft', icon: 'ri-gamepad-line', label: t('nav.menu.warcraft'), route: '/warcraft' },
   { id: 'market', icon: 'ri-sword-line', label: t('nav.menu.market'), route: '/market' },
+  { id: 'rpdb', icon: 'ri-archive-drawer-line', label: t('nav.menu.rpdb'), route: '/rpdb' },
   { id: 'community', icon: 'ri-chat-smile-2-line', label: t('nav.menu.community'), route: '/community' },
   { id: 'guild', icon: 'ri-shield-line', label: t('nav.menu.guild'), route: '/guild' },
   { id: 'settings', icon: 'ri-settings-3-line', label: t('nav.menu.settings'), route: '/settings' },
@@ -178,6 +183,7 @@ const lastMainMenu = ref<string>('home')
 function resolveMenu(path: string): string | null {
   if (path.startsWith('/warcraft') || path.startsWith('/sync') || path.startsWith('/archives')) return 'warcraft'
   if (path.startsWith('/market')) return 'market'
+  if (path.startsWith('/rpdb')) return 'rpdb'
   if (path.startsWith('/community')) return 'community'
   if (path.startsWith('/guild')) return 'guild'
   if (path.startsWith('/settings')) return 'settings'
@@ -382,6 +388,8 @@ onBeforeUnmount(() => {
 
     <!-- 全局消息通知 -->
     <RToast />
+
+    <RPDBJumpPreview />
   </div>
 </template>
 

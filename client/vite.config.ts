@@ -14,7 +14,7 @@ export default defineConfig({
   clearScreen: false,
   server: {
     host: '127.0.0.1',
-    port: 3101,
+    port: 3102,
     strictPort: true,
     proxy: {
       '/api': {

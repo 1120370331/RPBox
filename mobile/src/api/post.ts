@@ -57,7 +57,7 @@ export const POST_CATEGORIES: { value: PostCategory; label: string }[] = [
 export interface ListPostsParams {
   page?: number
   page_size?: number
-  sort?: 'created_at' | 'view_count' | 'like_count'
+  sort?: 'created_at' | 'updated_at' | 'view_count' | 'like_count'
   order?: 'asc' | 'desc'
   search?: string
   author_name?: string
@@ -88,6 +88,11 @@ export interface CreatePostRequest {
   event_start_time?: string
   event_end_time?: string
   event_color?: string
+}
+
+export interface SavePostDraftRequest extends Omit<CreatePostRequest, 'status'> {
+  title: string
+  content: string
 }
 
 export interface UpdatePostRequest {
@@ -155,8 +160,16 @@ export function createPost(data: CreatePostRequest) {
   return request.post<Post>('/posts', data)
 }
 
+export function createPostDraft(data: SavePostDraftRequest) {
+  return request.post<Post>('/posts', { ...data, status: 'draft' })
+}
+
 export function updatePost(id: number, data: UpdatePostRequest) {
   return request.put<Post>(`/posts/${id}`, data)
+}
+
+export function savePostDraft(id: number, data: SavePostDraftRequest) {
+  return request.put<Post>(`/posts/${id}/draft`, data)
 }
 
 export function deletePost(id: number) {

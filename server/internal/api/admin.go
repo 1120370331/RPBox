@@ -197,6 +197,9 @@ func (s *Server) setUserSponsor(c *gin.Context) {
 		"sponsor_level":      level,
 		"sponsor_expires_at": nil,
 	}
+	if level > sponsorLevelNone {
+		updates["sponsor_acknowledgement_level"] = nextSponsorAcknowledgementLevel(user, level)
+	}
 	if level < sponsorLevelStyle {
 		updates["sponsor_color"] = ""
 		updates["sponsor_bold"] = false

@@ -5,7 +5,7 @@ const props = defineProps<{
   visible: boolean
   title?: string
   targetLabel?: string
-  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'user' | 'story'
+  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'user' | 'story' | 'rpdb_work'
   submitting?: boolean
 }>()
 
@@ -37,6 +37,9 @@ const hideTargetLabel = computed(() => {
   }
   if (props.targetType === 'story') {
     return '隐藏这个剧情'
+  }
+  if (props.targetType === 'rpdb_work') {
+    return '隐藏这个 RP 数据库作品'
   }
   return '隐藏这条内容'
 })

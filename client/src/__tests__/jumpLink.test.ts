@@ -28,6 +28,7 @@ describe('jumpLink utils', () => {
       <div id="content">
         <a id="post-link" href="/community/post/12">帖子</a>
         <a id="guild-link" href="${window.location.origin}/guild/5?tab=posts">公会</a>
+        <a id="rpdb-link" href="/rpdb/10">RP数据库</a>
         <a id="external-link" href="https://example.com/docs">外部</a>
       </div>
     `
@@ -37,6 +38,7 @@ describe('jumpLink utils', () => {
 
     const postLink = document.getElementById('post-link') as HTMLAnchorElement
     const guildLink = document.getElementById('guild-link') as HTMLAnchorElement
+    const rpdbLink = document.getElementById('rpdb-link') as HTMLAnchorElement
     const externalLink = document.getElementById('external-link') as HTMLAnchorElement
 
     expect(postLink.getAttribute('data-jump-href')).toBe('/community/post/12')
@@ -46,6 +48,10 @@ describe('jumpLink utils', () => {
     expect(guildLink.getAttribute('data-jump-href')).toBe('/guild/5?tab=posts')
     expect(guildLink.getAttribute('data-jump-guild-id')).toBe('5')
     expect(guildLink.hasAttribute('href')).toBe(false)
+
+    expect(rpdbLink.getAttribute('data-jump-href')).toBe('/rpdb/10')
+    expect(rpdbLink.hasAttribute('href')).toBe(false)
+    expect(rpdbLink.classList.contains('jump-link')).toBe(true)
 
     expect(externalLink.getAttribute('href')).toBe('https://example.com/docs')
     expect(externalLink.hasAttribute('data-jump-href')).toBe(false)

@@ -12,6 +12,7 @@ import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RModal from '@/components/RModal.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import AchievementMedal from '@/components/AchievementMedal.vue'
+import RPDBContributionSection from '@/components/rpdb/RPDBContributionSection.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import {
@@ -701,6 +702,11 @@ function previewAchievementNotification() {
             </template>
           </div>
         </div>
+
+        <RPDBContributionSection
+          :user-id="Number(userId)"
+          :is-own-profile="isOwnProfile"
+        />
 
         <!-- 4. 账户状态卡片 -->
         <div class="status-card">

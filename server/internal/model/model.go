@@ -8,22 +8,23 @@ type User struct {
 	Email         string `gorm:"uniqueIndex;size:100" json:"-"`
 	EmailVerified bool   `gorm:"default:false" json:"email_verified"` // 邮箱是否已验证
 	// 注册协议同意记录
-	TermsAcceptedAt     *time.Time `json:"-"`
-	PrivacyAcceptedAt   *time.Time `json:"-"`
-	AgreementVersion    string     `gorm:"size:32" json:"-"`
-	Avatar              string     `gorm:"type:text" json:"avatar"`                                // 头像(base64)
-	AvatarReviewStatus  string     `gorm:"size:20;default:none;index" json:"avatar_review_status"` // none|pending|approved|rejected
-	AvatarReviewerID    *uint      `gorm:"index" json:"avatar_reviewer_id"`
-	AvatarReviewedAt    *time.Time `json:"avatar_reviewed_at"`
-	AvatarReviewComment string     `gorm:"size:512" json:"avatar_review_comment"`
-	Role                string     `gorm:"size:20;default:user" json:"role"`  // user|moderator|admin
-	IsSponsor           bool       `gorm:"default:false" json:"is_sponsor"`   // 赞助者权限
-	SponsorLevel        int        `gorm:"default:0" json:"sponsor_level"`    // 赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
-	SponsorExpiresAt    *time.Time `gorm:"index" json:"sponsor_expires_at"`   // 赞助到期时间（空=永久）
-	SponsorColor        string     `gorm:"size:6" json:"sponsor_color"`       // 赞助者自定义颜色(HEX, 无#)
-	SponsorBold         bool       `gorm:"default:false" json:"sponsor_bold"` // 赞助者名称加粗
-	Password            string     `gorm:"-" json:"-"`
-	PassHash            string     `json:"-"`
+	TermsAcceptedAt             *time.Time `json:"-"`
+	PrivacyAcceptedAt           *time.Time `json:"-"`
+	AgreementVersion            string     `gorm:"size:32" json:"-"`
+	Avatar                      string     `gorm:"type:text" json:"avatar"`                                // 头像(base64)
+	AvatarReviewStatus          string     `gorm:"size:20;default:none;index" json:"avatar_review_status"` // none|pending|approved|rejected
+	AvatarReviewerID            *uint      `gorm:"index" json:"avatar_reviewer_id"`
+	AvatarReviewedAt            *time.Time `json:"avatar_reviewed_at"`
+	AvatarReviewComment         string     `gorm:"size:512" json:"avatar_review_comment"`
+	Role                        string     `gorm:"size:20;default:user" json:"role"`               // user|moderator|admin
+	IsSponsor                   bool       `gorm:"default:false" json:"is_sponsor"`                // 当前赞助者权限
+	SponsorLevel                int        `gorm:"default:0" json:"sponsor_level"`                 // 当前赞助等级: 0=无, 1=鸣谢, 2=昵称样式, 3=个性化
+	SponsorAcknowledgementLevel int        `gorm:"default:0" json:"sponsor_acknowledgement_level"` // 感谢名单等级: 曾获得赞助后永久保留
+	SponsorExpiresAt            *time.Time `gorm:"index" json:"sponsor_expires_at"`                // 当前赞助到期时间（空=永久）
+	SponsorColor                string     `gorm:"size:6" json:"sponsor_color"`                    // 赞助者自定义颜色(HEX, 无#)
+	SponsorBold                 bool       `gorm:"default:false" json:"sponsor_bold"`              // 赞助者名称加粗
+	Password                    string     `gorm:"-" json:"-"`
+	PassHash                    string     `json:"-"`
 	// 个人资料字段
 	Bio      string `gorm:"size:500" json:"bio"`      // 个人简介
 	Location string `gorm:"size:100" json:"location"` // 地区

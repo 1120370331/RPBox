@@ -98,6 +98,11 @@ export interface CreatePostRequest {
   event_color?: string
 }
 
+export interface SavePostDraftRequest extends Omit<CreatePostRequest, 'status'> {
+  title: string
+  content: string
+}
+
 export interface UpdatePostRequest {
   title?: string
   content?: string
@@ -119,7 +124,7 @@ export interface UpdatePostRequest {
 export interface ListPostsParams {
   page?: number
   page_size?: number
-  sort?: 'created_at' | 'view_count' | 'like_count'
+  sort?: 'created_at' | 'updated_at' | 'view_count' | 'like_count'
   order?: 'asc' | 'desc'
   search?: string
   author_name?: string
@@ -143,6 +148,10 @@ export async function createPost(data: CreatePostRequest): Promise<Post> {
   return request.post('/posts', data)
 }
 
+export async function createPostDraft(data: SavePostDraftRequest): Promise<Post> {
+  return request.post('/posts', { ...data, status: 'draft' })
+}
+
 export async function getPost(id: number): Promise<{
   post: Post
   author_name: string
@@ -162,6 +171,10 @@ export async function getPost(id: number): Promise<{
 
 export async function updatePost(id: number, data: UpdatePostRequest): Promise<Post> {
   return request.put(`/posts/${id}`, data)
+}
+
+export async function savePostDraft(id: number, data: SavePostDraftRequest): Promise<Post> {
+  return request.put(`/posts/${id}/draft`, data)
 }
 
 export async function deletePost(id: number): Promise<void> {
