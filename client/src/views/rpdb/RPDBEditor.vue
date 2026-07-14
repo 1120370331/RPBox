@@ -96,6 +96,9 @@ const homeDetails = reactive({
   visit_status: 'friend_only',
   space_type: 'indoor_outdoor',
 })
+const transmogDetails = reactive({
+  share_code: '',
+})
 const typeOptions = computed<Array<{ id: RPDBWorkType; icon: string; title: string; description: string }>>(() => [
   {
     id: 'item_showcase',
@@ -567,7 +570,7 @@ function buildTransmogSlotPayload() {
 }
 
 function buildDraftPayload(status: 'draft' | 'published' = 'draft') {
-  syncHomeDetails()
+  syncExtraDetails()
   const { game_version: _gameVersion, expansion: _expansion, ...formPayload } = form as RPDBWorkPayload & { game_version?: string; expansion?: string }
   return {
     ...formPayload,
@@ -586,6 +589,7 @@ function saveLocalDraft() {
   window.localStorage.setItem(localDraftKey.value, JSON.stringify({
     form,
     homeDetails,
+    transmogDetails,
     customStyleTags: customStyleTags.value,
     autosavedWorkId: autosavedWorkId.value,
     savedAt: new Date().toISOString(),
@@ -599,9 +603,16 @@ function loadLocalDraft() {
   const raw = window.localStorage.getItem(localDraftKey.value)
   if (!raw) return
   try {
-    const draft = JSON.parse(raw) as { form?: Partial<RPDBWorkPayload>; homeDetails?: Partial<typeof homeDetails>; customStyleTags?: string[]; autosavedWorkId?: number }
+    const draft = JSON.parse(raw) as {
+      form?: Partial<RPDBWorkPayload>
+      homeDetails?: Partial<typeof homeDetails>
+      transmogDetails?: Partial<typeof transmogDetails>
+      customStyleTags?: string[]
+      autosavedWorkId?: number
+    }
     if (draft.form) Object.assign(form, draft.form)
     if (draft.homeDetails) Object.assign(homeDetails, draft.homeDetails)
+    if (draft.transmogDetails) Object.assign(transmogDetails, draft.transmogDetails)
     customStyleTags.value = draft.customStyleTags || draft.form?.tag_names || []
     autosavedWorkId.value = draft.autosavedWorkId || null
     ensureEditorDefaults()
@@ -687,14 +698,20 @@ function toggleVisibilityGuild(guildID: number) {
   form.guild_id = form.guild_ids[0]
 }
 
-function syncHomeDetails() {
-  form.extra = form.type === 'home_showcase' ? {
-    share_code: homeDetails.share_code,
-    visit_notes: homeDetails.visit_notes,
-    copy_status: homeDetails.copy_status,
-    visit_status: homeDetails.visit_status,
-    space_type: homeDetails.space_type,
-  } : {}
+function syncExtraDetails() {
+  if (form.type === 'home_showcase') {
+    form.extra = {
+      share_code: homeDetails.share_code,
+      visit_notes: homeDetails.visit_notes,
+      copy_status: homeDetails.copy_status,
+      visit_status: homeDetails.visit_status,
+      space_type: homeDetails.space_type,
+    }
+    return
+  }
+  form.extra = form.type === 'transmog'
+    ? { share_code: transmogDetails.share_code }
+    : {}
 }
 
 function ensureEditorDefaults() {
@@ -758,7 +775,7 @@ async function save(status: 'draft' | 'published') {
 }
 
 function preview() {
-  syncHomeDetails()
+  syncExtraDetails()
   sessionStorage.setItem('rpdb-preview', JSON.stringify(form))
   router.push('/rpdb/preview')
 }
@@ -804,6 +821,13 @@ onMounted(async () => {
             space_type: 'indoor',
           })
         }
+      } else if (work.type === 'transmog') {
+        try {
+          const details = JSON.parse(work.extra || '{}') as { share_code?: unknown }
+          transmogDetails.share_code = String(details.share_code || '')
+        } catch {
+          transmogDetails.share_code = ''
+        }
       }
       ensureEditorDefaults()
     } catch (error) {
@@ -819,7 +843,7 @@ onBeforeUnmount(() => {
   autoSaveTimer = null
 })
 
-watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
+watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, { deep: true })
 </script>
 
 <template>
@@ -992,6 +1016,16 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
             <label><span>{{ t('rpdb.editor.field.armorType') }}</span><RPDBSelect v-model="form.armor_type" :options="armorTypeOptions" /></label>
             <label><span>{{ t('rpdb.editor.field.faction') }}</span><RPDBSelect v-model="form.faction" :options="factionOptions" /></label>
             <label><span>{{ t('rpdb.editor.field.availability') }}</span><RPDBSelect v-model="form.availability_status" :options="availabilityOptions" /></label>
+            <label class="span-2 transmog-code-field">
+              <span>{{ t('rpdb.editor.field.transmogCode') }}</span>
+              <textarea
+                v-model="transmogDetails.share_code"
+                data-testid="transmog-share-code-input"
+                :placeholder="t('rpdb.editor.placeholder.transmogCode')"
+                autocomplete="off"
+                spellcheck="false"
+              ></textarea>
+            </label>
           </div>
           <div class="slot-helper-panel">
             <i class="ri-shirt-line"></i>
@@ -1401,6 +1435,7 @@ label{display:grid;gap:6px;color:var(--color-text-main);font-weight:700}
 label>span{font-size:12px}
 input,textarea,select{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main);font:inherit}
 textarea{min-height:70px;resize:vertical}
+.transmog-code-field textarea{min-height:92px;font:11px/1.55 Consolas,'SFMono-Regular',monospace;overflow-wrap:anywhere}
 .check-list{display:grid;gap:4px;margin-bottom:12px}
 .check-list>div{display:grid;grid-template-columns:20px 1fr auto;gap:7px;align-items:center;padding:8px 0;color:var(--color-text-secondary)}
 .check-list i,.check-list b{color:var(--btn-danger-bg)}

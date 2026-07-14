@@ -242,6 +242,8 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('[data-testid="transmog-editor-fields"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('护甲类型')
     expect(wrapper.text()).toContain('幻化部位')
+    expect(wrapper.text()).toContain('幻化分享代码')
+    expect(wrapper.find('[data-testid="transmog-share-code-input"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).not.toContain('外观主题')
     expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).not.toContain('主体来源')
     expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).not.toContain('套装链接')
@@ -338,6 +340,7 @@ describe('RPDBEditor', () => {
 
     await wrapper.findAll('.type-cards button')[1].trigger('click')
     expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).toContain('Armor type')
+    expect(wrapper.find('[data-testid="transmog-editor-fields"]').text()).toContain('Transmog share code')
     expect(wrapper.find('[data-testid="transmog-content-checklist"]').text()).toContain('Head')
 
     await wrapper.findAll('.type-cards button')[2].trigger('click')
@@ -496,5 +499,20 @@ describe('RPDBEditor', () => {
     })
     expect(customTopicSubmission?.[0]).not.toHaveProperty('game_version')
     expect(customTopicSubmission?.[0]).not.toHaveProperty('expansion')
+  })
+
+  it('publishes the pasted transmog share code with the post', async () => {
+    const wrapper = await mountEditor()
+
+    await wrapper.findAll('.type-cards button')[1].trigger('click')
+    await wrapper.find('#rpdb-title').setValue('银月秘法使')
+    await wrapper.find('[data-testid="transmog-share-code-input"]').setValue('TRANSMOG:HEAD=34339;CHEST=34202')
+    await wrapper.find('[data-testid="publish-work"]').trigger('click')
+
+    await vi.waitFor(() => expect(vi.mocked(createRPDBWork)).toHaveBeenCalled())
+    expect(vi.mocked(createRPDBWork).mock.calls.at(-1)?.[0]).toMatchObject({
+      type: 'transmog',
+      extra: { share_code: 'TRANSMOG:HEAD=34339;CHEST=34202' },
+    })
   })
 })
