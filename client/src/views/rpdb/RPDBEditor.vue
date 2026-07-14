@@ -50,6 +50,7 @@ const quickJumpOpen = ref(false)
 const showImageViewer = ref(false)
 const viewerImages = ref<string[]>([])
 const viewerStartIndex = ref(0)
+const coverInputRef = ref<HTMLInputElement | null>(null)
 const topicDraft = ref('')
 const showAllStyleTags = ref(false)
 const uploadingFurnitureIcon = ref<RPDBReference | null>(null)
@@ -135,8 +136,7 @@ const itemTypeOptions = computed(() => ['item', 'equipment', 'toy', 'quest_item'
   hint: t(`rpdb.editor.options.itemType.${value}.hint`),
 })))
 const bindOptions = computed(() => ['no', 'yes'].map(value => ({
-  value,
-  label: t(`rpdb.editor.options.bind.${value}.label`),
+  value,  label: t(`rpdb.editor.options.bind.${value}.label`),
   hint: t(`rpdb.editor.options.bind.${value}.hint`),
 })))
 const factionOptions = computed(() => ['neutral', 'alliance', 'horde'].map(value => ({
@@ -392,6 +392,10 @@ function openImageViewer(images: string[], index: number) {
   viewerImages.value = images
   viewerStartIndex.value = index
   showImageViewer.value = images.length > 0
+}
+
+function openCoverPicker() {
+  coverInputRef.value?.click()
 }
 
 async function uploadCover(event: Event) {
@@ -1071,25 +1075,34 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
           <div><span>{{ t('rpdb.editor.media.cover') }}</span><h2>{{ t('rpdb.editor.media.coverTitle') }}</h2></div>
           <small>{{ t('rpdb.editor.media.coverHint') }}</small>
         </div>
-        <div class="media-upload media-upload--cover" data-testid="cover-upload">
-          <input id="rpdb-cover-upload" type="file" accept="image/*" @change="uploadCover">
+        <div
+          class="media-upload media-upload--cover"
+          data-testid="cover-upload"
+          role="button"
+          tabindex="0"
+          :aria-label="coverPreviewURL ? t('rpdb.editor.action.replaceCover') : t('rpdb.editor.action.uploadCover')"
+          @click="openCoverPicker"
+          @keydown.enter.prevent="openCoverPicker"
+          @keydown.space.prevent="openCoverPicker"
+        >
+          <input ref="coverInputRef" id="rpdb-cover-upload" type="file" accept="image/*" @click.stop @change="uploadCover">
           <img v-if="coverPreviewURL" :src="coverPreviewURL" :alt="t('rpdb.editor.media.coverAlt')">
           <span v-else>
             <i class="ri-upload-cloud-2-line"></i>
             <b>{{ t('rpdb.editor.action.uploadCover') }}</b>
             <small>{{ t('rpdb.editor.media.coverOptional') }}</small>
           </span>
-          <label class="media-upload__action" for="rpdb-cover-upload">
+          <button type="button" class="media-upload__action" @click.stop="openCoverPicker">
             <i class="ri-upload-cloud-2-line"></i>
             {{ coverPreviewURL ? t('rpdb.editor.action.replaceCover') : t('rpdb.editor.action.customCover') }}
-          </label>
+          </button>
           <button
             v-if="coverPreviewURL"
             type="button"
             class="media-remove"
             data-testid="cover-remove"
             :aria-label="t('rpdb.editor.action.removeCover')"
-            @click="removeCover"
+            @click.stop="removeCover"
           >
             <i class="ri-close-line"></i>
           </button>
@@ -1400,7 +1413,16 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
 .panel-heading h2{margin:0;color:var(--color-text-main);font-size:15px}
 .panel-heading small{color:var(--color-text-secondary);font-size:11px;text-align:right}
 .media-upload{position:relative;display:grid;height:184px;place-items:center;overflow:hidden;border:1px dashed color-mix(in srgb,var(--color-accent) 48%,var(--rpdb-line));border-radius:12px;background:var(--rpdb-soft);cursor:pointer}
-.media-upload input{display:none}
+.media-upload input{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}
 .media-upload img{width:100%;height:100%;object-fit:cover}
 .media-upload>span{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--color-accent);text-align:center}
 .media-upload>span i{font-size:30px}
@@ -1623,6 +1645,7 @@ textarea{min-height:70px;resize:vertical}
   border-radius:6px;
   background:color-mix(in srgb,var(--color-panel-bg) 92%,transparent);
   color:var(--color-accent);
+  font:inherit;
   font-size:10px;
   font-weight:800;
   cursor:pointer;

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RPDBDetail from './RPDBDetail.vue'
+import i18n from '@/i18n'
 
 const getRPDBWork = vi.hoisted(() => vi.fn())
 const listRPDBComments = vi.hoisted(() => vi.fn())
@@ -57,6 +58,7 @@ vi.mock('@/api/safety', async () => {
 
 describe('RPDBDetail', () => {
   beforeEach(() => {
+    i18n.global.locale.value = 'zh-CN'
     clipboardWriteText.mockReset()
     addRPDBWorkToList.mockReset()
     createRPDBList.mockReset()
@@ -196,7 +198,12 @@ describe('RPDBDetail', () => {
     expect(reference.element.tagName).toBe('DIV')
     expect(reference.text()).toContain('玩具 · 旅店老板赠送')
     expect(reference.text()).toContain('供来访者记录故事与留言。')
-    expect(wrapper.find('.hero-metadata').text()).toContain('是否绑定是')
+    const metadata = wrapper.find('.hero-metadata').text()
+    expect(metadata).toContain('获取状态可获取')
+    expect(metadata).toContain('是否绑定是')
+    expect(metadata).toContain('阵营不限')
+    expect(metadata).not.toContain('available')
+    expect(metadata).not.toContain('neutral')
     expect(wrapper.text()).not.toContain('人确认有效')
     expect(wrapper.text()).not.toContain('社区验证')
     const metrics = wrapper.get('[data-testid="rpdb-detail-metrics"]')

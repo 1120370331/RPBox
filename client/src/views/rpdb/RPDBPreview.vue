@@ -3,8 +3,10 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { resolveRPDBMediaURL, type RPDBWorkPayload } from '@/api/rpdb'
 import RPDBWorkContent from '@/components/rpdb/RPDBWorkContent.vue'
+import { useRPDBOptionLabels } from '@/composables/useRPDBOptionLabels'
 
 const router = useRouter()
+const { availabilityLabel, bindTypeLabel, factionLabel } = useRPDBOptionLabels()
 const viewport = ref<'desktop' | 'mobile'>('desktop')
 const work = computed<RPDBWorkPayload>(() => {
   try {
@@ -117,8 +119,9 @@ const completedChecks = computed(() => checks.value.filter(item => item.done).le
               <section>
                 <h3>作品资料</h3>
                 <dl>
-                  <div><dt>获取状态</dt><dd>{{ work.availability_status || '未知' }}</dd></div>
-                  <div><dt>阵营</dt><dd>{{ work.faction || '不限' }}</dd></div>
+                  <div><dt>获取状态</dt><dd>{{ availabilityLabel(work.availability_status, work.type) }}</dd></div>
+                  <div v-if="work.type === 'item_showcase'"><dt>是否绑定</dt><dd>{{ bindTypeLabel(work.bind_type) }}</dd></div>
+                  <div><dt>阵营</dt><dd>{{ factionLabel(work.faction) }}</dd></div>
                   <div v-if="work.type === 'transmog'"><dt>护甲类型</dt><dd>{{ work.armor_type || '不限' }}</dd></div>
                 </dl>
               </section>
