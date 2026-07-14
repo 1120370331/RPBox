@@ -775,7 +775,7 @@ func (s *Server) savePostDraft(c *gin.Context) {
 		post.CoverImage = *req.CoverImage
 	}
 
-	if err := s.mutatePostListsGlobal(c.Request.Context(), func(tx *gorm.DB) error {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&post).Error; err != nil {
 			return err
 		}
