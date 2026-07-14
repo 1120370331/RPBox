@@ -239,27 +239,29 @@ onMounted(load)
               <router-link :to="`/rpdb/${entry.work_id}`">{{ entry.work.title }}</router-link>
               <p>{{ entry.work.summary }}</p>
             </div>
-            <button
-              type="button"
-              class="collect-toggle"
-              data-testid="collection-owned-toggle"
-              :class="{ collected: entry.status === 'owned' }"
-              @click="toggleCollected(entry)"
-            >
-              <i :class="entry.status === 'owned' ? 'ri-checkbox-circle-fill' : 'ri-checkbox-blank-circle-line'"></i>
-              {{ entry.status === 'owned' ? '已收集' : '未收集' }}
-            </button>
-            <button type="button" class="open-guide" data-testid="open-guide-link" @click="openGuide(entry)">
-              <i class="ri-route-line"></i>
-              查攻略
-            </button>
-            <router-link class="open-work" data-testid="open-work-link" :to="{ path: `/rpdb/${entry.work_id}`, query: { from: 'collection' } }">
-              <i class="ri-external-link-line"></i>
-              帖子
-            </router-link>
-            <button type="button" class="remove" data-testid="remove-collection-entry" @click="remove(entry)">
-              <i class="ri-delete-bin-line"></i>
-            </button>
+            <div class="entry-actions">
+              <button
+                type="button"
+                class="collect-toggle"
+                data-testid="collection-owned-toggle"
+                :class="{ collected: entry.status === 'owned' }"
+                @click="toggleCollected(entry)"
+              >
+                <i :class="entry.status === 'owned' ? 'ri-checkbox-circle-fill' : 'ri-checkbox-blank-circle-line'"></i>
+                {{ entry.status === 'owned' ? '已收集' : '未收集' }}
+              </button>
+              <button type="button" class="open-guide" data-testid="open-guide-link" @click="openGuide(entry)">
+                <i class="ri-route-line"></i>
+                查攻略
+              </button>
+              <router-link class="open-work" data-testid="open-work-link" :to="{ path: `/rpdb/${entry.work_id}`, query: { from: 'collection' } }">
+                <i class="ri-external-link-line"></i>
+                帖子
+              </router-link>
+              <button type="button" class="remove" data-testid="remove-collection-entry" aria-label="从清单移除" @click="remove(entry)">
+                <i class="ri-delete-bin-line"></i>
+              </button>
+            </div>
           </article>
         </div>
 
@@ -365,17 +367,18 @@ onMounted(load)
 .summary span{padding:13px;border:1px solid var(--rpdb-line);border-radius:12px;background:var(--rpdb-muted);color:var(--color-text-secondary)}
 .summary b{display:block;margin-bottom:3px;font-size:22px;color:var(--color-accent)}
 .entries{display:grid;gap:8px}
-.entries article{display:grid;grid-template-columns:68px minmax(0,1fr) 118px 88px 78px 38px;align-items:center;gap:10px;padding:9px;border:1px solid var(--rpdb-line);border-radius:12px;background:var(--color-panel-bg)}
+.entries article{display:grid;grid-template-columns:68px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px;border:1px solid var(--rpdb-line);border-radius:12px;background:var(--color-panel-bg)}
 .cover{display:grid;width:68px;height:52px;place-items:center;overflow:hidden;border-radius:10px;background:#211914;color:#fff}
 .cover img{width:100%;height:100%;object-fit:cover}
 .entry-copy{min-width:0}
 .entries a{font-weight:800;color:var(--color-text-main);text-decoration:none}
 .entries p{margin:4px 0 0;overflow:hidden;color:var(--color-text-secondary);font-size:12px;text-overflow:ellipsis;white-space:nowrap}
 .entries article.collected .entry-copy a,.entries article.collected .entry-copy p{color:var(--color-text-tertiary,var(--color-text-secondary));text-decoration:line-through;text-decoration-thickness:1px;text-decoration-color:currentColor}
-.collect-toggle{display:inline-flex;min-height:36px;align-items:center;justify-content:center;gap:6px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-text-main);font-weight:800}
+.entry-actions{display:grid;grid-template-columns:118px 88px 78px 38px;align-items:center;gap:10px}
+.collect-toggle{display:inline-flex;min-height:36px;align-items:center;justify-content:center;gap:6px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-text-main);white-space:nowrap;font-weight:800}
 .collect-toggle.collected{border-color:var(--color-accent);background:var(--rpdb-soft);color:var(--color-accent)}
 .remove{height:36px;border:1px solid var(--rpdb-line);border-radius:10px;background:transparent;color:#a33}
-.open-guide,.open-work{display:inline-flex;min-height:34px;align-items:center;justify-content:center;gap:5px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-accent)!important;text-decoration:none;font-weight:800}
+.open-guide,.open-work{display:inline-flex;min-height:34px;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-accent)!important;text-decoration:none;white-space:nowrap;font-weight:800}
 .open-guide{cursor:pointer;font:inherit}
 .empty{display:grid;min-height:360px;place-items:center;align-content:center;color:var(--color-text-secondary);text-align:center}
 .empty i{font-size:40px;color:var(--color-accent)}
@@ -397,5 +400,6 @@ onMounted(load)
 .guide-modal-state.error i{color:#b94a48}
 .spin{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:800px){.lists-heading,.switcher-head{align-items:flex-start;flex-direction:column}.switcher-head .create-open{width:100%}.list-select-row{grid-template-columns:1fr}.summary{grid-template-columns:1fr}.entries article{grid-template-columns:60px 1fr}.collect-toggle,.open-guide,.open-work,.remove{grid-column:auto}.toolbar{align-items:flex-start;flex-direction:column}.toolbar>div:last-child{width:100%}.toolbar button{flex:1}}
+@media(max-width:800px){.lists-heading,.switcher-head{align-items:flex-start;flex-direction:column}.switcher-head .create-open{width:100%}.list-select-row{grid-template-columns:1fr}.summary{grid-template-columns:1fr}.entries article{grid-template-columns:60px minmax(0,1fr)}.entry-actions{grid-column:1/-1;grid-template-columns:minmax(108px,1fr) minmax(88px,1fr) minmax(72px,1fr) 38px;gap:8px}.toolbar{align-items:flex-start;flex-direction:column}.toolbar>div:last-child{width:100%}.toolbar button{flex:1}}
+@media(max-width:480px){.entry-actions{grid-template-columns:minmax(108px,1fr) minmax(88px,1fr) 38px}.open-guide{grid-column:2/4}.open-work{grid-column:1/3}.remove{grid-column:3}}
 </style>
