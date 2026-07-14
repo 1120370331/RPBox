@@ -68,6 +68,7 @@ type RPDBWork struct {
 	IsPublic      bool       `gorm:"default:false;index" json:"is_public"`
 	Visibility    string     `gorm:"size:16;index" json:"visibility"`
 	GuildID       *uint      `gorm:"index" json:"guild_id,omitempty"`
+	GuildIDs      []uint     `gorm:"serializer:json;type:json" json:"guild_ids,omitempty"`
 	ReviewStatus  string     `gorm:"size:20;default:none;index" json:"review_status"`
 	ReviewerID    *uint      `gorm:"index" json:"reviewer_id"`
 	ReviewComment string     `gorm:"size:512" json:"review_comment"`

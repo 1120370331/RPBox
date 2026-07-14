@@ -60,7 +60,7 @@ func (s *Server) reviewRPDBWork(c *gin.Context) {
 	}
 	if request.Action == "approve" {
 		updates["status"] = model.RPDBStatusPublished
-		updates["is_public"] = true
+		updates["is_public"] = normalizeRPDBVisibility(work.Visibility, work.IsPublic) == model.RPDBVisibilityPublic
 	} else {
 		updates["status"] = model.RPDBStatusDraft
 		updates["is_public"] = false
@@ -179,6 +179,29 @@ func (s *Server) reviewRPDBRevision(c *gin.Context) {
 			return err
 		}
 		applyRPDBWorkRequest(&work, payload)
+		if payload.has("visibility") || payload.has("guild_ids") || payload.has("guild_id") || payload.has("is_public") {
+			visibility := payload.Visibility
+			if !payload.has("visibility") {
+				visibility = work.Visibility
+			}
+			if strings.TrimSpace(visibility) == "" {
+				visibility = normalizeRPDBVisibility("", payload.IsPublic)
+			}
+			requestedGuildIDs := payload.GuildIDs
+			legacyGuildID := payload.GuildID
+			if !payload.has("guild_ids") && !payload.has("guild_id") {
+				requestedGuildIDs = work.GuildIDs
+				legacyGuildID = work.GuildID
+			}
+			guildIDs, visibilityErr := validateRPDBVisibility(revision.ProposerID, visibility, requestedGuildIDs, legacyGuildID)
+			if visibilityErr != nil {
+				return visibilityErr
+			}
+			work.Visibility = visibility
+			work.GuildID = firstRPDBGuildID(guildIDs)
+			work.GuildIDs = guildIDs
+			work.IsPublic = visibility == model.RPDBVisibilityPublic
+		}
 		work.Version++
 		if err := tx.Save(&work).Error; err != nil {
 			return err

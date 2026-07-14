@@ -41,8 +41,9 @@ func newRPDBQueryTestServer(t *testing.T) (*Server, model.User) {
 func TestRPDBQueryEnforcesPrivateAndGuildVisibility(t *testing.T) {
 	server, author := newRPDBQueryTestServer(t)
 	member := model.User{Username: "guild-member", Email: "member@example.com", PassHash: "hash"}
+	secondMember := model.User{Username: "second-guild-member", Email: "second-member@example.com", PassHash: "hash"}
 	outsider := model.User{Username: "outsider", Email: "outsider@example.com", PassHash: "hash"}
-	if err := database.DB.Create(&[]model.User{member, outsider}).Error; err != nil {
+	if err := database.DB.Create(&[]model.User{member, secondMember, outsider}).Error; err != nil {
 		t.Fatalf("create viewers: %v", err)
 	}
 	if err := database.DB.Where("username = ?", member.Username).First(&member).Error; err != nil {
@@ -50,6 +51,9 @@ func TestRPDBQueryEnforcesPrivateAndGuildVisibility(t *testing.T) {
 	}
 	if err := database.DB.Where("username = ?", outsider.Username).First(&outsider).Error; err != nil {
 		t.Fatalf("reload outsider: %v", err)
+	}
+	if err := database.DB.Where("username = ?", secondMember.Username).First(&secondMember).Error; err != nil {
+		t.Fatalf("reload second member: %v", err)
 	}
 
 	guildID := uint(42)
@@ -61,13 +65,16 @@ func TestRPDBQueryEnforcesPrivateAndGuildVisibility(t *testing.T) {
 	guildWork := model.RPDBWork{
 		AuthorID: author.ID, Type: model.RPDBWorkTypeItemShowcase, Title: "公会档案",
 		Status: model.RPDBStatusPublished, ReviewStatus: model.RPDBReviewApproved,
-		Visibility: model.RPDBVisibilityGuild, GuildID: &guildID,
+		Visibility: model.RPDBVisibilityGuild, GuildID: &guildID, GuildIDs: []uint{guildID, 43},
 	}
 	if err := database.DB.Create(&[]*model.RPDBWork{&privateWork, &guildWork}).Error; err != nil {
 		t.Fatalf("create works: %v", err)
 	}
 	if err := database.DB.Create(&model.GuildMember{GuildID: guildID, UserID: member.ID, Role: "member"}).Error; err != nil {
 		t.Fatalf("create guild membership: %v", err)
+	}
+	if err := database.DB.Create(&model.GuildMember{GuildID: 43, UserID: secondMember.ID, Role: "member"}).Error; err != nil {
+		t.Fatalf("create second guild membership: %v", err)
 	}
 
 	authorResp := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works/"+strconv.FormatUint(uint64(privateWork.ID), 10), nil, newTestToken(t, author))
@@ -77,6 +84,10 @@ func TestRPDBQueryEnforcesPrivateAndGuildVisibility(t *testing.T) {
 	memberResp := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works/"+strconv.FormatUint(uint64(guildWork.ID), 10), nil, newTestToken(t, member))
 	if memberResp.Code != http.StatusOK {
 		t.Fatalf("expected guild member access, got %d body=%s", memberResp.Code, memberResp.Body.String())
+	}
+	secondMemberResp := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works/"+strconv.FormatUint(uint64(guildWork.ID), 10), nil, newTestToken(t, secondMember))
+	if secondMemberResp.Code != http.StatusOK {
+		t.Fatalf("expected second guild member access, got %d body=%s", secondMemberResp.Code, secondMemberResp.Body.String())
 	}
 	outsiderResp := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works/"+strconv.FormatUint(uint64(guildWork.ID), 10), nil, newTestToken(t, outsider))
 	if outsiderResp.Code != http.StatusNotFound {

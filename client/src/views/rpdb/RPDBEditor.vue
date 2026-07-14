@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   createRPDBWork,
   getRPDBWork,
@@ -10,9 +11,11 @@ import {
   type RPDBReference,
   type RPDBWorkPayload,
   type RPDBWorkType,
+  type RPDBVisibility,
 } from '@/api/rpdb'
 import { uploadImage } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
+import { listGuilds, type Guild } from '@/api/guild'
 import ImageViewer from '@/components/ImageViewer.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
@@ -24,21 +27,23 @@ import { formatTomTomCommand, hasTomTomCoordinates, parseTomTomCommands } from '
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToastStore()
 const saving = ref(false)
 const lastSaved = ref('')
 const autoSaveState = ref<'idle' | 'local' | 'saving' | 'saved' | 'error'>('idle')
 const autoSaveMessage = computed(() => {
-  if (autoSaveState.value === 'saving') return '自动保存中'
-  if (autoSaveState.value === 'saved') return `已自动保存 ${lastSaved.value}`
-  if (autoSaveState.value === 'local') return '已本地保存'
-  if (autoSaveState.value === 'error') return '自动保存失败'
-  return '正在编辑'
+  if (autoSaveState.value === 'saving') return t('rpdb.editor.autosave.saving')
+  if (autoSaveState.value === 'saved') return t('rpdb.editor.autosave.saved', { time: lastSaved.value })
+  if (autoSaveState.value === 'local') return t('rpdb.editor.autosave.local')
+  if (autoSaveState.value === 'error') return t('rpdb.editor.autosave.error')
+  return t('rpdb.editor.autosave.editing')
 })
 const hasLoadedInitialData = ref(false)
 const autosavedWorkId = ref<number | null>(null)
 let autoSaveTimer: ReturnType<typeof window.setTimeout> | null = null
 const rpStyleTags = ref<Tag[]>([])
+const guilds = ref<Guild[]>([])
 const tomtomDraft = ref('')
 const editorRef = ref<InstanceType<typeof TiptapEditor> | null>(null)
 const quickJumpOpen = ref(false)
@@ -63,6 +68,9 @@ const form = reactive<RPDBWorkPayload>({
   bind_type: 'no',
   faction: 'neutral',
   armor_type: '',
+  visibility: 'public',
+  guild_id: undefined,
+  guild_ids: [],
   references: [{
     external_type: 'item',
     external_id: '',
@@ -77,7 +85,7 @@ const form = reactive<RPDBWorkPayload>({
   transmog_slots: [],
   guide_steps: [],
   tag_ids: [],
-  is_public: false,
+  is_public: true,
   status: 'draft',
 })
 const guideCoordinateCount = computed(() => form.guide_steps?.filter(hasTomTomCoordinates).length || 0)
@@ -88,104 +96,78 @@ const homeDetails = reactive({
   visit_status: 'friend_only',
   space_type: 'indoor_outdoor',
 })
-const typeOptions: Array<{ id: RPDBWorkType; icon: string; title: string; description: string }> = [
+const typeOptions = computed<Array<{ id: RPDBWorkType; icon: string; title: string; description: string }>>(() => [
   {
     id: 'item_showcase',
     icon: 'ri-magic-line',
-    title: '魔兽物品',
-    description: '分享实际效果、使用场景和获取攻略',
+    title: t('rpdb.editor.workType.item.title'),
+    description: t('rpdb.editor.workType.item.description'),
   },
   {
     id: 'transmog',
     icon: 'ri-shirt-line',
-    title: '幻化方案',
-    description: '整理整套搭配、替代件和部件攻略',
+    title: t('rpdb.editor.workType.transmog.title'),
+    description: t('rpdb.editor.workType.transmog.description'),
   },
   {
     id: 'home_showcase',
     icon: 'ri-home-heart-line',
-    title: '家宅分享',
-    description: '展示住宅空间、参观信息和分享代码',
+    title: t('rpdb.editor.workType.home.title'),
+    description: t('rpdb.editor.workType.home.description'),
   },
-]
-const availabilityOptions = [
-  { value: 'available', label: '可获取', hint: '当前版本仍可取得' },
-  { value: 'limited', label: '限时获取', hint: '节日、活动或轮换内容' },
-  { value: 'removed', label: '已绝版', hint: '当前无法正常取得' },
-  { value: 'unknown', label: '未知', hint: '等待作者补充确认' },
-]
-const itemTypeOptions = [
-  { value: 'item', label: '物品', hint: '一般消耗品、材料或剧情物件' },
-  { value: 'equipment', label: '装备', hint: '角色可以装备的物品' },
-  { value: 'toy', label: '玩具', hint: '收藏或可重复使用的玩具' },
-  { value: 'quest_item', label: '任务道具', hint: '任务、事件或剧情流程使用' },
-]
-const bindOptions = [
-  { value: 'no', label: '否', hint: '物品不绑定角色或账号' },
-  { value: 'yes', label: '是', hint: '物品会绑定角色或账号' },
-]
-const factionOptions = [
-  { value: 'neutral', label: '不限', hint: '联盟和部落均可用' },
-  { value: 'alliance', label: '联盟', hint: '联盟角色适用' },
-  { value: 'horde', label: '部落', hint: '部落角色适用' },
-]
-const armorTypeOptions = [
-  { value: '', label: '不限', hint: '不限制护甲类型' },
-  { value: 'cloth', label: '布甲', hint: '布甲职业外观' },
-  { value: 'leather', label: '皮甲', hint: '皮甲职业外观' },
-  { value: 'mail', label: '锁甲', hint: '锁甲职业外观' },
-  { value: 'plate', label: '板甲', hint: '板甲职业外观' },
-  { value: 'cosmetic', label: '装饰外观', hint: '通用装饰或节日外观' },
-]
-const transmogSourceOptions = [
-  { value: 'collection', label: '收藏外观', hint: '已有收藏中组合' },
-  { value: 'dungeon', label: '副本', hint: '副本或团队副本掉落' },
-  { value: 'pvp', label: 'PVP', hint: '荣誉、征服或评级奖励' },
-  { value: 'trading-post', label: '商栈', hint: '商栈轮换奖励' },
-  { value: 'vendor', label: '商人', hint: '商人购买或兑换' },
-  { value: 'quest', label: '任务', hint: '任务线奖励' },
-]
-const slotOptions = [
-  { value: 'head', label: '头部' },
-  { value: 'shoulder', label: '肩部' },
-  { value: 'back', label: '背部' },
-  { value: 'chest', label: '胸甲' },
-  { value: 'shirt', label: '衬衣' },
-  { value: 'tabard', label: '战袍' },
-  { value: 'wrist', label: '护腕' },
-  { value: 'hands', label: '手套' },
-  { value: 'waist', label: '腰带' },
-  { value: 'legs', label: '腿部' },
-  { value: 'feet', label: '脚部' },
-  { value: 'main_hand', label: '主手' },
-  { value: 'off_hand', label: '副手' },
-]
-const slotRoleOptions = [
-  { value: 'unused', label: '不使用', hint: '这一槽位不纳入方案' },
-  { value: 'required', label: '必选', hint: '核心部件' },
-  { value: 'optional', label: '可选', hint: '可按角色调整' },
-  { value: 'variant', label: '替代', hint: '同风格替代件' },
-]
-const visitStatusOptions = [
-  { value: 'friend_only', label: '加好友后参观', hint: '需要先添加好友或联系作者' },
-  { value: 'closed', label: '不可参观', hint: '仅展示，不开放参观' },
-]
-const copyStatusOptions = [
-  { value: 'copyable', label: '可复制导入', hint: '公开住宅分享代码' },
-  { value: 'reference_only', label: '仅供参考', hint: '展示设计但不开放复制' },
-  { value: 'private', label: '暂不公开', hint: '隐藏代码内容' },
-]
-const spaceTypeOptions = [
-  { value: 'indoor', label: '室内', hint: '房间、酒馆、工坊等' },
-  { value: 'outdoor', label: '室外', hint: '庭院、营地、街区等' },
-  { value: 'indoor_outdoor', label: '室内外', hint: '室内和室外连续空间' },
-]
-const mediaTypeOptions = [
-  { value: 'image', label: '图片', hint: '静态截图' },
-  { value: 'gif', label: 'GIF', hint: '动态效果' },
-  { value: 'video', label: '视频', hint: '视频链接' },
-  { value: 'embed', label: '嵌入', hint: '外部嵌入内容' },
-]
+])
+const availabilityOptions = computed(() => ['available', 'limited', 'removed', 'unknown'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.availability.${value}.label`),
+  hint: t(`rpdb.editor.options.availability.${value}.hint`),
+})))
+const visibilityOptions = computed(() => ['public', 'guild', 'private'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.visibility.${value}.label`),
+  hint: t(`rpdb.editor.options.visibility.${value}.hint`),
+})))
+const itemTypeOptions = computed(() => ['item', 'equipment', 'toy', 'quest_item'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.itemType.${value}.label`),
+  hint: t(`rpdb.editor.options.itemType.${value}.hint`),
+})))
+const bindOptions = computed(() => ['no', 'yes'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.bind.${value}.label`),
+  hint: t(`rpdb.editor.options.bind.${value}.hint`),
+})))
+const factionOptions = computed(() => ['neutral', 'alliance', 'horde'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.faction.${value}.label`),
+  hint: t(`rpdb.editor.options.faction.${value}.hint`),
+})))
+const armorTypeOptions = computed(() => ['', 'cloth', 'leather', 'mail', 'plate', 'cosmetic'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.armor.${value || 'all'}.label`),
+  hint: t(`rpdb.editor.options.armor.${value || 'all'}.hint`),
+})))
+const slotValues = ['head', 'shoulder', 'back', 'chest', 'shirt', 'tabard', 'wrist', 'hands', 'waist', 'legs', 'feet', 'main_hand', 'off_hand']
+const slotOptions = computed(() => slotValues.map(value => ({ value, label: t(`rpdb.editor.options.slot.${value}`) })))
+const slotRoleOptions = computed(() => ['unused', 'required', 'optional', 'variant'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.slotRole.${value}.label`),
+  hint: t(`rpdb.editor.options.slotRole.${value}.hint`),
+})))
+const visitStatusOptions = computed(() => ['friend_only', 'closed'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.visit.${value}.label`),
+  hint: t(`rpdb.editor.options.visit.${value}.hint`),
+})))
+const copyStatusOptions = computed(() => ['copyable', 'reference_only', 'private'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.copy.${value}.label`),
+  hint: t(`rpdb.editor.options.copy.${value}.hint`),
+})))
+const spaceTypeOptions = computed(() => ['indoor', 'outdoor', 'indoor_outdoor'].map(value => ({
+  value,
+  label: t(`rpdb.editor.options.space.${value}.label`),
+  hint: t(`rpdb.editor.options.space.${value}.hint`),
+})))
 
 const isEdit = computed(() => Boolean(route.params.id))
 const isGuideType = computed(() => form.type !== 'home_showcase')
@@ -195,6 +177,7 @@ const previewMedia = computed(() => form.media?.find(item => item.type === 'imag
 const previewImageURL = computed(() => resolveRPDBMediaURL(previewMedia.value?.url))
 const openTransmogSlots = ref<Set<string>>(new Set())
 const openItemReferences = ref<Set<number>>(new Set())
+const openFurnitureReferences = ref<Set<number>>(new Set())
 const primaryReference = computed(() => form.references?.[0])
 const primaryItemReference = computed(() => {
   if (form.type !== 'item_showcase') return null
@@ -228,14 +211,14 @@ const visibleStyleTags = computed(() => {
   return showAllStyleTags.value ? candidateStyleTags.value : candidateStyleTags.value.slice(0, 8)
 })
 const typeFormTitle = computed(() => {
-  if (form.type === 'home_showcase') return '家宅资料'
-  if (form.type === 'transmog') return '幻化资料'
-  return '道具资料'
+  if (form.type === 'home_showcase') return t('rpdb.editor.typeForm.home.title')
+  if (form.type === 'transmog') return t('rpdb.editor.typeForm.transmog.title')
+  return t('rpdb.editor.typeForm.item.title')
 })
 const typeFormDescription = computed(() => {
-  if (form.type === 'home_showcase') return '填写参观状态、空间类型和可导入的家宅分享代码。'
-  if (form.type === 'transmog') return '填写护甲类型、阵营限制、部件清单和外观获取方式。'
-  return '填写道具来源、绑定状态、阵营限制和实际 RP 用途。'
+  if (form.type === 'home_showcase') return t('rpdb.editor.typeForm.home.description')
+  if (form.type === 'transmog') return t('rpdb.editor.typeForm.transmog.description')
+  return t('rpdb.editor.typeForm.item.description')
 })
 const titleHasError = computed(() => titleTouched.value && !form.title.trim())
 function scrollToSection(id: string) {
@@ -270,7 +253,7 @@ function ensurePrimaryReference(type: RPDBWorkType = form.type) {
   }
   if (type === 'transmog') {
     form.references[0].external_type = 'transmog'
-  } else if (!itemTypeOptions.some(option => option.value === form.references![0].external_type)) {
+  } else if (!itemTypeOptions.value.some(option => option.value === form.references![0].external_type)) {
     form.references[0].external_type = 'item'
   }
   form.references[0].is_primary = true
@@ -319,13 +302,13 @@ function addMedia() {
 
 function addSlot() {
   const usedSlots = new Set((form.transmog_slots || []).map(slot => slot.slot))
-  const nextSlot = slotOptions.find(option => !usedSlots.has(option.value)) || slotOptions[0]
+  const nextSlot = slotOptions.value.find(option => !usedSlots.has(option.value)) || slotOptions.value[0]
   form.transmog_slots!.push({ slot: nextSlot.value, role: 'required', name: '', description: '', source: '', wowhead_url: '', variant: '', note: '', sort_order: form.transmog_slots!.length + 1 })
 }
 
 function ensureTransmogSlots() {
   const currentSlots = new Map((form.transmog_slots || []).map(slot => [slot.slot, slot]))
-  form.transmog_slots = slotOptions.map((option, index) => ({
+  form.transmog_slots = slotOptions.value.map((option, index) => ({
     slot: option.value,
     role: currentSlots.get(option.value)?.role || 'unused',
     name: currentSlots.get(option.value)?.name || '',
@@ -363,7 +346,7 @@ function importTomTomSteps() {
   for (const waypoint of waypoints) {
     form.guide_steps!.push({
       sort_order: form.guide_steps!.length + 1,
-      title: waypoint.label || `路线点 ${form.guide_steps!.length + 1}`,
+      title: waypoint.label || t('rpdb.editor.guide.routePoint', { number: form.guide_steps!.length + 1 }),
       body: '',
       zone: waypoint.zone,
       map_id: waypoint.map_id,
@@ -373,14 +356,14 @@ function importTomTomSteps() {
     })
   }
   if (!waypoints.length) {
-    toast.error('未识别到可用的 TomTom /way 坐标')
+    toast.error(t('rpdb.editor.toast.noWaypoints'))
     return
   }
   tomtomDraft.value = ''
   if (rejected.length) {
-    toast.warning(`已导入 ${waypoints.length} 个路线点，跳过 ${rejected.length} 行`)
+    toast.warning(t('rpdb.editor.toast.waypointsPartial', { count: waypoints.length, rejected: rejected.length }))
   } else {
-    toast.success(`已按顺序导入 ${waypoints.length} 个路线点`)
+    toast.success(t('rpdb.editor.toast.waypointsImported', { count: waypoints.length }))
   }
 }
 
@@ -414,7 +397,7 @@ async function uploadCover(event: Event) {
   try {
     const result = await uploadImage(file) as { url?: string; data?: { url?: string } }
     form.cover_image = result.url || result.data?.url || ''
-    toast.success('封面已上传')
+    toast.success(t('rpdb.editor.toast.coverUploaded'))
   } catch (error) {
     toast.error((error as Error).message)
   }
@@ -444,8 +427,18 @@ function toggleItemReference(index: number) {
   openItemReferences.value = next
 }
 
+function toggleFurnitureReference(index: number) {
+  const next = new Set(openFurnitureReferences.value)
+  if (next.has(index)) {
+    next.delete(index)
+  } else {
+    next.add(index)
+  }
+  openFurnitureReferences.value = next
+}
+
 function itemTypeLabel(value?: string) {
-  return itemTypeOptions.find(option => option.value === value)?.label || '物品'
+  return itemTypeOptions.value.find(option => option.value === value)?.label || t('rpdb.editor.options.itemType.item.label')
 }
 
 function appendPreviewImage(url: string) {
@@ -456,7 +449,7 @@ function appendPreviewImage(url: string) {
     type: 'image',
     url,
     thumbnail_url: url,
-    caption: `效果预览 ${previewCount + 1}`,
+    caption: t('rpdb.editor.media.previewCaption', { number: previewCount + 1 }),
     sort_order: media.length + 1,
   })
 }
@@ -470,7 +463,7 @@ async function uploadPreview(event: Event) {
     try {
       const result = await uploadImage(file) as { url?: string; data?: { url?: string } }
       const url = result.url || result.data?.url || ''
-      if (!url) throw new Error('上传失败，未返回图片地址')
+      if (!url) throw new Error(t('rpdb.editor.toast.uploadMissingUrl'))
       appendPreviewImage(url)
       uploaded++
     } catch (error) {
@@ -478,7 +471,7 @@ async function uploadPreview(event: Event) {
     }
   }
   input.value = ''
-  if (uploaded) toast.success(`已添加 ${uploaded} 张预览图`)
+  if (uploaded) toast.success(t('rpdb.editor.toast.previewsAdded', { count: uploaded }))
 }
 
 async function uploadFurnitureIcon(event: Event, reference: RPDBReference) {
@@ -489,9 +482,9 @@ async function uploadFurnitureIcon(event: Event, reference: RPDBReference) {
   try {
     const result = await uploadImage(file) as { url?: string; data?: { url?: string } }
     const url = result.url || result.data?.url || ''
-    if (!url) throw new Error('上传失败，未返回图片地址')
+    if (!url) throw new Error(t('rpdb.editor.toast.uploadMissingUrl'))
     reference.icon = url
-    toast.success('家具图标已上传')
+    toast.success(t('rpdb.editor.toast.furnitureIconUploaded'))
   } catch (error) {
     toast.error((error as Error).message)
   } finally {
@@ -582,7 +575,10 @@ function buildDraftPayload(status: 'draft' | 'published' = 'draft') {
     transmog_slots: buildTransmogSlotPayload(),
     tag_names: [...customStyleTags.value],
     status,
-    is_public: status === 'published',
+    visibility: form.visibility || 'public',
+    guild_ids: form.visibility === 'guild' ? form.guild_ids : [],
+    guild_id: form.visibility === 'guild' ? form.guild_ids?.[0] : undefined,
+    is_public: form.visibility === 'public',
   }
 }
 
@@ -646,9 +642,9 @@ function importHomeShareCode(event: Event) {
   const reader = new FileReader()
   reader.onload = () => {
     homeDetails.share_code = String(reader.result || '').trim()
-    toast.success('家宅代码已导入')
+    toast.success(t('rpdb.editor.toast.homeCodeImported'))
   }
-  reader.onerror = () => toast.error('读取家宅代码失败')
+  reader.onerror = () => toast.error(t('rpdb.editor.toast.homeCodeReadFailed'))
   reader.readAsText(file)
 }
 
@@ -659,6 +655,36 @@ async function loadStyleTags() {
   } catch {
     rpStyleTags.value = []
   }
+}
+
+async function loadGuildOptions() {
+  if (!window.localStorage.getItem('token')) return
+  try {
+    const result = await listGuilds()
+    guilds.value = result.guilds || []
+  } catch {
+    guilds.value = []
+  }
+}
+
+function updateVisibility(value: string) {
+  form.visibility = value as RPDBVisibility
+  form.is_public = value === 'public'
+  if (value !== 'guild') {
+    form.guild_id = undefined
+    form.guild_ids = []
+  }
+}
+
+function toggleVisibilityGuild(guildID: number) {
+  const selected = new Set(form.guild_ids || [])
+  if (selected.has(guildID)) {
+    selected.delete(guildID)
+  } else {
+    selected.add(guildID)
+  }
+  form.guild_ids = Array.from(selected)
+  form.guild_id = form.guild_ids[0]
 }
 
 function syncHomeDetails() {
@@ -672,6 +698,17 @@ function syncHomeDetails() {
 }
 
 function ensureEditorDefaults() {
+  if (form.visibility !== 'public' && form.visibility !== 'guild' && form.visibility !== 'private') {
+    form.visibility = 'public'
+  }
+  form.is_public = form.visibility === 'public'
+  if (form.visibility === 'guild') {
+    form.guild_ids = Array.from(new Set((form.guild_ids?.length ? form.guild_ids : form.guild_id ? [form.guild_id] : []).filter(Boolean)))
+    form.guild_id = form.guild_ids[0]
+  } else {
+    form.guild_id = undefined
+    form.guild_ids = []
+  }
   if (form.type === 'home_showcase') {
     ensureHomeFurniture()
     return
@@ -681,9 +718,19 @@ function ensureEditorDefaults() {
 }
 
 async function save(status: 'draft' | 'published') {
+  if (!form.visibility) {
+    toast.error(t('rpdb.editor.validation.visibilityRequired'))
+    scrollToSection('section-basics')
+    return
+  }
+  if (form.visibility === 'guild' && !form.guild_ids?.length) {
+    toast.error(t('rpdb.editor.validation.guildRequired'))
+    scrollToSection('section-basics')
+    return
+  }
   if (!form.title.trim()) {
     titleTouched.value = true
-    toast.error('请先填写作品标题')
+    toast.error(t('rpdb.editor.validation.titleRequired'))
     scrollToSection('section-basics')
     window.setTimeout(() => document.getElementById('rpdb-title')?.focus(), 250)
     return
@@ -698,7 +745,7 @@ async function save(status: 'draft' | 'published') {
     lastSaved.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     autosavedWorkId.value = result.work?.id || targetId || null
     saveLocalDraft()
-    toast.success(status === 'draft' ? '草稿已自动保存' : '发布成功')
+    toast.success(status === 'draft' ? t('rpdb.editor.toast.draftSaved') : t('rpdb.editor.toast.published'))
     if (status === 'published') {
       const id = result.work?.id || Number(route.params.id)
       await router.push(id ? `/rpdb/${id}` : '/rpdb')
@@ -718,7 +765,7 @@ function preview() {
 
 onMounted(async () => {
   loadLocalDraft()
-  await loadStyleTags()
+  await Promise.all([loadStyleTags(), loadGuildOptions()])
   if (isEdit.value) {
     try {
       const { work } = await getRPDBWork(Number(route.params.id))
@@ -735,6 +782,9 @@ onMounted(async () => {
         bind_type: work.bind_type,
         faction: work.faction,
         armor_type: work.armor_type,
+        visibility: work.visibility || (work.is_public ? 'public' : 'private'),
+        guild_id: work.guild_id,
+        guild_ids: work.guild_ids?.length ? work.guild_ids : work.guild_id ? [work.guild_id] : [],
         references: work.references || [],
         media: work.media || [],
         transmog_slots: work.transmog_slots || [],
@@ -776,21 +826,60 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
   <div class="editor-page minimal-editor-shell">
     <header class="editor-heading">
       <div>
-        <span>RP 数据库发布台</span>
-        <h1>{{ isEdit ? '修订玩家作品' : '发布一份玩家作品' }}</h1>
-        <p>按创作流程完善资料，未完成的内容会自动保存在本地。</p>
+        <span>{{ t('rpdb.editor.header.eyebrow') }}</span>
+        <h1>{{ isEdit ? t('rpdb.editor.header.editTitle') : t('rpdb.editor.header.createTitle') }}</h1>
+        <p>{{ t('rpdb.editor.header.description') }}</p>
       </div>
       <div class="heading-actions">
-        <span v-if="lastSaved" class="saved-status"><i class="ri-checkbox-circle-fill"></i>已保存 {{ lastSaved }}</span>
-        <button type="button" aria-label="关闭编辑器" title="关闭编辑器" @click="router.push('/rpdb')"><i class="ri-close-line"></i></button>
+        <span v-if="lastSaved" class="saved-status"><i class="ri-checkbox-circle-fill"></i>{{ t('rpdb.editor.header.saved', { time: lastSaved }) }}</span>
+        <button type="button" :aria-label="t('rpdb.editor.action.close')" :title="t('rpdb.editor.action.close')" @click="router.push('/rpdb')"><i class="ri-close-line"></i></button>
       </div>
     </header>
 
     <section id="section-basics" class="editor-upper section-anchor" data-testid="editor-upper">
       <div class="metadata-panel">
         <div class="panel-heading">
-          <div><span>01</span><h2>基础资料</h2></div>
-          <small><b class="required-mark" aria-hidden="true">*</b> 为必填项 · {{ form.status === 'published' ? '待审核' : '草稿' }}</small>
+          <div><span>01</span><h2>{{ t('rpdb.editor.basics.title') }}</h2></div>
+          <small><b class="required-mark" aria-hidden="true">*</b> {{ t('rpdb.editor.basics.required') }} · {{ form.status === 'published' ? t('rpdb.editor.status.pending') : t('rpdb.editor.status.draft') }}</small>
+        </div>
+
+        <div class="visibility-setup" data-testid="visibility-field">
+          <div class="visibility-setup__intro">
+            <i class="ri-eye-line"></i>
+            <span>
+              <b>{{ t('rpdb.editor.help.visibilityTitle') }}</b>
+              <small>{{ t('rpdb.editor.help.visibility') }}</small>
+            </span>
+          </div>
+          <label data-testid="visibility-select">
+            <span>{{ t('rpdb.editor.field.visibility') }} <b class="required-mark" aria-hidden="true">*</b></span>
+            <RPDBSelect
+              :model-value="form.visibility"
+              :options="visibilityOptions"
+              @update:model-value="updateVisibility"
+            />
+          </label>
+          <label v-if="form.visibility === 'guild'" data-testid="visibility-guild-select">
+            <span>{{ t('rpdb.editor.field.visibilityGuild') }} <b class="required-mark" aria-hidden="true">*</b> <small>{{ t('rpdb.editor.help.visibilityGuildMultiple') }}</small></span>
+            <div v-if="guilds.length" class="visibility-guild-options">
+              <label
+                v-for="guild in guilds"
+                :key="guild.id"
+                class="visibility-guild-option"
+                :class="{ selected: form.guild_ids?.includes(guild.id) }"
+              >
+                <input
+                  type="checkbox"
+                  :checked="form.guild_ids?.includes(guild.id)"
+                  :value="guild.id"
+                  @change="toggleVisibilityGuild(guild.id)"
+                >
+                <span><b>{{ guild.name }}</b><small>{{ t(`rpdb.editor.options.guildRole.${guild.my_role || 'member'}`) }}</small></span>
+                <i v-if="form.guild_ids?.includes(guild.id)" class="ri-check-line"></i>
+              </label>
+            </div>
+            <small v-else class="visibility-empty">{{ t('rpdb.editor.help.noGuilds') }}</small>
+          </label>
         </div>
 
         <div class="type-cards">
@@ -808,7 +897,7 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
 
         <div class="metadata-grid">
           <label class="span-2 field-control" :class="{ invalid: titleHasError }">
-            <span>作品标题 <b class="required-mark" aria-hidden="true">*</b></span>
+            <span>{{ t('rpdb.editor.field.title') }} <b class="required-mark" aria-hidden="true">*</b></span>
             <input
               id="rpdb-title"
               v-model="form.title"
@@ -816,23 +905,23 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
               required
               :aria-invalid="titleHasError"
               aria-describedby="rpdb-title-help"
-              placeholder="例如：月光灯笼的巡夜用法"
+              :placeholder="t('rpdb.editor.placeholder.title')"
               @blur="titleTouched = true"
             >
             <small id="rpdb-title-help" :class="{ 'field-error': titleHasError }">
-              {{ titleHasError ? '请填写作品标题后再发布' : '建议写清物品、主题或空间特色' }}
+              {{ titleHasError ? t('rpdb.editor.validation.titleRequired') : t('rpdb.editor.help.title') }}
             </small>
           </label>
           <label class="span-2">
-            <span>一句话摘要 <em class="optional-label">选填</em></span>
-            <textarea v-model="form.summary" maxlength="512" placeholder="让浏览者快速理解实际效果和获取价值"></textarea>
+            <span>{{ t('rpdb.editor.field.summary') }} <em class="optional-label">{{ t('rpdb.editor.common.optional') }}</em></span>
+            <textarea v-model="form.summary" maxlength="512" :placeholder="t('rpdb.editor.placeholder.summary')"></textarea>
           </label>
           <label v-if="form.type !== 'home_showcase'">
-            <span>获取状态</span>
+            <span>{{ t('rpdb.editor.field.availability') }}</span>
             <RPDBSelect v-model="form.availability_status" :options="availabilityOptions" />
           </label>
           <div class="style-picker span-2">
-            <span>RP 风格标签 <em class="optional-label">选填</em></span>
+            <span>{{ t('rpdb.editor.field.styleTags') }} <em class="optional-label">{{ t('rpdb.editor.common.optional') }}</em></span>
             <div class="selected-topics" data-testid="rpdb-selected-topics">
               <button
                 v-for="tag in selectedStyleTags"
@@ -845,7 +934,7 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
                 <span>#{{ tag.name }}</span>
                 <i class="ri-close-line" data-testid="remove-rpdb-style-tag"></i>
               </button>
-              <span v-if="!selectedStyleTags.length" class="topic-empty">还没有选择风格话题</span>
+              <span v-if="!selectedStyleTags.length" class="topic-empty">{{ t('rpdb.editor.style.empty') }}</span>
             </div>
             <div class="style-options" data-testid="rpdb-style-candidates">
               <button
@@ -867,18 +956,18 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
                 @click="showAllStyleTags = !showAllStyleTags"
               >
                 <i :class="showAllStyleTags ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'"></i>
-                {{ showAllStyleTags ? '收起标签' : `展开更多 ${candidateStyleTags.length - 8} 个` }}
+                {{ showAllStyleTags ? t('rpdb.editor.style.collapse') : t('rpdb.editor.style.expand', { count: candidateStyleTags.length - 8 }) }}
               </button>
             </div>
             <label class="topic-input" data-testid="rpdb-topic-custom">
               <input
                 v-model="topicDraft"
                 data-testid="rpdb-topic-input"
-                placeholder="# 输入自定义 RP 风格话题"
+                :placeholder="t('rpdb.editor.placeholder.customStyle')"
                 @keydown.enter.prevent="addTopicFromInput"
               >
             </label>
-            <small v-if="!rpStyleTags.length">等待后端预设标签加载完成后可保存选择。</small>
+            <small v-if="!rpStyleTags.length">{{ t('rpdb.editor.style.loading') }}</small>
           </div>
         </div>
 
@@ -889,86 +978,83 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
 
         <section v-if="form.type === 'item_showcase' && primaryItemReference" class="type-form-panel item-type-form" data-testid="item-editor-fields">
           <div class="metadata-grid">
-            <label><span>物品名称</span><input v-model="primaryItemReference.name" placeholder="例如：月光灯笼"></label>
-            <label><span>物品类型</span><RPDBSelect v-model="primaryItemReference.external_type" :options="itemTypeOptions" /></label>
-            <label class="span-2"><span>物品描述</span><textarea v-model="primaryItemReference.description" placeholder="描述外观、效果或 RP 使用方式"></textarea></label>
-            <label class="span-2"><span>物品来源</span><input v-model="primaryItemReference.acquisition_method" placeholder="例如：任务奖励、商人购买或公会活动产出"></label>
-            <label><span>阵营</span><RPDBSelect v-model="form.faction" :options="factionOptions" /></label>
-            <label><span>是否绑定</span><RPDBSelect v-model="form.bind_type" :options="bindOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.itemName') }}</span><input v-model="primaryItemReference.name" :placeholder="t('rpdb.editor.placeholder.itemName')"></label>
+            <label><span>{{ t('rpdb.editor.field.itemType') }}</span><RPDBSelect v-model="primaryItemReference.external_type" :options="itemTypeOptions" /></label>
+            <label class="span-2"><span>{{ t('rpdb.editor.field.itemDescription') }}</span><textarea v-model="primaryItemReference.description" :placeholder="t('rpdb.editor.placeholder.itemDescription')"></textarea></label>
+            <label class="span-2"><span>{{ t('rpdb.editor.field.itemSource') }}</span><input v-model="primaryItemReference.acquisition_method" :placeholder="t('rpdb.editor.placeholder.itemSource')"></label>
+            <label><span>{{ t('rpdb.editor.field.faction') }}</span><RPDBSelect v-model="form.faction" :options="factionOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.bound') }}</span><RPDBSelect v-model="form.bind_type" :options="bindOptions" /></label>
           </div>
         </section>
 
         <section v-else-if="form.type === 'transmog' && primaryTransmogReference" class="type-form-panel transmog-type-form" data-testid="transmog-editor-fields">
           <div class="metadata-grid">
-            <label><span>护甲类型</span><RPDBSelect v-model="form.armor_type" :options="armorTypeOptions" /></label>
-            <label><span>阵营</span><RPDBSelect v-model="form.faction" :options="factionOptions" /></label>
-            <label><span>外观主题</span><input v-model="primaryTransmogReference.name" placeholder="银白骑士 / 暗月旅人 / 港务军官"></label>
-            <label><span>主体来源</span><RPDBSelect v-model="primaryTransmogReference.source" :options="transmogSourceOptions" /></label>
-            <label><span>套装链接</span><input v-model="primaryTransmogReference.url" placeholder="Wowhead dressing room 或截图链接"></label>
-            <label><span>获取状态</span><RPDBSelect v-model="form.availability_status" :options="availabilityOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.armorType') }}</span><RPDBSelect v-model="form.armor_type" :options="armorTypeOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.faction') }}</span><RPDBSelect v-model="form.faction" :options="factionOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.availability') }}</span><RPDBSelect v-model="form.availability_status" :options="availabilityOptions" /></label>
           </div>
           <div class="slot-helper-panel">
             <i class="ri-shirt-line"></i>
-            <span><b>幻化部位</b><small>右侧内容清单按固定槽位填写，未使用的槽位保持“不使用”。</small></span>
+            <span><b>{{ t('rpdb.editor.transmog.slotsTitle') }}</b><small>{{ t('rpdb.editor.transmog.slotsHelp') }}</small></span>
           </div>
         </section>
 
         <section v-else class="type-form-panel home-type-form" data-testid="home-editor-fields">
           <div class="home-grid">
-            <label><span>参观状态</span><RPDBSelect v-model="homeDetails.visit_status" :options="visitStatusOptions" /></label>
-            <label><span>代码状态</span><RPDBSelect v-model="homeDetails.copy_status" :options="copyStatusOptions" /></label>
-            <label><span>空间类型</span><RPDBSelect v-model="homeDetails.space_type" :options="spaceTypeOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.visitStatus') }}</span><RPDBSelect v-model="homeDetails.visit_status" :options="visitStatusOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.codeStatus') }}</span><RPDBSelect v-model="homeDetails.copy_status" :options="copyStatusOptions" /></label>
+            <label><span>{{ t('rpdb.editor.field.spaceType') }}</span><RPDBSelect v-model="homeDetails.space_type" :options="spaceTypeOptions" /></label>
             <div class="home-code-row span-2" data-testid="home-code-upload-row">
               <label>
-                <span>住宅分享代码</span>
-                <textarea v-model="homeDetails.share_code" data-testid="home-share-code-input" placeholder="粘贴家宅导入代码，或上传 .txt / .json / .lua 文件自动填入"></textarea>
+                <span>{{ t('rpdb.editor.field.homeCode') }}</span>
+                <textarea v-model="homeDetails.share_code" data-testid="home-share-code-input" :placeholder="t('rpdb.editor.placeholder.homeCode')"></textarea>
               </label>
               <label class="home-code-upload">
                 <input type="file" accept=".txt,.json,.lua" data-testid="home-code-file-input" @change="importHomeShareCode">
-                <span><i class="ri-file-upload-line"></i><b>上传家宅代码</b><small>.txt / .json / .lua</small></span>
+                <span><i class="ri-file-upload-line"></i><b>{{ t('rpdb.editor.action.uploadHomeCode') }}</b><small>.txt / .json / .lua</small></span>
               </label>
             </div>
-            <label class="span-2"><span>参观说明</span><textarea v-model="homeDetails.visit_notes" placeholder="开放时间、访问方式、战网昵称或拍摄须知"></textarea></label>
+            <label class="span-2"><span>{{ t('rpdb.editor.field.visitNotes') }}</span><textarea v-model="homeDetails.visit_notes" :placeholder="t('rpdb.editor.placeholder.visitNotes')"></textarea></label>
           </div>
         </section>
 
         <label v-if="isEdit" class="change-summary">
-          <span>修订说明</span>
-          <textarea v-model="form.change_summary" placeholder="说明这次修改了什么"></textarea>
+          <span>{{ t('rpdb.editor.field.changeSummary') }}</span>
+          <textarea v-model="form.change_summary" :placeholder="t('rpdb.editor.placeholder.changeSummary')"></textarea>
         </label>
       </div>
     </section>
 
     <section id="section-media" class="media-strip section-anchor" data-testid="rpdb-media-strip">
       <div class="media-strip__heading">
-        <span>03 · 选填</span>
-        <h2>图片展示</h2>
-        <p>封面用于列表与首屏，预览图用于展示实际效果。两者都可以稍后补充。</p>
+        <span>03 · {{ t('rpdb.editor.common.optional') }}</span>
+        <h2>{{ t('rpdb.editor.media.title') }}</h2>
+        <p>{{ t('rpdb.editor.media.description') }}</p>
       </div>
 
       <div class="media-upload-card">
         <div class="panel-heading">
-          <div><span>封面图</span><h2>列表主视觉</h2></div>
-          <small>推荐 16:9，JPG 或 PNG</small>
+          <div><span>{{ t('rpdb.editor.media.cover') }}</span><h2>{{ t('rpdb.editor.media.coverTitle') }}</h2></div>
+          <small>{{ t('rpdb.editor.media.coverHint') }}</small>
         </div>
         <div class="media-upload media-upload--cover" data-testid="cover-upload">
           <input id="rpdb-cover-upload" type="file" accept="image/*" @change="uploadCover">
-          <img v-if="coverPreviewURL" :src="coverPreviewURL" alt="作品封面预览">
+          <img v-if="coverPreviewURL" :src="coverPreviewURL" :alt="t('rpdb.editor.media.coverAlt')">
           <span v-else>
             <i class="ri-upload-cloud-2-line"></i>
-            <b>上传封面图</b>
-            <small>可不填，发布后会根据标题自动生成默认封面</small>
+            <b>{{ t('rpdb.editor.action.uploadCover') }}</b>
+            <small>{{ t('rpdb.editor.media.coverOptional') }}</small>
           </span>
           <label class="media-upload__action" for="rpdb-cover-upload">
             <i class="ri-upload-cloud-2-line"></i>
-            {{ coverPreviewURL ? '更换封面图' : '自定义封面图' }}
+            {{ coverPreviewURL ? t('rpdb.editor.action.replaceCover') : t('rpdb.editor.action.customCover') }}
           </label>
           <button
             v-if="coverPreviewURL"
             type="button"
             class="media-remove"
             data-testid="cover-remove"
-            aria-label="移除封面图"
+            :aria-label="t('rpdb.editor.action.removeCover')"
             @click="removeCover"
           >
             <i class="ri-close-line"></i>
@@ -978,30 +1064,30 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
 
       <div class="media-upload-card">
         <div class="panel-heading">
-          <div><span>预览图</span><h2>效果展示</h2></div>
-          <small>支持多选，推荐 1 至 6 张</small>
+          <div><span>{{ t('rpdb.editor.media.preview') }}</span><h2>{{ t('rpdb.editor.media.previewTitle') }}</h2></div>
+          <small>{{ t('rpdb.editor.media.previewHint') }}</small>
         </div>
         <label class="media-upload" data-testid="preview-upload">
           <input type="file" accept="image/*" multiple @change="uploadPreview">
-          <img v-if="previewImageURL" :src="previewImageURL" alt="作品预览图">
+          <img v-if="previewImageURL" :src="previewImageURL" :alt="t('rpdb.editor.media.previewAlt')">
           <span v-else>
             <i class="ri-image-add-line"></i>
-            <b>上传预览图</b>
-            <small>展示实际使用、成套幻化或家宅全景</small>
+            <b>{{ t('rpdb.editor.action.uploadPreview') }}</b>
+            <small>{{ t('rpdb.editor.media.previewOptional') }}</small>
           </span>
-          <em v-if="previewImageURL">继续添加预览图</em>
+          <em v-if="previewImageURL">{{ t('rpdb.editor.action.addMorePreviews') }}</em>
         </label>
       </div>
 
       <div v-if="previewImageURL" class="preview-gallery-panel" data-testid="preview-gallery">
         <div class="panel-heading">
-          <div><span>相册预览</span><h2>预览图相册</h2></div>
-          <small>点击图片可查看大图</small>
+          <div><span>{{ t('rpdb.editor.media.gallery') }}</span><h2>{{ t('rpdb.editor.media.galleryTitle') }}</h2></div>
+          <small>{{ t('rpdb.editor.media.galleryHint') }}</small>
         </div>
         <RPDBMediaGallery
           :cover="form.cover_image"
           :media="form.media"
-          :title="form.title || '作品预览'"
+          :title="form.title || t('rpdb.editor.media.workPreview')"
           @open-image="openImageViewer"
         />
       </div>
@@ -1011,16 +1097,16 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
       <main class="writing-workspace">
         <div class="writing-heading">
           <div>
-            <span>04 · 帖子编辑</span>
-            <h2>正文与获取攻略</h2>
-            <p>先说明实际体验，再补充可执行的获取路线和内容清单。</p>
+            <span>04 · {{ t('rpdb.editor.writing.eyebrow') }}</span>
+            <h2>{{ t('rpdb.editor.writing.title') }}</h2>
+            <p>{{ t('rpdb.editor.writing.description') }}</p>
           </div>
           <div class="outline-chips">
-            <span>正文</span>
-            <span v-if="form.type === 'item_showcase'">道具获取攻略</span>
-            <span v-else-if="form.type === 'transmog'">幻化部件攻略</span>
-            <span v-else>家宅展示说明</span>
-            <span>{{ form.type === 'home_showcase' ? '分享代码' : '版本说明' }}</span>
+            <span>{{ t('rpdb.editor.writing.body') }}</span>
+            <span v-if="form.type === 'item_showcase'">{{ t('rpdb.editor.writing.itemGuide') }}</span>
+            <span v-else-if="form.type === 'transmog'">{{ t('rpdb.editor.writing.transmogGuide') }}</span>
+            <span v-else>{{ t('rpdb.editor.writing.homeNotes') }}</span>
+            <span>{{ form.type === 'home_showcase' ? t('rpdb.editor.writing.shareCode') : t('rpdb.editor.writing.versionNotes') }}</span>
           </div>
         </div>
 
@@ -1029,7 +1115,7 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
             ref="editorRef"
             :model-value="form.content || ''"
             data-testid="rpdb-rich-editor"
-            placeholder="从实际效果、适用角色和剧情场景开始写作。可以插入图片、链接和分段标题。"
+            :placeholder="t('rpdb.editor.placeholder.content')"
             @update:model-value="form.content = $event"
           >
             <template #toolbar>
@@ -1037,14 +1123,14 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
                 type="button"
                 class="toolbar-slot toolbar-slot--featured"
                 :class="{ active: quickJumpOpen }"
-                title="内部链接"
-                aria-label="内部链接"
+                :title="t('rpdb.editor.action.internalLink')"
+                :aria-label="t('rpdb.editor.action.internalLink')"
                 data-testid="rpdb-internal-link-button"
                 @mousedown.prevent
                 @click="toggleQuickJump"
               >
                 <i class="ri-links-line"></i>
-                <span>内部链接</span>
+                <span>{{ t('rpdb.editor.action.internalLink') }}</span>
               </button>
             </template>
           </TiptapEditor>
@@ -1053,59 +1139,59 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
         <section v-if="isGuideType" class="guide-editor">
           <div class="section-heading">
             <div>
-              <span>获取攻略</span>
-              <h2>{{ form.type === 'transmog' ? '部件获取攻略' : '获取攻略' }}</h2>
-              <p>攻略属于当前作品，可填写文字路线、前置条件、区域和 TomTom 坐标。</p>
+              <span>{{ t('rpdb.editor.guide.eyebrow') }}</span>
+              <h2>{{ form.type === 'transmog' ? t('rpdb.editor.guide.transmogTitle') : t('rpdb.editor.guide.title') }}</h2>
+              <p>{{ t('rpdb.editor.guide.description') }}</p>
             </div>
-            <button type="button" @click="addStep"><i class="ri-add-line"></i>添加攻略步骤</button>
+            <button type="button" @click="addStep"><i class="ri-add-line"></i>{{ t('rpdb.editor.action.addGuideStep') }}</button>
           </div>
           <div class="tomtom-import" data-testid="tomtom-import-panel">
             <div class="tomtom-import__mark">
               <i class="ri-route-line"></i>
-              <span><b>TomTom 多点路线</b><small>/ttpaste 兼容格式</small></span>
+              <span><b>{{ t('rpdb.editor.guide.tomtomTitle') }}</b><small>{{ t('rpdb.editor.guide.tomtomFormat') }}</small></span>
             </div>
             <label>
-              <span>批量坐标</span>
+              <span>{{ t('rpdb.editor.guide.bulkCoordinates') }}</span>
               <textarea
                 v-model="tomtomDraft"
                 data-testid="tomtom-import-input"
-                placeholder="/way #47 73.80 44.50 夜色镇集合&#10;/way #47 68.20 51.40 林地入口"
+                :placeholder="t('rpdb.editor.placeholder.tomtom')"
               ></textarea>
-              <small>支持 /way、/tway、#地图ID 和区域名称；多行顺序会成为攻略步骤顺序。</small>
+              <small>{{ t('rpdb.editor.guide.tomtomHelp') }}</small>
             </label>
-            <button type="button" data-testid="tomtom-import-button" @click="importTomTomSteps"><i class="ri-map-pin-add-line"></i>导入路线</button>
+            <button type="button" data-testid="tomtom-import-button" @click="importTomTomSteps"><i class="ri-map-pin-add-line"></i>{{ t('rpdb.editor.action.importRoute') }}</button>
           </div>
           <div v-if="form.guide_steps?.length" class="guide-step-list">
             <article v-for="(step, index) in form.guide_steps" :key="`${step.sort_order}-${index}`">
               <div class="step-number">{{ index + 1 }}</div>
               <div class="step-main">
                 <div class="step-grid">
-                <label><span>步骤名称</span><input v-model="step.title" placeholder="例如：前往守夜营地"></label>
-                <label><span>区域</span><input v-model="step.zone" placeholder="暮色森林"></label>
+                <label><span>{{ t('rpdb.editor.field.stepName') }}</span><input v-model="step.title" :placeholder="t('rpdb.editor.placeholder.stepName')"></label>
+                <label><span>{{ t('rpdb.editor.field.zone') }}</span><input v-model="step.zone" :placeholder="t('rpdb.editor.placeholder.zone')"></label>
               </div>
               <p v-if="step.title" class="step-title-preview">{{ step.title }}</p>
-              <label><span>步骤说明</span><textarea v-model="step.body" placeholder="说明路线、目标、掉落方式或注意事项"></textarea></label>
-                <label><span>前置条件</span><input v-model="step.prerequisite" placeholder="任务、声望、职业或其他前置"></label>
+              <label><span>{{ t('rpdb.editor.field.stepDescription') }}</span><textarea v-model="step.body" :placeholder="t('rpdb.editor.placeholder.stepDescription')"></textarea></label>
+                <label><span>{{ t('rpdb.editor.field.prerequisite') }}</span><input v-model="step.prerequisite" :placeholder="t('rpdb.editor.placeholder.prerequisite')"></label>
               </div>
               <div class="step-coordinate">
-                <label><span>地图 ID</span><input v-model="step.map_id" placeholder="47"></label>
+                <label><span>{{ t('rpdb.editor.field.mapId') }}</span><input v-model="step.map_id" placeholder="47"></label>
                 <div>
                   <label><span>X</span><input v-model.number="step.x" type="number" min="0" max="100"></label>
                   <label><span>Y</span><input v-model.number="step.y" type="number" min="0" max="100"></label>
                 </div>
                 <code v-if="editorTomTomCommand(step, index)">{{ editorTomTomCommand(step, index) }}</code>
-                <button type="button" class="remove" @click="removeStep(index)"><i class="ri-delete-bin-line"></i>删除步骤</button>
+                <button type="button" class="remove" @click="removeStep(index)"><i class="ri-delete-bin-line"></i>{{ t('rpdb.editor.action.deleteStep') }}</button>
               </div>
             </article>
           </div>
           <div v-else class="empty-guide">
             <i class="ri-route-line"></i>
-            <p>尚未填写攻略。添加步骤后，公开页面会生成获取路线和 TomTom 操作。</p>
+            <p>{{ t('rpdb.editor.guide.empty') }}</p>
           </div>
           <div class="guide-bottom-actions">
             <button type="button" data-testid="add-guide-step-bottom" @click="addStep">
               <i class="ri-add-line"></i>
-              添加攻略步骤
+              {{ t('rpdb.editor.action.addGuideStep') }}
             </button>
           </div>
         </section>
@@ -1113,9 +1199,9 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
         <section v-else class="home-editor">
           <div class="section-heading">
             <div>
-              <span>家宅分享</span>
-              <h2>家宅展示补充</h2>
-              <p>家宅分享不显示获取攻略，重点补充参观说明和可导入代码。</p>
+              <span>{{ t('rpdb.editor.workType.home.title') }}</span>
+              <h2>{{ t('rpdb.editor.homeSupplement.title') }}</h2>
+              <p>{{ t('rpdb.editor.homeSupplement.description') }}</p>
             </div>
           </div>
         </section>
@@ -1123,7 +1209,7 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
 
       <aside class="content-inspector">
         <details open data-testid="rpdb-content-checklist">
-          <summary><span><i class="ri-list-check-3"></i>内容清单</span><b>{{ form.type === 'transmog' ? form.transmog_slots?.filter(slot => slot.role !== 'unused').length || 0 : form.references?.length || 0 }}</b></summary>
+          <summary><span><i class="ri-list-check-3"></i>{{ t('rpdb.editor.checklist.title') }}</span><b>{{ form.type === 'transmog' ? form.transmog_slots?.filter(slot => slot.role !== 'unused').length || 0 : form.references?.length || 0 }}</b></summary>
           <div class="inspector-body">
             <div v-if="form.type === 'item_showcase'" class="checklist-stack" data-testid="item-content-checklist">
               <details
@@ -1134,18 +1220,18 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
                 :open="openItemReferences.has(index)"
               >
                 <summary class="slot-row__head" @click.prevent="toggleItemReference(index)">
-                  <b>{{ item.name || `物品 ${index + 1}` }}</b>
+                  <b>{{ item.name || t('rpdb.editor.checklist.itemNumber', { number: index + 1 }) }}</b>
                   <span><small>{{ itemTypeLabel(item.external_type) }}</small><i class="ri-arrow-down-s-line"></i></span>
                 </summary>
                 <div class="slot-row__body">
-                  <label><span>物品名称</span><input v-model="item.name" placeholder="例如：月光灯笼"></label>
-                  <label><span>物品描述</span><textarea v-model="item.description" placeholder="描述外观、效果或 RP 使用方式"></textarea></label>
-                  <label><span>物品类型</span><RPDBSelect v-model="item.external_type" :options="itemTypeOptions" /></label>
-                  <label><span>物品来源</span><textarea v-model="item.acquisition_method" placeholder="任务、商人、专业或活动来源"></textarea></label>
-                  <button type="button" class="remove" @click="form.references!.splice(index, 1)"><i class="ri-delete-bin-line"></i>移除</button>
+                  <label><span>{{ t('rpdb.editor.field.itemName') }}</span><input v-model="item.name" :placeholder="t('rpdb.editor.placeholder.itemNameShort')"></label>
+                  <label><span>{{ t('rpdb.editor.field.itemDescription') }}</span><textarea v-model="item.description" :placeholder="t('rpdb.editor.placeholder.itemDescription')"></textarea></label>
+                  <label><span>{{ t('rpdb.editor.field.itemType') }}</span><RPDBSelect v-model="item.external_type" :options="itemTypeOptions" /></label>
+                  <label><span>{{ t('rpdb.editor.field.itemSource') }}</span><textarea v-model="item.acquisition_method" :placeholder="t('rpdb.editor.placeholder.itemSourceShort')"></textarea></label>
+                  <button type="button" class="remove" @click="form.references!.splice(index, 1)"><i class="ri-delete-bin-line"></i>{{ t('rpdb.editor.action.remove') }}</button>
                 </div>
               </details>
-              <button type="button" class="add-button" @click="addItemReference"><i class="ri-add-line"></i>添加道具</button>
+              <button type="button" class="add-button" @click="addItemReference"><i class="ri-add-line"></i>{{ t('rpdb.editor.action.addItem') }}</button>
             </div>
 
             <div v-else-if="form.type === 'transmog'" class="transmog-slot-checklist" data-testid="transmog-content-checklist">
@@ -1158,24 +1244,24 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
               >
                 <summary class="slot-row__head" @click.prevent="toggleTransmogSlot(slot.slot)">
                   <b>{{ slotOptions.find(option => option.value === slot.slot)?.label || slot.slot }}</b>
-                  <span><small>{{ slot.role === 'unused' ? '未使用' : '已填写' }}</small><i class="ri-arrow-down-s-line"></i></span>
+                  <span><small>{{ slot.role === 'unused' ? t('rpdb.editor.status.unused') : t('rpdb.editor.status.filled') }}</small><i class="ri-arrow-down-s-line"></i></span>
                 </summary>
                 <div class="slot-row__body">
                   <label>
-                    <span>槽位状态</span>
+                    <span>{{ t('rpdb.editor.field.slotStatus') }}</span>
                     <RPDBSelect v-model="slot.role" :options="slotRoleOptions" />
                   </label>
-                  <label><span>部件名称</span><input v-model="slot.name" placeholder="例如：海潮卫士头盔"></label>
-                  <label><span>部件介绍</span><textarea v-model="slot.description" placeholder="外观特点、替代搭配或 RP 用途"></textarea></label>
-                  <label><span>获取来源</span><input v-model="slot.source" placeholder="副本 / 商人 / 任务 / 成就 / 商栈"></label>
+                  <label><span>{{ t('rpdb.editor.field.componentName') }}</span><input v-model="slot.name" :placeholder="t('rpdb.editor.placeholder.componentName')"></label>
+                  <label><span>{{ t('rpdb.editor.field.componentDescription') }}</span><textarea v-model="slot.description" :placeholder="t('rpdb.editor.placeholder.componentDescription')"></textarea></label>
+                  <label><span>{{ t('rpdb.editor.field.acquisitionSource') }}</span><input v-model="slot.source" :placeholder="t('rpdb.editor.placeholder.componentSource')"></label>
                   <details class="slot-extra-options" data-testid="transmog-slot-more-options">
                     <summary>
-                      <span><i class="ri-equalizer-line"></i>其他选项</span>
-                      <small>Wowhead / 替代件</small>
+                      <span><i class="ri-equalizer-line"></i>{{ t('rpdb.editor.checklist.moreOptions') }}</span>
+                      <small>{{ t('rpdb.editor.checklist.moreOptionsHint') }}</small>
                     </summary>
                     <div class="slot-extra-grid">
-                      <label><span>Wowhead 地址</span><input v-model="slot.wowhead_url" placeholder="https://www.wowhead.com/item=..."></label>
-                      <label><span>替代件</span><input v-model="slot.variant" placeholder="可替代部件名称或链接"></label>
+                      <label><span>{{ t('rpdb.editor.field.wowheadUrl') }}</span><input v-model="slot.wowhead_url" placeholder="https://www.wowhead.com/item=..."></label>
+                      <label><span>{{ t('rpdb.editor.field.variant') }}</span><input v-model="slot.variant" :placeholder="t('rpdb.editor.placeholder.variant')"></label>
                     </div>
                   </details>
                 </div>
@@ -1183,36 +1269,48 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
             </div>
 
             <div v-else class="checklist-stack" data-testid="home-content-checklist">
-              <article v-for="(item, index) in form.references" :key="index" class="compact-card">
-                <label><span>家具名称</span><input v-model="item.name" placeholder="例如：木质长桌"></label>
-                <div class="furniture-icon-field" data-testid="furniture-icon-field">
-                  <span>图标</span>
-                  <div class="furniture-icon-control">
-                    <span class="furniture-icon-preview" :class="{ empty: !item.icon }">
-                      <img v-if="item.icon" :src="resolveRPDBMediaURL(item.icon)" :alt="`${item.name || '家具'}图标`">
-                      <i v-else class="ri-image-line"></i>
-                    </span>
-                    <input v-model="item.icon" data-testid="furniture-icon-url" placeholder="粘贴图片链接">
-                    <label class="furniture-icon-upload" :class="{ disabled: uploadingFurnitureIcon === item }" title="上传图标">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        data-testid="furniture-icon-upload"
-                        :disabled="uploadingFurnitureIcon === item"
-                        @change="uploadFurnitureIcon($event, item)"
-                      >
-                      <i :class="uploadingFurnitureIcon === item ? 'ri-loader-4-line spin' : 'ri-upload-2-line'"></i>
-                      <span>{{ uploadingFurnitureIcon === item ? '上传中' : '上传' }}</span>
-                    </label>
-                    <button v-if="item.icon" type="button" class="furniture-icon-clear" title="清除图标" aria-label="清除图标" @click="item.icon = ''"><i class="ri-close-line"></i></button>
+              <details
+                v-for="(item, index) in form.references"
+                :key="index"
+                class="compact-card slot-row furniture-reference-row"
+                data-testid="furniture-reference-panel"
+                :open="openFurnitureReferences.has(index)"
+              >
+                <summary class="slot-row__head" @click.prevent="toggleFurnitureReference(index)">
+                  <b>{{ item.name || t('rpdb.editor.checklist.furnitureNumber', { number: index + 1 }) }}</b>
+                  <span><small>{{ item.name ? t('rpdb.editor.status.filled') : t('rpdb.editor.status.unfilled') }}</small><i class="ri-arrow-down-s-line"></i></span>
+                </summary>
+                <div class="slot-row__body">
+                  <label><span>{{ t('rpdb.editor.field.furnitureName') }}</span><input v-model="item.name" :placeholder="t('rpdb.editor.placeholder.furnitureName')"></label>
+                  <div class="furniture-icon-field" data-testid="furniture-icon-field">
+                    <span>{{ t('rpdb.editor.field.icon') }}</span>
+                    <div class="furniture-icon-control">
+                      <span class="furniture-icon-preview" :class="{ empty: !item.icon }">
+                        <img v-if="item.icon" :src="resolveRPDBMediaURL(item.icon)" :alt="t('rpdb.editor.media.furnitureIconAlt', { name: item.name || t('rpdb.editor.checklist.furniture') })">
+                        <i v-else class="ri-image-line"></i>
+                      </span>
+                      <input v-model="item.icon" data-testid="furniture-icon-url" :placeholder="t('rpdb.editor.placeholder.iconUrl')">
+                      <label class="furniture-icon-upload" :class="{ disabled: uploadingFurnitureIcon === item }" :title="t('rpdb.editor.action.uploadIcon')">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          data-testid="furniture-icon-upload"
+                          :disabled="uploadingFurnitureIcon === item"
+                          @change="uploadFurnitureIcon($event, item)"
+                        >
+                        <i :class="uploadingFurnitureIcon === item ? 'ri-loader-4-line spin' : 'ri-upload-2-line'"></i>
+                        <span>{{ uploadingFurnitureIcon === item ? t('rpdb.editor.status.uploading') : t('rpdb.editor.action.upload') }}</span>
+                      </label>
+                      <button v-if="item.icon" type="button" class="furniture-icon-clear" :title="t('rpdb.editor.action.clearIcon')" :aria-label="t('rpdb.editor.action.clearIcon')" @click="item.icon = ''"><i class="ri-close-line"></i></button>
+                    </div>
                   </div>
+                  <label><span>{{ t('rpdb.editor.field.wowheadUrl') }}</span><input v-model="item.url" placeholder="https://www.wowhead.com/item=..."></label>
+                  <label><span>{{ t('rpdb.editor.field.acquisitionMethod') }}</span><textarea v-model="item.acquisition_method" :placeholder="t('rpdb.editor.placeholder.furnitureSource')"></textarea></label>
+                  <label><span>{{ t('rpdb.editor.field.description') }}</span><textarea v-model="item.description" :placeholder="t('rpdb.editor.placeholder.furnitureDescription')"></textarea></label>
+                  <button type="button" class="remove" @click="form.references!.splice(index, 1)"><i class="ri-delete-bin-line"></i>{{ t('rpdb.editor.action.remove') }}</button>
                 </div>
-                <label><span>Wowhead 地址</span><input v-model="item.url" placeholder="https://www.wowhead.com/item=..."></label>
-                <label><span>获取途径</span><textarea v-model="item.acquisition_method" placeholder="商人、任务、成就、专业或活动来源"></textarea></label>
-                <label><span>描述</span><textarea v-model="item.description" placeholder="用途、摆放效果或组合建议"></textarea></label>
-                <button type="button" class="remove" @click="form.references!.splice(index, 1)"><i class="ri-delete-bin-line"></i>移除</button>
-              </article>
-              <button type="button" class="add-button" @click="addFurnitureReference"><i class="ri-add-line"></i>添加家具</button>
+              </details>
+              <button type="button" class="add-button" @click="addFurnitureReference"><i class="ri-add-line"></i>{{ t('rpdb.editor.action.addFurniture') }}</button>
             </div>
               </div>
         </details>
@@ -1225,8 +1323,8 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
         <i class="ri-cloud-line"></i>
         <span>{{ autoSaveMessage }}</span>
       </div>
-      <button type="button" title="内部预览" @click="preview"><i class="ri-eye-line"></i><span>内部预览</span></button>
-      <button type="button" class="primary" data-testid="publish-work" :disabled="saving" @click="save('published')"><i class="ri-send-plane-2-line"></i><span>{{ saving ? '发布中' : '发布' }}</span></button>
+      <button type="button" :title="t('rpdb.editor.action.internalPreview')" @click="preview"><i class="ri-eye-line"></i><span>{{ t('rpdb.editor.action.internalPreview') }}</span></button>
+      <button type="button" class="primary" data-testid="publish-work" :disabled="saving" @click="save('published')"><i class="ri-send-plane-2-line"></i><span>{{ saving ? t('rpdb.editor.status.publishing') : t('rpdb.editor.action.publish') }}</span></button>
     </div>
 
     <PostQuickJump v-model="quickJumpOpen" :on-insert="handleQuickInsert" />
@@ -1236,14 +1334,14 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
 
 <style scoped>
 .editor-page{max-width:1380px;margin:auto;color:var(--color-text-main)}
-.minimal-editor-shell{--rpdb-surface:color-mix(in srgb,var(--color-panel-bg) 88%,#fff 12%);--rpdb-muted:color-mix(in srgb,var(--color-card-bg) 82%,#fff 18%);--rpdb-line:color-mix(in srgb,var(--color-border) 72%,transparent);--rpdb-soft:color-mix(in srgb,var(--color-accent) 8%,transparent)}
+.minimal-editor-shell{--rpdb-surface:color-mix(in srgb,var(--color-panel-bg) 88%,var(--color-main-bg) 12%);--rpdb-muted:color-mix(in srgb,var(--color-card-bg) 82%,var(--color-main-bg) 18%);--rpdb-line:color-mix(in srgb,var(--color-border) 72%,transparent);--rpdb-soft:color-mix(in srgb,var(--color-accent) 8%,transparent)}
 .editor-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--rpdb-line)}
 .editor-heading>div:first-child>span,.writing-heading>div>span,.section-heading>div>span{color:var(--color-accent);font-size:11px;font-weight:800;letter-spacing:.06em}
 .editor-heading h1{margin:6px 0 4px;color:var(--color-text-main);font:700 30px/1.2 system-ui,'Microsoft YaHei',sans-serif}
 .editor-heading p{margin:0;color:var(--color-text-secondary)}
 .heading-actions{display:flex;align-items:center;gap:10px}
 .heading-actions>button{display:grid;width:36px;height:36px;place-items:center;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-surface);color:var(--color-text-main)}
-.saved-status{display:inline-flex;align-items:center;gap:6px;color:#4d7a4c;font-size:12px}
+.saved-status{display:inline-flex;align-items:center;gap:6px;color:var(--color-success);font-size:12px}
 .media-strip{display:grid;grid-template-columns:220px minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px;padding:16px;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .media-strip__heading{display:flex;min-width:0;flex-direction:column;justify-content:center}
 .media-strip__heading span{color:var(--color-accent);font-size:11px;font-weight:800}
@@ -1275,6 +1373,10 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
 .media-upload>span small{max-width:210px;color:var(--color-text-secondary);line-height:1.5}
 .media-upload em{position:absolute;inset:auto 8px 8px;padding:5px 8px;border-radius:999px;background:rgba(25,17,12,.68);color:#fff;font-size:10px;font-style:normal}
 .type-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.visibility-setup{display:grid;grid-template-columns:minmax(210px,.75fr) minmax(240px,1fr);align-items:end;gap:12px;margin-bottom:14px;padding:0 0 14px;border-bottom:1px solid var(--rpdb-line)}
+.visibility-setup__intro{display:flex;min-width:0;align-items:center;gap:9px;padding-bottom:4px}.visibility-setup__intro>i{display:grid;width:30px;height:30px;flex:0 0 auto;place-items:center;border-radius:7px;background:var(--rpdb-soft);color:var(--color-accent);font-size:17px}.visibility-setup__intro>span{display:grid;min-width:0;gap:3px}.visibility-setup__intro b{font-size:12px}.visibility-setup__intro small,.visibility-empty{color:var(--color-text-secondary);font-size:10px;font-weight:500;line-height:1.45}.visibility-empty{display:flex;min-height:34px;align-items:center;padding:7px 9px;border:1px dashed var(--rpdb-line);border-radius:7px;background:var(--rpdb-muted)}
+.visibility-setup>[data-testid="visibility-guild-select"]{grid-column:2}
+.visibility-setup>[data-testid="visibility-guild-select"]>span{display:flex;align-items:baseline;gap:5px}.visibility-setup>[data-testid="visibility-guild-select"]>span small{color:var(--color-text-secondary);font-size:10px;font-weight:500}.visibility-guild-options{display:flex;flex-wrap:wrap;gap:7px}.visibility-guild-option{display:flex;min-width:0;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--rpdb-line);border-radius:7px;background:var(--color-panel-bg);cursor:pointer}.visibility-guild-option.selected{border-color:var(--rpdb-focus);background:var(--rpdb-soft)}.visibility-guild-option input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.visibility-guild-option>span{display:grid;min-width:0;gap:2px}.visibility-guild-option>span b{font-size:11px}.visibility-guild-option>span small{color:var(--color-text-secondary);font-size:9px;font-weight:500}.visibility-guild-option>i{color:var(--color-accent);font-size:15px}
 .type-cards button{display:flex;min-width:0;align-items:center;gap:8px;padding:10px;border:1px solid var(--rpdb-line);border-radius:12px;background:transparent;color:var(--color-text-main);text-align:left}
 .type-cards button.active{border-color:color-mix(in srgb,var(--color-accent) 68%,var(--rpdb-line));background:var(--rpdb-soft)}
 .type-cards i{flex:0 0 auto;color:var(--color-accent);font-size:20px}
@@ -1293,7 +1395,7 @@ watch([form, homeDetails, customStyleTags], scheduleAutoSave, { deep: true })
   .topic-input input{min-height:36px}
   .style-options{display:flex;flex-wrap:wrap;gap:7px}
   .style-options button{display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border:1px solid color-mix(in srgb,var(--tag-color) 52%,var(--rpdb-line));border-radius:999px;background:color-mix(in srgb,var(--tag-color) 9%,transparent);color:var(--color-text-main);font-size:12px;font-weight:700}
-  .style-options button.selected{background:var(--tag-color);border-color:var(--tag-color);color:#fff}
+  .style-options button.selected{background:var(--tag-color);border-color:var(--tag-color);color:var(--btn-primary-text)}
   .style-options button.disabled{opacity:.55;cursor:not-allowed}
 label{display:grid;gap:6px;color:var(--color-text-main);font-weight:700}
 label>span{font-size:12px}
@@ -1301,13 +1403,13 @@ input,textarea,select{width:100%;box-sizing:border-box;padding:10px 11px;border:
 textarea{min-height:70px;resize:vertical}
 .check-list{display:grid;gap:4px;margin-bottom:12px}
 .check-list>div{display:grid;grid-template-columns:20px 1fr auto;gap:7px;align-items:center;padding:8px 0;color:var(--color-text-secondary)}
-.check-list i,.check-list b{color:#b65a4f}
+.check-list i,.check-list b{color:var(--btn-danger-bg)}
 .check-list b{font-size:10px}
-.check-list .done i,.check-list .done b{color:#4d7a4c}
+.check-list .done i,.check-list .done b{color:var(--color-success)}
 .change-summary textarea{min-height:58px}
 .publish-actions{display:grid;gap:8px;margin-top:12px}
 .publish-actions button,.section-heading button,.add-button,.remove{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main)}
-.publish-actions .primary{border-color:var(--color-accent);background:var(--color-accent);color:#fff}
+.publish-actions .primary{border-color:var(--color-accent);background:var(--color-accent);color:var(--btn-primary-text)}
 .editor-lower{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;margin-top:14px;align-items:start}
 .writing-workspace,.content-inspector details{min-width:0;overflow:hidden;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .writing-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid var(--rpdb-line)}
@@ -1326,7 +1428,7 @@ textarea{min-height:70px;resize:vertical}
 .tomtom-import__mark{display:flex;align-self:stretch;align-items:center;gap:9px;padding-right:12px;border-right:1px solid var(--rpdb-line)}
 .tomtom-import__mark>i{color:var(--color-accent);font-size:23px}.tomtom-import__mark>span{display:flex;min-width:0;flex-direction:column}.tomtom-import__mark b{font-size:12px}.tomtom-import__mark small{margin-top:4px;color:var(--color-text-secondary);font:10px/1.35 Consolas,monospace}
 .tomtom-import label{display:grid;min-width:0;gap:5px}.tomtom-import label>span{font-size:11px;font-weight:800}.tomtom-import label>small{color:var(--color-text-secondary);font-size:10px;font-weight:500;line-height:1.5}.tomtom-import textarea{min-height:82px;font:11px/1.55 Consolas,'SFMono-Regular',monospace;resize:vertical}
-.tomtom-import>button{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--color-accent);border-radius:9px;background:var(--color-accent);color:#fff;font-weight:800;white-space:nowrap}
+.tomtom-import>button{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--color-accent);border-radius:9px;background:var(--color-accent);color:var(--btn-primary-text);font-weight:800;white-space:nowrap}
 .guide-step-list{display:grid;gap:10px}
 .guide-step-list article{display:grid;grid-template-columns:34px minmax(0,1fr) 200px;gap:12px;padding:13px;border:1px solid var(--rpdb-line);border-radius:12px;background:var(--rpdb-muted)}
 .step-number{display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:var(--rpdb-soft);color:var(--color-accent);font-weight:800}
@@ -1335,7 +1437,7 @@ textarea{min-height:70px;resize:vertical}
 .step-coordinate{display:flex;flex-direction:column;gap:7px;padding-left:12px;border-left:1px solid var(--rpdb-line)}
 .step-coordinate>div{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .step-coordinate code{overflow-wrap:anywhere;padding:8px;border-radius:9px;background:var(--rpdb-soft);color:var(--color-accent);font:10px/1.5 Consolas,monospace}
-.remove{min-height:30px;color:#b65a4f}
+.remove{min-height:30px;color:var(--btn-danger-bg)}
 .empty-guide{display:grid;min-height:140px;place-items:center;align-content:center;color:var(--color-text-secondary);text-align:center}
 .empty-guide i{font-size:34px;color:var(--color-accent)}
 .guide-bottom-actions{display:flex;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--rpdb-line)}
@@ -1366,6 +1468,7 @@ textarea{min-height:70px;resize:vertical}
 .slot-extra-grid{display:grid;gap:7px;padding:9px;border-top:1px solid var(--rpdb-line);background:var(--color-panel-bg)}
 @media(max-width:1160px){.media-strip{grid-template-columns:1fr 1fr}.media-strip__heading{grid-column:1/-1}.publish-panel{border-top:1px solid var(--rpdb-line);border-left:0}.publish-panel .check-list{grid-template-columns:1fr 1fr;gap:0 18px}.publish-actions{grid-template-columns:repeat(3,1fr)}.editor-lower{grid-template-columns:1fr}.content-inspector{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.editor-heading,.writing-heading,.section-heading{align-items:flex-start;flex-direction:column}.media-strip,.editor-upper,.tomtom-import{grid-template-columns:1fr}.tomtom-import__mark{padding:0 0 10px;border-right:0;border-bottom:1px solid var(--rpdb-line)}.tomtom-import>button{width:100%}.type-cards,.metadata-grid,.context-fields,.home-grid,.content-inspector{grid-template-columns:1fr}.span-2{grid-column:auto}.publish-panel .check-list{grid-template-columns:1fr}.publish-actions{grid-template-columns:1fr}.guide-step-list article{grid-template-columns:32px 1fr}.step-coordinate{grid-column:2;padding:10px 0 0;border-top:1px dashed var(--rpdb-line);border-left:0}.step-grid{grid-template-columns:1fr}.outline-chips{justify-content:flex-start}}
+@media(max-width:760px){.visibility-setup{grid-template-columns:1fr}.visibility-setup>[data-testid="visibility-guild-select"]{grid-column:auto}}
 @media(max-width:480px){.editor-heading h1{font-size:26px}.media-upload{height:165px}.step-coordinate>div{grid-template-columns:1fr 1fr}}
 
 /* Focused authoring workflow */
@@ -1374,14 +1477,14 @@ textarea{min-height:70px;resize:vertical}
   padding:0 12px 96px;
 }
 .minimal-editor-shell{
-  --rpdb-surface:color-mix(in srgb,var(--color-panel-bg) 94%,#fff 6%);
-  --rpdb-muted:color-mix(in srgb,var(--color-card-bg) 88%,#fff 12%);
+  --rpdb-surface:color-mix(in srgb,var(--color-panel-bg) 94%,var(--color-main-bg) 6%);
+  --rpdb-muted:color-mix(in srgb,var(--color-card-bg) 88%,var(--color-main-bg) 12%);
   --rpdb-line:color-mix(in srgb,var(--color-border) 64%,transparent);
   --rpdb-soft:color-mix(in srgb,var(--color-accent) 9%,transparent);
   --rpdb-focus:color-mix(in srgb,var(--color-accent) 68%,var(--rpdb-line));
-  --rpdb-success:#3f7d52;
-  --rpdb-danger:#b34f45;
-  --rpdb-shadow:0 8px 24px rgba(37,27,20,.055);
+  --rpdb-success:var(--color-success);
+  --rpdb-danger:var(--btn-danger-bg);
+  --rpdb-shadow:0 8px 24px rgba(var(--shadow-base),.055);
 }
 .editor-heading{
   align-items:center;
@@ -1408,9 +1511,9 @@ textarea{min-height:70px;resize:vertical}
 }
 .saved-status{
   padding:4px 8px;
-  border:1px solid color-mix(in srgb,#4d7a4c 20%,transparent);
+  border:1px solid color-mix(in srgb,var(--color-success) 20%,transparent);
   border-radius:999px;
-  background:color-mix(in srgb,#4d7a4c 8%,transparent);
+  background:var(--color-success-light);
 }
 .section-anchor{
   scroll-margin-top:92px;
@@ -1699,7 +1802,7 @@ input:focus,textarea:focus{
 button:focus-visible,
 label[for]:focus-visible,
 summary:focus-visible{
-  outline:2px solid color-mix(in srgb,var(--color-accent) 72%,#fff);
+  outline:2px solid color-mix(in srgb,var(--color-accent) 72%,var(--color-main-bg));
   outline-offset:2px;
 }
 select{
@@ -1710,20 +1813,20 @@ select{
   background:
     linear-gradient(45deg,transparent 50%,var(--color-text-secondary) 50%) calc(100% - 18px) 50%/5px 5px no-repeat,
     linear-gradient(135deg,var(--color-text-secondary) 50%,transparent 50%) calc(100% - 13px) 50%/5px 5px no-repeat,
-    linear-gradient(180deg,color-mix(in srgb,var(--color-panel-bg) 96%,#fff 4%),color-mix(in srgb,var(--color-card-bg) 82%,#fff 18%));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.35);
+    linear-gradient(180deg,color-mix(in srgb,var(--color-panel-bg) 96%,var(--color-main-bg) 4%),color-mix(in srgb,var(--color-card-bg) 82%,var(--color-main-bg) 18%));
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--color-text-main) 12%,transparent);
 }
 select:hover{
   border-color:color-mix(in srgb,var(--color-accent) 38%,var(--rpdb-line));
   background:
     linear-gradient(45deg,transparent 50%,var(--color-accent) 50%) calc(100% - 18px) 50%/5px 5px no-repeat,
     linear-gradient(135deg,var(--color-accent) 50%,transparent 50%) calc(100% - 13px) 50%/5px 5px no-repeat,
-    linear-gradient(180deg,color-mix(in srgb,var(--color-panel-bg) 98%,#fff 2%),color-mix(in srgb,var(--color-accent) 6%,var(--color-card-bg)));
+    linear-gradient(180deg,color-mix(in srgb,var(--color-panel-bg) 98%,var(--color-main-bg) 2%),color-mix(in srgb,var(--color-accent) 6%,var(--color-card-bg)));
 }
 select:focus{
   outline:none;
   border-color:var(--rpdb-focus);
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 14%,transparent),inset 0 1px 0 rgba(255,255,255,.35);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 14%,transparent),inset 0 1px 0 color-mix(in srgb,var(--color-text-main) 12%,transparent);
 }
 select:disabled{
   cursor:not-allowed;
@@ -1966,7 +2069,7 @@ label>span{
   border:1px solid var(--rpdb-line);
   border-radius:8px;
   background:color-mix(in srgb,var(--color-panel-bg) 94%,transparent);
-  box-shadow:0 12px 32px rgba(37,27,20,.16);
+  box-shadow:0 12px 32px rgba(var(--shadow-base),.16);
   backdrop-filter:blur(16px);
 }
 .floating-submit-toolbar .auto-save-state{
@@ -1980,10 +2083,10 @@ label>span{
 }
 .floating-submit-toolbar .auto-save-state.saved,
 .floating-submit-toolbar .auto-save-state.local{
-  color:#3f7d52;
+  color:var(--color-success);
 }
 .floating-submit-toolbar .auto-save-state.error{
-  color:#b65a4f;
+  color:var(--btn-danger-bg);
 }
 .floating-submit-toolbar button{
   display:inline-flex;
@@ -2002,7 +2105,7 @@ label>span{
 .floating-submit-toolbar button.primary{
   border-color:var(--color-accent);
   background:var(--color-accent);
-  color:#fff;
+  color:var(--btn-primary-text);
   box-shadow:0 5px 12px color-mix(in srgb,var(--color-accent) 22%,transparent);
 }
 .floating-submit-toolbar button:disabled{

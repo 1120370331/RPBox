@@ -167,8 +167,8 @@ onBeforeUnmount(removeFloatingListeners)
   padding: 7px 9px 7px 10px;
   border-radius: 7px;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-panel-bg) 97%, #fff 3%), color-mix(in srgb, var(--color-card-bg) 82%, #fff 18%));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35);
+    linear-gradient(180deg, color-mix(in srgb, var(--color-panel-bg) 97%, var(--color-main-bg) 3%), color-mix(in srgb, var(--color-card-bg) 82%, var(--color-main-bg) 18%));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text-main) 12%, transparent);
   cursor: pointer;
 }
 
@@ -176,11 +176,11 @@ onBeforeUnmount(removeFloatingListeners)
 .rpdb-select__trigger.active {
   border-color: var(--rpdb-focus, var(--color-accent));
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-panel-bg) 98%, #fff 2%), color-mix(in srgb, var(--color-accent) 6%, var(--color-card-bg)));
+    linear-gradient(180deg, color-mix(in srgb, var(--color-panel-bg) 98%, var(--color-main-bg) 2%), color-mix(in srgb, var(--color-accent) 6%, var(--color-card-bg)));
 }
 
 .rpdb-select__trigger.active {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 14%, transparent), inset 0 1px 0 rgba(255, 255, 255, .35);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--color-text-main) 12%, transparent);
 }
 
 .rpdb-select__trigger > span,
@@ -229,7 +229,7 @@ onBeforeUnmount(removeFloatingListeners)
   border: 1px solid var(--rpdb-line, var(--color-border));
   border-radius: 9px;
   background: color-mix(in srgb, var(--color-panel-bg) 96%, transparent);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, .18);
+  box-shadow: 0 16px 34px rgba(var(--shadow-base), .18);
   backdrop-filter: blur(14px);
 }
 

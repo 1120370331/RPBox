@@ -67,9 +67,9 @@ describe('RPDBMyUploads', () => {
     api.listGuilds.mockReset()
     api.confirm.mockReset()
     api.listMyRPDBWorks.mockResolvedValue({ works: [{ ...work }] })
-    api.listGuilds.mockResolvedValue({ guilds: [{ id: 5, name: '暮色守望' }] })
-    api.updateRPDBWorkVisibility.mockImplementation(async (_id: number, visibility: string, guildId?: number) => ({
-      work: { ...work, visibility, guild_id: guildId, is_public: visibility === 'public' },
+    api.listGuilds.mockResolvedValue({ guilds: [{ id: 5, name: '暮色守望' }, { id: 6, name: '夜色议会' }] })
+    api.updateRPDBWorkVisibility.mockImplementation(async (_id: number, visibility: string, guildIds: number[] = []) => ({
+      work: { ...work, visibility, guild_id: guildIds[0], guild_ids: guildIds, is_public: visibility === 'public' },
     }))
     api.deleteRPDBWork.mockResolvedValue({ message: 'deleted' })
     api.confirm.mockResolvedValue(true)
@@ -100,12 +100,16 @@ describe('RPDBMyUploads', () => {
     const visibilitySelect = wrapper.get('.visibility-control select')
     await visibilitySelect.setValue('guild')
     await flushPromises()
-    expect(api.updateRPDBWorkVisibility).toHaveBeenCalledWith(11, 'guild', 5)
-    expect(wrapper.findAll('.visibility-control select')).toHaveLength(2)
+    expect(api.updateRPDBWorkVisibility).toHaveBeenCalledWith(11, 'guild', [5])
+    expect(wrapper.findAll('.visibility-guilds input[type="checkbox"]')).toHaveLength(2)
 
-    await wrapper.findAll('.visibility-control select')[0].setValue('private')
+    await wrapper.findAll('.visibility-guilds input[type="checkbox"]')[1].setValue(true)
     await flushPromises()
-    expect(api.updateRPDBWorkVisibility).toHaveBeenLastCalledWith(11, 'private', 5)
+    expect(api.updateRPDBWorkVisibility).toHaveBeenLastCalledWith(11, 'guild', [5, 6])
+
+    await wrapper.find('.visibility-control select').setValue('private')
+    await flushPromises()
+    expect(api.updateRPDBWorkVisibility).toHaveBeenLastCalledWith(11, 'private', [5, 6])
   })
 
   it('navigates to view and edit, then removes a confirmed upload', async () => {
