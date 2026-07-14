@@ -34,12 +34,14 @@ import { resolveApiUrl } from '@/api/item'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { sortRPDBStyleTags } from '@/constants/rpdbStyles'
 import { hasTomTomCoordinates } from '@/utils/tomtom'
+import { useRPDBOptionLabels } from '@/composables/useRPDBOptionLabels'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToastStore()
 const emoteStore = useEmoteStore()
 const userStore = useUserStore()
+const { availabilityLabel, bindTypeLabel, factionLabel } = useRPDBOptionLabels()
 const work = ref<RPDBWork>()
 const comments = ref<RPDBComment[]>([])
 const loading = ref(true)
@@ -108,12 +110,6 @@ const canReportWork = computed(() => Boolean(
 
 function formatCount(value?: number) {
   return new Intl.NumberFormat('zh-CN').format(value || 0)
-}
-
-function bindTypeLabel(value?: string) {
-  if (value === 'yes') return '是'
-  if (value === 'no') return '否'
-  return value || '未标注'
 }
 
 function referenceTypeLabel(value?: string) {
@@ -459,9 +455,9 @@ onBeforeUnmount(() => {
           </span>
         </div>
         <dl class="hero-metadata">
-          <div><dt>{{ work.type === 'home_showcase' ? '开放状态' : '获取状态' }}</dt><dd>{{ work.availability_status || '未知' }}</dd></div>
+          <div><dt>{{ work.type === 'home_showcase' ? '开放状态' : '获取状态' }}</dt><dd>{{ availabilityLabel(work.availability_status, work.type) }}</dd></div>
           <div><dt>是否绑定</dt><dd>{{ bindTypeLabel(work.bind_type) }}</dd></div>
-          <div><dt>阵营</dt><dd>{{ work.faction || '不限' }}</dd></div>
+          <div><dt>阵营</dt><dd>{{ factionLabel(work.faction) }}</dd></div>
         </dl>
         <dl class="hero-stats" aria-label="作品数据" data-testid="rpdb-detail-metrics">
           <div><dt><i class="ri-eye-line"></i>浏览</dt><dd>{{ formatCount(work.view_count) }}</dd></div>

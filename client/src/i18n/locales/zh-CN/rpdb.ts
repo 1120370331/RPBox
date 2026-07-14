@@ -284,6 +284,10 @@ export default {
       bind: {
         no: { label: '否', hint: '物品不绑定角色或账号' },
         yes: { label: '是', hint: '物品会绑定角色或账号' },
+        account: { label: '账号绑定' },
+        pickup: { label: '拾取绑定' },
+        use: { label: '使用后绑定' },
+        unknown: { label: '未标注' },
       },
       faction: {
         neutral: { label: '不限', hint: '联盟和部落均可用' },

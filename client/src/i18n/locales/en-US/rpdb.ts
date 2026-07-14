@@ -170,6 +170,10 @@ export default {
       bind: {
         no: { label: 'No', hint: 'Not bound to a character or account' },
         yes: { label: 'Yes', hint: 'Binds to a character or account' },
+        account: { label: 'Account bound' },
+        pickup: { label: 'Binds when picked up' },
+        use: { label: 'Binds when used' },
+        unknown: { label: 'Not specified' },
       },
       faction: {
         neutral: { label: 'Any', hint: 'Available to Alliance and Horde' },

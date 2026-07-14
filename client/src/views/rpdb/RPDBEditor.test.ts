@@ -185,6 +185,12 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('.generated-cover').exists()).toBe(false)
     expect(wrapper.text()).toContain('可不填，发布后会根据标题自动生成默认封面')
 
+    const coverInput = wrapper.find('[data-testid="cover-upload"] input')
+    const coverClick = vi.spyOn(coverInput.element, 'click')
+    await wrapper.find('[data-testid="cover-upload"]').trigger('click')
+    expect(coverClick).toHaveBeenCalledOnce()
+    coverClick.mockRestore()
+
     vi.mocked(uploadImage).mockReset()
     vi.mocked(uploadImage)
       .mockResolvedValueOnce({ url: '/uploads/rpdb/test-cover.jpg' })
@@ -192,7 +198,6 @@ describe('RPDBEditor', () => {
       .mockResolvedValueOnce({ url: '/uploads/rpdb/test-preview-2.jpg' })
 
     const files = [new File(['x'], 'rpdb.png', { type: 'image/png' })]
-    const coverInput = wrapper.find('[data-testid="cover-upload"] input')
     Object.defineProperty(coverInput.element, 'files', { value: files, configurable: true })
     await coverInput.trigger('change')
 
