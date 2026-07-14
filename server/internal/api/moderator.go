@@ -1261,6 +1261,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	var pendingPosts, pendingItems, pendingReports int64
 	var pendingPostEdits, pendingItemEdits int64
 	var pendingPostCommentImages, pendingItemCommentImages, pendingUserAvatars int64
+	var pendingRPDBWorks, pendingRPDBMedia, pendingRPDBRevisions int64
 	var totalPosts, totalItems int64
 	var todayPosts, todayItems int64
 	var pendingGuilds, totalGuilds int64
@@ -1285,6 +1286,9 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 		Where("COALESCE(BTRIM(avatar), '') <> ''").
 		Where("avatar_review_status = ?", "pending").
 		Count(&pendingUserAvatars)
+	database.DB.Model(&model.RPDBWork{}).Where("review_status = ?", model.RPDBReviewPending).Count(&pendingRPDBWorks)
+	database.DB.Model(&model.RPDBMedia{}).Where("review_status = ?", model.RPDBReviewPending).Count(&pendingRPDBMedia)
+	database.DB.Model(&model.RPDBRevision{}).Where("status = ?", model.RPDBReviewPending).Count(&pendingRPDBRevisions)
 
 	// 总数量
 	database.DB.Model(&model.Post{}).Count(&totalPosts)
@@ -1298,7 +1302,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", today).Count(&todayItems)
 	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", today).Count(&todayUsers)
 
-	totalPendingReviews := pendingPosts + pendingItems + pendingGuilds + pendingReports + pendingPostEdits + pendingItemEdits + pendingPostCommentImages + pendingItemCommentImages + pendingUserAvatars
+	totalPendingReviews := pendingPosts + pendingItems + pendingGuilds + pendingReports + pendingPostEdits + pendingItemEdits + pendingPostCommentImages + pendingItemCommentImages + pendingUserAvatars + pendingRPDBWorks + pendingRPDBMedia + pendingRPDBRevisions
 
 	c.JSON(http.StatusOK, gin.H{
 		"pending_posts":               pendingPosts,
@@ -1310,6 +1314,9 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 		"pending_post_comment_images": pendingPostCommentImages,
 		"pending_item_comment_images": pendingItemCommentImages,
 		"pending_user_avatars":        pendingUserAvatars,
+		"pending_rpdb_works":          pendingRPDBWorks,
+		"pending_rpdb_media":          pendingRPDBMedia,
+		"pending_rpdb_revisions":      pendingRPDBRevisions,
 		"total_pending_reviews":       totalPendingReviews,
 		"total_posts":                 totalPosts,
 		"total_items":                 totalItems,

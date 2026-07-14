@@ -10,6 +10,7 @@ import guild from './guild'
 import home from './home'
 import collection from './collection'
 import library from './library'
+import rpdb from './rpdb'
 
 export default {
   common,
@@ -24,4 +25,5 @@ export default {
   home,
   collection,
   library,
+  rpdb,
 }

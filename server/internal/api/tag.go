@@ -12,8 +12,9 @@ import (
 
 // CreateTagRequest 创建标签请求
 type CreateTagRequest struct {
-	Name  string `json:"name" binding:"required"`
-	Color string `json:"color"`
+	Name     string `json:"name" binding:"required"`
+	Color    string `json:"color"`
+	Category string `json:"category"`
 }
 
 // UpdateTagRequest 更新标签请求
@@ -53,7 +54,7 @@ func (s *Server) getPresetTags(c *gin.Context) {
 	}
 
 	var tags []model.Tag
-	if err := query.Find(&tags).Error; err != nil {
+	if err := query.Order("usage_count DESC, id ASC").Find(&tags).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
@@ -74,9 +75,13 @@ func (s *Server) createTag(c *gin.Context) {
 	tag := model.Tag{
 		Name:      req.Name,
 		Color:     req.Color,
+		Category:  req.Category,
 		Type:      "custom",
 		CreatorID: userID,
 		IsPublic:  false,
+	}
+	if tag.Category == "" {
+		tag.Category = "story"
 	}
 
 	if err := database.DB.Create(&tag).Error; err != nil {

@@ -1,0 +1,143 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { RPDBWork, RPDBWorkPayload } from '@/api/rpdb'
+import RPDBGuideSection from './RPDBGuideSection.vue'
+
+const props = defineProps<{
+  work: RPDBWork | RPDBWorkPayload
+  homeDetails?: Record<string, string>
+}>()
+
+const transmogSlotOrder = [
+  { value: 'head', label: '头部' },
+  { value: 'shoulder', label: '肩部' },
+  { value: 'back', label: '背部' },
+  { value: 'chest', label: '胸甲' },
+  { value: 'shirt', label: '衬衣' },
+  { value: 'tabard', label: '战袍' },
+  { value: 'wrist', label: '护腕' },
+  { value: 'hands', label: '手套' },
+  { value: 'waist', label: '腰带' },
+  { value: 'legs', label: '腿部' },
+  { value: 'feet', label: '脚部' },
+  { value: 'main_hand', label: '主手' },
+  { value: 'off_hand', label: '副手' },
+]
+const transmogSlotRank = new Map(transmogSlotOrder.map((slot, index) => [slot.value, index]))
+const transmogSlotLabel = new Map(transmogSlotOrder.map(slot => [slot.value, slot.label]))
+const isHome = computed(() => props.work.type === 'home_showcase')
+const description = computed(() => props.work.effect_description || props.work.rp_use_cases || props.work.summary || '')
+const orderedTransmogSlots = computed(() => {
+  return [...(props.work.transmog_slots || [])]
+    .filter(slot => slot.role !== 'unused')
+    .sort((a, b) => {
+      const aRank = transmogSlotRank.get(a.slot) ?? 999
+      const bRank = transmogSlotRank.get(b.slot) ?? 999
+      if (aRank !== bRank) return aRank - bRank
+      return (a.sort_order || 0) - (b.sort_order || 0)
+    })
+})
+
+function formatSlotLabel(slot: string) {
+  return transmogSlotLabel.get(slot) || slot
+}
+</script>
+
+<template>
+  <div class="work-content" data-testid="work-content">
+    <section id="rpdb-section-overview" class="editorial-section">
+      <span>正文内容</span>
+      <h2>{{ isHome ? '空间故事与参观亮点' : '实际效果与 RP 用途' }}</h2>
+      <p v-if="description" class="lead">{{ description }}</p>
+      <p v-if="work.rp_use_cases && work.rp_use_cases !== description" class="use-cases">
+        <b>适用场景</b>
+        {{ work.rp_use_cases }}
+      </p>
+      <div v-if="work.content" class="rich-content" v-html="work.content"></div>
+      <p v-else class="empty-copy">作者尚未补充完整正文。</p>
+    </section>
+
+    <section v-if="orderedTransmogSlots.length" id="rpdb-section-transmog" class="editorial-section">
+      <span>幻化部件</span>
+      <h2>幻化部件与替代方案</h2>
+      <div class="slot-grid">
+        <article v-for="slot in orderedTransmogSlots" :key="slot.id || `${slot.slot}-${slot.sort_order}`" data-testid="transmog-slot-card">
+          <i class="ri-shirt-line"></i>
+          <div>
+            <b data-testid="transmog-slot-label">{{ formatSlotLabel(slot.slot) }}</b>
+            <dl class="slot-fields">
+              <div v-if="slot.name || slot.note">
+                <dt>名称</dt>
+                <dd>{{ slot.name || slot.note }}</dd>
+              </div>
+              <div v-if="slot.description">
+                <dt>介绍</dt>
+                <dd>{{ slot.description }}</dd>
+              </div>
+              <div v-if="slot.source">
+                <dt>来源</dt>
+                <dd>{{ slot.source }}</dd>
+              </div>
+              <div v-if="slot.wowhead_url">
+                <dt>Wowhead</dt>
+                <dd><a :href="slot.wowhead_url" target="_blank" rel="noopener">{{ slot.wowhead_url }}</a></dd>
+              </div>
+              <div v-if="slot.variant">
+                <dt>替代</dt>
+                <dd>{{ slot.variant }}</dd>
+              </div>
+            </dl>
+            <p v-if="!slot.name && !slot.note && !slot.description && !slot.source && !slot.variant && !slot.wowhead_url">
+              {{ slot.role === 'variant' ? '替代部件' : slot.role === 'optional' ? '可选部件' : '必选部件' }}
+            </p>
+          </div>
+          <small>{{ slot.role || 'required' }}</small>
+        </article>
+      </div>
+    </section>
+
+    <RPDBGuideSection
+      v-if="!isHome"
+      :steps="work.guide_steps || []"
+      :title="work.type === 'transmog' ? '部件获取攻略' : '获取攻略'"
+    />
+
+    <section v-if="isHome" id="rpdb-section-home" class="editorial-section home-profile">
+      <span>家宅资料</span>
+      <h2>家宅资料与参观方式</h2>
+      <p v-if="homeDetails?.visit_notes" class="visit-notes">{{ homeDetails.visit_notes }}</p>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.work-content{overflow:hidden;background:transparent}
+.editorial-section{padding:28px 30px;border-top:1px solid color-mix(in srgb,var(--color-border) 72%,transparent)}
+.editorial-section:first-child{border-top:0}
+.editorial-section>span{color:var(--color-accent);font-size:10px;font-weight:800;letter-spacing:.06em}
+.editorial-section h2{margin:5px 0 13px;color:var(--color-text-main);font:700 22px/1.25 system-ui,'Microsoft YaHei',sans-serif}
+.lead{margin:0;color:var(--color-text-main);font-size:15px;line-height:1.9}
+.use-cases{margin:16px 0;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--color-accent) 8%,transparent);color:var(--color-text-secondary);line-height:1.75}
+.use-cases b{margin-right:8px;color:var(--color-text-main)}
+.rich-content{color:var(--color-text-main);font-size:14px;line-height:1.9}
+.rich-content :deep(img){max-width:100%;height:auto;border-radius:10px}
+.empty-copy{color:var(--color-text-secondary)}
+.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.slot-grid article{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px;align-items:start;padding:12px;border:1px solid color-mix(in srgb,var(--color-border) 72%,transparent);border-radius:12px;background:color-mix(in srgb,var(--color-card-bg) 84%,#fff 16%)}
+.slot-grid i{color:var(--color-accent);font-size:20px}
+.slot-grid b{color:var(--color-text-main)}
+.slot-grid p{margin:5px 0 0;color:var(--color-text-secondary);font-size:12px}
+.slot-grid small{color:var(--color-text-secondary)}
+.slot-fields{display:grid;gap:5px;margin:7px 0 0}
+.slot-fields div{display:grid;grid-template-columns:38px minmax(0,1fr);gap:8px}
+.slot-fields dt{color:var(--color-text-secondary);font-size:11px}
+.slot-fields dd{margin:0;color:var(--color-text-main);font-size:12px;line-height:1.45}
+.slot-fields a{color:var(--link-color);overflow-wrap:anywhere;text-decoration:none}
+.slot-fields a:hover{color:var(--link-hover);text-decoration:underline}
+.home-profile dl{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;margin:0;border-top:1px solid color-mix(in srgb,var(--color-border) 72%,transparent)}
+.home-profile dl div{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid color-mix(in srgb,var(--color-border) 72%,transparent)}
+.home-profile dt{color:var(--color-text-secondary)}
+.home-profile dd{margin:0;color:var(--color-text-main);text-align:right}
+.visit-notes{margin:16px 0 0;padding:13px;border-radius:12px;background:color-mix(in srgb,var(--color-card-bg) 84%,#fff 16%);color:var(--color-text-secondary);line-height:1.75}
+@media(max-width:680px){.editorial-section{padding:22px 18px}.home-profile dl{grid-template-columns:1fr}}
+</style>

@@ -2,13 +2,26 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getPost, updatePost, getPostTags, deletePost, type UpdatePostRequest, POST_CATEGORIES, type PostCategory } from '@/api/post'
+import {
+  createPostDraft,
+  getPost,
+  updatePost,
+  savePostDraft,
+  getPostTags,
+  deletePost,
+  type PostWithAuthor,
+  type SavePostDraftRequest,
+  type UpdatePostRequest,
+  POST_CATEGORIES,
+  type PostCategory,
+} from '@/api/post'
 import { uploadImage } from '@/api/item'
 import { listTags, type Tag } from '@/api/tag'
 import { listGuilds, type Guild } from '@/api/guild'
 import { addPostTag, removePostTag } from '@/api/post'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
+import PostDraftBox from '@/components/PostDraftBox.vue'
 import CollectionSelector from '@/components/CollectionSelector.vue'
 import { getPostCollection, addPostToCollection, removePostFromCollection } from '@/api/collection'
 import { useToast } from '@/composables/useToast'
@@ -76,14 +89,18 @@ const selectedTags = ref<number[]>([])
 const originalTags = ref<number[]>([])
 const selectedCollectionId = ref<number | null>(null)
 const originalCollectionId = ref<number | null>(null)
-let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let loadToken = 0
 const activePostId = ref<number | null>(null)
 const initializing = ref(false)
+const draftSaveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const draftRefreshKey = ref(0)
+let cloudSaveRunning = false
+let cloudSaveQueued = false
+let skipUnmountSave = false
 
 // 保存草稿
-function saveDraft() {
+function saveLocalDraft() {
   const postId = activePostId.value
   if (!postId || initializing.value || loading.value) return
   const draft = {
@@ -99,7 +116,7 @@ function saveDraft() {
 function debouncedSaveDraft() {
   if (initializing.value) return
   if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(saveDraft, 1000)
+  debounceTimer = setTimeout(() => void saveDraftToCloud(), 1400)
 }
 
 // 恢复草稿
@@ -133,11 +150,6 @@ function clearDraft(postId = activePostId.value) {
   localStorage.removeItem(draftKeyForPost(postId))
 }
 
-function stopAutoSave() {
-  if (autoSaveTimer) clearInterval(autoSaveTimer)
-  autoSaveTimer = null
-}
-
 function clearPendingDraftSave() {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = null
@@ -162,7 +174,6 @@ async function initializePostEditor(postId: number) {
     return
   }
 
-  stopAutoSave()
   clearPendingDraftSave()
   initializing.value = true
   const token = ++loadToken
@@ -190,7 +201,7 @@ async function initializePostEditor(postId: number) {
 
   initializing.value = false
   loading.value = false
-  autoSaveTimer = setInterval(saveDraft, 10000)
+  draftSaveState.value = form.value.status === 'draft' ? 'saved' : 'idle'
 }
 
 onMounted(async () => {
@@ -212,12 +223,107 @@ watch(() => route.params.id, async (id, oldId) => {
 
 onUnmounted(() => {
   loadToken++
-  stopAutoSave()
   clearPendingDraftSave()
+  if (!skipUnmountSave) {
+    saveLocalDraft()
+    if (form.value.status === 'draft') void saveDraftToCloud()
+  }
 })
 
 // 监听表单变化，自动保存
-watch([() => form.value.title, () => form.value.content, () => form.value.region, () => form.value.address, selectedTags], debouncedSaveDraft, { deep: true })
+watch([form, selectedTags, selectedCollectionId], debouncedSaveDraft, { deep: true })
+
+function buildDraftPayload(): SavePostDraftRequest {
+  const payload: SavePostDraftRequest = {
+    title: form.value.title || '',
+    content: form.value.content || '',
+    content_type: form.value.content_type || 'html',
+    category: form.value.category || 'other',
+    region: form.value.region?.trim() || '',
+    address: form.value.address?.trim() || '',
+    guild_id: form.value.guild_id,
+    story_id: form.value.story_id,
+    cover_image: form.value.cover_image || '',
+    is_public: form.value.is_public,
+    event_type: form.value.event_type,
+    event_start_time: form.value.event_start_time,
+    event_end_time: form.value.event_end_time,
+    event_color: form.value.event_color,
+    tag_ids: [...selectedTags.value],
+  }
+  if (payload.event_start_time) payload.event_start_time = new Date(payload.event_start_time).toISOString()
+  if (payload.event_end_time) payload.event_end_time = new Date(payload.event_end_time).toISOString()
+  return payload
+}
+
+async function syncDraftCollection(postId: number) {
+  if (selectedCollectionId.value === originalCollectionId.value) return
+  if (originalCollectionId.value) await removePostFromCollection(originalCollectionId.value, postId)
+  if (selectedCollectionId.value) await addPostToCollection(selectedCollectionId.value, postId)
+  originalCollectionId.value = selectedCollectionId.value
+}
+
+async function saveDraftToCloud(force = false) {
+  saveLocalDraft()
+  const postId = activePostId.value
+  if (!postId || form.value.status !== 'draft' || initializing.value || (loading.value && !force)) return
+  if (cloudSaveRunning) {
+    cloudSaveQueued = true
+    return
+  }
+  cloudSaveRunning = true
+  draftSaveState.value = 'saving'
+  try {
+    await savePostDraft(postId, buildDraftPayload())
+    await syncDraftCollection(postId)
+    originalTags.value = [...selectedTags.value]
+    clearDraft(postId)
+    draftSaveState.value = 'saved'
+    draftRefreshKey.value++
+  } catch (error) {
+    console.error('云端草稿保存失败:', error)
+    draftSaveState.value = 'error'
+  } finally {
+    cloudSaveRunning = false
+    if (cloudSaveQueued) {
+      cloudSaveQueued = false
+      void saveDraftToCloud(force)
+    }
+  }
+}
+
+async function handleDraftSelect(id: number) {
+  if (id === activePostId.value) return
+  await saveDraftToCloud(true)
+  await router.push({ name: 'post-edit', params: { id } })
+}
+
+async function handleNewDraft() {
+  await saveDraftToCloud(true)
+  const created = await createPostDraft({ title: '', content: '', content_type: 'html', category: 'other', tag_ids: [] })
+  draftRefreshKey.value++
+  await router.push({ name: 'post-edit', params: { id: created.id } })
+}
+
+async function handleDraftDelete(post: PostWithAuthor) {
+  const confirmed = await dialog.confirm({
+    title: t('community.drafts.deleteTitle'),
+    message: t('community.drafts.deleteMessage', { title: post.title || t('community.drafts.untitled') }),
+    type: 'warning',
+  })
+  if (!confirmed) return
+  await deletePost(post.id)
+  draftRefreshKey.value++
+  if (post.id === activePostId.value) {
+    skipUnmountSave = true
+    await router.push({ name: 'post-create' })
+  }
+}
+
+async function handleManualDraftSave() {
+  await saveDraftToCloud(true)
+  if (draftSaveState.value === 'saved') toast.success(t('community.create.draftSuccess'))
+}
 
 async function loadPost(postId = Number(route.params.id), token = loadToken) {
   loading.value = true
@@ -370,6 +476,7 @@ async function handleSubmit(status: 'draft' | 'published') {
       }
     }
 
+    skipUnmountSave = true
     clearDraft(id) // 保存成功后清除草稿
     toast.success(t('community.edit.updateSuccess'))
     router.push({ name: 'post-detail', params: { id } })
@@ -385,9 +492,8 @@ function handleCancel() {
   router.back()
 }
 
-function handlePreview() {
-  // 先保存草稿
-  saveDraft()
+async function handlePreview() {
+  await saveDraftToCloud(true)
 
   const previewData = {
     title: form.value.title,
@@ -419,6 +525,7 @@ async function handleDelete() {
   try {
     const id = activePostId.value || Number(route.params.id)
     await deletePost(id)
+    skipUnmountSave = true
     clearDraft(id)
     toast.success(t('community.edit.deleteSuccess'))
     router.push({ name: 'community' })
@@ -500,6 +607,14 @@ function toggleQuickJump() {
     <!-- 头部 -->
     <div class="page-header anim-item" style="--delay: 0">
       <h1 class="page-title">{{ t('community.edit.pageTitle') }}</h1>
+      <PostDraftBox
+        :current-draft-id="form.status === 'draft' ? activePostId : null"
+        :save-state="draftSaveState"
+        :refresh-key="draftRefreshKey"
+        @select="handleDraftSelect"
+        @create="handleNewDraft"
+        @delete="handleDraftDelete"
+      />
     </div>
 
     <div v-if="loading && !form.title" class="loading">{{ t('community.edit.loading') }}</div>
@@ -725,6 +840,10 @@ function toggleQuickJump() {
 
       <!-- 操作按钮 -->
       <div class="actions-group">
+        <button v-if="form.status === 'draft'" class="action-btn draft" type="button" :disabled="loading" @click="handleManualDraftSave">
+          <i class="ri-save-line"></i>
+          {{ t('community.create.saveDraft') }}
+        </button>
         <button class="action-btn delete" type="button" @click="handleDelete">
           <i class="ri-delete-bin-line"></i>
           {{ t('community.edit.delete') }}
@@ -752,6 +871,10 @@ function toggleQuickJump() {
 
 /* ========== Page Header ========== */
 .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
@@ -1278,6 +1401,12 @@ function toggleQuickJump() {
   background: #F5EFE7;
   border: 1px solid #E5D4C1;
   color: #4B3621;
+}
+
+.actions-group .action-btn.draft {
+  color: #76512c;
+  border-color: rgba(118, 81, 44, 0.28);
+  background: #fbf8f3;
 }
 
 .actions-group .action-btn.preview:hover {
