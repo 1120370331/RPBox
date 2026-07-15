@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
@@ -147,11 +148,132 @@ func (s *Server) getRPDBWork(c *gin.Context) {
 	}
 
 	if work.Status == model.RPDBStatusPublished && work.ReviewStatus == model.RPDBReviewApproved {
-		database.DB.Model(&model.RPDBWork{}).Where("id = ?", work.ID).
-			UpdateColumn("view_count", gorm.Expr("view_count + 1"))
+		// 登录用户：同一作品每日最多计 1 次；未登录：每次访问计 1 次（不进热度榜）
+		if recordRPDBView(work.ID, viewerID) {
+			database.DB.Model(&model.RPDBWork{}).Where("id = ?", work.ID).
+				UpdateColumn("view_count", gorm.Expr("view_count + 1"))
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"work": detail})
+}
+
+// listRPDBHotWorks returns rolling 7-day heat TopN works.
+// Only optional type filter is applied; search/tag/etc. are ignored.
+func (s *Server) listRPDBHotWorks(c *gin.Context) {
+	limit := parsePositiveInt(c.Query("limit"), 3)
+	if limit > 6 {
+		limit = 6
+	}
+
+	viewerID := optionalRPDBUserID(c)
+	since := time.Now().Add(-7 * 24 * time.Hour)
+
+	base := database.DB.Model(&model.RPDBWork{}).
+		Where("status = ? AND review_status = ? AND is_public = ?",
+			model.RPDBStatusPublished,
+			model.RPDBReviewApproved,
+			true,
+		)
+	if workType := strings.TrimSpace(c.Query("type")); workType != "" {
+		base = base.Where("type = ?", workType)
+	}
+	if hiddenIDs, err := hiddenContentIDs(viewerID, reportTargetRPDBWork); err == nil && len(hiddenIDs) > 0 {
+		base = base.Where("id NOT IN ?", hiddenIDs)
+	}
+
+	type rankedWork struct {
+		ID           uint
+		RecentViews  int64
+	}
+	var ranked []rankedWork
+	if err := base.
+		Select("rpdb_works.id, COALESCE(COUNT(rpdb_view_events.id), 0) AS recent_views").
+		Joins("LEFT JOIN rpdb_view_events ON rpdb_view_events.work_id = rpdb_works.id AND rpdb_view_events.created_at >= ?", since).
+		Group("rpdb_works.id").
+		Order("recent_views DESC, rpdb_works.view_count DESC, rpdb_works.updated_at DESC").
+		Limit(limit).
+		Scan(&ranked).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询热度榜失败"})
+		return
+	}
+
+	if len(ranked) == 0 {
+		c.JSON(http.StatusOK, gin.H{"works": []rpdbWorkCard{}, "window_days": 7})
+		return
+	}
+
+	ids := make([]uint, 0, len(ranked))
+	rankMap := make(map[uint]int64, len(ranked))
+	for _, item := range ranked {
+		ids = append(ids, item.ID)
+		rankMap[item.ID] = item.RecentViews
+	}
+
+	var works []model.RPDBWork
+	if err := database.DB.Where("id IN ?", ids).Find(&works).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "加载热度作品失败"})
+		return
+	}
+	workByID := make(map[uint]model.RPDBWork, len(works))
+	for _, work := range works {
+		workByID[work.ID] = work
+	}
+	ordered := make([]model.RPDBWork, 0, len(ids))
+	for _, id := range ids {
+		if work, ok := workByID[id]; ok {
+			// expose rolling 7d views through view_count for UI metric display on top strip
+			work.ViewCount = int(rankMap[id])
+			ordered = append(ordered, work)
+		}
+	}
+
+	cards, err := buildRPDBWorkCards(ordered, viewerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "加载热度作品失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"works":       cards,
+		"window_days": 7,
+		"limit":       limit,
+	})
+}
+
+// recordRPDBView records a countable view.
+// Logged-in users contribute at most once per work per calendar day (also used for 7-day heat).
+// Anonymous viewers always count once per request but are not written into heat events.
+func recordRPDBView(workID, viewerID uint) bool {
+	if workID == 0 {
+		return false
+	}
+	if viewerID == 0 {
+		return true
+	}
+
+	viewDate := time.Now().Format("2006-01-02")
+	var existing model.RPDBViewEvent
+	err := database.DB.
+		Where("work_id = ? AND user_id = ? AND view_date = ?", workID, viewerID, viewDate).
+		First(&existing).Error
+	if err == nil {
+		return false // 今日已计过
+	}
+	if err != gorm.ErrRecordNotFound {
+		return false
+	}
+
+	event := model.RPDBViewEvent{
+		WorkID:   workID,
+		UserID:   viewerID,
+		ViewDate: viewDate,
+	}
+	if err := database.DB.Create(&event).Error; err != nil {
+		// 并发下唯一约束冲突视为今日已计
+		return false
+	}
+	return true
 }
 
 func (s *Server) getRPDBWorkPreview(c *gin.Context) {

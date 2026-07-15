@@ -4,17 +4,22 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import RPDBMain from './RPDBMain.vue'
 
-const { listRPDBWorks } = vi.hoisted(() => ({ listRPDBWorks: vi.fn() }))
+const { listRPDBWorks, listRPDBHotWorks } = vi.hoisted(() => ({
+  listRPDBWorks: vi.fn(),
+  listRPDBHotWorks: vi.fn(),
+}))
 vi.mock('@/api/rpdb', async () => {
   const actual = await vi.importActual<typeof import('@/api/rpdb')>('@/api/rpdb')
-  return { ...actual, listRPDBWorks }
+  return { ...actual, listRPDBWorks, listRPDBHotWorks }
 })
 
 describe('RPDBMain', () => {
   beforeEach(() => {
     localStorage.clear()
     listRPDBWorks.mockReset()
+    listRPDBHotWorks.mockReset()
     listRPDBWorks.mockResolvedValue({ works: [], total: 0, page: 1, page_size: 12 })
+    listRPDBHotWorks.mockResolvedValue({ works: [], window_days: 7, limit: 3 })
   })
 
   it('renders discovery controls and empty contribution action', async () => {
@@ -41,10 +46,14 @@ describe('RPDBMain', () => {
     expect(wrapper.find('.content-nav').exists()).toBe(true)
     expect(wrapper.find('a[href="/rpdb/my-uploads"]').text()).toContain('我的上传')
     expect(wrapper.find('.featured-grid').exists()).toBe(true)
+    expect(wrapper.text()).toContain('热度 Top3')
+    expect(wrapper.text()).not.toContain('社区精选')
+    expect(wrapper.text()).not.toContain('优质玩家作品将在审核后展示于此')
     expect(wrapper.find('.discovery-toolbar').classes()).not.toContain('sticky')
     expect(getComputedStyle(wrapper.find('.discovery-toolbar').element).position).not.toBe('sticky')
-    expect(wrapper.findAll('.featured-card')).toHaveLength(3)
+    expect(wrapper.findAll('[data-testid="rpdb-hot-card"]')).toHaveLength(3)
     expect(listRPDBWorks).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 12 }))
+    expect(listRPDBHotWorks).toHaveBeenCalledWith(expect.objectContaining({ limit: 3 }))
     const typeButtons = wrapper.findAll('.channel-tabs button')
     expect(typeButtons).toHaveLength(4)
     expect(typeButtons.map(button => button.text())).toEqual(
@@ -97,6 +106,11 @@ describe('RPDBMain', () => {
       created_at: '',
       updated_at: '',
     })
+    listRPDBHotWorks.mockResolvedValue({
+      works: Array.from({ length: 3 }, (_, index) => ({ ...makeWork(index + 100), view_count: 30 - index, summary: `摘要 ${index + 1}` })),
+      window_days: 7,
+      limit: 3,
+    })
     listRPDBWorks
       .mockResolvedValueOnce({ works: Array.from({ length: 12 }, (_, index) => makeWork(index + 1)), total: 25, page: 1, page_size: 12 })
       .mockResolvedValueOnce({ works: Array.from({ length: 12 }, (_, index) => makeWork(index + 13)), total: 25, page: 2, page_size: 12 })
@@ -114,10 +128,12 @@ describe('RPDBMain', () => {
 
     expect(wrapper.findAll('[data-testid="rpdb-work-card"]')).toHaveLength(12)
     expect(wrapper.findAll('[data-testid="rpdb-featured-metrics"]')).toHaveLength(3)
-    expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="浏览"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="近7日浏览"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="点赞"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="收藏"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="加入清单"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('摘要 1')
+    expect(wrapper.text()).not.toContain('优质玩家作品将在审核后展示于此')
     expect(wrapper.text()).toContain('每页最多 12 个')
     expect(wrapper.find('[data-testid="rpdb-pagination"]').text()).toContain('第 1 / 3 页')
     expect(wrapper.get('[data-testid="rpdb-card-view"]').attributes('aria-pressed')).toBe('true')
