@@ -1207,17 +1207,37 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   z-index: 0;
 }
 
-/* 封面锚定左侧约 45% 区域，右侧留给标记色与文字 */
+/* 封面铺满整宽，再用 mask 向右柔化溶解进标记色 */
 .banner-cover {
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 52%;
+  inset: 0;
+  width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: left center;
   display: block;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 28%,
+    rgba(0, 0, 0, 0.92) 38%,
+    rgba(0, 0, 0, 0.72) 48%,
+    rgba(0, 0, 0, 0.42) 58%,
+    rgba(0, 0, 0, 0.18) 70%,
+    rgba(0, 0, 0, 0.05) 82%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 28%,
+    rgba(0, 0, 0, 0.92) 38%,
+    rgba(0, 0, 0, 0.72) 48%,
+    rgba(0, 0, 0, 0.42) 58%,
+    rgba(0, 0, 0, 0.18) 70%,
+    rgba(0, 0, 0, 0.05) 82%,
+    transparent 100%
+  );
 }
 
 .banner-fallback {
@@ -1227,18 +1247,22 @@ function setEventStatusFilter(filter: EventStatusFilter) {
     linear-gradient(90deg, #2c1810 0%, color-mix(in srgb, var(--event-color, #B87333) 55%, #2c1810) 100%);
 }
 
-/* 封面从左清晰 → 向右渐变成活动标记色 */
+/* 活动色从右向左反噬，与封面互相侵蚀（长距离多节点） */
 .banner-color-fade {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background: linear-gradient(
     90deg,
-    rgba(0, 0, 0, 0.12) 0%,
-    transparent 18%,
-    transparent 30%,
-    color-mix(in srgb, var(--event-color, #B87333) 42%, transparent) 46%,
-    color-mix(in srgb, var(--event-color, #B87333) 82%, #1a100c) 68%,
+    rgba(0, 0, 0, 0.18) 0%,
+    rgba(0, 0, 0, 0.06) 14%,
+    transparent 24%,
+    color-mix(in srgb, var(--event-color, #B87333) 8%, transparent) 36%,
+    color-mix(in srgb, var(--event-color, #B87333) 22%, transparent) 46%,
+    color-mix(in srgb, var(--event-color, #B87333) 42%, transparent) 56%,
+    color-mix(in srgb, var(--event-color, #B87333) 64%, transparent) 68%,
+    color-mix(in srgb, var(--event-color, #B87333) 82%, #1a100c) 82%,
+    color-mix(in srgb, var(--event-color, #B87333) 94%, #1a100c) 92%,
     var(--event-color, #B87333) 100%
   );
 }
@@ -2060,16 +2084,35 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   }
 
   .banner-cover {
-    width: 58%;
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      #000 0%,
+      #000 22%,
+      rgba(0, 0, 0, 0.85) 36%,
+      rgba(0, 0, 0, 0.5) 52%,
+      rgba(0, 0, 0, 0.2) 68%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      90deg,
+      #000 0%,
+      #000 22%,
+      rgba(0, 0, 0, 0.85) 36%,
+      rgba(0, 0, 0, 0.5) 52%,
+      rgba(0, 0, 0, 0.2) 68%,
+      transparent 100%
+    );
   }
 
   .banner-color-fade {
     background: linear-gradient(
       90deg,
-      rgba(0, 0, 0, 0.1) 0%,
-      transparent 16%,
-      color-mix(in srgb, var(--event-color, #B87333) 45%, transparent) 42%,
-      color-mix(in srgb, var(--event-color, #B87333) 88%, #1a100c) 100%
+      rgba(0, 0, 0, 0.14) 0%,
+      transparent 18%,
+      color-mix(in srgb, var(--event-color, #B87333) 18%, transparent) 40%,
+      color-mix(in srgb, var(--event-color, #B87333) 48%, transparent) 58%,
+      color-mix(in srgb, var(--event-color, #B87333) 78%, #1a100c) 78%,
+      var(--event-color, #B87333) 100%
     );
   }
 }
