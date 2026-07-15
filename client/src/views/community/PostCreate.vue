@@ -6,6 +6,7 @@ import {
   createPost,
   createPostDraft,
   deletePost,
+  getPost,
   savePostDraft,
   updatePost,
   type CreatePostRequest,
@@ -113,12 +114,13 @@ function hasDraftContent(formData = form.value, tagIds = selectedTags.value) {
 }
 
 function saveLocalDraft() {
-  if (!hasDraftContent()) return
+  // 只缓存“独立新帖草稿”，且必须绑定合法 draft 状态云端 ID
+  if (!hasDraftContent() || !draftId.value) return
   const draft = {
     form: form.value,
     selectedTags: selectedTags.value,
     draftId: draftId.value,
-    savedAt: Date.now()
+    savedAt: Date.now(),
   }
   localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
 }
@@ -131,6 +133,21 @@ function debouncedSaveDraft() {
 // 清除草稿
 function clearDraft() {
   localStorage.removeItem(DRAFT_KEY)
+}
+
+/** 仅当云端帖仍是 draft 时才允许绑定，防止挂到已发布帖 */
+async function ensureValidDraftId(candidateId: number | null | undefined): Promise<number | null> {
+  const id = Number(candidateId)
+  if (!id) return null
+  try {
+    const res = await getPost(id)
+    if (res.post?.status === 'draft' && Number(res.post.author_id) === Number(userStore.user?.id)) {
+      return id
+    }
+  } catch (error) {
+    console.warn('草稿 ID 校验失败，将重新创建草稿:', error)
+  }
+  return null
 }
 
 async function maybeRestoreDraft() {
@@ -147,11 +164,11 @@ async function maybeRestoreDraft() {
     }
 
     const confirmed = await dialog.confirm({
-      title: '恢复未保存草稿',
-      message: '检测到一份未发布的新帖草稿。是否恢复？取消将丢弃这份本地草稿，避免它覆盖当前新内容。',
+      title: t('community.drafts.resumeTitle'),
+      message: t('community.drafts.resumeMessage'),
       type: 'warning',
-      confirmText: '恢复',
-      cancelText: '丢弃',
+      confirmText: t('community.drafts.resumeContinue'),
+      cancelText: t('community.drafts.resumeDiscard'),
     })
 
     if (!confirmed) {
@@ -159,10 +176,20 @@ async function maybeRestoreDraft() {
       return
     }
 
-    form.value = { ...form.value, ...draftForm }
-    selectedTags.value = draftTags
-    draftId.value = Number(draft.draftId) || null
-    coverImagePreview.value = form.value.cover_image || ''
+    const validId = await ensureValidDraftId(Number(draft.draftId) || null)
+    if (!validId) {
+      // 旧绑定已失效：只恢复本地内容，发布前会新建云端草稿
+      form.value = { ...form.value, ...draftForm, status: 'published' }
+      selectedTags.value = draftTags
+      draftId.value = null
+      coverImagePreview.value = form.value.cover_image || ''
+      clearDraft()
+      return
+    }
+
+    // 合法草稿：进入草稿编辑页，避免在 create 页误操作正式帖
+    clearDraft()
+    await router.replace({ name: 'post-edit', params: { id: validId } })
   } catch (e) {
     console.error('恢复草稿失败:', e)
     clearDraft()
@@ -179,6 +206,8 @@ onMounted(async () => {
 
   setTimeout(() => mounted.value = true, 50)
   await maybeRestoreDraft()
+  // 若已跳转到草稿编辑页，后续初始化由 PostEdit 接管
+  if (route.name !== 'post-create') return
 
   // 入口 query.category 始终生效（例如从 Banner 空态点「发布活动」）
   const preferredCategory = resolveInitialCategory()
@@ -191,8 +220,6 @@ onMounted(async () => {
 
   await loadTags()
   await loadGuilds()
-
-  if (hasDraftContent()) debouncedSaveDraft()
 })
 
 onUnmounted(() => {
@@ -233,7 +260,6 @@ async function syncDraftCollection(postId: number) {
 }
 
 async function saveDraftToCloud(force = false) {
-  saveLocalDraft()
   if ((!force && !hasDraftContent()) || (loading.value && !force)) return draftId.value
   if (cloudSaveRunning) {
     cloudSaveQueued = true
@@ -244,18 +270,31 @@ async function saveDraftToCloud(force = false) {
   draftSaveState.value = 'saving'
   try {
     const payload = buildDraftPayload()
-    const saved = draftId.value
-      ? await savePostDraft(draftId.value, payload)
+    let targetId = await ensureValidDraftId(draftId.value)
+    if (draftId.value && !targetId) {
+      // 绑定失效：断开旧 ID，改为新建草稿行
+      draftId.value = null
+    }
+
+    const saved = targetId
+      ? await savePostDraft(targetId, payload)
       : await createPostDraft(payload)
+
+    // 仅接受云端返回的草稿 ID
     draftId.value = saved.id
     await syncDraftCollection(saved.id)
-    localStorage.removeItem(DRAFT_KEY)
+    saveLocalDraft()
     draftSaveState.value = 'saved'
     draftRefreshKey.value++
     return saved.id
   } catch (error) {
     console.error('云端草稿保存失败:', error)
     draftSaveState.value = 'error'
+    // 草稿保存失败时不要继续拿着可能非法的 ID 去发布
+    if (String((error as any)?.message || '').includes('只有草稿') || String((error as any)?.message || '').includes('Conflict')) {
+      draftId.value = null
+      clearDraft()
+    }
     return draftId.value
   } finally {
     cloudSaveRunning = false
@@ -267,10 +306,22 @@ async function saveDraftToCloud(force = false) {
 }
 
 function resetForNewDraft() {
+  const preferredCategory = resolveInitialCategory()
   form.value = {
-    title: '', content: '', content_type: 'html', category: 'other', region: '', address: '', tag_ids: [],
-    status: 'published', cover_image: '', is_public: true, event_type: undefined,
-    event_start_time: undefined, event_end_time: undefined, event_color: '#D97706',
+    title: '',
+    content: '',
+    content_type: 'html',
+    category: preferredCategory,
+    region: '',
+    address: '',
+    tag_ids: [],
+    status: 'published',
+    cover_image: '',
+    is_public: true,
+    event_type: preferredCategory === 'event' ? 'server' : undefined,
+    event_start_time: undefined,
+    event_end_time: undefined,
+    event_color: '#D97706',
   }
   selectedTags.value = []
   selectedCollectionId.value = null
@@ -283,16 +334,40 @@ function resetForNewDraft() {
 
 async function handleDraftSelect(id: number) {
   if (id === draftId.value) return
-  await saveDraftToCloud()
-  await router.push({ name: 'post-edit', params: { id } })
-}
-
-async function handleNewDraft() {
-  // 先落盘当前草稿，再清空编辑器；绝不复用已有 draftId，避免写坏别的帖子
+  // 当前内容先尽量落盘到云端草稿箱，再进入选中草稿
   if (hasDraftContent()) {
     await saveDraftToCloud(true)
   }
-  resetForNewDraft()
+  const validId = await ensureValidDraftId(id)
+  if (!validId) {
+    toast.error(t('community.drafts.invalidDraft'))
+    draftRefreshKey.value++
+    return
+  }
+  await router.push({ name: 'post-edit', params: { id: validId } })
+}
+
+async function handleNewDraft() {
+  // 当前内容先入草稿箱，再创建全新空白草稿并进入编辑
+  if (hasDraftContent()) {
+    await saveDraftToCloud(true)
+  }
+  try {
+    const created = await createPostDraft({
+      title: '',
+      content: '',
+      content_type: 'html',
+      category: resolveInitialCategory() === 'other' ? 'other' : resolveInitialCategory(),
+      tag_ids: [],
+    })
+    clearDraft()
+    draftRefreshKey.value++
+    await router.push({ name: 'post-edit', params: { id: created.id } })
+  } catch (error) {
+    console.error('创建草稿失败:', error)
+    toast.error(t('community.drafts.error'))
+    resetForNewDraft()
+  }
 }
 
 async function handleDraftDelete(post: PostWithAuthor) {
@@ -388,23 +463,27 @@ async function handleSubmit(status: 'draft' | 'published') {
       return
     }
 
-    let res: any
-    if (draftId.value) {
-      await saveDraftToCloud(true)
-      res = await updatePost(draftId.value, payload)
+    // 发布：只允许把“云端 draft 行”转正；绝不能 update 已发布帖
+    let publishedPostId: number | null = null
+    const validDraftId = await ensureValidDraftId(draftId.value)
+    if (validDraftId) {
+      await savePostDraft(validDraftId, buildDraftPayload())
+      const published = await updatePost(validDraftId, payload)
+      publishedPostId = (published as any)?.id || validDraftId
     } else {
-      res = await createPost(payload)
+      draftId.value = null
+      const created = await createPost(payload)
+      publishedPostId = (created as any)?.id || (created as any)?.data?.id || null
     }
 
-    // 添加到合集
-    const publishedPostId = draftId.value || res?.data?.id || res?.id
-    if (selectedCollectionId.value && publishedPostId && !draftId.value) {
+    if (selectedCollectionId.value && publishedPostId) {
       await addPostToCollection(selectedCollectionId.value, publishedPostId)
     }
 
     skipUnmountSave = true
-    clearDraft() // 发布成功后清除草稿
-    toast.success(status === 'published' ? t('community.create.publishSuccess') : t('community.create.draftSuccess'))
+    clearDraft()
+    draftId.value = null
+    toast.success(t('community.create.publishSuccess'))
     router.push({ name: 'my-posts' })
   } catch (error: any) {
     console.error('提交失败:', error)

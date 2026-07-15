@@ -871,8 +871,17 @@ func (s *Server) getPost(c *gin.Context) {
 		return
 	}
 
-	// 权限检查：非公开帖子仅公会成员可见
+	// 草稿仅作者/版主可见；他人只能看已发布且审核通过的帖子
 	if post.AuthorID != userID && !isModerator {
+		if post.Status == "draft" || post.Status == "pending" || post.ReviewStatus != "approved" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+			return
+		}
+		if post.Status != "published" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+			return
+		}
+		// 权限检查：非公开帖子仅公会成员可见
 		if !post.IsPublic {
 			if post.GuildID != nil {
 				canAccess, role := checkGuildContentAccess(*post.GuildID, userID, "post")
@@ -1176,6 +1185,12 @@ func (s *Server) updatePost(c *gin.Context) {
 		return
 	}
 
+	// 已发布帖禁止回退为 draft（草稿箱对象与正式帖分离）
+	if post.Status == "published" && req.Status == "draft" {
+		c.JSON(http.StatusConflict, gin.H{"error": "已发布帖不能回退为草稿，请通过编辑审核修改"})
+		return
+	}
+
 	// 版主或草稿状态：直接修改
 	if req.Title != "" {
 		post.Title = req.Title
@@ -1203,7 +1218,10 @@ func (s *Server) updatePost(c *gin.Context) {
 		post.Address = *req.Address
 	}
 	if req.Status != "" {
-		post.Status = req.Status
+		// 仅允许 draft -> pending/published，不允许 published -> draft
+		if !(post.Status == "published" && req.Status == "draft") {
+			post.Status = req.Status
+		}
 	}
 	post.GuildID = req.GuildID
 	post.StoryID = req.StoryID
@@ -1222,7 +1240,7 @@ func (s *Server) updatePost(c *gin.Context) {
 			post.Status = "pending"
 			post.ReviewStatus = "pending"
 		}
-	} else if req.Status == "draft" {
+	} else if post.Status == "draft" {
 		post.ReviewStatus = ""
 	}
 

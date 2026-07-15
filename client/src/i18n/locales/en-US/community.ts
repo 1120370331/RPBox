@@ -215,6 +215,12 @@ export default {
     saving: 'Saving...',
     saved: 'Saved to cloud',
     error: 'Cloud save failed',
+    resumeTitle: 'Resume unpublished draft?',
+    resumeMessage: 'An unpublished draft was found. Continue to edit it, or discard and start blank.',
+    resumeContinue: 'Continue',
+    resumeDiscard: 'Start blank',
+    invalidDraft: 'This draft is missing or already published',
+    cannotDraftPublished: 'Published posts cannot be reverted to drafts',
   },
   edit: {
     pageTitle: 'Edit Scroll',

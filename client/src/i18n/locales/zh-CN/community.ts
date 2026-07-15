@@ -215,6 +215,12 @@ export default {
     saving: '正在保存...',
     saved: '已保存到云端',
     error: '云端保存失败',
+    resumeTitle: '继续未发布草稿？',
+    resumeMessage: '检测到一份未发布草稿。继续将进入该草稿编辑；取消则丢弃本地记录并开始全新内容。',
+    resumeContinue: '继续编辑',
+    resumeDiscard: '新建空白',
+    invalidDraft: '该草稿不存在或已发布，已从列表移除',
+    cannotDraftPublished: '已发布帖不能回退为草稿，请直接保存修改',
   },
   edit: {
     pageTitle: '编辑卷轴',
