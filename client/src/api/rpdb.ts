@@ -213,6 +213,20 @@ export interface RPDBWorkPayload {
   change_summary?: string
 }
 
+export interface RPDBDraft {
+  id: number
+  author_id: number
+  work_id?: number
+  type: RPDBWorkType | ''
+  title: string
+  cover_image?: string
+  payload: Partial<RPDBWorkPayload>
+  base_version: number
+  status: 'active'
+  created_at: string
+  updated_at: string
+}
+
 export function listRPDBWorks(params: ListRPDBWorksParams = {}) {
   return request.get<{ works: RPDBWork[]; total: number; page: number; page_size: number }>('/rpdb/works', { params })
 }
@@ -247,6 +261,33 @@ export function updateRPDBWork(id: number, payload: Partial<RPDBWorkPayload>) {
 
 export function deleteRPDBWork(id: number) {
   return request.delete<void>(`/rpdb/works/${id}`)
+}
+
+export function listRPDBDrafts(params: { work_id?: number } = {}) {
+  return request.get<{ drafts: RPDBDraft[] }>('/rpdb/drafts', { params })
+}
+
+export function createRPDBDraft(payload?: Partial<RPDBWorkPayload>, workId?: number) {
+  return request.post<{ draft: RPDBDraft }>('/rpdb/drafts', {
+    work_id: workId,
+    payload: payload || undefined,
+  })
+}
+
+export function getRPDBDraft(id: number) {
+  return request.get<{ draft: RPDBDraft }>(`/rpdb/drafts/${id}`)
+}
+
+export function updateRPDBDraft(id: number, payload: Partial<RPDBWorkPayload>) {
+  return request.put<{ draft: RPDBDraft }>(`/rpdb/drafts/${id}`, { payload })
+}
+
+export function deleteRPDBDraft(id: number) {
+  return request.delete<void>(`/rpdb/drafts/${id}`)
+}
+
+export function publishRPDBDraft(id: number) {
+  return request.post<{ work: RPDBWork; revision?: unknown }>(`/rpdb/drafts/${id}/publish`)
 }
 
 export function likeRPDBWork(id: number) {

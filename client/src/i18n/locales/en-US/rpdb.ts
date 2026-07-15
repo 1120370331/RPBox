@@ -28,6 +28,7 @@ export default {
       editTitle: 'Edit content',
       description: 'Complete the content step by step. Unfinished changes are saved locally.',
       saved: 'Saved {time}',
+      drafts: 'Drafts',
     },
     basics: { title: 'Basic details', required: 'Required' },
     common: { optional: 'Optional' },
@@ -136,7 +137,16 @@ export default {
       removeCover: 'Remove cover', uploadPreview: 'Upload previews', addMorePreviews: 'Add more previews',
       internalLink: 'Internal link', addGuideStep: 'Add guide step', importRoute: 'Import route', deleteStep: 'Delete step',
       uploadHomeCode: 'Upload code file', remove: 'Remove', addItem: 'Add item', addFurniture: 'Add furniture',
-      uploadIcon: 'Upload icon', upload: 'Upload', clearIcon: 'Clear icon', internalPreview: 'Internal preview', publish: 'Publish',
+      uploadIcon: 'Upload icon', upload: 'Upload', clearIcon: 'Clear icon', internalPreview: 'Internal preview',
+      saveDraft: 'Save draft', newDraft: 'New draft', continueDraft: 'Continue latest', deleteDraft: 'Delete draft', publish: 'Publish',
+    },
+    drafts: {
+      title: 'Drafts', count: '{count} unpublished drafts', empty: 'No unpublished drafts',
+      untitled: 'Untitled draft', related: 'Linked to a published work', standalone: 'New content',
+      resumeTitle: 'Unpublished draft found',
+      resumeMessage: 'You have unpublished work. Continue the most recent draft or start a new blank one?',
+      relatedResumeMessage: 'This work already has unpublished drafts. Continue the latest one or create a fresh draft from the published version?',
+      deleteTitle: 'Delete draft', deleteMessage: 'Delete this draft permanently? The published work will not be changed.',
     },
     toast: {
       noWaypoints: 'No valid TomTom /way coordinates were found',
@@ -145,6 +155,7 @@ export default {
       uploadMissingUrl: 'The upload response did not include an image URL', previewsAdded: 'Added {count} preview images',
       furnitureIconUploaded: 'Furniture icon uploaded', homeCodeImported: 'Housing code imported',
       homeCodeReadFailed: 'Could not read the housing code', draftSaved: 'Draft autosaved', published: 'Published',
+      revisionSubmitted: 'Changes submitted for review',
     },
     options: {
       availability: {

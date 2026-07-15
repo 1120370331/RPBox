@@ -3,10 +3,14 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  createRPDBWork,
-  getRPDBWork,
+  createRPDBDraft,
+  deleteRPDBDraft,
+  getRPDBDraft,
+  listRPDBDrafts,
+  publishRPDBDraft,
   resolveRPDBMediaURL,
-  updateRPDBWork,
+  updateRPDBDraft,
+  type RPDBDraft,
   type RPDBGuideStep,
   type RPDBReference,
   type RPDBWorkPayload,
@@ -22,6 +26,7 @@ import TiptapEditor from '@/components/TiptapEditor.vue'
 import RPDBMediaGallery from '@/components/rpdb/RPDBMediaGallery.vue'
 import RPDBSelect from '@/components/rpdb/RPDBSelect.vue'
 import { RPDB_STYLE_PRESETS, isRPDBStyleTag, sortRPDBStyleTags } from '@/constants/rpdbStyles'
+import { dialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { formatTomTomCommand, hasTomTomCoordinates, parseTomTomCommands } from '@/utils/tomtom'
 
@@ -40,8 +45,12 @@ const autoSaveMessage = computed(() => {
   return t('rpdb.editor.autosave.editing')
 })
 const hasLoadedInitialData = ref(false)
-const autosavedWorkId = ref<number | null>(null)
+const currentDraftId = ref<number | null>(null)
+const editingWorkId = ref<number | null>(null)
+const drafts = ref<RPDBDraft[]>([])
+const showDraftBox = ref(false)
 let autoSaveTimer: ReturnType<typeof window.setTimeout> | null = null
+let draftSaveQueue: Promise<boolean> = Promise.resolve(true)
 const rpStyleTags = ref<Tag[]>([])
 const styleTagsLoading = ref(true)
 const guilds = ref<Guild[]>([])
@@ -58,38 +67,42 @@ const uploadingFurnitureIcon = ref<RPDBReference | null>(null)
 const customStyleTags = ref<string[]>([])
 const officialSelectedTags = ref<Tag[]>([])
 const titleTouched = ref(false)
-const form = reactive<RPDBWorkPayload>({
-  type: 'item_showcase',
-  title: '',
-  summary: '',
-  content: '',
-  cover_image: '',
-  rp_use_cases: '',
-  effect_description: '',
-  availability_status: 'available',
-  bind_type: 'no',
-  faction: 'neutral',
-  armor_type: '',
-  visibility: 'public',
-  guild_id: undefined,
-  guild_ids: [],
-  references: [{
-    external_type: 'item',
-    external_id: '',
-    name: '',
-    description: '',
-    acquisition_method: '',
-    source: '',
-    url: '',
-    is_primary: true,
-  }],
-  media: [],
-  transmog_slots: [],
-  guide_steps: [],
-  tag_ids: [],
-  is_public: true,
-  status: 'draft',
-})
+function createEmptyForm(): RPDBWorkPayload {
+  return {
+    type: 'item_showcase',
+    title: '',
+    summary: '',
+    content: '',
+    cover_image: '',
+    rp_use_cases: '',
+    effect_description: '',
+    availability_status: 'available',
+    bind_type: 'no',
+    faction: 'neutral',
+    armor_type: '',
+    visibility: 'public',
+    guild_id: undefined,
+    guild_ids: [],
+    references: [{
+      external_type: 'item',
+      external_id: '',
+      name: '',
+      description: '',
+      acquisition_method: '',
+      source: '',
+      url: '',
+      is_primary: true,
+    }],
+    media: [],
+    transmog_slots: [],
+    guide_steps: [],
+    tag_ids: [],
+    is_public: true,
+    status: 'draft',
+  }
+}
+
+const form = reactive<RPDBWorkPayload>(createEmptyForm())
 const guideCoordinateCount = computed(() => form.guide_steps?.filter(hasTomTomCoordinates).length || 0)
 const homeDetails = reactive({
   share_code: '',
@@ -173,9 +186,9 @@ const spaceTypeOptions = computed(() => ['indoor', 'outdoor', 'indoor_outdoor'].
   hint: t(`rpdb.editor.options.space.${value}.hint`),
 })))
 
-const isEdit = computed(() => Boolean(route.params.id))
+const isEdit = computed(() => Boolean(editingWorkId.value))
 const isGuideType = computed(() => form.type !== 'home_showcase')
-const localDraftKey = computed(() => `rpdb-editor-draft:${route.params.id || 'new'}`)
+const localDraftKey = computed(() => `rpdb-editor-draft:${currentDraftId.value || 'new'}`)
 const coverPreviewURL = computed(() => resolveRPDBMediaURL(form.cover_image))
 const previewMedia = computed(() => form.media?.find(item => item.type === 'image' || item.type === 'gif'))
 const previewImageURL = computed(() => resolveRPDBMediaURL(previewMedia.value?.url))
@@ -605,52 +618,154 @@ function saveLocalDraft() {
     homeDetails,
     transmogDetails,
     customStyleTags: customStyleTags.value,
-    autosavedWorkId: autosavedWorkId.value,
+    draftId: currentDraftId.value,
+    workId: editingWorkId.value,
     savedAt: new Date().toISOString(),
   }))
   lastSaved.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   autoSaveState.value = 'local'
 }
 
-function loadLocalDraft() {
-  if (isEdit.value) return
-  const raw = window.localStorage.getItem(localDraftKey.value)
-  if (!raw) return
+function resetEditorForm() {
+  Object.assign(form, createEmptyForm())
+  Object.assign(homeDetails, {
+    share_code: '',
+    visit_notes: '',
+    copy_status: 'copyable',
+    visit_status: 'friend_only',
+    space_type: 'indoor_outdoor',
+  })
+  transmogDetails.share_code = ''
+  customStyleTags.value = []
+  officialSelectedTags.value = []
+  titleTouched.value = false
+}
+
+function applyDraftPayload(draft: RPDBDraft) {
+  resetEditorForm()
+  Object.assign(form, draft.payload || {})
+  form.status = 'draft'
+  currentDraftId.value = draft.id
+  editingWorkId.value = draft.work_id || null
+  customStyleTags.value = draft.payload?.tag_names || []
+  if (form.type === 'home_showcase') {
+    Object.assign(homeDetails, form.extra || {})
+  } else if (form.type === 'transmog') {
+    transmogDetails.share_code = String(form.extra?.share_code || '')
+  }
+  ensureEditorDefaults()
+}
+
+async function refreshDrafts() {
   try {
-    const draft = JSON.parse(raw) as {
-      form?: Partial<RPDBWorkPayload>
-      homeDetails?: Partial<typeof homeDetails>
-      transmogDetails?: Partial<typeof transmogDetails>
-      customStyleTags?: string[]
-      autosavedWorkId?: number
-    }
-    if (draft.form) Object.assign(form, draft.form)
-    if (draft.homeDetails) Object.assign(homeDetails, draft.homeDetails)
-    if (draft.transmogDetails) Object.assign(transmogDetails, draft.transmogDetails)
-    customStyleTags.value = draft.customStyleTags || draft.form?.tag_names || []
-    autosavedWorkId.value = draft.autosavedWorkId || null
-    ensureEditorDefaults()
-  } catch {
-    window.localStorage.removeItem(localDraftKey.value)
+    const result = await listRPDBDrafts()
+    drafts.value = result.drafts || []
+  } catch (error) {
+    toast.error((error as Error).message)
   }
 }
 
-async function autoSaveDraft() {
+function formatDraftDate(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+async function openDraft(draftId: number, updateRoute = true) {
+  hasLoadedInitialData.value = false
+  try {
+    const { draft } = await getRPDBDraft(draftId)
+    applyDraftPayload(draft)
+    if (updateRoute) {
+      await router.replace({ name: 'rpdb-draft-edit', params: { draftId: draft.id } })
+    }
+  } catch (error) {
+    toast.error((error as Error).message)
+  } finally {
+    hasLoadedInitialData.value = true
+    showDraftBox.value = false
+  }
+}
+
+async function startNewDraft(workId?: number) {
+  hasLoadedInitialData.value = false
+  resetEditorForm()
+  currentDraftId.value = null
+  editingWorkId.value = workId || null
+  window.localStorage.removeItem('rpdb-editor-draft:new')
+  try {
+    if (workId) {
+      const { draft } = await createRPDBDraft(undefined, workId)
+      applyDraftPayload(draft)
+      drafts.value = [draft, ...drafts.value.filter(item => item.id !== draft.id)]
+      await router.replace({ name: 'rpdb-draft-edit', params: { draftId: draft.id } })
+    } else {
+      await router.replace({ name: 'rpdb-create' })
+    }
+  } catch (error) {
+    toast.error((error as Error).message)
+  } finally {
+    hasLoadedInitialData.value = true
+    showDraftBox.value = false
+  }
+}
+
+async function removeDraft(draft: RPDBDraft) {
+  const confirmed = await dialog.confirm({
+    title: t('rpdb.editor.drafts.deleteTitle'),
+    message: t('rpdb.editor.drafts.deleteMessage'),
+    type: 'warning',
+    confirmText: t('rpdb.editor.action.deleteDraft'),
+  })
+  if (!confirmed) return
+  try {
+    await deleteRPDBDraft(draft.id)
+    window.localStorage.removeItem(`rpdb-editor-draft:${draft.id}`)
+    drafts.value = drafts.value.filter(item => item.id !== draft.id)
+    if (currentDraftId.value === draft.id) {
+      await startNewDraft()
+    }
+  } catch (error) {
+    toast.error((error as Error).message)
+  }
+}
+
+async function persistDraft(showSuccess = false) {
   saveLocalDraft()
-  if (!form.title.trim() || !window.localStorage.getItem('token')) return
   autoSaveState.value = 'saving'
   try {
     const payload = buildDraftPayload('draft')
-    const targetId = Number(route.params.id) || autosavedWorkId.value
-    const result = targetId
-      ? await updateRPDBWork(targetId, payload)
-      : await createRPDBWork(payload)
-    autosavedWorkId.value = result.work?.id || targetId || null
+    const previousLocalKey = localDraftKey.value
+    const result = currentDraftId.value
+      ? await updateRPDBDraft(currentDraftId.value, payload)
+      : await createRPDBDraft(payload, editingWorkId.value || undefined)
+    currentDraftId.value = result.draft.id
+    editingWorkId.value = result.draft.work_id || null
+    drafts.value = [result.draft, ...drafts.value.filter(item => item.id !== result.draft.id)]
+    if (previousLocalKey !== localDraftKey.value) {
+      window.localStorage.removeItem(previousLocalKey)
+      await router.replace({ name: 'rpdb-draft-edit', params: { draftId: result.draft.id } })
+    }
     saveLocalDraft()
     autoSaveState.value = 'saved'
-  } catch {
+    if (showSuccess) toast.success(t('rpdb.editor.toast.draftSaved'))
+    return true
+  } catch (error) {
     autoSaveState.value = 'error'
+    if (showSuccess) toast.error((error as Error).message)
+    return false
   }
+}
+
+function autoSaveDraft(showSuccess = false) {
+  draftSaveQueue = draftSaveQueue.then(
+    () => persistDraft(showSuccess),
+    () => persistDraft(showSuccess),
+  )
+  return draftSaveQueue
 }
 
 function scheduleAutoSave() {
@@ -752,6 +867,14 @@ function ensureEditorDefaults() {
 }
 
 async function save(status: 'draft' | 'published') {
+  if (autoSaveTimer) {
+    window.clearTimeout(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  if (status === 'draft') {
+    await autoSaveDraft(true)
+    return
+  }
   if (!form.visibility) {
     toast.error(t('rpdb.editor.validation.visibilityRequired'))
     scrollToSection('section-basics')
@@ -771,18 +894,19 @@ async function save(status: 'draft' | 'published') {
   }
   saving.value = true
   try {
-    const payload = buildDraftPayload(status)
-    const targetId = Number(route.params.id) || autosavedWorkId.value
-    const result = targetId
-      ? await updateRPDBWork(targetId, payload)
-      : await createRPDBWork(payload)
-    lastSaved.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    autosavedWorkId.value = result.work?.id || targetId || null
-    saveLocalDraft()
-    toast.success(status === 'draft' ? t('rpdb.editor.toast.draftSaved') : t('rpdb.editor.toast.published'))
-    if (status === 'published') {
-      const id = result.work?.id || Number(route.params.id)
-      await router.push(id ? `/rpdb/${id}` : '/rpdb')
+    const saved = await autoSaveDraft()
+    if (!saved || !currentDraftId.value) return
+    const publishedDraftId = currentDraftId.value
+    const result = await publishRPDBDraft(publishedDraftId)
+    window.localStorage.removeItem(`rpdb-editor-draft:${publishedDraftId}`)
+    drafts.value = drafts.value.filter(item => item.id !== publishedDraftId)
+    currentDraftId.value = null
+    toast.success(result.revision ? t('rpdb.editor.toast.revisionSubmitted') : t('rpdb.editor.toast.published'))
+    const id = result.work?.id
+    if (id) {
+      await router.push(`/rpdb/${id}`)
+    } else {
+      await router.push('/rpdb')
     }
   } catch (error) {
     toast.error((error as Error).message)
@@ -798,57 +922,46 @@ function preview() {
 }
 
 onMounted(async () => {
-  loadLocalDraft()
   await Promise.all([loadStyleTags(), loadGuildOptions()])
-  if (isEdit.value) {
-    try {
-      const { work } = await getRPDBWork(Number(route.params.id))
-      Object.assign(form, {
-        type: work.type,
-        title: work.title,
-        summary: work.summary,
-        content: work.content,
-        content_type: work.content_type,
-        cover_image: work.cover_image,
-        rp_use_cases: work.rp_use_cases,
-        effect_description: work.effect_description,
-        availability_status: work.availability_status,
-        bind_type: work.bind_type,
-        faction: work.faction,
-        armor_type: work.armor_type,
-        visibility: work.visibility || (work.is_public ? 'public' : 'private'),
-        guild_id: work.guild_id,
-        guild_ids: work.guild_ids?.length ? work.guild_ids : work.guild_id ? [work.guild_id] : [],
-        references: work.references || [],
-        media: work.media || [],
-        transmog_slots: work.transmog_slots || [],
-        guide_steps: work.guide_steps || [],
-        tag_ids: work.tags?.map(tag => tag.id) || [],
+  await refreshDrafts()
+
+  const routeDraftId = Number(route.params.draftId)
+  if (routeDraftId) {
+    await openDraft(routeDraftId, false)
+    return
+  }
+
+  const routeWorkId = Number(route.params.id)
+  if (routeWorkId) {
+    const relatedDrafts = drafts.value.filter(draft => draft.work_id === routeWorkId)
+    if (relatedDrafts.length) {
+      const resume = await dialog.confirm({
+        title: t('rpdb.editor.drafts.resumeTitle'),
+        message: t('rpdb.editor.drafts.relatedResumeMessage'),
+        type: 'warning',
+        confirmText: t('rpdb.editor.action.continueDraft'),
+        cancelText: t('rpdb.editor.action.newDraft'),
       })
-      officialSelectedTags.value = work.tags || []
-      if (work.type === 'home_showcase') {
-        try {
-          Object.assign(homeDetails, JSON.parse(work.extra || '{}'))
-        } catch {
-          Object.assign(homeDetails, {
-            share_code: '',
-            visit_notes: '',
-            copy_status: 'copyable',
-            visit_status: 'open',
-            space_type: 'indoor',
-          })
-        }
-      } else if (work.type === 'transmog') {
-        try {
-          const details = JSON.parse(work.extra || '{}') as { share_code?: unknown }
-          transmogDetails.share_code = String(details.share_code || '')
-        } catch {
-          transmogDetails.share_code = ''
-        }
+      if (resume) {
+        await openDraft(relatedDrafts[0].id)
+        return
       }
-      ensureEditorDefaults()
-    } catch (error) {
-      toast.error((error as Error).message)
+    }
+    await startNewDraft(routeWorkId)
+    return
+  }
+
+  if (drafts.value.length) {
+    const resume = await dialog.confirm({
+      title: t('rpdb.editor.drafts.resumeTitle'),
+      message: t('rpdb.editor.drafts.resumeMessage'),
+      type: 'warning',
+      confirmText: t('rpdb.editor.action.continueDraft'),
+      cancelText: t('rpdb.editor.action.newDraft'),
+    })
+    if (resume) {
+      await openDraft(drafts.value[0].id)
+      return
     }
   }
   ensureEditorDefaults()
@@ -873,6 +986,17 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
       </div>
       <div class="heading-actions">
         <span v-if="lastSaved" class="saved-status"><i class="ri-checkbox-circle-fill"></i>{{ t('rpdb.editor.header.saved', { time: lastSaved }) }}</span>
+        <button
+          type="button"
+          class="draft-box-button"
+          data-testid="rpdb-draft-box-button"
+          :aria-label="t('rpdb.editor.header.drafts')"
+          :title="t('rpdb.editor.header.drafts')"
+          @click="showDraftBox = true"
+        >
+          <i class="ri-draft-line"></i>
+          <b v-if="drafts.length">{{ drafts.length }}</b>
+        </button>
         <button type="button" :aria-label="t('rpdb.editor.action.close')" :title="t('rpdb.editor.action.close')" @click="router.push('/rpdb')"><i class="ri-close-line"></i></button>
       </div>
     </header>
@@ -1383,7 +1507,34 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
         <span>{{ autoSaveMessage }}</span>
       </div>
       <button type="button" :title="t('rpdb.editor.action.internalPreview')" @click="preview"><i class="ri-eye-line"></i><span>{{ t('rpdb.editor.action.internalPreview') }}</span></button>
+      <button type="button" data-testid="save-rpdb-draft" :disabled="saving" @click="save('draft')"><i class="ri-save-3-line"></i><span>{{ t('rpdb.editor.action.saveDraft') }}</span></button>
       <button type="button" class="primary" data-testid="publish-work" :disabled="saving" @click="save('published')"><i class="ri-send-plane-2-line"></i><span>{{ saving ? t('rpdb.editor.status.publishing') : t('rpdb.editor.action.publish') }}</span></button>
+    </div>
+
+    <div v-if="showDraftBox" class="draft-box-mask" data-testid="rpdb-draft-box" @click.self="showDraftBox = false">
+      <section class="draft-box-panel" role="dialog" aria-modal="true" :aria-label="t('rpdb.editor.drafts.title')">
+        <header>
+          <div>
+            <h2>{{ t('rpdb.editor.drafts.title') }}</h2>
+            <p>{{ t('rpdb.editor.drafts.count', { count: drafts.length }) }}</p>
+          </div>
+          <button type="button" :aria-label="t('rpdb.editor.action.close')" @click="showDraftBox = false"><i class="ri-close-line"></i></button>
+        </header>
+        <button type="button" class="draft-box-new" @click="startNewDraft()"><i class="ri-add-line"></i>{{ t('rpdb.editor.action.newDraft') }}</button>
+        <div v-if="drafts.length" class="draft-box-list">
+          <article v-for="draft in drafts" :key="draft.id" :class="{ active: draft.id === currentDraftId }">
+            <button type="button" class="draft-box-main" @click="openDraft(draft.id)">
+              <span>
+                <b>{{ draft.title || t('rpdb.editor.drafts.untitled') }}</b>
+                <small>{{ draft.work_id ? t('rpdb.editor.drafts.related') : t('rpdb.editor.drafts.standalone') }} · {{ formatDraftDate(draft.updated_at) }}</small>
+              </span>
+              <i class="ri-arrow-right-s-line"></i>
+            </button>
+            <button type="button" class="draft-box-delete" :aria-label="t('rpdb.editor.action.deleteDraft')" @click="removeDraft(draft)"><i class="ri-delete-bin-line"></i></button>
+          </article>
+        </div>
+        <div v-else class="draft-box-empty"><i class="ri-draft-line"></i>{{ t('rpdb.editor.drafts.empty') }}</div>
+      </section>
     </div>
 
     <PostQuickJump v-model="quickJumpOpen" :on-insert="handleQuickInsert" />
@@ -1400,7 +1551,13 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
 .editor-heading p{margin:0;color:var(--color-text-secondary)}
 .heading-actions{display:flex;align-items:center;gap:10px}
 .heading-actions>button{display:grid;width:36px;height:36px;place-items:center;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-surface);color:var(--color-text-main)}
+.draft-box-button{position:relative}.draft-box-button b{position:absolute;top:-6px;right:-6px;display:grid;min-width:18px;height:18px;place-items:center;padding:0 4px;border:2px solid var(--color-main-bg);border-radius:9px;background:var(--color-accent);color:#fff;font-size:9px}
 .saved-status{display:inline-flex;align-items:center;gap:6px;color:var(--color-success);font-size:12px}
+.draft-box-mask{position:fixed;z-index:1200;inset:0;display:grid;place-items:center;padding:20px;background:rgba(18,16,14,.58)}
+.draft-box-panel{width:min(620px,100%);max-height:min(720px,86vh);overflow:hidden;border:1px solid var(--rpdb-line);border-radius:8px;background:var(--color-panel-bg);box-shadow:0 22px 70px rgba(0,0,0,.3)}
+.draft-box-panel>header{display:flex;align-items:center;justify-content:space-between;padding:18px;border-bottom:1px solid var(--rpdb-line)}.draft-box-panel h2{margin:0;font-size:20px}.draft-box-panel p{margin:4px 0 0;color:var(--color-text-secondary);font-size:12px}.draft-box-panel>header button{display:grid;width:34px;height:34px;place-items:center;border:0;background:transparent;color:var(--color-text-main);font-size:20px}
+.draft-box-new{display:flex;width:calc(100% - 36px);min-height:42px;align-items:center;justify-content:center;gap:6px;margin:14px 18px;border:1px dashed var(--color-accent);border-radius:6px;background:var(--rpdb-soft);color:var(--color-accent);font-weight:800}
+.draft-box-list{max-height:520px;overflow:auto;border-top:1px solid var(--rpdb-line)}.draft-box-list article{display:grid;grid-template-columns:minmax(0,1fr) 44px;border-bottom:1px solid var(--rpdb-line)}.draft-box-list article.active{background:var(--rpdb-soft)}.draft-box-main{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:0;background:transparent;color:var(--color-text-main);text-align:left}.draft-box-main span{display:grid;min-width:0;gap:5px}.draft-box-main b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.draft-box-main small{color:var(--color-text-secondary)}.draft-box-main>i{font-size:20px}.draft-box-delete{border:0;border-left:1px solid var(--rpdb-line);background:transparent;color:var(--color-text-secondary);font-size:16px}.draft-box-delete:hover{color:var(--color-danger,#b83232)}.draft-box-empty{display:grid;min-height:180px;place-items:center;align-content:center;gap:10px;color:var(--color-text-secondary)}.draft-box-empty i{font-size:32px}
 .media-strip{display:grid;grid-template-columns:220px minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px;padding:16px;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .media-strip__heading{display:flex;min-width:0;flex-direction:column;justify-content:center}
 .media-strip__heading span{color:var(--color-accent);font-size:11px;font-weight:800}

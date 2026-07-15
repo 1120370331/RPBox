@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/pkg/auth"
@@ -34,6 +35,13 @@ type rpdbWorkDetail struct {
 	Tags          []model.Tag              `json:"tags"`
 }
 
+type rpdbWorkListResponse struct {
+	Works    []rpdbWorkCard `json:"works"`
+	Total    int64          `json:"total"`
+	Page     int            `json:"page"`
+	PageSize int            `json:"page_size"`
+}
+
 func (s *Server) listRPDBWorks(c *gin.Context) {
 	page := parsePositiveInt(c.Query("page"), 1)
 	pageSize := parsePositiveInt(c.Query("page_size"), 12)
@@ -48,6 +56,18 @@ func (s *Server) listRPDBWorks(c *gin.Context) {
 			true,
 		)
 	viewerID := optionalRPDBUserID(c)
+	var cacheKey string
+	if viewerID == 0 && s.cache != nil {
+		if version, err := s.cache.Version(c.Request.Context(), rpdbListCacheName); err == nil {
+			filterKey := "page=" + strconv.Itoa(page) + "&page_size=" + strconv.Itoa(pageSize) + "&" + c.Request.URL.RawQuery
+			cacheKey = cache.VersionedKey(rpdbListCacheName, version, cache.HashKey(filterKey))
+			var cached rpdbWorkListResponse
+			if err := s.cache.Get(c.Request.Context(), cacheKey, &cached); err == nil {
+				c.JSON(http.StatusOK, cached)
+				return
+			}
+		}
+	}
 	if hiddenIDs, err := hiddenContentIDs(viewerID, reportTargetRPDBWork); err == nil && len(hiddenIDs) > 0 {
 		base = base.Where("id NOT IN ?", hiddenIDs)
 	}
@@ -77,12 +97,11 @@ func (s *Server) listRPDBWorks(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"works":     cards,
-		"total":     total,
-		"page":      page,
-		"page_size": pageSize,
-	})
+	response := rpdbWorkListResponse{Works: cards, Total: total, Page: page, PageSize: pageSize}
+	if cacheKey != "" {
+		_ = s.cache.Set(c.Request.Context(), cacheKey, response, cache.TTL["rpdb:list"])
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (s *Server) getRPDBWork(c *gin.Context) {
@@ -184,8 +203,8 @@ func (s *Server) listRPDBHotWorks(c *gin.Context) {
 	}
 
 	type rankedWork struct {
-		ID           uint
-		RecentViews  int64
+		ID          uint
+		RecentViews int64
 	}
 	var ranked []rankedWork
 	if err := base.

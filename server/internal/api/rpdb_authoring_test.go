@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/rpbox/server/internal/database"
@@ -18,6 +19,7 @@ func newRPDBAuthoringTestServer(t *testing.T) (*Server, model.User, string) {
 		&model.User{},
 		&model.Tag{},
 		&model.RPDBWork{},
+		&model.RPDBDraft{},
 		&model.RPDBReference{},
 		&model.RPDBMedia{},
 		&model.RPDBGuideStep{},
@@ -147,8 +149,8 @@ func TestRPDBAuthorCannotSelectUnjoinedGuild(t *testing.T) {
 	}
 }
 
-func TestRPDBAuthoringCreatesItemDraftWithAcquisitionGuide(t *testing.T) {
-	server, user, token := newRPDBAuthoringTestServer(t)
+func TestRPDBAuthoringCreatesSeparateItemDraftWithAcquisitionGuide(t *testing.T) {
+	server, _, token := newRPDBAuthoringTestServer(t)
 
 	payload := map[string]interface{}{
 		"type":               model.RPDBWorkTypeItemShowcase,
@@ -169,29 +171,28 @@ func TestRPDBAuthoringCreatesItemDraftWithAcquisitionGuide(t *testing.T) {
 		},
 	}
 
-	resp := performRequest(server.router, http.MethodPost, "/api/v1/rpdb/works", payload, token)
+	resp := performRequest(server.router, http.MethodPost, "/api/v1/rpdb/drafts", map[string]interface{}{"payload": payload}, token)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d body=%s", resp.Code, resp.Body.String())
 	}
 
 	var response struct {
-		Work model.RPDBWork `json:"work"`
+		Draft struct {
+			ID      uint                   `json:"id"`
+			Payload map[string]interface{} `json:"payload"`
+		} `json:"draft"`
 	}
 	if err := json.Unmarshal(resp.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Work.AuthorID != user.ID || response.Work.Status != model.RPDBStatusDraft || response.Work.ReviewStatus != model.RPDBReviewNone {
-		t.Fatalf("unexpected work state: %#v", response.Work)
+	if response.Draft.ID == 0 || response.Draft.Payload["title"] != "仪式蜡烛" {
+		t.Fatalf("unexpected draft response: %#v", response.Draft)
 	}
 
-	var references int64
-	var media int64
-	var steps int64
-	database.DB.Model(&model.RPDBReference{}).Where("work_id = ?", response.Work.ID).Count(&references)
-	database.DB.Model(&model.RPDBMedia{}).Where("work_id = ?", response.Work.ID).Count(&media)
-	database.DB.Model(&model.RPDBGuideStep{}).Where("work_id = ?", response.Work.ID).Count(&steps)
-	if references != 1 || media != 1 || steps != 1 {
-		t.Fatalf("expected one reference, media item, and step, got references=%d media=%d steps=%d", references, media, steps)
+	var workCount int64
+	database.DB.Model(&model.RPDBWork{}).Count(&workCount)
+	if workCount != 0 {
+		t.Fatalf("saving a draft must not create or update formal works, got %d works", workCount)
 	}
 }
 
@@ -276,7 +277,7 @@ func TestRPDBAuthoringCreatesHomeShowcase(t *testing.T) {
 	}
 }
 
-func TestRPDBAuthoringPublishedEditCreatesRevision(t *testing.T) {
+func TestRPDBAuthoringPublishedEditRequiresSeparateDraft(t *testing.T) {
 	server, user, token := newRPDBAuthoringTestServer(t)
 
 	work := model.RPDBWork{
@@ -299,8 +300,8 @@ func TestRPDBAuthoringPublishedEditCreatesRevision(t *testing.T) {
 		map[string]interface{}{"title": "修订后的标题", "change_summary": "更新了标题"},
 		token,
 	)
-	if resp.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d body=%s", resp.Code, resp.Body.String())
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", resp.Code, resp.Body.String())
 	}
 
 	var stored model.RPDBWork
@@ -311,12 +312,137 @@ func TestRPDBAuthoringPublishedEditCreatesRevision(t *testing.T) {
 		t.Fatalf("published work was overwritten: %q", stored.Title)
 	}
 
+	var revisionCount int64
+	database.DB.Model(&model.RPDBRevision{}).Where("work_id = ?", work.ID).Count(&revisionCount)
+	if revisionCount != 0 {
+		t.Fatalf("direct edit must not create a revision, got %d", revisionCount)
+	}
+}
+
+func TestRPDBPublishingRelatedDraftCreatesRevisionWithoutOverwritingWork(t *testing.T) {
+	server, user, token := newRPDBAuthoringTestServer(t)
+	work := model.RPDBWork{
+		AuthorID:     user.ID,
+		Type:         model.RPDBWorkTypeItemShowcase,
+		Title:        "线上标题",
+		Status:       model.RPDBStatusPublished,
+		ReviewStatus: model.RPDBReviewApproved,
+		IsPublic:     true,
+		Visibility:   model.RPDBVisibilityPublic,
+		Version:      4,
+	}
+	if err := database.DB.Create(&work).Error; err != nil {
+		t.Fatalf("create work: %v", err)
+	}
+
+	createResp := performRequest(
+		server.router,
+		http.MethodPost,
+		"/api/v1/rpdb/drafts",
+		map[string]interface{}{"work_id": work.ID},
+		token,
+	)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create draft: expected 201, got %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var created struct {
+		Draft model.RPDBDraft `json:"draft"`
+	}
+	if err := json.Unmarshal(createResp.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode draft: %v", err)
+	}
+	updateResp := performRequest(
+		server.router,
+		http.MethodPut,
+		"/api/v1/rpdb/drafts/"+strconv.FormatUint(uint64(created.Draft.ID), 10),
+		map[string]interface{}{
+			"payload": map[string]interface{}{
+				"type":       model.RPDBWorkTypeItemShowcase,
+				"title":      "草稿中的新标题",
+				"visibility": model.RPDBVisibilityPublic,
+				"is_public":  true,
+			},
+		},
+		token,
+	)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update draft: expected 200, got %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	var unchanged model.RPDBWork
+	if err := database.DB.First(&unchanged, work.ID).Error; err != nil {
+		t.Fatalf("load unchanged work: %v", err)
+	}
+	if unchanged.Title != "线上标题" {
+		t.Fatalf("saving the related draft changed the formal work: %q", unchanged.Title)
+	}
+
+	publishResp := performRequest(
+		server.router,
+		http.MethodPost,
+		"/api/v1/rpdb/drafts/"+strconv.FormatUint(uint64(created.Draft.ID), 10)+"/publish",
+		nil,
+		token,
+	)
+	if publishResp.Code != http.StatusAccepted {
+		t.Fatalf("publish draft: expected 202, got %d body=%s", publishResp.Code, publishResp.Body.String())
+	}
+
+	var stored model.RPDBWork
+	if err := database.DB.First(&stored, work.ID).Error; err != nil {
+		t.Fatalf("load work: %v", err)
+	}
+	if stored.Title != "线上标题" {
+		t.Fatalf("draft publication overwrote the formal work before review: %q", stored.Title)
+	}
 	var revision model.RPDBRevision
 	if err := database.DB.Where("work_id = ?", work.ID).First(&revision).Error; err != nil {
 		t.Fatalf("load revision: %v", err)
 	}
-	if revision.BaseVersion != 3 || revision.ProposerID != user.ID || revision.Status != model.RPDBReviewPending {
+	if revision.BaseVersion != 4 || !strings.Contains(revision.Payload, "草稿中的新标题") {
 		t.Fatalf("unexpected revision: %#v", revision)
+	}
+	var draftCount int64
+	database.DB.Model(&model.RPDBDraft{}).Where("id = ?", created.Draft.ID).Count(&draftCount)
+	if draftCount != 0 {
+		t.Fatalf("published draft should leave the active draft box")
+	}
+}
+
+func TestRPDBDraftBoxMigratesLegacyDraftWorksWithoutLosingContent(t *testing.T) {
+	server, user, token := newRPDBAuthoringTestServer(t)
+	legacy := model.RPDBWork{
+		AuthorID:     user.ID,
+		Type:         model.RPDBWorkTypeHomeShowcase,
+		Title:        "旧版家宅草稿",
+		Content:      "<p>不能丢失的旧正文</p>",
+		Extra:        `{"share_code":"HOME-LEGACY"}`,
+		Status:       model.RPDBStatusDraft,
+		ReviewStatus: model.RPDBReviewNone,
+		Version:      1,
+	}
+	if err := database.DB.Create(&legacy).Error; err != nil {
+		t.Fatalf("create legacy draft work: %v", err)
+	}
+	if err := database.DB.Create(&model.RPDBMedia{
+		WorkID: legacy.ID, Type: "image", URL: "/uploads/images/legacy.jpg", Meta: "{}",
+		ReviewStatus: model.RPDBReviewPending,
+	}).Error; err != nil {
+		t.Fatalf("create legacy media: %v", err)
+	}
+
+	resp := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/drafts", nil, token)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("list drafts: expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "旧版家宅草稿") ||
+		!strings.Contains(resp.Body.String(), "不能丢失的旧正文") ||
+		!strings.Contains(resp.Body.String(), "legacy.jpg") {
+		t.Fatalf("legacy draft content was not preserved: %s", resp.Body.String())
+	}
+	var workCount int64
+	database.DB.Model(&model.RPDBWork{}).Where("id = ?", legacy.ID).Count(&workCount)
+	if workCount != 0 {
+		t.Fatalf("legacy draft work should be moved out of the formal works table")
 	}
 }
 

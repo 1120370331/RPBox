@@ -31,6 +31,8 @@ const (
 	RPDBVisibilityPublic  = "public"
 	RPDBVisibilityGuild   = "guild"
 	RPDBVisibilityPrivate = "private"
+
+	RPDBDraftStatusActive = "active"
 )
 
 // RPDBWork is a player-authored RP showcase, transmog, or guide.
@@ -87,6 +89,27 @@ type RPDBWork struct {
 }
 
 func (RPDBWork) TableName() string { return "rpdb_works" }
+
+// RPDBDraft stores an unpublished author-owned snapshot. WorkID is optional:
+// nil means a new work, while a value means the draft proposes changes to an
+// existing formal work.
+type RPDBDraft struct {
+	ID       uint  `gorm:"primarykey" json:"id"`
+	AuthorID uint  `gorm:"index;not null" json:"author_id"`
+	WorkID   *uint `gorm:"index" json:"work_id,omitempty"`
+
+	Type        string `gorm:"size:24;index" json:"type"`
+	Title       string `gorm:"size:256;index" json:"title"`
+	CoverImage  string `gorm:"type:text" json:"cover_image"`
+	Payload     string `gorm:"type:json;not null" json:"-"`
+	BaseVersion int    `gorm:"default:0" json:"base_version"`
+	Status      string `gorm:"size:20;default:active;index" json:"status"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (RPDBDraft) TableName() string { return "rpdb_drafts" }
 
 // RPDBReference links a work to a real game object or external database.
 type RPDBReference struct {

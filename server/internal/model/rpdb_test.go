@@ -14,6 +14,7 @@ func TestRPDBTableNames(t *testing.T) {
 		want string
 	}{
 		{"work", (RPDBWork{}).TableName(), "rpdb_works"},
+		{"draft", (RPDBDraft{}).TableName(), "rpdb_drafts"},
 		{"reference", (RPDBReference{}).TableName(), "rpdb_references"},
 		{"media", (RPDBMedia{}).TableName(), "rpdb_media"},
 		{"transmog slot", (RPDBTransmogSlot{}).TableName(), "rpdb_transmog_slots"},

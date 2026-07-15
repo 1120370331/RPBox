@@ -154,6 +154,7 @@ func (s *Server) addRPDBWorkToDefaultList(c *gin.Context) {
 	if created {
 		status = http.StatusCreated
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	c.JSON(status, gin.H{"list": list, "entry": entry})
 }
 
@@ -255,6 +256,7 @@ func (s *Server) removeRPDBListEntry(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "移除清单条目失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	c.Status(http.StatusNoContent)
 }
 
