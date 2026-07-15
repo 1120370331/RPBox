@@ -61,6 +61,7 @@ func (s *Server) setupRoutes() {
 
 		// RP 数据库公开浏览
 		v1.GET("/rpdb/works", s.listRPDBWorks)
+		v1.GET("/rpdb/works/hot", s.listRPDBHotWorks)
 		v1.GET("/rpdb/works/:id/preview", s.getRPDBWorkPreview)
 		v1.GET("/rpdb/works/:id", s.getRPDBWork)
 		v1.GET("/rpdb/works/:id/comments", s.listRPDBComments)

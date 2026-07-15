@@ -217,6 +217,10 @@ export function listRPDBWorks(params: ListRPDBWorksParams = {}) {
   return request.get<{ works: RPDBWork[]; total: number; page: number; page_size: number }>('/rpdb/works', { params })
 }
 
+export function listRPDBHotWorks(params: { type?: RPDBWorkType | ''; limit?: number } = {}) {
+  return request.get<{ works: RPDBWork[]; window_days: number; limit: number }>('/rpdb/works/hot', { params })
+}
+
 export function getRPDBWork(id: number) {
   return request.get<{ work: RPDBWork }>(`/rpdb/works/${id}`)
 }

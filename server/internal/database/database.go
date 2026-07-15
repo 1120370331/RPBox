@@ -143,6 +143,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.RPDBLike{},
 		&model.RPDBFavorite{},
 		&model.RPDBView{},
+		&model.RPDBViewEvent{},
 		&model.RPDBComment{},
 		&model.RPDBCommentLike{},
 		&model.RPDBList{},

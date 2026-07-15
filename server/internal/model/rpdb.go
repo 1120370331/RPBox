@@ -218,6 +218,18 @@ type RPDBView struct {
 
 func (RPDBView) TableName() string { return "rpdb_views" }
 
+// RPDBViewEvent records daily unique detail-page views for heat ranking.
+// Each logged-in user contributes at most once per work per calendar day.
+type RPDBViewEvent struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	WorkID    uint      `gorm:"uniqueIndex:idx_rpdb_view_event_daily,priority:1;index:idx_rpdb_view_event_work_time,priority:1;not null" json:"work_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_rpdb_view_event_daily,priority:2;index;not null" json:"user_id"`
+	ViewDate  string    `gorm:"size:10;uniqueIndex:idx_rpdb_view_event_daily,priority:3;not null" json:"view_date"` // YYYY-MM-DD local date
+	CreatedAt time.Time `gorm:"index:idx_rpdb_view_event_work_time,priority:2" json:"created_at"`
+}
+
+func (RPDBViewEvent) TableName() string { return "rpdb_view_events" }
+
 // RPDBComment supports threaded discussion beneath a work.
 type RPDBComment struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
