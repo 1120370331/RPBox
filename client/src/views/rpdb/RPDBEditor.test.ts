@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import RPDBEditor from './RPDBEditor.vue'
-import { createRPDBDraft } from '@/api/rpdb'
+import { createRPDBDraft, getRPDBDraft } from '@/api/rpdb'
 import { uploadImage } from '@/api/item'
 import i18n from '@/i18n'
 
@@ -65,7 +65,7 @@ vi.mock('@/api/guild', () => ({
   }),
 }))
 
-function mountEditor() {
+function mountEditor(path = '/') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -73,7 +73,7 @@ function mountEditor() {
       { path: '/drafts/:draftId/edit', name: 'rpdb-draft-edit', component: RPDBEditor },
     ],
   })
-  return router.push('/').then(() => mount(RPDBEditor, {
+  return router.push(path).then(() => mount(RPDBEditor, {
     global: {
       plugins: [createPinia(), router, i18n],
       stubs: {
@@ -151,6 +151,41 @@ describe('RPDBEditor', () => {
     expect(draftBox.exists()).toBe(true)
     expect(draftBox.text()).toContain('未发布的独立草稿')
     expect(draftBox.text()).toContain('新内容')
+  })
+
+  it('keeps an associated transmog draft in the formal work type and normalizes legacy null collections', async () => {
+    vi.mocked(getRPDBDraft).mockResolvedValueOnce({
+      draft: {
+        id: 42,
+        author_id: 1,
+        work_id: 7,
+        type: 'transmog',
+        title: '银月巡礼幻化',
+        payload: {
+          type: 'home_showcase',
+          title: '银月巡礼幻化',
+          references: null as never,
+          media: null as never,
+          transmog_slots: null as never,
+          guide_steps: null as never,
+          tag_ids: null as never,
+          guild_ids: null as never,
+        },
+        base_version: 3,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    })
+
+    const wrapper = await mountEditor('/drafts/42/edit')
+
+    await vi.waitFor(() => expect(getRPDBDraft).toHaveBeenCalledWith(42))
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="transmog-editor-fields"]').exists()).toBe(true))
+    expect(wrapper.find('[data-testid="transmog-editor-fields"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-editor-fields"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid="transmog-slot-panel"]').length).toBeGreaterThan(0)
+    expect(wrapper.findAll('.type-cards button')[2].attributes('disabled')).toBeDefined()
   })
 
   it('places required visibility above content type and defaults to public', async () => {
