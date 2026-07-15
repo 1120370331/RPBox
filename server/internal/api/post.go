@@ -542,9 +542,19 @@ func (s *Server) createPost(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
 			return
 		}
-		if req.Status == "published" && req.EventType == "guild" && req.GuildID == nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
-			return
+		if req.Status == "published" {
+			if req.EventType == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "请选择活动类型"})
+				return
+			}
+			if req.EventStartTime == nil || strings.TrimSpace(*req.EventStartTime) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "请填写活动开始时间"})
+				return
+			}
+			if req.EventType == "guild" && req.GuildID == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
+				return
+			}
 		}
 	} else {
 		req.EventType = ""
@@ -1011,17 +1021,6 @@ func (s *Server) updatePost(c *gin.Context) {
 		effectiveGuildID = req.GuildID
 	}
 
-	if effectiveCategory == "event" {
-		if effectiveEventType != "" && effectiveEventType != "server" && effectiveEventType != "guild" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
-			return
-		}
-		if effectiveEventType == "guild" && effectiveGuildID == nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
-			return
-		}
-	}
-
 	eventStartProvided := req.EventStartTime != nil
 	var parsedEventStart *time.Time
 	if eventStartProvided {
@@ -1042,6 +1041,31 @@ func (s *Server) updatePost(c *gin.Context) {
 			return
 		}
 		parsedEventEnd = parsed
+	}
+
+	if effectiveCategory == "event" {
+		if effectiveEventType != "" && effectiveEventType != "server" && effectiveEventType != "guild" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "活动类型无效"})
+			return
+		}
+		if req.Status == "published" {
+			if effectiveEventType == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "请选择活动类型"})
+				return
+			}
+			hasStart := (eventStartProvided && parsedEventStart != nil) || post.EventStartTime != nil
+			if !hasStart {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "请填写活动开始时间"})
+				return
+			}
+			if effectiveEventType == "guild" && effectiveGuildID == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
+				return
+			}
+		} else if effectiveEventType == "guild" && effectiveGuildID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "公会活动需要选择公会"})
+			return
+		}
 	}
 
 	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
@@ -1696,12 +1720,14 @@ func (s *Server) listEvents(c *gin.Context) {
 		memberGuildIDs = append(memberGuildIDs, m.GuildID)
 	}
 
-	// 只显示：服务器活动 或 用户所在公会的活动
+	// 只显示：服务器活动（含历史空类型）或 用户所在公会的活动
 	if len(memberGuildIDs) > 0 {
-		query = query.Where("event_type = ? OR (event_type = ? AND guild_id IN ?)",
-			"server", "guild", memberGuildIDs)
+		query = query.Where(
+			"(event_type = ? OR event_type = '' OR event_type IS NULL) OR (event_type = ? AND guild_id IN ?)",
+			"server", "guild", memberGuildIDs,
+		)
 	} else {
-		query = query.Where("event_type = ?", "server")
+		query = query.Where("event_type = ? OR event_type = '' OR event_type IS NULL", "server")
 	}
 
 	var posts []model.Post

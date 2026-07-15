@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   createPost,
@@ -30,6 +30,7 @@ import { useDialog } from '@/composables/useDialog'
 const DRAFT_KEY = 'post_create_draft'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const toast = useToastStore()
 const dialog = useDialog()
@@ -37,18 +38,28 @@ const userStore = useUserStore()
 const mounted = ref(false)
 const loading = ref(false)
 
+function resolveInitialCategory(): PostCategory {
+  const raw = String(route.query.category || '').trim()
+  if (POST_CATEGORIES.some(cat => cat.value === raw)) {
+    return raw as PostCategory
+  }
+  return 'other'
+}
+
+const initialCategory = resolveInitialCategory()
+
 const form = ref<CreatePostRequest>({
   title: '',
   content: '',
   content_type: 'html',
-  category: 'other',
+  category: initialCategory,
   region: '',
   address: '',
   tag_ids: [],
   status: 'published',
   cover_image: '',
   is_public: true,  // 公会外成员可见（默认开启）
-  event_type: undefined,
+  event_type: initialCategory === 'event' ? 'server' : undefined,
   event_start_time: undefined,
   event_end_time: undefined,
   event_color: '#D97706',
@@ -72,6 +83,8 @@ watch(() => form.value.category, (newVal) => {
     form.value.event_type = undefined
     form.value.event_start_time = undefined
     form.value.event_end_time = undefined
+  } else if (!form.value.event_type) {
+    form.value.event_type = 'server'
   }
 })
 
@@ -166,6 +179,16 @@ onMounted(async () => {
 
   setTimeout(() => mounted.value = true, 50)
   await maybeRestoreDraft()
+
+  // 入口 query.category 始终生效（例如从 Banner 空态点「发布活动」）
+  const preferredCategory = resolveInitialCategory()
+  if (preferredCategory !== 'other') {
+    form.value.category = preferredCategory
+    if (preferredCategory === 'event' && !form.value.event_type) {
+      form.value.event_type = 'server'
+    }
+  }
+
   await loadTags()
   await loadGuilds()
 
@@ -319,11 +342,17 @@ async function handleSubmit(status: 'draft' | 'published') {
 
   // 活动分区基础验证
   if (form.value.category === 'event') {
-    if (form.value.event_type === 'guild') {
-      if (!form.value.guild_id) {
-        toast.warning(t('community.create.selectGuildForEvent'))
-        return
-      }
+    if (!form.value.event_type) {
+      toast.warning(t('community.create.eventTypeRequired'))
+      return
+    }
+    if (!form.value.event_start_time) {
+      toast.warning(t('community.create.eventStartRequired'))
+      return
+    }
+    if (form.value.event_type === 'guild' && !form.value.guild_id) {
+      toast.warning(t('community.create.selectGuildForEvent'))
+      return
     }
   }
 
