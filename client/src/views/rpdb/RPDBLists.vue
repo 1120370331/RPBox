@@ -35,7 +35,6 @@ const guideWork = ref<RPDBWork | null>(null)
 const activeList = computed(() => lists.value[active.value])
 const guideSteps = computed(() => guideWork.value?.guide_steps || [])
 const guideModalTitle = computed(() => guideWork.value?.title || guideEntry.value?.work.title || '获取攻略')
-const guideSectionTitle = computed(() => guideWork.value?.type === 'transmog' ? '部件获取攻略' : '获取攻略')
 const statusLabels: Record<RPDBListStatus, string> = {
   wanted: '未收集',
   farming: '未收集',
@@ -309,7 +308,6 @@ onMounted(load)
         <RPDBGuideSection
           v-else-if="guideSteps.length"
           :steps="guideSteps"
-          :title="guideSectionTitle"
         />
         <div v-else class="guide-modal-state">
           <i class="ri-route-line"></i>

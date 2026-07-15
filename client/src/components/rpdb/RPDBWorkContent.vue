@@ -49,8 +49,6 @@ function formatSlotLabel(slot: string) {
 <template>
   <div class="work-content" data-testid="work-content">
     <section id="rpdb-section-overview" class="editorial-section">
-      <span>正文内容</span>
-      <h2>{{ isHome ? '空间故事与参观亮点' : '实际效果与 RP 用途' }}</h2>
       <p v-if="description" class="lead">{{ description }}</p>
       <p v-if="work.rp_use_cases && work.rp_use_cases !== description" class="use-cases">
         <b>适用场景</b>
@@ -112,11 +110,7 @@ function formatSlotLabel(slot: string) {
       </div>
     </section>
 
-    <RPDBGuideSection
-      v-if="!isHome"
-      :steps="work.guide_steps || []"
-      :title="work.type === 'transmog' ? '部件获取攻略' : '获取攻略'"
-    />
+    <RPDBGuideSection v-if="!isHome" :steps="work.guide_steps || []" />
 
     <section v-if="isHome" id="rpdb-section-home" class="editorial-section home-profile">
       <span>家宅资料</span>

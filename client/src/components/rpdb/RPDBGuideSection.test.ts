@@ -35,5 +35,7 @@ describe('RPDBGuideSection', () => {
     expect(wrapper.text()).toContain('/way #47 42.60 71.30 [1/2] 前往守夜营地')
     expect(wrapper.text()).toContain('/way #47 48.20 63.40 [2/2] 完成补给任务')
     expect(wrapper.text()).toContain('复制 2 个坐标')
+    expect(wrapper.text()).not.toContain('获取攻略')
+    expect(wrapper.text()).not.toContain('按步骤查看路线')
   })
 })
