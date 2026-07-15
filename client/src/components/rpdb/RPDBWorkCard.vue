@@ -89,7 +89,7 @@ function formatCount(value?: number) {
         </div>
       </div>
       <div class="work-card__metrics" aria-label="作品数据" data-testid="rpdb-work-metrics">
-        <span title="浏览" :aria-label="`浏览 ${formatCount(work.view_count)}`"><i class="ri-eye-line"></i><b>{{ formatCount(work.view_count) }}</b></span>
+        <span title="浏览（用户每日计1次）" :aria-label="`浏览 ${formatCount(work.view_count)}`"><i class="ri-eye-line"></i><b>{{ formatCount(work.view_count) }}</b></span>
         <span title="点赞" :aria-label="`点赞 ${formatCount(work.like_count)}`"><i class="ri-heart-3-line"></i><b>{{ formatCount(work.like_count) }}</b></span>
         <span title="收藏" :aria-label="`收藏 ${formatCount(work.favorite_count)}`"><i class="ri-bookmark-3-line"></i><b>{{ formatCount(work.favorite_count) }}</b></span>
         <span title="加入清单" :aria-label="`加入清单 ${formatCount(work.list_count)}`"><i class="ri-list-check-3"></i><b>{{ formatCount(work.list_count) }}</b></span>

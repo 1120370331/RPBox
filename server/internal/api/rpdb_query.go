@@ -148,10 +148,11 @@ func (s *Server) getRPDBWork(c *gin.Context) {
 	}
 
 	if work.Status == model.RPDBStatusPublished && work.ReviewStatus == model.RPDBReviewApproved {
-		// 登录用户：同一作品每日最多计 1 次；未登录：每次访问计 1 次（不进热度榜）
+		// 登录用户：同一作品每日最多计 1 次；未登录不计浏览
 		if recordRPDBView(work.ID, viewerID) {
 			database.DB.Model(&model.RPDBWork{}).Where("id = ?", work.ID).
 				UpdateColumn("view_count", gorm.Expr("view_count + 1"))
+			detail.ViewCount++
 		}
 	}
 
@@ -222,8 +223,6 @@ func (s *Server) listRPDBHotWorks(c *gin.Context) {
 	ordered := make([]model.RPDBWork, 0, len(ids))
 	for _, id := range ids {
 		if work, ok := workByID[id]; ok {
-			// expose rolling 7d views through view_count for UI metric display on top strip
-			work.ViewCount = int(rankMap[id])
 			ordered = append(ordered, work)
 		}
 	}
@@ -233,6 +232,10 @@ func (s *Server) listRPDBHotWorks(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "加载热度作品失败"})
 		return
 	}
+	// Top3 指标展示近 7 日热度，而不是累计浏览
+	for i := range cards {
+		cards[i].ViewCount = int(rankMap[cards[i].ID])
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"works":       cards,
@@ -241,15 +244,12 @@ func (s *Server) listRPDBHotWorks(c *gin.Context) {
 	})
 }
 
-// recordRPDBView records a countable view.
-// Logged-in users contribute at most once per work per calendar day (also used for 7-day heat).
-// Anonymous viewers always count once per request but are not written into heat events.
+// recordRPDBView records a countable view for logged-in users only.
+// Each user contributes at most once per work per calendar day.
+// Anonymous visitors do not increase view_count or heat ranking.
 func recordRPDBView(workID, viewerID uint) bool {
-	if workID == 0 {
+	if workID == 0 || viewerID == 0 {
 		return false
-	}
-	if viewerID == 0 {
-		return true
 	}
 
 	viewDate := time.Now().Format("2006-01-02")
@@ -274,6 +274,31 @@ func recordRPDBView(workID, viewerID uint) bool {
 		return false
 	}
 	return true
+}
+
+// loadRPDBEventViewCounts returns total unique daily view events per work.
+// This is the canonical display metric for cards/detail/hot ranking base counts.
+func loadRPDBEventViewCounts(workIDs []uint) (map[uint]int64, error) {
+	counts := make(map[uint]int64, len(workIDs))
+	if len(workIDs) == 0 {
+		return counts, nil
+	}
+	type row struct {
+		WorkID uint
+		Count  int64
+	}
+	var rows []row
+	if err := database.DB.Model(&model.RPDBViewEvent{}).
+		Select("work_id, COUNT(*) AS count").
+		Where("work_id IN ?", workIDs).
+		Group("work_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, item := range rows {
+		counts[item.WorkID] = item.Count
+	}
+	return counts, nil
 }
 
 func (s *Server) getRPDBWorkPreview(c *gin.Context) {
@@ -492,8 +517,15 @@ func buildRPDBWorkCards(works []model.RPDBWork, viewerID uint) ([]rpdbWorkCard, 
 		}
 	}
 
+	eventViews, err := loadRPDBEventViewCounts(workIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, work := range works {
 		author := authorMap[work.AuthorID]
+		// 列表/详情统一展示「登录用户每日最多 1 次」口径的累计浏览
+		work.ViewCount = int(eventViews[work.ID])
 		cards = append(cards, rpdbWorkCard{
 			RPDBWork:         work,
 			AuthorName:       author.Username,

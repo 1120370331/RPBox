@@ -67,7 +67,7 @@ describe('RPDBWorkCard', () => {
     expect(wrapper.text()).toContain('31')
     const metrics = wrapper.get('[data-testid="rpdb-work-metrics"]')
     expect(metrics.find('small').exists()).toBe(false)
-    expect(metrics.findAll('span').map(metric => metric.attributes('title'))).toEqual(['浏览', '点赞', '收藏', '加入清单'])
+    expect(metrics.findAll('span').map(metric => metric.attributes('title'))).toEqual(['浏览（用户每日计1次）', '点赞', '收藏', '加入清单'])
     expect(metrics.findAll('b').map(metric => metric.text())).toEqual(['188', '24', '31', '18'])
   })
 
