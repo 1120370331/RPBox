@@ -24,6 +24,8 @@ func newRPDBInteractionTestServer(t *testing.T) (*Server, model.User, model.RPDB
 		&model.RPDBFavorite{},
 		&model.RPDBComment{},
 		&model.RPDBCommentLike{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
 		&model.RPDBVerification{},
 		&model.RPDBList{},
 		&model.RPDBListEntry{},
@@ -59,6 +61,116 @@ func newRPDBInteractionTestServer(t *testing.T) (*Server, model.User, model.RPDB
 		t.Fatalf("create guide step: %v", err)
 	}
 	return newTestServer(t, db), user, work, newTestToken(t, user)
+}
+
+func TestRPDBWorkAuthorCanDeleteAnotherUsersComment(t *testing.T) {
+	server, commenter, work, _ := newRPDBInteractionTestServer(t)
+	var author model.User
+	if err := database.DB.First(&author, work.AuthorID).Error; err != nil {
+		t.Fatalf("load work author: %v", err)
+	}
+	root := model.RPDBComment{
+		WorkID: work.ID, AuthorID: commenter.ID, Content: "需要作者清理的评论",
+		Status: model.RPDBStatusPublished,
+	}
+	if err := database.DB.Create(&root).Error; err != nil {
+		t.Fatalf("create root comment: %v", err)
+	}
+	reply := model.RPDBComment{
+		WorkID: work.ID, AuthorID: commenter.ID, ParentID: &root.ID, Content: "保留的回复",
+		Status: model.RPDBStatusPublished,
+	}
+	if err := database.DB.Create(&reply).Error; err != nil {
+		t.Fatalf("create reply: %v", err)
+	}
+	if err := database.DB.Create(&model.RPDBCommentLike{CommentID: root.ID, UserID: author.ID}).Error; err != nil {
+		t.Fatalf("create comment like: %v", err)
+	}
+	if err := database.DB.Model(&work).Update("comment_count", 2).Error; err != nil {
+		t.Fatalf("update comment count: %v", err)
+	}
+
+	resp := performRequest(
+		server.router,
+		http.MethodDelete,
+		"/api/v1/rpdb/comments/"+strconv.FormatUint(uint64(root.ID), 10),
+		nil,
+		newTestToken(t, author),
+	)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected work author delete 204, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if err := database.DB.First(&model.RPDBComment{}, root.ID).Error; err == nil {
+		t.Fatalf("expected root comment deleted")
+	}
+	var storedReply model.RPDBComment
+	if err := database.DB.First(&storedReply, reply.ID).Error; err != nil {
+		t.Fatalf("load preserved reply: %v", err)
+	}
+	if storedReply.ParentID != nil {
+		t.Fatalf("expected preserved reply reparented to root, got parent %v", *storedReply.ParentID)
+	}
+	var likeCount int64
+	if err := database.DB.Model(&model.RPDBCommentLike{}).Where("comment_id = ?", root.ID).Count(&likeCount).Error; err != nil {
+		t.Fatalf("count deleted comment likes: %v", err)
+	}
+	if likeCount != 0 {
+		t.Fatalf("expected deleted comment likes removed, got %d", likeCount)
+	}
+	var storedWork model.RPDBWork
+	if err := database.DB.First(&storedWork, work.ID).Error; err != nil {
+		t.Fatalf("load work: %v", err)
+	}
+	if storedWork.CommentCount != 1 {
+		t.Fatalf("expected comment count 1, got %d", storedWork.CommentCount)
+	}
+}
+
+func TestRPDBCommentsExcludeHiddenCommentsAndBlockedAuthors(t *testing.T) {
+	server, viewer, work, token := newRPDBInteractionTestServer(t)
+	visibleAuthor := model.User{Username: "visible-commenter", Email: "visible@example.com", PassHash: "hash"}
+	blockedAuthor := model.User{Username: "blocked-commenter", Email: "blocked@example.com", PassHash: "hash"}
+	if err := database.DB.Create(&[]*model.User{&visibleAuthor, &blockedAuthor}).Error; err != nil {
+		t.Fatalf("create comment authors: %v", err)
+	}
+	comments := []model.RPDBComment{
+		{WorkID: work.ID, AuthorID: visibleAuthor.ID, Content: "可见评论", Status: model.RPDBStatusPublished},
+		{WorkID: work.ID, AuthorID: visibleAuthor.ID, Content: "已隐藏评论", Status: model.RPDBStatusPublished},
+		{WorkID: work.ID, AuthorID: blockedAuthor.ID, Content: "已屏蔽作者评论", Status: model.RPDBStatusPublished},
+	}
+	if err := database.DB.Create(&comments).Error; err != nil {
+		t.Fatalf("create comments: %v", err)
+	}
+	if err := database.DB.Create(&model.UserHiddenContent{
+		UserID: viewer.ID, TargetType: reportTargetRPDBComment, TargetID: comments[1].ID,
+	}).Error; err != nil {
+		t.Fatalf("hide comment: %v", err)
+	}
+	if err := database.DB.Create(&model.UserBlock{
+		BlockerID: viewer.ID, BlockedUserID: blockedAuthor.ID,
+	}).Error; err != nil {
+		t.Fatalf("block comment author: %v", err)
+	}
+
+	resp := performRequest(
+		server.router,
+		http.MethodGet,
+		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(work.ID), 10)+"/comments",
+		nil,
+		token,
+	)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected comments 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Comments []rpdbCommentResponse `json:"comments"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode comments: %v", err)
+	}
+	if len(payload.Comments) != 1 || payload.Comments[0].ID != comments[0].ID {
+		t.Fatalf("unexpected visible comments: %#v", payload.Comments)
+	}
 }
 
 func TestRPDBInteractionLikeAndFavoriteAreIdempotent(t *testing.T) {

@@ -306,7 +306,34 @@ func initPresetTags() {
 		{Name: "画作", Color: "C9B370", Type: "preset", Category: "item", IsPublic: true},
 	}
 
-	allTags := append(storyTags, itemTags...)
+	rpdbTags := []model.Tag{
+		{Name: "联盟风格", Color: "2F66C8", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "部落风格", Color: "B83030", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "库尔提拉斯风格", Color: "356A8A", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "洛丹伦风格", Color: "6E6A85", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "暴风城风格", Color: "356AB8", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "银月城风格", Color: "C08A2C", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "暗夜精灵风格", Color: "6D5DB8", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "矮人风格", Color: "8A6448", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "侏儒工程风格", Color: "C46B3A", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "地精工程风格", Color: "5D8F3A", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "被遗忘者风格", Color: "5E6E5A", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "熊猫人风格", Color: "4F8C62", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "德鲁斯瓦风格", Color: "5A5B68", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "达拉然风格", Color: "8A6DCC", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "海盗风格", Color: "9A5B38", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "泰坦遗迹风格", Color: "C2A15A", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "龙族风格", Color: "B35C42", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "荒野游侠风格", Color: "557A45", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "圣光教会风格", Color: "C7A95B", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "暗影诅咒风格", Color: "57456F", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "贵族沙龙风格", Color: "8B6F96", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "海港酒馆风格", Color: "4B7991", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "炼金工坊风格", Color: "6F8F46", Type: "preset", Category: "rpdb", IsPublic: true},
+		{Name: "军旅哨站风格", Color: "727A54", Type: "preset", Category: "rpdb", IsPublic: true},
+	}
+
+	allTags := append(append(storyTags, itemTags...), rpdbTags...)
 
 	for _, tag := range allTags {
 		var existing model.Tag

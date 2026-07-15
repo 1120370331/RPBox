@@ -1,6 +1,6 @@
 import request from './request'
 
-export type ReportTargetType = 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story' | 'rpdb_work'
+export type ReportTargetType = 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'rpdb_comment' | 'story' | 'rpdb_work'
 
 export interface CreateContentReportRequest {
   target_type: ReportTargetType

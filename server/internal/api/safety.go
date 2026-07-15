@@ -23,6 +23,7 @@ const (
 	reportTargetUser        = "user"
 	reportTargetComment     = "comment"
 	reportTargetItemComment = "item_comment"
+	reportTargetRPDBComment = "rpdb_comment"
 	reportTargetStory       = "story"
 	reportTargetRPDBWork    = "rpdb_work"
 )
@@ -181,6 +182,12 @@ func resolveReportTarget(targetType string, targetID uint) (string, uint, error)
 			return "", 0, err
 		}
 		return buildCommentReportTitle(comment.Content), comment.UserID, nil
+	case reportTargetRPDBComment:
+		var comment model.RPDBComment
+		if err := database.DB.Select("id", "work_id", "author_id", "content").First(&comment, targetID).Error; err != nil {
+			return "", 0, err
+		}
+		return buildCommentReportTitle(comment.Content), comment.AuthorID, nil
 	case reportTargetStory:
 		var story model.Story
 		if err := database.DB.Select("id", "user_id", "title").First(&story, targetID).Error; err != nil {
@@ -375,7 +382,7 @@ func validateReportReviewAction(targetType, action string) error {
 		default:
 			return errors.New("该举报目标不支持此处理动作")
 		}
-	case reportTargetPost, reportTargetItem, reportTargetComment, reportTargetItemComment, reportTargetStory, reportTargetRPDBWork:
+	case reportTargetPost, reportTargetItem, reportTargetComment, reportTargetItemComment, reportTargetRPDBComment, reportTargetStory, reportTargetRPDBWork:
 		switch action {
 		case "delete_content", "delete_and_mute_user", "delete_and_ban_user", "reject", "archive":
 			return nil
@@ -515,6 +522,22 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		}).Error
 
 		return targetName, comment.UserID, false, nil
+	case reportTargetRPDBComment:
+		var comment model.RPDBComment
+		if err := database.DB.First(&comment, targetID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return buildMissingReportTitle(targetType, targetID), 0, true, nil
+			}
+			return "", 0, false, err
+		}
+
+		targetName := buildCommentReportTitle(comment.Content)
+		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+			return deleteRPDBCommentRecord(tx, comment)
+		}); err != nil {
+			return "", 0, false, err
+		}
+		return targetName, comment.AuthorID, false, nil
 	case reportTargetStory:
 		var story model.Story
 		if err := database.DB.First(&story, targetID).Error; err != nil {
@@ -658,6 +681,8 @@ func buildMissingReportTitle(targetType string, targetID uint) string {
 		return fmt.Sprintf("帖子评论 #%d", targetID)
 	case reportTargetItemComment:
 		return fmt.Sprintf("作品评论 #%d", targetID)
+	case reportTargetRPDBComment:
+		return fmt.Sprintf("RP 数据库评论 #%d", targetID)
 	case reportTargetStory:
 		return fmt.Sprintf("剧情 #%d", targetID)
 	case reportTargetRPDBWork:
@@ -721,7 +746,7 @@ func upsertHiddenContentRecord(db *gorm.DB, userID uint, targetType string, targ
 	if userID == 0 || targetID == 0 {
 		return nil
 	}
-	if targetType != reportTargetPost && targetType != reportTargetItem && targetType != reportTargetComment && targetType != reportTargetItemComment && targetType != reportTargetRPDBWork {
+	if targetType != reportTargetPost && targetType != reportTargetItem && targetType != reportTargetComment && targetType != reportTargetItemComment && targetType != reportTargetRPDBComment && targetType != reportTargetRPDBWork {
 		return nil
 	}
 
@@ -989,7 +1014,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 	case "content":
 		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetPost, reportTargetItem, reportTargetRPDBWork})
 	case "comment":
-		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetComment, reportTargetItemComment})
+		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetComment, reportTargetItemComment, reportTargetRPDBComment})
 	case "story":
 		baseQuery = baseQuery.Where("target_type = ?", reportTargetStory)
 	}
@@ -1019,6 +1044,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 	itemIDs := make([]uint, 0)
 	commentIDs := make([]uint, 0)
 	itemCommentIDs := make([]uint, 0)
+	rpdbCommentIDs := make([]uint, 0)
 	storyIDs := make([]uint, 0)
 	rpdbWorkIDs := make([]uint, 0)
 	userIDs := make([]uint, 0)
@@ -1044,6 +1070,8 @@ func (s *Server) listContentReports(c *gin.Context) {
 			commentIDs = append(commentIDs, row.TargetID)
 		case reportTargetItemComment:
 			itemCommentIDs = append(itemCommentIDs, row.TargetID)
+		case reportTargetRPDBComment:
+			rpdbCommentIDs = append(rpdbCommentIDs, row.TargetID)
 		case reportTargetStory:
 			storyIDs = append(storyIDs, row.TargetID)
 		case reportTargetRPDBWork:
@@ -1096,6 +1124,17 @@ func (s *Server) listContentReports(c *gin.Context) {
 		itemCommentMap[comment.ID] = comment
 		itemIDs = append(itemIDs, comment.ItemID)
 		userIDs = append(userIDs, comment.UserID)
+	}
+
+	var rpdbComments []model.RPDBComment
+	if len(rpdbCommentIDs) > 0 {
+		_ = database.DB.Select("id", "work_id", "author_id", "content").Where("id IN ?", rpdbCommentIDs).Find(&rpdbComments).Error
+	}
+	rpdbCommentMap := make(map[uint]model.RPDBComment, len(rpdbComments))
+	for _, comment := range rpdbComments {
+		rpdbCommentMap[comment.ID] = comment
+		rpdbWorkIDs = append(rpdbWorkIDs, comment.WorkID)
+		userIDs = append(userIDs, comment.AuthorID)
 	}
 
 	var stories []model.Story
@@ -1220,6 +1259,18 @@ func (s *Server) listContentReports(c *gin.Context) {
 			targetPreviewImage = comment.ImageURL
 			if targetUserID == 0 {
 				targetUserID = comment.UserID
+			}
+		case reportTargetRPDBComment:
+			comment := rpdbCommentMap[row.TargetID]
+			if comment.ID != 0 {
+				targetTitle = buildCommentReportTitle(comment.Content)
+			}
+			parentTargetID = comment.WorkID
+			parentTargetTitle = rpdbWorkMap[comment.WorkID].Title
+			targetPreviewText = normalizeReportPreviewText(comment.Content, 220)
+			targetURL = fmt.Sprintf("/rpdb/%d?comment=%d", comment.WorkID, row.TargetID)
+			if targetUserID == 0 {
+				targetUserID = comment.AuthorID
 			}
 		case reportTargetStory:
 			story := storyMap[row.TargetID]

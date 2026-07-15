@@ -6,7 +6,10 @@ import RPDBGuideSection from './RPDBGuideSection.vue'
 const props = defineProps<{
   work: RPDBWork | RPDBWorkPayload
   homeDetails?: Record<string, string>
+  transmogShareCode?: string
+  copiedTransmogShareCode?: boolean
 }>()
+defineEmits<{ copyTransmogShareCode: [] }>()
 
 const transmogSlotOrder = [
   { value: 'head', label: '头部' },
@@ -55,6 +58,19 @@ function formatSlotLabel(slot: string) {
       </p>
       <div v-if="work.content" class="rich-content" v-html="work.content"></div>
       <p v-else class="empty-copy">作者尚未补充完整正文。</p>
+      <div v-if="work.type === 'transmog' && transmogShareCode" class="inline-share-code" data-testid="inline-transmog-share-code">
+        <span>
+          <i class="ri-shirt-line"></i>
+          <span>
+            <b>幻化分享代码</b>
+            <small>复制后可在游戏内导入这套幻化方案</small>
+          </span>
+        </span>
+        <button type="button" data-testid="copy-transmog-share-code-inline" @click="$emit('copyTransmogShareCode')">
+          <i :class="copiedTransmogShareCode ? 'ri-check-line' : 'ri-file-copy-line'"></i>
+          {{ copiedTransmogShareCode ? '已复制' : '复制代码' }}
+        </button>
+      </div>
     </section>
 
     <section v-if="orderedTransmogSlots.length" id="rpdb-section-transmog" class="editorial-section">
@@ -122,6 +138,8 @@ function formatSlotLabel(slot: string) {
 .rich-content{color:var(--color-text-main);font-size:14px;line-height:1.9}
 .rich-content :deep(img){max-width:100%;height:auto;border-radius:10px}
 .empty-copy{color:var(--color-text-secondary)}
+.inline-share-code{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:20px;padding:14px 16px;border:1px solid color-mix(in srgb,var(--color-accent) 42%,var(--color-border));border-radius:12px;background:color-mix(in srgb,var(--color-accent) 7%,var(--color-card-bg))}
+.inline-share-code>span{display:flex;min-width:0;align-items:center;gap:11px}.inline-share-code>span>i{display:grid;width:36px;height:36px;flex:0 0 36px;place-items:center;border-radius:9px;background:var(--color-accent);color:#fff;font-size:18px}.inline-share-code>span>span{display:flex;min-width:0;flex-direction:column;gap:3px}.inline-share-code b{color:var(--color-text-main)}.inline-share-code small{color:var(--color-text-secondary);line-height:1.45}.inline-share-code button{display:inline-flex;min-height:38px;flex:0 0 auto;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--color-accent);border-radius:9px;background:var(--color-accent);color:#fff;font-weight:800}
 .slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
 .slot-grid article{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px;align-items:start;padding:12px;border:1px solid color-mix(in srgb,var(--color-border) 72%,transparent);border-radius:12px;background:color-mix(in srgb,var(--color-card-bg) 84%,#fff 16%)}
 .slot-grid i{color:var(--color-accent);font-size:20px}
@@ -139,5 +157,5 @@ function formatSlotLabel(slot: string) {
 .home-profile dt{color:var(--color-text-secondary)}
 .home-profile dd{margin:0;color:var(--color-text-main);text-align:right}
 .visit-notes{margin:16px 0 0;padding:13px;border-radius:12px;background:color-mix(in srgb,var(--color-card-bg) 84%,#fff 16%);color:var(--color-text-secondary);line-height:1.75}
-@media(max-width:680px){.editorial-section{padding:22px 18px}.home-profile dl{grid-template-columns:1fr}}
+@media(max-width:680px){.editorial-section{padding:22px 18px}.inline-share-code{align-items:stretch;flex-direction:column}.inline-share-code button{width:100%}.home-profile dl{grid-template-columns:1fr}}
 </style>

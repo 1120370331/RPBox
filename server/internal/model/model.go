@@ -658,7 +658,7 @@ type UserBlock struct {
 type UserHiddenContent struct {
 	ID         uint      `gorm:"primarykey" json:"id"`
 	UserID     uint      `gorm:"uniqueIndex:idx_user_hidden_content;not null" json:"user_id"`
-	TargetType string    `gorm:"size:32;uniqueIndex:idx_user_hidden_content;not null" json:"target_type"` // post|item|comment|item_comment
+	TargetType string    `gorm:"size:32;uniqueIndex:idx_user_hidden_content;not null" json:"target_type"` // post|item|comment|item_comment|rpdb_work|rpdb_comment
 	TargetID   uint      `gorm:"uniqueIndex:idx_user_hidden_content;not null" json:"target_id"`
 	Reason     string    `gorm:"size:512" json:"reason"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -669,7 +669,7 @@ type UserHiddenContent struct {
 type ContentReport struct {
 	ID            uint       `gorm:"primarykey" json:"id"`
 	ReporterID    uint       `gorm:"index;not null" json:"reporter_id"`
-	TargetType    string     `gorm:"size:32;index:idx_content_report_target;not null" json:"target_type"` // post|item|user|comment|item_comment|story
+	TargetType    string     `gorm:"size:32;index:idx_content_report_target;not null" json:"target_type"` // post|item|user|comment|item_comment|rpdb_comment|story|rpdb_work
 	TargetID      uint       `gorm:"index:idx_content_report_target;not null" json:"target_id"`
 	TargetUserID  uint       `gorm:"index" json:"target_user_id"`
 	Reason        string     `gorm:"size:64;not null" json:"reason"`
