@@ -11,10 +11,12 @@ import {
   likeRPDBWork,
   listRPDBComments,
   listRPDBLists,
+  listRPDBWorkRecommendations,
   unfavoriteRPDBWork,
   unlikeRPDBWork,
   type RPDBComment,
   type RPDBList,
+  type RPDBRecommendation,
   type RPDBWork,
 } from '@/api/rpdb'
 import EmojiPicker from '@/components/EmojiPicker.vue'
@@ -24,6 +26,7 @@ import ImageViewer from '@/components/ImageViewer.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import RPDBMediaGallery from '@/components/rpdb/RPDBMediaGallery.vue'
+import RPDBWorkCard from '@/components/rpdb/RPDBWorkCard.vue'
 import RPDBWorkContent from '@/components/rpdb/RPDBWorkContent.vue'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useDialog } from '@/composables/useDialog'
@@ -47,6 +50,7 @@ const userStore = useUserStore()
 const { availabilityLabel, bindTypeLabel, factionLabel } = useRPDBOptionLabels()
 const work = ref<RPDBWork>()
 const comments = ref<RPDBComment[]>([])
+const recommendations = ref<RPDBRecommendation[]>([])
 const loading = ref(true)
 const comment = ref('')
 const submittingComment = ref(false)
@@ -118,6 +122,7 @@ const tableOfContents = computed(() => {
     result.push({ label: '获取攻略', target: 'rpdb-section-guide' })
   }
   if (work.value.type === 'home_showcase') result.push({ label: '家宅资料', target: 'rpdb-section-home' })
+  if (recommendations.value.length) result.push({ label: '相关推荐', target: 'rpdb-section-recommendations' })
   result.push({ label: '玩家讨论', target: 'rpdb-section-discussion' })
   return result
 })
@@ -215,9 +220,14 @@ async function load() {
   loading.value = true
   try {
     const id = Number(route.params.id)
-    const [detail, discussion] = await Promise.all([getRPDBWork(id), listRPDBComments(id)])
+    const [detail, discussion, related] = await Promise.all([
+      getRPDBWork(id),
+      listRPDBComments(id),
+      listRPDBWorkRecommendations(id).catch(() => ({ recommendations: [] })),
+    ])
     work.value = detail.work
     comments.value = discussion.comments || []
+    recommendations.value = related.recommendations || []
     commentLikes.clear()
     comments.value.forEach((item) => {
       if (item.liked) commentLikes.set(item.id, true)
@@ -523,6 +533,10 @@ function goBack() {
   void router.push('/rpdb')
 }
 
+function openRecommendation(workID: number) {
+  void router.push(`/rpdb/${workID}`)
+}
+
 function handleEmojiSelect(token: string) {
   commentEditorRef.value?.insertToken?.(token)
   showEmojiPicker.value = false
@@ -563,6 +577,12 @@ function collapseTocWhenSpaceIsTight() {
 watch(() => work.value?.content, async () => {
   await nextTick()
   setupArticleImagePreview()
+})
+
+watch(() => route.params.id, (nextID, previousID) => {
+  if (nextID === previousID) return
+  void load()
+  window.scrollTo?.({ top: 0, behavior: 'smooth' })
 })
 
 onMounted(async () => {
@@ -750,6 +770,24 @@ onBeforeUnmount(() => {
           :copied-transmog-share-code="copiedTransmogShareCode"
           @copy-transmog-share-code="copyTransmogShareCode"
         />
+
+        <section v-if="recommendations.length" id="rpdb-section-recommendations" class="recommendations-section anim-item" data-testid="rpdb-recommendations">
+          <header class="recommendations-heading">
+            <div>
+              <span>继续探索</span>
+              <h3>相关推荐</h3>
+            </div>
+            <i class="ri-node-tree"></i>
+          </header>
+          <div class="recommendations-grid">
+            <RPDBWorkCard
+              v-for="item in recommendations"
+              :key="item.id"
+              :work="item"
+              @open="openRecommendation(item.id)"
+            />
+          </div>
+        </section>
 
         <section id="rpdb-section-discussion" class="comments-section anim-item">
           <h3 class="comments-title">
@@ -1027,6 +1065,8 @@ onBeforeUnmount(() => {
 .detail-lower{display:block;margin-top:14px}
 .article-sheet,.floating-toc-content{overflow:hidden;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .comments-section{padding:32px;border-top:1px solid var(--rpdb-line);background:var(--color-panel-bg);box-shadow:0 4px 20px -2px rgba(var(--shadow-base),.05)}
+.recommendations-section{padding:30px 32px;border-top:1px solid var(--rpdb-line);background:color-mix(in srgb,var(--color-panel-bg) 82%,var(--color-main-bg))}
+.recommendations-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}.recommendations-heading>div{display:grid;gap:3px}.recommendations-heading span{color:var(--color-accent);font-size:10px;font-weight:900}.recommendations-heading h3{margin:0;color:var(--color-text-main);font:500 20px/1.35 Merriweather,serif}.recommendations-heading>i{color:var(--icon-color);font-size:24px}.recommendations-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .comments-title{display:flex;align-items:center;gap:10px;margin:0 0 20px;color:var(--color-text-main);font:500 20px/1.35 Merriweather,serif}
 .comment-badge{padding:4px 12px;border-radius:20px;background:var(--color-card-bg);color:var(--color-text-muted);font:400 13px/1 Inter,sans-serif}
 .comment-input-box{margin-top:24px;padding:16px;border:1px solid var(--color-border);background:var(--color-panel-bg);box-shadow:0 2px 8px rgba(var(--shadow-base),.04);transition:box-shadow .3s}
@@ -1153,5 +1193,5 @@ onBeforeUnmount(() => {
 .list-picker-dialog footer a{display:inline-flex;align-items:center;gap:6px}
 @media(max-width:1180px){.floating-toc-panel{right:12px;width:226px}}
 @media(max-width:1050px){.detail-hero{grid-template-columns:1fr}.hero-gallery{border-right:0;border-bottom:1px solid var(--rpdb-line)}}
-@media(max-width:680px){.hero-summary{padding:22px}.hero-summary h1{font-size:29px}.hero-metadata{grid-template-columns:1fr}.hero-actions{flex-wrap:wrap}.hero-actions button{flex:1}.comments-section{padding:22px 18px}.work-edit-footer{padding:16px 18px}.work-edit-footer a{width:100%}.comment-meta,.reply-meta{align-items:flex-start;flex-direction:column;gap:4px}.comment-actions{gap:8px}.floating-toc-panel{top:auto;right:12px;bottom:12px;left:12px;width:auto}.floating-toc-panel.is-collapsed{left:auto;width:0}.floating-toc-content{max-height:42vh}.toc-collapse{top:-48px;right:0;left:auto;border-radius:12px}.floating-toc-panel section{border-right:0}}
+@media(max-width:680px){.hero-summary{padding:22px}.hero-summary h1{font-size:29px}.hero-metadata{grid-template-columns:1fr}.hero-actions{flex-wrap:wrap}.hero-actions button{flex:1}.recommendations-section,.comments-section{padding:22px 18px}.recommendations-grid{grid-template-columns:1fr}.work-edit-footer{padding:16px 18px}.work-edit-footer a{width:100%}.comment-meta,.reply-meta{align-items:flex-start;flex-direction:column;gap:4px}.comment-actions{gap:8px}.floating-toc-panel{top:auto;right:12px;bottom:12px;left:12px;width:auto}.floating-toc-panel.is-collapsed{left:auto;width:0}.floating-toc-content{max-height:42vh}.toc-collapse{top:-48px;right:0;left:auto;border-radius:12px}.floating-toc-panel section{border-right:0}}
 </style>

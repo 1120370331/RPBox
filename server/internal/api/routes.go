@@ -63,6 +63,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/rpdb/works", s.listRPDBWorks)
 		v1.GET("/rpdb/works/hot", s.listRPDBHotWorks)
 		v1.GET("/rpdb/works/:id/preview", s.getRPDBWorkPreview)
+		v1.GET("/rpdb/works/:id/recommendations", s.listRPDBWorkRecommendations)
 		v1.GET("/rpdb/works/:id", s.getRPDBWork)
 		v1.GET("/rpdb/works/:id/comments", s.listRPDBComments)
 
