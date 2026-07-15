@@ -114,8 +114,8 @@ function hasDraftContent(formData = form.value, tagIds = selectedTags.value) {
 }
 
 function saveLocalDraft() {
-  // 只缓存“独立新帖草稿”，且必须绑定合法 draft 状态云端 ID
-  if (!hasDraftContent() || !draftId.value) return
+  // 允许先落本地（即使还没有 cloud draftId），避免刷新/跳转丢输入
+  if (!hasDraftContent()) return
   const draft = {
     form: form.value,
     selectedTags: selectedTags.value,
@@ -464,16 +464,37 @@ async function handleSubmit(status: 'draft' | 'published') {
     }
 
     // 发布：只允许把“云端 draft 行”转正；绝不能 update 已发布帖
+    if (!payload.title?.trim() || !payload.content?.trim()) {
+      toast.warning(t('community.create.contentRequired'))
+      return
+    }
+
     let publishedPostId: number | null = null
     const validDraftId = await ensureValidDraftId(draftId.value)
     if (validDraftId) {
+      // 先把当前完整正文落到草稿，再转正，避免用旧云端正文发布
       await savePostDraft(validDraftId, buildDraftPayload())
-      const published = await updatePost(validDraftId, payload)
-      publishedPostId = (published as any)?.id || validDraftId
+      const published = await updatePost(validDraftId, {
+        ...payload,
+        title: payload.title,
+        content: payload.content,
+        status: 'published',
+      })
+      publishedPostId = Number((published as any)?.id || validDraftId)
     } else {
       draftId.value = null
-      const created = await createPost(payload)
-      publishedPostId = (created as any)?.id || (created as any)?.data?.id || null
+      clearDraft()
+      const created = await createPost({
+        ...payload,
+        title: payload.title,
+        content: payload.content,
+        status: 'published',
+      })
+      publishedPostId = Number((created as any)?.id || (created as any)?.data?.id || 0) || null
+    }
+    if (!publishedPostId) {
+      toast.error(t('community.create.submitFailed'))
+      return
     }
 
     if (selectedCollectionId.value && publishedPostId) {

@@ -119,29 +119,36 @@ function debouncedSaveDraft() {
   debounceTimer = setTimeout(() => void saveDraftToCloud(), 1400)
 }
 
-// 恢复草稿
-function loadDraft(postId: number) {
+// 读取本地草稿快照（不直接覆盖表单）
+function readLocalDraft(postId: number): { form: UpdatePostRequest; selectedTags: number[]; savedAt: number } | null {
   const saved = localStorage.getItem(draftKeyForPost(postId))
-  if (saved) {
-    try {
-      const draft = JSON.parse(saved)
-      if (draft.post_id !== postId) {
-        localStorage.removeItem(draftKeyForPost(postId))
-        return false
-      }
-      if (draft.form) {
-        form.value = { ...form.value, ...draft.form }
-        coverImagePreview.value = form.value.cover_image || ''
-      }
-      if (draft.selectedTags) {
-        selectedTags.value = draft.selectedTags
-      }
-      return true
-    } catch (e) {
-      console.error('恢复草稿失败:', e)
+  if (!saved) return null
+  try {
+    const draft = JSON.parse(saved)
+    if (draft.post_id !== postId || !draft.form) {
+      localStorage.removeItem(draftKeyForPost(postId))
+      return null
     }
+    return {
+      form: draft.form,
+      selectedTags: Array.isArray(draft.selectedTags) ? draft.selectedTags : [],
+      savedAt: Number(draft.savedAt) || 0,
+    }
+  } catch (e) {
+    console.error('读取本地草稿失败:', e)
+    localStorage.removeItem(draftKeyForPost(postId))
+    return null
   }
-  return false
+}
+
+function localDraftHasUsefulContent(draftForm: UpdatePostRequest) {
+  return Boolean(
+    draftForm.title?.trim()
+    || draftForm.content?.trim()
+    || draftForm.cover_image
+    || draftForm.region?.trim()
+    || draftForm.address?.trim()
+  )
 }
 
 // 清除草稿
@@ -179,16 +186,46 @@ async function initializePostEditor(postId: number) {
   const token = ++loadToken
   resetEditorState(postId)
 
-  const hasDraft = loadDraft(postId)
-  if (!hasDraft) {
-    const loaded = await loadPost(postId, token)
-    if (token !== loadToken) return
-    if (!loaded) {
-      initializing.value = false
-      loading.value = false
-      return
-    }
+  // 永远先加载云端真相；本地草稿只作为“可能更新的未同步快照”
+  const loaded = await loadPost(postId, token)
+  if (token !== loadToken) return
+  if (!loaded) {
+    initializing.value = false
+    loading.value = false
+    return
   }
+
+  const local = readLocalDraft(postId)
+  if (local && localDraftHasUsefulContent(local.form) && form.value.status === 'draft') {
+    const serverUpdatedAt = Date.parse(String((form.value as any).updated_at || '')) || 0
+    const localIsNewer = !serverUpdatedAt || local.savedAt >= serverUpdatedAt
+    const localHasMoreText = (local.form.content?.trim().length || 0) > (form.value.content?.trim().length || 0)
+      || (local.form.title?.trim().length || 0) > (form.value.title?.trim().length || 0)
+
+    if (localIsNewer || localHasMoreText) {
+      const confirmed = await dialog.confirm({
+        title: t('community.drafts.resumeTitle'),
+        message: t('community.drafts.localNewerMessage'),
+        type: 'warning',
+        confirmText: t('community.drafts.resumeContinue'),
+        cancelText: t('community.drafts.useCloud'),
+      })
+      if (token !== loadToken) return
+      if (confirmed) {
+        form.value = { ...form.value, ...local.form, status: 'draft' }
+        selectedTags.value = local.selectedTags.length ? local.selectedTags : selectedTags.value
+        coverImagePreview.value = form.value.cover_image || ''
+      } else {
+        clearDraft(postId)
+      }
+    } else {
+      clearDraft(postId)
+    }
+  } else if (local && form.value.status !== 'draft') {
+    // 已发布帖的本地残留一律丢弃，避免覆盖线上内容
+    clearDraft(postId)
+  }
+
   if (token !== loadToken) return
 
   await Promise.all([
@@ -298,6 +335,19 @@ async function handleDraftSelect(id: number) {
   if (form.value.status === 'draft') {
     await saveDraftToCloud(true)
   }
+  // 草稿箱只能打开 draft；若点到异常 ID，拒绝进入正式帖编辑
+  try {
+    const res = await getPost(id)
+    if (res.post?.status !== 'draft') {
+      toast.error(t('community.drafts.invalidDraft'))
+      draftRefreshKey.value++
+      return
+    }
+  } catch {
+    toast.error(t('community.drafts.invalidDraft'))
+    draftRefreshKey.value++
+    return
+  }
   await router.push({ name: 'post-edit', params: { id } })
 }
 
@@ -340,31 +390,26 @@ async function loadPost(postId = Number(route.params.id), token = loadToken) {
   try {
     const res = await getPost(postId)
     if (token !== loadToken || activePostId.value !== postId) return false
-    form.value.title = res.post.title
-    form.value.content = res.post.content
-    form.value.content_type = res.post.content_type
-    form.value.category = res.post.category || 'other'
-    form.value.region = res.post.region || ''
-    form.value.address = res.post.address || ''
-    form.value.guild_id = res.post.guild_id
-    form.value.status = res.post.status
-    form.value.is_public = res.post.is_public ?? true
-    // 加载封面图
-    if (res.post.cover_image) {
-      form.value.cover_image = res.post.cover_image
-      coverImagePreview.value = res.post.cover_image
+    // 整表单按服务端覆盖，避免局部字段残留导致“看起来丢了”
+    form.value = {
+      ...createEmptyForm(),
+      title: res.post.title || '',
+      content: res.post.content || '',
+      content_type: res.post.content_type || 'html',
+      category: res.post.category || 'other',
+      region: res.post.region || '',
+      address: res.post.address || '',
+      guild_id: res.post.guild_id,
+      status: res.post.status,
+      is_public: res.post.is_public ?? true,
+      cover_image: res.post.cover_image || '',
+      event_type: res.post.event_type,
+      event_start_time: res.post.event_start_time ? res.post.event_start_time.slice(0, 16) : undefined,
+      event_end_time: res.post.event_end_time ? res.post.event_end_time.slice(0, 16) : undefined,
+      event_color: res.post.event_color || '#D97706',
     }
-    // 加载活动字段
-    form.value.event_type = res.post.event_type
-    if (res.post.event_start_time) {
-      form.value.event_start_time = res.post.event_start_time.slice(0, 16)
-    }
-    if (res.post.event_end_time) {
-      form.value.event_end_time = res.post.event_end_time.slice(0, 16)
-    }
-    if (res.post.event_color) {
-      form.value.event_color = res.post.event_color
-    }
+    ;(form.value as any).updated_at = res.post.updated_at
+    coverImagePreview.value = form.value.cover_image || ''
     return true
   } catch (error) {
     if (token !== loadToken || activePostId.value !== postId) return false
