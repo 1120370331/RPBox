@@ -627,79 +627,82 @@ function setEventStatusFilter(filter: EventStatusFilter) {
             loading="lazy"
           />
           <div class="banner-fallback" aria-hidden="true"></div>
-          <div class="banner-shade"></div>
+          <div class="banner-color-fade" aria-hidden="true"></div>
         </div>
 
-        <div class="banner-body">
-          <div class="banner-kicker">
-            <span class="kicker-dot"></span>
-            {{ t('community.banner.kicker') }}
-            <span class="banner-count">{{ t('community.banner.count', { count: bannerEvents.length }) }}</span>
+        <div class="banner-layout">
+          <div class="banner-date-card" aria-hidden="true">
+            <span class="date-month">{{ formatEventMonth(activeBanner.event_start_time) }}</span>
+            <span class="date-day">{{ formatEventDay(activeBanner.event_start_time) }}</span>
+            <span class="date-time">{{ formatEventTimeShort(activeBanner.event_start_time) }}</span>
           </div>
 
-          <div class="banner-chips">
-            <span class="status-chip" :class="getEventStatus(activeBanner)">
-              <i :class="getEventStatus(activeBanner) === 'live' ? 'ri-broadcast-line' : 'ri-time-line'"></i>
-              {{ getEventStatusLabel(getEventStatus(activeBanner)) }}
-            </span>
-            <span class="type-chip" :style="getEventStyle(activeBanner)">{{ getEventTypeLabel(activeBanner) }}</span>
-            <span v-if="activeBanner.guild_name" class="meta-chip">
-              <i class="ri-shield-star-line"></i>
-              {{ activeBanner.guild_name }}
-            </span>
-          </div>
-
-          <h2 class="banner-title" @click="goToPost(activeBanner.id)">{{ activeBanner.title }}</h2>
-
-          <div class="banner-meta-row">
-            <div class="meta-block">
-              <span class="meta-label">{{ t('community.banner.when') }}</span>
-              <strong>{{ formatEventRange(activeBanner) }}</strong>
-              <em v-if="formatCountdown(activeBanner)">{{ formatCountdown(activeBanner) }}</em>
+          <div class="banner-body">
+            <div class="banner-top-row">
+              <div class="banner-kicker">
+                <span class="kicker-dot"></span>
+                {{ t('community.banner.kicker') }}
+                <span class="banner-count">{{ t('community.banner.count', { count: bannerEvents.length }) }}</span>
+              </div>
+              <div class="banner-chips">
+                <span class="status-chip" :class="getEventStatus(activeBanner)">
+                  <i :class="getEventStatus(activeBanner) === 'live' ? 'ri-broadcast-line' : 'ri-time-line'"></i>
+                  {{ getEventStatusLabel(getEventStatus(activeBanner)) }}
+                </span>
+                <span class="type-chip" :style="getEventStyle(activeBanner)">{{ getEventTypeLabel(activeBanner) }}</span>
+                <span v-if="activeBanner.guild_name" class="meta-chip">
+                  <i class="ri-shield-star-line"></i>
+                  {{ activeBanner.guild_name }}
+                </span>
+              </div>
             </div>
-            <div v-if="formatLocation(activeBanner.region, activeBanner.address)" class="meta-block">
-              <span class="meta-label">{{ t('community.banner.where') }}</span>
-              <strong>
-                <i class="ri-map-pin-2-fill"></i>
-                {{ formatLocation(activeBanner.region, activeBanner.address) }}
-              </strong>
+
+            <h2 class="banner-title" @click="goToPost(activeBanner.id)">{{ activeBanner.title }}</h2>
+
+            <div class="banner-bottom-row">
+              <div class="banner-meta-inline">
+                <span class="meta-inline">
+                  <i class="ri-time-line"></i>
+                  {{ formatEventRange(activeBanner) }}
+                </span>
+                <span v-if="formatCountdown(activeBanner)" class="meta-inline countdown">
+                  {{ formatCountdown(activeBanner) }}
+                </span>
+                <span v-if="formatLocation(activeBanner.region, activeBanner.address)" class="meta-inline">
+                  <i class="ri-map-pin-2-fill"></i>
+                  {{ formatLocation(activeBanner.region, activeBanner.address) }}
+                </span>
+              </div>
+
+              <div class="banner-actions">
+                <button type="button" class="banner-cta" @click="goToPost(activeBanner.id)">
+                  {{ t('community.banner.viewDetail') }}
+                  <i class="ri-arrow-right-line"></i>
+                </button>
+                <button type="button" class="banner-secondary" @click="switchFeedTab('events')">
+                  {{ t('community.banner.viewAll') }}
+                </button>
+                <div v-if="bannerEvents.length > 1" class="banner-nav">
+                  <button type="button" class="nav-btn" @click="prevBanner" :aria-label="t('community.banner.prev')">
+                    <i class="ri-arrow-left-s-line"></i>
+                  </button>
+                  <div class="banner-dots">
+                    <button
+                      v-for="(event, index) in bannerEvents"
+                      :key="event.id"
+                      type="button"
+                      class="dot"
+                      :class="{ active: index === bannerIndex }"
+                      @click="goBanner(index)"
+                    />
+                  </div>
+                  <button type="button" class="nav-btn" @click="nextBanner" :aria-label="t('community.banner.next')">
+                    <i class="ri-arrow-right-s-line"></i>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-
-          <div class="banner-actions">
-            <button class="banner-cta" @click="goToPost(activeBanner.id)">
-              {{ t('community.banner.viewDetail') }}
-              <i class="ri-arrow-right-line"></i>
-            </button>
-            <button class="banner-secondary" @click="switchFeedTab('events')">
-              {{ t('community.banner.viewAll') }}
-            </button>
-          </div>
-        </div>
-
-        <div class="banner-date-card" aria-hidden="true">
-          <span class="date-month">{{ formatEventMonth(activeBanner.event_start_time) }}</span>
-          <span class="date-day">{{ formatEventDay(activeBanner.event_start_time) }}</span>
-          <span class="date-time">{{ formatEventTimeShort(activeBanner.event_start_time) }}</span>
-        </div>
-
-        <div v-if="bannerEvents.length > 1" class="banner-nav">
-          <button type="button" class="nav-btn" @click="prevBanner" :aria-label="t('community.banner.prev')">
-            <i class="ri-arrow-left-s-line"></i>
-          </button>
-          <div class="banner-dots">
-            <button
-              v-for="(event, index) in bannerEvents"
-              :key="event.id"
-              type="button"
-              class="dot"
-              :class="{ active: index === bannerIndex }"
-              @click="goBanner(index)"
-            />
-          </div>
-          <button type="button" class="nav-btn" @click="nextBanner" :aria-label="t('community.banner.next')">
-            <i class="ri-arrow-right-s-line"></i>
-          </button>
         </div>
       </div>
 
@@ -1170,90 +1173,156 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 
 /* ========== Event Banner ========== */
 .event-banner-section {
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .event-banner {
   position: relative;
-  min-height: 280px;
-  border-radius: 18px;
+  min-height: 140px;
+  height: 140px;
+  border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--color-border, #E5D4C1);
-  box-shadow: 0 18px 40px rgba(75, 54, 33, 0.12);
-  background: #2a1a12;
+  box-shadow: 0 10px 24px rgba(75, 54, 33, 0.1);
+  background: var(--event-color, #B87333);
   color: #fff;
 }
 
-.banner-media,
-.banner-fallback,
-.banner-shade,
+.banner-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
 .banner-cover {
   position: absolute;
   inset: 0;
-}
-
-.banner-cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scale(1.02);
+  object-position: left center;
 }
 
 .banner-fallback {
+  position: absolute;
+  inset: 0;
   background:
-    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--event-color, #B87333) 55%, transparent), transparent 42%),
-    linear-gradient(135deg, #3b2418 0%, #1f120c 55%, #4a2a18 100%);
+    linear-gradient(90deg, #2c1810 0%, color-mix(in srgb, var(--event-color, #B87333) 55%, #2c1810) 100%);
 }
 
-.banner-shade {
-  background:
-    linear-gradient(100deg, rgba(20, 12, 8, 0.88) 0%, rgba(20, 12, 8, 0.72) 42%, rgba(20, 12, 8, 0.28) 100%),
-    linear-gradient(0deg, rgba(20, 12, 8, 0.55), transparent 55%);
+/* 封面从左清晰 → 向右渐变成活动标记色 */
+.banner-color-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 28%,
+    color-mix(in srgb, var(--event-color, #B87333) 35%, transparent) 48%,
+    color-mix(in srgb, var(--event-color, #B87333) 78%, #1a100c) 72%,
+    color-mix(in srgb, var(--event-color, #B87333) 92%, #1a100c) 100%
+  );
+  pointer-events: none;
+}
+
+.banner-layout {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px 12px 14px;
+}
+
+.banner-date-card {
+  width: 72px;
+  height: 104px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.date-month {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+  font-weight: 700;
+}
+
+.date-day {
+  font-family: 'Cinzel', serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.date-time {
+  font-size: 11px;
+  opacity: 0.92;
+  margin-top: 2px;
 }
 
 .banner-body {
-  position: relative;
-  z-index: 2;
-  max-width: 720px;
-  padding: 28px 32px 72px;
+  min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  justify-content: center;
+  gap: 6px;
+}
+
+.banner-top-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }
 
 .banner-kicker {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  letter-spacing: 0.16em;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   font-weight: 700;
-  color: rgba(255, 245, 230, 0.82);
+  color: rgba(255, 245, 230, 0.88);
 }
 
 .kicker-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--event-color, #D97706);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--event-color, #D97706) 28%, transparent);
+  background: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #fff 22%, transparent);
 }
 
 .banner-count {
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   letter-spacing: 0;
   text-transform: none;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .banner-chips,
 .event-card-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -1263,27 +1332,27 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .status-chip.live {
-  background: rgba(220, 38, 38, 0.18);
+  background: rgba(220, 38, 38, 0.22);
   color: #fecaca;
   border: 1px solid rgba(248, 113, 113, 0.45);
 }
 
 .status-chip.upcoming {
-  background: rgba(245, 158, 11, 0.18);
+  background: rgba(245, 158, 11, 0.22);
   color: #fde68a;
   border: 1px solid rgba(251, 191, 36, 0.4);
 }
 
 .status-chip.ended {
-  background: rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.22);
   color: #e2e8f0;
   border: 1px solid rgba(148, 163, 184, 0.35);
 }
@@ -1298,6 +1367,8 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 
 .type-chip {
   border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #fff !important;
 }
 
 .meta-chip {
@@ -1313,150 +1384,119 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 .banner-title {
   margin: 0;
   font-family: 'Cinzel', serif;
-  font-size: clamp(24px, 3vw, 34px);
+  font-size: clamp(16px, 1.8vw, 22px);
   line-height: 1.25;
   cursor: pointer;
   transition: opacity 0.2s;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
 }
 
 .banner-title:hover {
+  opacity: 0.92;
+}
+
+.banner-bottom-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.banner-meta-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.meta-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 248, 240, 0.92);
+  white-space: nowrap;
+}
+
+.meta-inline i {
+  font-size: 13px;
   opacity: 0.9;
 }
 
-.banner-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px 28px;
-}
-
-.meta-block {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
-}
-
-.meta-label {
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 245, 230, 0.65);
-  font-weight: 700;
-}
-
-.meta-block strong {
-  font-size: 14px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.meta-block em {
-  font-style: normal;
-  font-size: 12px;
+.meta-inline.countdown {
   color: #fde68a;
 }
 
 .banner-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 4px;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .banner-cta,
 .banner-secondary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .banner-cta {
   border: none;
-  background: var(--event-color, #B87333);
-  color: #fff;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--event-color, #B87333) 35%, transparent);
+  background: rgba(255, 255, 255, 0.95);
+  color: color-mix(in srgb, var(--event-color, #B87333) 70%, #2c1810);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .banner-cta:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.04);
   transform: translateY(-1px);
 }
 
 .banner-secondary {
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
 .banner-secondary:hover {
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.banner-date-card {
-  position: absolute;
-  top: 24px;
-  right: 24px;
-  z-index: 2;
-  width: 88px;
-  padding: 12px 10px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.date-month {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.85;
-}
-
-.date-day {
-  font-family: 'Cinzel', serif;
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.date-time {
-  font-size: 12px;
-  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .banner-nav {
-  position: absolute;
-  left: 28px;
-  right: 28px;
-  bottom: 18px;
-  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  margin-left: 2px;
 }
 
 .nav-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
   display: grid;
   place-items: center;
   cursor: pointer;
+  padding: 0;
 }
 
 .nav-btn:hover {
@@ -1465,13 +1505,13 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 
 .banner-dots {
   display: flex;
-  gap: 8px;
+  gap: 5px;
   align-items: center;
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   border: none;
   background: rgba(255, 255, 255, 0.35);
@@ -1481,12 +1521,13 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 }
 
 .dot.active {
-  width: 22px;
+  width: 16px;
   background: #fff;
 }
 
 .event-banner.empty {
-  min-height: 220px;
+  height: auto;
+  min-height: 120px;
   background:
     linear-gradient(135deg, rgba(255, 249, 240, 0.95), rgba(245, 239, 231, 0.98));
   color: var(--color-text-main, #2C1810);
@@ -1499,25 +1540,25 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding: 28px;
+  gap: 14px;
+  padding: 16px 20px;
   text-align: left;
 }
 
 .banner-empty-inner i {
-  font-size: 42px;
+  font-size: 32px;
   color: var(--color-accent, #B87333);
 }
 
 .banner-empty-inner h3 {
-  margin: 0 0 4px;
-  font-size: 18px;
+  margin: 0 0 2px;
+  font-size: 15px;
 }
 
 .banner-empty-inner p {
   margin: 0;
   color: var(--color-text-secondary, #8D7B68);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .loading-banner .spin {
@@ -1966,6 +2007,42 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   .events-grid { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 900px) {
+  .event-banner {
+    height: auto;
+    min-height: 0;
+  }
+
+  .banner-layout {
+    grid-template-columns: 64px minmax(0, 1fr);
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .banner-date-card {
+    width: 64px;
+    height: 92px;
+  }
+
+  .date-day {
+    font-size: 24px;
+  }
+
+  .banner-bottom-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .banner-color-fade {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--event-color, #B87333) 40%, transparent) 40%,
+      color-mix(in srgb, var(--event-color, #B87333) 88%, #1a100c) 100%
+    );
+  }
+}
+
 @media (max-width: 760px) {
   .event-card {
     grid-template-columns: 1fr;
@@ -1975,17 +2052,20 @@ function setEventStatusFilter(filter: EventStatusFilter) {
     min-height: 140px;
   }
 
+  .banner-layout {
+    grid-template-columns: 1fr;
+  }
+
   .banner-date-card {
     display: none;
   }
 
-  .banner-body {
-    padding: 22px 18px 68px;
+  .banner-title {
+    -webkit-line-clamp: 2;
   }
 
-  .banner-nav {
-    left: 16px;
-    right: 16px;
+  .meta-inline {
+    white-space: normal;
   }
 }
 
