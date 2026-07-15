@@ -1192,10 +1192,12 @@ func (s *Server) updatePost(c *gin.Context) {
 	}
 
 	// 版主或草稿状态：直接修改
-	if req.Title != "" {
+	// 注意：草稿转发布时 title/content 可能是完整快照，必须用“字段是否出现”语义。
+	// 这里 title/content 非空才覆盖，避免把已有正文清空；但草稿发布前客户端已校验非空。
+	if strings.TrimSpace(req.Title) != "" {
 		post.Title = req.Title
 	}
-	if req.Content != "" {
+	if strings.TrimSpace(req.Content) != "" {
 		post.Content = req.Content
 	}
 	if req.ContentType != "" {
