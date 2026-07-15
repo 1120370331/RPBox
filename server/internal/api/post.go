@@ -91,9 +91,10 @@ type postListParams struct {
 	GuildID    string
 	TagID      string
 	AuthorID   string
-	Status     string
-	Category   string
-	IsPinned   *bool
+	Status          string
+	Category        string
+	ExcludeCategory string
+	IsPinned        *bool
 }
 
 type postListResponse struct {
@@ -177,23 +178,25 @@ func (s *Server) listPosts(c *gin.Context) {
 	authorID := c.Query("author_id")
 	status := c.DefaultQuery("status", "published")
 	category := c.Query("category") // 分区筛选
+	excludeCategory := c.Query("exclude_category")
 	isPinned := c.Query("is_pinned")
 
 	params := postListParams{
-		UserID:     userID,
-		Page:       page,
-		PageSize:   pageSize,
-		SortBy:     sortBy,
-		Order:      order,
-		Search:     search,
-		AuthorName: authorName,
-		Region:     region,
-		Address:    address,
-		GuildID:    guildID,
-		TagID:      tagID,
-		AuthorID:   authorID,
-		Status:     status,
-		Category:   category,
+		UserID:          userID,
+		Page:            page,
+		PageSize:        pageSize,
+		SortBy:          sortBy,
+		Order:           order,
+		Search:          search,
+		AuthorName:      authorName,
+		Region:          region,
+		Address:         address,
+		GuildID:         guildID,
+		TagID:           tagID,
+		AuthorID:        authorID,
+		Status:          status,
+		Category:        category,
+		ExcludeCategory: excludeCategory,
 	}
 	if isPinned != "" {
 		pinnedValue, err := strconv.ParseBool(isPinned)
@@ -211,8 +214,8 @@ func (s *Server) listPosts(c *gin.Context) {
 		if params.IsPinned != nil {
 			pinnedValue = strconv.FormatBool(*params.IsPinned)
 		}
-		filterKey := fmt.Sprintf("search_scope=global_v2|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|pinned=%s|status=%s",
-			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.Region, params.Address, params.TagID, params.AuthorID, params.Category, pinnedValue, params.Status)
+		filterKey := fmt.Sprintf("search_scope=global_v3|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|exclude_category=%s|pinned=%s|status=%s",
+			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.Region, params.Address, params.TagID, params.AuthorID, params.Category, params.ExcludeCategory, pinnedValue, params.Status)
 		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
 		if err != nil {
 			log.Printf("[Cache] Version error: %v", err)
@@ -308,6 +311,9 @@ func (s *Server) loadPostList(ctx context.Context, params postListParams) (postL
 	// 分区筛选
 	if params.Category != "" {
 		query = query.Where("posts.category = ?", params.Category)
+	}
+	if params.ExcludeCategory != "" {
+		query = query.Where("posts.category <> ?", params.ExcludeCategory)
 	}
 
 	if params.Search != "" || params.AuthorName != "" {

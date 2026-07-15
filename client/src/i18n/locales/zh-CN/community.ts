@@ -8,6 +8,39 @@ export default {
     latest: '最新',
     following: '关注',
   },
+  feed: {
+    posts: '帖子',
+    events: '活动',
+  },
+  banner: {
+    kicker: '今日布告',
+    count: '{count} 场进行中/即将开始',
+    when: '时间',
+    where: '地点',
+    viewDetail: '查看活动',
+    viewAll: '全部活动',
+    prev: '上一个活动',
+    next: '下一个活动',
+    emptyTitle: '还没有进行中的活动',
+    emptyBody: '发布一场酒馆活动，让它出现在首屏 Banner。',
+    emptyAction: '发布活动',
+  },
+  eventStatus: {
+    live: '进行中',
+    upcoming: '即将开始',
+    ended: '已结束',
+  },
+  eventFilter: {
+    active: '未结束',
+    all: '全部状态',
+  },
+  countdown: {
+    daysHours: '{days}天{hours}小时',
+    hoursMinutes: '{hours}小时{minutes}分',
+    minutes: '{minutes}分钟',
+    startsIn: '{time}后开始',
+    endsIn: '{time}后结束',
+  },
   post: {
     title: '标题',
     content: '内容',
@@ -67,7 +100,7 @@ export default {
   },
   events: {
     title: '近期活动',
-    empty: '暂无近期活动',
+    empty: '暂无符合条件的活动',
     calendarTitle: '活动日历',
     synced: '已同步',
     today: '今天',

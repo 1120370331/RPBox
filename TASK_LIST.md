@@ -48,7 +48,7 @@
 |----|------|------|--------|------|--------|
 | SRV-0007 | Redis 缓存优化与帖子列表刷新修复 | FIX | P1 | DONE | - |
 | SRV-0006 | 帖子编辑审核去重与终态收敛 | FIX | P0 | DONE | - |
-| COMM-0002 | 社区广场活动 Banner 与帖子/活动分栏 | DEV | P1 | TODO | - |
+| COMM-0002 | 社区广场活动 Banner 与帖子/活动分栏 | DEV | P1 | DONE | - |
 | COMM-0001 | 帖子内嵌人物卡卡片 | DEV | P1 | TODO | - |
 | COMM-0006 | 帖子与道具 Bilibili 视频嵌入支持 | DEV | P1 | TODO | - |
 | COMM-0003 | 桌面端帖子转发能力补齐 | DEV | P2 | DONE | - |
