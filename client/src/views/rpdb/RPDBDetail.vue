@@ -608,7 +608,7 @@ onBeforeUnmount(() => {
           <div><dt>阵营</dt><dd>{{ factionLabel(work.faction) }}</dd></div>
         </dl>
         <dl class="hero-stats" aria-label="作品数据" data-testid="rpdb-detail-metrics">
-          <div><dt><i class="ri-eye-line"></i>浏览</dt><dd>{{ formatCount(work.view_count) }}</dd></div>
+          <div><dt><i class="ri-eye-line"></i>浏览</dt><dd title="登录用户每日计 1 次">{{ formatCount(work.view_count) }}</dd></div>
           <div><dt><i class="ri-heart-3-line"></i>点赞</dt><dd>{{ formatCount(work.like_count) }}</dd></div>
           <div><dt><i class="ri-bookmark-3-line"></i>收藏</dt><dd>{{ formatCount(work.favorite_count) }}</dd></div>
           <div><dt><i class="ri-list-check-3"></i>清单</dt><dd>{{ formatCount(work.list_count) }}</dd></div>
@@ -659,7 +659,7 @@ onBeforeUnmount(() => {
         <section>
           <h3>快速操作</h3>
           <div class="floating-actions">
-            <div class="floating-view"><i class="ri-eye-line"></i><span>浏览</span><b>{{ formatCount(work.view_count) }}</b></div>
+            <div class="floating-view" title="登录用户每日计 1 次"><i class="ri-eye-line"></i><span>浏览</span><b>{{ formatCount(work.view_count) }}</b></div>
             <button type="button" :class="{ active: work.is_liked }" data-testid="floating-like-button" @click="toggleLike">
               <i class="ri-heart-3-line"></i>
               <span>{{ work.is_liked ? '已点赞' : '点赞' }}</span>
