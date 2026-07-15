@@ -266,6 +266,7 @@ async function syncDraftCollection(postId: number) {
 async function saveDraftToCloud(force = false) {
   saveLocalDraft()
   const postId = activePostId.value
+  // 已发布帖不允许走草稿自动保存接口（防止“未发布就改线上”）
   if (!postId || form.value.status !== 'draft' || initializing.value || (loading.value && !force)) return
   if (cloudSaveRunning) {
     cloudSaveQueued = true
@@ -294,15 +295,24 @@ async function saveDraftToCloud(force = false) {
 
 async function handleDraftSelect(id: number) {
   if (id === activePostId.value) return
-  await saveDraftToCloud(true)
+  if (form.value.status === 'draft') {
+    await saveDraftToCloud(true)
+  }
   await router.push({ name: 'post-edit', params: { id } })
 }
 
 async function handleNewDraft() {
-  await saveDraftToCloud(true)
-  const created = await createPostDraft({ title: '', content: '', content_type: 'html', category: 'other', tag_ids: [] })
-  draftRefreshKey.value++
-  await router.push({ name: 'post-edit', params: { id: created.id } })
+  if (form.value.status === 'draft') {
+    await saveDraftToCloud(true)
+  }
+  try {
+    const created = await createPostDraft({ title: '', content: '', content_type: 'html', category: 'other', tag_ids: [] })
+    draftRefreshKey.value++
+    await router.push({ name: 'post-edit', params: { id: created.id } })
+  } catch (error) {
+    console.error('创建草稿失败:', error)
+    toast.error(t('community.drafts.error'))
+  }
 }
 
 async function handleDraftDelete(post: PostWithAuthor) {
@@ -441,6 +451,15 @@ async function handleSubmit(status: 'draft' | 'published') {
   try {
     const id = activePostId.value
     if (!id) return
+
+    // 草稿态：保存草稿只写 draft 接口；发布才 update 转正
+    if (form.value.status === 'draft' && status === 'draft') {
+      await saveDraftToCloud(true)
+      if (draftSaveState.value === 'saved') toast.success(t('community.create.draftSuccess'))
+      else toast.error(t('community.drafts.error'))
+      return
+    }
+
     const payload: UpdatePostRequest = {
       ...form.value,
       status,
@@ -453,6 +472,13 @@ async function handleSubmit(status: 'draft' | 'published') {
     if (payload.event_end_time) {
       payload.event_end_time = new Date(payload.event_end_time).toISOString()
     }
+
+    // 已发布帖的“保存草稿”不允许回退 status，只能提交编辑审核/更新
+    if (form.value.status !== 'draft' && status === 'draft') {
+      toast.warning(t('community.drafts.cannotDraftPublished'))
+      return
+    }
+
     await updatePost(id, payload)
 
     // 更新标签
