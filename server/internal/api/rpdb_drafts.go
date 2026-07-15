@@ -17,6 +17,7 @@ import (
 )
 
 var errRPDBDraftBaseVersionConflict = errors.New("rpdb draft base version conflict")
+var errRPDBDraftWorkTypeConflict = errors.New("rpdb draft work type conflict")
 
 type rpdbDraftWriteRequest struct {
 	WorkID  *uint           `json:"work_id"`
@@ -51,7 +52,12 @@ func (s *Server) listRPDBDrafts(c *gin.Context) {
 		return
 	}
 	responses := make([]rpdbDraftResponse, 0, len(drafts))
-	for _, draft := range drafts {
+	for index := range drafts {
+		if err := repairRPDBDraftTypeMismatch(&drafts[index]); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "修复草稿类型失败"})
+			return
+		}
+		draft := drafts[index]
 		responses = append(responses, makeRPDBDraftResponse(draft))
 	}
 	c.JSON(http.StatusOK, gin.H{"drafts": responses})
@@ -67,6 +73,7 @@ func (s *Server) createRPDBDraft(c *gin.Context) {
 
 	payload := input.Payload
 	baseVersion := 0
+	var linkedWork *model.RPDBWork
 	if input.WorkID != nil {
 		var work model.RPDBWork
 		if err := database.DB.First(&work, *input.WorkID).Error; err != nil {
@@ -81,6 +88,7 @@ func (s *Server) createRPDBDraft(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "该作品当前不能编辑"})
 			return
 		}
+		linkedWork = &work
 		baseVersion = work.Version
 		if len(payload) == 0 || string(payload) == "null" {
 			var err error
@@ -95,6 +103,10 @@ func (s *Server) createRPDBDraft(c *gin.Context) {
 	request, normalizedPayload, err := normalizeRPDBDraftPayload(payload)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if linkedWork != nil && request.Type != linkedWork.Type {
+		c.JSON(http.StatusConflict, gin.H{"error": "关联草稿不能更改正式作品类型"})
 		return
 	}
 	draft := model.RPDBDraft{
@@ -119,6 +131,10 @@ func (s *Server) getRPDBDraft(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if err := repairRPDBDraftTypeMismatch(&draft); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "修复草稿类型失败"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"draft": makeRPDBDraftResponse(draft)})
 }
 
@@ -136,6 +152,17 @@ func (s *Server) updateRPDBDraft(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if draft.WorkID != nil {
+		var work model.RPDBWork
+		if err := database.DB.First(&work, *draft.WorkID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "关联的正式作品不存在"})
+			return
+		}
+		if request.Type != work.Type {
+			c.JSON(http.StatusConflict, gin.H{"error": "关联草稿不能更改正式作品类型"})
+			return
+		}
 	}
 	draft.Type = request.Type
 	draft.Title = strings.TrimSpace(request.Title)
@@ -249,6 +276,9 @@ func (s *Server) publishRPDBDraft(c *gin.Context) {
 			if publishedWork.AuthorID != userID {
 				return gorm.ErrRecordNotFound
 			}
+			if request.Type != publishedWork.Type {
+				return errRPDBDraftWorkTypeConflict
+			}
 			if draft.BaseVersion != 0 && draft.BaseVersion != publishedWork.Version {
 				return errRPDBDraftBaseVersionConflict
 			}
@@ -291,6 +321,10 @@ func (s *Server) publishRPDBDraft(c *gin.Context) {
 
 	if errors.Is(err, errRPDBDraftBaseVersionConflict) {
 		c.JSON(http.StatusConflict, gin.H{"error": "正式作品已发生更新，请基于最新版本重新创建草稿"})
+		return
+	}
+	if errors.Is(err, errRPDBDraftWorkTypeConflict) {
+		c.JSON(http.StatusConflict, gin.H{"error": "关联草稿不能更改正式作品类型"})
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -381,6 +415,36 @@ func makeRPDBDraftResponse(draft model.RPDBDraft) rpdbDraftResponse {
 		payload = json.RawMessage(`{}`)
 	}
 	return rpdbDraftResponse{RPDBDraft: draft, Payload: payload}
+}
+
+func repairRPDBDraftTypeMismatch(draft *model.RPDBDraft) error {
+	if draft.WorkID == nil {
+		return nil
+	}
+	var work model.RPDBWork
+	if err := database.DB.First(&work, *draft.WorkID).Error; err != nil {
+		return err
+	}
+	request, _, err := normalizeRPDBDraftPayload([]byte(draft.Payload))
+	if err == nil && draft.Type == work.Type && request.Type == work.Type {
+		return nil
+	}
+	payload, err := buildRPDBDraftPayload(database.DB, work)
+	if err != nil {
+		return err
+	}
+	draft.Type = work.Type
+	draft.Title = work.Title
+	draft.CoverImage = work.CoverImage
+	draft.Payload = string(payload)
+	draft.BaseVersion = work.Version
+	return database.DB.Model(draft).Updates(map[string]interface{}{
+		"type":         draft.Type,
+		"title":        draft.Title,
+		"cover_image":  draft.CoverImage,
+		"payload":      draft.Payload,
+		"base_version": draft.BaseVersion,
+	}).Error
 }
 
 func buildRPDBDraftPayload(tx *gorm.DB, work model.RPDBWork) ([]byte, error) {

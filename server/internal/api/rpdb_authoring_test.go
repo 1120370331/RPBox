@@ -408,6 +408,67 @@ func TestRPDBPublishingRelatedDraftCreatesRevisionWithoutOverwritingWork(t *test
 	}
 }
 
+func TestRPDBRelatedDraftRejectsTypeChangesAndRepairsContaminatedPayload(t *testing.T) {
+	server, user, token := newRPDBAuthoringTestServer(t)
+	work := model.RPDBWork{
+		AuthorID:     user.ID,
+		Type:         model.RPDBWorkTypeTransmog,
+		Title:        "银月巡礼幻化",
+		Content:      "<p>正式幻化资料</p>",
+		Status:       model.RPDBStatusPublished,
+		ReviewStatus: model.RPDBReviewApproved,
+		Visibility:   model.RPDBVisibilityPublic,
+		Version:      5,
+	}
+	if err := database.DB.Create(&work).Error; err != nil {
+		t.Fatalf("create work: %v", err)
+	}
+	draft := model.RPDBDraft{
+		AuthorID:    user.ID,
+		WorkID:      &work.ID,
+		Type:        model.RPDBWorkTypeHomeShowcase,
+		Title:       "错误的住宅草稿",
+		Payload:     `{"type":"home_showcase","title":"错误的住宅草稿","content":"住宅资料"}`,
+		BaseVersion: work.Version,
+		Status:      model.RPDBDraftStatusActive,
+	}
+	if err := database.DB.Create(&draft).Error; err != nil {
+		t.Fatalf("create contaminated draft: %v", err)
+	}
+
+	getResp := performRequest(
+		server.router,
+		http.MethodGet,
+		"/api/v1/rpdb/drafts/"+strconv.FormatUint(uint64(draft.ID), 10),
+		nil,
+		token,
+	)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get repaired draft: expected 200, got %d body=%s", getResp.Code, getResp.Body.String())
+	}
+	if !strings.Contains(getResp.Body.String(), `"type":"transmog"`) ||
+		!strings.Contains(getResp.Body.String(), "正式幻化资料") ||
+		strings.Contains(getResp.Body.String(), "住宅资料") {
+		t.Fatalf("contaminated draft was not rebuilt from the formal transmog work: %s", getResp.Body.String())
+	}
+
+	updateResp := performRequest(
+		server.router,
+		http.MethodPut,
+		"/api/v1/rpdb/drafts/"+strconv.FormatUint(uint64(draft.ID), 10),
+		map[string]interface{}{
+			"payload": map[string]interface{}{
+				"type":  model.RPDBWorkTypeHomeShowcase,
+				"title": "再次写成住宅",
+			},
+		},
+		token,
+	)
+	if updateResp.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for associated draft type change, got %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+}
+
 func TestRPDBDraftBoxMigratesLegacyDraftWorksWithoutLosingContent(t *testing.T) {
 	server, user, token := newRPDBAuthoringTestServer(t)
 	legacy := model.RPDBWork{

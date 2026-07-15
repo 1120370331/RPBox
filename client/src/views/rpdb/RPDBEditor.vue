@@ -51,6 +51,7 @@ const drafts = ref<RPDBDraft[]>([])
 const showDraftBox = ref(false)
 let autoSaveTimer: ReturnType<typeof window.setTimeout> | null = null
 let draftSaveQueue: Promise<boolean> = Promise.resolve(true)
+let editorSessionVersion = 0
 const rpStyleTags = ref<Tag[]>([])
 const styleTagsLoading = ref(true)
 const guilds = ref<Guild[]>([])
@@ -249,6 +250,7 @@ function scrollToSection(id: string) {
 }
 
 function selectWorkType(type: RPDBWorkType) {
+  if (editingWorkId.value && type !== form.type) return
   form.type = type
   if (type === 'home_showcase') {
     form.references = []
@@ -281,7 +283,8 @@ function ensurePrimaryReference(type: RPDBWorkType = form.type) {
 }
 
 function addReference(externalType: 'item' | 'transmog' = form.type === 'transmog' ? 'transmog' : 'item') {
-  form.references!.push({
+  const references = Array.isArray(form.references) ? form.references : (form.references = [])
+  references.push({
     external_type: externalType,
     external_id: '',
     name: '',
@@ -289,7 +292,7 @@ function addReference(externalType: 'item' | 'transmog' = form.type === 'transmo
     acquisition_method: '',
     source: externalType === 'transmog' ? 'collection' : '',
     url: '',
-    is_primary: form.references!.length === 0,
+    is_primary: references.length === 0,
   })
 }
 
@@ -317,13 +320,15 @@ function ensureHomeFurniture() {
 }
 
 function addMedia() {
-  form.media!.push({ type: 'image', url: '', caption: '' })
+  const media = Array.isArray(form.media) ? form.media : (form.media = [])
+  media.push({ type: 'image', url: '', caption: '' })
 }
 
 function addSlot() {
-  const usedSlots = new Set((form.transmog_slots || []).map(slot => slot.slot))
+  const slots = Array.isArray(form.transmog_slots) ? form.transmog_slots : (form.transmog_slots = [])
+  const usedSlots = new Set(slots.map(slot => slot.slot))
   const nextSlot = slotOptions.value.find(option => !usedSlots.has(option.value)) || slotOptions.value[0]
-  form.transmog_slots!.push({ slot: nextSlot.value, role: 'required', name: '', description: '', source: '', wowhead_url: '', variant: '', note: '', sort_order: form.transmog_slots!.length + 1 })
+  slots.push({ slot: nextSlot.value, role: 'required', name: '', description: '', source: '', wowhead_url: '', variant: '', note: '', sort_order: slots.length + 1 })
 }
 
 function ensureTransmogSlots() {
@@ -342,8 +347,9 @@ function ensureTransmogSlots() {
 }
 
 function addStep() {
-  form.guide_steps!.push({
-    sort_order: form.guide_steps!.length + 1,
+  const steps = Array.isArray(form.guide_steps) ? form.guide_steps : (form.guide_steps = [])
+  steps.push({
+    sort_order: steps.length + 1,
     title: '',
     body: '',
     zone: '',
@@ -363,10 +369,11 @@ function removeStep(index: number) {
 
 function importTomTomSteps() {
   const { waypoints, rejected } = parseTomTomCommands(tomtomDraft.value)
+  const steps = Array.isArray(form.guide_steps) ? form.guide_steps : (form.guide_steps = [])
   for (const waypoint of waypoints) {
-    form.guide_steps!.push({
-      sort_order: form.guide_steps!.length + 1,
-      title: waypoint.label || t('rpdb.editor.guide.routePoint', { number: form.guide_steps!.length + 1 }),
+    steps.push({
+      sort_order: steps.length + 1,
+      title: waypoint.label || t('rpdb.editor.guide.routePoint', { number: steps.length + 1 }),
       body: '',
       zone: waypoint.zone,
       map_id: waypoint.map_id,
@@ -641,13 +648,26 @@ function resetEditorForm() {
   titleTouched.value = false
 }
 
+function normalizeEditorCollections() {
+  form.references = Array.isArray(form.references) ? form.references : []
+  form.media = Array.isArray(form.media) ? form.media : []
+  form.transmog_slots = Array.isArray(form.transmog_slots) ? form.transmog_slots : []
+  form.guide_steps = Array.isArray(form.guide_steps) ? form.guide_steps : []
+  form.tag_ids = Array.isArray(form.tag_ids) ? form.tag_ids : []
+  form.guild_ids = Array.isArray(form.guild_ids) ? form.guild_ids : []
+}
+
 function applyDraftPayload(draft: RPDBDraft) {
   resetEditorForm()
   Object.assign(form, draft.payload || {})
+  if (draft.type === 'item_showcase' || draft.type === 'transmog' || draft.type === 'home_showcase') {
+    form.type = draft.type
+  }
+  normalizeEditorCollections()
   form.status = 'draft'
   currentDraftId.value = draft.id
   editingWorkId.value = draft.work_id || null
-  customStyleTags.value = draft.payload?.tag_names || []
+  customStyleTags.value = Array.isArray(draft.payload?.tag_names) ? draft.payload.tag_names : []
   if (form.type === 'home_showcase') {
     Object.assign(homeDetails, form.extra || {})
   } else if (form.type === 'transmog') {
@@ -675,9 +695,11 @@ function formatDraftDate(value: string) {
 }
 
 async function openDraft(draftId: number, updateRoute = true) {
+  const sessionVersion = beginEditorSession()
   hasLoadedInitialData.value = false
   try {
     const { draft } = await getRPDBDraft(draftId)
+    if (sessionVersion !== editorSessionVersion) return
     applyDraftPayload(draft)
     if (updateRoute) {
       await router.replace({ name: 'rpdb-draft-edit', params: { draftId: draft.id } })
@@ -685,12 +707,15 @@ async function openDraft(draftId: number, updateRoute = true) {
   } catch (error) {
     toast.error((error as Error).message)
   } finally {
-    hasLoadedInitialData.value = true
-    showDraftBox.value = false
+    if (sessionVersion === editorSessionVersion) {
+      hasLoadedInitialData.value = true
+      showDraftBox.value = false
+    }
   }
 }
 
 async function startNewDraft(workId?: number) {
+  const sessionVersion = beginEditorSession()
   hasLoadedInitialData.value = false
   resetEditorForm()
   currentDraftId.value = null
@@ -699,6 +724,7 @@ async function startNewDraft(workId?: number) {
   try {
     if (workId) {
       const { draft } = await createRPDBDraft(undefined, workId)
+      if (sessionVersion !== editorSessionVersion) return
       applyDraftPayload(draft)
       drafts.value = [draft, ...drafts.value.filter(item => item.id !== draft.id)]
       await router.replace({ name: 'rpdb-draft-edit', params: { draftId: draft.id } })
@@ -708,8 +734,10 @@ async function startNewDraft(workId?: number) {
   } catch (error) {
     toast.error((error as Error).message)
   } finally {
-    hasLoadedInitialData.value = true
-    showDraftBox.value = false
+    if (sessionVersion === editorSessionVersion) {
+      hasLoadedInitialData.value = true
+      showDraftBox.value = false
+    }
   }
 }
 
@@ -733,18 +761,33 @@ async function removeDraft(draft: RPDBDraft) {
   }
 }
 
-async function persistDraft(showSuccess = false) {
+function beginEditorSession() {
+  editorSessionVersion++
+  if (autoSaveTimer) {
+    window.clearTimeout(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  autoSaveState.value = 'idle'
+  lastSaved.value = ''
+  return editorSessionVersion
+}
+
+async function persistDraft(showSuccess = false, sessionVersion = editorSessionVersion) {
+  if (sessionVersion !== editorSessionVersion) return false
   saveLocalDraft()
   autoSaveState.value = 'saving'
   try {
     const payload = buildDraftPayload('draft')
     const previousLocalKey = localDraftKey.value
-    const result = currentDraftId.value
-      ? await updateRPDBDraft(currentDraftId.value, payload)
-      : await createRPDBDraft(payload, editingWorkId.value || undefined)
+    const targetDraftId = currentDraftId.value
+    const targetWorkId = editingWorkId.value
+    const result = targetDraftId
+      ? await updateRPDBDraft(targetDraftId, payload)
+      : await createRPDBDraft(payload, targetWorkId || undefined)
+    drafts.value = [result.draft, ...drafts.value.filter(item => item.id !== result.draft.id)]
+    if (sessionVersion !== editorSessionVersion) return false
     currentDraftId.value = result.draft.id
     editingWorkId.value = result.draft.work_id || null
-    drafts.value = [result.draft, ...drafts.value.filter(item => item.id !== result.draft.id)]
     if (previousLocalKey !== localDraftKey.value) {
       window.localStorage.removeItem(previousLocalKey)
       await router.replace({ name: 'rpdb-draft-edit', params: { draftId: result.draft.id } })
@@ -760,10 +803,10 @@ async function persistDraft(showSuccess = false) {
   }
 }
 
-function autoSaveDraft(showSuccess = false) {
+function autoSaveDraft(showSuccess = false, sessionVersion = editorSessionVersion) {
   draftSaveQueue = draftSaveQueue.then(
-    () => persistDraft(showSuccess),
-    () => persistDraft(showSuccess),
+    () => persistDraft(showSuccess, sessionVersion),
+    () => persistDraft(showSuccess, sessionVersion),
   )
   return draftSaveQueue
 }
@@ -771,8 +814,9 @@ function autoSaveDraft(showSuccess = false) {
 function scheduleAutoSave() {
   if (!hasLoadedInitialData.value) return
   if (autoSaveTimer) window.clearTimeout(autoSaveTimer)
+  const sessionVersion = editorSessionVersion
   autoSaveTimer = window.setTimeout(() => {
-    void autoSaveDraft()
+    void autoSaveDraft(false, sessionVersion)
   }, 900)
 }
 
@@ -1053,6 +1097,7 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
             :key="option.id"
             type="button"
             :class="{ active: form.type === option.id }"
+            :disabled="Boolean(editingWorkId) && form.type !== option.id"
             @click="selectWorkType(option.id)"
           >
             <i :class="option.icon"></i>
