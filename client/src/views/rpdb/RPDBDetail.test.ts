@@ -9,6 +9,7 @@ import i18n from '@/i18n'
 
 const getRPDBWork = vi.hoisted(() => vi.fn())
 const listRPDBComments = vi.hoisted(() => vi.fn())
+const listRPDBWorkRecommendations = vi.hoisted(() => vi.fn())
 const clipboardWriteText = vi.hoisted(() => vi.fn())
 const addRPDBWorkToList = vi.hoisted(() => vi.fn())
 const createRPDBList = vi.hoisted(() => vi.fn())
@@ -34,6 +35,7 @@ vi.mock('@/api/rpdb', async () => {
     ...actual,
     getRPDBWork,
     listRPDBComments,
+    listRPDBWorkRecommendations,
     addRPDBWorkToList,
     createRPDBList,
     createRPDBComment: vi.fn(),
@@ -73,6 +75,7 @@ describe('RPDBDetail', () => {
     favoriteRPDBWork.mockReset()
     likeRPDBWork.mockReset()
     listRPDBLists.mockReset()
+    listRPDBWorkRecommendations.mockReset()
     toastSuccess.mockReset()
     toastError.mockReset()
     toastWarning.mockReset()
@@ -96,6 +99,7 @@ describe('RPDBDetail', () => {
         { id: 6, user_id: 1, name: '幻化待刷', description: '幻化计划', is_default: false, is_public: false, item_count: 4, entries: [] },
       ],
     })
+    listRPDBWorkRecommendations.mockResolvedValue({ recommendations: [] })
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: clipboardWriteText },
@@ -228,6 +232,81 @@ describe('RPDBDetail', () => {
     expect(metrics.text()).toContain('点赞86')
     expect(metrics.text()).toContain('收藏34')
     expect(metrics.text()).toContain('清单12')
+  })
+
+  it('shows weighted related recommendations directly above the discussion section', async () => {
+    listRPDBWorkRecommendations.mockResolvedValueOnce({
+      recommendations: [
+        {
+          id: 2,
+          author_id: 3,
+          author_name: '巡夜人',
+          type: 'transmog',
+          title: '暮色巡林幻化',
+          slug: 'dusk-ranger',
+          summary: '浏览本物品的玩家也收藏了这套幻化。',
+          content: '',
+          content_type: 'html',
+          cover_image: '/uploads/rpdb/demo/transmog.jpg',
+          rp_use_cases: '',
+          effect_description: '',
+          restrictions: '',
+          extra: '',
+          game_version: '',
+          expansion: '',
+          availability_status: 'available',
+          bind_type: '',
+          faction: 'neutral',
+          armor_type: 'leather',
+          verification_status: 'verified',
+          verified_count: 2,
+          outdated_count: 0,
+          status: 'published',
+          is_public: true,
+          visibility: 'public',
+          review_status: 'approved',
+          version: 1,
+          view_count: 18,
+          like_count: 7,
+          favorite_count: 5,
+          comment_count: 0,
+          list_count: 3,
+          media_count: 1,
+          is_liked: false,
+          is_favorited: false,
+          in_collection_list: false,
+          recommendation_score: 32,
+          recommendation_reasons: ['2 位相关玩家收藏', '1 位相关玩家加入清单'],
+          recommendation_signals: {
+            likes: 0,
+            favorites: 2,
+            views: 0,
+            lists: 1,
+            creators: 0,
+            same_author: false,
+          },
+          created_at: '2026-07-10T00:00:00Z',
+          updated_at: '2026-07-10T00:00:00Z',
+        },
+      ],
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/rpdb/:id', component: RPDBDetail }],
+    })
+    await router.push('/rpdb/1')
+    const wrapper = mount(RPDBDetail, {
+      global: { plugins: [createPinia(), router] },
+    })
+
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="rpdb-recommendations"]').exists()).toBe(true))
+    const related = wrapper.get('[data-testid="rpdb-recommendations"]')
+    const discussion = wrapper.get('#rpdb-section-discussion')
+    expect(related.element.compareDocumentPosition(discussion.element)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(related.text()).toContain('暮色巡林幻化')
+    expect(related.text()).toContain('2 位相关玩家收藏')
+    expect(related.text()).toContain('32')
+    expect(listRPDBWorkRecommendations).toHaveBeenCalledWith(1)
   })
 
   it('keeps the floating helper collapsed when the viewport cannot fit it beside the article', async () => {

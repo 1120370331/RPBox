@@ -408,3 +408,150 @@ func TestRPDBWorkPreviewDoesNotIncreaseViewCount(t *testing.T) {
 		t.Fatalf("preview must not increase views, got %d", refreshed.ViewCount)
 	}
 }
+
+func TestRPDBRecommendationsWeightRelatedPlayerSignalsAndSameAuthor(t *testing.T) {
+	server, author := newRPDBQueryTestServer(t)
+	firstPlayer := model.User{Username: "first-player", Email: "first-player@example.com", PassHash: "hash"}
+	secondPlayer := model.User{Username: "second-player", Email: "second-player@example.com", PassHash: "hash"}
+	otherAuthor := model.User{Username: "other-author", Email: "other-author@example.com", PassHash: "hash"}
+	if err := database.DB.Create(&[]*model.User{&firstPlayer, &secondPlayer, &otherAuthor}).Error; err != nil {
+		t.Fatalf("create recommendation users: %v", err)
+	}
+
+	newWork := func(workAuthor uint, workType, title string) model.RPDBWork {
+		return model.RPDBWork{
+			AuthorID:     workAuthor,
+			Type:         workType,
+			Title:        title,
+			Status:       model.RPDBStatusPublished,
+			ReviewStatus: model.RPDBReviewApproved,
+			Visibility:   model.RPDBVisibilityPublic,
+			IsPublic:     true,
+		}
+	}
+	current := newWork(author.ID, model.RPDBWorkTypeItemShowcase, "月光灯笼")
+	collaborative := newWork(otherAuthor.ID, model.RPDBWorkTypeTransmog, "暮色巡林幻化")
+	sameAuthor := newWork(author.ID, model.RPDBWorkTypeHomeShowcase, "同作者旅店")
+	playerCreated := newWork(firstPlayer.ID, model.RPDBWorkTypeItemShowcase, "相关玩家制作的道具")
+	viewOnly := newWork(otherAuthor.ID, model.RPDBWorkTypeHomeShowcase, "浏览关联住宅")
+	unrelated := newWork(otherAuthor.ID, model.RPDBWorkTypeItemShowcase, "无关作品")
+	works := []*model.RPDBWork{&current, &collaborative, &sameAuthor, &playerCreated, &viewOnly, &unrelated}
+	for _, work := range works {
+		if err := database.DB.Create(work).Error; err != nil {
+			t.Fatalf("create work %q: %v", work.Title, err)
+		}
+	}
+
+	if err := database.DB.Create(&[]model.RPDBLike{
+		{WorkID: current.ID, UserID: firstPlayer.ID},
+		{WorkID: collaborative.ID, UserID: firstPlayer.ID},
+	}).Error; err != nil {
+		t.Fatalf("create recommendation likes: %v", err)
+	}
+	if err := database.DB.Create(&[]model.RPDBFavorite{
+		{WorkID: current.ID, UserID: secondPlayer.ID},
+		{WorkID: collaborative.ID, UserID: firstPlayer.ID},
+		{WorkID: collaborative.ID, UserID: secondPlayer.ID},
+	}).Error; err != nil {
+		t.Fatalf("create recommendation favorites: %v", err)
+	}
+	if err := database.DB.Create(&[]model.RPDBViewEvent{
+		{WorkID: current.ID, UserID: secondPlayer.ID, ViewDate: "2026-07-14"},
+		{WorkID: viewOnly.ID, UserID: secondPlayer.ID, ViewDate: "2026-07-14"},
+		{WorkID: viewOnly.ID, UserID: secondPlayer.ID, ViewDate: "2026-07-15"},
+	}).Error; err != nil {
+		t.Fatalf("create recommendation views: %v", err)
+	}
+	list := model.RPDBList{UserID: secondPlayer.ID, Name: "巡夜清单"}
+	if err := database.DB.Create(&list).Error; err != nil {
+		t.Fatalf("create recommendation list: %v", err)
+	}
+	if err := database.DB.Create(&[]model.RPDBListEntry{
+		{ListID: list.ID, WorkID: current.ID},
+		{ListID: list.ID, WorkID: collaborative.ID},
+	}).Error; err != nil {
+		t.Fatalf("create recommendation list entries: %v", err)
+	}
+
+	resp := performRequest(
+		server.router,
+		http.MethodGet,
+		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(current.ID), 10)+"/recommendations?limit=6",
+		nil,
+		"",
+	)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected recommendations 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload rpdbRecommendationResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode recommendations: %v", err)
+	}
+	if len(payload.Recommendations) != 4 {
+		t.Fatalf("expected four recommendations, got %d: %#v", len(payload.Recommendations), payload.Recommendations)
+	}
+	gotIDs := []uint{
+		payload.Recommendations[0].ID,
+		payload.Recommendations[1].ID,
+		payload.Recommendations[2].ID,
+		payload.Recommendations[3].ID,
+	}
+	wantIDs := []uint{collaborative.ID, sameAuthor.ID, playerCreated.ID, viewOnly.ID}
+	for index := range wantIDs {
+		if gotIDs[index] != wantIDs[index] {
+			t.Fatalf("unexpected recommendation order: got=%v want=%v", gotIDs, wantIDs)
+		}
+	}
+	top := payload.Recommendations[0]
+	if top.RecommendationScore != 42 ||
+		top.RecommendationSignals.Favorites != 2 ||
+		top.RecommendationSignals.Lists != 1 ||
+		top.RecommendationSignals.Likes != 1 {
+		t.Fatalf("unexpected collaborative score: %#v", top)
+	}
+	if !payload.Recommendations[1].RecommendationSignals.SameAuthor {
+		t.Fatalf("expected same-author reason: %#v", payload.Recommendations[1])
+	}
+	if payload.Recommendations[3].RecommendationSignals.Views != 1 {
+		t.Fatalf("daily repeat views must count once per player: %#v", payload.Recommendations[3])
+	}
+}
+
+func TestRPDBRecommendationsUseAnonymousRedisCacheAndVersionInvalidation(t *testing.T) {
+	server, author := newRPDBQueryTestServer(t)
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	server.cache = internalcache.NewRedisCache(redisClient, internalcache.Options{})
+	t.Cleanup(func() { _ = server.cache.Close() })
+
+	current := model.RPDBWork{
+		AuthorID: author.ID, Type: model.RPDBWorkTypeItemShowcase, Title: "当前作品",
+		Status: model.RPDBStatusPublished, ReviewStatus: model.RPDBReviewApproved,
+		Visibility: model.RPDBVisibilityPublic, IsPublic: true,
+	}
+	related := model.RPDBWork{
+		AuthorID: author.ID, Type: model.RPDBWorkTypeTransmog, Title: "缓存前推荐标题",
+		Status: model.RPDBStatusPublished, ReviewStatus: model.RPDBReviewApproved,
+		Visibility: model.RPDBVisibilityPublic, IsPublic: true,
+	}
+	if err := database.DB.Create(&[]*model.RPDBWork{&current, &related}).Error; err != nil {
+		t.Fatalf("create recommendation cache works: %v", err)
+	}
+	path := "/api/v1/rpdb/works/" + strconv.FormatUint(uint64(current.ID), 10) + "/recommendations"
+	first := performRequest(server.router, http.MethodGet, path, nil, "")
+	if first.Code != http.StatusOK || !strings.Contains(first.Body.String(), "缓存前推荐标题") {
+		t.Fatalf("first recommendations failed: code=%d body=%s", first.Code, first.Body.String())
+	}
+	if err := database.DB.Model(&related).Update("title", "缓存失效后的标题").Error; err != nil {
+		t.Fatalf("update related title: %v", err)
+	}
+	second := performRequest(server.router, http.MethodGet, path, nil, "")
+	if second.Code != http.StatusOK || !strings.Contains(second.Body.String(), "缓存前推荐标题") {
+		t.Fatalf("expected cached recommendations: code=%d body=%s", second.Code, second.Body.String())
+	}
+	server.bumpRPDBListCache(context.Background())
+	third := performRequest(server.router, http.MethodGet, path, nil, "")
+	if third.Code != http.StatusOK || !strings.Contains(third.Body.String(), "缓存失效后的标题") {
+		t.Fatalf("expected invalidated recommendations: code=%d body=%s", third.Code, third.Body.String())
+	}
+}

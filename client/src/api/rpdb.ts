@@ -123,6 +123,8 @@ export interface RPDBWork {
   transmog_slots?: RPDBTransmogSlot[]
   guide_steps?: RPDBGuideStep[]
   tags?: RPDBTag[]
+  recommendation_score?: number
+  recommendation_reasons?: string[]
   created_at: string
   updated_at: string
 }
@@ -227,6 +229,19 @@ export interface RPDBDraft {
   updated_at: string
 }
 
+export interface RPDBRecommendation extends RPDBWork {
+  recommendation_score: number
+  recommendation_reasons: string[]
+  recommendation_signals: {
+    likes: number
+    favorites: number
+    views: number
+    lists: number
+    creators: number
+    same_author: boolean
+  }
+}
+
 export function listRPDBWorks(params: ListRPDBWorksParams = {}) {
   return request.get<{ works: RPDBWork[]; total: number; page: number; page_size: number }>('/rpdb/works', { params })
 }
@@ -241,6 +256,12 @@ export function getRPDBWork(id: number) {
 
 export function getRPDBWorkPreview(id: number) {
   return request.get<{ work: RPDBWork }>(`/rpdb/works/${id}/preview`)
+}
+
+export function listRPDBWorkRecommendations(id: number, limit = 6) {
+  return request.get<{ recommendations: RPDBRecommendation[] }>(`/rpdb/works/${id}/recommendations`, {
+    params: { limit },
+  })
 }
 
 export function listMyRPDBWorks() {
