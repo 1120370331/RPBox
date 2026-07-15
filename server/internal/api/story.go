@@ -100,15 +100,19 @@ func (s *Server) listStories(c *gin.Context) {
 		}
 	}
 
-	// 搜索关键词
+	// 搜索关键词（标题/简介/地区/地点 + 剧情正文条目）
 	if search := strings.TrimSpace(c.Query("search")); search != "" {
 		likeKeyword := "%" + search + "%"
+		entrySubquery := database.DB.Model(&model.StoryEntry{}).
+			Select("story_id").
+			Where("content LIKE ?", likeKeyword)
 		query = query.Where(
-			"(title LIKE ? OR description LIKE ? OR region LIKE ? OR address LIKE ?)",
+			"(title LIKE ? OR description LIKE ? OR region LIKE ? OR address LIKE ? OR id IN (?))",
 			likeKeyword,
 			likeKeyword,
 			likeKeyword,
 			likeKeyword,
+			entrySubquery,
 		)
 	}
 	if region := strings.TrimSpace(c.Query("region")); region != "" {

@@ -33,11 +33,8 @@ const currentGuild = ref<Guild | null>(null)
 const currentPage = ref(1)
 const eventFilter = ref<'all' | 'server' | 'guild'>('all')
 const eventStatusFilter = ref<EventStatusFilter>('active')
-const bannerIndex = ref(0)
 const SEARCH_DEBOUNCE_MS = 350
-const BANNER_INTERVAL_MS = 6000
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
-let bannerTimer: ReturnType<typeof setInterval> | null = null
 let nowTick = ref(Date.now())
 let nowTimer: ReturnType<typeof setInterval> | null = null
 
@@ -62,7 +59,6 @@ async function bootstrapCommunity() {
   }
 
   await Promise.all([loadPosts(), loadEvents(), loadPinnedPosts()])
-  startBannerAutoplay()
 }
 
 onMounted(async () => {
@@ -109,7 +105,6 @@ watch(feedTab, (tab) => {
 
 onUnmounted(() => {
   clearSearchDebounce()
-  stopBannerAutoplay()
   if (nowTimer) {
     clearInterval(nowTimer)
     nowTimer = null
@@ -493,6 +488,7 @@ const filteredEvents = computed(() => {
         event.guild_name,
         event.region,
         event.address,
+        stripHtml(event.content || ''),
       ].filter(Boolean).join(' ').toLowerCase()
       return haystack.includes(keyword)
     })
@@ -514,13 +510,6 @@ const bannerEvents = computed(() => {
     .slice(0, 5)
 })
 
-watch(bannerEvents, () => {
-  bannerIndex.value = 0
-  startBannerAutoplay()
-})
-
-const activeBanner = computed(() => bannerEvents.value[bannerIndex.value] || null)
-
 const eventStats = computed(() => {
   const list = filteredEvents.value
   return {
@@ -529,35 +518,6 @@ const eventStats = computed(() => {
     ended: list.filter(e => getEventStatus(e) === 'ended').length,
   }
 })
-
-function startBannerAutoplay() {
-  stopBannerAutoplay()
-  if (bannerEvents.value.length <= 1) return
-  bannerTimer = setInterval(() => {
-    bannerIndex.value = (bannerIndex.value + 1) % bannerEvents.value.length
-  }, BANNER_INTERVAL_MS)
-}
-
-function stopBannerAutoplay() {
-  if (bannerTimer) {
-    clearInterval(bannerTimer)
-    bannerTimer = null
-  }
-}
-
-function goBanner(index: number) {
-  if (!bannerEvents.value.length) return
-  bannerIndex.value = ((index % bannerEvents.value.length) + bannerEvents.value.length) % bannerEvents.value.length
-  startBannerAutoplay()
-}
-
-function prevBanner() {
-  goBanner(bannerIndex.value - 1)
-}
-
-function nextBanner() {
-  goBanner(bannerIndex.value + 1)
-}
 
 function setEventFilter(filter: 'all' | 'server' | 'guild') {
   eventFilter.value = filter
@@ -616,7 +576,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
       </button>
     </div>
 
-    <!-- Event Banner -->
+    <!-- Event Banner：多活动竖直排列，不切页 -->
     <section class="event-banner-section anim-item" style="--delay: 1">
       <div v-if="eventsLoading" class="event-banner empty loading-banner">
         <div class="banner-empty-inner">
@@ -625,98 +585,82 @@ function setEventStatusFilter(filter: EventStatusFilter) {
         </div>
       </div>
 
-      <div
-        v-else-if="activeBanner"
-        class="event-banner"
-        :class="{ 'has-cover': !!getEventCover(activeBanner) }"
-        :style="{ '--event-color': resolveEventColor(activeBanner) }"
-      >
-        <div class="banner-media">
-          <img
-            v-if="getEventCover(activeBanner)"
-            :src="getEventCover(activeBanner)"
-            alt=""
-            class="banner-cover"
-            loading="lazy"
-          />
-          <div v-else class="banner-fallback" aria-hidden="true"></div>
-          <div class="banner-color-fade" aria-hidden="true"></div>
-        </div>
-
-        <div class="banner-layout">
-          <div class="banner-date-card" aria-hidden="true">
-            <span class="date-month">{{ formatEventMonth(activeBanner.event_start_time) }}</span>
-            <span class="date-day">{{ formatEventDay(activeBanner.event_start_time) }}</span>
-            <span class="date-time">{{ formatEventTimeShort(activeBanner.event_start_time) }}</span>
+      <div v-else-if="bannerEvents.length" class="event-banner-stack">
+        <article
+          v-for="event in bannerEvents"
+          :key="event.id"
+          class="event-banner"
+          :class="{ 'has-cover': !!getEventCover(event) }"
+          :style="{ '--event-color': resolveEventColor(event) }"
+        >
+          <div class="banner-media">
+            <img
+              v-if="getEventCover(event)"
+              :src="getEventCover(event)"
+              alt=""
+              class="banner-cover"
+              loading="lazy"
+            />
+            <div v-else class="banner-fallback" aria-hidden="true"></div>
+            <div class="banner-color-fade" aria-hidden="true"></div>
           </div>
 
-          <div class="banner-body">
-            <div class="banner-top-row">
-              <div class="banner-kicker">
-                <span class="kicker-dot"></span>
-                {{ t('community.banner.kicker') }}
-                <span class="banner-count">{{ t('community.banner.count', { count: bannerEvents.length }) }}</span>
-              </div>
-              <div class="banner-chips">
-                <span class="status-chip" :class="getEventStatus(activeBanner)">
-                  <i :class="getEventStatus(activeBanner) === 'live' ? 'ri-broadcast-line' : 'ri-time-line'"></i>
-                  {{ getEventStatusLabel(getEventStatus(activeBanner)) }}
-                </span>
-                <span class="type-chip" :style="getEventStyle(activeBanner)">{{ getEventTypeLabel(activeBanner) }}</span>
-                <span v-if="activeBanner.guild_name" class="meta-chip">
-                  <i class="ri-shield-star-line"></i>
-                  {{ activeBanner.guild_name }}
-                </span>
-              </div>
+          <div class="banner-layout">
+            <div class="banner-date-card" aria-hidden="true">
+              <span class="date-month">{{ formatEventMonth(event.event_start_time) }}</span>
+              <span class="date-day">{{ formatEventDay(event.event_start_time) }}</span>
+              <span class="date-time">{{ formatEventTimeShort(event.event_start_time) }}</span>
             </div>
 
-            <h2 class="banner-title" @click="goToPost(activeBanner.id)">{{ activeBanner.title }}</h2>
-
-            <div class="banner-bottom-row">
-              <div class="banner-meta-inline">
-                <span class="meta-inline">
-                  <i class="ri-time-line"></i>
-                  {{ formatEventRange(activeBanner) }}
-                </span>
-                <span v-if="formatCountdown(activeBanner)" class="meta-inline countdown">
-                  {{ formatCountdown(activeBanner) }}
-                </span>
-                <span v-if="formatLocation(activeBanner.region, activeBanner.address)" class="meta-inline">
-                  <i class="ri-map-pin-2-fill"></i>
-                  {{ formatLocation(activeBanner.region, activeBanner.address) }}
-                </span>
+            <div class="banner-body">
+              <div class="banner-top-row">
+                <div class="banner-kicker">
+                  <span class="kicker-dot"></span>
+                  {{ t('community.banner.kicker') }}
+                </div>
+                <div class="banner-chips">
+                  <span class="status-chip" :class="getEventStatus(event)">
+                    <i :class="getEventStatus(event) === 'live' ? 'ri-broadcast-line' : 'ri-time-line'"></i>
+                    {{ getEventStatusLabel(getEventStatus(event)) }}
+                  </span>
+                  <span class="type-chip" :style="getEventStyle(event)">{{ getEventTypeLabel(event) }}</span>
+                  <span v-if="event.guild_name" class="meta-chip">
+                    <i class="ri-shield-star-line"></i>
+                    {{ event.guild_name }}
+                  </span>
+                </div>
               </div>
 
-              <div class="banner-actions">
-                <button type="button" class="banner-cta" @click="goToPost(activeBanner.id)">
-                  {{ t('community.banner.viewDetail') }}
-                  <i class="ri-arrow-right-line"></i>
-                </button>
-                <button type="button" class="banner-secondary" @click="switchFeedTab('events')">
-                  {{ t('community.banner.viewAll') }}
-                </button>
-                <div v-if="bannerEvents.length > 1" class="banner-nav">
-                  <button type="button" class="nav-btn" @click="prevBanner" :aria-label="t('community.banner.prev')">
-                    <i class="ri-arrow-left-s-line"></i>
+              <h2 class="banner-title" @click="goToPost(event.id)">{{ event.title }}</h2>
+
+              <div class="banner-bottom-row">
+                <div class="banner-meta-inline">
+                  <span class="meta-inline">
+                    <i class="ri-time-line"></i>
+                    {{ formatEventRange(event) }}
+                  </span>
+                  <span v-if="formatCountdown(event)" class="meta-inline countdown">
+                    {{ formatCountdown(event) }}
+                  </span>
+                  <span v-if="formatLocation(event.region, event.address)" class="meta-inline">
+                    <i class="ri-map-pin-2-fill"></i>
+                    {{ formatLocation(event.region, event.address) }}
+                  </span>
+                </div>
+
+                <div class="banner-actions">
+                  <button type="button" class="banner-cta" @click="goToPost(event.id)">
+                    {{ t('community.banner.viewDetail') }}
+                    <i class="ri-arrow-right-line"></i>
                   </button>
-                  <div class="banner-dots">
-                    <button
-                      v-for="(event, index) in bannerEvents"
-                      :key="event.id"
-                      type="button"
-                      class="dot"
-                      :class="{ active: index === bannerIndex }"
-                      @click="goBanner(index)"
-                    />
-                  </div>
-                  <button type="button" class="nav-btn" @click="nextBanner" :aria-label="t('community.banner.next')">
-                    <i class="ri-arrow-right-s-line"></i>
+                  <button type="button" class="banner-secondary" @click="switchFeedTab('events')">
+                    {{ t('community.banner.viewAll') }}
                   </button>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </article>
       </div>
 
       <div v-else class="event-banner empty">
@@ -1189,6 +1133,12 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   margin-bottom: 20px;
 }
 
+.event-banner-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .event-banner {
   position: relative;
   min-height: 140px;
@@ -1527,52 +1477,6 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 
 .banner-secondary:hover {
   background: rgba(255, 255, 255, 0.18);
-}
-
-.banner-nav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 2px;
-}
-
-.nav-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  padding: 0;
-}
-
-.nav-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.banner-dots {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-}
-
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  border: none;
-  background: rgba(255, 255, 255, 0.35);
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.2s;
-}
-
-.dot.active {
-  width: 16px;
-  background: #fff;
 }
 
 .event-banner.empty {

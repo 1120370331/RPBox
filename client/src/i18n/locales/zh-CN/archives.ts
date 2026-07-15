@@ -64,7 +64,7 @@ export default {
   },
   filter: {
     search: '综合搜索',
-    searchPlaceholder: '搜索标题、简介、地区或地点...',
+    searchPlaceholder: '搜索标题、简介、正文、地区或地点...',
     region: '地区',
     regionPlaceholder: '按地区筛选，如闪金镇...',
     address: '地址',

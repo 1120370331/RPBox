@@ -61,7 +61,7 @@ function patchType(value: RPDBWorkType | '') {
     <div class="search-row" data-testid="rpdb-search-row">
       <label class="search-box">
         <i class="ri-search-2-line"></i>
-        <input :value="modelValue.search" placeholder="搜索道具、幻化、家宅、作者或标签" @input="patch('search', ($event.target as HTMLInputElement).value)" @keyup.enter="$emit('search')" />
+        <input :value="modelValue.search" placeholder="搜索标题、正文、道具、幻化、家宅、作者或标签" @input="patch('search', ($event.target as HTMLInputElement).value)" @keyup.enter="$emit('search')" />
       </label>
       <button type="button" class="search-trigger" data-testid="rpdb-search-button" title="搜索" @click="$emit('search')"><i class="ri-search-2-line"></i><span>搜索</span></button>
     </div>

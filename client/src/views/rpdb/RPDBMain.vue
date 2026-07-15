@@ -119,6 +119,17 @@ function formatCount(value?: number) {
   return new Intl.NumberFormat('zh-CN').format(value || 0)
 }
 
+function workSummary(work?: RPDBWork | null) {
+  if (!work) return '席位空缺，浏览作品后将按近 7 日热度上榜'
+  const summary = work.summary?.trim()
+  if (summary) return summary
+  const effect = work.effect_description?.trim()
+  if (effect) return effect
+  const useCases = work.rp_use_cases?.trim()
+  if (useCases) return useCases
+  return '作者尚未填写作品摘要'
+}
+
 async function loadStyleTags() {
   try {
     const result = await getPresetTags('rpdb')
@@ -178,8 +189,8 @@ onMounted(() => {
             <div class="featured-shade"></div>
             <div class="featured-copy">
               <span>{{ work ? typeLabel(work.type) : '暂无数据' }}</span>
-              <h2>{{ work?.title || `第 ${index + 1} 名` }}</h2>
-              <p>{{ work?.summary || '还没有足够浏览数据' }}</p>
+              <h2>{{ work?.title || `TOP ${index + 1} 空缺` }}</h2>
+              <p>{{ workSummary(work) }}</p>
               <div class="featured-meta">
                 <b>{{ work?.author_name || '—' }}</b>
                 <div v-if="work" class="featured-metrics" aria-label="作品数据" data-testid="rpdb-featured-metrics">

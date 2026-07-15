@@ -117,9 +117,13 @@ func (s *Server) listItems(c *gin.Context) {
 			Where("users.username LIKE ?", "%"+authorName+"%")
 	}
 
-	// 搜索
+	// 搜索（名称、简介、正文详情）
 	if search := c.Query("search"); search != "" {
-		query = query.Where("name LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
+		like := "%" + search + "%"
+		query = query.Where(
+			"name LIKE ? OR description LIKE ? OR detail_content LIKE ?",
+			like, like, like,
+		)
 	}
 
 	// 标签筛选

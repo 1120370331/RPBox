@@ -218,6 +218,8 @@ function buildDraftPayload(): SavePostDraftRequest {
     content_type: 'html',
     tag_ids: [...selectedTags.value],
   }
+  // 明确携带封面字段，避免 undefined 跳过更新；空字符串表示清空当前草稿封面
+  payload.cover_image = form.value.cover_image || ''
   if (payload.event_start_time) payload.event_start_time = new Date(payload.event_start_time).toISOString()
   if (payload.event_end_time) payload.event_end_time = new Date(payload.event_end_time).toISOString()
   return payload
@@ -286,7 +288,10 @@ async function handleDraftSelect(id: number) {
 }
 
 async function handleNewDraft() {
-  await saveDraftToCloud()
+  // 先落盘当前草稿，再清空编辑器；绝不复用已有 draftId，避免写坏别的帖子
+  if (hasDraftContent()) {
+    await saveDraftToCloud(true)
+  }
   resetForNewDraft()
 }
 

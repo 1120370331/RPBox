@@ -81,7 +81,7 @@ export default {
   regionSearchPlaceholder: '按地区搜索，如闪金镇...',
   addressSearchPlaceholder: '按地址搜索，如狮王之傲酒店...',
   filter: {
-    search: '搜索标题、作者、地区或地点...',
+    search: '搜索标题、正文、作者、地区或地点...',
     authorSearch: '按作者搜索...',
     category: '分类',
     all: '全部',

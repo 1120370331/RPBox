@@ -214,7 +214,7 @@ func (s *Server) listPosts(c *gin.Context) {
 		if params.IsPinned != nil {
 			pinnedValue = strconv.FormatBool(*params.IsPinned)
 		}
-		filterKey := fmt.Sprintf("search_scope=global_v3|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|exclude_category=%s|pinned=%s|status=%s",
+		filterKey := fmt.Sprintf("search_scope=global_v4_content|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|exclude_category=%s|pinned=%s|status=%s",
 			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.Region, params.Address, params.TagID, params.AuthorID, params.Category, params.ExcludeCategory, pinnedValue, params.Status)
 		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
 		if err != nil {
@@ -785,14 +785,22 @@ func (s *Server) savePostDraft(c *gin.Context) {
 	if post.GuildID == nil {
 		post.IsPublic = true
 	}
-	if req.CoverImage != nil && post.CoverImage != *req.CoverImage {
-		now := time.Now()
-		post.CoverImageUpdatedAt = &now
-		post.CoverImage = *req.CoverImage
+	if req.CoverImage != nil {
+		nextCover := strings.TrimSpace(*req.CoverImage)
+		if nextCover != post.CoverImage {
+			now := time.Now()
+			post.CoverImageUpdatedAt = &now
+			post.CoverImage = nextCover
+		}
 	}
 
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Save(&post).Error; err != nil {
+		// 草稿快照必须整字段覆盖，避免 Save 在零值字段上产生意外遗留
+		if err := tx.Model(&post).Select(
+			"title", "content", "content_type", "category", "region", "address",
+			"guild_id", "story_id", "event_type", "event_start_time", "event_end_time",
+			"event_color", "review_status", "is_public", "cover_image", "cover_image_updated_at",
+		).Updates(&post).Error; err != nil {
 			return err
 		}
 

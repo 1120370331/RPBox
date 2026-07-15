@@ -41,7 +41,7 @@ export default {
   empty: '暂无作品',
   loading: '加载中...',
   filter: {
-    search: '搜索作品名称、类型或标签...',
+    search: '搜索作品名称、简介、正文、类型或标签...',
     category: '分类',
     categoryLabel: '分类：',
     all: '全部',
@@ -172,7 +172,7 @@ export default {
       published: '已发布',
       pending: '待审核',
       draft: '草稿',
-      searchPlaceholder: '搜索作品名称或描述...',
+      searchPlaceholder: '搜索作品名称、描述或正文...',
       allTypes: '全部类型',
     },
     empty: {

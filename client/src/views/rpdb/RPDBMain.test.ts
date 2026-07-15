@@ -133,6 +133,7 @@ describe('RPDBMain', () => {
     expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="收藏"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="加入清单"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('摘要 1')
+    expect(wrapper.text()).not.toContain('还没有足够浏览数据')
     expect(wrapper.text()).not.toContain('优质玩家作品将在审核后展示于此')
     expect(wrapper.text()).toContain('每页最多 12 个')
     expect(wrapper.find('[data-testid="rpdb-pagination"]').text()).toContain('第 1 / 3 页')

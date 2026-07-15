@@ -81,7 +81,7 @@ export default {
   regionSearchPlaceholder: 'Search region, e.g. Goldshire...',
   addressSearchPlaceholder: 'Search address, e.g. Lion\'s Pride Inn...',
   filter: {
-    search: 'Search titles, authors, regions, or places...',
+    search: 'Search titles, content, authors, regions, or places...',
     authorSearch: 'Search by author...',
     category: 'Category',
     all: 'All',
