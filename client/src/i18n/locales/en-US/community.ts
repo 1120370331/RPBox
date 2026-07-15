@@ -8,6 +8,39 @@ export default {
     latest: 'Latest',
     following: 'Following',
   },
+  feed: {
+    posts: 'Posts',
+    events: 'Events',
+  },
+  banner: {
+    kicker: 'Tonight\'s Board',
+    count: '{count} live / upcoming',
+    when: 'When',
+    where: 'Where',
+    viewDetail: 'View Event',
+    viewAll: 'All Events',
+    prev: 'Previous event',
+    next: 'Next event',
+    emptyTitle: 'No live events yet',
+    emptyBody: 'Publish an event to feature it on the community banner.',
+    emptyAction: 'Create Event',
+  },
+  eventStatus: {
+    live: 'Live',
+    upcoming: 'Upcoming',
+    ended: 'Ended',
+  },
+  eventFilter: {
+    active: 'Active',
+    all: 'All Status',
+  },
+  countdown: {
+    daysHours: '{days}d {hours}h',
+    hoursMinutes: '{hours}h {minutes}m',
+    minutes: '{minutes}m',
+    startsIn: 'Starts in {time}',
+    endsIn: 'Ends in {time}',
+  },
   post: {
     title: 'Title',
     content: 'Content',
@@ -67,7 +100,7 @@ export default {
   },
   events: {
     title: 'Upcoming Events',
-    empty: 'No upcoming events',
+    empty: 'No events match the current filters',
     calendarTitle: 'Event Calendar',
     synced: 'Synced',
     today: 'Today',

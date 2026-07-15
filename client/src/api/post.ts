@@ -135,6 +135,7 @@ export interface ListPostsParams {
   author_id?: number
   status?: 'draft' | 'published' | 'all'
   category?: PostCategory
+  exclude_category?: PostCategory
   is_pinned?: boolean
 }
 
