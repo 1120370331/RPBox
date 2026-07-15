@@ -19,6 +19,9 @@ const toastSuccess = vi.hoisted(() => vi.fn())
 const toastError = vi.hoisted(() => vi.fn())
 const toastWarning = vi.hoisted(() => vi.fn())
 const createContentReport = vi.hoisted(() => vi.fn())
+const createUserBlock = vi.hoisted(() => vi.fn())
+const deleteRPDBComment = vi.hoisted(() => vi.fn())
+const confirmDialog = vi.hoisted(() => vi.fn())
 
 vi.mock('@/api/emote', () => ({
   listEmotePacks: vi.fn().mockResolvedValue({ packs: [] }),
@@ -34,6 +37,7 @@ vi.mock('@/api/rpdb', async () => {
     addRPDBWorkToList,
     createRPDBList,
     createRPDBComment: vi.fn(),
+    deleteRPDBComment,
     favoriteRPDBWork,
     likeRPDBWork,
     listRPDBLists,
@@ -53,8 +57,12 @@ vi.mock('@/stores/toast', () => ({
 
 vi.mock('@/api/safety', async () => {
   const actual = await vi.importActual<typeof import('@/api/safety')>('@/api/safety')
-  return { ...actual, createContentReport }
+  return { ...actual, createContentReport, createUserBlock }
 })
+
+vi.mock('@/composables/useDialog', () => ({
+  useDialog: () => ({ confirm: confirmDialog }),
+}))
 
 describe('RPDBDetail', () => {
   beforeEach(() => {
@@ -69,7 +77,13 @@ describe('RPDBDetail', () => {
     toastError.mockReset()
     toastWarning.mockReset()
     createContentReport.mockReset()
+    createUserBlock.mockReset()
+    deleteRPDBComment.mockReset()
+    confirmDialog.mockReset()
     createContentReport.mockResolvedValue({ message: '举报已提交', report_id: 9, submitted_report: true })
+    createUserBlock.mockResolvedValue({ message: '已屏蔽', submitted_report: false })
+    deleteRPDBComment.mockResolvedValue(undefined)
+    confirmDialog.mockResolvedValue(true)
     localStorage.setItem('token', 'viewer-token')
     localStorage.setItem('user', JSON.stringify({ id: 2, username: 'viewer', role: 'user' }))
     addRPDBWorkToList.mockResolvedValue({})
@@ -420,9 +434,122 @@ describe('RPDBDetail', () => {
     expect(wrapper.text()).toContain('回复 @旅店老板')
     expect(wrapper.find('.comment-input-box').exists()).toBe(true)
     expect(wrapper.find('.input-footer .emoji-btn').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="delete-rpdb-comment-11"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="report-rpdb-comment-11"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="delete-rpdb-comment-12"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="report-rpdb-comment-12"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="block-rpdb-comment-author-12"]').exists()).toBe(true)
 
     await wrapper.find('.comment-actions .reply-btn').trigger('click')
     expect(wrapper.findComponent({ name: 'CommentReplyBox' }).exists()).toBe(true)
+  })
+
+  it('lets the work author delete root comments and replies', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'rpdb_demo', role: 'user' }))
+    listRPDBComments.mockResolvedValueOnce({
+      comments: [
+        {
+          id: 21,
+          work_id: 1,
+          author_id: 2,
+          author_name: '旅店老板',
+          content: '作者可以管理这条评论。',
+          like_count: 0,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 22,
+          work_id: 1,
+          author_id: 3,
+          author_name: '巡夜人',
+          parent_id: 21,
+          content: '作者也可以管理回复。',
+          like_count: 0,
+          created_at: new Date().toISOString(),
+        },
+      ],
+    })
+    listRPDBComments.mockResolvedValueOnce({ comments: [] })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/rpdb/:id', component: RPDBDetail }],
+    })
+    await router.push('/rpdb/1')
+    const wrapper = mount(RPDBDetail, {
+      global: { plugins: [createPinia(), router] },
+    })
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('作者可以管理这条评论'))
+    expect(wrapper.find('[data-testid="delete-rpdb-comment-21"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="delete-rpdb-comment-22"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="delete-rpdb-comment-22"]').trigger('click')
+    await vi.waitFor(() => expect(deleteRPDBComment).toHaveBeenCalledWith(22))
+    expect(confirmDialog).toHaveBeenCalled()
+    expect(toastSuccess).toHaveBeenCalledWith('评论已删除')
+  })
+
+  it('reports and blocks RPDB comment authors for root comments and replies', async () => {
+    listRPDBComments.mockResolvedValueOnce({
+      comments: [
+        {
+          id: 31,
+          work_id: 1,
+          author_id: 3,
+          author_name: '可疑旅人',
+          content: '这是一条需要举报的评论。',
+          like_count: 0,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 32,
+          work_id: 1,
+          author_id: 4,
+          author_name: '陌生访客',
+          parent_id: 31,
+          content: '这是一条需要屏蔽作者的回复。',
+          like_count: 0,
+          created_at: new Date().toISOString(),
+        },
+      ],
+    })
+    listRPDBComments.mockResolvedValue({ comments: [] })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/rpdb/:id', component: RPDBDetail }],
+    })
+    await router.push('/rpdb/1')
+    const wrapper = mount(RPDBDetail, {
+      global: { plugins: [createPinia(), router] },
+    })
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('可疑旅人'))
+    await wrapper.get('[data-testid="report-rpdb-comment-31"]').trigger('click')
+    const reportDialog = wrapper.getComponent({ name: 'SafetyReportDialog' })
+    expect(reportDialog.props('targetType')).toBe('rpdb_comment')
+    reportDialog.vm.$emit('submit', {
+      reason: 'abuse',
+      detail: '评论存在人身攻击',
+      hideTarget: false,
+      blockAuthor: false,
+      submitReport: true,
+    })
+    await vi.waitFor(() => expect(createContentReport).toHaveBeenCalledWith({
+      target_type: 'rpdb_comment',
+      target_id: 31,
+      reason: 'abuse',
+      detail: '评论存在人身攻击',
+      hide_target: false,
+      block_author: false,
+      submit_report: true,
+    }))
+
+    await wrapper.get('[data-testid="block-rpdb-comment-author-32"]').trigger('click')
+    await vi.waitFor(() => expect(createUserBlock).toHaveBeenCalledWith(
+      4,
+      expect.stringContaining('陌生访客'),
+    ))
+    expect(toastSuccess).toHaveBeenCalledWith('已屏蔽该作者，相关评论已隐藏')
   })
 
   it('can create a collection checklist directly from the list picker and add the work', async () => {
@@ -609,6 +736,7 @@ describe('RPDBDetail', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('海潮卫士'))
     await wrapper.get('[data-testid="floating-toc-collapse"]').trigger('click')
     const copyButton = wrapper.get('[data-testid="copy-transmog-share-code"]')
+    const inlineCopyButton = wrapper.get('[data-testid="copy-transmog-share-code-inline"]')
 
     expect(wrapper.findAll('[data-testid="transmog-slot-label"]').map(item => item.text())).toEqual([
       '头部',
@@ -624,10 +752,14 @@ describe('RPDBDetail', () => {
     expect(wrapper.find('a[href="https://www.wowhead.com/item=190001"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('不显示')
     expect(copyButton.text()).toContain('复制幻化分享代码')
+    expect(inlineCopyButton.text()).toContain('复制代码')
+    expect(wrapper.get('[data-testid="inline-transmog-share-code"]').text()).toContain('复制后可在游戏内导入这套幻化方案')
     expect(wrapper.text()).not.toContain('TRANSMOG:TIDE-GUARD-001')
-    await copyButton.trigger('click')
+    await inlineCopyButton.trigger('click')
     expect(clipboardWriteText).toHaveBeenCalledWith('TRANSMOG:TIDE-GUARD-001')
     expect(toastSuccess).toHaveBeenCalledWith('幻化分享代码已复制')
+    expect(copyButton.text()).toContain('已复制幻化分享代码')
+    expect(inlineCopyButton.text()).toContain('已复制')
   })
 
   it('lets a signed-in viewer report an RPDB work', async () => {

@@ -5,6 +5,7 @@ import {
   addRPDBWorkToList,
   createRPDBComment,
   createRPDBList,
+  deleteRPDBComment,
   favoriteRPDBWork,
   getRPDBWork,
   likeRPDBWork,
@@ -24,7 +25,8 @@ import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import RPDBMediaGallery from '@/components/rpdb/RPDBMediaGallery.vue'
 import RPDBWorkContent from '@/components/rpdb/RPDBWorkContent.vue'
-import { createContentReport } from '@/api/safety'
+import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
+import { useDialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { useEmoteStore } from '@/stores/emote'
 import { useUserStore } from '@/stores/user'
@@ -39,6 +41,7 @@ import { useRPDBOptionLabels } from '@/composables/useRPDBOptionLabels'
 const route = useRoute()
 const router = useRouter()
 const toast = useToastStore()
+const dialog = useDialog()
 const emoteStore = useEmoteStore()
 const userStore = useUserStore()
 const { availabilityLabel, bindTypeLabel, factionLabel } = useRPDBOptionLabels()
@@ -72,6 +75,12 @@ const collectionLists = ref<RPDBList[]>([])
 const commentLikes = reactive(new Map<number, boolean>())
 const reportDialogOpen = ref(false)
 const reportSubmitting = ref(false)
+const reportContext = ref<{
+  targetType: Extract<ReportTargetType, 'rpdb_work' | 'rpdb_comment'>
+  targetId: number
+  targetLabel: string
+  dialogTitle: string
+} | null>(null)
 
 const typeLabel = computed(() => {
   if (work.value?.type === 'item_showcase') return '魔兽物品'
@@ -122,6 +131,18 @@ const canEditWork = computed(() => Boolean(
   && userStore.user
   && (userStore.user.id === work.value.author_id || userStore.user.role === 'admin'),
 ))
+
+function canUseCommentSafetyActions(item: RPDBComment) {
+  return Boolean(userStore.user?.id && item.author_id !== userStore.user.id)
+}
+
+function canDeleteComment(item: RPDBComment) {
+  if (!work.value || !userStore.user) return false
+  return item.author_id === userStore.user.id
+    || work.value.author_id === userStore.user.id
+    || userStore.user.role === 'moderator'
+    || userStore.user.role === 'admin'
+}
 
 function formatCount(value?: number) {
   return new Intl.NumberFormat('zh-CN').format(value || 0)
@@ -281,23 +302,111 @@ async function createListAndAdd() {
   }
 }
 
+function buildCommentReportLabel(item: RPDBComment) {
+  const content = item.content.replace(/\s+/g, ' ').trim()
+  const excerpt = content.length > 36 ? `${content.slice(0, 36)}...` : content || '评论'
+  return `${item.author_name || '匿名玩家'}：${excerpt}`
+}
+
+function openWorkReport() {
+  if (!work.value) return
+  reportContext.value = {
+    targetType: 'rpdb_work',
+    targetId: work.value.id,
+    targetLabel: work.value.title,
+    dialogTitle: '举报 RP 数据库作品',
+  }
+  reportDialogOpen.value = true
+}
+
+function openCommentReport(item: RPDBComment) {
+  reportContext.value = {
+    targetType: 'rpdb_comment',
+    targetId: item.id,
+    targetLabel: buildCommentReportLabel(item),
+    dialogTitle: '举报评论',
+  }
+  reportDialogOpen.value = true
+}
+
+function closeReportDialog() {
+  reportDialogOpen.value = false
+  reportContext.value = null
+}
+
+async function refreshComments() {
+  if (!work.value) return
+  const discussion = await listRPDBComments(work.value.id)
+  comments.value = discussion.comments || []
+  commentLikes.clear()
+  comments.value.forEach((item) => {
+    if (item.liked) commentLikes.set(item.id, true)
+  })
+}
+
+async function handleDeleteComment(item: RPDBComment) {
+  const confirmed = await dialog.confirm({
+    title: '删除评论',
+    message: '删除后无法恢复，确认删除这条评论吗？',
+    type: 'warning',
+    confirmText: '确认删除',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  try {
+    await deleteRPDBComment(item.id)
+    if (work.value) {
+      work.value.comment_count = Math.max(0, work.value.comment_count - 1)
+    }
+    await refreshComments()
+    toast.success('评论已删除')
+  } catch (error) {
+    toast.error((error as Error).message || '删除评论失败')
+  }
+}
+
+async function handleBlockCommentAuthor(item: RPDBComment) {
+  const confirmed = await dialog.confirm({
+    title: '屏蔽该评论作者',
+    message: '屏蔽后该作者的评论会立即从当前页面隐藏，你稍后仍可在设置中取消屏蔽。',
+    type: 'warning',
+    confirmText: '确认屏蔽',
+    cancelText: '取消',
+  })
+  if (!confirmed) return
+
+  try {
+    await createUserBlock(item.author_id, `RP 数据库评论：${buildCommentReportLabel(item)}`)
+    await refreshComments()
+    toast.success('已屏蔽该作者，相关评论已隐藏')
+  } catch (error) {
+    toast.error((error as Error).message || '屏蔽作者失败')
+  }
+}
+
 async function submitSafetyReport(payload: { reason: string; detail: string; hideTarget: boolean; blockAuthor: boolean; submitReport: boolean }) {
-  if (!work.value || reportSubmitting.value) return
+  if (!reportContext.value || reportSubmitting.value) return
   reportSubmitting.value = true
   try {
+    const context = reportContext.value
     const result = await createContentReport({
-      target_type: 'rpdb_work',
-      target_id: work.value.id,
+      target_type: context.targetType,
+      target_id: context.targetId,
       reason: payload.reason,
       detail: payload.detail,
       hide_target: payload.hideTarget,
       block_author: payload.blockAuthor,
       submit_report: payload.submitReport,
     })
-    reportDialogOpen.value = false
+    closeReportDialog()
     toast.success(result.message || (payload.submitReport ? '举报已提交，版主会尽快处理' : '已按你的设置完成处理'))
-    if (payload.hideTarget || payload.blockAuthor) {
+    if (context.targetType === 'rpdb_work' && (payload.hideTarget || payload.blockAuthor)) {
       await router.push('/rpdb')
+      return
+    }
+    if (context.targetType === 'rpdb_comment' && (payload.hideTarget || payload.blockAuthor)) {
+      await refreshComments()
     }
   } catch (error) {
     toast.error((error as Error).message || '举报提交失败')
@@ -510,7 +619,7 @@ onBeforeUnmount(() => {
             <i class="ri-add-circle-line"></i>
             {{ work.in_collection_list ? '已在清单' : '加入清单' }}
           </button>
-          <button v-if="canReportWork" type="button" class="report-action" data-testid="rpdb-report-button" @click="reportDialogOpen = true">
+          <button v-if="canReportWork" type="button" class="report-action" data-testid="rpdb-report-button" @click="openWorkReport">
             <i class="ri-flag-line"></i>
             举报
           </button>
@@ -627,7 +736,13 @@ onBeforeUnmount(() => {
 
     <div class="detail-lower" data-testid="detail-lower">
       <main ref="articleContentRef" class="article-sheet">
-        <RPDBWorkContent :work="work" :home-details="homeDetails" />
+        <RPDBWorkContent
+          :work="work"
+          :home-details="homeDetails"
+          :transmog-share-code="transmogShareCode"
+          :copied-transmog-share-code="copiedTransmogShareCode"
+          @copy-transmog-share-code="copyTransmogShareCode"
+        />
 
         <section id="rpdb-section-discussion" class="comments-section anim-item">
           <h3 class="comments-title">
@@ -660,6 +775,33 @@ onBeforeUnmount(() => {
                 <div class="comment-actions">
                   <button class="reply-btn" type="button" @click="startReply(item)">
                     <i class="ri-reply-line"></i> 回复
+                  </button>
+                  <button
+                    v-if="canUseCommentSafetyActions(item)"
+                    type="button"
+                    class="comment-safety-btn"
+                    :data-testid="`report-rpdb-comment-${item.id}`"
+                    @click="openCommentReport(item)"
+                  >
+                    <i class="ri-alarm-warning-line"></i> 举报评论
+                  </button>
+                  <button
+                    v-if="canUseCommentSafetyActions(item)"
+                    type="button"
+                    class="comment-safety-btn danger"
+                    :data-testid="`block-rpdb-comment-author-${item.id}`"
+                    @click="handleBlockCommentAuthor(item)"
+                  >
+                    <i class="ri-forbid-2-line"></i> 屏蔽作者
+                  </button>
+                  <button
+                    v-if="canDeleteComment(item)"
+                    type="button"
+                    class="delete-btn"
+                    :data-testid="`delete-rpdb-comment-${item.id}`"
+                    @click="handleDeleteComment(item)"
+                  >
+                    <i class="ri-delete-bin-line"></i> 删除
                   </button>
                 </div>
 
@@ -706,6 +848,33 @@ onBeforeUnmount(() => {
                       <div class="comment-actions">
                         <button class="reply-btn" type="button" @click="startReply(reply)">
                           <i class="ri-reply-line"></i> 回复
+                        </button>
+                        <button
+                          v-if="canUseCommentSafetyActions(reply)"
+                          type="button"
+                          class="comment-safety-btn"
+                          :data-testid="`report-rpdb-comment-${reply.id}`"
+                          @click="openCommentReport(reply)"
+                        >
+                          <i class="ri-alarm-warning-line"></i> 举报评论
+                        </button>
+                        <button
+                          v-if="canUseCommentSafetyActions(reply)"
+                          type="button"
+                          class="comment-safety-btn danger"
+                          :data-testid="`block-rpdb-comment-author-${reply.id}`"
+                          @click="handleBlockCommentAuthor(reply)"
+                        >
+                          <i class="ri-forbid-2-line"></i> 屏蔽作者
+                        </button>
+                        <button
+                          v-if="canDeleteComment(reply)"
+                          type="button"
+                          class="delete-btn"
+                          :data-testid="`delete-rpdb-comment-${reply.id}`"
+                          @click="handleDeleteComment(reply)"
+                        >
+                          <i class="ri-delete-bin-line"></i> 删除
                         </button>
                       </div>
 
@@ -759,10 +928,10 @@ onBeforeUnmount(() => {
     <SafetyReportDialog
       :visible="reportDialogOpen"
       :submitting="reportSubmitting"
-      title="举报 RP 数据库作品"
-      :target-label="work.title"
-      target-type="rpdb_work"
-      @close="reportDialogOpen = false"
+      :title="reportContext?.dialogTitle"
+      :target-label="reportContext?.targetLabel"
+      :target-type="reportContext?.targetType"
+      @close="closeReportDialog"
       @submit="submitSafetyReport"
     />
 
@@ -886,6 +1055,11 @@ onBeforeUnmount(() => {
 .reply-btn,.like-btn-inline{display:inline-flex;align-items:center;border:0;background:none;color:var(--color-text-muted);cursor:pointer;transition:color .2s}
 .reply-btn{gap:4px;padding:4px 8px;font-size:12px}
 .reply-btn:hover,.like-btn-inline:hover{color:var(--color-secondary)}
+.comment-safety-btn,.delete-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border:0;background:none;font-size:12px;cursor:pointer;transition:color .2s,background .2s}
+.comment-safety-btn{color:var(--color-text-muted)}
+.comment-safety-btn:hover{color:var(--color-secondary)}
+.comment-safety-btn.danger,.delete-btn{color:#c44536}
+.comment-safety-btn.danger:hover,.delete-btn:hover{color:#dc2626;background:rgba(220,38,38,.05)}
 .like-btn-inline{gap:3px;margin-left:8px;padding:2px 6px;font-size:11px}
 .like-btn-inline.active,.like-btn-inline.active i{color:#dc2626}
 .like-btn-inline i{font-size:13px}

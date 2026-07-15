@@ -269,6 +269,10 @@ export function createRPDBComment(id: number, content: string, parentId?: number
   return request.post<{ comment: RPDBComment }>(`/rpdb/works/${id}/comments`, { content, parent_id: parentId })
 }
 
+export function deleteRPDBComment(commentId: number) {
+  return request.delete<void>(`/rpdb/comments/${commentId}`)
+}
+
 export function verifyRPDBWork(id: number, result: 'valid' | 'outdated', comment = '') {
   return request.post(`/rpdb/works/${id}/verify`, { result, comment })
 }

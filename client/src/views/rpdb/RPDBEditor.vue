@@ -43,6 +43,7 @@ const hasLoadedInitialData = ref(false)
 const autosavedWorkId = ref<number | null>(null)
 let autoSaveTimer: ReturnType<typeof window.setTimeout> | null = null
 const rpStyleTags = ref<Tag[]>([])
+const styleTagsLoading = ref(true)
 const guilds = ref<Guild[]>([])
 const tomtomDraft = ref('')
 const editorRef = ref<InstanceType<typeof TiptapEditor> | null>(null)
@@ -208,7 +209,10 @@ const selectedStyleTags = computed(() => {
 })
 const candidateStyleTags = computed(() => {
   const selectedIds = new Set(form.tag_ids || [])
-  return styleOptions.value.filter(tag => !tag.id || !selectedIds.has(tag.id))
+  const selectedCustomNames = new Set(customStyleTags.value.map(name => name.toLowerCase()))
+  return styleOptions.value.filter(tag => (
+    tag.id ? !selectedIds.has(tag.id) : !selectedCustomNames.has(tag.name.toLowerCase())
+  ))
 })
 const visibleStyleTags = computed(() => {
   return showAllStyleTags.value ? candidateStyleTags.value : candidateStyleTags.value.slice(0, 8)
@@ -501,7 +505,13 @@ async function uploadFurnitureIcon(event: Event, reference: RPDBReference) {
 }
 
 function toggleStyleTag(tag: Pick<Tag, 'id' | 'name'>) {
-  if (!tag.id) return
+  if (!tag.id) {
+    const selected = customStyleTags.value.some(name => name.toLowerCase() === tag.name.toLowerCase())
+    customStyleTags.value = selected
+      ? customStyleTags.value.filter(name => name.toLowerCase() !== tag.name.toLowerCase())
+      : [...customStyleTags.value, tag.name]
+    return
+  }
   const selected = new Set(form.tag_ids || [])
   if (selected.has(tag.id)) {
     selected.delete(tag.id)
@@ -664,11 +674,14 @@ function importHomeShareCode(event: Event) {
 }
 
 async function loadStyleTags() {
+  styleTagsLoading.value = true
   try {
     const result = await getPresetTags('rpdb')
     rpStyleTags.value = sortRPDBStyleTags((result.tags || []).filter(isRPDBStyleTag))
   } catch {
     rpStyleTags.value = []
+  } finally {
+    styleTagsLoading.value = false
   }
 }
 
@@ -970,7 +983,6 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
                 :key="`${tag.name}-${tag.id}`"
                 type="button"
                 data-testid="rpdb-style-option"
-                :class="{ disabled: !tag.id }"
                 :style="{ '--tag-color': `#${tag.color || 'B87333'}` }"
                 @click="toggleStyleTag(tag)"
               >
@@ -995,7 +1007,7 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
                 @keydown.enter.prevent="addTopicFromInput"
               >
             </label>
-            <small v-if="!rpStyleTags.length">{{ t('rpdb.editor.style.loading') }}</small>
+            <small v-if="styleTagsLoading">{{ t('rpdb.editor.style.loading') }}</small>
           </div>
         </div>
 

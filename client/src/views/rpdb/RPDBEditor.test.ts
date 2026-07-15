@@ -9,6 +9,8 @@ import i18n from '@/i18n'
 
 enableAutoUnmount(afterEach)
 
+const getPresetTags = vi.hoisted(() => vi.fn())
+
 vi.mock('@/api/rpdb', async () => {
   const actual = await vi.importActual<typeof import('@/api/rpdb')>('@/api/rpdb')
   return {
@@ -20,15 +22,7 @@ vi.mock('@/api/rpdb', async () => {
 })
 
 vi.mock('@/api/tag', () => ({
-  getPresetTags: vi.fn().mockResolvedValue({
-    tags: [
-      { id: 105, name: '炼金工坊风格', color: '6F8F46', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
-      { id: 104, name: '洛丹伦风格', color: '6E6A85', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
-      { id: 102, name: '部落风格', color: 'B83030', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
-      { id: 101, name: '联盟风格', color: '2F66C8', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
-      { id: 103, name: '库尔提拉斯风格', color: '356A8A', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
-    ],
-  }),
+  getPresetTags,
 }))
 
 vi.mock('@/api/item', () => ({
@@ -80,6 +74,15 @@ describe('RPDBEditor', () => {
     localStorage.clear()
     sessionStorage.clear()
     vi.clearAllMocks()
+    getPresetTags.mockResolvedValue({
+      tags: [
+        { id: 105, name: '炼金工坊风格', color: '6F8F46', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
+        { id: 104, name: '洛丹伦风格', color: '6E6A85', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
+        { id: 102, name: '部落风格', color: 'B83030', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
+        { id: 101, name: '联盟风格', color: '2F66C8', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
+        { id: 103, name: '库尔提拉斯风格', color: '356A8A', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
+      ],
+    })
   })
 
   it('renders an upper publishing setup and lower writing workspace', async () => {
@@ -504,6 +507,25 @@ describe('RPDBEditor', () => {
     })
     expect(customTopicSubmission?.[0]).not.toHaveProperty('game_version')
     expect(customTopicSubmission?.[0]).not.toHaveProperty('expansion')
+  })
+
+  it('keeps built-in style tags selectable when the preset API is unavailable', async () => {
+    getPresetTags.mockRejectedValueOnce(new Error('network unavailable'))
+    const wrapper = await mountEditor()
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('联盟风格'))
+    expect(wrapper.text()).not.toContain('正在加载系统风格标签')
+
+    await wrapper.findAll('[data-testid="rpdb-style-option"]')[0].trigger('click')
+    expect(wrapper.find('[data-testid="rpdb-selected-topics"]').text()).toContain('#联盟风格')
+
+    await wrapper.find('input[placeholder="例如：月光灯笼的巡夜用法"]').setValue('线上风格标签回退测试')
+    await wrapper.find('[data-testid="publish-work"]').trigger('click')
+
+    await vi.waitFor(() => {
+      const fallbackSubmission = vi.mocked(createRPDBWork).mock.calls.find(([payload]) => payload.tag_names?.includes('联盟风格'))
+      expect(fallbackSubmission?.[0]).toMatchObject({ tag_names: ['联盟风格'] })
+    })
   })
 
   it('publishes the pasted transmog share code with the post', async () => {

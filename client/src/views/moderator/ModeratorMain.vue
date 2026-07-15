@@ -1102,6 +1102,7 @@ function getReportTargetLabel(type: string) {
   if (type === 'user') return '用户'
   if (type === 'comment') return '帖子评论'
   if (type === 'item_comment') return '作品评论'
+  if (type === 'rpdb_comment') return 'RP 数据库评论'
   if (type === 'story') return '剧情'
   return type
 }
@@ -1346,6 +1347,13 @@ function openReportTarget(report: ReportReviewItem) {
     router.push({
       name: 'item-detail',
       params: { id: report.parent_target_id },
+    })
+    return
+  }
+  if (report.target_type === 'rpdb_comment' && report.parent_target_id) {
+    router.push(report.target_url || {
+      path: `/rpdb/${report.parent_target_id}`,
+      query: { comment: String(report.target_id) },
     })
     return
   }

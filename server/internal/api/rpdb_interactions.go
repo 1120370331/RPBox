@@ -128,6 +128,39 @@ func (s *Server) listRPDBComments(c *gin.Context) {
 		return
 	}
 
+	viewerID := optionalRPDBUserID(c)
+	if viewerID != 0 {
+		blockedIDs, err := getBlockedUserIDs(viewerID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载评论失败"})
+			return
+		}
+		hiddenIDs, err := hiddenContentIDs(viewerID, reportTargetRPDBComment)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载评论失败"})
+			return
+		}
+		blockedMap := make(map[uint]struct{}, len(blockedIDs))
+		for _, blockedID := range blockedIDs {
+			blockedMap[blockedID] = struct{}{}
+		}
+		hiddenMap := make(map[uint]struct{}, len(hiddenIDs))
+		for _, hiddenID := range hiddenIDs {
+			hiddenMap[hiddenID] = struct{}{}
+		}
+		filtered := make([]model.RPDBComment, 0, len(comments))
+		for _, comment := range comments {
+			if _, blocked := blockedMap[comment.AuthorID]; blocked {
+				continue
+			}
+			if _, hidden := hiddenMap[comment.ID]; hidden {
+				continue
+			}
+			filtered = append(filtered, comment)
+		}
+		comments = filtered
+	}
+
 	authorIDs := make([]uint, 0, len(comments))
 	for _, comment := range comments {
 		authorIDs = append(authorIDs, comment.AuthorID)
@@ -139,11 +172,16 @@ func (s *Server) listRPDBComments(c *gin.Context) {
 		authorMap[author.ID] = author
 	}
 
-	viewerID := optionalRPDBUserID(c)
 	liked := map[uint]bool{}
 	if viewerID != 0 {
 		var likes []model.RPDBCommentLike
-		database.DB.Where("user_id = ?", viewerID).Find(&likes)
+		commentIDs := make([]uint, 0, len(comments))
+		for _, comment := range comments {
+			commentIDs = append(commentIDs, comment.ID)
+		}
+		if len(commentIDs) > 0 {
+			database.DB.Where("user_id = ? AND comment_id IN ?", viewerID, commentIDs).Find(&likes)
+		}
 		for _, like := range likes {
 			liked[like.CommentID] = true
 		}
@@ -246,22 +284,45 @@ func (s *Server) deleteRPDBComment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
 		return
 	}
+	var work model.RPDBWork
+	if err := database.DB.Select("id", "author_id").First(&work, comment.WorkID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "作品不存在"})
+		return
+	}
 	role, _ := rpdbUserRole(userID)
-	if comment.AuthorID != userID && role != "moderator" && role != "admin" {
+	if comment.AuthorID != userID && work.AuthorID != userID && role != "moderator" && role != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权删除该评论"})
 		return
 	}
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&comment).Error; err != nil {
-			return err
-		}
-		return tx.Model(&model.RPDBWork{}).Where("id = ?", comment.WorkID).
-			UpdateColumn("comment_count", gorm.Expr("CASE WHEN comment_count > 0 THEN comment_count - 1 ELSE 0 END")).Error
+		return deleteRPDBCommentRecord(tx, comment)
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除评论失败"})
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func deleteRPDBCommentRecord(tx *gorm.DB, comment model.RPDBComment) error {
+	if err := tx.Where("comment_id = ?", comment.ID).Delete(&model.RPDBCommentLike{}).Error; err != nil {
+		return err
+	}
+	if comment.ParentID == nil {
+		if err := tx.Model(&model.RPDBComment{}).Where("parent_id = ?", comment.ID).
+			Update("parent_id", nil).Error; err != nil {
+			return err
+		}
+	} else {
+		if err := tx.Model(&model.RPDBComment{}).Where("parent_id = ?", comment.ID).
+			Update("parent_id", *comment.ParentID).Error; err != nil {
+			return err
+		}
+	}
+	if err := tx.Delete(&comment).Error; err != nil {
+		return err
+	}
+	return tx.Model(&model.RPDBWork{}).Where("id = ?", comment.WorkID).
+		UpdateColumn("comment_count", gorm.Expr("CASE WHEN comment_count > 0 THEN comment_count - 1 ELSE 0 END")).Error
 }
 
 func (s *Server) verifyRPDBWork(c *gin.Context) {
