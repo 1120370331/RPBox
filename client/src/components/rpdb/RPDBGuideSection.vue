@@ -41,8 +41,12 @@ async function copyText(value: string, key: string) {
 
 <template>
   <section v-if="steps.length" id="rpdb-section-guide" class="guide-section" data-testid="guide-reading">
-    <header v-if="commands.length" class="guide-heading">
-      <div class="tomtom-bulk" data-testid="tomtom-bulk-panel">
+    <header class="guide-heading">
+      <div class="section-heading">
+        <span>获取攻略</span>
+        <h2>路线与坐标步骤</h2>
+      </div>
+      <div v-if="commands.length" class="tomtom-bulk" data-testid="tomtom-bulk-panel">
         <span><i class="ri-route-line"></i>TomTom 多点路线</span>
         <code>/ttpaste</code>
         <button
@@ -94,7 +98,10 @@ async function copyText(value: string, key: string) {
 
 <style scoped>
 .guide-section{padding:26px 30px;border-top:1px solid color-mix(in srgb,var(--color-border) 72%,transparent);background:transparent}
-.guide-heading{display:flex;justify-content:flex-end;padding-bottom:16px}
+.guide-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding-bottom:16px}
+.section-heading{min-width:0}
+.section-heading span{display:block;color:var(--color-accent);font-size:10px;font-weight:800;letter-spacing:.06em}
+.section-heading h2{margin:5px 0 0;color:var(--color-text-main);font:700 20px/1.3 system-ui,'Microsoft YaHei',sans-serif}
 .tomtom-bulk{display:grid;grid-template-columns:auto auto auto;align-items:center;gap:6px 9px;max-width:430px;padding:9px 10px;border:1px solid color-mix(in srgb,var(--color-accent) 34%,var(--color-border));border-radius:10px;background:color-mix(in srgb,var(--color-accent) 7%,var(--color-panel-bg));color:var(--color-text-main)}
 .tomtom-bulk>span{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;letter-spacing:0}.tomtom-bulk>span i{color:var(--color-accent);font-size:15px}.tomtom-bulk>code{padding:4px 7px;border-radius:6px;background:var(--color-panel-bg);color:var(--color-accent);font:700 11px/1.2 Consolas,monospace}.tomtom-bulk>small{grid-column:1/-1;color:var(--color-text-secondary);font-size:10px;line-height:1.5}
 .copy-all,.step-tools button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:0 12px;border:1px solid var(--color-accent);border-radius:10px;background:var(--color-accent);color:#fff}
@@ -113,5 +120,5 @@ async function copyText(value: string, key: string) {
 .step-tools code{overflow-wrap:anywhere;padding:8px;border-radius:9px;background:color-mix(in srgb,var(--color-accent) 8%,transparent);color:var(--color-accent);font:11px/1.5 Consolas,monospace}
 .step-tools button{min-height:31px;background:transparent;color:var(--color-accent)}
 .step-tools .no-coordinate{margin:auto 0;text-align:center}
-@media(max-width:760px){.guide-section{padding:20px}.tomtom-bulk{width:100%;max-width:none;grid-template-columns:auto auto minmax(0,1fr)}.tomtom-bulk .copy-all{justify-self:end}.guide-steps li{grid-template-columns:38px 1fr}.step-tools{grid-column:2;padding:10px 0 0;border-left:0;border-top:1px dashed color-mix(in srgb,var(--color-border) 72%,transparent)}}
+@media(max-width:760px){.guide-section{padding:20px}.guide-heading{align-items:flex-start;flex-direction:column}.tomtom-bulk{width:100%;max-width:none;grid-template-columns:auto auto minmax(0,1fr)}.tomtom-bulk .copy-all{justify-self:end}.guide-steps li{grid-template-columns:38px 1fr}.step-tools{grid-column:2;padding:10px 0 0;border-left:0;border-top:1px dashed color-mix(in srgb,var(--color-border) 72%,transparent)}}
 </style>

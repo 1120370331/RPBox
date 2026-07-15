@@ -107,8 +107,16 @@ const transmogShareCode = computed(() => {
 })
 const tableOfContents = computed(() => {
   if (!work.value) return []
-  const result: Array<{ label: string; target: string }> = []
+  const result: Array<{ label: string; target: string }> = [
+    {
+      label: work.value.type === 'home_showcase' ? '空间故事' : '作品介绍',
+      target: 'rpdb-section-overview',
+    },
+  ]
   if (work.value.transmog_slots?.length) result.push({ label: '幻化部件', target: 'rpdb-section-transmog' })
+  if (work.value.guide_steps?.length && work.value.type !== 'home_showcase') {
+    result.push({ label: '获取攻略', target: 'rpdb-section-guide' })
+  }
   if (work.value.type === 'home_showcase') result.push({ label: '家宅资料', target: 'rpdb-section-home' })
   result.push({ label: '玩家讨论', target: 'rpdb-section-discussion' })
   return result

@@ -49,6 +49,10 @@ function formatSlotLabel(slot: string) {
 <template>
   <div class="work-content" data-testid="work-content">
     <section id="rpdb-section-overview" class="editorial-section">
+      <header class="section-heading">
+        <span>{{ isHome ? '空间故事' : '作品介绍' }}</span>
+        <h2>{{ isHome ? '空间故事与参观亮点' : '实际效果与 RP 用途' }}</h2>
+      </header>
       <p v-if="description" class="lead">{{ description }}</p>
       <p v-if="work.rp_use_cases && work.rp_use_cases !== description" class="use-cases">
         <b>适用场景</b>
@@ -72,8 +76,10 @@ function formatSlotLabel(slot: string) {
     </section>
 
     <section v-if="orderedTransmogSlots.length" id="rpdb-section-transmog" class="editorial-section">
-      <span>幻化部件</span>
-      <h2>幻化部件与替代方案</h2>
+      <header class="section-heading">
+        <span>幻化部件</span>
+        <h2>幻化部件与替代方案</h2>
+      </header>
       <div class="slot-grid">
         <article v-for="slot in orderedTransmogSlots" :key="slot.id || `${slot.slot}-${slot.sort_order}`" data-testid="transmog-slot-card">
           <i class="ri-shirt-line"></i>
@@ -113,8 +119,10 @@ function formatSlotLabel(slot: string) {
     <RPDBGuideSection v-if="!isHome" :steps="work.guide_steps || []" />
 
     <section v-if="isHome" id="rpdb-section-home" class="editorial-section home-profile">
-      <span>家宅资料</span>
-      <h2>家宅资料与参观方式</h2>
+      <header class="section-heading">
+        <span>家宅资料</span>
+        <h2>家宅资料与参观方式</h2>
+      </header>
       <p v-if="homeDetails?.visit_notes" class="visit-notes">{{ homeDetails.visit_notes }}</p>
     </section>
   </div>
@@ -124,8 +132,9 @@ function formatSlotLabel(slot: string) {
 .work-content{overflow:hidden;background:transparent}
 .editorial-section{padding:28px 30px;border-top:1px solid color-mix(in srgb,var(--color-border) 72%,transparent)}
 .editorial-section:first-child{border-top:0}
-.editorial-section>span{color:var(--color-accent);font-size:10px;font-weight:800;letter-spacing:.06em}
-.editorial-section h2{margin:5px 0 13px;color:var(--color-text-main);font:700 22px/1.25 system-ui,'Microsoft YaHei',sans-serif}
+.section-heading{margin:0 0 14px}
+.section-heading span{display:block;color:var(--color-accent);font-size:10px;font-weight:800;letter-spacing:.06em}
+.section-heading h2{margin:5px 0 0;color:var(--color-text-main);font:700 20px/1.3 system-ui,'Microsoft YaHei',sans-serif}
 .lead{margin:0;color:var(--color-text-main);font-size:15px;line-height:1.9}
 .use-cases{margin:16px 0;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--color-accent) 8%,transparent);color:var(--color-text-secondary);line-height:1.75}
 .use-cases b{margin-right:8px;color:var(--color-text-main)}
