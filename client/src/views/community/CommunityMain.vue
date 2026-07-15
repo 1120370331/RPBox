@@ -49,22 +49,39 @@ const eventTypeMeta = computed(() => ({
   other: { label: t('community.eventType.other'), color: '#D97706' }
 }))
 
-onMounted(async () => {
+async function bootstrapCommunity() {
   if (route.query.guild_id) {
     filterGuildId.value = Number(route.query.guild_id)
     await loadGuildInfo()
+  } else {
+    filterGuildId.value = null
+    currentGuild.value = null
   }
   if (route.query.tab === 'events') {
     feedTab.value = 'events'
   }
 
+  await Promise.all([loadPosts(), loadEvents(), loadPinnedPosts()])
+  startBannerAutoplay()
+}
+
+onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
   nowTimer = setInterval(() => {
     nowTick.value = Date.now()
   }, 30000)
-  await Promise.all([loadPosts(), loadEvents(), loadPinnedPosts()])
-  startBannerAutoplay()
+  await bootstrapCommunity()
 })
+
+// 从发帖页返回时重新拉取活动，避免 Banner 停留在旧数据
+watch(
+  () => route.fullPath,
+  async (path, prev) => {
+    if (!path.includes('/community') || path === prev) return
+    if (route.name !== 'community') return
+    await bootstrapCommunity()
+  }
+)
 
 watch(() => route.query.guild_id, async (newGuildId) => {
   if (newGuildId) {
@@ -85,6 +102,8 @@ watch(feedTab, (tab) => {
   currentPage.value = 1
   if (tab === 'posts') {
     void Promise.all([loadPosts(), loadPinnedPosts()])
+  } else {
+    void loadEvents()
   }
 })
 
@@ -208,8 +227,15 @@ function goToPost(id: number) {
   router.push({ name: 'post-detail', params: { id } })
 }
 
-function goToCreatePost() {
-  router.push({ name: 'post-create' })
+function goToCreatePost(options?: { category?: PostCategory }) {
+  router.push({
+    name: 'post-create',
+    query: options?.category ? { category: options.category } : undefined,
+  })
+}
+
+function goToCreateEvent() {
+  goToCreatePost({ category: 'event' })
 }
 
 function goToMyPosts() {
@@ -293,13 +319,13 @@ function getCategoryClass(category: string) {
 }
 
 function getEventTypeLabel(event: EventItem) {
-  const typeKey = event.event_type || 'other'
-  return eventTypeMeta.value[typeKey]?.label || eventTypeMeta.value.other.label
+  const typeKey = event.event_type || 'server'
+  return eventTypeMeta.value[typeKey]?.label || eventTypeMeta.value.server.label
 }
 
 function resolveEventColor(event: EventItem) {
-  const typeKey = event.event_type || 'other'
-  return event.event_color || eventTypeMeta.value[typeKey]?.color || eventTypeMeta.value.other.color
+  const typeKey = event.event_type || 'server'
+  return event.event_color || eventTypeMeta.value[typeKey]?.color || eventTypeMeta.value.server.color
 }
 
 function getEventEndTime(event: EventItem): Date | null {
@@ -420,13 +446,35 @@ function getEventStyle(event: EventItem) {
   }
 }
 
+function sortEventsByStatus(list: EventItem[]) {
+  const statusWeight: Record<EventStatus, number> = { live: 0, upcoming: 1, ended: 2 }
+  return [...list].sort((a, b) => {
+    const sa = getEventStatus(a)
+    const sb = getEventStatus(b)
+    if (statusWeight[sa] !== statusWeight[sb]) return statusWeight[sa] - statusWeight[sb]
+    const at = a.event_start_time ? new Date(a.event_start_time).getTime() : 0
+    const bt = b.event_start_time ? new Date(b.event_start_time).getTime() : 0
+    if (sa === 'ended') return bt - at
+    return at - bt
+  })
+}
+
+// Banner 只跟随公会上下文，不受搜索/类型筛选影响
+const bannerSourceEvents = computed(() => {
+  let list = events.value
+  if (filterGuildId.value) {
+    list = list.filter(event => event.guild_id === filterGuildId.value || event.event_type === 'server' || !event.event_type)
+  }
+  return sortEventsByStatus(list)
+})
+
 const filteredEvents = computed(() => {
   let list = events.value
   if (filterGuildId.value) {
-    list = list.filter(event => event.guild_id === filterGuildId.value || event.event_type === 'server')
+    list = list.filter(event => event.guild_id === filterGuildId.value || event.event_type === 'server' || !event.event_type)
   }
   if (eventFilter.value !== 'all') {
-    list = list.filter(event => event.event_type === eventFilter.value)
+    list = list.filter(event => (event.event_type || 'server') === eventFilter.value)
   }
   const keyword = searchKeyword.value.trim().toLowerCase()
   if (keyword) {
@@ -441,32 +489,19 @@ const filteredEvents = computed(() => {
       return haystack.includes(keyword)
     })
   }
-  return list
-})
-
-const sortedEvents = computed(() => {
-  const statusWeight: Record<EventStatus, number> = { live: 0, upcoming: 1, ended: 2 }
-  return [...filteredEvents.value].sort((a, b) => {
-    const sa = getEventStatus(a)
-    const sb = getEventStatus(b)
-    if (statusWeight[sa] !== statusWeight[sb]) return statusWeight[sa] - statusWeight[sb]
-    const at = a.event_start_time ? new Date(a.event_start_time).getTime() : 0
-    const bt = b.event_start_time ? new Date(b.event_start_time).getTime() : 0
-    if (sa === 'ended') return bt - at
-    return at - bt
-  })
+  return sortEventsByStatus(list)
 })
 
 const displayEvents = computed(() => {
-  if (eventStatusFilter.value === 'all') return sortedEvents.value
+  if (eventStatusFilter.value === 'all') return filteredEvents.value
   if (eventStatusFilter.value === 'active') {
-    return sortedEvents.value.filter(event => getEventStatus(event) !== 'ended')
+    return filteredEvents.value.filter(event => getEventStatus(event) !== 'ended')
   }
-  return sortedEvents.value.filter(event => getEventStatus(event) === eventStatusFilter.value)
+  return filteredEvents.value.filter(event => getEventStatus(event) === eventStatusFilter.value)
 })
 
 const bannerEvents = computed(() => {
-  return sortedEvents.value
+  return bannerSourceEvents.value
     .filter(event => getEventStatus(event) !== 'ended')
     .slice(0, 5)
 })
@@ -553,11 +588,11 @@ function setEventStatusFilter(filter: EventStatusFilter) {
           <i class="ri-file-list-3-line"></i>
           {{ t('community.action.myPosts') }}
         </button>
-        <button class="create-btn" @click="goToCreatePost">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="create-btn" @click="goToCreatePost()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
           </svg>
-          {{ t('community.action.publish') }}
+          <span>{{ t('community.action.publish') }}</span>
         </button>
       </div>
     </header>
@@ -675,9 +710,9 @@ function setEventStatusFilter(filter: EventStatusFilter) {
             <h3>{{ t('community.banner.emptyTitle') }}</h3>
             <p>{{ t('community.banner.emptyBody') }}</p>
           </div>
-          <button class="create-btn" @click="goToCreatePost">
-            <i class="ri-add-line"></i>
-            {{ t('community.banner.emptyAction') }}
+          <button type="button" class="create-btn banner-empty-action" @click="goToCreateEvent">
+            <i class="ri-add-line" aria-hidden="true"></i>
+            <span>{{ t('community.banner.emptyAction') }}</span>
           </button>
         </div>
       </div>
@@ -813,9 +848,9 @@ function setEventStatusFilter(filter: EventStatusFilter) {
           <div v-if="posts.length === 0 && pinnedPosts.length === 0" class="empty-state">
             <i class="ri-article-line"></i>
             <p>{{ t('community.empty') }}</p>
-            <button class="create-btn" @click="goToCreatePost">
-              <i class="ri-add-line"></i>
-              {{ t('community.emptyAction') }}
+            <button type="button" class="create-btn" @click="goToCreatePost()">
+              <i class="ri-add-line" aria-hidden="true"></i>
+              <span>{{ t('community.emptyAction') }}</span>
             </button>
           </div>
         </div>
@@ -870,6 +905,10 @@ function setEventStatusFilter(filter: EventStatusFilter) {
       <div v-else-if="displayEvents.length === 0" class="events-empty-state anim-item" style="--delay: 3">
         <i class="ri-calendar-close-line"></i>
         <p>{{ t('community.events.empty') }}</p>
+        <button type="button" class="create-btn" @click="goToCreateEvent">
+          <i class="ri-add-line" aria-hidden="true"></i>
+          <span>{{ t('community.banner.emptyAction') }}</span>
+        </button>
       </div>
 
       <div v-else class="events-grid anim-item" style="--delay: 3">
@@ -1087,8 +1126,9 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 }
 
 .create-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 8px 20px;
   background: var(--color-secondary, #804030);
@@ -1097,20 +1137,35 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
+  line-height: 1;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(128, 64, 48, 0.2);
   transition: all 0.2s;
 }
 
-.create-btn svg,
-.create-btn i {
+.create-btn svg {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
+}
+
+.create-btn i {
   font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.create-btn span {
+  line-height: 1.2;
 }
 
 .create-btn:hover {
   background: var(--color-secondary-hover, #6B3528);
+}
+
+.banner-empty-action {
+  min-height: 40px;
+  padding: 10px 18px;
 }
 
 /* ========== Event Banner ========== */
@@ -1890,7 +1945,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 14px;
   padding: 72px 20px;
   color: var(--color-text-secondary, #8D7B68);
 }
