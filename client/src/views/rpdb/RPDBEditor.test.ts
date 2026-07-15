@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import RPDBEditor from './RPDBEditor.vue'
-import { createRPDBWork } from '@/api/rpdb'
+import { createRPDBDraft } from '@/api/rpdb'
 import { uploadImage } from '@/api/item'
 import i18n from '@/i18n'
 
@@ -15,9 +15,36 @@ vi.mock('@/api/rpdb', async () => {
   const actual = await vi.importActual<typeof import('@/api/rpdb')>('@/api/rpdb')
   return {
     ...actual,
-    createRPDBWork: vi.fn().mockResolvedValue({ work: { id: 999 } }),
-    updateRPDBWork: vi.fn().mockResolvedValue({ work: { id: 999 } }),
-    getRPDBWork: vi.fn(),
+    listRPDBDrafts: vi.fn().mockResolvedValue({ drafts: [] }),
+    createRPDBDraft: vi.fn().mockImplementation(async (payload) => ({
+      draft: {
+        id: 999,
+        author_id: 1,
+        type: payload?.type || 'item_showcase',
+        title: payload?.title || '',
+        payload: payload || {},
+        base_version: 0,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    })),
+    updateRPDBDraft: vi.fn().mockImplementation(async (id, payload) => ({
+      draft: {
+        id,
+        author_id: 1,
+        type: payload?.type || 'item_showcase',
+        title: payload?.title || '',
+        payload: payload || {},
+        base_version: 0,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    })),
+    getRPDBDraft: vi.fn(),
+    deleteRPDBDraft: vi.fn(),
+    publishRPDBDraft: vi.fn().mockResolvedValue({ work: { id: 999 } }),
   }
 })
 
@@ -41,7 +68,10 @@ vi.mock('@/api/guild', () => ({
 function mountEditor() {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/', component: RPDBEditor }],
+    routes: [
+      { path: '/', name: 'rpdb-create', component: RPDBEditor },
+      { path: '/drafts/:draftId/edit', name: 'rpdb-draft-edit', component: RPDBEditor },
+    ],
   })
   return router.push('/').then(() => mount(RPDBEditor, {
     global: {
@@ -95,7 +125,8 @@ describe('RPDBEditor', () => {
     expect(wrapper.text()).toContain('帖子编辑')
     expect(wrapper.text()).not.toContain('新媒体正文与攻略编辑')
     expect(wrapper.text()).not.toContain('发布检查')
-    expect(wrapper.text()).not.toContain('保存草稿')
+    expect(wrapper.text()).toContain('保存草稿')
+    expect(wrapper.find('[data-testid="rpdb-draft-box-button"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('游戏版本')
     expect(wrapper.text()).not.toContain('资料片')
     expect(wrapper.text()).not.toContain('获取难度')
@@ -106,6 +137,20 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('[data-testid="rpdb-authoring-steps"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="rpdb-internal-link-button"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('内部链接')
+  })
+
+  it('opens the visible draft box and keeps saved drafts separate from formal works', async () => {
+    const wrapper = await mountEditor()
+    await wrapper.find('#rpdb-title').setValue('未发布的独立草稿')
+    await wrapper.find('[data-testid="save-rpdb-draft"]').trigger('click')
+
+    await vi.waitFor(() => expect(vi.mocked(createRPDBDraft)).toHaveBeenCalled())
+    await wrapper.find('[data-testid="rpdb-draft-box-button"]').trigger('click')
+
+    const draftBox = wrapper.find('[data-testid="rpdb-draft-box"]')
+    expect(draftBox.exists()).toBe(true)
+    expect(draftBox.text()).toContain('未发布的独立草稿')
+    expect(draftBox.text()).toContain('新内容')
   })
 
   it('places required visibility above content type and defaults to public', async () => {
@@ -149,8 +194,8 @@ describe('RPDBEditor', () => {
     await wrapper.find('input[placeholder="例如：月光灯笼的巡夜用法"]').setValue('银月议会收藏')
     await wrapper.find('[data-testid="publish-work"]').trigger('click')
 
-    await vi.waitFor(() => expect(vi.mocked(createRPDBWork)).toHaveBeenCalled())
-    expect(vi.mocked(createRPDBWork).mock.calls.at(-1)?.[0]).toMatchObject({
+    await vi.waitFor(() => expect(vi.mocked(createRPDBDraft)).toHaveBeenCalled())
+    expect(vi.mocked(createRPDBDraft).mock.calls.at(-1)?.[0]).toMatchObject({
       visibility: 'guild',
       guild_id: 7,
       guild_ids: [7, 8],
@@ -164,12 +209,12 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('[data-testid="rpdb-authoring-steps"]').exists()).toBe(false)
     expect(wrapper.find('#rpdb-title').attributes('required')).toBeDefined()
 
-    vi.mocked(createRPDBWork).mockClear()
+    vi.mocked(createRPDBDraft).mockClear()
     await wrapper.find('[data-testid="publish-work"]').trigger('click')
 
     expect(wrapper.find('.field-control').classes()).toContain('invalid')
     expect(wrapper.text()).toContain('请填写内容标题后再发布')
-    expect(createRPDBWork).not.toHaveBeenCalled()
+    expect(createRPDBDraft).not.toHaveBeenCalled()
 
     await wrapper.find('#rpdb-title').setValue('暮色森林巡林灯')
     expect(wrapper.find('.field-control').classes()).not.toContain('invalid')
@@ -423,8 +468,8 @@ describe('RPDBEditor', () => {
     await fields.find('input[placeholder="例如：任务奖励、商人购买或公会活动产出"]').setValue('公会巡夜活动')
     await wrapper.find('[data-testid="publish-work"]').trigger('click')
 
-    await vi.waitFor(() => expect(vi.mocked(createRPDBWork)).toHaveBeenCalled())
-    expect(vi.mocked(createRPDBWork).mock.calls.at(-1)?.[0]).toMatchObject({
+    await vi.waitFor(() => expect(vi.mocked(createRPDBDraft)).toHaveBeenCalled())
+    expect(vi.mocked(createRPDBDraft).mock.calls.at(-1)?.[0]).toMatchObject({
       bind_type: 'no',
       faction: 'neutral',
       visibility: 'public',
@@ -499,9 +544,9 @@ describe('RPDBEditor', () => {
     await wrapper.find('[data-testid="publish-work"]').trigger('click')
 
     await vi.waitFor(() => {
-      expect(vi.mocked(createRPDBWork)).toHaveBeenCalled()
+      expect(vi.mocked(createRPDBDraft)).toHaveBeenCalled()
     })
-    const customTopicSubmission = vi.mocked(createRPDBWork).mock.calls.find(([payload]) => payload.tag_names?.includes('暮色森林风格'))
+    const customTopicSubmission = vi.mocked(createRPDBDraft).mock.calls.find(([payload]) => payload?.tag_names?.includes('暮色森林风格'))
     expect(customTopicSubmission?.[0]).toMatchObject({
       tag_names: ['暮色森林风格'],
     })
@@ -523,7 +568,7 @@ describe('RPDBEditor', () => {
     await wrapper.find('[data-testid="publish-work"]').trigger('click')
 
     await vi.waitFor(() => {
-      const fallbackSubmission = vi.mocked(createRPDBWork).mock.calls.find(([payload]) => payload.tag_names?.includes('联盟风格'))
+      const fallbackSubmission = vi.mocked(createRPDBDraft).mock.calls.find(([payload]) => payload?.tag_names?.includes('联盟风格'))
       expect(fallbackSubmission?.[0]).toMatchObject({ tag_names: ['联盟风格'] })
     })
   })
@@ -536,8 +581,8 @@ describe('RPDBEditor', () => {
     await wrapper.find('[data-testid="transmog-share-code-input"]').setValue('TRANSMOG:HEAD=34339;CHEST=34202')
     await wrapper.find('[data-testid="publish-work"]').trigger('click')
 
-    await vi.waitFor(() => expect(vi.mocked(createRPDBWork)).toHaveBeenCalled())
-    expect(vi.mocked(createRPDBWork).mock.calls.at(-1)?.[0]).toMatchObject({
+    await vi.waitFor(() => expect(vi.mocked(createRPDBDraft)).toHaveBeenCalled())
+    expect(vi.mocked(createRPDBDraft).mock.calls.at(-1)?.[0]).toMatchObject({
       type: 'transmog',
       extra: { share_code: 'TRANSMOG:HEAD=34339;CHEST=34202' },
     })

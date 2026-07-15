@@ -6,8 +6,10 @@ import RPDBMyUploads from './RPDBMyUploads.vue'
 
 const api = vi.hoisted(() => ({
   listMyRPDBWorks: vi.fn(),
+  listRPDBDrafts: vi.fn(),
   updateRPDBWorkVisibility: vi.fn(),
   deleteRPDBWork: vi.fn(),
+  deleteRPDBDraft: vi.fn(),
   listGuilds: vi.fn(),
   confirm: vi.fn(),
 }))
@@ -17,8 +19,10 @@ vi.mock('@/api/rpdb', async () => {
   return {
     ...actual,
     listMyRPDBWorks: api.listMyRPDBWorks,
+    listRPDBDrafts: api.listRPDBDrafts,
     updateRPDBWorkVisibility: api.updateRPDBWorkVisibility,
     deleteRPDBWork: api.deleteRPDBWork,
+    deleteRPDBDraft: api.deleteRPDBDraft,
     resolveRPDBMediaURL: (value?: string) => value || '',
   }
 })
@@ -62,16 +66,20 @@ const work = {
 describe('RPDBMyUploads', () => {
   beforeEach(() => {
     api.listMyRPDBWorks.mockReset()
+    api.listRPDBDrafts.mockReset()
     api.updateRPDBWorkVisibility.mockReset()
     api.deleteRPDBWork.mockReset()
+    api.deleteRPDBDraft.mockReset()
     api.listGuilds.mockReset()
     api.confirm.mockReset()
     api.listMyRPDBWorks.mockResolvedValue({ works: [{ ...work }] })
+    api.listRPDBDrafts.mockResolvedValue({ drafts: [] })
     api.listGuilds.mockResolvedValue({ guilds: [{ id: 5, name: '暮色守望' }, { id: 6, name: '夜色议会' }] })
     api.updateRPDBWorkVisibility.mockImplementation(async (_id: number, visibility: string, guildIds: number[] = []) => ({
       work: { ...work, visibility, guild_id: guildIds[0], guild_ids: guildIds, is_public: visibility === 'public' },
     }))
     api.deleteRPDBWork.mockResolvedValue({ message: 'deleted' })
+    api.deleteRPDBDraft.mockResolvedValue({ message: 'deleted' })
     api.confirm.mockResolvedValue(true)
   })
 
@@ -82,6 +90,7 @@ describe('RPDBMyUploads', () => {
         { path: '/rpdb/my-uploads', component: RPDBMyUploads },
         { path: '/rpdb/:id', component: { template: '<div />' } },
         { path: '/rpdb/:id/edit', component: { template: '<div />' } },
+        { path: '/rpdb/drafts/:draftId/edit', component: { template: '<div />' } },
         { path: '/rpdb', component: { template: '<div />' } },
       ],
     })
@@ -110,6 +119,30 @@ describe('RPDBMyUploads', () => {
     await wrapper.find('.visibility-control select').setValue('private')
     await flushPromises()
     expect(api.updateRPDBWorkVisibility).toHaveBeenLastCalledWith(11, 'private', [5, 6])
+  })
+
+  it('lists separate drafts and opens them without treating them as formal works', async () => {
+    api.listRPDBDrafts.mockResolvedValue({
+      drafts: [{
+        id: 21,
+        author_id: 1,
+        work_id: 11,
+        type: 'item_showcase',
+        title: '提灯修改草稿',
+        payload: { title: '提灯修改草稿' },
+        base_version: 1,
+        status: 'active',
+        created_at: '2026-07-13T00:00:00Z',
+        updated_at: '2026-07-14T00:00:00Z',
+      }],
+    })
+    const { wrapper, router } = await mountPage()
+
+    expect(wrapper.get('[data-testid="rpdb-draft-list"]').text()).toContain('提灯修改草稿')
+    expect(wrapper.get('[data-testid="rpdb-draft-list"]').text()).toContain('发布前不会改动线上内容')
+    await wrapper.get('[data-testid="rpdb-draft-row"] .row-actions button').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/rpdb/drafts/21/edit')
   })
 
   it('navigates to view and edit, then removes a confirmed upload', async () => {

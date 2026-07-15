@@ -135,6 +135,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.CollectionFavorite{},
 		&model.StoryBookmark{},
 		&model.RPDBWork{},
+		&model.RPDBDraft{},
 		&model.RPDBReference{},
 		&model.RPDBMedia{},
 		&model.RPDBTransmogSlot{},

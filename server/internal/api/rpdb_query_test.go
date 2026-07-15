@@ -1,11 +1,16 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+	internalcache "github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/testutil"
@@ -25,6 +30,7 @@ func newRPDBQueryTestServer(t *testing.T) (*Server, model.User) {
 		&model.RPDBTag{},
 		&model.RPDBLike{},
 		&model.RPDBFavorite{},
+		&model.RPDBViewEvent{},
 		&model.RPDBList{},
 		&model.RPDBListEntry{},
 		&model.GuildMember{},
@@ -36,6 +42,42 @@ func newRPDBQueryTestServer(t *testing.T) (*Server, model.User) {
 	}
 
 	return newTestServer(t, db), author
+}
+
+func TestRPDBPublicListUsesRedisCacheAndVersionInvalidation(t *testing.T) {
+	server, author := newRPDBQueryTestServer(t)
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	server.cache = internalcache.NewRedisCache(redisClient, internalcache.Options{})
+	t.Cleanup(func() { _ = server.cache.Close() })
+
+	work := model.RPDBWork{
+		AuthorID: author.ID, Type: model.RPDBWorkTypeItemShowcase, Title: "缓存前标题",
+		Status: model.RPDBStatusPublished, ReviewStatus: model.RPDBReviewApproved,
+		Visibility: model.RPDBVisibilityPublic, IsPublic: true,
+	}
+	if err := database.DB.Create(&work).Error; err != nil {
+		t.Fatalf("create work: %v", err)
+	}
+
+	first := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works", nil, "")
+	if first.Code != http.StatusOK || !strings.Contains(first.Body.String(), "缓存前标题") {
+		t.Fatalf("first list failed: code=%d body=%s", first.Code, first.Body.String())
+	}
+	if err := database.DB.Model(&work).Update("title", "数据库新标题").Error; err != nil {
+		t.Fatalf("update work: %v", err)
+	}
+
+	second := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works", nil, "")
+	if second.Code != http.StatusOK || !strings.Contains(second.Body.String(), "缓存前标题") {
+		t.Fatalf("expected cached response, code=%d body=%s", second.Code, second.Body.String())
+	}
+
+	server.bumpRPDBListCache(context.Background())
+	third := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works", nil, "")
+	if third.Code != http.StatusOK || !strings.Contains(third.Body.String(), "数据库新标题") {
+		t.Fatalf("expected invalidated response, code=%d body=%s", third.Code, third.Body.String())
+	}
 }
 
 func TestRPDBQueryEnforcesPrivateAndGuildVisibility(t *testing.T) {

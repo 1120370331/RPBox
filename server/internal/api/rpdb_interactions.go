@@ -13,19 +13,19 @@ import (
 )
 
 func (s *Server) likeRPDBWork(c *gin.Context) {
-	changeRPDBWorkInteraction(c, &model.RPDBLike{}, "like_count", true)
+	s.changeRPDBWorkInteraction(c, &model.RPDBLike{}, "like_count", true)
 }
 
 func (s *Server) unlikeRPDBWork(c *gin.Context) {
-	changeRPDBWorkInteraction(c, &model.RPDBLike{}, "like_count", false)
+	s.changeRPDBWorkInteraction(c, &model.RPDBLike{}, "like_count", false)
 }
 
 func (s *Server) favoriteRPDBWork(c *gin.Context) {
-	changeRPDBWorkInteraction(c, &model.RPDBFavorite{}, "favorite_count", true)
+	s.changeRPDBWorkInteraction(c, &model.RPDBFavorite{}, "favorite_count", true)
 }
 
 func (s *Server) unfavoriteRPDBWork(c *gin.Context) {
-	changeRPDBWorkInteraction(c, &model.RPDBFavorite{}, "favorite_count", false)
+	s.changeRPDBWorkInteraction(c, &model.RPDBFavorite{}, "favorite_count", false)
 }
 
 func (s *Server) listMyRPDBFavorites(c *gin.Context) {
@@ -55,7 +55,7 @@ func (s *Server) listMyRPDBFavorites(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"works": cards})
 }
 
-func changeRPDBWorkInteraction(c *gin.Context, target interface{}, counter string, add bool) {
+func (s *Server) changeRPDBWorkInteraction(c *gin.Context, target interface{}, counter string, add bool) {
 	userID := c.GetUint("userID")
 	workID, ok := parseRPDBWorkID(c)
 	if !ok {
@@ -100,6 +100,7 @@ func changeRPDBWorkInteraction(c *gin.Context, target interface{}, counter strin
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新互动状态失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"active": add})
 }
 
@@ -255,6 +256,7 @@ func (s *Server) createRPDBComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "发布评论失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 
 	var work model.RPDBWork
 	if err := database.DB.Select("id", "author_id", "title").First(&work, workID).Error; err == nil && work.AuthorID != userID {
@@ -300,6 +302,7 @@ func (s *Server) deleteRPDBComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除评论失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	c.Status(http.StatusNoContent)
 }
 
@@ -362,6 +365,7 @@ func (s *Server) verifyRPDBWork(c *gin.Context) {
 		return
 	}
 	recalculateRPDBVerification(workID)
+	s.bumpRPDBListCache(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"verification": verification})
 }
 

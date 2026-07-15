@@ -62,7 +62,9 @@ func (s *Server) reviewRPDBWork(c *gin.Context) {
 		updates["status"] = model.RPDBStatusPublished
 		updates["is_public"] = normalizeRPDBVisibility(work.Visibility, work.IsPublic) == model.RPDBVisibilityPublic
 	} else {
-		updates["status"] = model.RPDBStatusDraft
+		// 正式作品与草稿分表。审核拒绝只改变正式作品的审核状态，
+		// 不能把正式作品降级成 draft 行。
+		updates["status"] = model.RPDBStatusPending
 		updates["is_public"] = false
 	}
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
@@ -77,6 +79,7 @@ func (s *Server) reviewRPDBWork(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	logAdminAction(c, "review_rpdb_work", "rpdb_work", work.ID, work.Title, map[string]interface{}{"action": request.Action, "comment": request.Comment})
 	notifyModerationResult(work.AuthorID, "rpdb_work", work.ID, "RP 数据库作品《"+work.Title+"》", request.Action, request.Comment)
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成"})
@@ -120,6 +123,7 @@ func (s *Server) reviewRPDBMedia(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存媒体审核结果失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	logAdminAction(c, "review_rpdb_media", "rpdb_media", media.ID, media.URL, map[string]interface{}{"action": request.Action})
 	if media.AuthorID != nil {
 		notifyModerationResult(*media.AuthorID, "rpdb_work", media.WorkID, "RP 数据库媒体", request.Action, request.Comment)
@@ -225,6 +229,7 @@ func (s *Server) reviewRPDBRevision(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "应用修订失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	logAdminAction(c, "review_rpdb_revision", "rpdb_revision", revision.ID, revision.ChangeSummary, map[string]interface{}{"action": request.Action})
 	notifyModerationResult(revision.ProposerID, "rpdb_work", revision.WorkID, "RP 数据库修订", request.Action, request.Comment)
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成"})
@@ -244,6 +249,7 @@ func (s *Server) hideRPDBWorkByMod(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "隐藏作品失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	logAdminAction(c, "hide_rpdb_work", "rpdb_work", work.ID, work.Title, nil)
 	c.JSON(http.StatusOK, gin.H{"message": "作品已隐藏并打回审核"})
 }
@@ -262,6 +268,7 @@ func (s *Server) deleteRPDBWorkByMod(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除作品失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	logAdminAction(c, "delete_rpdb_work", "rpdb_work", work.ID, work.Title, nil)
 	c.Status(http.StatusNoContent)
 }

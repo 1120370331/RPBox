@@ -28,6 +28,7 @@ export default {
       editTitle: '编辑内容',
       description: '按创作流程完善内容，未完成的内容会自动保存在本地。',
       saved: '已保存 {time}',
+      drafts: '草稿箱',
     },
     basics: {
       title: '基础资料',
@@ -243,7 +244,24 @@ export default {
       upload: '上传',
       clearIcon: '清除图标',
       internalPreview: '内部预览',
+      saveDraft: '保存草稿',
+      newDraft: '新建草稿',
+      continueDraft: '继续最近草稿',
+      deleteDraft: '删除草稿',
       publish: '发布',
+    },
+    drafts: {
+      title: '草稿箱',
+      count: '{count} 份未发布草稿',
+      empty: '还没有未发布草稿',
+      untitled: '未命名草稿',
+      related: '关联正式作品',
+      standalone: '新内容',
+      resumeTitle: '发现未发布草稿',
+      resumeMessage: '草稿箱中还有未发布内容。继续最近编辑的草稿，还是新建一份空白内容？',
+      relatedResumeMessage: '这个正式作品已有未发布草稿。继续最近的草稿，还是基于线上内容新建草稿？',
+      deleteTitle: '删除草稿',
+      deleteMessage: '确定永久删除这份草稿吗？正式作品不会受到影响。',
     },
     toast: {
       noWaypoints: '未识别到可用的 TomTom /way 坐标',
@@ -257,6 +275,7 @@ export default {
       homeCodeReadFailed: '读取家宅代码失败',
       draftSaved: '草稿已自动保存',
       published: '发布成功',
+      revisionSubmitted: '修改草稿已发布，等待审核',
     },
     options: {
       availability: {

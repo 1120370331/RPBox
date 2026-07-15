@@ -7,7 +7,10 @@ import (
 	"github.com/rpbox/server/internal/cache"
 )
 
-const postListCacheName = "post:list"
+const (
+	postListCacheName = "post:list"
+	rpdbListCacheName = "rpdb:list"
+)
 
 func (s *Server) userProfileCacheKey(userID string) string {
 	return cache.Key("user", "public", "v2", userID)
@@ -25,4 +28,11 @@ func (s *Server) bumpPostListCache(ctx context.Context) {
 		return
 	}
 	_, _ = s.cache.BumpVersion(ctx, postListCacheName)
+}
+
+func (s *Server) bumpRPDBListCache(ctx context.Context) {
+	if s.cache == nil {
+		return
+	}
+	_, _ = s.cache.BumpVersion(ctx, rpdbListCacheName)
 }

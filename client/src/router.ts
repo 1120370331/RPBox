@@ -57,6 +57,7 @@ const router = createRouter({
         { path: 'rpdb', name: 'rpdb', component: () => import('./views/rpdb/RPDBMain.vue') },
         { path: 'rpdb/my-uploads', name: 'rpdb-my-uploads', component: () => import('./views/rpdb/RPDBMyUploads.vue') },
         { path: 'rpdb/create', name: 'rpdb-create', component: () => import('./views/rpdb/RPDBEditor.vue') },
+        { path: 'rpdb/drafts/:draftId/edit', name: 'rpdb-draft-edit', component: () => import('./views/rpdb/RPDBEditor.vue') },
         { path: 'rpdb/preview', name: 'rpdb-preview', component: () => import('./views/rpdb/RPDBPreview.vue') },
         { path: 'rpdb/lists', name: 'rpdb-lists', component: () => import('./views/rpdb/RPDBLists.vue') },
         { path: 'rpdb/:id/edit', name: 'rpdb-edit', component: () => import('./views/rpdb/RPDBEditor.vue') },

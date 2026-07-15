@@ -103,6 +103,13 @@ func (s *Server) createRPDBWork(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
 		return
 	}
+	if request.Status == model.RPDBStatusDraft {
+		c.JSON(http.StatusConflict, gin.H{"error": "草稿必须通过草稿箱接口保存，不能创建为正式作品"})
+		return
+	}
+	if request.Status == "" {
+		request.Status = model.RPDBStatusPublished
+	}
 	if err := validateRPDBWriteRequest(request, true); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -149,6 +156,10 @@ func (s *Server) createRPDBWork(c *gin.Context) {
 		ReviewStatus:       reviewStatus,
 		Version:            1,
 	}
+	if work.CoverImage != "" {
+		now := time.Now()
+		work.CoverImageUpdatedAt = &now
+	}
 
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&work).Error; err != nil {
@@ -160,6 +171,7 @@ func (s *Server) createRPDBWork(c *gin.Context) {
 		return
 	}
 
+	s.bumpRPDBListCache(c.Request.Context())
 	c.JSON(http.StatusCreated, gin.H{"work": work})
 }
 
@@ -194,24 +206,7 @@ func (s *Server) updateRPDBWork(c *gin.Context) {
 	}
 
 	if work.Status == model.RPDBStatusPublished && !canModerate {
-		payload, err := json.Marshal(request.present)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无法保存修订内容"})
-			return
-		}
-		revision := model.RPDBRevision{
-			WorkID:        work.ID,
-			ProposerID:    userID,
-			BaseVersion:   work.Version,
-			Payload:       string(payload),
-			ChangeSummary: strings.TrimSpace(request.ChangeSummary),
-			Status:        model.RPDBReviewPending,
-		}
-		if err := database.DB.Create(&revision).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建修订申请失败"})
-			return
-		}
-		c.JSON(http.StatusAccepted, gin.H{"revision": revision})
+		c.JSON(http.StatusConflict, gin.H{"error": "正式作品不能直接修改，请先创建关联草稿并在发布时提交"})
 		return
 	}
 
@@ -260,6 +255,7 @@ func (s *Server) updateRPDBWork(c *gin.Context) {
 		return
 	}
 
+	s.bumpRPDBListCache(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"work": work})
 }
 
@@ -304,13 +300,22 @@ func (s *Server) deleteRPDBWork(c *gin.Context) {
 		}
 	}
 
+	s.bumpRPDBListCache(c.Request.Context())
 	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) listMyRPDBWorks(c *gin.Context) {
 	userID := c.GetUint("userID")
+	if err := migrateLegacyRPDBDrafts(userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "迁移旧草稿失败"})
+		return
+	}
 	var works []model.RPDBWork
-	if err := database.DB.Where("author_id = ? AND status <> ?", userID, model.RPDBStatusArchived).Order("updated_at DESC").Find(&works).Error; err != nil {
+	if err := database.DB.
+		Where("author_id = ? AND status <> ? AND NOT (status = ? AND COALESCE(review_status, '') IN ?)",
+			userID, model.RPDBStatusArchived, model.RPDBStatusDraft, []string{"", model.RPDBReviewNone}).
+		Order("updated_at DESC").
+		Find(&works).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "加载作品失败"})
 		return
 	}
@@ -370,6 +375,7 @@ func (s *Server) updateRPDBWorkVisibility(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新可见范围失败"})
 		return
 	}
+	s.bumpRPDBListCache(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"work": work})
 }
 
@@ -545,7 +551,12 @@ func applyRPDBWorkRequest(work *model.RPDBWork, request rpdbWorkWriteRequest) {
 		work.ContentType = defaultString(request.ContentType, work.ContentType)
 	}
 	if request.has("cover_image") {
-		work.CoverImage = strings.TrimSpace(request.CoverImage)
+		nextCover := strings.TrimSpace(request.CoverImage)
+		if work.CoverImage != nextCover {
+			now := time.Now()
+			work.CoverImageUpdatedAt = &now
+		}
+		work.CoverImage = nextCover
 	}
 	if request.has("rp_use_cases") {
 		work.RPUseCases = request.RPUseCases
