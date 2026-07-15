@@ -261,6 +261,7 @@ export interface EventItem extends Post {
   author_forum_level_color?: string
   author_forum_level_bold?: boolean
   guild_name?: string
+  cover_image_url?: string
 }
 
 export async function listEvents(start?: string, end?: string): Promise<{ events: EventItem[] }> {

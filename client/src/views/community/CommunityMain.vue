@@ -426,12 +426,20 @@ function formatEventTimeShort(dateStr?: string) {
 }
 
 function getEventCover(event: EventItem) {
-  if (!event.cover_image && !(event as any).cover_image_url) return ''
-  return getImageUrl('post-cover', event.id, {
-    w: 1200,
-    q: 80,
-    v: event.cover_image_updated_at || event.updated_at
-  })
+  if (event.cover_image_url) {
+    return resolveApiUrl(event.cover_image_url)
+  }
+  if (event.cover_image) {
+    if (event.cover_image.startsWith('http://') || event.cover_image.startsWith('https://') || event.cover_image.startsWith('data:')) {
+      return event.cover_image
+    }
+    return getImageUrl('post-cover', event.id, {
+      w: 1200,
+      q: 80,
+      v: event.cover_image_updated_at || event.updated_at
+    })
+  }
+  return ''
 }
 
 function getEventStyle(event: EventItem) {
@@ -617,7 +625,12 @@ function setEventStatusFilter(filter: EventStatusFilter) {
         </div>
       </div>
 
-      <div v-else-if="activeBanner" class="event-banner" :style="{ '--event-color': resolveEventColor(activeBanner) }">
+      <div
+        v-else-if="activeBanner"
+        class="event-banner"
+        :class="{ 'has-cover': !!getEventCover(activeBanner) }"
+        :style="{ '--event-color': resolveEventColor(activeBanner) }"
+      >
         <div class="banner-media">
           <img
             v-if="getEventCover(activeBanner)"
@@ -626,7 +639,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
             class="banner-cover"
             loading="lazy"
           />
-          <div class="banner-fallback" aria-hidden="true"></div>
+          <div v-else class="banner-fallback" aria-hidden="true"></div>
           <div class="banner-color-fade" aria-hidden="true"></div>
         </div>
 
@@ -1194,13 +1207,17 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   z-index: 0;
 }
 
+/* 封面锚定左侧约 45% 区域，右侧留给标记色与文字 */
 .banner-cover {
   position: absolute;
-  inset: 0;
-  width: 100%;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 52%;
   height: 100%;
   object-fit: cover;
-  object-position: left center;
+  object-position: center;
+  display: block;
 }
 
 .banner-fallback {
@@ -1214,15 +1231,24 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 .banner-color-fade {
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background: linear-gradient(
     90deg,
-    transparent 0%,
-    transparent 28%,
-    color-mix(in srgb, var(--event-color, #B87333) 35%, transparent) 48%,
-    color-mix(in srgb, var(--event-color, #B87333) 78%, #1a100c) 72%,
-    color-mix(in srgb, var(--event-color, #B87333) 92%, #1a100c) 100%
+    rgba(0, 0, 0, 0.12) 0%,
+    transparent 18%,
+    transparent 30%,
+    color-mix(in srgb, var(--event-color, #B87333) 42%, transparent) 46%,
+    color-mix(in srgb, var(--event-color, #B87333) 82%, #1a100c) 68%,
+    var(--event-color, #B87333) 100%
   );
-  pointer-events: none;
+}
+
+.event-banner:not(.has-cover) .banner-color-fade {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--event-color, #B87333) 70%, #1a100c) 0%,
+    var(--event-color, #B87333) 100%
+  );
 }
 
 .banner-layout {
@@ -2033,11 +2059,16 @@ function setEventStatusFilter(filter: EventStatusFilter) {
     align-items: flex-start;
   }
 
+  .banner-cover {
+    width: 58%;
+  }
+
   .banner-color-fade {
     background: linear-gradient(
       90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--event-color, #B87333) 40%, transparent) 40%,
+      rgba(0, 0, 0, 0.1) 0%,
+      transparent 16%,
+      color-mix(in srgb, var(--event-color, #B87333) 45%, transparent) 42%,
       color-mix(in srgb, var(--event-color, #B87333) 88%, #1a100c) 100%
     );
   }
