@@ -1744,6 +1744,7 @@ func (s *Server) listEvents(c *gin.Context) {
 		AuthorForumLevelColor string `json:"author_forum_level_color"`
 		AuthorForumLevelBold  bool   `json:"author_forum_level_bold"`
 		GuildName             string `json:"guild_name,omitempty"`
+		CoverImageURL         string `json:"cover_image_url,omitempty"`
 	}
 
 	// 收集ID
@@ -1776,12 +1777,26 @@ func (s *Server) listEvents(c *gin.Context) {
 		}
 	}
 
-	// 组装结果
+	// 组装结果（封面走 cover_image_url，不回传大字段 cover_image）
 	result := make([]EventItem, len(posts))
 	for i, p := range posts {
 		author := userMap[p.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
 		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
+		coverURL := ""
+		if strings.TrimSpace(p.CoverImage) != "" {
+			ensurePostCoverUpdatedAt(&p)
+			rawCover := strings.TrimSpace(p.CoverImage)
+			if strings.HasPrefix(rawCover, "http://") || strings.HasPrefix(rawCover, "https://") ||
+				strings.HasPrefix(rawCover, "/uploads/") || strings.HasPrefix(rawCover, "uploads/") {
+				coverURL = buildAPIURL(s.cfg.Server.ApiHost, rawCover)
+			} else {
+				coverURL = postCoverURLFromMeta(p.ID, p.UpdatedAt, p.CoverImageUpdatedAt)
+			}
+		}
+		// 列表不需要正文与原始封面内容
+		p.Content = ""
+		p.CoverImage = ""
 		item := EventItem{
 			Post:                  p,
 			AuthorName:            author.Username,
@@ -1791,6 +1806,7 @@ func (s *Server) listEvents(c *gin.Context) {
 			AuthorForumLevelName:  levelInfo.Name,
 			AuthorForumLevelColor: levelInfo.Color,
 			AuthorForumLevelBold:  levelInfo.Bold,
+			CoverImageURL:         coverURL,
 		}
 		if p.GuildID != nil {
 			item.GuildName = guildMap[*p.GuildID]
