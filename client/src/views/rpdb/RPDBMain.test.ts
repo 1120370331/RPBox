@@ -12,6 +12,7 @@ vi.mock('@/api/rpdb', async () => {
 
 describe('RPDBMain', () => {
   beforeEach(() => {
+    localStorage.clear()
     listRPDBWorks.mockReset()
     listRPDBWorks.mockResolvedValue({ works: [], total: 0, page: 1, page_size: 12 })
   })
@@ -119,6 +120,12 @@ describe('RPDBMain', () => {
     expect(wrapper.find('[data-testid="rpdb-featured-metrics"] [title="加入清单"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('每页最多 12 个')
     expect(wrapper.find('[data-testid="rpdb-pagination"]').text()).toContain('第 1 / 3 页')
+    expect(wrapper.get('[data-testid="rpdb-card-view"]').attributes('aria-pressed')).toBe('true')
+
+    await wrapper.get('[data-testid="rpdb-compact-view"]').trigger('click')
+    expect(wrapper.get('[data-testid="rpdb-discovery-results"]').classes()).toContain('compact')
+    expect(wrapper.findAll('[data-testid="rpdb-work-card"]').every(card => card.classes().includes('work-card--compact'))).toBe(true)
+    expect(localStorage.getItem('rpdb-view-mode')).toBe('compact')
 
     await wrapper.findAll('[data-testid="rpdb-pagination"] button')[1].trigger('click')
     await flushPromises()

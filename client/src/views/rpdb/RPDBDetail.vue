@@ -61,6 +61,7 @@ const showImageViewer = ref(false)
 const viewerImages = ref<string[]>([])
 const viewerStartIndex = ref(0)
 const copiedHomeShareCode = ref(false)
+const copiedTransmogShareCode = ref(false)
 const FLOATING_TOC_WIDE_VIEWPORT = 2160
 const tocCollapsed = ref(typeof window !== 'undefined' && window.innerWidth < FLOATING_TOC_WIDE_VIEWPORT)
 const listPickerOpen = ref(false)
@@ -86,6 +87,15 @@ const homeDetails = computed<Record<string, string>>(() => {
   }
 })
 const homeShareCode = computed(() => String(homeDetails.value.share_code || '').trim())
+const transmogShareCode = computed(() => {
+  if (work.value?.type !== 'transmog') return ''
+  try {
+    const details = JSON.parse(work.value.extra || '{}') as Record<string, unknown>
+    return String(details.share_code || '').trim()
+  } catch {
+    return ''
+  }
+})
 const tableOfContents = computed(() => {
   if (!work.value) return []
   const result = [{ label: work.value.type === 'home_showcase' ? '空间故事' : '实际效果与 RP 用途', target: 'rpdb-section-overview' }]
@@ -106,6 +116,11 @@ const canReportWork = computed(() => Boolean(
   work.value
   && userStore.user?.id
   && userStore.user.id !== work.value.author_id,
+))
+const canEditWork = computed(() => Boolean(
+  work.value
+  && userStore.user
+  && (userStore.user.id === work.value.author_id || userStore.user.role === 'admin'),
 ))
 
 function formatCount(value?: number) {
@@ -308,6 +323,23 @@ async function copyHomeShareCode() {
   }
 }
 
+async function copyTransmogShareCode() {
+  if (!transmogShareCode.value) {
+    toast.warning('作者暂未提供幻化分享代码')
+    return
+  }
+  try {
+    await navigator.clipboard?.writeText(transmogShareCode.value)
+    copiedTransmogShareCode.value = true
+    toast.success('幻化分享代码已复制')
+    window.setTimeout(() => {
+      copiedTransmogShareCode.value = false
+    }, 1600)
+  } catch {
+    toast.error('复制失败，请手动选择复制')
+  }
+}
+
 async function submitComment() {
   if (!work.value || !comment.value.trim()) return
   submittingComment.value = true
@@ -372,7 +404,7 @@ function goBack() {
     void router.push('/rpdb/lists')
     return
   }
-  router.back()
+  void router.push('/rpdb')
 }
 
 function handleEmojiSelect(token: string) {
@@ -534,9 +566,22 @@ onBeforeUnmount(() => {
           <h3>获取助手</h3>
           <p>{{ work.guide_steps?.length || 0 }} 个步骤，其中 {{ coordinateCount }} 个包含 TomTom 坐标。</p>
           <div class="assistant-actions">
-            <button type="button" @click="addList"><i class="ri-list-check-3"></i>加入收集清单</button>
             <button type="button" :disabled="!work.guide_steps?.length" @click="scrollToSection('rpdb-section-guide')"><i class="ri-route-line"></i>跳到攻略</button>
           </div>
+        </section>
+
+        <section v-if="work.type === 'transmog'">
+          <h3>幻化代码</h3>
+          <button
+            type="button"
+            class="transmog-copy-code"
+            data-testid="copy-transmog-share-code"
+            :disabled="!transmogShareCode"
+            @click="copyTransmogShareCode"
+          >
+            <i class="ri-file-copy-line"></i>
+            {{ copiedTransmogShareCode ? '已复制幻化分享代码' : '复制幻化分享代码' }}
+          </button>
         </section>
 
         <section v-if="work.references?.length">
@@ -697,6 +742,13 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </section>
+
+        <footer v-if="canEditWork" class="work-edit-footer" data-testid="rpdb-edit-footer">
+          <router-link :to="`/rpdb/${work.id}/edit`" data-testid="rpdb-edit-button">
+            <i class="ri-edit-line"></i>
+            编辑帖子
+          </router-link>
+        </footer>
       </main>
 
     </div>
@@ -792,7 +844,7 @@ onBeforeUnmount(() => {
 .hero-metadata dd{margin:0;text-align:right}
 .hero-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:14px 0 0;padding:11px 0;border-top:1px solid var(--rpdb-line);border-bottom:1px solid var(--rpdb-line)}.hero-stats div{display:grid;justify-items:center;gap:4px;border-right:1px solid var(--rpdb-line)}.hero-stats div:last-child{border-right:0}.hero-stats dt{display:inline-flex;align-items:center;gap:4px;color:var(--color-text-secondary);font-size:10px}.hero-stats dt i{color:var(--color-accent);font-size:13px}.hero-stats dd{margin:0;color:var(--color-text-main);font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
 .hero-actions{display:flex;gap:8px;margin-top:auto;padding-top:20px}
-.hero-actions button,.assistant-actions button,.verify-actions button,.home-copy-code,.floating-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main)}
+.hero-actions button,.assistant-actions button,.verify-actions button,.home-copy-code,.transmog-copy-code,.floating-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main)}
 .hero-actions button.active,.hero-actions .primary,.floating-actions button.active,.floating-actions button.primary{border-color:var(--color-accent);background:var(--color-accent);color:#fff}
 .hero-actions .report-action{margin-left:auto;color:var(--color-text-secondary)}
 .hero-actions .report-action:hover{border-color:var(--color-danger,#b83232);color:var(--color-danger,#b83232)}
@@ -841,6 +893,9 @@ onBeforeUnmount(() => {
 .reply-item{display:flex;gap:10px;padding:12px 0}
 .reply-item:not(:last-child){border-bottom:1px solid var(--color-border-light)}
 .empty-comments{padding:40px 16px;color:var(--color-text-muted);font-size:14px;text-align:center}
+.work-edit-footer{display:flex;justify-content:flex-end;padding:18px 32px;border-top:1px solid var(--rpdb-line);background:var(--color-panel-bg)}
+.work-edit-footer a{display:inline-flex;min-height:40px;align-items:center;justify-content:center;gap:7px;padding:0 16px;border:1px solid var(--color-accent);border-radius:10px;background:var(--color-accent);color:#fff;text-decoration:none;font-weight:800}
+.work-edit-footer a:hover{filter:brightness(.96)}
 .floating-toc-panel{position:fixed;z-index:25;top:92px;right:24px;width:240px}
 .floating-toc-panel.is-collapsed{width:0}
 .floating-toc-content{max-height:calc(100vh - 120px);overflow:auto;box-shadow:var(--shadow-md);backdrop-filter:blur(12px)}
@@ -861,8 +916,8 @@ onBeforeUnmount(() => {
 .floating-view{display:flex;min-height:36px;align-items:center;gap:6px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-text-secondary);font-weight:800}.floating-view i{color:var(--color-accent)}.floating-view b{margin-left:auto;color:var(--color-text-main);font-size:11px}
 .floating-actions button{width:100%;justify-content:flex-start;font-weight:800}
 .floating-actions button b{margin-left:auto;font-size:11px}
-.home-copy-code{width:100%;min-height:44px;margin-top:12px;border-color:var(--color-accent);background:var(--color-accent);color:#fff;font-weight:800}
-.home-copy-code:disabled{cursor:not-allowed;opacity:.45}
+.home-copy-code,.transmog-copy-code{width:100%;min-height:44px;margin-top:12px;border-color:var(--color-accent);background:var(--color-accent);color:#fff;font-weight:800}
+.home-copy-code:disabled,.transmog-copy-code:disabled{cursor:not-allowed;opacity:.45}
 .floating-toc-panel a{display:flex;gap:8px;padding:9px 0;border-bottom:1px solid var(--rpdb-line);color:var(--color-text-main);text-decoration:none}
 .floating-toc-panel a:last-child{border-bottom:0}
 .floating-toc-panel a i{color:var(--color-accent)}
@@ -917,5 +972,5 @@ onBeforeUnmount(() => {
 .list-picker-dialog footer a{display:inline-flex;align-items:center;gap:6px}
 @media(max-width:1180px){.floating-toc-panel{right:12px;width:226px}}
 @media(max-width:1050px){.detail-hero{grid-template-columns:1fr}.hero-gallery{border-right:0;border-bottom:1px solid var(--rpdb-line)}}
-@media(max-width:680px){.hero-summary{padding:22px}.hero-summary h1{font-size:29px}.hero-metadata{grid-template-columns:1fr}.hero-actions{flex-wrap:wrap}.hero-actions button{flex:1}.comments-section{padding:22px 18px}.comment-meta,.reply-meta{align-items:flex-start;flex-direction:column;gap:4px}.comment-actions{gap:8px}.floating-toc-panel{top:auto;right:12px;bottom:12px;left:12px;width:auto}.floating-toc-panel.is-collapsed{left:auto;width:0}.floating-toc-content{max-height:42vh}.toc-collapse{top:-48px;right:0;left:auto;border-radius:12px}.floating-toc-panel section{border-right:0}}
+@media(max-width:680px){.hero-summary{padding:22px}.hero-summary h1{font-size:29px}.hero-metadata{grid-template-columns:1fr}.hero-actions{flex-wrap:wrap}.hero-actions button{flex:1}.comments-section{padding:22px 18px}.work-edit-footer{padding:16px 18px}.work-edit-footer a{width:100%}.comment-meta,.reply-meta{align-items:flex-start;flex-direction:column;gap:4px}.comment-actions{gap:8px}.floating-toc-panel{top:auto;right:12px;bottom:12px;left:12px;width:auto}.floating-toc-panel.is-collapsed{left:auto;width:0}.floating-toc-content{max-height:42vh}.toc-collapse{top:-48px;right:0;left:auto;border-radius:12px}.floating-toc-panel section{border-right:0}}
 </style>

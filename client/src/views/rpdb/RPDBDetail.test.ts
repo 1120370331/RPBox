@@ -183,6 +183,7 @@ describe('RPDBDetail', () => {
     expect(wrapper.find('[data-testid="guide-reading"]').exists()).toBe(true)
     expect(wrapper.find('.minimal-detail-shell').exists()).toBe(true)
     expect(wrapper.find('[data-testid="floating-toc"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="rpdb-edit-button"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('/ttpaste')
     expect(wrapper.text()).toContain('联盟风格')
     expect(wrapper.text()).toContain('库尔提拉斯风格')
@@ -263,6 +264,67 @@ describe('RPDBDetail', () => {
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/rpdb/lists'))
   })
 
+  it('returns directly to discovery instead of the previous editor page', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/rpdb', component: { template: '<div />' } },
+        { path: '/rpdb/create', component: { template: '<div />' } },
+        { path: '/rpdb/:id', component: RPDBDetail },
+      ],
+    })
+    await router.push('/rpdb/create')
+    await router.push('/rpdb/1')
+    const wrapper = mount(RPDBDetail, {
+      global: { plugins: [createPinia(), router] },
+    })
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('月光灯笼'))
+    await wrapper.find('[data-testid="detail-back-button"]').trigger('click')
+
+    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/rpdb'))
+  })
+
+  it.each([
+    ['the author', { id: 1, username: 'rpdb_demo', role: 'user' }],
+    ['an administrator', { id: 99, username: 'admin', role: 'admin' }],
+  ])('shows the bottom edit action to %s', async (_label, user) => {
+    localStorage.setItem('user', JSON.stringify(user))
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/rpdb/:id', component: RPDBDetail },
+        { path: '/rpdb/:id/edit', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/rpdb/1')
+    const wrapper = mount(RPDBDetail, {
+      global: { plugins: [createPinia(), router] },
+    })
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('月光灯笼'))
+    const editButton = wrapper.get('[data-testid="rpdb-edit-button"]')
+    expect(editButton.text()).toContain('编辑帖子')
+    await editButton.trigger('click')
+
+    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/rpdb/1/edit'))
+  })
+
+  it('does not show the edit action to a moderator who is not the author', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 99, username: 'moderator', role: 'moderator' }))
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/rpdb/:id', component: RPDBDetail }],
+    })
+    await router.push('/rpdb/1')
+    const wrapper = mount(RPDBDetail, {
+      global: { plugins: [createPinia(), router] },
+    })
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('月光灯笼'))
+    expect(wrapper.find('[data-testid="rpdb-edit-button"]').exists()).toBe(false)
+  })
+
   it('provides floating like, favorite and collection list actions with feedback', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
@@ -275,6 +337,13 @@ describe('RPDBDetail', () => {
 
     await vi.waitFor(() => expect(wrapper.text()).toContain('月光灯笼'))
     await wrapper.get('[data-testid="floating-toc-collapse"]').trigger('click')
+    const floatingContent = wrapper.get('[data-testid="floating-toc-content"]')
+    const collectionButtons = floatingContent.findAll('button').filter(button => (
+      button.text().includes('加入清单')
+      || button.text().includes('加入收集清单')
+      || button.text().includes('已在清单')
+    ))
+    expect(collectionButtons).toHaveLength(1)
 
     await wrapper.find('[data-testid="floating-like-button"]').trigger('click')
     expect(likeRPDBWork).toHaveBeenCalledWith(1)
@@ -490,7 +559,7 @@ describe('RPDBDetail', () => {
         rp_use_cases: '',
         effect_description: '',
         restrictions: '',
-        extra: '',
+        extra: JSON.stringify({ share_code: 'TRANSMOG:TIDE-GUARD-001' }),
         game_version: '11.2.7',
         expansion: '至暗之夜',
         availability_status: 'available',
@@ -538,6 +607,8 @@ describe('RPDBDetail', () => {
     })
 
     await vi.waitFor(() => expect(wrapper.text()).toContain('海潮卫士'))
+    await wrapper.get('[data-testid="floating-toc-collapse"]').trigger('click')
+    const copyButton = wrapper.get('[data-testid="copy-transmog-share-code"]')
 
     expect(wrapper.findAll('[data-testid="transmog-slot-label"]').map(item => item.text())).toEqual([
       '头部',
@@ -552,6 +623,11 @@ describe('RPDBDetail', () => {
     expect(wrapper.text()).toContain('替代海潮守备头盔')
     expect(wrapper.find('a[href="https://www.wowhead.com/item=190001"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('不显示')
+    expect(copyButton.text()).toContain('复制幻化分享代码')
+    expect(wrapper.text()).not.toContain('TRANSMOG:TIDE-GUARD-001')
+    await copyButton.trigger('click')
+    expect(clipboardWriteText).toHaveBeenCalledWith('TRANSMOG:TIDE-GUARD-001')
+    expect(toastSuccess).toHaveBeenCalledWith('幻化分享代码已复制')
   })
 
   it('lets a signed-in viewer report an RPDB work', async () => {
