@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 )
 
@@ -22,7 +23,8 @@ func (s *Server) cleanupPostImages(c *gin.Context, post model.Post) {
 	keys := make(map[string]struct{})
 	collectUploadKeysFromValue(c, post.CoverImage, keys)
 	collectUploadKeysFromContent(c, post.Content, keys)
-	s.deleteUploadKeys(keys)
+	// 帖子正文图片按用户目录共享；删除草稿/帖子时必须先确认无其它帖子仍引用，否则会清掉已发布内容的图片。
+	s.deleteUnreferencedUploadKeys(c, keys, post.ID)
 }
 
 func (s *Server) cleanupItemImages(c *gin.Context, item model.Item, images []model.ItemImage) {
@@ -39,6 +41,61 @@ func (s *Server) cleanupItemImages(c *gin.Context, item model.Item, images []mod
 func (s *Server) deleteUploadKeys(keys map[string]struct{}) {
 	for key := range keys {
 		s.deleteUploadKey(key)
+	}
+}
+
+// deleteUnreferencedUploadKeys only deletes keys that are not still referenced by other posts.
+func (s *Server) deleteUnreferencedUploadKeys(c *gin.Context, keys map[string]struct{}, excludePostID uint) {
+	for key := range keys {
+		if isUploadKeyReferencedByOtherPosts(c, key, excludePostID) {
+			continue
+		}
+		s.deleteUploadKey(key)
+	}
+}
+
+func isUploadKeyReferencedByOtherPosts(c *gin.Context, key string, excludePostID uint) bool {
+	if key == "" || database.DB == nil {
+		return false
+	}
+	patterns := uploadKeyMatchPatterns(key)
+	if len(patterns) == 0 {
+		return false
+	}
+
+	query := database.DB.Model(&model.Post{})
+	if excludePostID != 0 {
+		query = query.Where("id <> ?", excludePostID)
+	}
+
+	orParts := make([]string, 0, len(patterns)*2)
+	args := make([]interface{}, 0, len(patterns)*2)
+	for _, pattern := range patterns {
+		orParts = append(orParts, "cover_image LIKE ?", "content LIKE ?")
+		args = append(args, pattern, pattern)
+	}
+	var count int64
+	if err := query.Where("("+strings.Join(orParts, " OR ")+")", args...).Limit(1).Count(&count).Error; err != nil {
+		// 查询失败时保守不删，避免误清线上图片
+		log.Printf("[image-cleanup] reference check failed for %s: %v", key, err)
+		return true
+	}
+	return count > 0
+}
+
+func uploadKeyMatchPatterns(key string) []string {
+	cleaned := strings.TrimSpace(strings.TrimPrefix(key, "/"))
+	if cleaned == "" {
+		return nil
+	}
+	base := cleaned
+	if !strings.HasPrefix(base, "uploads/") {
+		base = path.Join("uploads", cleaned)
+	}
+	// 兼容相对路径、绝对路径、完整 URL 中的引用
+	return []string{
+		"%" + base + "%",
+		"%/" + strings.TrimPrefix(base, "uploads/") + "%",
 	}
 }
 

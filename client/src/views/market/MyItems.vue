@@ -63,8 +63,12 @@ const filteredItems = computed(() => {
   return list.filter(item => {
     const name = (item.name || '').toLowerCase()
     const description = (item.description || '').toLowerCase()
+    const detail = (item.detail_content || '').replace(/<[^>]+>/g, ' ').toLowerCase()
     const typeText = getTypeText(item.type).toLowerCase()
-    return name.includes(keyword) || description.includes(keyword) || typeText.includes(keyword)
+    return name.includes(keyword)
+      || description.includes(keyword)
+      || detail.includes(keyword)
+      || typeText.includes(keyword)
   })
 })
 

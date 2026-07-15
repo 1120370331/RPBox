@@ -64,7 +64,7 @@ export default {
   },
   filter: {
     search: 'Search',
-    searchPlaceholder: 'Search titles, summaries, regions, or places...',
+    searchPlaceholder: 'Search titles, summaries, content, regions, or places...',
     region: 'Region',
     regionPlaceholder: 'Filter by region, e.g. Goldshire...',
     address: 'Address',

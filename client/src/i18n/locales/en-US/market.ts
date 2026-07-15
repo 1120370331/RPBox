@@ -41,7 +41,7 @@ export default {
   empty: 'No items yet',
   loading: 'Loading...',
   filter: {
-    search: 'Search by name, type or tags...',
+    search: 'Search by name, summary, content, type or tags...',
     category: 'Category',
     categoryLabel: 'Category:',
     all: 'All',
@@ -172,7 +172,7 @@ export default {
       published: 'Published',
       pending: 'Pending',
       draft: 'Draft',
-      searchPlaceholder: 'Search by name or description...',
+      searchPlaceholder: 'Search by name, description, or content...',
       allTypes: 'All Types',
     },
     empty: {
