@@ -1,7 +1,7 @@
 import type { Router } from 'vue-router'
 
 const JUMP_LINK_SELECTOR = '.jump-link, a.jump-card, [data-jump-href], [data-jump-type]'
-const INTERNAL_PREFIXES = ['/archives/story/', '/community/post/', '/posts/', '/stories/', '/guild/', '/market/', '/items/']
+const INTERNAL_PREFIXES = ['/archives/story/', '/community/post/', '/posts/', '/stories/', '/guild/', '/market/', '/items/', '/rpdb/']
 
 function resolveInternalHref(href: string): string | null {
   const trimmed = href.trim()

@@ -6,6 +6,7 @@ describe('mobileFeatures', () => {
     expect(mobileFeatures).toEqual([
       'community',
       'stories',
+      'rpdb',
       'market',
       'guild',
       'profile',

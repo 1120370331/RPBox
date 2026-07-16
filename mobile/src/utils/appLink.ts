@@ -6,6 +6,7 @@ const SUPPORTED_PATH_PATTERNS = [
   /^\/posts\/\d+$/,
   /^\/items\/\d+$/,
   /^\/stories\/\d+$/,
+  /^\/rpdb\/\d+$/,
   /^\/profiles\/\d+$/,
   /^\/guild\/\d+$/,
   /^\/guild\/\d+\/posts$/,

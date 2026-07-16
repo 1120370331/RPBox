@@ -41,7 +41,7 @@ function handleOffline() {
 }
 
 function isHomeRoute(path: string) {
-  return ['/community', '/stories', '/market', '/guild', '/profile'].includes(path)
+  return ['/community', '/stories', '/rpdb', '/market', '/guild', '/profile'].includes(path)
 }
 
 function updateViewportVariables() {

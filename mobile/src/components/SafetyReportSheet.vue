@@ -5,7 +5,7 @@ const props = defineProps<{
   open: boolean
   title?: string
   targetLabel?: string
-  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'user' | 'story'
+  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'rpdb_comment' | 'rpdb_work' | 'user' | 'story'
   submitting?: boolean
 }>()
 
@@ -24,7 +24,7 @@ const canSubmit = computed(() => {
   return hideTarget.value || blockAuthor.value
 })
 const hideTargetLabel = computed(() => {
-  if (props.targetType === 'comment' || props.targetType === 'item_comment') {
+  if (props.targetType === 'comment' || props.targetType === 'item_comment' || props.targetType === 'rpdb_comment') {
     return '隐藏这条评论'
   }
   if (props.targetType === 'item') {
@@ -35,6 +35,9 @@ const hideTargetLabel = computed(() => {
   }
   if (props.targetType === 'story') {
     return '隐藏这条剧情'
+  }
+  if (props.targetType === 'rpdb_work') {
+    return '隐藏这份 RP 数据库作品'
   }
   return '隐藏这条内容'
 })

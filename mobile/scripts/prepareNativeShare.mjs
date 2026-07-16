@@ -7,7 +7,7 @@ const mobileRoot = path.basename(cwd) === 'mobile' ? cwd : path.join(cwd, 'mobil
 const appId = 'app.rpbox.mobile'
 const appPackage = appId
 const associatedHosts = ['totalrpbox.com', 'www.totalrpbox.com']
-const appLinkPathPrefixes = ['/posts/', '/items/', '/stories/', '/profiles/', '/guild/', '/open-app.html']
+const appLinkPathPrefixes = ['/posts/', '/items/', '/stories/', '/profiles/', '/guild/', '/rpdb/', '/open-app.html']
 
 function ensureFile(filePath, contents) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })

@@ -45,6 +45,11 @@ const router = createRouter({
           component: () => import('./views/Stories.vue'),
         },
         {
+          path: 'rpdb',
+          name: 'rpdb',
+          component: () => import('./views/RPDB.vue'),
+        },
+        {
           path: 'market',
           name: 'market',
           component: () => import('./views/Market.vue'),
@@ -115,6 +120,36 @@ const router = createRouter({
       path: '/items/:id',
       name: 'item-detail',
       component: () => import('./views/details/ItemDetail.vue'),
+    },
+    {
+      path: '/rpdb/:id',
+      name: 'rpdb-detail',
+      component: () => import('./views/details/RPDBDetail.vue'),
+    },
+    {
+      path: '/rpdb/create',
+      name: 'rpdb-create',
+      component: () => import('./views/rpdb/Editor.vue'),
+    },
+    {
+      path: '/rpdb/drafts/:draftId/edit',
+      name: 'rpdb-draft-edit',
+      component: () => import('./views/rpdb/Editor.vue'),
+    },
+    {
+      path: '/rpdb/:id/edit',
+      name: 'rpdb-edit',
+      component: () => import('./views/rpdb/Editor.vue'),
+    },
+    {
+      path: '/rpdb/my-uploads',
+      name: 'rpdb-my-uploads',
+      component: () => import('./views/rpdb/MyUploads.vue'),
+    },
+    {
+      path: '/rpdb/lists',
+      name: 'rpdb-lists',
+      component: () => import('./views/rpdb/Lists.vue'),
     },
     {
       path: '/profiles/:id',
