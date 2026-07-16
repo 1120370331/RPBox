@@ -303,6 +303,7 @@ describe('RPDBDetail', () => {
     const related = wrapper.get('[data-testid="rpdb-recommendations"]')
     const discussion = wrapper.get('#rpdb-section-discussion')
     expect(related.element.compareDocumentPosition(discussion.element)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(related.get('[data-testid="rpdb-work-card"]').classes()).toContain('work-card--mini')
     expect(related.text()).toContain('暮色巡林幻化')
     expect(related.text()).toContain('2 位相关玩家收藏')
     expect(related.text()).toContain('32')

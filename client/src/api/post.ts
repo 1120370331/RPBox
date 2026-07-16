@@ -145,6 +145,10 @@ export async function listPosts(params?: ListPostsParams): Promise<{ posts: Post
   return request.get('/posts', { params })
 }
 
+export async function listPostDrafts(): Promise<{ posts: PostWithAuthor[]; total: number }> {
+  return request.get('/posts/drafts')
+}
+
 export async function createPost(data: CreatePostRequest): Promise<Post> {
   return request.post('/posts', data)
 }

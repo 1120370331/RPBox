@@ -784,6 +784,7 @@ onBeforeUnmount(() => {
               v-for="item in recommendations"
               :key="item.id"
               :work="item"
+              layout="mini"
               @open="openRecommendation(item.id)"
             />
           </div>
@@ -1065,8 +1066,8 @@ onBeforeUnmount(() => {
 .detail-lower{display:block;margin-top:14px}
 .article-sheet,.floating-toc-content{overflow:hidden;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .comments-section{padding:32px;border-top:1px solid var(--rpdb-line);background:var(--color-panel-bg);box-shadow:0 4px 20px -2px rgba(var(--shadow-base),.05)}
-.recommendations-section{padding:30px 32px;border-top:1px solid var(--rpdb-line);background:color-mix(in srgb,var(--color-panel-bg) 82%,var(--color-main-bg))}
-.recommendations-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}.recommendations-heading>div{display:grid;gap:3px}.recommendations-heading span{color:var(--color-accent);font-size:10px;font-weight:900}.recommendations-heading h3{margin:0;color:var(--color-text-main);font:500 20px/1.35 Merriweather,serif}.recommendations-heading>i{color:var(--icon-color);font-size:24px}.recommendations-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.recommendations-section{padding:22px 24px;border-top:1px solid var(--rpdb-line);background:color-mix(in srgb,var(--color-panel-bg) 82%,var(--color-main-bg))}
+.recommendations-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.recommendations-heading>div{display:grid;gap:2px}.recommendations-heading span{color:var(--color-accent);font-size:9px;font-weight:900}.recommendations-heading h3{margin:0;color:var(--color-text-main);font:500 17px/1.35 Merriweather,serif}.recommendations-heading>i{color:var(--icon-color);font-size:20px}.recommendations-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
 .comments-title{display:flex;align-items:center;gap:10px;margin:0 0 20px;color:var(--color-text-main);font:500 20px/1.35 Merriweather,serif}
 .comment-badge{padding:4px 12px;border-radius:20px;background:var(--color-card-bg);color:var(--color-text-muted);font:400 13px/1 Inter,sans-serif}
 .comment-input-box{margin-top:24px;padding:16px;border:1px solid var(--color-border);background:var(--color-panel-bg);box-shadow:0 2px 8px rgba(var(--shadow-base),.04);transition:box-shadow .3s}
@@ -1193,5 +1194,6 @@ onBeforeUnmount(() => {
 .list-picker-dialog footer a{display:inline-flex;align-items:center;gap:6px}
 @media(max-width:1180px){.floating-toc-panel{right:12px;width:226px}}
 @media(max-width:1050px){.detail-hero{grid-template-columns:1fr}.hero-gallery{border-right:0;border-bottom:1px solid var(--rpdb-line)}}
+@media(max-width:980px){.recommendations-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.hero-summary{padding:22px}.hero-summary h1{font-size:29px}.hero-metadata{grid-template-columns:1fr}.hero-actions{flex-wrap:wrap}.hero-actions button{flex:1}.recommendations-section,.comments-section{padding:22px 18px}.recommendations-grid{grid-template-columns:1fr}.work-edit-footer{padding:16px 18px}.work-edit-footer a{width:100%}.comment-meta,.reply-meta{align-items:flex-start;flex-direction:column;gap:4px}.comment-actions{gap:8px}.floating-toc-panel{top:auto;right:12px;bottom:12px;left:12px;width:auto}.floating-toc-panel.is-collapsed{left:auto;width:0}.floating-toc-content{max-height:42vh}.toc-collapse{top:-48px;right:0;left:auto;border-radius:12px}.floating-toc-panel section{border-right:0}}
 </style>

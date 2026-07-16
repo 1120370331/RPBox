@@ -89,6 +89,15 @@ describe('RPDBWorkCard', () => {
     expect(wrapper.get('.work-card__compact-headline').text()).toContain('适合夜间巡逻与酒馆场景。')
   })
 
+  it('renders a half-height mini card for related recommendations', () => {
+    const wrapper = mount(RPDBWorkCard, {
+      props: { work, layout: 'mini' },
+    })
+
+    expect(wrapper.get('[data-testid="rpdb-work-card"]').classes()).toContain('work-card--mini')
+    expect(wrapper.get('.work-card__compact-headline').text()).toContain('月光灯笼')
+  })
+
   it('shows quest items that do not bind as explicit card traits', () => {
     const wrapper = mount(RPDBWorkCard, {
       props: { work: { ...work, item_type: 'quest_item', bind_type: 'no' } },

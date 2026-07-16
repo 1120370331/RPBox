@@ -232,6 +232,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/posts/likes", s.listMyPostLikes)
 			auth.GET("/posts/views", s.listMyPostViews)
 			auth.GET("/posts/events", s.listEvents) // 活动日历
+			auth.GET("/posts/drafts", s.listMyPostDrafts)
 			auth.GET("/posts/:id", s.getPost)
 			auth.PUT("/posts/:id", s.updatePost)
 			auth.PUT("/posts/:id/draft", s.savePostDraft)
