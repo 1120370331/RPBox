@@ -204,33 +204,6 @@ onMounted(load)
       <h2>这个分类还没有内容</h2>
       <button type="button" @click="router.push('/rpdb/create')">发布第一份作品</button>
     </div>
-    <section v-if="!loading && filteredDrafts.length" class="uploads-list draft-list" data-testid="rpdb-draft-list">
-      <article v-for="draft in filteredDrafts" :key="`draft-${draft.id}`" class="upload-row" data-testid="rpdb-draft-row">
-        <div class="upload-cover" :class="{ empty: !draft.cover_image }">
-          <img v-if="draft.cover_image" :src="resolveRPDBMediaURL(draft.cover_image)" :alt="draft.title">
-          <i v-else class="ri-draft-line"></i>
-        </div>
-        <div class="upload-main">
-          <div class="upload-heading">
-            <div>
-              <span class="type-label">{{ draft.type === 'transmog' ? '幻化方案' : draft.type === 'home_showcase' ? '家宅分享' : '魔兽物品' }}</span>
-              <span class="status-label draft">草稿</span>
-            </div>
-            <time>{{ formatDate(draft.updated_at) }}</time>
-          </div>
-          <h2>{{ draft.title || '未命名草稿' }}</h2>
-          <p>{{ draft.work_id ? '这是正式作品的关联修改草稿，发布前不会改动线上内容。' : '尚未发布的新内容草稿。' }}</p>
-        </div>
-        <div class="visibility-control">
-          <span>草稿归属</span>
-          <b>{{ draft.work_id ? `正式作品 #${draft.work_id}` : '新内容' }}</b>
-        </div>
-        <div class="row-actions">
-          <button type="button" title="继续编辑" @click="router.push(`/rpdb/drafts/${draft.id}/edit`)"><i class="ri-edit-line"></i><span>编辑</span></button>
-          <button type="button" class="danger" title="删除" @click="removeDraft(draft)"><i class="ri-delete-bin-line"></i><span>删除</span></button>
-        </div>
-      </article>
-    </section>
     <section v-if="!loading && filteredWorks.length" class="uploads-list" data-testid="rpdb-my-uploads-list">
       <article v-for="work in filteredWorks" :key="work.id" class="upload-row" data-testid="rpdb-upload-row">
         <div class="upload-cover" :class="{ empty: !work.cover_image }">
@@ -277,6 +250,33 @@ onMounted(load)
           <button type="button" title="查看" @click="router.push(`/rpdb/${work.id}`)"><i class="ri-eye-line"></i><span>查看</span></button>
           <button type="button" title="编辑" @click="router.push(`/rpdb/${work.id}/edit`)"><i class="ri-edit-line"></i><span>编辑</span></button>
           <button type="button" class="danger" title="删除" :disabled="busyWorkId === work.id" @click="removeWork(work)"><i class="ri-delete-bin-line"></i><span>删除</span></button>
+        </div>
+      </article>
+    </section>
+    <section v-if="!loading && filteredDrafts.length" class="uploads-list draft-list" data-testid="rpdb-draft-list">
+      <article v-for="draft in filteredDrafts" :key="`draft-${draft.id}`" class="upload-row" data-testid="rpdb-draft-row">
+        <div class="upload-cover" :class="{ empty: !draft.cover_image }">
+          <img v-if="draft.cover_image" :src="resolveRPDBMediaURL(draft.cover_image)" :alt="draft.title">
+          <i v-else class="ri-draft-line"></i>
+        </div>
+        <div class="upload-main">
+          <div class="upload-heading">
+            <div>
+              <span class="type-label">{{ draft.type === 'transmog' ? '幻化方案' : draft.type === 'home_showcase' ? '家宅分享' : '魔兽物品' }}</span>
+              <span class="status-label draft">草稿</span>
+            </div>
+            <time>{{ formatDate(draft.updated_at) }}</time>
+          </div>
+          <h2>{{ draft.title || '未命名草稿' }}</h2>
+          <p>{{ draft.work_id ? '这是正式作品的关联修改草稿，发布前不会改动线上内容。' : '尚未发布的新内容草稿。' }}</p>
+        </div>
+        <div class="visibility-control">
+          <span>草稿归属</span>
+          <b>{{ draft.work_id ? `正式作品 #${draft.work_id}` : '新内容' }}</b>
+        </div>
+        <div class="row-actions">
+          <button type="button" title="继续编辑" @click="router.push(`/rpdb/drafts/${draft.id}/edit`)"><i class="ri-edit-line"></i><span>编辑</span></button>
+          <button type="button" class="danger" title="删除" @click="removeDraft(draft)"><i class="ri-delete-bin-line"></i><span>删除</span></button>
         </div>
       </article>
     </section>

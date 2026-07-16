@@ -49,6 +49,7 @@ function patchType(value: RPDBWorkType | '') {
     availability_status: '',
     faction: '',
     armor_type: '',
+    bind_type: '',
     tag_id: undefined,
     tag_search: undefined,
     page: 1,
@@ -80,6 +81,10 @@ function patchType(value: RPDBWorkType | '') {
 
       <select v-if="modelValue.type === 'transmog'" :value="modelValue.armor_type" aria-label="护甲类型" @change="patch('armor_type', ($event.target as HTMLSelectElement).value)">
         <option value="">全部护甲</option><option value="cloth">布甲</option><option value="leather">皮甲</option><option value="mail">锁甲</option><option value="plate">板甲</option><option value="cosmetic">装饰</option>
+      </select>
+
+      <select v-if="modelValue.type === 'item_showcase'" :value="modelValue.bind_type" aria-label="绑定状态" @change="patch('bind_type', ($event.target as HTMLSelectElement).value)">
+        <option value="">全部绑定状态</option><option value="yes">绑定</option><option value="no">不绑定</option>
       </select>
 
       <select v-if="modelValue.type === 'transmog' || modelValue.type === 'item_showcase'" :value="modelValue.faction" aria-label="阵营" @change="patch('faction', ($event.target as HTMLSelectElement).value)">

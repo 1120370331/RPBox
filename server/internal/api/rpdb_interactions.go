@@ -1,9 +1,11 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
@@ -61,7 +63,16 @@ func (s *Server) changeRPDBWorkInteraction(c *gin.Context, target interface{}, c
 	if !ok {
 		return
 	}
-	if !rpdbPublishedWorkExists(workID) {
+	var work model.RPDBWork
+	if err := database.DB.
+		Where(
+			"id = ? AND status = ? AND review_status = ? AND is_public = ?",
+			workID,
+			model.RPDBStatusPublished,
+			model.RPDBReviewApproved,
+			true,
+		).
+		First(&work).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "作品不存在"})
 		return
 	}
@@ -80,8 +91,27 @@ func (s *Server) changeRPDBWorkInteraction(c *gin.Context, target interface{}, c
 				return result.Error
 			}
 			if result.RowsAffected == 1 {
-				return tx.Model(&model.RPDBWork{}).Where("id = ?", workID).
-					UpdateColumn(counter, gorm.Expr(counter+" + 1")).Error
+				if err := tx.Model(&model.RPDBWork{}).Where("id = ?", workID).
+					UpdateColumn(counter, gorm.Expr(counter+" + 1")).Error; err != nil {
+					return err
+				}
+				if _, isLike := target.(*model.RPDBLike); isLike {
+					if _, err := service.ApplyDailyFirstLikeBonus(tx, userID, time.Now()); err != nil {
+						return err
+					}
+					if work.AuthorID != userID {
+						if _, err := service.AwardActivityReward(
+							tx,
+							work.AuthorID,
+							"rpdb_like_received",
+							fmt.Sprintf("rpdb:%d:liker:%d", work.ID, userID),
+							service.RPDBLikeRewardPoints,
+							service.RPDBLikeRewardExperience,
+						); err != nil {
+							return err
+						}
+					}
+				}
 			}
 			return nil
 		}
@@ -154,9 +184,13 @@ func (s *Server) changeRPDBCommentLike(c *gin.Context, add bool) {
 				return nil
 			}
 			created = true
-			return tx.Model(&model.RPDBComment{}).
+			if err := tx.Model(&model.RPDBComment{}).
 				Where("id = ?", comment.ID).
-				UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
+				UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error; err != nil {
+				return err
+			}
+			_, err := service.ApplyDailyFirstLikeBonus(tx, userID, time.Now())
+			return err
 		}
 
 		result := tx.
@@ -289,7 +323,16 @@ func (s *Server) createRPDBComment(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !rpdbPublishedWorkExists(workID) {
+	var work model.RPDBWork
+	if err := database.DB.
+		Where(
+			"id = ? AND status = ? AND review_status = ? AND is_public = ?",
+			workID,
+			model.RPDBStatusPublished,
+			model.RPDBReviewApproved,
+			true,
+		).
+		First(&work).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "作品不存在"})
 		return
 	}
@@ -306,12 +349,14 @@ func (s *Server) createRPDBComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "评论长度必须为 1 到 2000 个字符"})
 		return
 	}
+	commentOwnerID := work.AuthorID
 	if request.ParentID != nil {
 		var parent model.RPDBComment
 		if err := database.DB.Where("id = ? AND work_id = ?", *request.ParentID, workID).First(&parent).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "回复目标不存在"})
 			return
 		}
+		commentOwnerID = parent.AuthorID
 	}
 
 	comment := model.RPDBComment{
@@ -325,24 +370,52 @@ func (s *Server) createRPDBComment(c *gin.Context) {
 		if err := tx.Create(&comment).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.RPDBWork{}).Where("id = ?", workID).
-			UpdateColumn("comment_count", gorm.Expr("comment_count + 1")).Error
+		if err := tx.Model(&model.RPDBWork{}).Where("id = ?", workID).
+			UpdateColumn("comment_count", gorm.Expr("comment_count + 1")).Error; err != nil {
+			return err
+		}
+		if _, err := service.AwardActivityReward(
+			tx,
+			userID,
+			"rpdb_comment_create",
+			fmt.Sprintf("rpdb-comment:%d", comment.ID),
+			0,
+			service.CommentCreateExperience,
+		); err != nil {
+			return err
+		}
+		if commentOwnerID != userID {
+			if _, err := service.AwardActivityReward(
+				tx,
+				commentOwnerID,
+				"rpdb_comment_received",
+				fmt.Sprintf("rpdb-comment:%d:owner:%d", comment.ID, commentOwnerID),
+				0,
+				service.CommentReceivedExperience,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "发布评论失败"})
 		return
 	}
 	s.bumpRPDBListCache(c.Request.Context())
 
-	var work model.RPDBWork
-	if err := database.DB.Select("id", "author_id", "title").First(&work, workID).Error; err == nil && work.AuthorID != userID {
+	if commentOwnerID != userID {
 		actorID := userID
+		content := "有人评论了你的 RP 数据库作品《" + work.Title + "》"
+		if request.ParentID != nil {
+			content = "有人回复了你在 RP 数据库作品《" + work.Title + "》中的评论"
+		}
 		_ = service.CreateNotification(&model.Notification{
-			UserID:     work.AuthorID,
+			UserID:     commentOwnerID,
 			Type:       "rpdb_comment",
 			ActorID:    &actorID,
 			TargetType: "rpdb_work",
 			TargetID:   workID,
-			Content:    "有人评论了你的 RP 数据库作品《" + work.Title + "》",
+			Content:    content,
 		})
 	}
 

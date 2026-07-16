@@ -33,9 +33,9 @@ export default {
     rules: {
       dailySignIn: '每日签到 +10',
       firstLike: '每日首次点赞 +5',
-      comment: '发表评论 +3，收到评论 +3',
-      liked: '帖子获赞 +5，道具获赞 +10',
-      approved: '帖子审核通过 +30，道具审核通过 +50',
+      comment: '发表评论 +3，收到评论 +3（含社区、道具与 RP 数据库）',
+      liked: '帖子或 RP 数据库作品获赞 +5，道具获赞 +10',
+      approved: '帖子或 RP 数据库作品审核通过 +30，道具审核通过 +50',
       download: '道具被下载 +10',
       story: '剧情归档每累计 10 条 +1，每日最多 +50',
     },

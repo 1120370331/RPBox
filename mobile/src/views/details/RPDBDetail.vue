@@ -616,7 +616,10 @@ onMounted(load)
           <h1>{{ work.title }}</h1>
           <p>{{ getRPDBSummary(work) }}</p>
           <div class="author-row">
-            <span class="author-avatar">{{ (work.author_name || 'R').slice(0, 1).toUpperCase() }}</span>
+            <span class="author-avatar">
+              <CachedImage v-if="work.author_avatar" :src="resolveRPDBMediaUrl(work.author_avatar)" :alt="`${work.author_name || '发布者'}的头像`" />
+              <b v-else>{{ (work.author_name || 'R').slice(0, 1).toUpperCase() }}</b>
+            </span>
             <span>
               <b :style="{ color: work.author_name_color || undefined, fontWeight: work.author_name_bold ? 'bold' : undefined }">
                 {{ work.author_name || '匿名贡献者' }}

@@ -3,23 +3,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import RPDBEditor from './RPDBEditor.vue'
-import { createRPDBDraft, getRPDBDraft } from '@/api/rpdb'
+import { createRPDBDraft, deleteRPDBWork, getRPDBDraft } from '@/api/rpdb'
 import { uploadImage } from '@/api/item'
 import i18n from '@/i18n'
 
 enableAutoUnmount(afterEach)
 
 const getPresetTags = vi.hoisted(() => vi.fn())
+const confirmDialog = vi.hoisted(() => vi.fn())
 
 vi.mock('@/api/rpdb', async () => {
   const actual = await vi.importActual<typeof import('@/api/rpdb')>('@/api/rpdb')
   return {
     ...actual,
     listRPDBDrafts: vi.fn().mockResolvedValue({ drafts: [] }),
-    createRPDBDraft: vi.fn().mockImplementation(async (payload) => ({
+    createRPDBDraft: vi.fn().mockImplementation(async (payload, workId) => ({
       draft: {
         id: 999,
         author_id: 1,
+        work_id: workId,
         type: payload?.type || 'item_showcase',
         title: payload?.title || '',
         payload: payload || {},
@@ -44,12 +46,17 @@ vi.mock('@/api/rpdb', async () => {
     })),
     getRPDBDraft: vi.fn(),
     deleteRPDBDraft: vi.fn(),
+    deleteRPDBWork: vi.fn(),
     publishRPDBDraft: vi.fn().mockResolvedValue({ work: { id: 999 } }),
   }
 })
 
 vi.mock('@/api/tag', () => ({
   getPresetTags,
+}))
+
+vi.mock('@/composables/useDialog', () => ({
+  dialog: { confirm: confirmDialog },
 }))
 
 vi.mock('@/api/item', () => ({
@@ -71,6 +78,8 @@ function mountEditor(path = '/') {
     routes: [
       { path: '/', name: 'rpdb-create', component: RPDBEditor },
       { path: '/drafts/:draftId/edit', name: 'rpdb-draft-edit', component: RPDBEditor },
+      { path: '/works/:id/edit', name: 'rpdb-edit', component: RPDBEditor },
+      { path: '/rpdb/my-uploads', component: { template: '<div />' } },
     ],
   })
   return router.push(path).then(() => mount(RPDBEditor, {
@@ -104,6 +113,7 @@ describe('RPDBEditor', () => {
     localStorage.clear()
     sessionStorage.clear()
     vi.clearAllMocks()
+    confirmDialog.mockResolvedValue(true)
     getPresetTags.mockResolvedValue({
       tags: [
         { id: 105, name: '炼金工坊风格', color: '6F8F46', type: 'preset', is_public: true, usage_count: 0, creator_id: 1, created_at: '', updated_at: '' },
@@ -137,6 +147,19 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('[data-testid="rpdb-authoring-steps"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="rpdb-internal-link-button"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('内部链接')
+  })
+
+  it('deletes a published work and its linked draft from the editor', async () => {
+    const wrapper = await mountEditor('/works/7/edit')
+    await vi.waitFor(() => expect(wrapper.find('[data-testid="delete-rpdb-work"]').exists()).toBe(true))
+
+    await wrapper.get('[data-testid="delete-rpdb-work"]').trigger('click')
+
+    await vi.waitFor(() => expect(deleteRPDBWork).toHaveBeenCalledWith(7))
+    expect(confirmDialog).toHaveBeenCalledWith(expect.objectContaining({
+      title: '删除正式作品',
+      confirmText: '删除作品',
+    }))
   })
 
   it('opens the visible draft box and keeps saved drafts separate from formal works', async () => {

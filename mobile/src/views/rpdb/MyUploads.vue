@@ -174,24 +174,6 @@ onMounted(load)
         <button type="button" @click="router.push({ name: 'rpdb-create' })">发布第一份作品</button>
       </div>
 
-      <section v-if="visibleDrafts.length" class="content-list">
-        <article v-for="draft in visibleDrafts" :key="`draft-${draft.id}`" class="content-card">
-          <div class="cover">
-            <CachedImage v-if="draft.cover_image" :src="resolveRPDBMediaUrl(draft.cover_image)" :alt="draft.title" />
-            <i v-else class="ri-draft-line" />
-          </div>
-          <div class="card-copy">
-            <div class="eyebrow"><span>草稿</span><time>{{ formatDate(draft.updated_at) }}</time></div>
-            <h2>{{ draft.title || '未命名草稿' }}</h2>
-            <p>{{ draft.work_id ? '正式作品的修改草稿，发布前不会影响线上版本。' : '尚未发布的新作品。' }}</p>
-          </div>
-          <footer>
-            <button type="button" @click="router.push({ name: 'rpdb-draft-edit', params: { draftId: draft.id } })"><i class="ri-edit-line" />继续编辑</button>
-            <button type="button" class="danger" @click="deleteTarget = { kind: 'draft', id: draft.id, title: draft.title || '未命名草稿' }"><i class="ri-delete-bin-line" /></button>
-          </footer>
-        </article>
-      </section>
-
       <section v-if="visibleWorks.length" class="content-list">
         <article v-for="work in visibleWorks" :key="work.id" class="content-card">
           <div class="cover">
@@ -231,6 +213,24 @@ onMounted(load)
             <button type="button" @click="router.push({ name: 'rpdb-detail', params: { id: work.id } })"><i class="ri-eye-line" />查看</button>
             <button type="button" @click="router.push({ name: 'rpdb-edit', params: { id: work.id } })"><i class="ri-edit-line" />编辑</button>
             <button type="button" class="danger" @click="deleteTarget = { kind: 'work', id: work.id, title: work.title }"><i class="ri-delete-bin-line" /></button>
+          </footer>
+        </article>
+      </section>
+
+      <section v-if="visibleDrafts.length" class="content-list">
+        <article v-for="draft in visibleDrafts" :key="`draft-${draft.id}`" class="content-card">
+          <div class="cover">
+            <CachedImage v-if="draft.cover_image" :src="resolveRPDBMediaUrl(draft.cover_image)" :alt="draft.title" />
+            <i v-else class="ri-draft-line" />
+          </div>
+          <div class="card-copy">
+            <div class="eyebrow"><span>草稿</span><time>{{ formatDate(draft.updated_at) }}</time></div>
+            <h2>{{ draft.title || '未命名草稿' }}</h2>
+            <p>{{ draft.work_id ? '正式作品的修改草稿，发布前不会影响线上版本。' : '尚未发布的新作品。' }}</p>
+          </div>
+          <footer>
+            <button type="button" @click="router.push({ name: 'rpdb-draft-edit', params: { draftId: draft.id } })"><i class="ri-edit-line" />继续编辑</button>
+            <button type="button" class="danger" @click="deleteTarget = { kind: 'draft', id: draft.id, title: draft.title || '未命名草稿' }"><i class="ri-delete-bin-line" /></button>
           </footer>
         </article>
       </section>

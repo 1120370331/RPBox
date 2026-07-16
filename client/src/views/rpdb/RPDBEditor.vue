@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import {
   createRPDBDraft,
   deleteRPDBDraft,
+  deleteRPDBWork,
   getRPDBDraft,
   listRPDBDrafts,
   publishRPDBDraft,
@@ -35,6 +36,7 @@ const router = useRouter()
 const { t } = useI18n()
 const toast = useToastStore()
 const saving = ref(false)
+const deletingWork = ref(false)
 const lastSaved = ref('')
 const autoSaveState = ref<'idle' | 'local' | 'saving' | 'saved' | 'error'>('idle')
 const autoSaveMessage = computed(() => {
@@ -758,6 +760,34 @@ async function removeDraft(draft: RPDBDraft) {
     }
   } catch (error) {
     toast.error((error as Error).message)
+  }
+}
+
+async function removeEditingWork() {
+  if (!editingWorkId.value || deletingWork.value) return
+  const workID = editingWorkId.value
+  const confirmed = await dialog.confirm({
+    title: t('rpdb.editor.workDelete.title'),
+    message: t('rpdb.editor.workDelete.message'),
+    type: 'warning',
+    confirmText: t('rpdb.editor.action.deleteWork'),
+  })
+  if (!confirmed) return
+
+  deletingWork.value = true
+  beginEditorSession()
+  try {
+    await deleteRPDBWork(workID)
+    if (currentDraftId.value) {
+      window.localStorage.removeItem(`rpdb-editor-draft:${currentDraftId.value}`)
+    }
+    window.localStorage.removeItem('rpdb-editor-draft:new')
+    toast.success(t('rpdb.editor.toast.workDeleted'))
+    await router.replace('/rpdb/my-uploads')
+  } catch (error) {
+    toast.error((error as Error).message)
+  } finally {
+    deletingWork.value = false
   }
 }
 
@@ -1552,8 +1582,9 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
         <span>{{ autoSaveMessage }}</span>
       </div>
       <button type="button" :title="t('rpdb.editor.action.internalPreview')" @click="preview"><i class="ri-eye-line"></i><span>{{ t('rpdb.editor.action.internalPreview') }}</span></button>
-      <button type="button" data-testid="save-rpdb-draft" :disabled="saving" @click="save('draft')"><i class="ri-save-3-line"></i><span>{{ t('rpdb.editor.action.saveDraft') }}</span></button>
-      <button type="button" class="primary" data-testid="publish-work" :disabled="saving" @click="save('published')"><i class="ri-send-plane-2-line"></i><span>{{ saving ? t('rpdb.editor.status.publishing') : t('rpdb.editor.action.publish') }}</span></button>
+      <button v-if="editingWorkId" type="button" class="danger" data-testid="delete-rpdb-work" :disabled="saving || deletingWork" @click="removeEditingWork"><i class="ri-delete-bin-line"></i><span>{{ deletingWork ? t('rpdb.editor.status.deleting') : t('rpdb.editor.action.deleteWork') }}</span></button>
+      <button type="button" data-testid="save-rpdb-draft" :disabled="saving || deletingWork" @click="save('draft')"><i class="ri-save-3-line"></i><span>{{ t('rpdb.editor.action.saveDraft') }}</span></button>
+      <button type="button" class="primary" data-testid="publish-work" :disabled="saving || deletingWork" @click="save('published')"><i class="ri-send-plane-2-line"></i><span>{{ saving ? t('rpdb.editor.status.publishing') : t('rpdb.editor.action.publish') }}</span></button>
     </div>
 
     <div v-if="showDraftBox" class="draft-box-mask" data-testid="rpdb-draft-box" @click.self="showDraftBox = false">
@@ -2379,6 +2410,10 @@ label>span{
   background:var(--color-accent);
   color:var(--btn-primary-text);
   box-shadow:0 5px 12px color-mix(in srgb,var(--color-accent) 22%,transparent);
+}
+.floating-submit-toolbar button.danger{
+  border-color:var(--btn-danger-bg);
+  color:var(--btn-danger-bg);
 }
 .floating-submit-toolbar button:disabled{
   cursor:wait;

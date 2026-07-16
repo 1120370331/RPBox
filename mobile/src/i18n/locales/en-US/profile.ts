@@ -33,9 +33,9 @@ export default {
     rules: {
       dailySignIn: 'Daily sign-in +10',
       firstLike: 'First like of the day +5',
-      comment: 'Post a comment +3, receive a comment +3',
-      liked: 'Post liked +5, item liked +10',
-      approved: 'Post approved +30, item approved +50',
+      comment: 'Comment +3, receive a comment +3 (community, items, and RP Database)',
+      liked: 'Post or RP Database work liked +5, item liked +10',
+      approved: 'Post or RP Database work approved +30, item approved +50',
       download: 'Item downloaded +10',
       story: 'Story archive: +1 for every 10 entries, up to +50 per day',
     },

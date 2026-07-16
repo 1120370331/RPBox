@@ -28,6 +28,7 @@ interface RPDBListState {
   availability: string
   faction: string
   armorType: string
+  bindType: string
   tagId?: number
   scrollTop: number
 }
@@ -52,6 +53,7 @@ const advancedFilters = reactive({
   availability: cachedState?.availability || '',
   faction: cachedState?.faction || '',
   armorType: cachedState?.armorType || '',
+  bindType: cachedState?.bindType || '',
   tagId: cachedState?.tagId,
 })
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -77,6 +79,7 @@ const activeAdvancedFilterCount = computed(() => [
   advancedFilters.availability,
   advancedFilters.faction,
   advancedFilters.armorType,
+  advancedFilters.bindType,
   advancedFilters.tagId,
 ].filter(Boolean).length)
 
@@ -92,6 +95,7 @@ async function loadWorks() {
       availability_status: advancedFilters.availability,
       faction: advancedFilters.faction,
       armor_type: advancedFilters.armorType,
+      bind_type: advancedFilters.bindType,
       tag_id: advancedFilters.tagId,
       page: filters.page,
       page_size: pageSize,
@@ -126,6 +130,7 @@ async function loadHotWorks() {
 function selectType(type: RPDBWorkType | '') {
   if (filters.type === type) return
   filters.type = type
+  if (type !== 'item_showcase') advancedFilters.bindType = ''
   filters.page = 1
   void loadHotWorks()
 }
@@ -160,6 +165,7 @@ function resetAdvancedFilters() {
   advancedFilters.availability = ''
   advancedFilters.faction = ''
   advancedFilters.armorType = ''
+  advancedFilters.bindType = ''
   advancedFilters.tagId = undefined
 }
 
@@ -184,6 +190,7 @@ const { save: saveListState } = useListStateCache<RPDBListState>({
     availability: advancedFilters.availability,
     faction: advancedFilters.faction,
     armorType: advancedFilters.armorType,
+    bindType: advancedFilters.bindType,
     tagId: advancedFilters.tagId,
     scrollTop: 0,
   }),
@@ -381,6 +388,14 @@ onUnmounted(() => {
                 <option value="mail">锁甲</option>
                 <option value="plate">板甲</option>
                 <option value="cosmetic">装饰品</option>
+              </select>
+            </label>
+            <label v-if="filters.type === 'item_showcase'">
+              <span>绑定状态</span>
+              <select v-model="advancedFilters.bindType">
+                <option value="">全部绑定状态</option>
+                <option value="yes">绑定</option>
+                <option value="no">不绑定</option>
               </select>
             </label>
             <label v-if="styleTags.length">

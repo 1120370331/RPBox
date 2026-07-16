@@ -45,6 +45,7 @@ export default {
       unfilled: '待填写',
       uploading: '上传中',
       publishing: '发布中',
+      deleting: '删除中',
     },
     autosave: {
       editing: '正在编辑',
@@ -248,6 +249,7 @@ export default {
       newDraft: '新建草稿',
       continueDraft: '继续最近草稿',
       deleteDraft: '删除草稿',
+      deleteWork: '删除作品',
       publish: '发布',
     },
     drafts: {
@@ -263,7 +265,12 @@ export default {
       deleteTitle: '删除草稿',
       deleteMessage: '确定永久删除这份草稿吗？正式作品不会受到影响。',
     },
+    workDelete: {
+      title: '删除正式作品',
+      message: '作品将从 RP 数据库下架，关联的修改草稿也会一并删除。此操作无法撤销。',
+    },
     toast: {
+      workDeleted: '作品已删除',
       noWaypoints: '未识别到可用的 TomTom /way 坐标',
       waypointsPartial: '已导入 {count} 个路线点，跳过 {rejected} 行',
       waypointsImported: '已按顺序导入 {count} 个路线点',

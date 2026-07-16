@@ -278,26 +278,25 @@ func (s *Server) deleteRPDBWork(c *gin.Context) {
 		return
 	}
 
-	if work.Status == model.RPDBStatusDraft {
-		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("work_id = ?", work.ID).Delete(&model.RPDBDraft{}).Error; err != nil {
+			return err
+		}
+		if work.Status == model.RPDBStatusDraft {
 			if err := deleteRPDBWorkChildren(tx, work.ID); err != nil {
 				return err
 			}
 			return tx.Delete(&work).Error
-		}); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除作品失败"})
-			return
 		}
-	} else {
 		work.Status = model.RPDBStatusArchived
 		work.IsPublic = false
 		work.Visibility = model.RPDBVisibilityPrivate
 		work.GuildID = nil
 		work.GuildIDs = []uint{}
-		if err := database.DB.Select("status", "is_public", "visibility", "guild_id", "guild_ids").Save(&work).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "归档作品失败"})
-			return
-		}
+		return tx.Select("status", "is_public", "visibility", "guild_id", "guild_ids").Save(&work).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除作品失败"})
+		return
 	}
 
 	s.bumpRPDBListCache(c.Request.Context())
