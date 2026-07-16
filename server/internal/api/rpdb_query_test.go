@@ -203,6 +203,45 @@ func TestRPDBQueryPublicListFiltersUnpublishedWorks(t *testing.T) {
 	}
 }
 
+func TestRPDBQueryFiltersItemsByBindingStatus(t *testing.T) {
+	server, author := newRPDBQueryTestServer(t)
+	works := []model.RPDBWork{
+		{AuthorID: author.ID, Type: model.RPDBWorkTypeItemShowcase, Title: "账号绑定物品", BindType: "account", Status: model.RPDBStatusPublished, ReviewStatus: model.RPDBReviewApproved, IsPublic: true},
+		{AuthorID: author.ID, Type: model.RPDBWorkTypeItemShowcase, Title: "拾取绑定物品", BindType: "pickup", Status: model.RPDBStatusPublished, ReviewStatus: model.RPDBReviewApproved, IsPublic: true},
+		{AuthorID: author.ID, Type: model.RPDBWorkTypeItemShowcase, Title: "不绑定物品", BindType: "no", Status: model.RPDBStatusPublished, ReviewStatus: model.RPDBReviewApproved, IsPublic: true},
+	}
+	if err := database.DB.Create(&works).Error; err != nil {
+		t.Fatalf("create binding works: %v", err)
+	}
+
+	var payload struct {
+		Works []rpdbWorkCard `json:"works"`
+		Total int64          `json:"total"`
+	}
+	boundResp := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works?type=item_showcase&bind_type=yes", nil, "")
+	if boundResp.Code != http.StatusOK {
+		t.Fatalf("expected bound filter 200, got %d body=%s", boundResp.Code, boundResp.Body.String())
+	}
+	if err := json.Unmarshal(boundResp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode bound response: %v", err)
+	}
+	if payload.Total != 2 || len(payload.Works) != 2 {
+		t.Fatalf("expected all bound variants, got total=%d works=%d", payload.Total, len(payload.Works))
+	}
+
+	payload.Works = nil
+	unboundResp := performRequest(server.router, http.MethodGet, "/api/v1/rpdb/works?type=item_showcase&bind_type=no", nil, "")
+	if unboundResp.Code != http.StatusOK {
+		t.Fatalf("expected unbound filter 200, got %d body=%s", unboundResp.Code, unboundResp.Body.String())
+	}
+	if err := json.Unmarshal(unboundResp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode unbound response: %v", err)
+	}
+	if payload.Total != 1 || len(payload.Works) != 1 || payload.Works[0].Title != "不绑定物品" {
+		t.Fatalf("unexpected unbound filter result: total=%d works=%#v", payload.Total, payload.Works)
+	}
+}
+
 func TestRPDBQueryPublicListCapsPageSizeAtTwelve(t *testing.T) {
 	server, author := newRPDBQueryTestServer(t)
 

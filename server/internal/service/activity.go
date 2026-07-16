@@ -31,6 +31,12 @@ const (
 	CommentReceivedExperience = 3
 	// PostPublishExperience is the experience earned when publishing a post.
 	PostPublishExperience = 30
+	// RPDBPublishExperience is the experience earned when an RPDB work is approved.
+	RPDBPublishExperience = PostPublishExperience
+	// RPDBLikeRewardPoints is the points earned when an RPDB work receives a like.
+	RPDBLikeRewardPoints = PostLikeRewardPoints
+	// RPDBLikeRewardExperience is the experience earned when an RPDB work receives a like.
+	RPDBLikeRewardExperience = PostLikeRewardExperience
 	// ItemPublishExperience is the experience earned when publishing an item.
 	ItemPublishExperience = 50
 	// ItemDownloadRewardExperience is the experience earned when an item is downloaded.

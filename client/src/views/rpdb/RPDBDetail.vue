@@ -616,7 +616,15 @@ onBeforeUnmount(() => {
         <h1>{{ work.title }}</h1>
         <p class="summary">{{ work.summary }}</p>
         <div class="author">
-          <span class="author-avatar">{{ (work.author_name || 'R').slice(0, 1).toUpperCase() }}</span>
+          <span class="author-avatar">
+            <span>{{ (work.author_name || 'R').slice(0, 1).toUpperCase() }}</span>
+            <img
+              v-if="work.author_avatar"
+              :src="resolveApiUrl(work.author_avatar)"
+              :alt="`${work.author_name || '发布者'}的头像`"
+              @error="($event.currentTarget as HTMLImageElement).hidden = true"
+            >
+          </span>
           <span>
             由 {{ work.author_name || '匿名贡献者' }} 发布
             <small>v{{ work.version }}</small>
@@ -1050,7 +1058,7 @@ onBeforeUnmount(() => {
 .hero-summary h1{margin:16px 0 9px;color:var(--color-text-main);font:700 34px/1.2 system-ui,'Microsoft YaHei',sans-serif}
 .summary{margin:0;color:var(--color-text-secondary);font-size:14px;line-height:1.85}
 .author{display:flex;align-items:center;gap:10px;margin:20px 0;color:var(--color-text-main)}
-.author-avatar{display:grid;width:36px;height:36px;place-items:center;border-radius:50%;background:var(--color-secondary);color:#fff;font-weight:800}
+.author-avatar{position:relative;display:grid;width:36px;height:36px;overflow:hidden;place-items:center;border-radius:50%;background:var(--color-secondary);color:#fff;font-weight:800}.author-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .author>span:last-child{display:flex;flex-direction:column}
 .author small{margin-top:4px;color:var(--color-text-secondary)}
 .hero-metadata{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;margin:0;border-top:1px solid var(--rpdb-line)}

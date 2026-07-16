@@ -26,6 +26,8 @@ func newRPDBInteractionTestServer(t *testing.T) (*Server, model.User, model.RPDB
 		&model.RPDBCommentLike{},
 		&model.UserBlock{},
 		&model.UserHiddenContent{},
+		&model.UserDailyActivity{},
+		&model.UserActivityLog{},
 		&model.RPDBVerification{},
 		&model.RPDBList{},
 		&model.RPDBListEntry{},
@@ -174,7 +176,7 @@ func TestRPDBCommentsExcludeHiddenCommentsAndBlockedAuthors(t *testing.T) {
 }
 
 func TestRPDBInteractionLikeAndFavoriteAreIdempotent(t *testing.T) {
-	server, _, work, token := newRPDBInteractionTestServer(t)
+	server, user, work, token := newRPDBInteractionTestServer(t)
 	base := "/api/v1/rpdb/works/" + strconv.FormatUint(uint64(work.ID), 10)
 
 	for i := 0; i < 2; i++ {
@@ -192,6 +194,21 @@ func TestRPDBInteractionLikeAndFavoriteAreIdempotent(t *testing.T) {
 	}
 	if stored.LikeCount != 1 || stored.FavoriteCount != 1 {
 		t.Fatalf("expected counters 1/1, got likes=%d favorites=%d", stored.LikeCount, stored.FavoriteCount)
+	}
+
+	var rewardedUser model.User
+	if err := database.DB.First(&rewardedUser, user.ID).Error; err != nil {
+		t.Fatalf("load liker rewards: %v", err)
+	}
+	if rewardedUser.ActivityExperience != 5 {
+		t.Fatalf("expected liker daily first-like experience 5, got %d", rewardedUser.ActivityExperience)
+	}
+	var rewardedAuthor model.User
+	if err := database.DB.First(&rewardedAuthor, work.AuthorID).Error; err != nil {
+		t.Fatalf("load author rewards: %v", err)
+	}
+	if rewardedAuthor.ActivityPoints != 3 || rewardedAuthor.ActivityExperience != 5 {
+		t.Fatalf("expected author rewards 3 points/5 experience, got %d/%d", rewardedAuthor.ActivityPoints, rewardedAuthor.ActivityExperience)
 	}
 }
 
@@ -236,6 +253,13 @@ func TestRPDBCommentAndReplyLikesAreIdempotent(t *testing.T) {
 	}
 	if storedRoot.LikeCount != 1 || storedReply.LikeCount != 1 {
 		t.Fatalf("expected comment like counts 1/1, got %d/%d", storedRoot.LikeCount, storedReply.LikeCount)
+	}
+	var rewardedUser model.User
+	if err := database.DB.First(&rewardedUser, user.ID).Error; err != nil {
+		t.Fatalf("load comment liker rewards: %v", err)
+	}
+	if rewardedUser.ActivityExperience != 5 {
+		t.Fatalf("expected one daily first-like reward across comment likes, got %d", rewardedUser.ActivityExperience)
 	}
 
 	listResp := performRequest(
@@ -313,6 +337,20 @@ func TestRPDBInteractionCreatesCommentAndDefaultList(t *testing.T) {
 	}, token)
 	if commentResp.Code != http.StatusCreated {
 		t.Fatalf("expected comment 201, got %d body=%s", commentResp.Code, commentResp.Body.String())
+	}
+	var rewardedCommenter model.User
+	if err := database.DB.First(&rewardedCommenter, user.ID).Error; err != nil {
+		t.Fatalf("load commenter rewards: %v", err)
+	}
+	if rewardedCommenter.ActivityExperience != 3 {
+		t.Fatalf("expected commenter experience 3, got %d", rewardedCommenter.ActivityExperience)
+	}
+	var rewardedAuthor model.User
+	if err := database.DB.First(&rewardedAuthor, work.AuthorID).Error; err != nil {
+		t.Fatalf("load work author rewards: %v", err)
+	}
+	if rewardedAuthor.ActivityExperience != 3 {
+		t.Fatalf("expected work author received-comment experience 3, got %d", rewardedAuthor.ActivityExperience)
 	}
 
 	listResp := performRequest(server.router, http.MethodPost, base+"/list", map[string]interface{}{

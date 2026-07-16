@@ -109,6 +109,7 @@ describe('RPDBDetail', () => {
         id: 1,
         author_id: 1,
         author_name: 'rpdb_demo',
+        author_avatar: '/uploads/users/1/avatar/rpdb-demo.jpg',
         type: 'item_showcase',
         title: '月光灯笼',
         slug: 'moon-lantern',
@@ -202,6 +203,7 @@ describe('RPDBDetail', () => {
     expect(wrapper.find('.minimal-detail-shell').exists()).toBe(true)
     expect(wrapper.find('[data-testid="floating-toc"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="rpdb-edit-button"]').exists()).toBe(false)
+    expect(wrapper.get('.author-avatar img').attributes('src')).toContain('/uploads/users/1/avatar/rpdb-demo.jpg')
     expect(wrapper.text()).toContain('/ttpaste')
     expect(wrapper.text()).toContain('联盟风格')
     expect(wrapper.text()).toContain('库尔提拉斯风格')

@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -72,7 +74,18 @@ func (s *Server) reviewRPDBWork(c *gin.Context) {
 			return err
 		}
 		if request.Action == "approve" {
-			return publishRPDBWorkCustomTags(tx, work.ID)
+			if err := publishRPDBWorkCustomTags(tx, work.ID); err != nil {
+				return err
+			}
+			_, err := service.AwardActivityReward(
+				tx,
+				work.AuthorID,
+				"rpdb_publish",
+				fmt.Sprintf("rpdb:%d", work.ID),
+				0,
+				service.RPDBPublishExperience,
+			)
+			return err
 		}
 		return nil
 	}); err != nil {

@@ -5,6 +5,7 @@ import { useToastStore } from '@shared/stores/toast'
 import {
   createRPDBDraft,
   deleteRPDBDraft,
+  deleteRPDBWork,
   getRPDBDraft,
   getRPDBWork,
   listRPDBDrafts,
@@ -46,7 +47,7 @@ const selectedTagIds = ref<number[]>([])
 const lastSaved = ref('')
 const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const loaded = ref(false)
-const deleteDialogOpen = ref(false)
+const deleteTarget = ref<'draft' | 'work' | null>(null)
 const tomtomImport = ref('')
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -423,19 +424,26 @@ async function publish() {
   }
 }
 
-async function deleteDraft() {
-  if (!currentDraftId.value || deleting.value) return
+async function deleteCurrent() {
+  if (!deleteTarget.value || deleting.value) return
   deleting.value = true
   try {
-    await deleteRPDBDraft(currentDraftId.value)
+    if (deleteTarget.value === 'work') {
+      if (!editingWorkId.value) return
+      await deleteRPDBWork(editingWorkId.value)
+      toast.success('作品已删除')
+    } else {
+      if (!currentDraftId.value) return
+      await deleteRPDBDraft(currentDraftId.value)
+      toast.success('草稿已删除')
+    }
     localStorage.removeItem('rpdb-mobile-local-draft')
-    toast.success('草稿已删除')
     await router.replace({ name: 'rpdb-my-uploads' })
   } catch (error) {
     toast.error((error as Error).message || '删除失败')
   } finally {
     deleting.value = false
-    deleteDialogOpen.value = false
+    deleteTarget.value = null
   }
 }
 
@@ -637,7 +645,7 @@ onBeforeUnmount(() => {
             <div v-if="form.visibility === 'guild'" class="guild-selector"><button v-for="guild in guilds" :key="guild.id" type="button" :class="{ active: form.guild_ids?.includes(guild.id) }" @click="toggleGuild(guild.id)"><i :class="form.guild_ids?.includes(guild.id) ? 'ri-checkbox-circle-fill' : 'ri-checkbox-blank-circle-line'" />{{ guild.name }}</button><p v-if="!guilds.length">你还没有加入公会。</p></div>
           </div>
           <button type="button" class="large-preview" @click="previewMode = true"><i class="ri-eye-line" />打开移动端预览</button>
-          <button v-if="currentDraftId" type="button" class="delete-draft" @click="deleteDialogOpen = true"><i class="ri-delete-bin-line" />删除当前草稿</button>
+          <button v-if="editingWorkId || currentDraftId" type="button" class="delete-draft" @click="deleteTarget = editingWorkId ? 'work' : 'draft'"><i class="ri-delete-bin-line" />{{ editingWorkId ? '删除作品' : '删除当前草稿' }}</button>
         </section>
       </main>
 
@@ -648,7 +656,7 @@ onBeforeUnmount(() => {
       </footer>
     </template>
 
-    <div v-if="deleteDialogOpen" class="dialog-mask"><section class="dialog" role="dialog" aria-modal="true"><h2>删除草稿</h2><p>草稿删除后无法恢复，正式作品不会受到影响。</p><footer><button type="button" @click="deleteDialogOpen = false">取消</button><button type="button" class="danger" :disabled="deleting" @click="deleteDraft">确认删除</button></footer></section></div>
+    <div v-if="deleteTarget" class="dialog-mask"><section class="dialog" role="dialog" aria-modal="true"><h2>{{ deleteTarget === 'work' ? '删除正式作品' : '删除草稿' }}</h2><p>{{ deleteTarget === 'work' ? '作品将从 RP 数据库下架，关联的修改草稿也会一并删除。此操作无法撤销。' : '草稿删除后无法恢复，正式作品不会受到影响。' }}</p><footer><button type="button" @click="deleteTarget = null">取消</button><button type="button" class="danger" :disabled="deleting" @click="deleteCurrent">确认删除</button></footer></section></div>
   </div>
 </template>
 

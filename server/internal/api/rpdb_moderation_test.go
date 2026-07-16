@@ -24,6 +24,7 @@ func newRPDBModerationTestServer(t *testing.T) (*Server, model.User, model.User,
 		&model.RPDBGuideStep{},
 		&model.RPDBTag{},
 		&model.RPDBRevision{},
+		&model.UserActivityLog{},
 	)
 	author := model.User{Username: "rpdb-author", Email: "rpdb-author@example.com", PassHash: "hash", Role: "user"}
 	moderator := model.User{Username: "rpdb-moderator", Email: "rpdb-moderator@example.com", PassHash: "hash", Role: "moderator"}
@@ -41,6 +42,7 @@ func TestRPDBModerationApprovesPendingWork(t *testing.T) {
 		Title:        "待审核作品",
 		Status:       model.RPDBStatusPending,
 		ReviewStatus: model.RPDBReviewPending,
+		Visibility:   model.RPDBVisibilityPublic,
 		Version:      1,
 	}
 	if err := database.DB.Create(&work).Error; err != nil {
@@ -67,6 +69,13 @@ func TestRPDBModerationApprovesPendingWork(t *testing.T) {
 	}
 	if stored.ReviewerID == nil || *stored.ReviewerID != moderator.ID || stored.ReviewedAt == nil {
 		t.Fatalf("missing reviewer metadata: %#v", stored)
+	}
+	var rewardedAuthor model.User
+	if err := database.DB.First(&rewardedAuthor, author.ID).Error; err != nil {
+		t.Fatalf("load rewarded author: %v", err)
+	}
+	if rewardedAuthor.ActivityExperience != 30 {
+		t.Fatalf("expected RPDB approval experience 30, got %d", rewardedAuthor.ActivityExperience)
 	}
 }
 

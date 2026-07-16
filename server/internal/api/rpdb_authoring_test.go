@@ -28,6 +28,7 @@ func newRPDBAuthoringTestServer(t *testing.T) (*Server, model.User, string) {
 		&model.RPDBRevision{},
 		&model.Guild{},
 		&model.GuildMember{},
+		&model.UserActivityLog{},
 	)
 	for _, statement := range []string{
 		`CREATE TRIGGER validate_rpdb_media_json_before_insert
@@ -146,6 +147,58 @@ func TestRPDBAuthorCannotSelectUnjoinedGuild(t *testing.T) {
 	)
 	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unjoined guild, got %d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestRPDBAuthorDeletePublishedWorkAlsoDeletesLinkedDrafts(t *testing.T) {
+	server, user, token := newRPDBAuthoringTestServer(t)
+	work := model.RPDBWork{
+		AuthorID:     user.ID,
+		Type:         model.RPDBWorkTypeItemShowcase,
+		Title:        "待归档作品",
+		Status:       model.RPDBStatusPublished,
+		ReviewStatus: model.RPDBReviewApproved,
+		Visibility:   model.RPDBVisibilityPublic,
+		IsPublic:     true,
+	}
+	if err := database.DB.Create(&work).Error; err != nil {
+		t.Fatalf("create work: %v", err)
+	}
+	draft := model.RPDBDraft{
+		AuthorID: user.ID,
+		WorkID:   &work.ID,
+		Type:     work.Type,
+		Title:    "待归档作品修改稿",
+		Status:   model.RPDBDraftStatusActive,
+	}
+	if err := database.DB.Create(&draft).Error; err != nil {
+		t.Fatalf("create linked draft: %v", err)
+	}
+
+	resp := performRequest(
+		server.router,
+		http.MethodDelete,
+		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(work.ID), 10),
+		nil,
+		token,
+	)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var stored model.RPDBWork
+	if err := database.DB.First(&stored, work.ID).Error; err != nil {
+		t.Fatalf("load archived work: %v", err)
+	}
+	if stored.Status != model.RPDBStatusArchived || stored.IsPublic || stored.Visibility != model.RPDBVisibilityPrivate {
+		t.Fatalf("unexpected archived work state: %#v", stored)
+	}
+	var draftCount int64
+	if err := database.DB.Model(&model.RPDBDraft{}).Where("work_id = ?", work.ID).Count(&draftCount).Error; err != nil {
+		t.Fatalf("count linked drafts: %v", err)
+	}
+	if draftCount != 0 {
+		t.Fatalf("expected linked drafts deleted, got %d", draftCount)
 	}
 }
 

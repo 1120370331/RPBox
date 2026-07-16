@@ -7,6 +7,7 @@ const work: RPDBWork = {
   id: 7,
   author_id: 2,
   author_name: '守望者',
+  author_avatar: '/uploads/users/2/avatar/watch.jpg',
   type: 'item_showcase',
   title: '月光灯笼',
   slug: 'moon-lantern',
@@ -55,6 +56,7 @@ describe('RPDBWorkCard', () => {
 
     expect(wrapper.text()).toContain('月光灯笼')
     expect(wrapper.text()).toContain('守望者')
+    expect(wrapper.get('.author-mark img').attributes('src')).toContain('/uploads/users/2/avatar/watch.jpg')
     expect(wrapper.text()).toContain('魔兽物品')
     const itemTraits = wrapper.get('[data-testid="rpdb-item-traits"]')
     expect(itemTraits.text()).toContain('玩具')

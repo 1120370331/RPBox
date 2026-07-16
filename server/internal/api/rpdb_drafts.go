@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"github.com/rpbox/server/internal/service"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -268,6 +269,18 @@ func (s *Server) publishRPDBDraft(c *gin.Context) {
 			}
 			if err := replaceRPDBWorkChildren(tx, publishedWork.ID, userID, role, request, true); err != nil {
 				return err
+			}
+			if publishedWork.ReviewStatus == model.RPDBReviewApproved {
+				if _, err := service.AwardActivityReward(
+					tx,
+					userID,
+					"rpdb_publish",
+					fmt.Sprintf("rpdb:%d", publishedWork.ID),
+					0,
+					service.RPDBPublishExperience,
+				); err != nil {
+					return err
+				}
 			}
 		} else {
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&publishedWork, *draft.WorkID).Error; err != nil {

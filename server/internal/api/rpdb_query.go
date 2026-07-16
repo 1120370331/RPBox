@@ -396,6 +396,17 @@ func applyRPDBWorkFilters(query *gorm.DB, c *gin.Context) *gorm.DB {
 	if armorType := strings.TrimSpace(c.Query("armor_type")); armorType != "" {
 		query = query.Where("armor_type = ?", armorType)
 	}
+	if bindType := strings.TrimSpace(c.Query("bind_type")); bindType != "" {
+		if bindType == "yes" {
+			query = query.Where(
+				"type = ? AND bind_type IN ?",
+				model.RPDBWorkTypeItemShowcase,
+				[]string{"yes", "account", "pickup", "use"},
+			)
+		} else {
+			query = query.Where("type = ? AND bind_type = ?", model.RPDBWorkTypeItemShowcase, bindType)
+		}
+	}
 	if authorID := strings.TrimSpace(c.Query("author_id")); authorID != "" {
 		query = query.Where("author_id = ?", authorID)
 	}

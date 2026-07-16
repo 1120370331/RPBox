@@ -21,10 +21,12 @@ describe('RPDBFilterBar', () => {
     expect(item.find('[aria-label="获取状态"]').exists()).toBe(true)
     expect(item.find('[data-testid="rpdb-tag-filter-input"]').exists()).toBe(true)
     expect(item.find('[aria-label="护甲类型"]').exists()).toBe(false)
+    expect(item.find('[aria-label="绑定状态"]').exists()).toBe(true)
     expect(item.text()).not.toContain('全部可信度')
 
     const transmog = mountFilter({ search: '', type: 'transmog', sort: 'updated_at' })
     expect(transmog.find('[aria-label="护甲类型"]').exists()).toBe(true)
+    expect(transmog.find('[aria-label="绑定状态"]').exists()).toBe(false)
     expect(transmog.find('[aria-label="阵营"]').exists()).toBe(true)
     expect(transmog.find('[aria-label="参观状态"]').exists()).toBe(false)
 
@@ -32,6 +34,7 @@ describe('RPDBFilterBar', () => {
     expect(home.find('[aria-label="参观状态"]').exists()).toBe(true)
     expect(home.find('[data-testid="rpdb-tag-filter-input"]').exists()).toBe(true)
     expect(home.find('[aria-label="护甲类型"]').exists()).toBe(false)
+    expect(home.find('[aria-label="绑定状态"]').exists()).toBe(false)
   })
 
   it('emits fuzzy RP style filters from typed text and suggestions', async () => {

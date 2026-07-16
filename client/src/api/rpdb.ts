@@ -178,6 +178,7 @@ export interface ListRPDBWorksParams {
   verification_status?: RPDBVerificationStatus | ''
   faction?: string
   armor_type?: string
+  bind_type?: string
   tag_id?: number
   tag_search?: string
   author_id?: number

@@ -41,7 +41,13 @@ const styleTags = computed(() => (props.work.tags || []).filter(tag => tag.name.
       <h3>{{ work.title }}</h3>
       <p>{{ getRPDBSummary(work) }}</p>
       <footer>
-        <span class="author">{{ work.author_name || '匿名贡献者' }}</span>
+        <span class="author">
+          <span class="author-avatar">
+            <CachedImage v-if="work.author_avatar" :src="resolveRPDBMediaUrl(work.author_avatar)" :alt="`${work.author_name || '发布者'}的头像`" />
+            <b v-else>{{ (work.author_name || 'R').charAt(0).toUpperCase() }}</b>
+          </span>
+          <span>{{ work.author_name || '匿名贡献者' }}</span>
+        </span>
         <span><i class="ri-eye-line" />{{ work.view_count || 0 }}</span>
         <span><i class="ri-heart-3-line" />{{ work.like_count || 0 }}</span>
       </footer>
@@ -177,6 +183,24 @@ footer span {
   color: var(--color-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.author-avatar {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 8px;
+}
+
+.author > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .compact {

@@ -203,6 +203,7 @@ export interface ListRPDBWorksParams {
   availability_status?: string
   faction?: string
   armor_type?: string
+  bind_type?: string
   tag_id?: number
   sort?: 'updated_at' | 'created_at' | 'popular' | 'favorite' | 'comments' | 'verified'
   page?: number

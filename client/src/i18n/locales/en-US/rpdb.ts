@@ -34,7 +34,7 @@ export default {
     common: { optional: 'Optional' },
     status: {
       draft: 'Draft', pending: 'Ready to publish', unused: 'Unused', filled: 'Complete', unfilled: 'Not filled',
-      uploading: 'Uploading', publishing: 'Publishing',
+      uploading: 'Uploading', publishing: 'Publishing', deleting: 'Deleting',
     },
     autosave: {
       editing: 'Editing', saving: 'Autosaving', saved: 'Autosaved {time}', local: 'Saved locally', error: 'Autosave failed',
@@ -138,7 +138,7 @@ export default {
       internalLink: 'Internal link', addGuideStep: 'Add guide step', importRoute: 'Import route', deleteStep: 'Delete step',
       uploadHomeCode: 'Upload code file', remove: 'Remove', addItem: 'Add item', addFurniture: 'Add furniture',
       uploadIcon: 'Upload icon', upload: 'Upload', clearIcon: 'Clear icon', internalPreview: 'Internal preview',
-      saveDraft: 'Save draft', newDraft: 'New draft', continueDraft: 'Continue latest', deleteDraft: 'Delete draft', publish: 'Publish',
+      saveDraft: 'Save draft', newDraft: 'New draft', continueDraft: 'Continue latest', deleteDraft: 'Delete draft', deleteWork: 'Delete work', publish: 'Publish',
     },
     drafts: {
       title: 'Drafts', count: '{count} unpublished drafts', empty: 'No unpublished drafts',
@@ -148,7 +148,12 @@ export default {
       relatedResumeMessage: 'This work already has unpublished drafts. Continue the latest one or create a fresh draft from the published version?',
       deleteTitle: 'Delete draft', deleteMessage: 'Delete this draft permanently? The published work will not be changed.',
     },
+    workDelete: {
+      title: 'Delete published work',
+      message: 'This work will be removed from the RP Database together with its linked revision drafts. This cannot be undone.',
+    },
     toast: {
+      workDeleted: 'Work deleted',
       noWaypoints: 'No valid TomTom /way coordinates were found',
       waypointsPartial: 'Imported {count} route points and skipped {rejected} lines',
       waypointsImported: 'Imported {count} route points in order', coverUploaded: 'Cover uploaded',

@@ -138,6 +138,9 @@ describe('RPDBMyUploads', () => {
     })
     const { wrapper, router } = await mountPage()
 
+    const publishedList = wrapper.get('[data-testid="rpdb-my-uploads-list"]').element
+    const draftList = wrapper.get('[data-testid="rpdb-draft-list"]').element
+    expect(publishedList.compareDocumentPosition(draftList) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(wrapper.get('[data-testid="rpdb-draft-list"]').text()).toContain('提灯修改草稿')
     expect(wrapper.get('[data-testid="rpdb-draft-list"]').text()).toContain('发布前不会改动线上内容')
     await wrapper.get('[data-testid="rpdb-draft-row"] .row-actions button').trigger('click')
