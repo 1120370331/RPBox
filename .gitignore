@@ -289,3 +289,7 @@ server/data/icons/
 *.bak
 .codex-tmp/
 .codex-release-artifacts/
+.tmp-release-*/
+.tmp-rpdb/
+.worktrees/
+/output/
