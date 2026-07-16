@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { listPosts, POST_CATEGORIES, type PostWithAuthor } from '@/api/post'
-import { useUserStore } from '@/stores/user'
+import { listPostDrafts, POST_CATEGORIES, type PostWithAuthor } from '@/api/post'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -19,7 +18,6 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
-const userStore = useUserStore()
 const root = ref<HTMLElement | null>(null)
 const open = ref(false)
 const loading = ref(false)
@@ -42,18 +40,9 @@ function categoryLabel(category: string) {
 }
 
 async function loadDrafts() {
-  const authorId = userStore.user?.id
-  if (!authorId) return
   loading.value = true
   try {
-    const result = await listPosts({
-      author_id: authorId,
-      status: 'draft',
-      sort: 'updated_at',
-      order: 'desc',
-      page: 1,
-      page_size: 100,
-    })
+    const result = await listPostDrafts()
     drafts.value = result.posts || []
   } catch (error) {
     console.error('Failed to load post drafts', error)

@@ -79,18 +79,18 @@ type UpdatePostRequest struct {
 }
 
 type postListParams struct {
-	UserID     uint
-	Page       int
-	PageSize   int
-	SortBy     string
-	Order      string
-	Search     string
-	AuthorName string
-	Region     string
-	Address    string
-	GuildID    string
-	TagID      string
-	AuthorID   string
+	UserID          uint
+	Page            int
+	PageSize        int
+	SortBy          string
+	Order           string
+	Search          string
+	AuthorName      string
+	Region          string
+	Address         string
+	GuildID         string
+	TagID           string
+	AuthorID        string
 	Status          string
 	Category        string
 	ExcludeCategory string
@@ -246,6 +246,25 @@ func (s *Server) listPosts(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, response)
+}
+
+// listMyPostDrafts returns drafts owned by the authenticated user.
+func (s *Server) listMyPostDrafts(c *gin.Context) {
+	userID := c.GetUint("userID")
+	response, err := s.loadPostList(c.Request.Context(), postListParams{
+		UserID:   userID,
+		Page:     1,
+		PageSize: 100,
+		SortBy:   "updated_at",
+		Order:    "desc",
+		AuthorID: strconv.Itoa(int(userID)),
+		Status:   "draft",
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "加载草稿失败"})
+		return
+	}
 	c.JSON(http.StatusOK, response)
 }
 

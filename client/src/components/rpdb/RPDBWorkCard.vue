@@ -6,7 +6,7 @@ import { sortRPDBStyleTags } from '@/constants/rpdbStyles'
 
 const props = withDefaults(defineProps<{
   work: RPDBWork
-  layout?: 'card' | 'compact'
+  layout?: 'card' | 'compact' | 'mini'
 }>(), {
   layout: 'card',
 })
@@ -49,7 +49,10 @@ function formatCount(value?: number) {
   <article
     data-testid="rpdb-work-card"
     class="work-card"
-    :class="{ 'work-card--compact': layout === 'compact' }"
+    :class="{
+      'work-card--compact': layout === 'compact',
+      'work-card--mini': layout === 'mini',
+    }"
     role="button"
     tabindex="0"
     @click="$emit('open')"
@@ -70,7 +73,7 @@ function formatCount(value?: number) {
 
     <div class="work-card__body">
       <div class="work-card__details">
-        <div v-if="layout === 'compact'" class="work-card__compact-headline">
+        <div v-if="layout !== 'card'" class="work-card__compact-headline">
           <span><i :class="typeIcon"></i>{{ typeLabel }}</span>
           <h3>{{ work.title }}</h3>
           <p>{{ work.summary || work.effect_description || '作者尚未填写作品摘要。' }}</p>
@@ -108,6 +111,7 @@ function formatCount(value?: number) {
 .work-card__recommendation{display:flex;min-width:0;align-items:center;gap:5px;overflow:hidden}.work-card__recommendation span{overflow:hidden;padding:3px 6px;border:1px solid color-mix(in srgb,var(--color-accent) 32%,var(--color-border));border-radius:4px;background:color-mix(in srgb,var(--color-accent) 7%,var(--tag-bg));color:var(--color-text-secondary);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.work-card__recommendation b{display:inline-flex;flex:0 0 auto;align-items:center;gap:3px;margin-left:auto;color:var(--color-accent);font-size:10px}.work-card__recommendation i{font-size:11px}
 .work-card__compact-headline{min-width:0}.work-card__compact-headline>span{display:inline-flex;align-items:center;gap:5px;color:var(--color-accent);font-size:10px;font-weight:800}.work-card__compact-headline h3{overflow:hidden;margin:4px 0 3px;color:var(--color-text-main);font:700 17px/1.25 Georgia,'Microsoft YaHei',serif;text-overflow:ellipsis;white-space:nowrap}.work-card__compact-headline p{display:-webkit-box;overflow:hidden;margin:0;color:var(--color-text-secondary);font-size:11px;line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .work-card--compact{display:grid;grid-template-columns:176px minmax(0,1fr);min-height:138px}.work-card--compact:hover,.work-card--compact:focus-visible{transform:translateX(2px)}.work-card--compact .work-card__media{height:100%;min-height:138px}.work-card--compact .work-card__headline{display:none}.work-card--compact .work-card__body{grid-template-columns:minmax(0,1fr) minmax(180px,230px);gap:14px;padding:12px 14px}.work-card--compact .work-card__details{align-content:center}.work-card--compact .work-card__metrics{grid-template-columns:repeat(2,minmax(0,1fr));margin:0;padding:9px;border:0;border-left:1px solid var(--color-border);border-radius:0;background:transparent}.work-card--compact .work-card__metrics>span{border-radius:7px;background:color-mix(in srgb,var(--color-panel-bg) 72%,transparent)}.work-card--compact .work-card__metrics i{font-size:13px}.work-card--compact .work-card__metrics b{font-size:11px}
+.work-card--mini{display:grid;grid-template-columns:96px minmax(0,1fr);min-height:118px;border-radius:6px;box-shadow:none}.work-card--mini:hover,.work-card--mini:focus-visible{transform:translateY(-1px)}.work-card--mini .work-card__media{height:100%;min-height:118px}.work-card--mini .work-card__headline,.work-card--mini .work-card__media-count{display:none}.work-card--mini .work-card__type{top:7px;left:7px;min-height:20px;padding:0 5px;font-size:8px}.work-card--mini .work-card__placeholder{gap:3px}.work-card--mini .work-card__placeholder i{font-size:25px}.work-card--mini .work-card__placeholder span{display:none}.work-card--mini .work-card__body{display:grid;grid-template-columns:1fr;gap:5px;padding:8px 8px 6px}.work-card--mini .work-card__details{align-content:start;gap:5px}.work-card--mini .work-card__compact-headline>span{font-size:8px}.work-card--mini .work-card__compact-headline h3{margin:2px 0;color:var(--color-text-main);font-size:13px;line-height:1.25}.work-card--mini .work-card__compact-headline p{font-size:9px;line-height:1.35;-webkit-line-clamp:1}.work-card--mini .work-card__item-traits,.work-card--mini .work-card__flags,.work-card--mini .work-card__author{display:none}.work-card--mini .work-card__recommendation{gap:3px}.work-card--mini .work-card__recommendation span{display:none;padding:2px 4px;font-size:8px}.work-card--mini .work-card__recommendation span:first-child{display:block}.work-card--mini .work-card__recommendation b{font-size:9px}.work-card--mini .work-card__metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin:0;padding:5px 0 0;border-top:1px solid var(--color-border);background:transparent}.work-card--mini .work-card__metrics>span{gap:2px}.work-card--mini .work-card__metrics i{font-size:9px}.work-card--mini .work-card__metrics b{font-size:8px}
 @media(max-width:760px){.work-card--compact{grid-template-columns:126px minmax(0,1fr)}.work-card--compact .work-card__body{grid-template-columns:1fr;gap:8px;padding:10px 11px}.work-card--compact .work-card__metrics{grid-template-columns:repeat(4,minmax(0,1fr));padding:7px 0 0;border-top:1px solid var(--color-border);border-left:0}.work-card--compact .work-card__metrics>span{min-height:26px}.work-card--compact .work-card__flags{display:none}.work-card--compact .work-card__placeholder span{display:none}}
 @media(prefers-reduced-motion:reduce){.work-card,.work-card__media img{transition:none}}
 </style>

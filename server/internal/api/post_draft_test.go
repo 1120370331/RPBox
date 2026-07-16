@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
@@ -114,5 +115,61 @@ func TestCreatePostAllowsEmptyDraftButRejectsEmptyPublishedPost(t *testing.T) {
 	}, token)
 	if publishedResp.Code != http.StatusBadRequest {
 		t.Fatalf("expected blank published post to return 400, got %d body=%s", publishedResp.Code, publishedResp.Body.String())
+	}
+}
+
+func TestListMyPostDraftsReturnsOnlyCurrentUsersDrafts(t *testing.T) {
+	db := testutil.NewTestDB(t,
+		&model.User{},
+		&model.Post{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+	)
+	database.DB = db
+
+	user := model.User{Username: "draft-owner", Email: "draft-owner@example.com", PassHash: "hash"}
+	other := model.User{Username: "other-owner", Email: "other-owner@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&user, &other}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	older := model.Post{
+		AuthorID: user.ID, Title: "较早草稿", Content: "older", Status: "draft",
+		Category: "novel", IsPublic: true,
+	}
+	newer := model.Post{
+		AuthorID: user.ID, Title: "最新草稿", Content: "newer", Status: "draft",
+		Category: "report", IsPublic: true,
+	}
+	published := model.Post{
+		AuthorID: user.ID, Title: "已发布帖子", Content: "published", Status: "published",
+		ReviewStatus: "approved", Category: "other", IsPublic: true,
+	}
+	foreign := model.Post{
+		AuthorID: other.ID, Title: "他人草稿", Content: "foreign", Status: "draft",
+		Category: "other", IsPublic: true,
+	}
+	if err := db.Create(&[]*model.Post{&older, &newer, &published, &foreign}).Error; err != nil {
+		t.Fatalf("create posts: %v", err)
+	}
+	if err := db.Model(&older).Update("updated_at", older.UpdatedAt.Add(-time.Hour)).Error; err != nil {
+		t.Fatalf("age older draft: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	resp := performRequest(server.router, http.MethodGet, "/api/v1/posts/drafts", nil, newTestToken(t, user))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected drafts 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var payload postListResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode drafts: %v", err)
+	}
+	if payload.Total != 2 || len(payload.Posts) != 2 {
+		t.Fatalf("expected 2 own drafts, got total=%d posts=%#v", payload.Total, payload.Posts)
+	}
+	if payload.Posts[0].ID != newer.ID || payload.Posts[1].ID != older.ID {
+		t.Fatalf("unexpected draft order: %#v", payload.Posts)
 	}
 }
