@@ -6,6 +6,7 @@ const props = defineProps<{
   title?: string
   targetLabel?: string
   targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'rpdb_comment' | 'rpdb_work' | 'user' | 'story'
+  initialAction?: 'default' | 'report' | 'block'
   submitting?: boolean
 }>()
 
@@ -63,6 +64,18 @@ const reasonOptions = [
 function resetForm() {
   reason.value = 'spam'
   detail.value = ''
+  if (props.initialAction === 'report') {
+    submitReport.value = true
+    hideTarget.value = false
+    blockAuthor.value = false
+    return
+  }
+  if (props.initialAction === 'block') {
+    submitReport.value = false
+    hideTarget.value = false
+    blockAuthor.value = true
+    return
+  }
   submitReport.value = false
   hideTarget.value = props.targetType !== 'user'
   blockAuthor.value = props.targetType === 'user'

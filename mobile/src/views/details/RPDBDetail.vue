@@ -19,7 +19,6 @@ import {
   unfavoriteRPDBWork,
   unlikeRPDBComment,
   unlikeRPDBWork,
-  verifyRPDBWork,
   type RPDBComment,
   type RPDBList,
   type RPDBMedia,
@@ -66,7 +65,6 @@ const lists = ref<RPDBList[]>([])
 const newListName = ref('')
 const listSubmitting = ref(false)
 const replyingTo = ref<RPDBComment | null>(null)
-const verifyBusy = ref(false)
 const reportOpen = ref(false)
 const reportSubmitting = ref(false)
 const reportContext = ref<{
@@ -74,6 +72,7 @@ const reportContext = ref<{
   targetId: number
   title: string
   dialogTitle: string
+  mode: 'report' | 'block'
 } | null>(null)
 const deleteCommentTarget = ref<RPDBComment | null>(null)
 const commentLikeBusy = ref(new Set<number>())
@@ -418,28 +417,14 @@ async function confirmDeleteComment() {
   }
 }
 
-async function verifyWork(result: 'valid' | 'outdated') {
-  if (!work.value || verifyBusy.value) return
-  verifyBusy.value = true
-  try {
-    await verifyRPDBWork(work.value.id, result)
-    if (result === 'valid') work.value.verified_count += 1
-    else work.value.outdated_count += 1
-    toast.success(result === 'valid' ? '已确认当前信息有效' : '已反馈信息可能过期')
-  } catch (error) {
-    toast.error((error as Error).message || '验证提交失败')
-  } finally {
-    verifyBusy.value = false
-  }
-}
-
-function openWorkReport() {
+function openWorkSafety(mode: 'report' | 'block') {
   if (!work.value) return
   reportContext.value = {
     targetType: 'rpdb_work',
     targetId: work.value.id,
     title: work.value.title,
-    dialogTitle: '举报 RP 数据库作品',
+    dialogTitle: mode === 'report' ? '举报 RP 数据库作品' : '屏蔽作品发布者',
+    mode,
   }
   reportOpen.value = true
 }
@@ -450,6 +435,7 @@ function openCommentReport(item: RPDBComment) {
     targetId: item.id,
     title: `${item.author_name || '匿名玩家'}：${item.content.slice(0, 36)}`,
     dialogTitle: '举报评论',
+    mode: 'report',
   }
   reportOpen.value = true
 }
@@ -630,9 +616,6 @@ onMounted(load)
           <button v-if="canEdit" type="button" class="edit-work" @click="router.push({ name: 'rpdb-edit', params: { id: work.id } })">
             <i class="ri-edit-line" />编辑这份作品
           </button>
-          <button v-if="canReportWork" type="button" class="report-work" @click="openWorkReport">
-            <i class="ri-flag-line" />举报作品
-          </button>
         </section>
 
         <dl class="metadata-strip">
@@ -657,14 +640,14 @@ onMounted(load)
           <div><dt><i class="ri-list-check-3" />清单</dt><dd>{{ work.list_count }}</dd></div>
         </dl>
 
-        <section class="verification-strip">
-          <div>
-            <span><i class="ri-shield-check-line" />玩家验证</span>
-            <p>{{ work.verified_count }} 人确认有效 · {{ work.outdated_count }} 人反馈过期</p>
+        <section v-if="canReportWork" class="safety-strip">
+          <div class="safety-strip__copy">
+            <span><i class="ri-shield-user-line" />举报与屏蔽</span>
+            <p>处理不适内容，或隐藏该发布者的作品与评论。</p>
           </div>
-          <div>
-            <button type="button" :disabled="verifyBusy" @click="verifyWork('valid')"><i class="ri-check-line" />仍然有效</button>
-            <button type="button" :disabled="verifyBusy" @click="verifyWork('outdated')"><i class="ri-time-line" />可能过期</button>
+          <div class="safety-strip__actions">
+            <button type="button" class="report" @click="openWorkSafety('report')"><i class="ri-flag-line" />举报作品</button>
+            <button type="button" class="block" @click="openWorkSafety('block')"><i class="ri-forbid-2-line" />屏蔽作者</button>
           </div>
         </section>
 
@@ -860,6 +843,7 @@ onMounted(load)
       :title="reportContext?.dialogTitle"
       :target-label="reportContext?.title"
       :target-type="reportContext?.targetType"
+      :initial-action="reportContext?.mode"
       @close="reportOpen = false"
       @submit="submitReport"
     />
@@ -1236,7 +1220,7 @@ onMounted(load)
   white-space: nowrap;
 }
 
-.verification-strip {
+.safety-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1246,7 +1230,7 @@ onMounted(load)
   background: #f7efe6;
 }
 
-.verification-strip span {
+.safety-strip__copy span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1255,25 +1239,39 @@ onMounted(load)
   font-weight: 800;
 }
 
-.verification-strip p {
+.safety-strip__copy p {
   margin-top: 4px;
   color: var(--color-text-secondary);
   font-size: 9px;
 }
 
-.verification-strip > div:last-child {
+.safety-strip__actions {
   display: flex;
   gap: 5px;
 }
 
-.verification-strip button {
+.safety-strip__actions button {
+  display: inline-flex;
   min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 0 8px;
   border: 1px solid var(--color-border);
   border-radius: 5px;
   background: var(--color-panel-bg);
   color: var(--color-text-main);
   font-size: 9px;
+  font-weight: 700;
+}
+
+.safety-strip__actions .report {
+  color: #a44a32;
+}
+
+.safety-strip__actions .block {
+  border-color: rgba(166, 50, 50, 0.3);
+  color: #a63232;
 }
 
 .stats-strip dd {
@@ -2055,12 +2053,12 @@ onMounted(load)
 }
 
 @media (max-width: 420px) {
-  .verification-strip {
+  .safety-strip {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .verification-strip > div:last-child {
+  .safety-strip__actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
