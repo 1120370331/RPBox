@@ -14,6 +14,7 @@ describe('appLink helpers', () => {
   it('normalizes supported app paths', () => {
     expect(normalizeInAppPath('/posts/12')).toBe('/posts/12')
     expect(normalizeInAppPath('items/7')).toBe('/items/7')
+    expect(normalizeInAppPath('/rpdb/19')).toBe('/rpdb/19')
     expect(normalizeInAppPath('/guild/2/posts/')).toBe('/guild/2/posts')
   })
 
@@ -38,6 +39,7 @@ describe('appLink helpers', () => {
 
   it('builds direct public site route url', () => {
     expect(buildPublicSitePathUrl('/posts/12')).toBe('https://totalrpbox.com/posts/12')
+    expect(buildPublicSitePathUrl('/rpdb/19')).toBe('https://totalrpbox.com/rpdb/19')
   })
 
   it('resolves path from custom scheme, redirect and direct site urls', () => {

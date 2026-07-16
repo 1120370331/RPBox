@@ -117,6 +117,81 @@ type rpdbCommentResponse struct {
 	Liked                 bool   `json:"liked"`
 }
 
+func (s *Server) likeRPDBComment(c *gin.Context) {
+	s.changeRPDBCommentLike(c, true)
+}
+
+func (s *Server) unlikeRPDBComment(c *gin.Context) {
+	s.changeRPDBCommentLike(c, false)
+}
+
+func (s *Server) changeRPDBCommentLike(c *gin.Context, add bool) {
+	userID := c.GetUint("userID")
+	commentID, ok := parseRPDBCommentID(c)
+	if !ok {
+		return
+	}
+
+	var comment model.RPDBComment
+	if err := database.DB.
+		Where("id = ? AND status = ?", commentID, model.RPDBStatusPublished).
+		First(&comment).Error; err != nil || !rpdbPublishedWorkExists(comment.WorkID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		return
+	}
+
+	created := false
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if add {
+			like := model.RPDBCommentLike{CommentID: comment.ID, UserID: userID}
+			result := tx.
+				Where("comment_id = ? AND user_id = ?", comment.ID, userID).
+				FirstOrCreate(&like)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return nil
+			}
+			created = true
+			return tx.Model(&model.RPDBComment{}).
+				Where("id = ?", comment.ID).
+				UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
+		}
+
+		result := tx.
+			Where("comment_id = ? AND user_id = ?", comment.ID, userID).
+			Delete(&model.RPDBCommentLike{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		return tx.Model(&model.RPDBComment{}).
+			Where("id = ?", comment.ID).
+			UpdateColumn("like_count", gorm.Expr("CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END")).Error
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新评论点赞状态失败"})
+		return
+	}
+
+	if created && comment.AuthorID != userID {
+		actorID := userID
+		_ = service.CreateNotification(&model.Notification{
+			UserID:     comment.AuthorID,
+			Type:       "rpdb_comment_like",
+			ActorID:    &actorID,
+			TargetType: "rpdb_comment",
+			TargetID:   comment.ID,
+			Content:    "有人点赞了你在 RP 数据库中的评论",
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"active": add})
+}
+
 func (s *Server) listRPDBComments(c *gin.Context) {
 	workID, ok := parseRPDBWorkID(c)
 	if !ok {
@@ -397,6 +472,15 @@ func parseRPDBWorkID(c *gin.Context) (uint, bool) {
 	value, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || value == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的作品 ID"})
+		return 0, false
+	}
+	return uint(value), true
+}
+
+func parseRPDBCommentID(c *gin.Context) (uint, bool) {
+	value, err := strconv.ParseUint(c.Param("commentId"), 10, 64)
+	if err != nil || value == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的评论 ID"})
 		return 0, false
 	}
 	return uint(value), true

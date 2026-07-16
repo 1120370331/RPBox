@@ -1,4 +1,4 @@
-export const mobileFeatures = ['community', 'stories', 'market', 'guild', 'profile', 'profiles'] as const
+export const mobileFeatures = ['community', 'stories', 'rpdb', 'market', 'guild', 'profile', 'profiles'] as const
 
 export type MobileFeature = (typeof mobileFeatures)[number]
 

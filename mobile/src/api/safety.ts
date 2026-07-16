@@ -1,6 +1,6 @@
 import { request } from '@shared/api/request'
 
-export type ReportTargetType = 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'story'
+export type ReportTargetType = 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'rpdb_comment' | 'story' | 'rpdb_work'
 
 export interface CreateContentReportRequest {
   target_type: ReportTargetType

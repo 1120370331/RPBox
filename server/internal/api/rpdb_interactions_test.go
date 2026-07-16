@@ -195,6 +195,115 @@ func TestRPDBInteractionLikeAndFavoriteAreIdempotent(t *testing.T) {
 	}
 }
 
+func TestRPDBCommentAndReplyLikesAreIdempotent(t *testing.T) {
+	server, user, work, token := newRPDBInteractionTestServer(t)
+	var author model.User
+	if err := database.DB.First(&author, work.AuthorID).Error; err != nil {
+		t.Fatalf("load work author: %v", err)
+	}
+	root := model.RPDBComment{
+		WorkID: work.ID, AuthorID: author.ID, Content: "根评论",
+		Status: model.RPDBStatusPublished,
+	}
+	if err := database.DB.Create(&root).Error; err != nil {
+		t.Fatalf("create root comment: %v", err)
+	}
+	reply := model.RPDBComment{
+		WorkID: work.ID, AuthorID: author.ID, ParentID: &root.ID, Content: "评论回复",
+		Status: model.RPDBStatusPublished,
+	}
+	if err := database.DB.Create(&reply).Error; err != nil {
+		t.Fatalf("create reply: %v", err)
+	}
+
+	for _, commentID := range []uint{root.ID, reply.ID} {
+		endpoint := "/api/v1/rpdb/comments/" + strconv.FormatUint(uint64(commentID), 10) + "/like"
+		for attempt := 0; attempt < 2; attempt++ {
+			resp := performRequest(server.router, http.MethodPost, endpoint, nil, token)
+			if resp.Code != http.StatusOK {
+				t.Fatalf("like comment %d attempt %d returned %d body=%s", commentID, attempt+1, resp.Code, resp.Body.String())
+			}
+		}
+	}
+
+	var storedRoot model.RPDBComment
+	var storedReply model.RPDBComment
+	if err := database.DB.First(&storedRoot, root.ID).Error; err != nil {
+		t.Fatalf("load root comment: %v", err)
+	}
+	if err := database.DB.First(&storedReply, reply.ID).Error; err != nil {
+		t.Fatalf("load reply: %v", err)
+	}
+	if storedRoot.LikeCount != 1 || storedReply.LikeCount != 1 {
+		t.Fatalf("expected comment like counts 1/1, got %d/%d", storedRoot.LikeCount, storedReply.LikeCount)
+	}
+
+	listResp := performRequest(
+		server.router,
+		http.MethodGet,
+		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(work.ID), 10)+"/comments",
+		nil,
+		token,
+	)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list comments returned %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var listed struct {
+		Comments []rpdbCommentResponse `json:"comments"`
+	}
+	if err := json.Unmarshal(listResp.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode comments: %v", err)
+	}
+	if len(listed.Comments) != 2 || !listed.Comments[0].Liked || !listed.Comments[1].Liked {
+		t.Fatalf("expected root and reply liked for viewer, got %#v", listed.Comments)
+	}
+
+	for _, commentID := range []uint{root.ID, reply.ID} {
+		endpoint := "/api/v1/rpdb/comments/" + strconv.FormatUint(uint64(commentID), 10) + "/like"
+		for attempt := 0; attempt < 2; attempt++ {
+			resp := performRequest(server.router, http.MethodDelete, endpoint, nil, token)
+			if resp.Code != http.StatusOK {
+				t.Fatalf("unlike comment %d attempt %d returned %d body=%s", commentID, attempt+1, resp.Code, resp.Body.String())
+			}
+		}
+	}
+
+	if err := database.DB.First(&storedRoot, root.ID).Error; err != nil {
+		t.Fatalf("reload root comment: %v", err)
+	}
+	if err := database.DB.First(&storedReply, reply.ID).Error; err != nil {
+		t.Fatalf("reload reply: %v", err)
+	}
+	if storedRoot.LikeCount != 0 || storedReply.LikeCount != 0 {
+		t.Fatalf("expected comment like counts 0/0, got %d/%d", storedRoot.LikeCount, storedReply.LikeCount)
+	}
+	var likes int64
+	if err := database.DB.Model(&model.RPDBCommentLike{}).Where("user_id = ?", user.ID).Count(&likes).Error; err != nil {
+		t.Fatalf("count comment likes: %v", err)
+	}
+	if likes != 0 {
+		t.Fatalf("expected comment likes removed, got %d", likes)
+	}
+
+	listResp = performRequest(
+		server.router,
+		http.MethodGet,
+		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(work.ID), 10)+"/comments",
+		nil,
+		token,
+	)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list comments after unlike returned %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	listed.Comments = nil
+	if err := json.Unmarshal(listResp.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode comments after unlike: %v", err)
+	}
+	if len(listed.Comments) != 2 || listed.Comments[0].Liked || listed.Comments[1].Liked {
+		t.Fatalf("expected root and reply unliked for viewer, got %#v", listed.Comments)
+	}
+}
+
 func TestRPDBInteractionCreatesCommentAndDefaultList(t *testing.T) {
 	server, user, work, token := newRPDBInteractionTestServer(t)
 	base := "/api/v1/rpdb/works/" + strconv.FormatUint(uint64(work.ID), 10)

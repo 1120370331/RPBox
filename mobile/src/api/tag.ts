@@ -5,11 +5,11 @@ export interface Tag {
   name: string
   color?: string
   type?: string
-  category?: 'story' | 'item' | 'post'
+  category?: 'story' | 'item' | 'post' | 'rpdb'
   usage_count?: number
 }
 
-export function getPresetTags(category?: 'story' | 'item' | 'post') {
+export function getPresetTags(category?: 'story' | 'item' | 'post' | 'rpdb') {
   const params = category ? { category } : undefined
   return request.get<{ tags: Tag[] }>('/tags/preset', { params })
 }

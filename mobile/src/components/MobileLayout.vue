@@ -11,6 +11,7 @@ const tabs = computed(() => {
   const allTabs = [
     { name: 'community', icon: 'ri-chat-3-line', activeIcon: 'ri-chat-3-fill', label: t('nav.tabs.community') },
     { name: 'stories', icon: 'ri-book-open-line', activeIcon: 'ri-book-open-fill', label: t('nav.tabs.stories') },
+    { name: 'rpdb', icon: 'ri-archive-stack-line', activeIcon: 'ri-archive-stack-fill', label: t('nav.tabs.rpdb') },
     { name: 'market', icon: 'ri-store-2-line', activeIcon: 'ri-store-2-fill', label: t('nav.tabs.market') },
     { name: 'guild', icon: 'ri-shield-line', activeIcon: 'ri-shield-fill', label: t('nav.tabs.guild') },
     { name: 'profile', icon: 'ri-user-line', activeIcon: 'ri-user-fill', label: t('nav.tabs.profile') },
@@ -100,7 +101,7 @@ const currentTab = computed(() => route.name as string)
   gap: 1px;
   height: 100%;
   border-radius: 12px;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   color: var(--color-text-muted);
   text-decoration: none;
@@ -108,7 +109,7 @@ const currentTab = computed(() => route.name as string)
 }
 
 .tab-item i {
-  font-size: 20px;
+  font-size: 19px;
 }
 
 .tab-item.active {
@@ -124,11 +125,11 @@ const currentTab = computed(() => route.name as string)
   }
 
   .tab-item {
-    font-size: 9px;
+    font-size: 8px;
   }
 
   .tab-item i {
-    font-size: 19px;
+    font-size: 18px;
   }
 }
 </style>

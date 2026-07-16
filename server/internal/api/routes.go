@@ -324,6 +324,8 @@ func (s *Server) setupRoutes() {
 			auth.GET("/rpdb/my/favorites", s.listMyRPDBFavorites)
 			auth.POST("/rpdb/works/:id/comments", s.createRPDBComment)
 			auth.DELETE("/rpdb/comments/:commentId", s.deleteRPDBComment)
+			auth.POST("/rpdb/comments/:commentId/like", s.likeRPDBComment)
+			auth.DELETE("/rpdb/comments/:commentId/like", s.unlikeRPDBComment)
 			auth.POST("/rpdb/works/:id/verify", s.verifyRPDBWork)
 			auth.POST("/rpdb/works/:id/list", s.addRPDBWorkToDefaultList)
 			auth.GET("/rpdb/lists", s.listRPDBLists)
