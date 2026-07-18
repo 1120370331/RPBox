@@ -37,6 +37,7 @@ func (s *Server) listNotifications(c *gin.Context) {
 	actorIDs := make([]uint, 0)
 	commentIDs := make([]uint, 0)
 	itemCommentIDs := make([]uint, 0)
+	rpdbCommentIDs := make([]uint, 0)
 	for _, notif := range notifications {
 		if notif.ActorID != nil {
 			actorIDs = append(actorIDs, *notif.ActorID)
@@ -46,6 +47,9 @@ func (s *Server) listNotifications(c *gin.Context) {
 		}
 		if notif.TargetType == "item_comment" {
 			itemCommentIDs = append(itemCommentIDs, notif.TargetID)
+		}
+		if notif.TargetType == "rpdb_comment" {
+			rpdbCommentIDs = append(rpdbCommentIDs, notif.TargetID)
 		}
 	}
 
@@ -76,15 +80,25 @@ func (s *Server) listNotifications(c *gin.Context) {
 		}
 	}
 
+	rpdbCommentWorkMap := make(map[uint]uint)
+	if len(rpdbCommentIDs) > 0 {
+		var rpdbCommentRows []model.RPDBComment
+		database.DB.Select("id", "work_id").Where("id IN ?", rpdbCommentIDs).Find(&rpdbCommentRows)
+		for _, c := range rpdbCommentRows {
+			rpdbCommentWorkMap[c.ID] = c.WorkID
+		}
+	}
+
 	// 组装响应
 	type NotificationWithActor struct {
 		model.Notification
-		ActorName      string `json:"actor_name,omitempty"`
-		ActorAvatar    string `json:"actor_avatar,omitempty"`
-		ActorNameColor string `json:"actor_name_color,omitempty"`
-		ActorNameBold  bool   `json:"actor_name_bold,omitempty"`
-		TargetPostID   uint   `json:"target_post_id,omitempty"`
-		TargetItemID   uint   `json:"target_item_id,omitempty"`
+		ActorName        string `json:"actor_name,omitempty"`
+		ActorAvatar      string `json:"actor_avatar,omitempty"`
+		ActorNameColor   string `json:"actor_name_color,omitempty"`
+		ActorNameBold    bool   `json:"actor_name_bold,omitempty"`
+		TargetPostID     uint   `json:"target_post_id,omitempty"`
+		TargetItemID     uint   `json:"target_item_id,omitempty"`
+		TargetRPDBWorkID uint   `json:"target_rpdb_work_id,omitempty"`
 	}
 	result := make([]NotificationWithActor, len(notifications))
 	for i, notif := range notifications {
@@ -99,6 +113,11 @@ func (s *Server) listNotifications(c *gin.Context) {
 		if notif.TargetType == "item_comment" {
 			if itemID, ok := itemCommentItemMap[notif.TargetID]; ok {
 				item.TargetItemID = itemID
+			}
+		}
+		if notif.TargetType == "rpdb_comment" {
+			if workID, ok := rpdbCommentWorkMap[notif.TargetID]; ok {
+				item.TargetRPDBWorkID = workID
 			}
 		}
 		if notif.ActorID != nil {

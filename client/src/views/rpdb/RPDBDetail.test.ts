@@ -23,6 +23,7 @@ const createContentReport = vi.hoisted(() => vi.fn())
 const createUserBlock = vi.hoisted(() => vi.fn())
 const deleteRPDBComment = vi.hoisted(() => vi.fn())
 const confirmDialog = vi.hoisted(() => vi.fn())
+const scrollIntoView = vi.hoisted(() => vi.fn())
 
 vi.mock('@/api/emote', () => ({
   listEmotePacks: vi.fn().mockResolvedValue({ packs: [] }),
@@ -83,6 +84,11 @@ describe('RPDBDetail', () => {
     createUserBlock.mockReset()
     deleteRPDBComment.mockReset()
     confirmDialog.mockReset()
+    scrollIntoView.mockReset()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
     createContentReport.mockResolvedValue({ message: '举报已提交', report_id: 9, submitted_report: true })
     createUserBlock.mockResolvedValue({ message: '已屏蔽', submitted_report: false })
     deleteRPDBComment.mockResolvedValue(undefined)
@@ -526,6 +532,53 @@ describe('RPDBDetail', () => {
 
     await wrapper.find('.comment-actions .reply-btn').trigger('click')
     expect(wrapper.findComponent({ name: 'CommentReplyBox' }).exists()).toBe(true)
+  })
+
+  it('scrolls to and briefly highlights the deep-linked RPDB reply after comments load', async () => {
+    listRPDBComments.mockResolvedValueOnce({
+      comments: [
+        {
+          id: 41,
+          work_id: 1,
+          author_id: 3,
+          author_name: '旅店老板',
+          content: '顶层评论。',
+          like_count: 0,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 42,
+          work_id: 1,
+          author_id: 4,
+          author_name: '巡夜人',
+          parent_id: 41,
+          content: '通知跳转到这条回复。',
+          like_count: 0,
+          created_at: new Date().toISOString(),
+        },
+      ],
+    })
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/rpdb/:id', component: RPDBDetail }],
+    })
+    await router.push('/rpdb/1?comment=42')
+    const wrapper = mount(RPDBDetail, {
+      global: { plugins: [createPinia(), router] },
+      attachTo: document.body,
+    })
+
+    await vi.waitFor(() => {
+      const target = document.getElementById('comment-42')
+      expect(target).toBeTruthy()
+      expect(target?.classList.contains('comment-highlight')).toBe(true)
+    })
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1600)
+    wrapper.unmount()
+    setTimeoutSpy.mockRestore()
   })
 
   it('lets the work author delete root comments and replies', async () => {

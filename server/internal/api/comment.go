@@ -409,7 +409,7 @@ func (s *Server) likeComment(c *gin.Context) {
 	if comment.AuthorID != userID {
 		notification := model.Notification{
 			UserID:     comment.AuthorID,
-			Type:       "post_comment",
+			Type:       "post_comment_like",
 			ActorID:    &userID,
 			TargetType: "comment",
 			TargetID:   uint(commentID),

@@ -210,6 +210,32 @@ func TestRPDBInteractionLikeAndFavoriteAreIdempotent(t *testing.T) {
 	if rewardedAuthor.ActivityPoints != 3 || rewardedAuthor.ActivityExperience != 5 {
 		t.Fatalf("expected author rewards 3 points/5 experience, got %d/%d", rewardedAuthor.ActivityPoints, rewardedAuthor.ActivityExperience)
 	}
+
+	var notifications []model.Notification
+	if err := database.DB.Where("user_id = ?", work.AuthorID).Find(&notifications).Error; err != nil {
+		t.Fatalf("load work like notifications: %v", err)
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("expected one work like notification after duplicate likes, got %d", len(notifications))
+	}
+	notification := notifications[0]
+	if notification.Type != "rpdb_like" || notification.TargetType != "rpdb_work" || notification.TargetID != work.ID {
+		t.Fatalf("unexpected work like notification: %#v", notification)
+	}
+	if notification.ActorID == nil || *notification.ActorID != user.ID {
+		t.Fatalf("expected liker %d as notification actor, got %#v", user.ID, notification.ActorID)
+	}
+
+	if resp := performRequest(server.router, http.MethodPost, base+"/like", nil, newTestToken(t, rewardedAuthor)); resp.Code != http.StatusOK {
+		t.Fatalf("self-like returned %d body=%s", resp.Code, resp.Body.String())
+	}
+	var selfLikeNotificationCount int64
+	if err := database.DB.Model(&model.Notification{}).Where("user_id = ?", work.AuthorID).Count(&selfLikeNotificationCount).Error; err != nil {
+		t.Fatalf("count notifications after self-like: %v", err)
+	}
+	if selfLikeNotificationCount != 1 {
+		t.Fatalf("expected self-like to create no notification, got %d total", selfLikeNotificationCount)
+	}
 }
 
 func TestRPDBCommentAndReplyLikesAreIdempotent(t *testing.T) {
@@ -260,6 +286,36 @@ func TestRPDBCommentAndReplyLikesAreIdempotent(t *testing.T) {
 	}
 	if rewardedUser.ActivityExperience != 5 {
 		t.Fatalf("expected one daily first-like reward across comment likes, got %d", rewardedUser.ActivityExperience)
+	}
+
+	notificationResp := performRequest(server.router, http.MethodGet, "/api/v1/notifications?type=all", nil, newTestToken(t, author))
+	if notificationResp.Code != http.StatusOK {
+		t.Fatalf("list comment like notifications returned %d body=%s", notificationResp.Code, notificationResp.Body.String())
+	}
+	var notificationPayload struct {
+		Notifications []struct {
+			Type             string `json:"type"`
+			TargetType       string `json:"target_type"`
+			TargetID         uint   `json:"target_id"`
+			TargetRPDBWorkID uint   `json:"target_rpdb_work_id"`
+		} `json:"notifications"`
+	}
+	if err := json.Unmarshal(notificationResp.Body.Bytes(), &notificationPayload); err != nil {
+		t.Fatalf("decode comment like notifications: %v", err)
+	}
+	if len(notificationPayload.Notifications) != 2 {
+		t.Fatalf("expected two comment like notifications, got %#v", notificationPayload.Notifications)
+	}
+	seenCommentNotifications := make(map[uint]bool, len(notificationPayload.Notifications))
+	for _, notification := range notificationPayload.Notifications {
+		if notification.Type != "rpdb_comment_like" || notification.TargetType != "rpdb_comment" ||
+			notification.TargetRPDBWorkID != work.ID {
+			t.Fatalf("unexpected RPDB comment like notification: %#v", notification)
+		}
+		seenCommentNotifications[notification.TargetID] = true
+	}
+	if !seenCommentNotifications[root.ID] || !seenCommentNotifications[reply.ID] {
+		t.Fatalf("expected notifications for root/reply comments, got %#v", notificationPayload.Notifications)
 	}
 
 	listResp := performRequest(

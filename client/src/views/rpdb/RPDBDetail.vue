@@ -238,7 +238,27 @@ async function load() {
     toast.error((error as Error).message)
   } finally {
     loading.value = false
+    await scrollToCommentFromRoute()
   }
+}
+
+function getCommentIdFromRoute() {
+  const raw = route.query.comment
+  if (!raw) return null
+  const value = Array.isArray(raw) ? raw[0] : raw
+  const id = Number(value)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+async function scrollToCommentFromRoute() {
+  const commentId = getCommentIdFromRoute()
+  if (!commentId) return
+  await nextTick()
+  const target = document.getElementById(`comment-${commentId}`)
+  if (!target) return
+  target.classList.add('comment-highlight')
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  window.setTimeout(() => target.classList.remove('comment-highlight'), 1600)
 }
 
 async function toggleLike() {
@@ -577,6 +597,10 @@ function collapseTocWhenSpaceIsTight() {
 watch(() => work.value?.content, async () => {
   await nextTick()
   setupArticleImagePreview()
+})
+
+watch(() => route.query.comment, () => {
+  void scrollToCommentFromRoute()
 })
 
 watch(() => route.params.id, (nextID, previousID) => {
@@ -1091,6 +1115,7 @@ onBeforeUnmount(() => {
 .emoji-btn i{font-size:18px}
 .comments-list{display:flex;flex-direction:column;gap:24px;margin-top:24px}
 .comment-item{display:flex;gap:12px}
+.comment-item.comment-highlight,.reply-item.comment-highlight{background:var(--color-primary-light);outline:2px solid var(--color-accent);outline-offset:2px;border-radius:8px}
 .comment-avatar,.reply-avatar{display:flex;flex-shrink:0;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--color-border);border-radius:50%;background:linear-gradient(135deg,var(--color-accent),var(--color-secondary));color:var(--btn-primary-text,var(--color-text-light));font-weight:600}
 .comment-avatar{width:32px;height:32px;font-size:12px}
 .reply-avatar{width:28px;height:28px;font-size:11px}

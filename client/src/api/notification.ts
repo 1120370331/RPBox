@@ -16,6 +16,7 @@ export interface Notification {
   actor_avatar?: string
   actor_name_color?: string
   actor_name_bold?: boolean
+  target_rpdb_work_id?: number
 }
 
 export interface NotificationsResponse {

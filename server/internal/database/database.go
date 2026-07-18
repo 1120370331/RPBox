@@ -57,6 +57,16 @@ func migrateLegacyRPDBLikes(db *gorm.DB) error {
 	return nil
 }
 
+func migrateLegacyCommentLikeNotifications(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&model.Notification{}) {
+		return nil
+	}
+
+	return db.Model(&model.Notification{}).
+		Where("type = ? AND content = ?", "post_comment", "点赞了你的评论").
+		Update("type", "post_comment_like").Error
+}
+
 func Init(cfg *config.DatabaseConfig) error {
 	sslmode := cfg.SSLMode
 	if sslmode == "" {
@@ -155,6 +165,10 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.RPDBSetWork{},
 	); err != nil {
 		return err
+	}
+
+	if err := migrateLegacyCommentLikeNotifications(db); err != nil {
+		return fmt.Errorf("migrate legacy comment like notifications: %w", err)
 	}
 
 	// 手动迁移：修改 checksum 列类型为 text
