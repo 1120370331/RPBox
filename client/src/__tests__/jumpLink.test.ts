@@ -3,16 +3,22 @@ import {
   clearJumpReturn,
   getJumpReturn,
   handleJumpLinkClick,
+  hydrateJumpCards,
   hydrateJumpCardImages,
   sanitizeJumpLinks,
 } from '../utils/jumpLink'
 
-const { getGuildMock } = vi.hoisted(() => ({
+const { getGuildMock, getPostEmbedPreviewMock } = vi.hoisted(() => ({
   getGuildMock: vi.fn(),
+  getPostEmbedPreviewMock: vi.fn(),
 }))
 
 vi.mock('@/api/guild', () => ({
   getGuild: getGuildMock,
+}))
+
+vi.mock('@/api/post', () => ({
+  getPostEmbedPreview: getPostEmbedPreviewMock,
 }))
 
 describe('jumpLink utils', () => {
@@ -110,5 +116,86 @@ describe('jumpLink utils', () => {
     expect(image).not.toBeNull()
     expect(card?.getAttribute('data-jump-image')).toContain('/api/v1/images/guild-avatar/5')
     expect(image?.getAttribute('src')).toContain('/api/v1/images/guild-avatar/5')
+  })
+
+  it('hydrates embedded post cards with current source data', async () => {
+    getPostEmbedPreviewMock.mockResolvedValue({
+      post: {
+        id: 12,
+        title: '更新后的战报',
+        category: 'event',
+        event_type: 'server',
+        cover_image: '/uploads/post-cover.jpg',
+        cover_image_updated_at: '2026-07-18T08:00:00Z',
+        updated_at: '2026-07-18T08:00:00Z',
+      },
+      author_name: '新作者',
+      author_avatar: '/uploads/avatar.jpg',
+    })
+
+    document.body.innerHTML = `
+      <div id="content">
+        <span class="jump-card jump-card--guild-home" data-jump-href="/community/post/12" data-jump-type="post">
+          <span class="jump-card__logo"><span class="jump-card__logo-fallback">旧</span></span>
+          <span class="jump-card__content">
+            <span class="jump-card__label">公开帖子</span>
+            <span class="jump-card__title">旧标题</span>
+          </span>
+          <span class="jump-card__stat"><span class="jump-card__stat-value">旧作者</span></span>
+        </span>
+      </div>
+    `
+    const container = document.getElementById('content') as HTMLElement
+
+    hydrateJumpCards(container)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const card = container.querySelector('.jump-card') as HTMLElement
+    expect(getPostEmbedPreviewMock).toHaveBeenCalledWith(12)
+    expect(card.getAttribute('data-jump-label')).toBe('服务器')
+    expect(card.getAttribute('data-jump-title')).toBe('更新后的战报')
+    expect(card.getAttribute('data-jump-author')).toBe('新作者')
+    expect(card.getAttribute('data-jump-avatar')).toBe('/uploads/avatar.jpg')
+    expect(card.getAttribute('data-jump-image')).toContain('/api/v1/images/post-cover/12')
+    expect(card.querySelector('.jump-card__label')?.textContent).toBe('服务器')
+    expect(card.querySelector('.jump-card__title')?.textContent).toBe('更新后的战报')
+    expect(card.querySelector('.jump-card__stat-value')?.textContent).toBe('新作者')
+    expect(card.querySelector('.jump-card__logo-image')?.getAttribute('src')).toContain('/api/v1/images/post-cover/12')
+  })
+
+  it('replaces inaccessible embedded posts with an unavailable card', async () => {
+    getPostEmbedPreviewMock.mockRejectedValue(Object.assign(new Error('帖子不存在'), { status: 404 }))
+
+    document.body.innerHTML = `
+      <div id="content">
+        <span class="jump-card jump-card--guild-home" data-jump-href="/community/post/20" data-jump-type="post">
+          <span class="jump-card__logo"><img class="jump-card__logo-image" src="/old-cover.jpg"></span>
+          <span class="jump-card__content">
+            <span class="jump-card__label">公开帖子</span>
+            <span class="jump-card__title">旧标题</span>
+          </span>
+          <span class="jump-card__stat"><span class="jump-card__stat-value">旧作者</span></span>
+        </span>
+      </div>
+    `
+    const container = document.getElementById('content') as HTMLElement
+
+    hydrateJumpCards(container)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const card = container.querySelector('.jump-card') as HTMLElement
+    expect(card.getAttribute('data-jump-unavailable')).toBe('true')
+    expect(card.getAttribute('aria-disabled')).toBe('true')
+    expect(card.getAttribute('data-jump-title')).toBe('引用的帖子当前不可用')
+    expect(card.hasAttribute('data-jump-author')).toBe(false)
+    expect(card.hasAttribute('data-jump-image')).toBe(false)
+    expect(card.querySelector('.jump-card__title')?.textContent).toBe('引用的帖子当前不可用')
+    expect(card.querySelector('.jump-card__stat-value')?.textContent).toBe('无法访问')
+    expect(card.querySelector('.jump-card__logo-fallback')?.textContent).toBe('!')
+
+    const router = { push: vi.fn() }
+    card.addEventListener('click', (event) => handleJumpLinkClick(event as MouseEvent, router as any))
+    card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(router.push).not.toHaveBeenCalled()
   })
 })

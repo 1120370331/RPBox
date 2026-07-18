@@ -21,7 +21,7 @@ function trimTrailingSlash(input: string) {
   return input.replace(/\/+$/, '')
 }
 
-function getPublicSiteOrigin() {
+export function getPublicSiteOrigin() {
   const raw = String(import.meta.env.VITE_PUBLIC_SITE_ORIGIN || DEFAULT_PUBLIC_SITE_ORIGIN).trim()
   return trimTrailingSlash(raw || DEFAULT_PUBLIC_SITE_ORIGIN)
 }
@@ -57,6 +57,14 @@ export function normalizeSharedPath(input: string) {
   if (!normalized) return null
 
   return SUPPORTED_PUBLIC_PATH_PATTERNS.some((pattern) => pattern.test(normalized)) ? normalized : null
+}
+
+export function buildPublicSitePathUrl(path: string) {
+  const normalized = normalizeSharedPath(path)
+  if (!normalized) {
+    throw new Error(`Unsupported shared path: ${path}`)
+  }
+  return new URL(normalized, `${getPublicSiteOrigin()}/`).toString()
 }
 
 export function resolveSharedPathFromUrl(rawUrl: string) {

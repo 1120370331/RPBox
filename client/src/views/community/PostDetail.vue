@@ -15,6 +15,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 import { resolveApiUrl } from '@/api/item'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
+import { buildPublicSitePathUrl } from '@/utils/desktopDeepLink'
 import { handleAttachmentClick } from '@/utils/download'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useToast } from '@/composables/useToast'
@@ -101,6 +102,12 @@ const canUseSafetyActions = computed(() => {
   if (!post.value || !currentUserId.value) return false
   return post.value.author_id !== currentUserId.value
 })
+
+const canSharePost = computed(() => Boolean(
+  post.value?.is_public &&
+  post.value?.status === 'published' &&
+  post.value?.review_status === 'approved'
+))
 
 function canUseCommentSafetyActions(comment: CommentWithAuthor): boolean {
   if (!currentUserId.value) return false
@@ -283,6 +290,43 @@ async function handleFavorite() {
     console.error('收藏失败:', error)
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function handleShare() {
+  if (!post.value?.id || !canSharePost.value) return
+
+  try {
+    const url = buildPublicSitePathUrl(`/posts/${post.value.id}`)
+    if (navigator.share) {
+      await navigator.share({
+        title: post.value.title,
+        text: post.value.title,
+        url,
+      })
+      toast.success(t('community.detail.shareSuccess'))
+      return
+    }
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = url
+      textarea.setAttribute('readonly', 'true')
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      if (!copied) throw new Error('Clipboard copy failed')
+    }
+    toast.success(t('community.detail.shareLinkCopied'))
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return
+    console.error('分享帖子失败:', error)
+    toast.error(t('community.detail.shareFailed'))
   }
 }
 
@@ -714,6 +758,16 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
               <button class="action-btn" :class="{ active: favorited }" @click="handleFavorite" :disabled="actionLoading">
                 <i :class="favorited ? 'ri-star-fill' : 'ri-star-line'"></i>
                 <span>{{ post.favorite_count }}</span>
+              </button>
+              <button
+                v-if="canSharePost"
+                class="action-btn action-btn--icon"
+                type="button"
+                :title="t('community.action.share')"
+                :aria-label="t('community.action.share')"
+                @click="handleShare"
+              >
+                <i class="ri-share-forward-line"></i>
               </button>
               <span class="view-count">
                 <i class="ri-eye-line"></i>
@@ -1164,6 +1218,13 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
 .action-btn i {
   font-size: 16px;
+}
+
+.action-btn--icon {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
 }
 
 .view-count {

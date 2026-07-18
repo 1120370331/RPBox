@@ -1,6 +1,7 @@
 import type { Router } from 'vue-router'
-import { getImageUrl } from '@/api/item'
+import { getImageUrl, resolveApiUrl } from '@/api/item'
 import { getGuild, type Guild } from '@/api/guild'
+import { getPostEmbedPreview, type Post } from '@/api/post'
 
 const JUMP_LINK_SELECTOR = '.jump-link, a.jump-card, [data-jump-href], [data-jump-type]'
 const EDITOR_SELECTOR = '.tiptap, [contenteditable="true"]'
@@ -8,8 +9,18 @@ const INTERNAL_PREFIXES = ['/archives/story/', '/community/post/', '/guild/', '/
 const JUMP_RETURN_KEY = 'jump_return_post'
 const GUILD_ID_REGEX = /\/guild\/(\d+)/i
 const GUILD_IMAGE_REGEX = /\/images\/(?:guild-avatar|guild-banner)\/(\d+)/i
+const POST_ID_REGEX = /\/(?:community\/post|posts)\/(\d+)(?:$|[/?#])/i
 
 const guildCache = new Map<number, Promise<Guild | null>>()
+const postRequests = new Map<number, Promise<EmbeddedPostResult>>()
+
+interface EmbeddedPost {
+  post: Post
+  author_name: string
+  author_avatar?: string
+}
+
+type EmbeddedPostResult = EmbeddedPost | 'unavailable' | null
 
 function parseGuildId(value: string | null | undefined): number | null {
   if (!value) return null
@@ -28,6 +39,13 @@ function resolveGuildIdFromHref(href: string | null | undefined): number | null 
 function resolveGuildIdFromImageSrc(src: string | null | undefined): number | null {
   if (!src) return null
   const match = src.match(GUILD_IMAGE_REGEX)
+  if (!match) return null
+  return parseGuildId(match[1])
+}
+
+function resolvePostIdFromHref(href: string | null | undefined): number | null {
+  if (!href) return null
+  const match = href.match(POST_ID_REGEX)
   if (!match) return null
   return parseGuildId(match[1])
 }
@@ -54,6 +72,11 @@ function resolveGuildIdForCard(card: HTMLElement): number | null {
   return null
 }
 
+function resolvePostIdForCard(card: HTMLElement): number | null {
+  const href = card.getAttribute('data-jump-href') || card.getAttribute('href')
+  return resolvePostIdFromHref(href)
+}
+
 function fetchGuildInfo(id: number): Promise<Guild | null> {
   const cached = guildCache.get(id)
   if (cached) return cached
@@ -64,6 +87,25 @@ function fetchGuildInfo(id: number): Promise<Guild | null> {
       return null
     })
   guildCache.set(id, request)
+  return request
+}
+
+function fetchEmbeddedPost(id: number): Promise<EmbeddedPostResult> {
+  const pending = postRequests.get(id)
+  if (pending) return pending
+
+  const request: Promise<EmbeddedPostResult> = getPostEmbedPreview(id)
+    .then((res) => res)
+    .catch((error) => {
+      const status = typeof error === 'object' && error ? (error as { status?: number }).status : undefined
+      if (status === 403 || status === 404) return 'unavailable'
+      console.error('获取嵌入帖子信息失败:', error)
+      return null
+    })
+    .finally(() => {
+      postRequests.delete(id)
+    })
+  postRequests.set(id, request)
   return request
 }
 
@@ -128,6 +170,123 @@ function refreshGuildHomeCard(card: HTMLElement, guild: Guild) {
   image.src = avatarUrl
   image.alt = ''
   avatarWrap.appendChild(image)
+}
+
+function getPostCardLabel(post: Post): string {
+  if (post.category !== 'event') return '公开帖子'
+  if (post.event_type === 'server') return '服务器'
+  if (post.event_type === 'guild') return '公会'
+  return '活动'
+}
+
+function buildPostCoverUrl(post: Post): string {
+  if (!post.cover_image) return ''
+  return getImageUrl('post-cover', post.id, {
+    w: 800,
+    q: 80,
+    v: post.cover_image_updated_at || post.updated_at,
+  })
+}
+
+function refreshPostCardLogo(card: HTMLElement, imageUrl: string, title: string) {
+  const logo = card.querySelector<HTMLElement>('.jump-card__logo')
+  if (!logo) return
+
+  const existingImage = logo.querySelector<HTMLImageElement>('.jump-card__logo-image')
+  const fallback = logo.querySelector<HTMLElement>('.jump-card__logo-fallback')
+  if (imageUrl) {
+    if (existingImage) {
+      existingImage.src = imageUrl
+      return
+    }
+    const image = document.createElement('img')
+    image.className = 'jump-card__logo-image'
+    image.src = imageUrl
+    image.alt = ''
+    if (fallback) {
+      fallback.replaceWith(image)
+    } else {
+      logo.appendChild(image)
+    }
+    return
+  }
+
+  existingImage?.remove()
+  if (fallback) {
+    fallback.textContent = title.slice(0, 1)
+    return
+  }
+  const nextFallback = document.createElement('span')
+  nextFallback.className = 'jump-card__logo-fallback'
+  nextFallback.textContent = title.slice(0, 1)
+  logo.appendChild(nextFallback)
+}
+
+function refreshPostCard(card: HTMLElement, embeddedPost: EmbeddedPost) {
+  if (!card.isConnected) return
+
+  const post = embeddedPost.post
+  const title = post.title?.trim() || '未命名帖子'
+  const author = embeddedPost.author_name?.trim() || '未知作者'
+  const label = getPostCardLabel(post)
+  const avatarUrl = resolveApiUrl(embeddedPost.author_avatar)
+  const imageUrl = buildPostCoverUrl(post)
+
+  card.removeAttribute('data-jump-unavailable')
+  card.removeAttribute('aria-disabled')
+  card.setAttribute('role', 'link')
+  card.setAttribute('tabindex', '0')
+  card.setAttribute('data-jump-label', label)
+  card.setAttribute('data-jump-title', title)
+  card.setAttribute('data-jump-author', author)
+  if (avatarUrl) {
+    card.setAttribute('data-jump-avatar', avatarUrl)
+  } else {
+    card.removeAttribute('data-jump-avatar')
+  }
+  if (imageUrl) {
+    card.setAttribute('data-jump-image', imageUrl)
+  } else {
+    card.removeAttribute('data-jump-image')
+  }
+
+  const labelElement = card.querySelector<HTMLElement>('.jump-card__label')
+  if (labelElement) labelElement.textContent = label
+  const titleElement = card.querySelector<HTMLElement>('.jump-card__title')
+  if (titleElement) titleElement.textContent = title
+  const authorElement = card.querySelector<HTMLElement>('.jump-card__stat-value')
+  if (authorElement) authorElement.textContent = author
+  refreshPostCardLogo(card, imageUrl, title)
+}
+
+function refreshUnavailablePostCard(card: HTMLElement) {
+  if (!card.isConnected) return
+
+  const label = '帖子引用'
+  const title = '引用的帖子当前不可用'
+  card.setAttribute('data-jump-unavailable', 'true')
+  card.setAttribute('aria-disabled', 'true')
+  card.setAttribute('tabindex', '-1')
+  card.setAttribute('data-jump-label', label)
+  card.setAttribute('data-jump-title', title)
+  card.removeAttribute('data-jump-author')
+  card.removeAttribute('data-jump-avatar')
+  card.removeAttribute('data-jump-image')
+
+  const labelElement = card.querySelector<HTMLElement>('.jump-card__label')
+  if (labelElement) labelElement.textContent = label
+  const titleElement = card.querySelector<HTMLElement>('.jump-card__title')
+  if (titleElement) titleElement.textContent = title
+  const authorElement = card.querySelector<HTMLElement>('.jump-card__stat-value')
+  if (authorElement) authorElement.textContent = '无法访问'
+
+  const logo = card.querySelector<HTMLElement>('.jump-card__logo')
+  if (!logo) return
+  logo.textContent = ''
+  const fallback = document.createElement('span')
+  fallback.className = 'jump-card__logo-fallback'
+  fallback.textContent = '!'
+  logo.appendChild(fallback)
 }
 
 export type JumpReturnPayload = {
@@ -208,6 +367,12 @@ export function handleJumpLinkClick(
     (element.closest(JUMP_LINK_SELECTOR) as HTMLElement | null) ||
     (element.closest('a[href]') as HTMLElement | null)
   if (!link) return
+
+  if (link.getAttribute('data-jump-unavailable') === 'true') {
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
 
   const href = getJumpTarget(link)
   if (!href) return
@@ -292,12 +457,23 @@ export function sanitizeJumpLinks(container: HTMLElement | null) {
   })
 }
 
-export function hydrateJumpCardImages(container: HTMLElement | null) {
+export function hydrateJumpCards(container: HTMLElement | null) {
   if (!container) return
   const cards = Array.from(container.querySelectorAll<HTMLElement>('.jump-card'))
   if (!cards.length) return
 
   cards.forEach((card) => {
+    const postId = resolvePostIdForCard(card)
+    if (postId) {
+      void fetchEmbeddedPost(postId).then((post) => {
+        if (post === 'unavailable') {
+          refreshUnavailablePostCard(card)
+          return
+        }
+        if (post) refreshPostCard(card, post)
+      })
+    }
+
     const guildId = resolveGuildIdForCard(card)
     if (!guildId) return
 
@@ -313,4 +489,8 @@ export function hydrateJumpCardImages(container: HTMLElement | null) {
       }
     })
   })
+}
+
+export function hydrateJumpCardImages(container: HTMLElement | null) {
+  hydrateJumpCards(container)
 }

@@ -11,7 +11,8 @@ export interface Post {
   address?: string
   guild_id?: number
   story_id?: number
-  status: 'draft' | 'published'
+  status: 'draft' | 'pending' | 'published'
+  review_status?: 'pending' | 'approved' | 'rejected' | ''
   is_public: boolean
   is_pinned: boolean      // 置顶
   is_featured: boolean    // 精华
@@ -157,7 +158,7 @@ export async function createPostDraft(data: SavePostDraftRequest): Promise<Post>
   return request.post('/posts', { ...data, status: 'draft' })
 }
 
-export async function getPost(id: number): Promise<{
+export interface PostDetailResponse {
   post: Post
   author_name: string
   author_avatar?: string
@@ -170,8 +171,14 @@ export async function getPost(id: number): Promise<{
   tags: any[]
   liked: boolean
   favorited: boolean
-}> {
+}
+
+export async function getPost(id: number): Promise<PostDetailResponse> {
   return request.get(`/posts/${id}`)
+}
+
+export async function getPostEmbedPreview(id: number): Promise<PostDetailResponse> {
+  return request.get(`/posts/${id}`, { params: { embed: 1 } })
 }
 
 export async function updatePost(id: number, data: UpdatePostRequest): Promise<Post> {

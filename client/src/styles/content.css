@@ -40,6 +40,13 @@
   box-shadow: 6px 6px 0 rgba(var(--shadow-base), 0.2);
 }
 
+.jump-card[data-jump-unavailable="true"],
+.jump-card[data-jump-unavailable="true"]:hover {
+  cursor: not-allowed;
+  opacity: 0.68;
+  transform: none;
+}
+
 .jump-card:focus-visible {
   outline: 2px solid var(--color-accent, #B87333);
   outline-offset: 2px;

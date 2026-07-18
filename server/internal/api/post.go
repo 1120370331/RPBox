@@ -871,15 +871,22 @@ func (s *Server) getPost(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 	isModerator := checkModerator(userID)
+	isEmbedPreview := c.Query("embed") == "1"
 
 	var post model.Post
-	if err := database.DB.First(&post, id).Error; err != nil {
+	query := database.DB
+	if isEmbedPreview {
+		query = query.Select("id, author_id, title, cover_image, cover_image_updated_at, category, guild_id, status, is_public, event_type, review_status, created_at, updated_at")
+	}
+	if err := query.First(&post, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
 		return
 	}
-	if normalizedContent := s.normalizeAndStoreContentImages(c, post.Content, fmt.Sprintf("posts/%d/content", post.AuthorID)); normalizedContent != post.Content {
-		post.Content = normalizedContent
-		_ = database.DB.Model(&model.Post{}).Where("id = ?", post.ID).Update("content", normalizedContent).Error
+	if !isEmbedPreview {
+		if normalizedContent := s.normalizeAndStoreContentImages(c, post.Content, fmt.Sprintf("posts/%d/content", post.AuthorID)); normalizedContent != post.Content {
+			post.Content = normalizedContent
+			_ = database.DB.Model(&model.Post{}).Where("id = ?", post.ID).Update("content", normalizedContent).Error
+		}
 	}
 	if isContentHidden(userID, reportTargetPost, post.ID) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
@@ -915,19 +922,21 @@ func (s *Server) getPost(c *gin.Context) {
 		}
 	}
 
-	// 增加浏览次数
-	database.DB.Model(&post).Update("view_count", post.ViewCount+1)
+	if !isEmbedPreview {
+		// 嵌入卡片需要读取当前数据，但不应被计为一次详情浏览。
+		database.DB.Model(&post).Update("view_count", post.ViewCount+1)
 
-	// 记录浏览历史
-	if userID != 0 {
-		view := model.PostView{
-			PostID: post.ID,
-			UserID: userID,
+		// 记录浏览历史
+		if userID != 0 {
+			view := model.PostView{
+				PostID: post.ID,
+				UserID: userID,
+			}
+			database.DB.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "post_id"}, {Name: "user_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
+			}).Create(&view)
 		}
-		database.DB.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "post_id"}, {Name: "user_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
-		}).Create(&view)
 	}
 
 	// 获取作者信息
@@ -936,31 +945,36 @@ func (s *Server) getPost(c *gin.Context) {
 	nameColor, nameBold := userDisplayStyle(author)
 	levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 
-	// 获取标签
-	var postTags []model.PostTag
-	database.DB.Where("post_id = ?", id).Find(&postTags)
-	tagIDs := make([]uint, len(postTags))
-	for i, pt := range postTags {
-		tagIDs[i] = pt.TagID
-	}
 	var tags []model.Tag
-	if len(tagIDs) > 0 {
-		database.DB.Where("id IN ?", tagIDs).Find(&tags)
-	}
-
-	// 检查当前用户是否点赞和收藏
 	var liked, favorited bool
-	var postLike model.PostLike
-	if err := database.DB.Where("post_id = ? AND user_id = ?", id, userID).First(&postLike).Error; err == nil {
-		liked = true
-	}
-	var postFav model.PostFavorite
-	if err := database.DB.Where("post_id = ? AND user_id = ?", id, userID).First(&postFav).Error; err == nil {
-		favorited = true
+	if !isEmbedPreview {
+		// 获取标签
+		var postTags []model.PostTag
+		database.DB.Where("post_id = ?", id).Find(&postTags)
+		tagIDs := make([]uint, len(postTags))
+		for i, pt := range postTags {
+			tagIDs[i] = pt.TagID
+		}
+		if len(tagIDs) > 0 {
+			database.DB.Where("id IN ?", tagIDs).Find(&tags)
+		}
+
+		// 检查当前用户是否点赞和收藏
+		var postLike model.PostLike
+		if err := database.DB.Where("post_id = ? AND user_id = ?", id, userID).First(&postLike).Error; err == nil {
+			liked = true
+		}
+		var postFav model.PostFavorite
+		if err := database.DB.Where("post_id = ? AND user_id = ?", id, userID).First(&postFav).Error; err == nil {
+			favorited = true
+		}
 	}
 
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
+	if isEmbedPreview {
+		post.Content = ""
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"post":                     post,
