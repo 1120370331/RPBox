@@ -77,6 +77,8 @@ func (s *Server) changeRPDBWorkInteraction(c *gin.Context, target interface{}, c
 		return
 	}
 
+	_, isLike := target.(*model.RPDBLike)
+	created := false
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		var result *gorm.DB
 		if add {
@@ -91,11 +93,12 @@ func (s *Server) changeRPDBWorkInteraction(c *gin.Context, target interface{}, c
 				return result.Error
 			}
 			if result.RowsAffected == 1 {
+				created = true
 				if err := tx.Model(&model.RPDBWork{}).Where("id = ?", workID).
 					UpdateColumn(counter, gorm.Expr(counter+" + 1")).Error; err != nil {
 					return err
 				}
-				if _, isLike := target.(*model.RPDBLike); isLike {
+				if isLike {
 					if _, err := service.ApplyDailyFirstLikeBonus(tx, userID, time.Now()); err != nil {
 						return err
 					}
@@ -129,6 +132,17 @@ func (s *Server) changeRPDBWorkInteraction(c *gin.Context, target interface{}, c
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新互动状态失败"})
 		return
+	}
+	if created && isLike && work.AuthorID != userID {
+		actorID := userID
+		_ = service.CreateNotification(&model.Notification{
+			UserID:     work.AuthorID,
+			Type:       "rpdb_like",
+			ActorID:    &actorID,
+			TargetType: "rpdb_work",
+			TargetID:   work.ID,
+			Content:    "点赞了你的 RP 数据库作品《" + work.Title + "》",
+		})
 	}
 	s.bumpRPDBListCache(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"active": add})

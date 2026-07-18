@@ -36,7 +36,8 @@ onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   if (userStore.token) {
     void refreshCurrentUser()
-    notificationStore.loadUnreadCount()
+    void notificationStore.loadUnreadCount()
+    notificationStore.connectWebSocket()
     if (userStore.isModerator) {
       void loadModeratorPendingCount()
     }
@@ -47,17 +48,29 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleGlobalJumpLink, true)
+  notificationStore.disconnectWebSocket()
 })
 
 // 侧边栏菜单点击时刷新未读消息数量
 function handleMenuClick() {
   if (userStore.token) {
-    notificationStore.loadUnreadCount()
+    void notificationStore.loadUnreadCount()
     if (userStore.isModerator) {
       void loadModeratorPendingCount()
     }
   }
 }
+
+watch(() => userStore.token, (token) => {
+  if (token) {
+    notificationStore.connectWebSocket()
+    void notificationStore.loadUnreadCount()
+    return
+  }
+
+  notificationStore.disconnectWebSocket()
+  notificationStore.resetUnreadCount()
+})
 
 watch(() => userStore.isModerator, (isModerator) => {
   if (isModerator) {

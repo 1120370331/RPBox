@@ -68,7 +68,13 @@ func GetNotifications(userID uint, notifType string, page, pageSize int) ([]mode
 	if notifType != "" && notifType != "all" {
 		switch notifType {
 		case "like":
-			query = query.Where("type IN ?", []string{"post_like", "item_like"})
+			query = query.Where("type IN ?", []string{
+				"post_like",
+				"post_comment_like",
+				"item_like",
+				"rpdb_like",
+				"rpdb_comment_like",
+			})
 		case "comment":
 			query = query.Where("type IN ?", []string{"post_comment", "item_comment"})
 		case "guild":

@@ -143,6 +143,15 @@ function handleNotificationClick(notification: Notification) {
         query: { comment: String(notification.target_id) }
       })
     }
+  } else if (targetType === 'rpdb_comment') {
+    if (notification.target_rpdb_work_id) {
+      router.push({
+        path: `/rpdb/${notification.target_rpdb_work_id}`,
+        query: { comment: String(notification.target_id) }
+      })
+    }
+  } else if (targetType === 'rpdb_work') {
+    router.push(`/rpdb/${notification.target_id}`)
   } else if (targetType === 'post') {
     router.push(`/community/post/${notification.target_id}`)
   } else if (targetType === 'item') {
@@ -155,7 +164,10 @@ function handleNotificationClick(notification: Notification) {
 function getTypeBadge(type: string): string {
   const badges: Record<string, string> = {
     'post_like': 'LIKE',
+    'post_comment_like': 'LIKE',
     'item_like': 'LIKE',
+    'rpdb_like': 'LIKE',
+    'rpdb_comment_like': 'LIKE',
     'post_comment': 'REPLY',
     'item_comment': 'REPLY',
     'mention': 'AT',

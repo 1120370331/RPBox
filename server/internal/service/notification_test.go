@@ -14,11 +14,23 @@ func TestNotificationLifecycle(t *testing.T) {
 	notificationHub = nil
 
 	like := model.Notification{UserID: 1, Type: "post_like", TargetType: "post", TargetID: 10}
+	commentLike := model.Notification{UserID: 1, Type: "post_comment_like", TargetType: "comment", TargetID: 13}
+	rpdbLike := model.Notification{UserID: 1, Type: "rpdb_like", TargetType: "rpdb_work", TargetID: 14}
+	rpdbCommentLike := model.Notification{UserID: 1, Type: "rpdb_comment_like", TargetType: "rpdb_comment", TargetID: 15}
 	comment := model.Notification{UserID: 1, Type: "item_comment", TargetType: "item", TargetID: 11}
 	mention := model.Notification{UserID: 1, Type: "mention", TargetType: "post", TargetID: 12}
 
 	if err := CreateNotification(&like); err != nil {
 		t.Fatalf("create notification: %v", err)
+	}
+	if err := CreateNotification(&commentLike); err != nil {
+		t.Fatalf("create comment like notification: %v", err)
+	}
+	if err := CreateNotification(&rpdbLike); err != nil {
+		t.Fatalf("create RPDB like notification: %v", err)
+	}
+	if err := CreateNotification(&rpdbCommentLike); err != nil {
+		t.Fatalf("create RPDB comment like notification: %v", err)
 	}
 	if err := CreateNotification(&comment); err != nil {
 		t.Fatalf("create notification: %v", err)
@@ -31,8 +43,8 @@ func TestNotificationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unread count: %v", err)
 	}
-	if count != 3 {
-		t.Fatalf("expected 3 unread, got %d", count)
+	if count != 6 {
+		t.Fatalf("expected 6 unread, got %d", count)
 	}
 
 	if err := MarkAsRead(like.ID, 1); err != nil {
@@ -45,6 +57,14 @@ func TestNotificationLifecycle(t *testing.T) {
 	}
 	if total != 1 || len(list) != 1 {
 		t.Fatalf("expected 1 comment notification, got %d", total)
+	}
+
+	list, total, err = GetNotifications(1, "like", 1, 10)
+	if err != nil {
+		t.Fatalf("get like notifications: %v", err)
+	}
+	if total != 4 || len(list) != 4 {
+		t.Fatalf("expected 4 like notifications, got %d", total)
 	}
 
 	list, total, err = GetNotifications(1, "mention", 1, 10)

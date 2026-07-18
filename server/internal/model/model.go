@@ -734,9 +734,9 @@ type DailyMetrics struct {
 type Notification struct {
 	ID         uint      `gorm:"primarykey" json:"id"`
 	UserID     uint      `gorm:"index;not null" json:"user_id"`      // 接收通知的用户ID
-	Type       string    `gorm:"size:20;index;not null" json:"type"` // 通知类型: post_like|post_comment|item_like|item_comment|mention|guild_application|guild_invite|system
+	Type       string    `gorm:"size:20;index;not null" json:"type"` // 通知类型: post_like|post_comment_like|post_comment|item_like|item_comment|rpdb_like|rpdb_comment_like|mention|guild_application|guild_invite|system
 	ActorID    *uint     `gorm:"index" json:"actor_id"`              // 触发通知的用户ID（可空，系统通知无actor）
-	TargetType string    `gorm:"size:20;index" json:"target_type"`   // 目标类型: post|item|comment|item_comment|guild
+	TargetType string    `gorm:"size:20;index" json:"target_type"`   // 目标类型: post|item|comment|item_comment|rpdb_work|rpdb_comment|guild
 	TargetID   uint      `gorm:"index" json:"target_id"`             // 目标ID
 	Content    string    `gorm:"size:512" json:"content"`            // 通知内容
 	IsRead     bool      `gorm:"default:false;index" json:"is_read"` // 是否已读
