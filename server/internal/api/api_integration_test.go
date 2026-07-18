@@ -174,6 +174,58 @@ func TestListPostsSupportsAuthorNameSearch(t *testing.T) {
 	}
 }
 
+func TestEmbeddedPostPreviewDoesNotIncrementViewCount(t *testing.T) {
+	db := testutil.NewTestDB(t,
+		&model.User{},
+		&model.Post{},
+		&model.UserBlock{},
+		&model.UserHiddenContent{},
+	)
+	database.DB = db
+
+	author := model.User{Username: "post-author", Email: "post-author@example.com", PassHash: "hash"}
+	viewer := model.User{Username: "post-viewer", Email: "post-viewer@example.com", PassHash: "hash"}
+	if err := db.Create(&[]*model.User{&author, &viewer}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+	post := model.Post{
+		AuthorID:     author.ID,
+		Title:        "Embedded post",
+		Content:      "post content",
+		Status:       "published",
+		ReviewStatus: "approved",
+		IsPublic:     true,
+		Category:     "other",
+		ViewCount:    7,
+	}
+	if err := db.Create(&post).Error; err != nil {
+		t.Fatalf("create post: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	resp := performRequest(server.router, http.MethodGet, "/api/v1/posts/"+strconv.FormatUint(uint64(post.ID), 10)+"?embed=1", nil, newTestToken(t, viewer))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected embed preview 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	var payload struct {
+		Post model.Post `json:"post"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode embed preview: %v", err)
+	}
+	if payload.Post.Content != "" {
+		t.Fatalf("expected embed preview content to be omitted, got %q", payload.Post.Content)
+	}
+
+	var stored model.Post
+	if err := db.First(&stored, post.ID).Error; err != nil {
+		t.Fatalf("reload post: %v", err)
+	}
+	if stored.ViewCount != 7 {
+		t.Fatalf("expected embed preview not to increment views, got %d", stored.ViewCount)
+	}
+}
+
 func TestCreateReplyCommentNotifiesParentAndPostAuthor(t *testing.T) {
 	db := testutil.NewTestDB(t,
 		&model.User{},

@@ -96,7 +96,8 @@ async function baseRequest<T>(path: string, options: RequestInit = {}): Promise<
     }
     const message = data?.error || data?.message || res.statusText || 'Request failed'
     const translatedMessage = translateError(message)
-    throw new Error(translatedMessage)
+    const error = Object.assign(new Error(translatedMessage), { status: res.status })
+    throw error
   }
 
   return data as T

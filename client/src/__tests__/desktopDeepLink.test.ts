@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  buildPublicSitePathUrl,
   handleDesktopDeepLinkUrls,
   mapSharedPathToDesktopRoute,
   normalizeSharedPath,
@@ -28,6 +29,11 @@ describe('desktop deep link utils', () => {
     expect(mapSharedPathToDesktopRoute('/stories/5')).toBe('/archives/story/5')
     expect(mapSharedPathToDesktopRoute('/profiles/9')).toBe('/user/9')
     expect(mapSharedPathToDesktopRoute('/guild/4/stories')).toBe('/guild/4/stories')
+  })
+
+  it('builds public links for supported shared paths', () => {
+    expect(buildPublicSitePathUrl('/posts/12')).toBe('https://totalrpbox.com/posts/12')
+    expect(() => buildPublicSitePathUrl('/community/post/12')).toThrow('Unsupported shared path')
   })
 
   it('resolves desktop routes directly from external urls', () => {

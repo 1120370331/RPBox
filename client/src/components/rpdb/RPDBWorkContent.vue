@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { RPDBWork, RPDBWorkPayload } from '@/api/rpdb'
+import { hydrateJumpCards, sanitizeJumpLinks } from '@/utils/jumpLink'
 import RPDBGuideSection from './RPDBGuideSection.vue'
 
 const props = defineProps<{
@@ -41,6 +42,18 @@ const orderedTransmogSlots = computed(() => {
     })
 })
 
+const richContentRef = ref<HTMLElement | null>(null)
+
+async function hydrateRichContent() {
+  await nextTick()
+  sanitizeJumpLinks(richContentRef.value)
+  hydrateJumpCards(richContentRef.value)
+}
+
+watch(() => props.work.content, () => {
+  void hydrateRichContent()
+}, { immediate: true })
+
 function formatSlotLabel(slot: string) {
   return transmogSlotLabel.get(slot) || slot
 }
@@ -58,7 +71,7 @@ function formatSlotLabel(slot: string) {
         <b>适用场景</b>
         {{ work.rp_use_cases }}
       </p>
-      <div v-if="work.content" class="rich-content" v-html="work.content"></div>
+      <div v-if="work.content" ref="richContentRef" class="rich-content" v-html="work.content"></div>
       <p v-else class="empty-copy">作者尚未补充完整正文。</p>
       <div v-if="work.type === 'transmog' && transmogShareCode" class="inline-share-code" data-testid="inline-transmog-share-code">
         <span>
