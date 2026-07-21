@@ -194,6 +194,7 @@ const isGuideType = computed(() => form.type !== 'home_showcase')
 const localDraftKey = computed(() => `rpdb-editor-draft:${currentDraftId.value || 'new'}`)
 const coverPreviewURL = computed(() => resolveRPDBMediaURL(form.cover_image))
 const previewMedia = computed(() => form.media?.find(item => item.type === 'image' || item.type === 'gif'))
+const previewMediaIndex = computed(() => form.media?.findIndex(item => item.type === 'image' || item.type === 'gif') ?? -1)
 const previewImageURL = computed(() => resolveRPDBMediaURL(previewMedia.value?.url))
 const openTransmogSlots = ref<Set<string>>(new Set())
 const openItemReferences = ref<Set<number>>(new Set())
@@ -438,6 +439,19 @@ async function uploadCover(event: Event) {
 
 function removeCover() {
   form.cover_image = ''
+}
+
+function removePreviewMedia(index: number) {
+  const media = form.media
+  if (!Array.isArray(media) || index < 0 || index >= media.length) return
+  media.splice(index, 1)
+  media.forEach((item, itemIndex) => {
+    item.sort_order = itemIndex + 1
+  })
+}
+
+function removeCurrentPreview() {
+  removePreviewMedia(previewMediaIndex.value)
 }
 
 function toggleTransmogSlot(slot: string) {
@@ -1334,6 +1348,16 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
             <small>{{ t('rpdb.editor.media.previewOptional') }}</small>
           </span>
           <em v-if="previewImageURL">{{ t('rpdb.editor.action.addMorePreviews') }}</em>
+          <button
+            v-if="previewImageURL"
+            type="button"
+            class="media-remove"
+            data-testid="preview-remove"
+            :aria-label="t('rpdb.editor.action.removePreview')"
+            @click.stop.prevent="removeCurrentPreview"
+          >
+            <i class="ri-close-line"></i>
+          </button>
         </label>
       </div>
 
@@ -1348,6 +1372,17 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
           :title="form.title || t('rpdb.editor.media.workPreview')"
           @open-image="openImageViewer"
         />
+        <div v-if="form.media?.length" class="preview-remove-list" data-testid="preview-remove-list">
+          <button
+            v-for="(item, index) in form.media"
+            :key="`${item.url}-${index}`"
+            type="button"
+            @click="removePreviewMedia(index)"
+          >
+            <i class="ri-delete-bin-line"></i>
+            {{ item.caption || t('rpdb.editor.media.previewCaption', { number: index + 1 }) }}
+          </button>
+        </div>
       </div>
     </section>
 
@@ -1648,6 +1683,9 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
 .preview-gallery-panel :deep(.thumbs){margin-top:10px}
 .preview-gallery-panel :deep(.thumbs button){border-color:var(--rpdb-line);background:var(--color-panel-bg)}
 .preview-gallery-panel :deep(.thumbs button.active){border-color:var(--color-accent)}
+.preview-remove-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.preview-remove-list button{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:1px solid color-mix(in srgb,#c2410c 42%,var(--rpdb-line));border-radius:999px;background:color-mix(in srgb,#c2410c 8%,var(--color-panel-bg));color:#c2410c;font-size:11px;font-weight:800;cursor:pointer}
+.preview-remove-list button:hover{border-color:#c2410c;background:color-mix(in srgb,#c2410c 14%,var(--color-panel-bg))}
 .editor-upper{display:grid;grid-template-columns:minmax(0,1fr);overflow:hidden;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .metadata-panel,.publish-panel{min-width:0;padding:16px}
 .publish-panel{background:var(--rpdb-muted)}
@@ -1909,6 +1947,7 @@ textarea{min-height:70px;resize:vertical}
   border-radius:6px;
   background:rgba(37,27,20,.66);
   color:#fff;
+  cursor:pointer;
 }
 .editor-upper{
   margin:0 0 12px;
