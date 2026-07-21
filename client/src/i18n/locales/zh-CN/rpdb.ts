@@ -231,6 +231,7 @@ export default {
       replaceCover: '更换封面图',
       customCover: '自定义封面图',
       removeCover: '移除封面图',
+      removePreview: '移除预览图',
       uploadPreview: '上传预览图',
       addMorePreviews: '继续添加预览图',
       internalLink: '内部链接',
