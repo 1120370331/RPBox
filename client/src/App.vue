@@ -9,6 +9,7 @@ import UpdateNotification from '@/components/UpdateNotification.vue'
 import ChangelogDialog from '@/components/ChangelogDialog.vue'
 import RDialog from '@/components/RDialog.vue'
 import RToast from '@/components/RToast.vue'
+import { handleExternalLinkClick } from '@/utils/externalLink'
 
 const themeStore = useThemeStore()
 const userStore = useUserStore()
@@ -29,10 +30,12 @@ onMounted(() => {
     handleOffline()
   }
   window.addEventListener('offline', handleOffline)
+  document.addEventListener('click', handleExternalLinkClick, true)
 })
 
 onUnmounted(() => {
   window.removeEventListener('offline', handleOffline)
+  document.removeEventListener('click', handleExternalLinkClick, true)
 })
 </script>
 

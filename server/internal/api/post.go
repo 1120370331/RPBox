@@ -1118,8 +1118,8 @@ func (s *Server) updatePost(c *gin.Context) {
 		}
 	}
 
-	// 已发布帖子的编辑：普通用户需要审核，版主直接生效
-	if post.Status == "published" && post.ReviewStatus == "approved" && !isModerator {
+	// 已发布帖子的编辑：作者版主可直接生效；普通用户和版主代改他人帖走编辑申请，避免直接覆盖原作者内容。
+	if post.Status == "published" && post.ReviewStatus == "approved" && (!isModerator || post.AuthorID != userID) {
 		editReq := model.PostEditRequest{
 			PostID:   post.ID,
 			AuthorID: userID,
@@ -1210,9 +1210,13 @@ func (s *Server) updatePost(c *gin.Context) {
 			return
 		}
 		s.bumpPostListCache(c.Request.Context())
+		message := "编辑请求已提交，等待审核"
+		if isModerator && post.AuthorID != userID {
+			message = "已为他人帖子保存编辑草稿，需在版主中心审核后应用"
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"code":    0,
-			"message": "编辑请求已提交，等待审核",
+			"message": message,
 			"data":    editReq,
 		})
 		return
