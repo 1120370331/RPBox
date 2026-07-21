@@ -229,6 +229,7 @@ export default {
     loading: '加载中...',
     postNotFound: '帖子不存在',
     updateSuccess: '更新成功',
+    moderatorDraftSaved: '已保存为版主编辑草稿，请到版主中心审核后应用',
     updateFailed: '更新失败，请重试',
     deleteTitle: '删除帖子',
     deleteMessage: '确定要删除这篇帖子吗？此操作不可恢复。',

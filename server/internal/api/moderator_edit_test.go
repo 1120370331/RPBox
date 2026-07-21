@@ -332,6 +332,63 @@ func TestDeletePostClearsPostEditRequests(t *testing.T) {
 	}
 }
 
+func TestModeratorEditingOtherPublishedPostCreatesPendingEdit(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.PostEditRequest{})
+	author := model.User{Username: "author", Email: "author-mod-edit@example.com", PassHash: "hash", Role: "user"}
+	moderator := model.User{Username: "moderator", Email: "mod-edit@example.com", PassHash: "hash", Role: "moderator"}
+	if err := db.Create(&[]*model.User{&author, &moderator}).Error; err != nil {
+		t.Fatalf("create users: %v", err)
+	}
+
+	post := model.Post{
+		AuthorID:     author.ID,
+		Title:        "Original title",
+		Content:      "Original content",
+		ContentType:  "html",
+		Category:     "other",
+		Status:       "published",
+		ReviewStatus: "approved",
+		IsPublic:     true,
+	}
+	if err := db.Create(&post).Error; err != nil {
+		t.Fatalf("create post: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	resp := performRequest(
+		server.router,
+		http.MethodPut,
+		fmt.Sprintf("/api/v1/posts/%d", post.ID),
+		map[string]interface{}{
+			"title":        "Moderator draft",
+			"content":      "Moderator content",
+			"content_type": "html",
+			"category":     "other",
+			"status":       "published",
+		},
+		newTestToken(t, moderator),
+	)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected update 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var refreshed model.Post
+	if err := db.First(&refreshed, post.ID).Error; err != nil {
+		t.Fatalf("load post: %v", err)
+	}
+	if refreshed.Title != post.Title || refreshed.Content != post.Content {
+		t.Fatalf("expected original post untouched, got title=%q content=%q", refreshed.Title, refreshed.Content)
+	}
+
+	var edit model.PostEditRequest
+	if err := db.Where("post_id = ?", post.ID).First(&edit).Error; err != nil {
+		t.Fatalf("expected pending edit request: %v", err)
+	}
+	if edit.AuthorID != moderator.ID || edit.Title != "Moderator draft" || edit.Content != "Moderator content" || edit.Status != "pending" {
+		t.Fatalf("unexpected edit request: %+v", edit)
+	}
+}
+
 func TestReviewItemEditAppliesPreviewImage(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.User{}, &model.Item{}, &model.ItemPendingEdit{})
 	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash", Role: "user"}

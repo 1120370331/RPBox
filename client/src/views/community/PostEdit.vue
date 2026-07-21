@@ -73,6 +73,11 @@ const quickJumpOpen = ref(false)
 
 // 是否为活动分区
 const isEventCategory = computed(() => form.value.category === 'event')
+const isModeratingOtherPost = computed(() => (
+  userStore.isModerator
+  && loadedPostAuthorId.value !== null
+  && loadedPostAuthorId.value !== userStore.user?.id
+))
 
 // 监听分区变化，重置活动相关字段
 watch(() => form.value.category, (newVal) => {
@@ -95,6 +100,7 @@ const activePostId = ref<number | null>(null)
 const initializing = ref(false)
 const draftSaveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const draftRefreshKey = ref(0)
+const loadedPostAuthorId = ref<number | null>(null)
 let cloudSaveRunning = false
 let cloudSaveQueued = false
 let skipUnmountSave = false
@@ -391,6 +397,7 @@ async function loadPost(postId = Number(route.params.id), token = loadToken) {
     const res = await getPost(postId)
     if (token !== loadToken || activePostId.value !== postId) return false
     // 整表单按服务端覆盖，避免局部字段残留导致“看起来丢了”
+    loadedPostAuthorId.value = res.post.author_id
     form.value = {
       ...createEmptyForm(),
       title: res.post.title || '',
@@ -526,30 +533,32 @@ async function handleSubmit(status: 'draft' | 'published') {
 
     await updatePost(id, payload)
 
-    // 更新标签
-    const addedTags = selectedTags.value.filter(t => !originalTags.value.includes(t))
-    const removedTags = originalTags.value.filter(t => !selectedTags.value.includes(t))
+    if (!isModeratingOtherPost.value) {
+      // 更新标签
+      const addedTags = selectedTags.value.filter(t => !originalTags.value.includes(t))
+      const removedTags = originalTags.value.filter(t => !selectedTags.value.includes(t))
 
-    for (const tagId of addedTags) {
-      await addPostTag(id, tagId)
-    }
-    for (const tagId of removedTags) {
-      await removePostTag(id, tagId)
-    }
-
-    // 更新合集
-    if (selectedCollectionId.value !== originalCollectionId.value) {
-      if (originalCollectionId.value) {
-        await removePostFromCollection(originalCollectionId.value, id)
+      for (const tagId of addedTags) {
+        await addPostTag(id, tagId)
       }
-      if (selectedCollectionId.value) {
-        await addPostToCollection(selectedCollectionId.value, id)
+      for (const tagId of removedTags) {
+        await removePostTag(id, tagId)
+      }
+
+      // 更新合集
+      if (selectedCollectionId.value !== originalCollectionId.value) {
+        if (originalCollectionId.value) {
+          await removePostFromCollection(originalCollectionId.value, id)
+        }
+        if (selectedCollectionId.value) {
+          await addPostToCollection(selectedCollectionId.value, id)
+        }
       }
     }
 
     skipUnmountSave = true
     clearDraft(id) // 保存成功后清除草稿
-    toast.success(t('community.edit.updateSuccess'))
+    toast.success(isModeratingOtherPost.value ? t('community.edit.moderatorDraftSaved') : t('community.edit.updateSuccess'))
     router.push({ name: 'post-detail', params: { id } })
   } catch (error) {
     console.error('更新失败:', error)
