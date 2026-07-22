@@ -16,6 +16,14 @@ import type {
 
 const { t } = useI18n()
 
+interface Props {
+  active?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  active: true,
+})
+
 interface ProfileOption {
   key: string
   name: string
@@ -1307,19 +1315,22 @@ defineExpose({
         </section>
       </div>
 
-      <footer v-if="selectedCount > 0" class="staging-footer">
-        <span>{{ t('archives.staging.selectedCount', { count: selectedCount }) }}</span>
-        <div>
-          <button type="button" class="clear-button" @click="clearSelection">
-            {{ t('archives.staging.clearSelection') }}
-          </button>
-          <RButton type="primary" @click="archiveSelected">
-            {{ t('archives.staging.archiveSelected') }}
-          </RButton>
-        </div>
-      </footer>
     </section>
   </div>
+
+  <Teleport to="body">
+    <footer v-if="props.active && selectedCount > 0" class="staging-footer">
+      <span>{{ t('archives.staging.selectedCount', { count: selectedCount }) }}</span>
+      <div>
+        <button type="button" class="clear-button" @click="clearSelection">
+          {{ t('archives.staging.clearSelection') }}
+        </button>
+        <RButton type="primary" @click="archiveSelected">
+          {{ t('archives.staging.archiveSelected') }}
+        </RButton>
+      </div>
+    </footer>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -2020,10 +2031,19 @@ input:focus-visible {
 }
 
 .staging-footer {
-  position: absolute;
-  right: 20px;
-  bottom: 18px;
+  --archive-ink: var(--color-text-main, #2c1810);
+  --archive-parchment: var(--color-panel-bg, #f4e8d8);
+  --archive-copper: var(--color-accent, #b87333);
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   min-width: 310px;
+  max-width: calc(100vw - 48px);
   padding: 10px 12px 10px 16px;
   color: var(--archive-ink);
   background: color-mix(in srgb, var(--archive-parchment) 88%, var(--color-card-bg, #fff));
@@ -2038,8 +2058,6 @@ input:focus-visible {
   align-items: center;
   gap: 12px;
 }
-
-.ledger { position: relative; }
 
 .tutorial-link {
   display: inline-flex;
@@ -2102,10 +2120,12 @@ input:focus-visible {
   .message-copy,
   .identity-copy { grid-column: 3; }
   .staging-footer {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-wrap: wrap;
     min-width: 0;
+    max-width: none;
   }
 }
 

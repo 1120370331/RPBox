@@ -763,7 +763,7 @@ function handleViewStory(id: number) {
     <!-- Tab切换 -->
     <RTabs v-model="activeTab" class="anim-item" style="--delay: 1">
       <RTabPane v-if="!filterGuildId" name="staging" :label="$t('archives.tabs.staging')">
-        <StagingPool ref="stagingPoolRef" @archive="handleArchive" />
+        <StagingPool ref="stagingPoolRef" :active="activeTab === 'staging'" @archive="handleArchive" />
       </RTabPane>
       <RTabPane name="stories" :label="$t('archives.tabs.stories')">
         <StoryList ref="storyListRef" :initialFilter="storyFilter" @create="openCreateStoryModal" @view="handleViewStory" />
