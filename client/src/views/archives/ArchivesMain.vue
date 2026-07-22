@@ -12,10 +12,11 @@ import AddonInstaller from '@/components/AddonInstaller.vue'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import StagingPool from './StagingPool.vue'
 import StoryList from './StoryList.vue'
-import { createStory, addStoryEntries, listStories, type CreateStoryEntryRequest, type Story, type StoryFilterParams } from '@/api/story'
+import { createStory, addStoryEntries, getStory, listStories, type CreateStoryEntryRequest, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
 import { getAddonManifest } from '@/api/addon'
 import { getGuild, type Guild } from '@/api/guild'
+import { useToast } from '@/composables/useToast'
 import type { ChatRecord, IdentityEndpoint, ProfileSnapshot } from '@/types/chatLog'
 
 interface InstalledAddonInfo {
@@ -26,7 +27,8 @@ interface InstalledAddonInfo {
 const mounted = ref(false)
 const router = useRouter()
 const route = useRoute()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const toast = useToast()
 const activeTab = ref('staging')
 const wowPath = ref(localStorage.getItem('wow_path') || '')
 
@@ -56,9 +58,94 @@ const archiveMode = ref<'create' | 'append'>('create')
 const userStories = ref<Story[]>([])
 const selectedStoryId = ref<number | null>(null)
 const loadingStories = ref(false)
+const storySearch = ref('')
+const archiveError = ref('')
+const archiveWarning = ref('')
+const archiveStage = ref<'idle' | 'creating' | 'tagging' | 'checking' | 'entries' | 'finalizing'>('idle')
+const createdArchiveStoryId = ref<number | null>(null)
+const appliedArchiveTagIds = ref<number[]>([])
+const entrySubmissionAttempted = ref(false)
+
+const RECENT_ARCHIVE_STORY_KEY = 'rpbox_recent_archive_story_id'
+const STORY_OPTION_RENDER_LIMIT = 80
+const LARGE_ARCHIVE_THRESHOLD = 800
 
 // 待归档的记录
 const pendingRecords = ref<ChatRecord[]>([])
+
+const recentArchiveStoryId = ref<number | null>((() => {
+  const value = Number(localStorage.getItem(RECENT_ARCHIVE_STORY_KEY))
+  return Number.isFinite(value) && value > 0 ? value : null
+})())
+
+const filteredUserStories = computed(() => {
+  const query = storySearch.value.trim().toLocaleLowerCase()
+  const stories = query
+    ? userStories.value.filter((story) => {
+      const tags = story.tag_list?.map(tag => tag.name).join(' ') || story.tags || ''
+      return [story.title, story.description, story.region, story.address, tags]
+        .filter(Boolean)
+        .some(value => String(value).toLocaleLowerCase().includes(query))
+    })
+    : [...userStories.value]
+
+  const recentId = recentArchiveStoryId.value
+  return stories.sort((left, right) => {
+    if (left.id === recentId) return -1
+    if (right.id === recentId) return 1
+    return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
+  })
+})
+
+const displayedUserStories = computed(() => filteredUserStories.value.slice(0, STORY_OPTION_RENDER_LIMIT))
+const hiddenStoryOptionCount = computed(() => Math.max(0, filteredUserStories.value.length - displayedUserStories.value.length))
+const selectedExistingStory = computed(() => userStories.value.find(story => story.id === selectedStoryId.value) || null)
+const archiveTargetLocked = computed(() => creating.value || createdArchiveStoryId.value !== null)
+
+const archiveSummary = computed(() => {
+  const records = [...pendingRecords.value].sort((left, right) => left.timestamp - right.timestamp)
+  const speakerNames = new Set<string>()
+  const channels = new Set<string>()
+  let identityEventCount = 0
+  let emptyEntryCount = 0
+
+  records.forEach((record) => {
+    const speaker = archiveRecordSpeaker(record)
+    if (speaker) speakerNames.add(speaker)
+    if (record.event || record.mark === 'S') identityEventCount += 1
+    else if (record.channel) channels.add(record.channel.toUpperCase())
+    if (!archiveRecordContent(record)) emptyEntryCount += 1
+  })
+
+  const first = records[0]
+  const last = records.at(-1)
+  return {
+    count: records.length,
+    start: first ? new Date(first.timestamp * 1000) : null,
+    end: last ? new Date(last.timestamp * 1000) : null,
+    speakerNames: [...speakerNames],
+    channelCount: channels.size,
+    identityEventCount,
+    emptyEntryCount,
+    isLarge: records.length >= LARGE_ARCHIVE_THRESHOLD,
+  }
+})
+
+const archiveTimeRange = computed(() => formatArchiveTimeRange(archiveSummary.value.start, archiveSummary.value.end))
+const archiveStageText = computed(() => archiveStage.value === 'idle'
+  ? ''
+  : t(`archives.modal.archiveStage.${archiveStage.value}`))
+const archiveDismissLocked = computed(() => Boolean(
+  creating.value
+  || (createdArchiveStoryId.value !== null && pendingRecords.value.length > 0),
+))
+const archiveSubmitDisabled = computed(() => {
+  if (creating.value) return true
+  if (archiveMode.value === 'append' && !selectedStoryId.value) {
+    return true
+  }
+  return archiveSummary.value.emptyEntryCount > 0
+})
 
 // 插件状态
 const showAddonInstaller = ref(false)
@@ -164,6 +251,7 @@ async function handleCheckAddonUpdate() {
 }
 
 onMounted(() => {
+  loadTags()
   // 从 URL query 读取公会筛选
   if (route.query.guild_id) {
     filterGuildId.value = Number(route.query.guild_id)
@@ -181,7 +269,6 @@ onMounted(() => {
   wowPath.value = savedPath
   setTimeout(() => mounted.value = true, 50)
   checkAddonUpdate()  // 检查插件更新
-  loadTags()
 })
 
 // 监听路由变化
@@ -232,8 +319,11 @@ async function loadUserStories() {
   try {
     const res = await listStories({ sort: 'updated_at', order: 'desc' })
     userStories.value = res.stories || []
+    archiveWarning.value = ''
   } catch (e) {
     console.error('加载剧情列表失败:', e)
+    userStories.value = []
+    archiveWarning.value = t('archives.modal.storyListLoadFailed')
   } finally {
     loadingStories.value = false
   }
@@ -288,10 +378,102 @@ function buildIdentityEventContent(record: ChatRecord): string {
   return `${eventLabel}：${identityEndpointName(record.event?.from)} → ${identityEndpointName(record.event?.to)}（${certainty}）`
 }
 
-async function handleArchive(records: ChatRecord[]) {
-  pendingRecords.value = records
-  archiveMode.value = 'create'
+function archiveRecordSpeaker(record: ChatRecord): string {
+  if (record.event || record.mark === 'S' || record.mark === 'B' || (record.mark === 'N' && !record.npc)) return ''
+  if (record.mark === 'N' && record.npc) return cleanTRP3Content(record.npc)
+
+  const historicalName = snapshotDisplayName(record.profile_snapshot)
+  if (historicalName) return historicalName
+  const trp3 = record.sender.trp3
+  if (trp3?.FN) return cleanTRP3Content(trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
+  return cleanTRP3Content(record.sender.gameID.split('-')[0])
+}
+
+function archiveRecordContent(record: ChatRecord): string {
+  if (record.event || record.mark === 'S') return cleanTRP3Content(buildIdentityEventContent(record))
+  const content = record.mark === 'B' || (record.mark === 'N' && !record.npc)
+    ? stripNpcPrefix(record.content)
+    : record.content
+  return cleanTRP3Content(content)
+}
+
+function formatArchiveTimeRange(start: Date | null, end: Date | null): string {
+  if (!start || !end) return '—'
+  const dateFormatter = new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'short', day: 'numeric' })
+  const timeFormatter = new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' })
+  const sameDay = start.getFullYear() === end.getFullYear()
+    && start.getMonth() === end.getMonth()
+    && start.getDate() === end.getDate()
+  if (sameDay) return `${dateFormatter.format(start)} ${timeFormatter.format(start)}–${timeFormatter.format(end)}`
+  return `${dateFormatter.format(start)} ${timeFormatter.format(start)} – ${dateFormatter.format(end)} ${timeFormatter.format(end)}`
+}
+
+function suggestedArchiveTitle(records: ChatRecord[]): string {
+  const sorted = [...records].sort((left, right) => left.timestamp - right.timestamp)
+  const start = sorted[0] ? new Date(sorted[0].timestamp * 1000) : new Date()
+  const date = new Intl.DateTimeFormat(locale.value, { month: '2-digit', day: '2-digit' }).format(start)
+  const speakers = [...new Set(sorted.map(archiveRecordSpeaker).filter(Boolean))].slice(0, 2)
+  return speakers.length > 0
+    ? t('archives.modal.suggestedTitle', { date, speakers: speakers.join(locale.value.startsWith('zh') ? '、' : ' & ') })
+    : t('archives.modal.suggestedTitleNoSpeaker', { date })
+}
+
+function resetCreateDialog(clearPending = true) {
+  if (clearPending) pendingRecords.value = []
+  newStoryTitle.value = ''
+  newStoryDesc.value = ''
+  newStoryRegion.value = ''
+  newStoryAddress.value = ''
+  selectedTagIds.value = []
   selectedStoryId.value = null
+  archiveMode.value = 'create'
+  storySearch.value = ''
+  archiveError.value = ''
+  archiveWarning.value = ''
+  archiveStage.value = 'idle'
+  createdArchiveStoryId.value = null
+  appliedArchiveTagIds.value = []
+  entrySubmissionAttempted.value = false
+}
+
+function openCreateStoryModal() {
+  resetCreateDialog()
+  showCreateModal.value = true
+}
+
+function closeCreateStoryModal() {
+  if (archiveDismissLocked.value) return
+  showCreateModal.value = false
+  resetCreateDialog()
+}
+
+function setArchiveMode(mode: 'create' | 'append') {
+  if (archiveTargetLocked.value || archiveMode.value === mode) return
+  archiveMode.value = mode
+  archiveError.value = ''
+  archiveWarning.value = ''
+  entrySubmissionAttempted.value = false
+  if (mode === 'create') selectedStoryId.value = null
+}
+
+function selectArchiveStory(id: number) {
+  if (creating.value) return
+  if (selectedStoryId.value !== id) entrySubmissionAttempted.value = false
+  selectedStoryId.value = id
+  archiveError.value = ''
+}
+
+function toggleArchiveTag(id: number) {
+  if (archiveTargetLocked.value) return
+  selectedTagIds.value = selectedTagIds.value.includes(id)
+    ? selectedTagIds.value.filter(tagId => tagId !== id)
+    : [...selectedTagIds.value, id]
+}
+
+async function handleArchive(records: ChatRecord[]) {
+  resetCreateDialog()
+  pendingRecords.value = records
+  newStoryTitle.value = suggestedArchiveTitle(records)
   showCreateModal.value = true
   // 加载用户剧情列表供追加选择
   loadUserStories()
@@ -300,33 +482,22 @@ async function handleArchive(records: ChatRecord[]) {
 // 将待归档记录转换为条目请求
 function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest[] {
   return records.map(record => {
-    const trp3 = record.sender.trp3
-    let speaker: string
+    let speaker = archiveRecordSpeaker(record)
     let type: string = 'dialogue'
     let channel: string = record.channel
     let isNpc: boolean = false
-    let content = record.content
+    const content = archiveRecordContent(record)
 
     if (record.event || record.mark === 'S') {
-      speaker = ''
       type = 'narration'
       channel = 'SYSTEM'
-      content = buildIdentityEventContent(record)
     } else if (record.mark === 'N' && record.npc) {
-      speaker = record.npc
       isNpc = true
       if (record.nt) {
         channel = record.nt.toUpperCase()
       }
     } else if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
-      speaker = ''
       type = 'narration'
-      content = stripNpcPrefix(content)
-    } else {
-      const historicalName = snapshotDisplayName(record.profile_snapshot)
-      speaker = historicalName || (trp3?.FN
-        ? (trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
-        : record.sender.gameID.split('-')[0])
     }
 
     const isIdentityEvent = Boolean(record.event) || record.mark === 'S'
@@ -335,7 +506,7 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
       source_id: `chat_${record.record_key}`,
       type: type,
       speaker: speaker,
-      content: cleanTRP3Content(content),
+      content,
       channel: channel,
       timestamp: new Date(record.timestamp * 1000).toISOString(),
       ref_id: isIdentityEvent ? undefined : record.ref_id,
@@ -347,67 +518,120 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
 }
 
 async function handleCreateStory() {
-  // 创建模式需要标题，追加模式需要选择剧情
-  if (archiveMode.value === 'create' && !newStoryTitle.value.trim()) return
-  if (archiveMode.value === 'append' && !selectedStoryId.value) return
+  archiveError.value = ''
+  archiveWarning.value = ''
+  const title = newStoryTitle.value.trim()
+  if (archiveMode.value === 'create' && !title) {
+    archiveError.value = t('archives.modal.titleRequired')
+    return
+  }
+  if (title.length > 256) {
+    archiveError.value = t('archives.modal.titleTooLong')
+    return
+  }
+  if (newStoryRegion.value.trim().length > 128) {
+    archiveError.value = t('archives.modal.regionTooLong')
+    return
+  }
+  if (newStoryAddress.value.trim().length > 256) {
+    archiveError.value = t('archives.modal.addressTooLong')
+    return
+  }
+  if (archiveMode.value === 'append' && !selectedStoryId.value) {
+    archiveError.value = t('archives.modal.targetRequired')
+    return
+  }
 
+  const entries = buildEntriesFromRecords(pendingRecords.value)
+  if (entries.some(entry => !entry.content.trim())) {
+    archiveError.value = t('archives.modal.emptyRecordWarning', { count: archiveSummary.value.emptyEntryCount })
+    return
+  }
+
+  let failedTagCount = 0
+  let skippedDuplicateCount = 0
   creating.value = true
   try {
     let storyId: number
+    let targetTitle = ''
 
     if (archiveMode.value === 'create') {
-      // 创建新剧情
-      const story = await createStory({
-        title: newStoryTitle.value,
-        description: newStoryDesc.value,
-        region: newStoryRegion.value.trim(),
-        address: newStoryAddress.value.trim(),
-      })
-      storyId = story.id
+      if (createdArchiveStoryId.value) {
+        storyId = createdArchiveStoryId.value
+        targetTitle = title
+      } else {
+        archiveStage.value = 'creating'
+        const story = await createStory({
+          title,
+          description: newStoryDesc.value,
+          region: newStoryRegion.value.trim(),
+          address: newStoryAddress.value.trim(),
+        })
+        storyId = story.id
+        targetTitle = story.title || title
+        createdArchiveStoryId.value = story.id
+      }
 
-      // 添加选中的标签
-      if (selectedTagIds.value.length > 0) {
-        for (const tagId of selectedTagIds.value) {
+      const missingTagIds = selectedTagIds.value.filter(tagId => !appliedArchiveTagIds.value.includes(tagId))
+      if (missingTagIds.length > 0) {
+        archiveStage.value = 'tagging'
+        for (const tagId of missingTagIds) {
           try {
             await addStoryTag(storyId, tagId)
+            appliedArchiveTagIds.value = [...appliedArchiveTagIds.value, tagId]
           } catch (e) {
             console.error('添加标签失败:', e)
+            failedTagCount += 1
           }
         }
       }
     } else {
-      // 追加到已有剧情
       storyId = selectedStoryId.value!
+      targetTitle = selectedExistingStory.value?.title || ''
     }
 
-    // 添加待归档记录到剧情
-    if (pendingRecords.value.length > 0) {
-      const entries = buildEntriesFromRecords(pendingRecords.value)
-      await addStoryEntries(storyId, entries)
+    let entriesToSubmit = entries
+    if (entries.length > 0 && entrySubmissionAttempted.value) {
+      archiveStage.value = 'checking'
+      const existing = await getStory(storyId)
+      const existingSourceIds = new Set(existing.entries.map(entry => entry.source_id).filter(Boolean))
+      entriesToSubmit = entries.filter(entry => !entry.source_id || !existingSourceIds.has(entry.source_id))
+      skippedDuplicateCount = entries.length - entriesToSubmit.length
+    }
 
-      // 从待归档池移除已归档的记录
+    if (entriesToSubmit.length > 0) {
+      archiveStage.value = 'entries'
+      entrySubmissionAttempted.value = true
+      await addStoryEntries(storyId, entriesToSubmit)
+    }
+
+    if (pendingRecords.value.length > 0) {
+      archiveStage.value = 'finalizing'
       const archivedRecordKeys = pendingRecords.value.map(record => record.record_key)
       stagingPoolRef.value?.removeArchivedRecords?.(archivedRecordKeys)
-      pendingRecords.value = []
     }
 
-    // 重置表单
+    recentArchiveStoryId.value = storyId
+    localStorage.setItem(RECENT_ARCHIVE_STORY_KEY, String(storyId))
+    const archivedCount = pendingRecords.value.length
     showCreateModal.value = false
-    newStoryTitle.value = ''
-    newStoryDesc.value = ''
-    newStoryRegion.value = ''
-    newStoryAddress.value = ''
-    selectedTagIds.value = []
-    selectedStoryId.value = null
-    archiveMode.value = 'create'
+    resetCreateDialog()
     activeTab.value = 'stories'
 
-    // 刷新剧情列表
     storyListRef.value?.loadStories?.()
+    toast.success(archivedCount > 0
+      ? t('archives.modal.archiveSuccess', { count: archivedCount, title: targetTitle })
+      : t('archives.modal.createSuccess', { title: targetTitle }))
+    if (failedTagCount > 0) toast.info(t('archives.modal.tagsPartialFailed', { count: failedTagCount }))
+    if (skippedDuplicateCount > 0) toast.info(t('archives.modal.duplicatesSkipped', { count: skippedDuplicateCount }))
   } catch (e) {
     console.error('归档失败:', e)
+    const stage = archiveStageText.value || t('archives.modal.archiveStage.entries')
+    archiveError.value = t('archives.modal.archiveFailedAt', { stage })
+    toast.error(archiveError.value)
   } finally {
     creating.value = false
+    archiveStage.value = 'idle'
   }
 }
 
@@ -424,7 +648,7 @@ function handleViewStory(id: number) {
         <h1>{{ $t('archives.pageTitle') }}</h1>
         <p>{{ $t('archives.pageSubtitle') }}</p>
       </div>
-      <button class="btn-create" @click="showCreateModal = true">
+      <button class="btn-create" @click="openCreateStoryModal">
         <i class="ri-add-line"></i> {{ $t('archives.action.createNew') }}
       </button>
     </div>
@@ -514,48 +738,94 @@ function handleViewStory(id: number) {
         <StagingPool ref="stagingPoolRef" @archive="handleArchive" />
       </RTabPane>
       <RTabPane name="stories" :label="$t('archives.tabs.stories')">
-        <StoryList ref="storyListRef" :initialFilter="storyFilter" @create="showCreateModal = true" @view="handleViewStory" />
+        <StoryList ref="storyListRef" :initialFilter="storyFilter" @create="openCreateStoryModal" @view="handleViewStory" />
       </RTabPane>
     </RTabs>
+    </template>
 
     <!-- 创建/追加剧情对话框 -->
-    <RModal v-model="showCreateModal" :title="pendingRecords.length > 0 ? $t('archives.modal.archiveTitle') : $t('archives.modal.createTitle')" width="480px">
+    <RModal
+      v-model="showCreateModal"
+      :title="pendingRecords.length > 0 ? $t('archives.modal.archiveTitle') : $t('archives.modal.createTitle')"
+      width="680px"
+      :closable="!archiveDismissLocked"
+      :mask-closable="!archiveDismissLocked"
+      @close="closeCreateStoryModal"
+    >
       <div class="create-form">
+        <section v-if="pendingRecords.length > 0" class="archive-manifest" aria-live="polite">
+          <div class="manifest-heading">
+            <span class="manifest-seal"><i class="ri-archive-drawer-line"></i></span>
+            <div>
+              <strong>{{ $t('archives.modal.archiveManifest') }}</strong>
+              <span>{{ archiveTimeRange }}</span>
+            </div>
+            <b>{{ $t('archives.modal.recordUnit', { count: archiveSummary.count }) }}</b>
+          </div>
+          <div class="manifest-rule">
+            <span>{{ $t('archives.modal.speakerSummary', { count: archiveSummary.speakerNames.length }) }}</span>
+            <span>{{ $t('archives.modal.channelSummary', { count: archiveSummary.channelCount }) }}</span>
+            <span v-if="archiveSummary.identityEventCount > 0">
+              {{ $t('archives.modal.identitySummary', { count: archiveSummary.identityEventCount }) }}
+            </span>
+          </div>
+          <p v-if="archiveSummary.speakerNames.length > 0" class="manifest-speakers">
+            {{ archiveSummary.speakerNames.slice(0, 5).join(' · ') }}
+            <span v-if="archiveSummary.speakerNames.length > 5">+{{ archiveSummary.speakerNames.length - 5 }}</span>
+          </p>
+          <p v-if="archiveSummary.isLarge" class="archive-notice warning">
+            <i class="ri-timer-line"></i>{{ $t('archives.modal.largeArchiveWarning', { count: archiveSummary.count }) }}
+          </p>
+          <p v-if="archiveSummary.emptyEntryCount > 0" class="archive-notice danger">
+            <i class="ri-error-warning-line"></i>{{ $t('archives.modal.emptyRecordWarning', { count: archiveSummary.emptyEntryCount }) }}
+          </p>
+        </section>
+
         <!-- 模式切换（仅在有待归档记录时显示） -->
         <div v-if="pendingRecords.length > 0" class="mode-switcher">
           <button
             class="mode-btn"
             :class="{ active: archiveMode === 'create' }"
-            @click="archiveMode = 'create'"
+            :disabled="archiveTargetLocked"
+            @click="setArchiveMode('create')"
           >
             <i class="ri-add-line"></i> {{ $t('archives.mode.createNew') }}
           </button>
           <button
             class="mode-btn"
             :class="{ active: archiveMode === 'append' }"
-            @click="archiveMode = 'append'"
+            :disabled="archiveTargetLocked"
+            @click="setArchiveMode('append')"
           >
             <i class="ri-file-add-line"></i> {{ $t('archives.mode.appendExisting') }}
           </button>
         </div>
 
+        <p v-if="createdArchiveStoryId" class="archive-recovery-note">
+          <i class="ri-shield-check-line"></i>
+          {{ $t('archives.modal.safeRetryTarget', { id: createdArchiveStoryId }) }}
+        </p>
+
         <!-- 创建模式：显示标题、描述、标签 -->
         <template v-if="archiveMode === 'create'">
           <div class="form-field">
             <label>{{ $t('archives.modal.storyTitle') }}</label>
-            <RInput v-model="newStoryTitle" :placeholder="$t('archives.modal.storyTitlePlaceholder')" />
+            <RInput v-model="newStoryTitle" :disabled="archiveTargetLocked" :placeholder="$t('archives.modal.storyTitlePlaceholder')" />
+            <span class="field-count" :class="{ invalid: newStoryTitle.length > 256 }">{{ newStoryTitle.length }}/256</span>
           </div>
           <div class="form-field">
             <label>{{ $t('archives.modal.storyDesc') }}</label>
-            <textarea v-model="newStoryDesc" :placeholder="$t('archives.modal.storyDescPlaceholder')" rows="3"></textarea>
+            <textarea v-model="newStoryDesc" :disabled="archiveTargetLocked" :placeholder="$t('archives.modal.storyDescPlaceholder')" rows="3"></textarea>
           </div>
           <div class="form-field">
             <label>{{ $t('archives.modal.storyRegion') }}</label>
-            <RInput v-model="newStoryRegion" :placeholder="$t('archives.modal.storyRegionPlaceholder')" />
+            <RInput v-model="newStoryRegion" :disabled="archiveTargetLocked" :placeholder="$t('archives.modal.storyRegionPlaceholder')" />
+            <span class="field-count" :class="{ invalid: newStoryRegion.trim().length > 128 }">{{ newStoryRegion.trim().length }}/128</span>
           </div>
           <div class="form-field">
             <label>{{ $t('archives.modal.storyAddress') }}</label>
-            <RInput v-model="newStoryAddress" :placeholder="$t('archives.modal.storyAddressPlaceholder')" />
+            <RInput v-model="newStoryAddress" :disabled="archiveTargetLocked" :placeholder="$t('archives.modal.storyAddressPlaceholder')" />
+            <span class="field-count" :class="{ invalid: newStoryAddress.trim().length > 256 }">{{ newStoryAddress.trim().length }}/256</span>
           </div>
           <div class="form-field">
             <label>{{ $t('archives.modal.addTags') }}</label>
@@ -566,7 +836,8 @@ function handleViewStory(id: number) {
                 class="tag-option"
                 :class="{ selected: selectedTagIds.includes(tag.id) }"
                 :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: 'var(--color-text-light)' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
-                @click="selectedTagIds.includes(tag.id) ? selectedTagIds = selectedTagIds.filter(id => id !== tag.id) : selectedTagIds.push(tag.id)"
+                :aria-disabled="archiveTargetLocked"
+                @click="toggleArchiveTag(tag.id)"
               >
                 {{ tag.name }}
               </span>
@@ -578,39 +849,67 @@ function handleViewStory(id: number) {
         <template v-else>
           <div class="form-field">
             <label>{{ $t('archives.modal.selectStory') }}</label>
+            <RInput
+              v-model="storySearch"
+              type="search"
+              clearable
+              :disabled="creating"
+              :placeholder="$t('archives.modal.storySearchPlaceholder')"
+            />
             <div v-if="loadingStories" class="loading-stories">
               <i class="ri-loader-4-line spinning"></i> {{ $t('archives.status.loading') }}
             </div>
             <div v-else-if="userStories.length === 0" class="no-stories">
               {{ $t('archives.empty.noStories') }}
             </div>
+            <div v-else-if="filteredUserStories.length === 0" class="no-stories">
+              {{ $t('archives.modal.noMatchingStories') }}
+            </div>
             <div v-else class="story-selector">
-              <div
-                v-for="story in userStories"
+              <button
+                v-for="story in displayedUserStories"
                 :key="story.id"
+                type="button"
                 class="story-option"
                 :class="{ selected: selectedStoryId === story.id }"
-                @click="selectedStoryId = story.id"
+                :disabled="creating"
+                @click="selectArchiveStory(story.id)"
               >
-                <div class="story-option-title">{{ story.title }}</div>
-                <div class="story-option-meta">
-                  {{ $t('archives.modal.updatedAt', { date: new Date(story.updated_at).toLocaleDateString() }) }}
+                <div class="story-option-title">
+                  <span>{{ story.title }}</span>
+                  <em v-if="story.id === recentArchiveStoryId">{{ $t('archives.modal.recentTarget') }}</em>
                 </div>
-              </div>
+                <div class="story-option-meta">
+                  <span>{{ $t('archives.modal.entryCount', { count: story.entry_count || 0 }) }}</span>
+                  <span>{{ $t('archives.modal.updatedAt', { date: new Date(story.updated_at).toLocaleDateString() }) }}</span>
+                </div>
+                <div v-if="story.tag_list?.length" class="story-option-tags">
+                  <span v-for="tag in story.tag_list.slice(0, 3)" :key="tag.name">{{ tag.name }}</span>
+                </div>
+              </button>
+              <p v-if="hiddenStoryOptionCount > 0" class="story-options-limited">
+                {{ $t('archives.modal.storyOptionsLimited', { count: hiddenStoryOptionCount }) }}
+              </p>
             </div>
           </div>
         </template>
 
-        <p v-if="pendingRecords.length > 0" class="pending-info">
-          {{ $t('archives.modal.pendingRecords', { count: pendingRecords.length }) }}
+        <p v-if="archiveWarning" class="archive-notice warning">
+          <i class="ri-information-line"></i>{{ archiveWarning }}
+        </p>
+        <p v-if="archiveError" class="archive-notice danger" role="alert">
+          <i class="ri-error-warning-line"></i>{{ archiveError }}
+        </p>
+        <p v-if="creating && archiveStageText" class="archive-progress" aria-live="polite">
+          <i class="ri-loader-4-line spinning"></i>{{ archiveStageText }}
         </p>
       </div>
       <template #footer>
-        <RButton @click="showCreateModal = false">{{ $t('archives.action.cancel') }}</RButton>
+        <RButton type="outline" :disabled="archiveDismissLocked" @click="closeCreateStoryModal">{{ $t('archives.action.cancel') }}</RButton>
         <RButton
           type="primary"
           :loading="creating"
-          :disabled="archiveMode === 'append' && !selectedStoryId"
+          :disabled="archiveSubmitDisabled"
           @click="handleCreateStory"
         >
           {{ archiveMode === 'create' ? $t('archives.action.create') : $t('archives.action.append') }}
@@ -627,7 +926,6 @@ function handleViewStory(id: number) {
 
     <!-- 插件更新提示 -->
     <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonStatus" />
-    </template>
   </div>
 </template>
 
@@ -866,6 +1164,78 @@ function handleViewStory(id: number) {
   gap: 16px;
 }
 
+.archive-manifest {
+  position: relative;
+  overflow: hidden;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--color-border, #d1bfa8);
+  border-left: 4px solid var(--color-accent, #B87333);
+  border-radius: 10px;
+  color: var(--color-primary, #4B3621);
+  background:
+    repeating-linear-gradient(0deg, transparent 0 29px, color-mix(in srgb, var(--color-border, #d1bfa8) 42%, transparent) 30px),
+    color-mix(in srgb, var(--color-panel-bg, #fff) 90%, var(--color-accent, #B87333));
+}
+
+.manifest-heading {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.manifest-heading > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.manifest-heading strong {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
+.manifest-heading span,
+.manifest-rule,
+.manifest-speakers {
+  color: var(--color-text-secondary, #856a52);
+  font-size: 12px;
+}
+
+.manifest-heading b {
+  color: var(--color-accent, #B87333);
+  font-family: ui-monospace, 'Consolas', monospace;
+  font-size: 15px;
+}
+
+.manifest-seal {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--color-accent, #B87333) 55%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-accent, #B87333) 13%, transparent);
+  color: var(--color-accent, #B87333) !important;
+  font-size: 18px !important;
+}
+
+.manifest-rule {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed color-mix(in srgb, var(--color-border, #d1bfa8) 75%, transparent);
+}
+
+.manifest-speakers {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
@@ -880,6 +1250,19 @@ function handleViewStory(id: number) {
   font-size: 14px;
   font-weight: 500;
   color: var(--color-primary, #4B3621);
+}
+
+.field-count {
+  align-self: flex-end;
+  margin-top: -3px;
+  color: var(--color-text-secondary, #856a52);
+  font-size: 11px;
+  font-family: ui-monospace, 'Consolas', monospace;
+}
+
+.field-count.invalid {
+  color: var(--color-danger, #b42318);
+  font-weight: 700;
 }
 
 .form-field textarea {
@@ -898,6 +1281,48 @@ function handleViewStory(id: number) {
   outline: none;
   border-color: var(--color-accent, #B87333);
   box-shadow: 0 0 0 2px var(--color-primary-light, rgba(184, 115, 51, 0.1));
+}
+
+.form-field textarea:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+  background: var(--color-card-bg, #f5efe7);
+}
+
+.archive-notice,
+.archive-progress,
+.archive-recovery-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.archive-notice.warning {
+  margin-top: 10px;
+  color: var(--color-warning-dark, #8a4b08);
+  background: color-mix(in srgb, var(--color-warning, #d69028) 12%, transparent);
+}
+
+.archive-notice.danger {
+  margin-top: 10px;
+  color: var(--color-danger, #a3342d);
+  background: color-mix(in srgb, var(--color-danger, #a3342d) 10%, transparent);
+}
+
+.archive-progress,
+.archive-recovery-note {
+  color: var(--color-secondary, #804030);
+  background: color-mix(in srgb, var(--color-accent, #B87333) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent, #B87333) 28%, transparent);
+}
+
+.archive-recovery-note i {
+  color: var(--color-success, #4f7a50);
 }
 
 .pending-info {
@@ -1102,6 +1527,11 @@ function handleViewStory(id: number) {
   font-weight: 600;
 }
 
+.tag-option[aria-disabled='true'] {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 /* 模式切换器 */
 .mode-switcher {
   display: flex;
@@ -1137,6 +1567,11 @@ function handleViewStory(id: number) {
   color: var(--color-text-light, #fff);
 }
 
+.mode-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* 剧情选择器 */
 .story-selector {
   max-height: 240px;
@@ -1146,8 +1581,14 @@ function handleViewStory(id: number) {
 }
 
 .story-option {
+  display: block;
+  width: 100%;
   padding: 12px 14px;
+  border: none;
   cursor: pointer;
+  background: transparent;
+  text-align: left;
+  color: inherit;
   border-bottom: 1px solid var(--color-border-light, #f0e6dc);
   transition: background 0.2s;
 }
@@ -1165,16 +1606,63 @@ function handleViewStory(id: number) {
   border-left: 3px solid var(--color-accent, #B87333);
 }
 
+.story-option:disabled {
+  cursor: wait;
+}
+
 .story-option-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 14px;
   font-weight: 500;
   color: var(--color-primary, #4B3621);
   margin-bottom: 4px;
 }
 
+.story-option-title em {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent, #B87333) 13%, transparent);
+  color: var(--color-accent, #B87333);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
 .story-option-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
   font-size: 12px;
   color: var(--color-text-secondary, #856a52);
+}
+
+.story-option-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.story-option-tags span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-card-bg, #f5efe7);
+  color: var(--color-text-secondary, #856a52);
+  font-size: 10px;
+}
+
+.story-options-limited {
+  margin: 0;
+  padding: 9px 12px;
+  border-top: 1px solid var(--color-border-light, #f0e6dc);
+  color: var(--color-text-secondary, #856a52);
+  background: var(--color-card-bg, #f5efe7);
+  font-size: 11px;
+  text-align: center;
 }
 
 .loading-stories,
@@ -1192,5 +1680,23 @@ function handleViewStory(id: number) {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .manifest-heading {
+    grid-template-columns: auto 1fr;
+  }
+
+  .manifest-heading b {
+    grid-column: 2;
+  }
+
+  .mode-switcher {
+    flex-direction: column;
+  }
+
+  .story-selector {
+    max-height: 210px;
+  }
 }
 </style>

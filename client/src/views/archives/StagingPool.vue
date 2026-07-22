@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import RButton from '@/components/RButton.vue'
@@ -21,7 +21,13 @@ interface ProfileOption {
   name: string
   detail: string
   legacy: boolean
+  count: number
 }
+
+type RecordKind = 'dialogue' | 'npc' | 'background' | 'identity'
+type SortDirection = 'newest' | 'oldest'
+
+const recordKinds: RecordKind[] = ['dialogue', 'npc', 'background', 'identity']
 
 const emit = defineEmits<{
   archive: [records: ChatRecord[]]
@@ -33,16 +39,25 @@ const accounts = ref<AccountChatLogs[]>([])
 const selectedRecords = ref<Set<string>>(new Set())
 const expandedDates = ref<Set<string>>(new Set())
 const expandedHours = ref<Set<string>>(new Set())
+const hourRenderLimits = ref<Map<string, number>>(new Map())
 
 const filterSearch = ref('')
 const filterStartDate = ref('')
 const filterEndDate = ref('')
+const filterAccounts = ref<Set<string>>(new Set())
+const filterRecordKinds = ref<Set<RecordKind>>(new Set())
 const filterChannels = ref<Set<string>>(new Set())
 const filterSenderProfiles = ref<Set<string>>(new Set())
 const filterListenerProfiles = ref<Set<string>>(new Set())
+const senderProfileSearch = ref('')
+const listenerProfileSearch = ref('')
+const sortDirection = ref<SortDirection>('newest')
+const selectionAnchor = ref('')
 
 const ARCHIVED_KEYS_STORAGE = 'rpbox_archived_record_keys_v2'
 const LEGACY_ARCHIVED_STORAGE = 'archived_timestamps'
+const HOUR_RECORD_BATCH_SIZE = 120
+const PROFILE_OPTION_RENDER_LIMIT = 160
 
 function readStoredSet<T>(key: string): Set<T> {
   try {
@@ -104,6 +119,16 @@ function normalizeAccounts(logs: AccountChatLogs[]): AccountChatLogs[] {
 }
 
 const allRecords = computed(() => accounts.value.flatMap(account => account.records))
+const unarchivedRecords = computed(() => allRecords.value
+  .filter(record => !archivedRecordKeys.value.has(record.record_key)))
+
+const availableAccounts = computed(() => accounts.value
+  .map(account => ({
+    id: account.account_id,
+    count: account.records.filter(record => !archivedRecordKeys.value.has(record.record_key)).length,
+  }))
+  .filter(account => account.count > 0)
+  .sort((a, b) => a.id.localeCompare(b.id)))
 
 function getSelectedRecords(): ChatRecord[] {
   return visibleRecords.value
@@ -117,6 +142,7 @@ function getSelectedRecords(): ChatRecord[] {
 
 function clearSelection() {
   selectedRecords.value = new Set()
+  selectionAnchor.value = ''
 }
 
 function removeArchivedRecords(recordKeys: string[]) {
@@ -204,19 +230,27 @@ function optionFromRecord(record: ChatRecord, key: string): ProfileOption {
         || (record.identity_source === 'game_id' ? t('archives.staging.noProfileCard') : ''),
     ].filter(Boolean).join(' · '),
     legacy: record.identity_source !== 'snapshot',
+    count: 1,
   }
 }
 
 function mergeProfileOption(map: Map<string, ProfileOption>, option: ProfileOption) {
   const current = map.get(option.key)
-  if (!current || (current.legacy && !option.legacy) || (!current.detail && option.detail)) {
+  if (!current) {
     map.set(option.key, option)
+    return
+  }
+  const count = current.count + option.count
+  if ((current.legacy && !option.legacy) || (!current.detail && option.detail)) {
+    map.set(option.key, { ...option, count })
+  } else {
+    map.set(option.key, { ...current, count })
   }
 }
 
 const availableSenderProfiles = computed(() => {
   const profiles = new Map<string, ProfileOption>()
-  for (const record of allRecords.value) {
+  for (const record of unarchivedRecords.value) {
     for (const key of senderProfileKeys(record)) {
       if (record.event) {
         const endpoint = [record.event.from, record.event.to]
@@ -230,6 +264,7 @@ const availableSenderProfiles = computed(() => {
               endpoint.ref_id,
             ].filter(Boolean).join(' · '),
             legacy: false,
+            count: 1,
           })
         } else {
           mergeProfileOption(profiles, optionFromRecord(record, key))
@@ -244,9 +279,12 @@ const availableSenderProfiles = computed(() => {
 
 const availableListenerProfiles = computed(() => {
   const profiles = new Map<string, ProfileOption>()
-  for (const record of allRecords.value) {
+  for (const record of unarchivedRecords.value) {
+    const seen = new Set<string>()
     for (const listener of record.listeners || []) {
       const key = listenerProfileKey(listener)
+      if (seen.has(key)) continue
+      seen.add(key)
       const name = snapshotDisplayName(listener.snapshot)
         || cleanWowText(listener.gameID.split('-')[0] || listener.gameID)
       const profileName = cleanWowText(listener.snapshot?.pn || '')
@@ -258,11 +296,31 @@ const availableListenerProfiles = computed(() => {
           listener.profileID || '',
         ].filter(Boolean).join(' · '),
         legacy: !listener.snapshot_id,
+        count: 1,
       })
     }
   }
   return [...profiles.values()].sort((a, b) => a.name.localeCompare(b.name))
 })
+
+function profileMatchesSearch(profile: ProfileOption, search: string): boolean {
+  const query = search.trim().toLocaleLowerCase()
+  if (!query) return true
+  return [profile.name, profile.detail, profile.key]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase()
+    .includes(query)
+}
+
+const filteredSenderProfiles = computed(() => availableSenderProfiles.value
+  .filter(profile => profileMatchesSearch(profile, senderProfileSearch.value)))
+const filteredListenerProfiles = computed(() => availableListenerProfiles.value
+  .filter(profile => profileMatchesSearch(profile, listenerProfileSearch.value)))
+const visibleSenderProfiles = computed(() => filteredSenderProfiles.value.slice(0, PROFILE_OPTION_RENDER_LIMIT))
+const visibleListenerProfiles = computed(() => filteredListenerProfiles.value.slice(0, PROFILE_OPTION_RENDER_LIMIT))
+const hiddenSenderProfileCount = computed(() => Math.max(0, filteredSenderProfiles.value.length - visibleSenderProfiles.value.length))
+const hiddenListenerProfileCount = computed(() => Math.max(0, filteredListenerProfiles.value.length - visibleListenerProfiles.value.length))
 
 function localDateKey(timestamp: number): string {
   const date = new Date(timestamp * 1000)
@@ -270,6 +328,54 @@ function localDateKey(timestamp: number): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function inputDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function recordKind(record: ChatRecord): RecordKind {
+  if (record.event || record.mark === 'S') return 'identity'
+  if (record.mark === 'N' && record.npc) return 'npc'
+  if (record.mark === 'B' || record.mark === 'N') return 'background'
+  return 'dialogue'
+}
+
+const dateRangeInvalid = computed(() => Boolean(
+  filterStartDate.value
+  && filterEndDate.value
+  && filterStartDate.value > filterEndDate.value,
+))
+
+const activeDatePreset = computed<'today' | 'week' | 'all' | 'custom'>(() => {
+  const today = new Date()
+  const todayKey = inputDateKey(today)
+  const weekStart = new Date(today)
+  weekStart.setDate(weekStart.getDate() - 6)
+  if (!filterStartDate.value && !filterEndDate.value) return 'all'
+  if (filterStartDate.value === todayKey && filterEndDate.value === todayKey) return 'today'
+  if (filterStartDate.value === inputDateKey(weekStart) && filterEndDate.value === todayKey) return 'week'
+  return 'custom'
+})
+
+function setDatePreset(preset: 'today' | 'week' | 'all') {
+  if (preset === 'all') {
+    filterStartDate.value = ''
+    filterEndDate.value = ''
+    return
+  }
+  const today = new Date()
+  filterEndDate.value = inputDateKey(today)
+  if (preset === 'today') {
+    filterStartDate.value = filterEndDate.value
+    return
+  }
+  const weekStart = new Date(today)
+  weekStart.setDate(weekStart.getDate() - 6)
+  filterStartDate.value = inputDateKey(weekStart)
 }
 
 function recordSearchText(record: ChatRecord): string {
@@ -299,9 +405,12 @@ const groupedRecords = computed(() => {
 
   for (const record of allRecords.value) {
     if (archivedRecordKeys.value.has(record.record_key)) continue
+    if (dateRangeInvalid.value) continue
     const dateStr = localDateKey(record.timestamp)
     if (filterStartDate.value && dateStr < filterStartDate.value) continue
     if (filterEndDate.value && dateStr > filterEndDate.value) continue
+    if (filterAccounts.value.size > 0 && !filterAccounts.value.has(record.account_id)) continue
+    if (filterRecordKinds.value.size > 0 && !filterRecordKinds.value.has(recordKind(record))) continue
     if (filterChannels.value.size > 0 && !filterChannels.value.has(normalizeChannel(record.channel))) continue
     if (!matchesSet(senderProfileKeys(record), filterSenderProfiles.value)) continue
 
@@ -320,9 +429,13 @@ const groupedRecords = computed(() => {
   for (const date of Object.values(groups)) {
     for (const records of Object.values(date)) {
       records.sort((a, b) => (
-        b.timestamp - a.timestamp
-        || (b.sequence ?? 0) - (a.sequence ?? 0)
-        || b.record_key.localeCompare(a.record_key)
+        (sortDirection.value === 'newest' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp)
+        || (sortDirection.value === 'newest'
+          ? (b.sequence ?? 0) - (a.sequence ?? 0)
+          : (a.sequence ?? 0) - (b.sequence ?? 0))
+        || (sortDirection.value === 'newest'
+          ? b.record_key.localeCompare(a.record_key)
+          : a.record_key.localeCompare(b.record_key))
       ))
     }
   }
@@ -331,25 +444,50 @@ const groupedRecords = computed(() => {
 
 const totalRecords = computed(() => Object.values(groupedRecords.value)
   .reduce((total, date) => total + Object.values(date).flat().length, 0))
-const visibleRecords = computed(() => Object.values(groupedRecords.value)
-  .flatMap(date => Object.values(date).flat()))
-const unarchivedRecordCount = computed(() => allRecords.value
-  .filter(record => !archivedRecordKeys.value.has(record.record_key)).length)
+const orderedDates = computed(() => Object.keys(groupedRecords.value)
+  .sort((a, b) => sortDirection.value === 'newest' ? b.localeCompare(a) : a.localeCompare(b)))
+
+function orderedHours(date: string): string[] {
+  return Object.keys(groupedRecords.value[date] || {})
+    .sort((a, b) => sortDirection.value === 'newest' ? b.localeCompare(a) : a.localeCompare(b))
+}
+
+const visibleRecords = computed(() => orderedDates.value.flatMap(date => (
+  orderedHours(date).flatMap(hour => groupedRecords.value[date][hour])
+)))
+const renderedVisibleRecords = computed(() => orderedDates.value.flatMap((date) => {
+  if (!expandedDates.value.has(date)) return []
+  return orderedHours(date).flatMap((hour) => {
+    if (!expandedHours.value.has(`${date}-${hour}`)) return []
+    return renderedHourRecords(date, hour)
+  })
+}))
+const unarchivedRecordCount = computed(() => unarchivedRecords.value.length)
 const selectedCount = computed(() => getSelectedRecords().length)
 const activeFilterCount = computed(() => (
   Number(Boolean(filterSearch.value.trim()))
   + Number(Boolean(filterStartDate.value))
   + Number(Boolean(filterEndDate.value))
+  + filterAccounts.value.size
+  + filterRecordKinds.value.size
   + filterChannels.value.size
   + filterSenderProfiles.value.size
   + filterListenerProfiles.value.size
 ))
 
-function toggledSet(current: Set<string>, value: string): Set<string> {
+function toggledSet<T>(current: Set<T>, value: T): Set<T> {
   const next = new Set(current)
   if (next.has(value)) next.delete(value)
   else next.add(value)
   return next
+}
+
+function toggleAccount(value: string) {
+  filterAccounts.value = toggledSet(filterAccounts.value, value)
+}
+
+function toggleRecordKind(value: RecordKind) {
+  filterRecordKinds.value = toggledSet(filterRecordKinds.value, value)
 }
 
 function toggleChannel(value: string) {
@@ -370,6 +508,59 @@ function toggleExpandedDate(key: string) {
 
 function toggleExpandedHour(key: string) {
   expandedHours.value = toggledSet(expandedHours.value, key)
+  if (expandedHours.value.has(key) && !hourRenderLimits.value.has(key)) {
+    const next = new Map(hourRenderLimits.value)
+    next.set(key, HOUR_RECORD_BATCH_SIZE)
+    hourRenderLimits.value = next
+  }
+}
+
+function collapseAll() {
+  expandedDates.value = new Set()
+  expandedHours.value = new Set()
+  hourRenderLimits.value = new Map()
+}
+
+function expandFirstMatch() {
+  const date = orderedDates.value[0]
+  if (!date) {
+    collapseAll()
+    return
+  }
+  const hour = orderedHours(date)[0]
+  expandedDates.value = new Set([date])
+  expandedHours.value = hour ? new Set([`${date}-${hour}`]) : new Set()
+  hourRenderLimits.value = hour ? new Map([[`${date}-${hour}`, HOUR_RECORD_BATCH_SIZE]]) : new Map()
+}
+
+function renderedHourRecords(date: string, hour: string): ChatRecord[] {
+  const key = `${date}-${hour}`
+  return getHourRecords(date, hour).slice(0, hourRenderLimits.value.get(key) || HOUR_RECORD_BATCH_SIZE)
+}
+
+function hiddenHourRecordCount(date: string, hour: string): number {
+  return Math.max(0, getHourRecords(date, hour).length - renderedHourRecords(date, hour).length)
+}
+
+function loadMoreHourRecords(date: string, hour: string) {
+  const key = `${date}-${hour}`
+  const next = new Map(hourRenderLimits.value)
+  next.set(key, (next.get(key) || HOUR_RECORD_BATCH_SIZE) + HOUR_RECORD_BATCH_SIZE)
+  hourRenderLimits.value = next
+}
+
+function selectAllMatches() {
+  selectedRecords.value = new Set(visibleRecords.value.map(record => record.record_key))
+  selectionAnchor.value = renderedVisibleRecords.value.at(-1)?.record_key || visibleRecords.value.at(-1)?.record_key || ''
+}
+
+function invertMatchSelection() {
+  const next = new Set<string>()
+  for (const record of visibleRecords.value) {
+    if (!selectedRecords.value.has(record.record_key)) next.add(record.record_key)
+  }
+  selectedRecords.value = next
+  selectionAnchor.value = ''
 }
 
 function archiveSelected() {
@@ -380,9 +571,13 @@ function clearFilters() {
   filterSearch.value = ''
   filterStartDate.value = ''
   filterEndDate.value = ''
+  filterAccounts.value = new Set()
+  filterRecordKinds.value = new Set()
   filterChannels.value = new Set()
   filterSenderProfiles.value = new Set()
   filterListenerProfiles.value = new Set()
+  senderProfileSearch.value = ''
+  listenerProfileSearch.value = ''
 }
 
 async function syncFromPlugin() {
@@ -394,13 +589,7 @@ async function syncFromPlugin() {
     const logs = await invoke<AccountChatLogs[]>('scan_chat_logs', { wowPath })
     accounts.value = normalizeAccounts(logs)
     clearSelection()
-    const dates = Object.keys(groupedRecords.value).sort()
-    if (dates.length > 0) {
-      const lastDate = dates[dates.length - 1]
-      expandedDates.value = new Set([lastDate])
-      const hours = Object.keys(groupedRecords.value[lastDate]).sort()
-      if (hours.length > 0) expandedHours.value = new Set([`${lastDate}-${hours[hours.length - 1]}`])
-    }
+    expandFirstMatch()
   } catch (error) {
     syncError.value = error instanceof Error ? error.message : String(error)
     console.error('同步失败:', error)
@@ -409,11 +598,26 @@ async function syncFromPlugin() {
   }
 }
 
-function toggleRecord(recordKey: string) {
+function toggleRecord(recordKey: string, extendRange = false) {
+  if (extendRange && selectionAnchor.value) {
+    const keys = renderedVisibleRecords.value.map(record => record.record_key)
+    const anchorIndex = keys.indexOf(selectionAnchor.value)
+    const targetIndex = keys.indexOf(recordKey)
+    if (anchorIndex >= 0 && targetIndex >= 0) {
+      const next = new Set(selectedRecords.value)
+      const [start, end] = anchorIndex < targetIndex
+        ? [anchorIndex, targetIndex]
+        : [targetIndex, anchorIndex]
+      for (const key of keys.slice(start, end + 1)) next.add(key)
+      selectedRecords.value = next
+      return
+    }
+  }
   const next = new Set(selectedRecords.value)
   if (next.has(recordKey)) next.delete(recordKey)
   else next.add(recordKey)
   selectedRecords.value = next
+  selectionAnchor.value = recordKey
 }
 
 function getDateRecords(date: string): ChatRecord[] {
@@ -441,7 +645,59 @@ function toggleRecords(records: ChatRecord[]) {
     else next.add(record.record_key)
   }
   selectedRecords.value = next
+  selectionAnchor.value = ''
 }
+
+const filterSignature = computed(() => JSON.stringify({
+  search: filterSearch.value.trim(),
+  start: filterStartDate.value,
+  end: filterEndDate.value,
+  accounts: [...filterAccounts.value].sort(),
+  kinds: [...filterRecordKinds.value].sort(),
+  channels: [...filterChannels.value].sort(),
+  senders: [...filterSenderProfiles.value].sort(),
+  listeners: [...filterListenerProfiles.value].sort(),
+  sort: sortDirection.value,
+}))
+
+watch(filterSignature, () => {
+  const visibleKeys = new Set(visibleRecords.value.map(record => record.record_key))
+  if ([...selectedRecords.value].some(key => !visibleKeys.has(key))) {
+    selectedRecords.value = new Set([...selectedRecords.value].filter(key => visibleKeys.has(key)))
+  }
+  if (selectionAnchor.value && !visibleKeys.has(selectionAnchor.value)) selectionAnchor.value = ''
+  expandFirstMatch()
+}, { flush: 'post' })
+
+watch(
+  () => availableAccounts.value.map(account => account.id).join('\u0000'),
+  () => {
+    const available = new Set(availableAccounts.value.map(account => account.id))
+    if ([...filterAccounts.value].some(account => !available.has(account))) {
+      filterAccounts.value = new Set([...filterAccounts.value].filter(account => available.has(account)))
+    }
+  },
+)
+
+watch(
+  () => availableSenderProfiles.value.map(profile => profile.key).join('\u0000'),
+  () => {
+    const available = new Set(availableSenderProfiles.value.map(profile => profile.key))
+    if ([...filterSenderProfiles.value].some(key => !available.has(key))) {
+      filterSenderProfiles.value = new Set([...filterSenderProfiles.value].filter(key => available.has(key)))
+    }
+  },
+)
+
+watch(
+  () => availableListenerProfiles.value.map(profile => profile.key).join('\u0000'),
+  () => {
+    const available = new Set(availableListenerProfiles.value.map(profile => profile.key))
+    if ([...filterListenerProfiles.value].some(key => !available.has(key))) {
+      filterListenerProfiles.value = new Set([...filterListenerProfiles.value].filter(key => available.has(key)))
+    }
+  },
+)
 
 function stripNpcPrefix(text: string): string {
   if (!text || text.startsWith('|c')) return text
@@ -566,6 +822,32 @@ defineExpose({
 
       <fieldset class="filter-section">
         <legend>{{ t('archives.staging.dateRange') }}</legend>
+        <div class="date-presets" :aria-label="t('archives.staging.quickDateRange')">
+          <button
+            type="button"
+            :class="{ active: activeDatePreset === 'today' }"
+            :aria-pressed="activeDatePreset === 'today'"
+            @click="setDatePreset('today')"
+          >
+            {{ t('archives.staging.today') }}
+          </button>
+          <button
+            type="button"
+            :class="{ active: activeDatePreset === 'week' }"
+            :aria-pressed="activeDatePreset === 'week'"
+            @click="setDatePreset('week')"
+          >
+            {{ t('archives.staging.recentWeek') }}
+          </button>
+          <button
+            type="button"
+            :class="{ active: activeDatePreset === 'all' }"
+            :aria-pressed="activeDatePreset === 'all'"
+            @click="setDatePreset('all')"
+          >
+            {{ t('archives.staging.allDates') }}
+          </button>
+        </div>
         <div class="date-grid">
           <label>
             <span>{{ t('archives.staging.startDate') }}</span>
@@ -575,6 +857,47 @@ defineExpose({
             <span>{{ t('archives.staging.endDate') }}</span>
             <input v-model="filterEndDate" type="date" />
           </label>
+        </div>
+        <p v-if="dateRangeInvalid" class="filter-error" role="alert">
+          {{ t('archives.staging.invalidDateRange') }}
+        </p>
+      </fieldset>
+
+      <fieldset v-if="availableAccounts.length" class="filter-section">
+        <legend>
+          {{ t('archives.staging.gameAccount') }}
+          <small>{{ t('archives.staging.multiSelectOr') }}</small>
+        </legend>
+        <div class="filter-chips account-chips">
+          <button
+            v-for="account in availableAccounts"
+            :key="account.id"
+            type="button"
+            class="filter-chip account-chip"
+            :class="{ active: filterAccounts.has(account.id) }"
+            :aria-pressed="filterAccounts.has(account.id)"
+            @click="toggleAccount(account.id)"
+          >
+            <span>{{ account.id }}</span>
+            <small>{{ account.count }}</small>
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="filter-section">
+        <legend>{{ t('archives.staging.recordType') }}</legend>
+        <div class="filter-chips">
+          <button
+            v-for="kind in recordKinds"
+            :key="kind"
+            type="button"
+            class="filter-chip"
+            :class="{ active: filterRecordKinds.has(kind) }"
+            :aria-pressed="filterRecordKinds.has(kind)"
+            @click="toggleRecordKind(kind)"
+          >
+            {{ t(`archives.staging.recordKind.${kind}`) }}
+          </button>
         </div>
       </fieldset>
 
@@ -600,9 +923,18 @@ defineExpose({
           {{ t('archives.staging.senderProfile') }}
           <small>{{ t('archives.staging.multiSelectOr') }}</small>
         </legend>
-        <div v-if="availableSenderProfiles.length" class="profile-options">
+        <label v-if="availableSenderProfiles.length" class="profile-search">
+          <i class="ri-search-line" aria-hidden="true"></i>
+          <input
+            v-model="senderProfileSearch"
+            type="search"
+            :aria-label="t('archives.staging.searchSenderProfiles')"
+            :placeholder="t('archives.staging.searchProfiles')"
+          />
+        </label>
+        <div v-if="visibleSenderProfiles.length" class="profile-options">
           <button
-            v-for="profile in availableSenderProfiles"
+            v-for="profile in visibleSenderProfiles"
             :key="profile.key"
             type="button"
             class="profile-option"
@@ -613,9 +945,19 @@ defineExpose({
             <span>{{ profile.name }}</span>
             <small v-if="profile.detail">{{ profile.detail }}</small>
             <em v-if="profile.legacy">{{ t('archives.staging.legacyShort') }}</em>
+            <b :title="t('archives.staging.profileRecordCount', { count: profile.count })">
+              {{ profile.count }}
+            </b>
           </button>
         </div>
-        <span v-else class="filter-empty-hint">{{ t('archives.staging.noProfileData') }}</span>
+        <p v-if="hiddenSenderProfileCount > 0" class="filter-empty-hint">
+          {{ t('archives.staging.profileOptionsLimited', { count: hiddenSenderProfileCount }) }}
+        </p>
+        <span v-if="!visibleSenderProfiles.length" class="filter-empty-hint">
+          {{ availableSenderProfiles.length
+            ? t('archives.staging.noProfileMatches')
+            : t('archives.staging.noProfileData') }}
+        </span>
       </fieldset>
 
       <fieldset class="filter-section">
@@ -623,9 +965,18 @@ defineExpose({
           {{ t('archives.staging.listenerProfile') }}
           <small>{{ t('archives.staging.multiSelectOr') }}</small>
         </legend>
-        <div v-if="availableListenerProfiles.length" class="profile-options">
+        <label v-if="availableListenerProfiles.length" class="profile-search">
+          <i class="ri-search-line" aria-hidden="true"></i>
+          <input
+            v-model="listenerProfileSearch"
+            type="search"
+            :aria-label="t('archives.staging.searchListenerProfiles')"
+            :placeholder="t('archives.staging.searchProfiles')"
+          />
+        </label>
+        <div v-if="visibleListenerProfiles.length" class="profile-options">
           <button
-            v-for="profile in availableListenerProfiles"
+            v-for="profile in visibleListenerProfiles"
             :key="profile.key"
             type="button"
             class="profile-option"
@@ -636,9 +987,19 @@ defineExpose({
             <span>{{ profile.name }}</span>
             <small v-if="profile.detail">{{ profile.detail }}</small>
             <em v-if="profile.legacy">{{ t('archives.staging.legacyShort') }}</em>
+            <b :title="t('archives.staging.profileRecordCount', { count: profile.count })">
+              {{ profile.count }}
+            </b>
           </button>
         </div>
-        <span v-else class="filter-empty-hint">{{ t('archives.staging.noListenerData') }}</span>
+        <p v-if="hiddenListenerProfileCount > 0" class="filter-empty-hint">
+          {{ t('archives.staging.profileOptionsLimited', { count: hiddenListenerProfileCount }) }}
+        </p>
+        <span v-if="!visibleListenerProfiles.length" class="filter-empty-hint">
+          {{ availableListenerProfiles.length
+            ? t('archives.staging.noProfileMatches')
+            : t('archives.staging.noListenerData') }}
+        </span>
         <p v-if="filterListenerProfiles.size" class="strict-filter-note">
           {{ t('archives.staging.legacyListenerExcluded') }}
         </p>
@@ -666,6 +1027,42 @@ defineExpose({
         </RButton>
       </header>
 
+      <nav class="ledger-tools" :aria-label="t('archives.staging.batchTools')">
+        <div class="selection-ruler" aria-live="polite">
+          <span>{{ t('archives.staging.matchingScope', { count: totalRecords }) }}</span>
+          <strong>{{ t('archives.staging.selectedCount', { count: selectedCount }) }}</strong>
+        </div>
+        <div class="bulk-actions">
+          <button type="button" :disabled="totalRecords === 0" @click="selectAllMatches">
+            <i class="ri-checkbox-multiple-line" aria-hidden="true"></i>
+            {{ t('archives.staging.selectAllMatches') }}
+          </button>
+          <button type="button" :disabled="totalRecords === 0" @click="invertMatchSelection">
+            <i class="ri-checkbox-indeterminate-line" aria-hidden="true"></i>
+            {{ t('archives.staging.invertMatches') }}
+          </button>
+          <button type="button" :disabled="selectedCount === 0" @click="clearSelection">
+            {{ t('archives.staging.clearSelection') }}
+          </button>
+        </div>
+        <div class="view-actions">
+          <button
+            type="button"
+            :title="t('archives.staging.sortOrder')"
+            @click="sortDirection = sortDirection === 'newest' ? 'oldest' : 'newest'"
+          >
+            <i :class="sortDirection === 'newest' ? 'ri-sort-desc' : 'ri-sort-asc'" aria-hidden="true"></i>
+            {{ sortDirection === 'newest'
+              ? t('archives.staging.newestFirst')
+              : t('archives.staging.oldestFirst') }}
+          </button>
+          <button type="button" @click="collapseAll">
+            <i class="ri-collapse-diagonal-line" aria-hidden="true"></i>
+            {{ t('archives.staging.collapseAll') }}
+          </button>
+        </div>
+      </nav>
+
       <p v-if="syncError" class="sync-error" role="alert">{{ syncError }}</p>
 
       <REmpty
@@ -690,7 +1087,7 @@ defineExpose({
 
       <div v-else class="staging-content">
         <section
-          v-for="date in Object.keys(groupedRecords).sort().reverse()"
+          v-for="date in orderedDates"
           :key="date"
           class="date-group"
         >
@@ -715,7 +1112,7 @@ defineExpose({
 
           <div v-if="expandedDates.has(date)" class="hour-groups">
             <section
-              v-for="hour in Object.keys(groupedRecords[date]).sort().reverse()"
+              v-for="hour in orderedHours(date)"
               :key="`${date}-${hour}`"
               class="hour-group"
             >
@@ -740,7 +1137,7 @@ defineExpose({
 
               <div v-if="expandedHours.has(`${date}-${hour}`)" class="records">
                 <article
-                  v-for="record in groupedRecords[date][hour]"
+                  v-for="record in renderedHourRecords(date, hour)"
                   :key="record.record_key"
                   class="record-item"
                   :class="{
@@ -752,9 +1149,9 @@ defineExpose({
                   role="checkbox"
                   :aria-checked="selectedRecords.has(record.record_key)"
                   tabindex="0"
-                  @click="toggleRecord(record.record_key)"
-                  @keydown.enter.prevent="toggleRecord(record.record_key)"
-                  @keydown.space.prevent="toggleRecord(record.record_key)"
+                  @click="toggleRecord(record.record_key, $event.shiftKey)"
+                  @keydown.enter.prevent="toggleRecord(record.record_key, $event.shiftKey)"
+                  @keydown.space.prevent="toggleRecord(record.record_key, $event.shiftKey)"
                 >
                   <RCheckbox :model-value="selectedRecords.has(record.record_key)" />
                   <time :datetime="new Date(record.timestamp * 1000).toISOString()">
@@ -809,6 +1206,20 @@ defineExpose({
                     </div>
                   </template>
                 </article>
+                <button
+                  v-if="hiddenHourRecordCount(date, hour) > 0"
+                  type="button"
+                  class="load-more-records"
+                  @click="loadMoreHourRecords(date, hour)"
+                >
+                  <span>{{ t('archives.staging.showingHourRecords', {
+                    shown: renderedHourRecords(date, hour).length,
+                    total: getHourRecords(date, hour).length,
+                  }) }}</span>
+                  <strong>{{ t('archives.staging.loadMoreRecords', {
+                    count: Math.min(HOUR_RECORD_BATCH_SIZE, hiddenHourRecordCount(date, hour)),
+                  }) }}</strong>
+                </button>
               </div>
             </section>
           </div>
@@ -817,9 +1228,14 @@ defineExpose({
 
       <footer v-if="selectedCount > 0" class="staging-footer">
         <span>{{ t('archives.staging.selectedCount', { count: selectedCount }) }}</span>
-        <RButton type="primary" @click="archiveSelected">
-          {{ t('archives.staging.archiveSelected') }}
-        </RButton>
+        <div>
+          <button type="button" class="clear-button" @click="clearSelection">
+            {{ t('archives.staging.clearSelection') }}
+          </button>
+          <RButton type="primary" @click="archiveSelected">
+            {{ t('archives.staging.archiveSelected') }}
+          </RButton>
+        </div>
       </footer>
     </section>
   </div>
@@ -907,7 +1323,8 @@ defineExpose({
 }
 
 .search-input-wrap input,
-.date-grid input {
+.date-grid input,
+.profile-search input {
   min-width: 0;
   width: 100%;
   padding: 8px 0;
@@ -949,6 +1366,31 @@ defineExpose({
   gap: 8px;
 }
 
+.date-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.date-presets button {
+  padding: 5px 4px;
+  color: var(--archive-muted);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--archive-copper) 22%, var(--color-border));
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.date-presets button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.date-presets button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+.date-presets button.active {
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--archive-copper);
+  border-color: var(--archive-copper);
+}
+
 .date-grid label {
   display: grid;
   gap: 4px;
@@ -962,6 +1404,13 @@ defineExpose({
   border: 1px solid color-mix(in srgb, var(--archive-copper) 22%, var(--color-border));
   border-radius: var(--radius-sm);
   font-size: 11px;
+}
+
+.filter-error {
+  margin: 7px 0 0;
+  color: #9d3429;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .filter-chips,
@@ -985,10 +1434,64 @@ defineExpose({
   font-size: 11px;
 }
 
+.account-chips {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.account-chip {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.account-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-chip small {
+  min-width: 20px;
+  padding: 1px 5px;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  border-radius: 999px;
+  text-align: center;
+}
+
+.profile-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  color: var(--archive-muted);
+  background: color-mix(in srgb, var(--archive-parchment) 76%, var(--color-card-bg, #fff));
+  border: 1px solid color-mix(in srgb, var(--archive-copper) 20%, var(--color-border));
+  border-radius: var(--radius-sm);
+}
+
+.profile-search input {
+  padding: 7px 0;
+  font-size: 11px;
+}
+
+.profile-options {
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 1px 4px 1px 1px;
+  scrollbar-color: color-mix(in srgb, var(--archive-copper) 45%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
 .profile-option {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 1px 6px;
   max-width: 100%;
   padding: 6px 9px;
@@ -1022,6 +1525,20 @@ defineExpose({
   font-style: normal;
 }
 
+.profile-option b {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  min-width: 20px;
+  padding: 1px 5px;
+  color: var(--archive-copper);
+  background: rgba(184, 115, 51, 0.08);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .filter-chip.active,
 .profile-option.active {
   color: var(--btn-primary-text, var(--color-text-light, #fff));
@@ -1030,9 +1547,12 @@ defineExpose({
 }
 
 .profile-option.active span,
-.profile-option.active em {
+.profile-option.active em,
+.profile-option.active b {
   color: var(--btn-primary-text, var(--color-text-light, #fff));
 }
+
+.profile-option.active b { background: rgba(255, 255, 255, 0.16); }
 
 .filter-empty-hint,
 .strict-filter-note {
@@ -1089,6 +1609,63 @@ defineExpose({
   margin: 3px 0 0;
   color: var(--archive-muted);
   font-size: 12px;
+}
+
+.ledger-tools {
+  display: grid;
+  grid-template-columns: minmax(145px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  background:
+    linear-gradient(90deg, rgba(184, 115, 51, 0.09), transparent 42%),
+    color-mix(in srgb, var(--archive-parchment) 50%, var(--color-main-bg, #eed9c4));
+  border-bottom: 1px solid color-mix(in srgb, var(--archive-copper) 22%, var(--color-border));
+}
+
+.selection-ruler {
+  display: grid;
+  gap: 1px;
+  padding-left: 9px;
+  border-left: 2px solid var(--archive-copper);
+  font-size: 10px;
+}
+
+.selection-ruler span { color: var(--archive-muted); }
+.selection-ruler strong { color: var(--archive-ink); font-size: 11px; }
+
+.bulk-actions,
+.view-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.view-actions { justify-content: flex-end; }
+
+.ledger-tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  color: var(--archive-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ledger-tools button:hover:not(:disabled) {
+  color: var(--archive-ink);
+  background: rgba(184, 115, 51, 0.08);
+  border-color: rgba(184, 115, 51, 0.16);
+}
+
+.ledger-tools button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .sync-error {
@@ -1173,6 +1750,33 @@ defineExpose({
   width: 1px;
   background: color-mix(in srgb, var(--archive-copper) 24%, var(--color-border));
   content: '';
+}
+
+.load-more-records {
+  position: relative;
+  z-index: 1;
+  width: calc(100% - 10px);
+  margin: 8px 0 4px 10px;
+  padding: 9px 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed color-mix(in srgb, var(--archive-copper) 38%, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--archive-parchment) 88%, var(--archive-copper));
+  color: var(--archive-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.load-more-records:hover {
+  border-style: solid;
+  color: var(--archive-ink);
+}
+
+.load-more-records strong {
+  color: var(--archive-copper);
+  white-space: nowrap;
 }
 
 .record-item {
@@ -1335,6 +1939,12 @@ input:focus-visible {
   font-size: 12px;
 }
 
+.staging-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .ledger { position: relative; }
 
 .tutorial-link {
@@ -1360,11 +1970,29 @@ input:focus-visible {
   }
 
   .ledger { min-height: 520px; }
+
+  .ledger-tools {
+    grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
+  }
+
+  .view-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
   .ledger-header,
   .rail-heading { align-items: flex-start; }
+  .ledger-tools {
+    grid-template-columns: 1fr;
+    padding-inline: 10px;
+  }
+  .bulk-actions,
+  .view-actions {
+    grid-column: 1;
+    flex-wrap: wrap;
+  }
   .date-grid { grid-template-columns: 1fr; }
   .staging-content { padding-inline: 10px; }
   .hour-header { margin-left: 6px; }

@@ -30,8 +30,8 @@ function logs(records: ChatRecord[]): AccountChatLogs[] {
   }]
 }
 
-async function mountPool(records: ChatRecord[]) {
-  invoke.mockResolvedValue(logs(records))
+async function mountPool(records: ChatRecord[], accountLogs = logs(records)) {
+  invoke.mockResolvedValue(accountLogs)
   const wrapper = mount(StagingPool, {
     global: {
       plugins: [i18n],
@@ -63,7 +63,7 @@ describe('StagingPool', () => {
 
     await firstLine!.trigger('click')
     expect(wrapper.find('.staging-footer').text()).toContain('1')
-    await wrapper.find('.staging-footer button').trigger('click')
+    await wrapper.find('.staging-footer .r-button').trigger('click')
 
     const archived = wrapper.emitted<[ChatRecord[]]>('archive')?.[0]?.[0]
     expect(archived).toHaveLength(1)
@@ -76,7 +76,7 @@ describe('StagingPool', () => {
     expect(wrapper.text()).toContain('second line')
   })
 
-  it('archives only selected records that remain visible after filtering', async () => {
+  it('drops selections hidden by filtering before archive', async () => {
     const wrapper = await mountPool([
       makeRecord({ record_key: 'rpbox-visible', content: 'visible needle' }),
       makeRecord({ record_key: 'rpbox-hidden', content: 'hidden haystack' }),
@@ -88,10 +88,84 @@ describe('StagingPool', () => {
     expect(wrapper.findAll('.record-item')).toHaveLength(1)
     expect(wrapper.find('.staging-footer').text()).toContain('1')
 
-    await wrapper.find('.staging-footer button').trigger('click')
+    await wrapper.find('.staging-footer .r-button').trigger('click')
     const archived = wrapper.emitted<[ChatRecord[]]>('archive')?.[0]?.[0]
     expect(archived).toHaveLength(1)
     expect(archived?.[0].record_key).toBe('rpbox-visible')
+
+    await wrapper.get('.rail-heading .clear-button').trigger('click')
+    expect(wrapper.findAll('.record-item.selected')).toHaveLength(1)
+    expect(wrapper.find('.staging-footer').text()).toContain('1')
+  })
+
+  it('bulk-selects, inverts, and clears only the current matches', async () => {
+    const wrapper = await mountPool([
+      makeRecord({ record_key: 'rpbox-one', content: 'one' }),
+      makeRecord({ record_key: 'rpbox-two', content: 'two' }),
+      makeRecord({ record_key: 'rpbox-three', content: 'three' }),
+    ])
+    const actions = wrapper.findAll('.bulk-actions button')
+
+    await actions[0].trigger('click')
+    expect(wrapper.findAll('.record-item.selected')).toHaveLength(3)
+
+    await wrapper.findAll('.record-item')[0].trigger('click')
+    await actions[1].trigger('click')
+    expect(wrapper.findAll('.record-item.selected')).toHaveLength(1)
+
+    await actions[2].trigger('click')
+    expect(wrapper.findAll('.record-item.selected')).toHaveLength(0)
+    expect(wrapper.find('.staging-footer').exists()).toBe(false)
+  })
+
+  it('selects a contiguous visible range with shift click', async () => {
+    const wrapper = await mountPool([
+      makeRecord({ record_key: 'rpbox-range-a', timestamp: 1_753_200_000, content: 'range a' }),
+      makeRecord({ record_key: 'rpbox-range-b', timestamp: 1_753_200_001, content: 'range b' }),
+      makeRecord({ record_key: 'rpbox-range-c', timestamp: 1_753_200_002, content: 'range c' }),
+    ])
+    const items = wrapper.findAll('.record-item')
+
+    await items[0].trigger('click')
+    await items[2].trigger('click', { shiftKey: true })
+
+    expect(wrapper.findAll('.record-item.selected')).toHaveLength(3)
+    expect(wrapper.find('.staging-footer').text()).toContain('3')
+  })
+
+  it('renders long hours in bounded batches and reveals more on demand', async () => {
+    const records = Array.from({ length: 150 }, (_, index) => makeRecord({
+      record_key: `rpbox-long-hour-${index}`,
+      timestamp: 1_753_200_000 + index,
+      sequence: index,
+      content: `line ${index}`,
+    }))
+    const wrapper = await mountPool(records)
+
+    expect(wrapper.findAll('.record-item')).toHaveLength(120)
+    expect(wrapper.get('.load-more-records').text()).toContain('120')
+    expect(wrapper.get('.load-more-records').text()).toContain('150')
+
+    await wrapper.get('.load-more-records').trigger('click')
+    expect(wrapper.findAll('.record-item')).toHaveLength(150)
+    expect(wrapper.find('.load-more-records').exists()).toBe(false)
+  })
+
+  it('limits shift-range selection to the currently rendered records', async () => {
+    const records = Array.from({ length: 150 }, (_, index) => makeRecord({
+      record_key: `rpbox-shift-batch-${index}`,
+      timestamp: 1_753_210_000 + index,
+      sequence: index,
+      content: `range line ${index}`,
+    }))
+    const wrapper = await mountPool(records)
+    const items = wrapper.findAll('.record-item')
+
+    await items[0].trigger('click')
+    await items[119].trigger('click', { shiftKey: true })
+
+    expect(wrapper.findAll('.record-item.selected')).toHaveLength(120)
+    expect(wrapper.find('.staging-footer').text()).toContain('120')
   })
 
   it('combines speaker and listener profile filters with strict legacy semantics', async () => {
@@ -175,6 +249,136 @@ describe('StagingPool', () => {
     expect(wrapper.findAll('.record-item')).toHaveLength(1)
     expect(wrapper.text()).toContain('private line')
     expect(wrapper.text()).not.toContain('guild line')
+  })
+
+  it('filters by account, record type, and a quick date range', async () => {
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    const old = new Date(now)
+    old.setDate(old.getDate() - 10)
+    const recentNpc = makeRecord({
+      record_key: 'rpbox-account-b-npc',
+      account_id: 'ACCOUNT-B',
+      timestamp: Math.floor(now.getTime() / 1000),
+      mark: 'N',
+      npc: 'Innkeeper',
+      content: 'recent npc line',
+    })
+    const oldBackground = makeRecord({
+      record_key: 'rpbox-account-b-old',
+      account_id: 'ACCOUNT-B',
+      timestamp: Math.floor(old.getTime() / 1000),
+      mark: 'B',
+      content: 'old scene line',
+    })
+    const accountA = makeRecord({
+      record_key: 'rpbox-account-a',
+      timestamp: Math.floor(now.getTime() / 1000),
+      content: 'account a line',
+    })
+    const accountLogs: AccountChatLogs[] = [
+      { account_id: 'ACCOUNT-A', last_update: accountA.timestamp, record_count: 1, records: [accountA] },
+      {
+        account_id: 'ACCOUNT-B',
+        last_update: recentNpc.timestamp,
+        record_count: 2,
+        records: [recentNpc, oldBackground],
+      },
+    ]
+    const wrapper = await mountPool([accountA, recentNpc, oldBackground], accountLogs)
+    const accountB = wrapper.findAll('.account-chip')
+      .find(button => button.text().includes('ACCOUNT-B'))
+
+    await accountB!.trigger('click')
+    expect(wrapper.get('.selection-ruler').text()).toContain('2')
+
+    const recentWeek = wrapper.findAll('.date-presets button')
+      .find(button => button.text().includes('Last 7 days'))
+    await recentWeek!.trigger('click')
+    expect(wrapper.get('.selection-ruler').text()).toContain('1')
+    expect(wrapper.text()).toContain('recent npc line')
+    expect(wrapper.text()).not.toContain('old scene line')
+
+    const npcKind = wrapper.findAll('.filter-chip')
+      .find(button => button.text() === 'NPC dialogue')
+    await npcKind!.trigger('click')
+    expect(wrapper.findAll('.record-item')).toHaveLength(1)
+    expect(wrapper.text()).toContain('Innkeeper')
+  })
+
+  it('searches profile options, shows unarchived counts, and removes archived-only options', async () => {
+    const wrapper = await mountPool([
+      makeRecord({
+        record_key: 'rpbox-profile-a-1',
+        ref_id: 'profile-a',
+        profile_snapshot_id: 'snapshot-a-1',
+        profile_snapshot: { ref: 'profile-a', n: 'Alice One', pn: 'Alice Card' },
+        identity_source: 'snapshot',
+      }),
+      makeRecord({
+        record_key: 'rpbox-profile-a-2',
+        ref_id: 'profile-a',
+        profile_snapshot_id: 'snapshot-a-2',
+        profile_snapshot: { ref: 'profile-a', n: 'Alice Two', pn: 'Alice Card' },
+        identity_source: 'snapshot',
+      }),
+      makeRecord({
+        record_key: 'rpbox-profile-b',
+        ref_id: 'profile-b',
+        profile_snapshot_id: 'snapshot-b',
+        profile_snapshot: { ref: 'profile-b', n: 'Bram', pn: 'Bram Card' },
+        identity_source: 'snapshot',
+      }),
+    ])
+    const speakerSection = wrapper.findAll('.filter-section')
+      .find(section => section.text().includes('Speaker profile'))!
+    const search = speakerSection.get('.profile-search input')
+
+    await search.setValue('Alice')
+    expect(speakerSection.findAll('.profile-option')).toHaveLength(1)
+    expect(speakerSection.get('.profile-option').text()).toContain('2')
+
+    ;(wrapper.vm as unknown as { removeArchivedRecords: (keys: string[]) => void })
+      .removeArchivedRecords(['rpbox-profile-a-1', 'rpbox-profile-a-2'])
+    await wrapper.vm.$nextTick()
+    expect(speakerSection.findAll('.profile-option')).toHaveLength(0)
+    expect(speakerSection.text()).toContain('No profile options match')
+
+    await search.setValue('')
+    expect(speakerSection.findAll('.profile-option')).toHaveLength(1)
+    expect(speakerSection.text()).toContain('Bram Card')
+  })
+
+  it('keeps groups collapsed until a filter opens only its first match', async () => {
+    const today = new Date()
+    today.setHours(12, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const wrapper = await mountPool([
+      makeRecord({
+        record_key: 'rpbox-new-day',
+        timestamp: Math.floor(today.getTime() / 1000),
+        content: 'newest unique line',
+      }),
+      makeRecord({
+        record_key: 'rpbox-old-day',
+        timestamp: Math.floor(yesterday.getTime() / 1000),
+        content: 'old unique line',
+      }),
+    ])
+
+    const sort = wrapper.findAll('.view-actions button')[0]
+    await sort.trigger('click')
+    expect(wrapper.findAll('.record-item')).toHaveLength(1)
+    expect(wrapper.text()).toContain('old unique line')
+
+    const collapse = wrapper.findAll('.view-actions button')[1]
+    await collapse.trigger('click')
+    expect(wrapper.findAll('.record-item')).toHaveLength(0)
+
+    await wrapper.get('.search-field input').setValue('old unique line')
+    expect(wrapper.findAll('.record-item')).toHaveLength(1)
+    expect(wrapper.text()).toContain('old unique line')
   })
 
   it('groups snapshot revisions by TRP3 profile ref and matches every historical name', async () => {
