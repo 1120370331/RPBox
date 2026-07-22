@@ -33,10 +33,12 @@ function logs(records: ChatRecord[]): AccountChatLogs[] {
 async function mountPool(records: ChatRecord[], accountLogs = logs(records)) {
   invoke.mockResolvedValue(accountLogs)
   const wrapper = mount(StagingPool, {
+    props: { active: true },
     global: {
       plugins: [i18n],
       stubs: {
         RouterLink: { template: '<a><slot /></a>' },
+        Teleport: true,
       },
     },
   })
@@ -74,6 +76,21 @@ describe('StagingPool', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.record-item')).toHaveLength(1)
     expect(wrapper.text()).toContain('second line')
+  })
+
+  it('shows the floating archive toolbar only while the staging tab is active', async () => {
+    const wrapper = await mountPool([
+      makeRecord({ record_key: 'rpbox-floating-toolbar', content: 'selected line' }),
+    ])
+
+    await wrapper.get('.record-item').trigger('click')
+    expect(wrapper.get('.staging-footer').text()).toContain('1')
+
+    await wrapper.setProps({ active: false })
+    expect(wrapper.find('.staging-footer').exists()).toBe(false)
+
+    await wrapper.setProps({ active: true })
+    expect(wrapper.get('.staging-footer').text()).toContain('1')
   })
 
   it('drops selections hidden by filtering before archive', async () => {
