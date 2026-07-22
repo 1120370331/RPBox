@@ -147,11 +147,26 @@ describe('ArchivesMain archive workbench', () => {
 
     expect(wrapper.get('.archive-manifest').text()).toContain('1')
     expect((wrapper.get('.form-field input').element as HTMLInputElement).value).toContain('Historic Name')
+    expect((wrapper.get('.remove-from-staging-option input').element as HTMLInputElement).checked).toBe(true)
 
     await wrapper.findAll('.mode-btn')[1].trigger('click')
     await wrapper.get('input[type="search"]').setValue('Moonlit')
     expect(wrapper.findAll('.story-option')).toHaveLength(1)
     expect(wrapper.get('.story-option').text()).toContain('Moonlit Patrol')
+  })
+
+  it('keeps archived records in staging when removal is unchecked', async () => {
+    const wrapper = await mountArchives()
+    await wrapper.get('.staging-test-trigger').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('.remove-from-staging-option input').setValue(false)
+    await wrapper.get('.r-modal__footer .r-button--primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.addStoryEntries).toHaveBeenCalledTimes(1)
+    expect(mocks.removeArchivedRecords).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1)
   })
 
   it('reuses a story created by a failed attempt and reconciles before retrying', async () => {

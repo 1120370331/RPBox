@@ -1084,7 +1084,6 @@ defineExpose({
         <div>
           <span class="eyebrow">RPBOX · TRP3</span>
           <h2>{{ t('archives.staging.timelineTitle') }}</h2>
-          <p>{{ t('archives.staging.timelineSubtitle') }}</p>
         </div>
         <RButton :loading="loading" @click="syncFromPlugin">
           <i class="ri-refresh-line" aria-hidden="true"></i>
@@ -1685,12 +1684,6 @@ defineExpose({
 .ledger-header {
   padding: 16px 20px;
   border-bottom: 1px solid color-mix(in srgb, var(--archive-copper) 20%, var(--color-border));
-}
-
-.ledger-header p {
-  margin: 3px 0 0;
-  color: var(--archive-muted);
-  font-size: 12px;
 }
 
 .ledger-tools {
