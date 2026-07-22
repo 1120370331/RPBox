@@ -14,7 +14,10 @@ import (
 	"github.com/rpbox/server/internal/service"
 	"github.com/rpbox/server/pkg/validator"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+const existingSourceIDLookupLimit = 500
 
 // CreateStoryRequest 创建剧情请求
 type CreateStoryRequest struct {
@@ -41,6 +44,11 @@ type CreateStoryEntryRequest struct {
 	GameID   string `json:"game_id"`   // 游戏内ID
 	TRP3Data string `json:"trp3_data"` // 完整TRP3 profile JSON
 	IsNPC    bool   `json:"is_npc"`    // 是否NPC
+}
+
+// ExistingStoryEntrySourceIDsRequest 查询剧情中已存在的来源记录 ID。
+type ExistingStoryEntrySourceIDsRequest struct {
+	SourceIDs []string `json:"source_ids"`
 }
 
 func (s *Server) listStories(c *gin.Context) {
@@ -820,8 +828,36 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		return
 	}
 
+	sourceIDs := make([]string, 0, len(entries))
+	requestedSourceIDs := make(map[string]struct{}, len(entries))
+	for i := range entries {
+		entries[i].SourceID = strings.TrimSpace(entries[i].SourceID)
+		if entries[i].SourceID == "" {
+			continue
+		}
+		if _, exists := requestedSourceIDs[entries[i].SourceID]; exists {
+			continue
+		}
+		requestedSourceIDs[entries[i].SourceID] = struct{}{}
+		sourceIDs = append(sourceIDs, entries[i].SourceID)
+	}
+
 	now := time.Now()
+	createdCount := 0
+	skippedCount := 0
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		// 锁住剧情行，确保所有经此接口写入的同剧情请求按顺序完成幂等检查。
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND user_id = ?", id, userID).
+			First(&story).Error; err != nil {
+			return err
+		}
+
+		existingSourceIDs, err := loadExistingStorySourceIDSet(tx, uint(id), sourceIDs)
+		if err != nil {
+			return err
+		}
+
 		// 获取当前最大排序号
 		var maxOrder int
 		if err := tx.Model(&model.StoryEntry{}).
@@ -833,7 +869,16 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 
 		var minTimestamp *time.Time
 		var maxTimestamp *time.Time
-		for i, req := range entries {
+		for _, req := range entries {
+			if req.SourceID != "" {
+				if _, exists := existingSourceIDs[req.SourceID]; exists {
+					skippedCount++
+					continue
+				}
+				// 同一请求内后续相同的非空来源 ID 也应跳过。
+				existingSourceIDs[req.SourceID] = struct{}{}
+			}
+
 			var characterID *uint
 
 			// 如果有角色信息，查找或创建角色
@@ -852,7 +897,7 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 				Speaker:     req.Speaker,
 				Content:     req.Content,
 				Channel:     req.Channel,
-				SortOrder:   maxOrder + i + 1,
+				SortOrder:   maxOrder + createdCount + 1,
 			}
 			if req.Timestamp != "" {
 				if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
@@ -870,6 +915,11 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 			if err := tx.Create(&entry).Error; err != nil {
 				return err
 			}
+			createdCount++
+		}
+
+		if createdCount == 0 {
+			return nil
 		}
 
 		updates := map[string]interface{}{
@@ -906,7 +956,7 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		if err := tx.Model(&story).Updates(updates).Error; err != nil {
 			return err
 		}
-		if _, err := service.ApplyStoryArchiveProgress(tx, userID, len(entries), now); err != nil {
+		if _, err := service.ApplyStoryArchiveProgress(tx, userID, createdCount, now); err != nil {
 			return err
 		}
 		return nil
@@ -914,9 +964,99 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "添加失败"})
 		return
 	}
-	s.invalidateUserProfileCache(c.Request.Context(), userID)
+	if createdCount > 0 {
+		s.invalidateUserProfileCache(c.Request.Context(), userID)
+	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "添加成功", "count": len(entries)})
+	c.JSON(http.StatusCreated, gin.H{
+		"message":       "添加成功",
+		"count":         len(entries),
+		"created_count": createdCount,
+		"skipped_count": skippedCount,
+	})
+}
+
+func (s *Server) getExistingStoryEntrySourceIDs(c *gin.Context) {
+	userID := c.GetUint("userID")
+	storyID, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var story model.Story
+	if err := database.DB.Select("id").
+		Where("id = ? AND user_id = ?", storyID, userID).
+		First(&story).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "剧情不存在"})
+		return
+	}
+
+	var req ExistingStoryEntrySourceIDsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if len(req.SourceIDs) > existingSourceIDLookupLimit {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "单次最多查询500个来源记录ID"})
+		return
+	}
+
+	normalizedSourceIDs := normalizeNonEmptySourceIDs(req.SourceIDs)
+	if len(normalizedSourceIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"source_ids": []string{}})
+		return
+	}
+
+	existingSourceIDs, err := loadExistingStorySourceIDSet(database.DB, story.ID, normalizedSourceIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	// 按请求首次出现的顺序返回，结果稳定且不会暴露条目正文。
+	result := make([]string, 0, len(existingSourceIDs))
+	for _, sourceID := range normalizedSourceIDs {
+		if _, exists := existingSourceIDs[sourceID]; exists {
+			result = append(result, sourceID)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"source_ids": result})
+}
+
+func normalizeNonEmptySourceIDs(sourceIDs []string) []string {
+	result := make([]string, 0, len(sourceIDs))
+	seen := make(map[string]struct{}, len(sourceIDs))
+	for _, sourceID := range sourceIDs {
+		sourceID = strings.TrimSpace(sourceID)
+		if sourceID == "" {
+			continue
+		}
+		if _, exists := seen[sourceID]; exists {
+			continue
+		}
+		seen[sourceID] = struct{}{}
+		result = append(result, sourceID)
+	}
+	return result
+}
+
+func loadExistingStorySourceIDSet(db *gorm.DB, storyID uint, sourceIDs []string) (map[string]struct{}, error) {
+	result := make(map[string]struct{}, len(sourceIDs))
+	for start := 0; start < len(sourceIDs); start += existingSourceIDLookupLimit {
+		end := start + existingSourceIDLookupLimit
+		if end > len(sourceIDs) {
+			end = len(sourceIDs)
+		}
+
+		var found []string
+		if err := db.Model(&model.StoryEntry{}).
+			Where("story_id = ? AND source_id <> '' AND source_id IN ?", storyID, sourceIDs[start:end]).
+			Distinct().
+			Pluck("source_id", &found).Error; err != nil {
+			return nil, err
+		}
+		for _, sourceID := range found {
+			result[sourceID] = struct{}{}
+		}
+	}
+	return result, nil
 }
 
 // publishStory 发布/取消发布剧情

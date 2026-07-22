@@ -103,6 +103,22 @@ export async function getStory(id: number): Promise<{ story: Story; entries: Sto
   return request.get(`/stories/${id}`)
 }
 
+const SOURCE_ID_LOOKUP_BATCH_SIZE = 500
+
+export async function getExistingStoryEntrySourceIds(id: number, sourceIds: string[]): Promise<string[]> {
+  const uniqueSourceIds = [...new Set(sourceIds.map(sourceId => sourceId.trim()).filter(Boolean))]
+  const existingSourceIds = new Set<string>()
+  for (let offset = 0; offset < uniqueSourceIds.length; offset += SOURCE_ID_LOOKUP_BATCH_SIZE) {
+    const batch = uniqueSourceIds.slice(offset, offset + SOURCE_ID_LOOKUP_BATCH_SIZE)
+    const response = await request.post<{ source_ids: string[] }>(
+      `/stories/${id}/entries/existing-source-ids`,
+      { source_ids: batch },
+    )
+    response.source_ids.forEach(sourceId => existingSourceIds.add(sourceId))
+  }
+  return [...existingSourceIds]
+}
+
 export async function createStory(data: CreateStoryRequest): Promise<Story> {
   return request.post('/stories', data)
 }

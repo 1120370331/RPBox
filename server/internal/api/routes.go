@@ -125,6 +125,7 @@ func (s *Server) setupRoutes() {
 			auth.POST("/music/playlists/:playlistId/tracks/:trackId", s.addStoryMusicPlaylistTrack)
 			auth.DELETE("/music/playlists/:playlistId/tracks/:trackId", s.removeStoryMusicPlaylistTrack)
 			auth.POST("/stories/:id/entries", s.addStoryEntries)
+			auth.POST("/stories/:id/entries/existing-source-ids", s.getExistingStoryEntrySourceIDs)
 			auth.POST("/stories/:id/entries/batch-background", s.batchUpdateEntryBackgroundColor)
 			auth.POST("/stories/:id/entries/batch-delete", s.batchDeleteEntries)
 			auth.POST("/stories/:id/entries/archive", s.archiveEntriesToStory)

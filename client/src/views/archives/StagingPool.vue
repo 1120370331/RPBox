@@ -39,7 +39,7 @@ const accounts = ref<AccountChatLogs[]>([])
 const selectedRecords = ref<Set<string>>(new Set())
 const expandedDates = ref<Set<string>>(new Set())
 const expandedHours = ref<Set<string>>(new Set())
-const hourRenderLimits = ref<Map<string, number>>(new Map())
+const hourPageStarts = ref<Map<string, number>>(new Map())
 
 const filterSearch = ref('')
 const filterStartDate = ref('')
@@ -152,6 +152,7 @@ function removeArchivedRecords(recordKeys: string[]) {
   }
   archivedRecordKeys.value = new Set(archivedRecordKeys.value)
   selectedRecords.value = new Set(selectedRecords.value)
+  reconcileExpandedRecordWindow()
   saveArchivedKeys()
 }
 
@@ -317,8 +318,15 @@ const filteredSenderProfiles = computed(() => availableSenderProfiles.value
   .filter(profile => profileMatchesSearch(profile, senderProfileSearch.value)))
 const filteredListenerProfiles = computed(() => availableListenerProfiles.value
   .filter(profile => profileMatchesSearch(profile, listenerProfileSearch.value)))
-const visibleSenderProfiles = computed(() => filteredSenderProfiles.value.slice(0, PROFILE_OPTION_RENDER_LIMIT))
-const visibleListenerProfiles = computed(() => filteredListenerProfiles.value.slice(0, PROFILE_OPTION_RENDER_LIMIT))
+
+function boundedProfileOptions(profiles: ProfileOption[], selected: Set<string>): ProfileOption[] {
+  return [...profiles]
+    .sort((left, right) => Number(selected.has(right.key)) - Number(selected.has(left.key)))
+    .slice(0, PROFILE_OPTION_RENDER_LIMIT)
+}
+
+const visibleSenderProfiles = computed(() => boundedProfileOptions(filteredSenderProfiles.value, filterSenderProfiles.value))
+const visibleListenerProfiles = computed(() => boundedProfileOptions(filteredListenerProfiles.value, filterListenerProfiles.value))
 const hiddenSenderProfileCount = computed(() => Math.max(0, filteredSenderProfiles.value.length - visibleSenderProfiles.value.length))
 const hiddenListenerProfileCount = computed(() => Math.max(0, filteredListenerProfiles.value.length - visibleListenerProfiles.value.length))
 
@@ -503,22 +511,34 @@ function toggleListenerProfile(value: string) {
 }
 
 function toggleExpandedDate(key: string) {
-  expandedDates.value = toggledSet(expandedDates.value, key)
+  if (expandedDates.value.has(key)) {
+    expandedDates.value = new Set()
+  } else {
+    expandedDates.value = new Set([key])
+  }
+  expandedHours.value = new Set()
+  selectionAnchor.value = ''
 }
 
 function toggleExpandedHour(key: string) {
-  expandedHours.value = toggledSet(expandedHours.value, key)
-  if (expandedHours.value.has(key) && !hourRenderLimits.value.has(key)) {
-    const next = new Map(hourRenderLimits.value)
-    next.set(key, HOUR_RECORD_BATCH_SIZE)
-    hourRenderLimits.value = next
+  if (expandedHours.value.has(key)) {
+    expandedHours.value = new Set()
+    selectionAnchor.value = ''
+    return
   }
+  expandedHours.value = new Set([key])
+  if (!hourPageStarts.value.has(key)) {
+    const next = new Map(hourPageStarts.value)
+    next.set(key, 0)
+    hourPageStarts.value = next
+  }
+  selectionAnchor.value = ''
 }
 
 function collapseAll() {
   expandedDates.value = new Set()
   expandedHours.value = new Set()
-  hourRenderLimits.value = new Map()
+  hourPageStarts.value = new Map()
 }
 
 function expandFirstMatch() {
@@ -530,23 +550,68 @@ function expandFirstMatch() {
   const hour = orderedHours(date)[0]
   expandedDates.value = new Set([date])
   expandedHours.value = hour ? new Set([`${date}-${hour}`]) : new Set()
-  hourRenderLimits.value = hour ? new Map([[`${date}-${hour}`, HOUR_RECORD_BATCH_SIZE]]) : new Map()
+  hourPageStarts.value = hour ? new Map([[`${date}-${hour}`, 0]]) : new Map()
+}
+
+function reconcileExpandedRecordWindow() {
+  const expandedDate = [...expandedDates.value][0]
+  if (!expandedDate) return
+  if (!groupedRecords.value[expandedDate]) {
+    expandFirstMatch()
+    return
+  }
+
+  const hours = orderedHours(expandedDate)
+  const expandedHourKey = [...expandedHours.value][0]
+  const expandedHour = expandedHourKey?.startsWith(`${expandedDate}-`)
+    ? expandedHourKey.slice(expandedDate.length + 1)
+    : ''
+  const hour = hours.includes(expandedHour) ? expandedHour : hours[0]
+  if (!hour) {
+    expandedHours.value = new Set()
+    hourPageStarts.value = new Map()
+    return
+  }
+
+  const key = `${expandedDate}-${hour}`
+  const total = getHourRecords(expandedDate, hour).length
+  const maxStart = Math.max(0, Math.floor((total - 1) / HOUR_RECORD_BATCH_SIZE) * HOUR_RECORD_BATCH_SIZE)
+  expandedHours.value = new Set([key])
+  hourPageStarts.value = new Map([[key, Math.min(hourPageStarts.value.get(key) || 0, maxStart)]])
+  selectionAnchor.value = ''
 }
 
 function renderedHourRecords(date: string, hour: string): ChatRecord[] {
   const key = `${date}-${hour}`
-  return getHourRecords(date, hour).slice(0, hourRenderLimits.value.get(key) || HOUR_RECORD_BATCH_SIZE)
+  const start = hourPageStarts.value.get(key) || 0
+  return getHourRecords(date, hour).slice(start, start + HOUR_RECORD_BATCH_SIZE)
 }
 
-function hiddenHourRecordCount(date: string, hour: string): number {
-  return Math.max(0, getHourRecords(date, hour).length - renderedHourRecords(date, hour).length)
+function hourPageStart(date: string, hour: string): number {
+  return (hourPageStarts.value.get(`${date}-${hour}`) || 0) + 1
 }
 
-function loadMoreHourRecords(date: string, hour: string) {
+function hourPageEnd(date: string, hour: string): number {
+  return (hourPageStarts.value.get(`${date}-${hour}`) || 0) + renderedHourRecords(date, hour).length
+}
+
+function hasPreviousHourPage(date: string, hour: string): boolean {
+  return (hourPageStarts.value.get(`${date}-${hour}`) || 0) > 0
+}
+
+function hasNextHourPage(date: string, hour: string): boolean {
+  return hourPageEnd(date, hour) < getHourRecords(date, hour).length
+}
+
+function changeHourPage(date: string, hour: string, direction: -1 | 1) {
   const key = `${date}-${hour}`
-  const next = new Map(hourRenderLimits.value)
-  next.set(key, (next.get(key) || HOUR_RECORD_BATCH_SIZE) + HOUR_RECORD_BATCH_SIZE)
-  hourRenderLimits.value = next
+  const current = hourPageStarts.value.get(key) || 0
+  const maxStart = Math.max(0, Math.floor((getHourRecords(date, hour).length - 1) / HOUR_RECORD_BATCH_SIZE) * HOUR_RECORD_BATCH_SIZE)
+  const nextStart = Math.min(maxStart, Math.max(0, current + direction * HOUR_RECORD_BATCH_SIZE))
+  const next = new Map(hourPageStarts.value)
+  next.set(key, nextStart)
+  hourPageStarts.value = next
+  selectionAnchor.value = ''
 }
 
 function selectAllMatches() {
@@ -792,7 +857,7 @@ defineExpose({
 
 <template>
   <div class="staging-pool">
-    <aside class="filter-rail" aria-label="剧情回溯筛选">
+    <aside class="filter-rail" :aria-label="t('archives.staging.filterAriaLabel')">
       <div class="rail-heading">
         <div>
           <span class="eyebrow">{{ t('archives.staging.archiveDesk') }}</span>
@@ -1206,20 +1271,37 @@ defineExpose({
                     </div>
                   </template>
                 </article>
-                <button
-                  v-if="hiddenHourRecordCount(date, hour) > 0"
-                  type="button"
-                  class="load-more-records"
-                  @click="loadMoreHourRecords(date, hour)"
+                <nav
+                  v-if="getHourRecords(date, hour).length > HOUR_RECORD_BATCH_SIZE"
+                  class="hour-pagination"
+                  :aria-label="t('archives.staging.hourPagination')"
                 >
                   <span>{{ t('archives.staging.showingHourRecords', {
-                    shown: renderedHourRecords(date, hour).length,
+                    start: hourPageStart(date, hour),
+                    end: hourPageEnd(date, hour),
                     total: getHourRecords(date, hour).length,
                   }) }}</span>
-                  <strong>{{ t('archives.staging.loadMoreRecords', {
-                    count: Math.min(HOUR_RECORD_BATCH_SIZE, hiddenHourRecordCount(date, hour)),
-                  }) }}</strong>
-                </button>
+                  <div>
+                    <button
+                      type="button"
+                      class="previous-hour-page"
+                      :disabled="!hasPreviousHourPage(date, hour)"
+                      @click="changeHourPage(date, hour, -1)"
+                    >
+                      <i class="ri-arrow-left-line" aria-hidden="true"></i>
+                      {{ t('archives.staging.previousRecordBatch') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="next-hour-page"
+                      :disabled="!hasNextHourPage(date, hour)"
+                      @click="changeHourPage(date, hour, 1)"
+                    >
+                      {{ t('archives.staging.nextRecordBatch') }}
+                      <i class="ri-arrow-right-line" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </nav>
               </div>
             </section>
           </div>
@@ -1752,31 +1834,50 @@ defineExpose({
   content: '';
 }
 
-.load-more-records {
+.hour-pagination {
   position: relative;
   z-index: 1;
   width: calc(100% - 10px);
   margin: 8px 0 4px 10px;
   padding: 9px 12px;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   border: 1px dashed color-mix(in srgb, var(--archive-copper) 38%, var(--color-border));
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--archive-parchment) 88%, var(--archive-copper));
   color: var(--archive-muted);
-  cursor: pointer;
   font-size: 11px;
 }
 
-.load-more-records:hover {
-  border-style: solid;
+.hour-pagination > div {
+  display: flex;
+  gap: 6px;
+}
+
+.hour-pagination button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--archive-copper) 32%, var(--color-border));
+  border-radius: 5px;
+  background: var(--archive-parchment);
+  color: var(--archive-copper);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.hour-pagination button:hover:not(:disabled) {
+  border-color: var(--archive-copper);
   color: var(--archive-ink);
 }
 
-.load-more-records strong {
-  color: var(--archive-copper);
-  white-space: nowrap;
+.hour-pagination button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .record-item {
@@ -1997,6 +2098,8 @@ input:focus-visible {
   .staging-content { padding-inline: 10px; }
   .hour-header { margin-left: 6px; }
   .records { margin-left: 10px; padding-left: 9px; }
+  .hour-pagination { align-items: stretch; flex-direction: column; }
+  .hour-pagination > div { justify-content: space-between; }
   .record-item,
   .identity-event {
     grid-template-columns: 20px 58px minmax(0, 1fr);

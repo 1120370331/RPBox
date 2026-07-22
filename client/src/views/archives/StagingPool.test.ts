@@ -133,7 +133,7 @@ describe('StagingPool', () => {
     expect(wrapper.find('.staging-footer').text()).toContain('3')
   })
 
-  it('renders long hours in bounded batches and reveals more on demand', async () => {
+  it('pages long hours without growing the rendered record budget', async () => {
     const records = Array.from({ length: 150 }, (_, index) => makeRecord({
       record_key: `rpbox-long-hour-${index}`,
       timestamp: 1_753_200_000 + index,
@@ -143,12 +143,60 @@ describe('StagingPool', () => {
     const wrapper = await mountPool(records)
 
     expect(wrapper.findAll('.record-item')).toHaveLength(120)
-    expect(wrapper.get('.load-more-records').text()).toContain('120')
-    expect(wrapper.get('.load-more-records').text()).toContain('150')
+    expect(wrapper.get('.hour-pagination').text()).toContain('120')
+    expect(wrapper.get('.hour-pagination').text()).toContain('150')
 
-    await wrapper.get('.load-more-records').trigger('click')
-    expect(wrapper.findAll('.record-item')).toHaveLength(150)
-    expect(wrapper.find('.load-more-records').exists()).toBe(false)
+    await wrapper.get('.next-hour-page').trigger('click')
+    expect(wrapper.findAll('.record-item')).toHaveLength(30)
+    expect(wrapper.get('.hour-pagination').text()).toContain('121')
+    expect(wrapper.get('.previous-hour-page').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.next-hour-page').attributes('disabled')).toBeDefined()
+  })
+
+  it('clamps the active hour page after archived records shrink the result set', async () => {
+    const records = Array.from({ length: 250 }, (_, index) => makeRecord({
+      record_key: `rpbox-clamp-hour-${index}`,
+      timestamp: 1_753_200_000 + index,
+      sequence: index,
+      content: `clamp line ${index}`,
+    }))
+    const wrapper = await mountPool(records)
+
+    await wrapper.get('.next-hour-page').trigger('click')
+    await wrapper.get('.next-hour-page').trigger('click')
+    expect(wrapper.findAll('.record-item')).toHaveLength(10)
+
+    ;(wrapper.vm as unknown as { removeArchivedRecords: (keys: string[]) => void })
+      .removeArchivedRecords(Array.from({ length: 10 }, (_, index) => `rpbox-clamp-hour-${index}`))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.record-item')).toHaveLength(120)
+    expect(wrapper.get('.hour-pagination').text()).toContain('121')
+    expect(wrapper.get('.hour-pagination').text()).toContain('240')
+  })
+
+  it('keeps one paged hour open so total rendered records stay globally bounded', async () => {
+    const firstHour = Array.from({ length: 150 }, (_, index) => makeRecord({
+      record_key: `rpbox-hour-a-${index}`,
+      timestamp: 1_753_200_000 + index,
+      sequence: index,
+      content: `hour a ${index}`,
+    }))
+    const secondHour = Array.from({ length: 150 }, (_, index) => makeRecord({
+      record_key: `rpbox-hour-b-${index}`,
+      timestamp: 1_753_203_600 + index,
+      sequence: index,
+      content: `hour b ${index}`,
+    }))
+    const wrapper = await mountPool([...firstHour, ...secondHour])
+
+    expect(wrapper.findAll('.record-item').length).toBeLessThanOrEqual(120)
+    const closedHour = wrapper.findAll('.hour-header')
+      .find(header => header.find('.ri-arrow-right-s-line').exists())
+    await closedHour!.findAll('button')[1].trigger('click')
+
+    expect(wrapper.findAll('.record-item').length).toBeLessThanOrEqual(120)
+    expect(wrapper.findAll('.records')).toHaveLength(1)
   })
 
   it('limits shift-range selection to the currently rendered records', async () => {
@@ -347,6 +395,34 @@ describe('StagingPool', () => {
     await search.setValue('')
     expect(speakerSection.findAll('.profile-option')).toHaveLength(1)
     expect(speakerSection.text()).toContain('Bram Card')
+  })
+
+  it('keeps a selected profile visible when the bounded option list is restored', async () => {
+    const records = Array.from({ length: 161 }, (_, index) => {
+      const suffix = String(index).padStart(3, '0')
+      return makeRecord({
+        record_key: `rpbox-profile-${suffix}`,
+        ref_id: `profile-${suffix}`,
+        profile_snapshot_id: `snapshot-${suffix}`,
+        profile_snapshot: {
+          ref: `profile-${suffix}`,
+          n: `Character ${suffix}`,
+          pn: `Card ${suffix}`,
+        },
+        identity_source: 'snapshot',
+      })
+    })
+    const wrapper = await mountPool(records)
+    const speakerSection = wrapper.findAll('.filter-section')
+      .find(section => section.text().includes('Speaker profile'))!
+    const search = speakerSection.get('.profile-search input')
+
+    await search.setValue('Card 160')
+    await speakerSection.get('.profile-option').trigger('click')
+    await search.setValue('')
+
+    expect(speakerSection.findAll('.profile-option')).toHaveLength(160)
+    expect(speakerSection.text()).toContain('Card 160')
   })
 
   it('keeps groups collapsed until a filter opens only its first match', async () => {
