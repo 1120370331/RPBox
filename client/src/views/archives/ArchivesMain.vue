@@ -12,11 +12,12 @@ import AddonInstaller from '@/components/AddonInstaller.vue'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import StagingPool from './StagingPool.vue'
 import StoryList from './StoryList.vue'
-import { createStory, addStoryEntries, getStory, listStories, type CreateStoryEntryRequest, type Story, type StoryFilterParams } from '@/api/story'
+import { createStory, addStoryEntries, getExistingStoryEntrySourceIds, listStories, type CreateStoryEntryRequest, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
 import { getAddonManifest } from '@/api/addon'
 import { getGuild, type Guild } from '@/api/guild'
 import { useToast } from '@/composables/useToast'
+import { useDialog } from '@/composables/useDialog'
 import type { ChatRecord, IdentityEndpoint, ProfileSnapshot } from '@/types/chatLog'
 
 interface InstalledAddonInfo {
@@ -29,6 +30,7 @@ const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
 const toast = useToast()
+const { confirm } = useDialog()
 const activeTab = ref('staging')
 const wowPath = ref(localStorage.getItem('wow_path') || '')
 
@@ -65,10 +67,12 @@ const archiveStage = ref<'idle' | 'creating' | 'tagging' | 'checking' | 'entries
 const createdArchiveStoryId = ref<number | null>(null)
 const appliedArchiveTagIds = ref<number[]>([])
 const entrySubmissionAttempted = ref(false)
+const entrySubmissionStoryId = ref<number | null>(null)
 
 const RECENT_ARCHIVE_STORY_KEY = 'rpbox_recent_archive_story_id'
 const STORY_OPTION_RENDER_LIMIT = 80
 const LARGE_ARCHIVE_THRESHOLD = 800
+const ARCHIVE_ENTRY_BATCH_SIZE = 500
 
 // 待归档的记录
 const pendingRecords = ref<ChatRecord[]>([])
@@ -100,7 +104,8 @@ const filteredUserStories = computed(() => {
 const displayedUserStories = computed(() => filteredUserStories.value.slice(0, STORY_OPTION_RENDER_LIMIT))
 const hiddenStoryOptionCount = computed(() => Math.max(0, filteredUserStories.value.length - displayedUserStories.value.length))
 const selectedExistingStory = computed(() => userStories.value.find(story => story.id === selectedStoryId.value) || null)
-const archiveTargetLocked = computed(() => creating.value || createdArchiveStoryId.value !== null)
+const lockedArchiveStoryId = computed(() => createdArchiveStoryId.value || entrySubmissionStoryId.value)
+const archiveTargetLocked = computed(() => creating.value || lockedArchiveStoryId.value !== null)
 
 const archiveSummary = computed(() => {
   const records = [...pendingRecords.value].sort((left, right) => left.timestamp - right.timestamp)
@@ -135,9 +140,9 @@ const archiveTimeRange = computed(() => formatArchiveTimeRange(archiveSummary.va
 const archiveStageText = computed(() => archiveStage.value === 'idle'
   ? ''
   : t(`archives.modal.archiveStage.${archiveStage.value}`))
-const archiveDismissLocked = computed(() => Boolean(
+const archiveNativeCloseLocked = computed(() => Boolean(
   creating.value
-  || (createdArchiveStoryId.value !== null && pendingRecords.value.length > 0),
+  || (lockedArchiveStoryId.value !== null && pendingRecords.value.length > 0),
 ))
 const archiveSubmitDisabled = computed(() => {
   if (creating.value) return true
@@ -434,6 +439,7 @@ function resetCreateDialog(clearPending = true) {
   createdArchiveStoryId.value = null
   appliedArchiveTagIds.value = []
   entrySubmissionAttempted.value = false
+  entrySubmissionStoryId.value = null
 }
 
 function openCreateStoryModal() {
@@ -441,8 +447,18 @@ function openCreateStoryModal() {
   showCreateModal.value = true
 }
 
-function closeCreateStoryModal() {
-  if (archiveDismissLocked.value) return
+async function closeCreateStoryModal() {
+  if (creating.value) return
+  if (lockedArchiveStoryId.value !== null && pendingRecords.value.length > 0) {
+    const shouldDiscard = await confirm({
+      title: t('archives.modal.discardRetryTitle'),
+      message: t('archives.modal.discardRetryMessage', { id: lockedArchiveStoryId.value }),
+      type: 'warning',
+      confirmText: t('archives.modal.discardRetryConfirm'),
+      cancelText: t('archives.modal.keepRetrying'),
+    })
+    if (!shouldDiscard) return
+  }
   showCreateModal.value = false
   resetCreateDialog()
 }
@@ -457,7 +473,7 @@ function setArchiveMode(mode: 'create' | 'append') {
 }
 
 function selectArchiveStory(id: number) {
-  if (creating.value) return
+  if (archiveTargetLocked.value) return
   if (selectedStoryId.value !== id) entrySubmissionAttempted.value = false
   selectedStoryId.value = id
   archiveError.value = ''
@@ -515,6 +531,12 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
       is_npc: isIdentityEvent ? false : isNpc,
     }
   })
+}
+
+async function addEntriesInBoundedBatches(storyId: number, entries: CreateStoryEntryRequest[]) {
+  for (let offset = 0; offset < entries.length; offset += ARCHIVE_ENTRY_BATCH_SIZE) {
+    await addStoryEntries(storyId, entries.slice(offset, offset + ARCHIVE_ENTRY_BATCH_SIZE))
+  }
 }
 
 async function handleCreateStory() {
@@ -591,10 +613,12 @@ async function handleCreateStory() {
     }
 
     let entriesToSubmit = entries
-    if (entries.length > 0 && entrySubmissionAttempted.value) {
+    if (entries.length > 0 && (archiveMode.value === 'append' || entrySubmissionAttempted.value)) {
       archiveStage.value = 'checking'
-      const existing = await getStory(storyId)
-      const existingSourceIds = new Set(existing.entries.map(entry => entry.source_id).filter(Boolean))
+      const existingSourceIds = new Set(await getExistingStoryEntrySourceIds(
+        storyId,
+        entries.map(entry => entry.source_id || ''),
+      ))
       entriesToSubmit = entries.filter(entry => !entry.source_id || !existingSourceIds.has(entry.source_id))
       skippedDuplicateCount = entries.length - entriesToSubmit.length
     }
@@ -602,7 +626,8 @@ async function handleCreateStory() {
     if (entriesToSubmit.length > 0) {
       archiveStage.value = 'entries'
       entrySubmissionAttempted.value = true
-      await addStoryEntries(storyId, entriesToSubmit)
+      entrySubmissionStoryId.value = storyId
+      await addEntriesInBoundedBatches(storyId, entriesToSubmit)
     }
 
     if (pendingRecords.value.length > 0) {
@@ -748,8 +773,8 @@ function handleViewStory(id: number) {
       v-model="showCreateModal"
       :title="pendingRecords.length > 0 ? $t('archives.modal.archiveTitle') : $t('archives.modal.createTitle')"
       width="680px"
-      :closable="!archiveDismissLocked"
-      :mask-closable="!archiveDismissLocked"
+      :closable="!archiveNativeCloseLocked"
+      :mask-closable="!archiveNativeCloseLocked"
       @close="closeCreateStoryModal"
     >
       <div class="create-form">
@@ -801,9 +826,9 @@ function handleViewStory(id: number) {
           </button>
         </div>
 
-        <p v-if="createdArchiveStoryId" class="archive-recovery-note">
+        <p v-if="lockedArchiveStoryId" class="archive-recovery-note">
           <i class="ri-shield-check-line"></i>
-          {{ $t('archives.modal.safeRetryTarget', { id: createdArchiveStoryId }) }}
+          {{ $t('archives.modal.safeRetryTarget', { id: lockedArchiveStoryId }) }}
         </p>
 
         <!-- 创建模式：显示标题、描述、标签 -->
@@ -872,7 +897,7 @@ function handleViewStory(id: number) {
                 type="button"
                 class="story-option"
                 :class="{ selected: selectedStoryId === story.id }"
-                :disabled="creating"
+                :disabled="archiveTargetLocked"
                 @click="selectArchiveStory(story.id)"
               >
                 <div class="story-option-title">
@@ -905,7 +930,7 @@ function handleViewStory(id: number) {
         </p>
       </div>
       <template #footer>
-        <RButton type="outline" :disabled="archiveDismissLocked" @click="closeCreateStoryModal">{{ $t('archives.action.cancel') }}</RButton>
+        <RButton type="outline" :disabled="creating" @click="closeCreateStoryModal">{{ $t('archives.action.cancel') }}</RButton>
         <RButton
           type="primary"
           :loading="creating"

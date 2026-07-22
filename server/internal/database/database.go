@@ -217,6 +217,8 @@ func Init(cfg *config.DatabaseConfig) error {
 		"CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status)",
 		// posts 表添加 is_public 索引
 		"CREATE INDEX IF NOT EXISTS idx_posts_is_public ON posts(is_public)",
+		// story_entries 按剧情和来源 ID 查询，支持归档重试的轻量幂等核对
+		"CREATE INDEX IF NOT EXISTS idx_story_entries_story_source ON story_entries(story_id, source_id) WHERE source_id <> ''",
 		// guilds 表限制同一 owner 只能存在一个待审核公会
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_guilds_owner_pending_unique ON guilds(owner_id) WHERE status = 'pending'",
 		"CREATE INDEX IF NOT EXISTS idx_rpdb_works_public_list ON rpdb_works(status, review_status, is_public, type, updated_at)",
