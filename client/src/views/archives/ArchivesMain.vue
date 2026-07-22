@@ -7,6 +7,7 @@ import RTabs from '@/components/RTabs.vue'
 import RTabPane from '@/components/RTabPane.vue'
 import RModal from '@/components/RModal.vue'
 import RButton from '@/components/RButton.vue'
+import RCheckbox from '@/components/RCheckbox.vue'
 import RInput from '@/components/RInput.vue'
 import AddonInstaller from '@/components/AddonInstaller.vue'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
@@ -76,6 +77,7 @@ const ARCHIVE_ENTRY_BATCH_SIZE = 500
 
 // 待归档的记录
 const pendingRecords = ref<ChatRecord[]>([])
+const removeFromStagingAfterArchive = ref(true)
 
 const recentArchiveStoryId = ref<number | null>((() => {
   const value = Number(localStorage.getItem(RECENT_ARCHIVE_STORY_KEY))
@@ -425,6 +427,7 @@ function suggestedArchiveTitle(records: ChatRecord[]): string {
 
 function resetCreateDialog(clearPending = true) {
   if (clearPending) pendingRecords.value = []
+  removeFromStagingAfterArchive.value = true
   newStoryTitle.value = ''
   newStoryDesc.value = ''
   newStoryRegion.value = ''
@@ -630,7 +633,7 @@ async function handleCreateStory() {
       await addEntriesInBoundedBatches(storyId, entriesToSubmit)
     }
 
-    if (pendingRecords.value.length > 0) {
+    if (pendingRecords.value.length > 0 && removeFromStagingAfterArchive.value) {
       archiveStage.value = 'finalizing'
       const archivedRecordKeys = pendingRecords.value.map(record => record.record_key)
       stagingPoolRef.value?.removeArchivedRecords?.(archivedRecordKeys)
@@ -930,15 +933,26 @@ function handleViewStory(id: number) {
         </p>
       </div>
       <template #footer>
-        <RButton type="outline" :disabled="creating" @click="closeCreateStoryModal">{{ $t('archives.action.cancel') }}</RButton>
-        <RButton
-          type="primary"
-          :loading="creating"
-          :disabled="archiveSubmitDisabled"
-          @click="handleCreateStory"
-        >
-          {{ archiveMode === 'create' ? $t('archives.action.create') : $t('archives.action.append') }}
-        </RButton>
+        <div class="archive-modal-footer">
+          <RCheckbox
+            v-if="pendingRecords.length > 0"
+            v-model="removeFromStagingAfterArchive"
+            class="remove-from-staging-option"
+            :disabled="creating"
+            :label="$t('archives.modal.removeFromStagingAfterArchive')"
+          />
+          <div class="archive-modal-actions">
+            <RButton type="outline" :disabled="creating" @click="closeCreateStoryModal">{{ $t('archives.action.cancel') }}</RButton>
+            <RButton
+              type="primary"
+              :loading="creating"
+              :disabled="archiveSubmitDisabled"
+              @click="handleCreateStory"
+            >
+              {{ archiveMode === 'create' ? $t('archives.action.create') : $t('archives.action.append') }}
+            </RButton>
+          </div>
+        </div>
       </template>
     </RModal>
 
@@ -1187,6 +1201,19 @@ function handleViewStory(id: number) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.archive-modal-footer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.archive-modal-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .archive-manifest {
@@ -1708,6 +1735,12 @@ function handleViewStory(id: number) {
 }
 
 @media (max-width: 640px) {
+  .archive-modal-footer {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 12px;
+  }
+
   .manifest-heading {
     grid-template-columns: auto 1fr;
   }
