@@ -217,9 +217,15 @@ local currentFilter = {
     search = "",
 }
 
-local LOG_RECENT_LIMIT = 3000
-local LOG_VIEW_WINDOW_SIZE = 120
+local LOG_VIEW_WINDOW_SIZE = 80
+local LOG_MIN_PAGE_SIZE = 40
+local LOG_MAX_LIVE_ROWS = 120
+local LOG_SCAN_BATCH_SIZE = 250
+local LOG_RENDER_BATCH_SIZE = 20
+local LOG_LIVE_REFRESH_INTERVAL = 1
 local RefreshLogContent
+local RenderLogPage
+local SchedulePendingLiveRefresh
 
 local CHANNEL_FILTER_OPTIONS = {
     { value = "SAY", text = "说话" },
@@ -309,41 +315,41 @@ local function AddParticipantOption(optionsByKey, profileID, gameID, identity, e
     if literalID and literalID ~= "" then
         label = label .. "  [" .. tostring(literalID) .. "]"
     end
-    optionsByKey[key] = optionsByKey[key] or { value = key, text = label }
+    if not optionsByKey[key] then
+        optionsByKey[key] = { value = key, text = label }
+        return optionsByKey[key]
+    end
+    return nil
+end
+
+local function IndexParticipantOption(catalog, profileID, gameID, identity, endpoint)
+    local option = AddParticipantOption(catalog.byKey, profileID, gameID, identity, endpoint)
+    if option then catalog.list[#catalog.list + 1] = option end
+end
+
+local function IndexRecordParticipants(speakerOptions, listenerOptions, record)
+    local senderID = record.s or (record.sender and record.sender.gameID)
+    local identity = ResolveRecordIdentity(record)
+    local profileID = record.ref or (identity and identity.ref)
+    IndexParticipantOption(speakerOptions, profileID, senderID, identity)
+
+    if record.mk == "S" and record.ev then
+        local from = record.ev.from
+        local to = record.ev.to
+        if from then IndexParticipantOption(speakerOptions, from.ref, senderID, GetEndpointIdentity(from), from) end
+        if to then IndexParticipantOption(speakerOptions, to.ref, senderID, GetEndpointIdentity(to), to) end
+    end
+
+    for _, listener in ipairs(record.listeners or {}) do
+        local listenerIdentity = ResolveListenerIdentity(listener)
+        local listenerProfileID = listener.ref or listener.profileID or (listenerIdentity and listenerIdentity.ref)
+        IndexParticipantOption(listenerOptions, listenerProfileID, listener.gameID, listenerIdentity)
+    end
 end
 
 local function BuildParticipantOptions(mode)
-    local optionsByKey = {}
-    for _, hours in pairs(RPBox_ChatLog or {}) do
-        for _, hourRecords in pairs(hours) do
-            for _, record in ipairs(hourRecords) do
-                if mode == "speaker" then
-                    local senderID = record.s or (record.sender and record.sender.gameID)
-                    local identity = ResolveRecordIdentity(record)
-                    local profileID = record.ref or (identity and identity.ref)
-                    AddParticipantOption(optionsByKey, profileID, senderID, identity)
-
-                    if record.mk == "S" and record.ev then
-                        local from = record.ev.from
-                        local to = record.ev.to
-                        if from then AddParticipantOption(optionsByKey, from.ref, senderID, GetEndpointIdentity(from), from) end
-                        if to then AddParticipantOption(optionsByKey, to.ref, senderID, GetEndpointIdentity(to), to) end
-                    end
-                else
-                    for _, listener in ipairs(record.listeners or {}) do
-                        local identity = ResolveListenerIdentity(listener)
-                        local profileID = listener.ref or listener.profileID or (identity and identity.ref)
-                        AddParticipantOption(optionsByKey, profileID, listener.gameID, identity)
-                    end
-                end
-            end
-        end
-    end
-
-    local options = {}
-    for _, option in pairs(optionsByKey) do options[#options + 1] = option end
-    table.sort(options, function(a, b) return a.text < b.text end)
-    return options
+    if not MainFrame or not MainFrame.participantOptions then return {} end
+    return MainFrame.participantOptions[mode] or {}
 end
 
 local function UpdateFilterSummary()
@@ -568,73 +574,75 @@ local function RecordMatchesSearch(record, searchLower)
     return false
 end
 
--- 获取筛选后的记录
-local function GetFilteredRecords()
-    local records = {}
-    local chatLog = RPBox_ChatLog or {}
+local function GetFilterMinTime()
     local now = time()
-
-    -- 计算时间范围
-    local minTime = nil
     if currentFilter.days ~= nil then
         if currentFilter.days == 0 then
-            -- 今天：从今天0点开始
             local today = date("*t", now)
             today.hour, today.min, today.sec = 0, 0, 0
-            minTime = time(today)
-        else
-            -- x天内
-            minTime = now - (currentFilter.days * 24 * 60 * 60)
+            return time(today)
         end
+        return now - (currentFilter.days * 24 * 60 * 60)
     end
+    return nil
+end
 
-    for dateStr, hours in pairs(chatLog) do
-        for hourStr, hourRecords in pairs(hours) do
-            for _, record in ipairs(hourRecords) do
-                local timestamp = record.t or record.timestamp or 0
-                local channel = NormalizeRecordChannel(record.c or record.channel)
-                local content = record.m or record.content
+local function RecordMatchesCurrentFilter(record, minTime, searchLower)
+    local timestamp = record.t or record.timestamp or 0
+    if minTime and timestamp < minTime then return false end
 
-                -- 时间筛选
-                local timeMatch = (minTime == nil) or (timestamp >= minTime)
-                local channelMatch = not HasSelections(currentFilter.channels)
-                    or (channel and currentFilter.channels[channel] == true)
-                local speakerMatch = MatchesSelectedKeys(currentFilter.speakers, GetRecordSpeakerKeys(record))
-                local listenerMatch = MatchesSelectedKeys(currentFilter.listeners, GetRecordListenerKeys(record))
-                local searchMatch = RecordMatchesSearch(record, currentFilter.search:lower())
+    local channel = NormalizeRecordChannel(record.c or record.channel)
+    if HasSelections(currentFilter.channels)
+        and (not channel or currentFilter.channels[channel] ~= true) then
+        return false
+    end
+    if not MatchesSelectedKeys(currentFilter.speakers, GetRecordSpeakerKeys(record)) then return false end
+    if not MatchesSelectedKeys(currentFilter.listeners, GetRecordListenerKeys(record)) then return false end
+    return RecordMatchesSearch(record, searchLower)
+end
 
-                if timeMatch and channelMatch and speakerMatch and listenerMatch and searchMatch then
-                    table.insert(records, record)
+local function SortHourKeys(a, b)
+    local numberA, numberB = tonumber(a), tonumber(b)
+    if numberA and numberB and numberA ~= numberB then return numberA < numberB end
+    return tostring(a) < tostring(b)
+end
+
+-- Buckets are small (dates x hours), while records remain in append order inside each hour.
+-- This provides chronological playback without a one-frame sort over every matching record.
+local function BuildChronologicalLogBuckets()
+    local chatLog = RPBox_ChatLog or {}
+    local dateKeys = {}
+    for dateKey in pairs(chatLog) do dateKeys[#dateKeys + 1] = dateKey end
+    table.sort(dateKeys, function(a, b) return tostring(a) < tostring(b) end)
+
+    local buckets = {}
+    local totalRecords = 0
+    for _, dateKey in ipairs(dateKeys) do
+        local hours = chatLog[dateKey]
+        if type(hours) == "table" then
+            local hourKeys = {}
+            for hourKey in pairs(hours) do hourKeys[#hourKeys + 1] = hourKey end
+            table.sort(hourKeys, SortHourKeys)
+            for _, hourKey in ipairs(hourKeys) do
+                local records = hours[hourKey]
+                if type(records) == "table" and #records > 0 then
+                    buckets[#buckets + 1] = records
+                    totalRecords = totalRecords + #records
                 end
             end
         end
     end
-
-    table.sort(records, function(a, b)
-        local ta = a.t or a.timestamp or 0
-        local tb = b.t or b.timestamp or 0
-        if ta ~= tb then return ta < tb end
-        local sequenceA = tonumber(a.seq) or 0
-        local sequenceB = tonumber(b.seq) or 0
-        if sequenceA ~= sequenceB then return sequenceA < sequenceB end
-        return tostring(a.id or "") < tostring(b.id or "")
-    end)
-
-    if #records > LOG_RECENT_LIMIT then
-        local limitedRecords = {}
-        local startIndex = #records - LOG_RECENT_LIMIT + 1
-        for i = startIndex, #records do
-            limitedRecords[#limitedRecords + 1] = records[i]
-        end
-        return limitedRecords, #records
-    end
-
-    return records, #records
+    return buckets, totalRecords
 end
 
 local function InvalidateLogRender()
     if not MainFrame then return end
     MainFrame.logRenderToken = (MainFrame.logRenderToken or 0) + 1
+    MainFrame.logPageRenderToken = (MainFrame.logPageRenderToken or 0) + 1
+    MainFrame.logLiveRefreshScheduleToken = (MainFrame.logLiveRefreshScheduleToken or 0) + 1
+    MainFrame.logLiveRefreshScheduled = false
+    MainFrame.logLiveRefreshPending = false
+    MainFrame.logScan = nil
     MainFrame.logState = nil
 end
 
@@ -669,6 +677,7 @@ local function UpdateLogLayoutWidth()
 end
 
 local function EnsureLogRow(content, index)
+    if index < 1 or index > LOG_MAX_LIVE_ROWS then return nil end
     content.rows = content.rows or {}
 
     local row = content.rows[index]
@@ -868,28 +877,10 @@ local function RenderLogRow(row, record)
     return textHeight, plainText
 end
 
-local function UpdateLogStatus(totalMatched, displayCount, loadedCount, hiddenCount)
-    if not MainFrame or not MainFrame.statusText then return end
-
-    local baseText
-    if hiddenCount and hiddenCount > 0 then
-        baseText = format("共 %d 条记录（页面仅展示最近 %d 条）", totalMatched, LOG_RECENT_LIMIT)
-    else
-        baseText = format("共 %d 条记录", totalMatched)
-    end
-
-    if loadedCount and loadedCount < displayCount then
-        MainFrame.statusText:SetText(baseText .. format("，已加载 %d/%d", loadedCount, displayCount))
-        return
-    end
-
-    MainFrame.statusText:SetText(baseText)
-end
-
 local function GetLogPageSize()
     local size = tonumber(RPBox_Config.logViewWindowSize) or LOG_VIEW_WINDOW_SIZE
-    if size < 80 then size = 80 end
-    if size > 240 then size = 240 end
+    if size < LOG_MIN_PAGE_SIZE then size = LOG_MIN_PAGE_SIZE end
+    if size > LOG_MAX_LIVE_ROWS then size = LOG_MAX_LIVE_ROWS end
     return floor(size)
 end
 
@@ -904,130 +895,269 @@ local function HideAllLogRows()
     MainFrame.logShownRowCount = 0
 end
 
-local UpdateLogFooterNotice
-
-local function RefreshVisibleLogRows()
-    if not MainFrame or not MainFrame.logState or not MainFrame.logContent then return end
-
-    local state = MainFrame.logState
-    UpdateLogLayoutWidth()
-
-    local rows = MainFrame.logContent.rows or {}
-    local yOffset = 0
-    for i = 1, state.loadedCount do
-        local row = rows[i]
-        if row then
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", 0, -yOffset)
-            row:SetPoint("TOPRIGHT", 0, -yOffset)
-
-            local textHeight = select(1, RenderLogRow(row, state.records[i]))
-            row:Show()
-            yOffset = yOffset + textHeight + 6
-        end
+local function SetLogNavigationState(state, scanning)
+    if not MainFrame then return end
+    local busy = scanning or (state and state.rendering)
+    if MainFrame.prevPageBtn then
+        MainFrame.prevPageBtn:SetEnabled(not busy and state ~= nil and state.page > 1)
     end
-
-    state.yOffset = yOffset
-    UpdateLogFooterNotice(state)
-
-    local extraFooterHeight = (state.hiddenCount and state.hiddenCount > 0 and state.loadedCount >= state.displayCount) and 26 or 0
-    MainFrame.logContent:SetHeight(max(yOffset + extraFooterHeight, 1))
-
-    if MainFrame.logScroll then
-        MainFrame.logScroll:UpdateScrollChildRect()
+    if MainFrame.nextPageBtn then
+        MainFrame.nextPageBtn:SetEnabled(not busy and state ~= nil and state.page < state.totalPages)
+    end
+    if MainFrame.latestPageBtn then
+        MainFrame.latestPageBtn:SetEnabled(not busy and state ~= nil and state.page < state.totalPages)
+    end
+    if MainFrame.pageProgress then
+        if scanning then
+            MainFrame.pageProgress:SetText("筛选中…")
+        elseif state then
+            MainFrame.pageProgress:SetText(format("%d / %d 页", state.page, state.totalPages))
+        else
+            MainFrame.pageProgress:SetText("0 / 0 页")
+        end
     end
 end
 
-UpdateLogFooterNotice = function(state)
-    if not MainFrame or not MainFrame.logContent then return end
-
-    if not MainFrame.logFooterNotice then
-        local notice = MainFrame.logContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        notice:SetJustifyH("CENTER")
-        notice:SetJustifyV("TOP")
-        notice:SetWordWrap(true)
-        MainFrame.logFooterNotice = notice
-    end
-
-    local notice = MainFrame.logFooterNotice
-    if state and state.hiddenCount and state.hiddenCount > 0 and state.loadedCount >= state.displayCount then
-        notice:ClearAllPoints()
-        notice:SetPoint("TOPLEFT", MainFrame.logContent, "TOPLEFT", 0, -(state.yOffset + 8))
-        notice:SetPoint("TOPRIGHT", MainFrame.logContent, "TOPRIGHT", 0, -(state.yOffset + 8))
-        notice:SetText(format("还有 %d 条更早记录未显示，请导出后前往客户端查看", state.hiddenCount))
-        notice:Show()
-    else
-        notice:Hide()
-    end
+local function UpdateLogScanStatus(scanned, totalRecords, matched)
+    if not MainFrame or not MainFrame.statusText then return end
+    MainFrame.statusText:SetText(format("正在筛选：已扫描 %d/%d 条，命中 %d 条", scanned, totalRecords, matched))
 end
 
-local TryLoadMoreLogRows
-TryLoadMoreLogRows = function(force)
-    if not MainFrame or not MainFrame.logState or not MainFrame.logContent then return end
-    if currentTab ~= "log" then return end
-
-    local state = MainFrame.logState
-    if state.renderToken ~= MainFrame.logRenderToken then return end
-    if state.loading then return end
-
-    if not force then
-        local scrollFrame = MainFrame.logScroll
-        if not scrollFrame then return end
-        local scrollRange = scrollFrame:GetVerticalScrollRange() or 0
-        local currentScroll = scrollFrame:GetVerticalScroll() or 0
-        if scrollRange > 0 and currentScroll < (scrollRange - 160) then
-            return
-        end
-    end
-
-    if state.loadedCount >= state.displayCount then
-        UpdateLogFooterNotice(state)
+local function UpdateLogPageStatus(state)
+    if not MainFrame or not MainFrame.statusText then return end
+    if not state or state.totalMatched <= 0 then
+        MainFrame.statusText:SetText("共 0 条记录")
         return
     end
 
-    state.loading = true
-
-    local startIndex = state.loadedCount + 1
-    local endIndex = min(startIndex + state.pageSize - 1, state.displayCount)
-    local yOffset = state.yOffset or 0
-
-    for i = startIndex, endIndex do
-        local row = EnsureLogRow(MainFrame.logContent, i)
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 0, -yOffset)
-        row:SetPoint("TOPRIGHT", 0, -yOffset)
-
-        local textHeight = select(1, RenderLogRow(row, state.records[i]))
-        row:Show()
-        yOffset = yOffset + textHeight + 6
+    local text = format(
+        "共 %d 条 · 当前 %d-%d · 第 %d/%d 页",
+        state.totalMatched,
+        state.startIndex,
+        state.endIndex,
+        state.page,
+        state.totalPages
+    )
+    if state.rendering and state.loadedCount < state.displayCount then
+        text = text .. format(" · 正在绘制 %d/%d", state.loadedCount, state.displayCount)
     end
+    MainFrame.statusText:SetText(text)
+end
 
-    state.yOffset = yOffset
-    state.loadedCount = endIndex
-    MainFrame.logShownRowCount = endIndex
-
-    UpdateLogFooterNotice(state)
-    local extraFooterHeight = (state.hiddenCount and state.hiddenCount > 0 and state.loadedCount >= state.displayCount) and 26 or 0
-    MainFrame.logContent:SetHeight(max(yOffset + extraFooterHeight, 1))
-
+local function ResetLogViewport()
+    if not MainFrame or not MainFrame.logContent then return end
+    HideAllLogRows()
+    MainFrame.logContent:SetHeight(1)
     if MainFrame.logScroll then
+        MainFrame.logScroll:SetVerticalScroll(0)
         MainFrame.logScroll:UpdateScrollChildRect()
     end
+end
 
-    state.loading = false
-    UpdateLogStatus(state.totalMatched, state.displayCount, state.loadedCount, state.hiddenCount)
+local function GetLiveRefreshClock()
+    if type(GetTime) == "function" then return GetTime() end
+    return time()
+end
 
-    if force and state.loadedCount < state.displayCount and MainFrame.logScroll then
-        local scrollRange = MainFrame.logScroll:GetVerticalScrollRange() or 0
-        if scrollRange <= 0 then
-            local token = state.renderToken
+-- Live chat can arrive faster than a complete archive scan. Keep one dirty bit instead of
+-- cancelling an active scan, and start at most one live-triggered refresh per interval.
+SchedulePendingLiveRefresh = function()
+    if not MainFrame or not MainFrame.logLiveRefreshPending then return end
+    if not MainFrame:IsShown() or currentTab ~= "log" then return end
+    if MainFrame.logScan or (MainFrame.logState and MainFrame.logState.rendering) then return end
+    if MainFrame.logLiveRefreshScheduled then return end
+
+    local now = GetLiveRefreshClock()
+    local lastRefresh = MainFrame.logLastLiveRefreshAt or 0
+    local delay = max(LOG_LIVE_REFRESH_INTERVAL - (now - lastRefresh), 0)
+    MainFrame.logLiveRefreshScheduled = true
+    MainFrame.logLiveRefreshScheduleToken = (MainFrame.logLiveRefreshScheduleToken or 0) + 1
+    local scheduleToken = MainFrame.logLiveRefreshScheduleToken
+
+    C_Timer.After(delay, function()
+        if not MainFrame or scheduleToken ~= MainFrame.logLiveRefreshScheduleToken then return end
+        MainFrame.logLiveRefreshScheduled = false
+        if not MainFrame.logLiveRefreshPending then return end
+        if not MainFrame:IsShown() or currentTab ~= "log" then return end
+        if MainFrame.logScan or (MainFrame.logState and MainFrame.logState.rendering) then
+            return
+        end
+
+        local state = MainFrame.logState
+        local requestedPage = state and state.page or 1
+        local followLatest = state and state.page == state.totalPages or false
+        MainFrame.logLiveRefreshPending = false
+        MainFrame.logLastLiveRefreshAt = GetLiveRefreshClock()
+        RefreshLogContent({ requestedPage = requestedPage, followLatest = followLatest })
+    end)
+end
+
+local function RefreshVisibleLogRows()
+    if not MainFrame or not MainFrame.logState then return end
+    local scrollOffset = MainFrame.logScroll and MainFrame.logScroll:GetVerticalScroll() or 0
+    RenderLogPage(MainFrame.logState.page, scrollOffset)
+end
+
+RenderLogPage = function(page, restoreScrollOffset)
+    if not MainFrame or not MainFrame.logState or not MainFrame.logContent then return end
+    local state = MainFrame.logState
+    if state.renderToken ~= MainFrame.logRenderToken then return end
+
+    page = max(1, min(tonumber(page) or 1, state.totalPages))
+    state.page = page
+    state.startIndex = ((page - 1) * state.pageSize) + 1
+    state.endIndex = min(state.startIndex + state.pageSize - 1, state.totalMatched)
+    state.displayCount = max(state.endIndex - state.startIndex + 1, 0)
+    state.loadedCount = 0
+    state.yOffset = 0
+    state.rendering = true
+
+    MainFrame.logPageRenderToken = (MainFrame.logPageRenderToken or 0) + 1
+    local pageRenderToken = MainFrame.logPageRenderToken
+    ResetLogViewport()
+    UpdateLogLayoutWidth()
+    SetLogNavigationState(state, false)
+    UpdateLogPageStatus(state)
+
+    local function RenderBatch()
+        if not MainFrame or not MainFrame.logState then return end
+        if pageRenderToken ~= MainFrame.logPageRenderToken then return end
+        if state.renderToken ~= MainFrame.logRenderToken or MainFrame.logState ~= state then return end
+
+        local batchEnd = min(state.loadedCount + LOG_RENDER_BATCH_SIZE, state.displayCount)
+        for rowIndex = state.loadedCount + 1, batchEnd do
+            local row = EnsureLogRow(MainFrame.logContent, rowIndex)
+            if not row then break end
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -state.yOffset)
+            row:SetPoint("TOPRIGHT", 0, -state.yOffset)
+
+            local recordIndex = state.startIndex + rowIndex - 1
+            local textHeight = select(1, RenderLogRow(row, state.records[recordIndex]))
+            row:Show()
+            state.yOffset = state.yOffset + textHeight + 6
+            state.loadedCount = rowIndex
+        end
+
+        MainFrame.logShownRowCount = state.loadedCount
+        MainFrame.logContent:SetHeight(max(state.yOffset, 1))
+        if MainFrame.logScroll then MainFrame.logScroll:UpdateScrollChildRect() end
+        UpdateLogPageStatus(state)
+
+        if state.loadedCount < state.displayCount then
+            C_Timer.After(0, RenderBatch)
+            return
+        end
+
+        state.rendering = false
+        SetLogNavigationState(state, false)
+        UpdateLogPageStatus(state)
+        SchedulePendingLiveRefresh()
+        if restoreScrollOffset and restoreScrollOffset > 0 and MainFrame.logScroll then
             C_Timer.After(0, function()
-                if not MainFrame or not MainFrame.logState then return end
-                if token ~= MainFrame.logRenderToken then return end
-                TryLoadMoreLogRows(true)
+                if not MainFrame or pageRenderToken ~= MainFrame.logPageRenderToken then return end
+                local range = MainFrame.logScroll:GetVerticalScrollRange() or 0
+                MainFrame.logScroll:SetVerticalScroll(min(restoreScrollOffset, range))
             end)
         end
     end
+
+    C_Timer.After(0, RenderBatch)
+end
+
+local function CompleteLogScan(scan)
+    if not MainFrame or scan.renderToken ~= MainFrame.logRenderToken then return end
+    MainFrame.logScan = nil
+    MainFrame.participantOptions = {
+        speaker = scan.speakerOptions.list,
+        listener = scan.listenerOptions.list,
+    }
+    InitParticipantDropdown(MainFrame.speakerDropdown, "speaker", currentFilter.speakers)
+    InitParticipantDropdown(MainFrame.listenerDropdown, "listener", currentFilter.listeners)
+
+    local totalMatched = #scan.matches
+    MainFrame.debugRecentRecords = {}
+    for i = max(totalMatched - 4, 1), totalMatched do
+        if scan.matches[i] then
+            MainFrame.debugRecentRecords[#MainFrame.debugRecentRecords + 1] = scan.matches[i]
+        end
+    end
+    if totalMatched <= 0 then
+        MainFrame.logState = nil
+        ResetLogViewport()
+        SetLogNavigationState(nil, false)
+        UpdateLogPageStatus(nil)
+        SchedulePendingLiveRefresh()
+        return
+    end
+
+    local pageSize = GetLogPageSize()
+    local totalPages = max(1, math.ceil(totalMatched / pageSize))
+    local requestedPage = scan.followLatest and totalPages or scan.requestedPage
+    requestedPage = max(1, min(requestedPage or 1, totalPages))
+    MainFrame.logState = {
+        records = scan.matches,
+        totalMatched = totalMatched,
+        totalPages = totalPages,
+        page = requestedPage,
+        pageSize = pageSize,
+        renderToken = scan.renderToken,
+    }
+    RenderLogPage(requestedPage)
+end
+
+local function StartLogScan(renderToken, requestedPage, followLatest)
+    local buckets, totalRecords = BuildChronologicalLogBuckets()
+    local scan = {
+        renderToken = renderToken,
+        requestedPage = requestedPage or 1,
+        followLatest = followLatest == true,
+        buckets = buckets,
+        totalRecords = totalRecords,
+        bucketIndex = 1,
+        recordIndex = 1,
+        scanned = 0,
+        matches = {},
+        minTime = GetFilterMinTime(),
+        searchLower = currentFilter.search:lower(),
+        speakerOptions = { byKey = {}, list = {} },
+        listenerOptions = { byKey = {}, list = {} },
+    }
+    MainFrame.logScan = scan
+    SetLogNavigationState(nil, true)
+    UpdateLogScanStatus(0, totalRecords, 0)
+
+    local function ScanBatch()
+        if not MainFrame or scan.renderToken ~= MainFrame.logRenderToken then return end
+        if MainFrame.logScan ~= scan or currentTab ~= "log" then return end
+
+        local processed = 0
+        while processed < LOG_SCAN_BATCH_SIZE and scan.bucketIndex <= #scan.buckets do
+            local records = scan.buckets[scan.bucketIndex]
+            local record = records[scan.recordIndex]
+            if record then
+                IndexRecordParticipants(scan.speakerOptions, scan.listenerOptions, record)
+                if RecordMatchesCurrentFilter(record, scan.minTime, scan.searchLower) then
+                    scan.matches[#scan.matches + 1] = record
+                end
+                scan.recordIndex = scan.recordIndex + 1
+                scan.scanned = scan.scanned + 1
+                processed = processed + 1
+            else
+                scan.bucketIndex = scan.bucketIndex + 1
+                scan.recordIndex = 1
+            end
+        end
+
+        UpdateLogScanStatus(scan.scanned, scan.totalRecords, #scan.matches)
+        if scan.bucketIndex <= #scan.buckets then
+            C_Timer.After(0, ScanBatch)
+        else
+            CompleteLogScan(scan)
+        end
+    end
+
+    C_Timer.After(0, ScanBatch)
 end
 
 -- 创建标签按钮
@@ -1041,54 +1171,23 @@ local function CreateTabButton(parent, text, tabName, xOffset)
 end
 
 -- 刷新日志内容
-RefreshLogContent = function()
+RefreshLogContent = function(options)
     if not MainFrame or not MainFrame.logContent then return end
+    options = options or {}
 
     UpdateFilterSummary()
+    local previousState = MainFrame.logState
+    local requestedPage = options.requestedPage
+        or (options.preservePage and previousState and previousState.page)
+        or 1
+    local followLatest = options.followLatest == true
     InvalidateLogRender()
     local renderToken = MainFrame.logRenderToken
     UpdateLogLayoutWidth()
-
-    local records, totalMatched = GetFilteredRecords()
-    local totalRecords = #records
-    local displayCount = totalRecords
-    local hiddenCount = max(totalMatched - totalRecords, 0)
-
-    local content = MainFrame.logContent
-    content.rows = content.rows or {}
+    MainFrame.logContent.rows = MainFrame.logContent.rows or {}
     MainFrame.logPlainText = nil
-
-    HideAllLogRows()
-    UpdateLogFooterNotice(nil)
-    content:SetHeight(1)
-    MainFrame.logShownRowCount = 0
-
-    if MainFrame.logScroll then
-        MainFrame.logScroll:SetVerticalScroll(0)
-        MainFrame.logScroll:UpdateScrollChildRect()
-    end
-
-    if displayCount <= 0 then
-        MainFrame.logState = nil
-        UpdateLogStatus(totalMatched, displayCount, displayCount, hiddenCount)
-        return
-    end
-
-    MainFrame.logState = {
-        records = records,
-        totalRecords = totalRecords,
-        totalMatched = totalMatched,
-        hiddenCount = hiddenCount,
-        displayCount = displayCount,
-        loadedCount = 0,
-        yOffset = 0,
-        pageSize = GetLogPageSize(),
-        renderToken = renderToken,
-        loading = false,
-    }
-
-    UpdateLogStatus(totalMatched, displayCount, 0, hiddenCount)
-    TryLoadMoreLogRows(true)
+    ResetLogViewport()
+    StartLogScan(renderToken, requestedPage, followLatest)
 end
 
 -- 刷新名单内容
@@ -1185,11 +1284,14 @@ local function RefreshDebugContent()
 
     -- 最近5条记录的详细信息
     table.insert(lines, "--- 最近5条记录详情 ---")
-    local records = select(1, GetFilteredRecords())
-    for i = 1, math.min(5, #records) do
+    local records = MainFrame.debugRecentRecords or {}
+    local firstRecord = 1
+    local debugIndex = 0
+    for i = firstRecord, #records do
         local record = records[i]
+        debugIndex = debugIndex + 1
         table.insert(lines, "")
-        table.insert(lines, format("[记录 %d]", i))
+        table.insert(lines, format("[记录 %d]", debugIndex))
 
         -- 兼容新旧字段
         local senderID = record.s or (record.sender and record.sender.gameID) or "unknown"
@@ -1388,13 +1490,13 @@ local function RefreshSettingsContent()
     content.showIconCb:Show()
     yOffset = yOffset + 26
 
-    -- 懒加载设置（每次追加加载条数）
+    -- 有界分页设置（同时存活的日志行永不超过硬上限）
     yOffset = yOffset + 15
     if not content.viewWindowSizeTitle then
         content.viewWindowSizeTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     end
     content.viewWindowSizeTitle:SetPoint("TOPLEFT", 10, -yOffset)
-    content.viewWindowSizeTitle:SetText("每批加载条数:")
+    content.viewWindowSizeTitle:SetText("每页回放条数:")
     content.viewWindowSizeTitle:Show()
 
     if not content.viewWindowSizeBox then
@@ -1410,8 +1512,8 @@ local function RefreshSettingsContent()
     viewWindowSizeBox:SetText(tostring(GetLogPageSize()))
     viewWindowSizeBox:SetScript("OnEnterPressed", function(self)
         local value = tonumber(self:GetText()) or LOG_VIEW_WINDOW_SIZE
-        if value < 80 then value = 80 end
-        if value > 240 then value = 240 end
+        if value < LOG_MIN_PAGE_SIZE then value = LOG_MIN_PAGE_SIZE end
+        if value > LOG_MAX_LIVE_ROWS then value = LOG_MAX_LIVE_ROWS end
         RPBox_Config.logViewWindowSize = floor(value)
         self:SetText(tostring(RPBox_Config.logViewWindowSize))
 
@@ -1431,7 +1533,7 @@ local function RefreshSettingsContent()
         content.viewWindowSizeHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     end
     content.viewWindowSizeHint:SetPoint("LEFT", viewWindowSizeBox, "RIGHT", 8, 0)
-    content.viewWindowSizeHint:SetText("建议 120（范围 80-240）")
+    content.viewWindowSizeHint:SetText("建议 80（范围 40-120，硬上限 120）")
     content.viewWindowSizeHint:Show()
     yOffset = yOffset + 26
 
@@ -1442,6 +1544,9 @@ end
 -- 切换标签页
 local function SwitchTab(tabName)
     if not MainFrame then return end
+    if currentTab == "log" and tabName ~= "log" then
+        InvalidateLogRender()
+    end
     currentTab = tabName
 
     -- 隐藏所有内容
@@ -1664,11 +1769,44 @@ local function CreateMainFrame()
     ledgerHeader:SetHeight(24)
     local ledgerTitle = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     ledgerTitle:SetPoint("LEFT", 0, 0)
-    ledgerTitle:SetText("时间账本")
-    local ledgerHint = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    ledgerHint:SetPoint("RIGHT", 0, 0)
-    ledgerHint:SetText("按时间正序回放 · 滚动继续加载")
+    ledgerTitle:SetText("时间账本 · 正序")
+
+    local latestPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
+    latestPageBtn:SetSize(48, 20)
+    latestPageBtn:SetPoint("RIGHT", 0, 0)
+    latestPageBtn:SetText("最新")
+    latestPageBtn:SetScript("OnClick", function()
+        if MainFrame.logState then RenderLogPage(MainFrame.logState.totalPages) end
+    end)
+
+    local nextPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
+    nextPageBtn:SetSize(66, 20)
+    nextPageBtn:SetPoint("RIGHT", latestPageBtn, "LEFT", -4, 0)
+    nextPageBtn:SetText("继续 →")
+    nextPageBtn:SetScript("OnClick", function()
+        if MainFrame.logState then RenderLogPage(MainFrame.logState.page + 1) end
+    end)
+
+    local pageProgress = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    pageProgress:SetWidth(72)
+    pageProgress:SetPoint("RIGHT", nextPageBtn, "LEFT", -4, 0)
+    pageProgress:SetJustifyH("CENTER")
+    pageProgress:SetText("0 / 0 页")
+
+    local prevPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
+    prevPageBtn:SetSize(62, 20)
+    prevPageBtn:SetPoint("RIGHT", pageProgress, "LEFT", -4, 0)
+    prevPageBtn:SetText("← 较早")
+    prevPageBtn:SetScript("OnClick", function()
+        if MainFrame.logState then RenderLogPage(MainFrame.logState.page - 1) end
+    end)
+
     MainFrame.ledgerHeader = ledgerHeader
+    MainFrame.prevPageBtn = prevPageBtn
+    MainFrame.nextPageBtn = nextPageBtn
+    MainFrame.latestPageBtn = latestPageBtn
+    MainFrame.pageProgress = pageProgress
+    SetLogNavigationState(nil, false)
 
     -- 日志滚动框架
     local logScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
@@ -1691,8 +1829,6 @@ local function CreateMainFrame()
             self:SetVerticalScroll(clamped)
             self._rpboxAdjustingScroll = nil
         end
-
-        TryLoadMoreLogRows(false)
     end)
 
     local logContent = CreateFrame("Frame", nil, logScroll)
@@ -1758,7 +1894,16 @@ local function CreateMainFrame()
     refreshBtn:SetPoint("BOTTOMRIGHT", -35, 8)
     refreshBtn:SetText("刷新")
     refreshBtn:SetScript("OnClick", function()
-        SwitchTab(currentTab)
+        if currentTab == "log" then
+            local state = MainFrame.logState
+            local scan = MainFrame.logScan
+            RefreshLogContent({
+                requestedPage = state and state.page or (scan and scan.requestedPage) or 1,
+                followLatest = (state and state.page == state.totalPages) or (scan and scan.followLatest) or false,
+            })
+        else
+            SwitchTab(currentTab)
+        end
     end)
 
     -- 复制按钮
@@ -1772,10 +1917,6 @@ local function CreateMainFrame()
             return
         end
 
-        if MainFrame.logState.displayCount > 2000 then
-            print(format("|cFFFFAA00[RPBox]|r 当前窗口内共有 %d 条可复制记录，复制可能卡顿，请耐心等待。", MainFrame.logState.displayCount))
-        end
-
         -- 创建对话框（如果不存在）
         if not MainFrame.copyDialog then
             local dialog = CreateFrame("Frame", "RPBoxCopyDialog", UIParent, "BasicFrameTemplateWithInset")
@@ -1787,7 +1928,7 @@ local function CreateMainFrame()
             dialog:SetScript("OnDragStart", dialog.StartMoving)
             dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
             dialog:SetFrameStrata("DIALOG")
-            dialog.TitleText:SetText("复制日志 (Ctrl+A 全选, Ctrl+C 复制)")
+            dialog.TitleText:SetText("复制当前页 (Ctrl+A 全选, Ctrl+C 复制)")
 
             -- 设置关闭按钮
             dialog.CloseButton:SetScript("OnClick", function()
@@ -1826,7 +1967,7 @@ local function CreateMainFrame()
             -- 更新内容并显示
             local copyLines = {}
             local state = MainFrame.logState
-            for i = 1, state.displayCount do
+            for i = state.startIndex, state.endIndex do
                 local _, plainText = BuildLogLineTexts(state.records[i])
                 copyLines[#copyLines + 1] = plainText
             end
@@ -1944,7 +2085,8 @@ end
 -- 注册新消息回调，自动刷新日志面板
 ns.RegisterOnNewMessage(function()
     if MainFrame and MainFrame:IsShown() and currentTab == "log" then
-        RefreshLogContent()
+        MainFrame.logLiveRefreshPending = true
+        SchedulePendingLiveRefresh()
     end
 end)
 

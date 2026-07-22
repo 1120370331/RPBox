@@ -22,7 +22,7 @@ local DEFAULT_CONFIG = {
     blacklist = {},
     warnedThisSession = false,
     warnThreshold = 9000,
-    logViewWindowSize = 120,
+    logViewWindowSize = 80,
     -- 监听的频道配置
     channels = {
         SAY = true,
