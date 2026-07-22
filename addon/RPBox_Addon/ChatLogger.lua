@@ -78,34 +78,39 @@ end
 
 -- 获取 TRP3 角色信息并缓存
 local function GetTRP3InfoAndCache(unitID)
-    if not TRP3_API or not TRP3_API.register then return nil, nil end
-    if not TRP3_API.register.isUnitIDKnown(unitID) then return nil, nil end
-
-    local character = TRP3_API.register.getUnitIDCharacter(unitID)
-    if not character or not character.profileID then return nil, nil end
-
-    local profileID = character.profileID
-    local profile = TRP3_API.register.getProfile(profileID)
-    if not profile or not (profile.characteristics or profile.about or profile.misc) then return nil, nil end
+    local context = ns.GetRemoteProfileContext and ns.GetRemoteProfileContext(unitID) or nil
+    if not context then return nil, nil, nil end
 
     -- 缓存完整角色卡数据
-    ns.CacheProfile(profileID, profile)
+    ns.CacheProfile(context.profileID, context.profile)
+    local snapshotKey = nil
+    if ns.ObserveRemoteProfileIdentity then
+        snapshotKey = ns.ObserveRemoteProfileIdentity(unitID, context.profileID, context.profile, true)
+    elseif ns.CaptureProfileSnapshot then
+        snapshotKey = ns.CaptureProfileSnapshot(context.profileID, context.profile, unitID)
+    end
 
-    return profileID, profile
+    return context.profileID, context.profile, snapshotKey
 end
 
 -- 获取自己的 TRP3 信息并缓存
 local function GetSelfTRP3InfoAndCache()
-    if not TRP3_API or not TRP3_API.profile then return nil, nil end
-
-    local profileID = TRP3_API.profile.getPlayerCurrentProfileID()
-    local player = TRP3_API.profile.getData("player")
-    if not player then return nil, nil end
+    local context = ns.GetSelfProfileContext and ns.GetSelfProfileContext() or nil
+    if not context then return nil, nil, nil end
 
     -- 缓存完整角色卡数据
-    ns.CacheProfile(profileID, player)
+    ns.CacheProfile(context.profileID, context.profile)
+    local snapshotKey = nil
+    if ns.CaptureProfileSnapshot then
+        snapshotKey = ns.CaptureProfileSnapshot(
+            context.profileID,
+            context.root or context.profile,
+            context.gameID,
+            context.profileName
+        )
+    end
 
-    return profileID, player
+    return context.profileID, context.profile, snapshotKey
 end
 
 -- 获取角色的 TRP3 显示名称（纯文本，不含格式代码）
@@ -234,6 +239,13 @@ end
 
 -- 保存聊天记录
 local function SaveChatLog(record)
+    if not record.t and not record.timestamp then
+        record.t = time()
+    end
+    if ns.ApplyRecordSchema then
+        ns.ApplyRecordSchema(record)
+    end
+
     local timestamp = record.t or record.timestamp
     local dateStr = date("%Y-%m-%d", timestamp)
     local hourStr = date("%H", timestamp)
@@ -251,6 +263,71 @@ local function SaveChatLog(record)
 
     -- 检查记录上限
     CheckRecordLimit()
+end
+
+ns.SaveRecord = SaveChatLog
+
+local function CopyEventEndpoint(endpoint)
+    endpoint = endpoint or {}
+    return {
+        ref = endpoint.ref,
+        ps = endpoint.ps,
+        n = endpoint.n or "",
+        pn = endpoint.pn,
+    }
+end
+
+local function BuildCurrentListener()
+    local context = ns.GetSelfProfileContext and ns.GetSelfProfileContext() or nil
+    if not context then return nil end
+
+    local snapshotKey = nil
+    if ns.CaptureProfileSnapshot then
+        snapshotKey = ns.CaptureProfileSnapshot(
+            context.profileID,
+            context.root or context.profile,
+            context.gameID,
+            context.profileName
+        )
+    end
+    return {
+        gameID = context.gameID,
+        profileID = context.profileID,
+        ref = context.profileID,
+        ps = snapshotKey,
+    }
+end
+
+-- AppendProfileTimelineEvent writes profile transitions into the same chronological ledger.
+function ns.AppendProfileTimelineEvent(kind, certainty, fromEndpoint, toEndpoint, actorGameID)
+    if kind ~= "profile_switch" and kind ~= "profile_update" then return end
+
+    local fromCopy = CopyEventEndpoint(fromEndpoint)
+    local toCopy = CopyEventEndpoint(toEndpoint)
+    local verb = kind == "profile_switch" and "人物卡切换" or "人物卡更新"
+    local fromLabel = fromCopy.n ~= "" and fromCopy.n or tostring(fromCopy.ref or "未知")
+    local toLabel = toCopy.n ~= "" and toCopy.n or tostring(toCopy.ref or "未知")
+    local record = {
+        t = time(),
+        c = "SYSTEM",
+        m = verb .. "：" .. fromLabel .. " -> " .. toLabel,
+        mk = "S",
+        s = actorGameID or ns.GetPlayerID(),
+        ref = toCopy.ref or fromCopy.ref,
+        ps = toCopy.ps or fromCopy.ps,
+        ev = {
+            kind = kind,
+            certainty = certainty == "exact" and "exact" or "observed",
+            from = fromCopy,
+            to = toCopy,
+        },
+    }
+
+    local listener = BuildCurrentListener()
+    if listener then
+        record.listeners = { listener }
+    end
+    SaveChatLog(record)
 end
 
 -- 解析 NPC/旁白消息
@@ -339,14 +416,15 @@ local function OnChatMessage(self, event, msg, sender, ...)
 
     -- 获取 profileID
     local profileID
+    local senderProfileSnapshot = nil
     if isFromSelf then
-        profileID = GetSelfTRP3InfoAndCache()
+        profileID, _, senderProfileSnapshot = GetSelfTRP3InfoAndCache()
         if not senderClass then
             local _, classFilename = UnitClass("player")
             senderClass = classFilename
         end
     else
-        profileID = GetTRP3InfoAndCache(senderID)
+        profileID, _, senderProfileSnapshot = GetTRP3InfoAndCache(senderID)
     end
 
     -- 解析消息类型
@@ -372,20 +450,29 @@ local function OnChatMessage(self, event, msg, sender, ...)
         mk = mk,
         s = senderID,
         ref = profileID,
+        ps = senderProfileSnapshot,
     }
 
     -- 添加收听者信息（当前登录的角色）
-    local listenerGameID = ns.GetPlayerID()
-    local listenerProfileID = nil
-    if TRP3_API and TRP3_API.profile then
-        listenerProfileID = TRP3_API.profile.getPlayerCurrentProfileID()
-    end
-
-    if listenerGameID then
+    local listenerContext = ns.GetSelfProfileContext and ns.GetSelfProfileContext() or nil
+    if listenerContext and listenerContext.gameID then
+        local listenerSnapshot = nil
+        if isFromSelf and listenerContext.profileID == profileID then
+            listenerSnapshot = senderProfileSnapshot
+        elseif ns.CaptureProfileSnapshot then
+            listenerSnapshot = ns.CaptureProfileSnapshot(
+                listenerContext.profileID,
+                listenerContext.root or listenerContext.profile,
+                listenerContext.gameID,
+                listenerContext.profileName
+            )
+        end
         record.listeners = {
             {
-                gameID = listenerGameID,
-                profileID = listenerProfileID
+                gameID = listenerContext.gameID,
+                profileID = listenerContext.profileID,
+                ref = listenerContext.profileID,
+                ps = listenerSnapshot,
             }
         }
     end

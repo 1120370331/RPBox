@@ -586,11 +586,13 @@ function getCharacterDisplayName(character: Character): string {
 
 function getEntrySpeakerName(entry: StoryEntry): string {
   if (entry.type === 'narration') return '旁白'
+  // Keep playback faithful to the name captured on this historical entry.
+  if (entry.speaker) return entry.speaker
   const character = getEntryCharacter(entry)
   if (character) {
     return getCharacterDisplayName(character)
   }
-  return entry.speaker || '未知'
+  return '未知'
 }
 
 function getEntrySpeakerInitial(entry: StoryEntry): string {

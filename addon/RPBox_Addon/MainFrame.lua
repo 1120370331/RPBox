@@ -76,16 +76,67 @@ local function GetClassColor(classFilename)
     return nil
 end
 
+local function BuildIdentityName(identity)
+    if type(identity) ~= "table" then return nil end
+    if identity.n and identity.n ~= "" then return identity.n end
+    if identity.rpName and identity.rpName ~= "" then return identity.rpName end
+
+    local firstName = identity.FN or ""
+    local lastName = identity.LN or ""
+    if firstName ~= "" and lastName ~= "" then return firstName .. " " .. lastName end
+    if firstName ~= "" then return firstName end
+    if lastName ~= "" then return lastName end
+    return nil
+end
+
+local function GetInlineRecordIdentity(record)
+    if type(record) ~= "table" then return nil end
+    if type(record.snapshot) == "table" then return record.snapshot end
+    if type(record.identity) == "table" then return record.identity end
+    if record.sender and type(record.sender.snapshot) == "table" then return record.sender.snapshot end
+    if record.sender and type(record.sender.trp3) == "table" then return record.sender.trp3 end
+    if record.FN or record.LN or record.TI or record.IC or record.CH or record.n then return record end
+    return nil
+end
+
+-- Historical identity precedence: inline record snapshot, immutable snapshot table,
+-- legacy embedded/cache data, and finally the literal game ID.
+local function ResolveRecordIdentity(record)
+    local inlineIdentity = GetInlineRecordIdentity(record)
+    if inlineIdentity then return inlineIdentity, "record" end
+
+    if record.ps and ns.GetProfileSnapshot then
+        local snapshot = ns.GetProfileSnapshot(record.ps)
+        if snapshot then return snapshot, "snapshot" end
+    end
+
+    if record.ref then
+        local cached = ns.GetCachedProfile(record.ref)
+        if cached then return cached, "legacy-cache" end
+    end
+    return nil, "game"
+end
+
+local function ResolveListenerIdentity(listener)
+    if type(listener) ~= "table" then return nil end
+    if type(listener.snapshot) == "table" then return listener.snapshot end
+    if type(listener.trp3) == "table" then return listener.trp3 end
+    if listener.ps and ns.GetProfileSnapshot then
+        local snapshot = ns.GetProfileSnapshot(listener.ps)
+        if snapshot then return snapshot end
+    end
+    local profileID = listener.ref or listener.profileID
+    if profileID then return ns.GetCachedProfile(profileID) end
+    return nil
+end
+
 -- 获取内联图标字符串
 local function GetInlineIcon(record)
     if not RPBox_Config.showIcon then return "" end
 
-    -- 优先使用TRP3头像
-    if record.ref then
-        local profile = ns.GetCachedProfile(record.ref)
-        if profile and profile.IC then
-            return format("|TInterface\\Icons\\%s:14:14|t ", profile.IC)
-        end
+    local identity = ResolveRecordIdentity(record)
+    if identity and identity.IC and identity.IC ~= "" then
+        return format("|TInterface\\Icons\\%s:14:14|t ", identity.IC)
     end
     -- 使用职业图标
     if record.cls then
@@ -142,93 +193,14 @@ local function ParseNPCMessage(content)
     return { name = nil, type = "emote", message = text, color = NPC_EMOTE_COLOR }
 end
 
--- 实时获取 TRP3 信息（显示时查询）
-local function GetTRP3InfoRealtime(unitID)
-    if not TRP3_API or not TRP3_API.register then return nil end
-    if not TRP3_API.register.isUnitIDKnown(unitID) then return nil end
-
-    local character = TRP3_API.register.getUnitIDCharacter(unitID)
-    if not character or not character.profileID then return nil end
-
-    local profile = TRP3_API.register.getProfile(character.profileID)
-    if not profile or not profile.player then return nil end
-
-    local char = profile.player.characteristics or {}
-    local rpName = nil
-    if TRP3_API.register.getCompleteName then
-        rpName = TRP3_API.register.getCompleteName(char, unitID, true)
-    end
-
-    return {
-        rpName = rpName,
-        CH = char.CH,
-    }
-end
-
 -- 获取显示名称（兼容新旧数据结构）
 local function GetDisplayName(record)
-    local displayName = nil
-    local colorCode = nil
     local senderID = record.s or (record.sender and record.sender.gameID)
+    local identity = ResolveRecordIdentity(record)
+    local displayName = BuildIdentityName(identity)
+    local colorCode = identity and identity.CH or nil
 
-    -- 1. 先尝试实时获取 TRP3 数据
-    if senderID then
-        local realtimeTRP3 = GetTRP3InfoRealtime(senderID)
-        if realtimeTRP3 then
-            if realtimeTRP3.rpName and realtimeTRP3.rpName ~= "" then
-                displayName = realtimeTRP3.rpName
-            end
-            if realtimeTRP3.CH and realtimeTRP3.CH ~= "" then
-                colorCode = realtimeTRP3.CH
-            end
-        end
-    end
-
-    -- 2. 从 ProfileCache 获取（新结构）
-    if not displayName and record.ref then
-        local cached = ns.GetCachedProfile(record.ref)
-        if cached then
-            local name = cached.FN or ""
-            if cached.LN and cached.LN ~= "" then
-                if name ~= "" then
-                    name = name .. " " .. cached.LN
-                else
-                    name = cached.LN
-                end
-            end
-            if name ~= "" then
-                displayName = name
-            end
-            if not colorCode and cached.CH then
-                colorCode = cached.CH
-            end
-        end
-    end
-
-    -- 3. 旧结构兼容
-    if not displayName and record.sender and record.sender.trp3 then
-        local trp3 = record.sender.trp3
-        if trp3.rpName and trp3.rpName ~= "" then
-            displayName = trp3.rpName
-        else
-            local name = trp3.FN or ""
-            if trp3.LN and trp3.LN ~= "" then
-                if name ~= "" then
-                    name = name .. " " .. trp3.LN
-                else
-                    name = trp3.LN
-                end
-            end
-            if name ~= "" then
-                displayName = name
-            end
-        end
-        if not colorCode and trp3.CH then
-            colorCode = trp3.CH
-        end
-    end
-
-    -- 4. 回退到游戏名
+    -- Do not query live TRP3 data here: it would rewrite historical identity at render time.
     if not displayName or displayName == "" then
         displayName = senderID and strsplit("-", senderID) or "未知"
     end
@@ -239,12 +211,159 @@ end
 -- 当前筛选条件
 local currentFilter = {
     days = nil,  -- nil=全部, 0=今天, 3=3天内, 7=7天内, 30=30天内
-    channel = nil,
+    channels = {},
+    speakers = {},
+    listeners = {},
     search = "",
 }
 
 local LOG_RECENT_LIMIT = 3000
 local LOG_VIEW_WINDOW_SIZE = 120
+local RefreshLogContent
+
+local CHANNEL_FILTER_OPTIONS = {
+    { value = "SAY", text = "说话" },
+    { value = "YELL", text = "大喊" },
+    { value = "EMOTE", text = "表情" },
+    { value = "TEXT_EMOTE", text = "文字表情" },
+    { value = "PARTY", text = "小队" },
+    { value = "RAID", text = "团队" },
+    { value = "WHISPER_IN", text = "收到密语" },
+    { value = "WHISPER_OUT", text = "发送密语" },
+    { value = "GUILD", text = "公会" },
+    { value = "SYSTEM", text = "人物卡节点" },
+}
+
+local function NormalizeRecordChannel(channel)
+    if channel == "CHAT_MSG_SAY" then return "SAY" end
+    if channel == "CHAT_MSG_YELL" then return "YELL" end
+    if channel == "CHAT_MSG_EMOTE" then return "EMOTE" end
+    if channel == "CHAT_MSG_TEXT_EMOTE" then return "TEXT_EMOTE" end
+    if channel == "CHAT_MSG_PARTY" or channel == "CHAT_MSG_PARTY_LEADER" then return "PARTY" end
+    if channel == "CHAT_MSG_RAID" or channel == "CHAT_MSG_RAID_LEADER" then return "RAID" end
+    if channel == "CHAT_MSG_WHISPER" then return "WHISPER_IN" end
+    if channel == "CHAT_MSG_WHISPER_INFORM" then return "WHISPER_OUT" end
+    if channel == "CHAT_MSG_GUILD" then return "GUILD" end
+    return channel
+end
+
+local function CountSelected(values)
+    local count = 0
+    for _, selected in pairs(values or {}) do
+        if selected then count = count + 1 end
+    end
+    return count
+end
+
+local function HasSelections(values)
+    return CountSelected(values) > 0
+end
+
+local function SetMultiDropdownText(dropdown, emptyText, selectedValues)
+    if not dropdown then return end
+    local count = CountSelected(selectedValues)
+    UIDropDownMenu_SetText(dropdown, count == 0 and emptyText or ("已选 " .. tostring(count) .. " 项"))
+end
+
+local function GetDatePresetText(days)
+    if days == 0 then return "今天" end
+    if days == 1 then return "24小时内" end
+    if days == 3 then return "3天内" end
+    if days == 7 then return "7天内" end
+    if days == 30 then return "30天内" end
+    return "全部时间"
+end
+
+local function GetIdentitySelectorKey(profileID, gameID)
+    if profileID and profileID ~= "" then return "p:" .. tostring(profileID) end
+    if gameID and gameID ~= "" then return "g:" .. tostring(gameID) end
+    return nil
+end
+
+local function GetEndpointIdentity(endpoint)
+    if type(endpoint) ~= "table" then return nil end
+    if endpoint.ps and ns.GetProfileSnapshot then
+        return ns.GetProfileSnapshot(endpoint.ps)
+    end
+    return nil
+end
+
+local function GetEndpointDisplayName(endpoint)
+    if type(endpoint) ~= "table" then return nil end
+    if endpoint.n and endpoint.n ~= "" then return endpoint.n end
+    local snapshot = GetEndpointIdentity(endpoint)
+    return BuildIdentityName(snapshot)
+end
+
+local function AddParticipantOption(optionsByKey, profileID, gameID, identity, endpoint)
+    local key = GetIdentitySelectorKey(profileID, gameID)
+    if not key then return end
+
+    local displayName = endpoint and GetEndpointDisplayName(endpoint) or BuildIdentityName(identity)
+    local profileName = endpoint and endpoint.pn or (identity and identity.pn)
+    local literalID = profileID or gameID
+    local label = displayName or (gameID and strsplit("-", gameID)) or tostring(literalID or "未知")
+    if profileName and profileName ~= "" and profileName ~= label then
+        label = label .. " · " .. profileName
+    end
+    if literalID and literalID ~= "" then
+        label = label .. "  [" .. tostring(literalID) .. "]"
+    end
+    optionsByKey[key] = optionsByKey[key] or { value = key, text = label }
+end
+
+local function BuildParticipantOptions(mode)
+    local optionsByKey = {}
+    for _, hours in pairs(RPBox_ChatLog or {}) do
+        for _, hourRecords in pairs(hours) do
+            for _, record in ipairs(hourRecords) do
+                if mode == "speaker" then
+                    local senderID = record.s or (record.sender and record.sender.gameID)
+                    local identity = ResolveRecordIdentity(record)
+                    local profileID = record.ref or (identity and identity.ref)
+                    AddParticipantOption(optionsByKey, profileID, senderID, identity)
+
+                    if record.mk == "S" and record.ev then
+                        local from = record.ev.from
+                        local to = record.ev.to
+                        if from then AddParticipantOption(optionsByKey, from.ref, senderID, GetEndpointIdentity(from), from) end
+                        if to then AddParticipantOption(optionsByKey, to.ref, senderID, GetEndpointIdentity(to), to) end
+                    end
+                else
+                    for _, listener in ipairs(record.listeners or {}) do
+                        local identity = ResolveListenerIdentity(listener)
+                        local profileID = listener.ref or listener.profileID or (identity and identity.ref)
+                        AddParticipantOption(optionsByKey, profileID, listener.gameID, identity)
+                    end
+                end
+            end
+        end
+    end
+
+    local options = {}
+    for _, option in pairs(optionsByKey) do options[#options + 1] = option end
+    table.sort(options, function(a, b) return a.text < b.text end)
+    return options
+end
+
+local function UpdateFilterSummary()
+    if not MainFrame or not MainFrame.filterSummary then return end
+    local parts = {}
+    if currentFilter.days ~= nil then parts[#parts + 1] = GetDatePresetText(currentFilter.days) end
+
+    local speakerCount = CountSelected(currentFilter.speakers)
+    local listenerCount = CountSelected(currentFilter.listeners)
+    local channelCount = CountSelected(currentFilter.channels)
+    if speakerCount > 0 then parts[#parts + 1] = "发言者 " .. speakerCount end
+    if listenerCount > 0 then parts[#parts + 1] = "视角 " .. listenerCount end
+    if channelCount > 0 then parts[#parts + 1] = "频道 " .. channelCount end
+    if currentFilter.search ~= "" then parts[#parts + 1] = "搜索“" .. currentFilter.search .. "”" end
+
+    MainFrame.filterSummary:SetText(#parts > 0 and table.concat(parts, "\n") or "当前显示全部档案记录")
+    if MainFrame.clearFilterBtn then
+        MainFrame.clearFilterBtn:SetEnabled(#parts > 0)
+    end
+end
 
 -- 获取可用的日期列表
 local function GetAvailableDates()
@@ -262,8 +381,9 @@ local function InitDateDropdown()
     if not MainFrame or not MainFrame.dateDropdown then return end
 
     local dayOptions = {
-        { value = nil, text = "全部" },
+        { value = nil, text = "全部时间" },
         { value = 0, text = "今天" },
+        { value = 1, text = "24小时内" },
         { value = 3, text = "3天内" },
         { value = 7, text = "7天内" },
         { value = 30, text = "30天内" },
@@ -271,54 +391,181 @@ local function InitDateDropdown()
 
     UIDropDownMenu_Initialize(MainFrame.dateDropdown, function(self, level)
         for _, opt in ipairs(dayOptions) do
+            local value = opt.value
+            local optionText = opt.text
             local info = UIDropDownMenu_CreateInfo()
-            info.text = opt.text
-            info.value = opt.value
-            info.checked = (currentFilter.days == opt.value)
+            info.text = optionText
+            info.value = value
+            info.checked = (currentFilter.days == value)
             info.func = function()
-                currentFilter.days = opt.value
-                UIDropDownMenu_SetText(MainFrame.dateDropdown, opt.text)
+                currentFilter.days = value
+                UIDropDownMenu_SetText(MainFrame.dateDropdown, optionText)
+                UpdateFilterSummary()
                 RefreshLogContent()
             end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
 
-    UIDropDownMenu_SetText(MainFrame.dateDropdown, "全部")
+    UIDropDownMenu_SetText(MainFrame.dateDropdown, GetDatePresetText(currentFilter.days))
 end
 
 -- 初始化频道下拉框
 local function InitChannelDropdown()
     if not MainFrame or not MainFrame.channelDropdown then return end
 
-    local channelOptions = {
-        { value = nil, text = "全部" },
-        { value = "SAY", text = "说话" },
-        { value = "YELL", text = "大喊" },
-        { value = "EMOTE", text = "表情" },
-        { value = "PARTY", text = "小队" },
-        { value = "RAID", text = "团队" },
-        { value = "WHISPER_IN", text = "收到密语" },
-        { value = "WHISPER_OUT", text = "发送密语" },
-        { value = "GUILD", text = "公会" },
-    }
-
     UIDropDownMenu_Initialize(MainFrame.channelDropdown, function(self, level)
-        for _, opt in ipairs(channelOptions) do
+        local allInfo = UIDropDownMenu_CreateInfo()
+        allInfo.text = "全部频道"
+        allInfo.checked = not HasSelections(currentFilter.channels)
+        allInfo.func = function()
+            wipe(currentFilter.channels)
+            SetMultiDropdownText(MainFrame.channelDropdown, "全部频道", currentFilter.channels)
+            UpdateFilterSummary()
+            RefreshLogContent()
+        end
+        UIDropDownMenu_AddButton(allInfo, level)
+
+        for _, opt in ipairs(CHANNEL_FILTER_OPTIONS) do
+            local value = opt.value
             local info = UIDropDownMenu_CreateInfo()
             info.text = opt.text
-            info.value = opt.value
-            info.checked = (currentFilter.channel == opt.value)
+            info.value = value
+            info.isNotRadio = true
+            info.keepShownOnClick = true
+            info.checked = currentFilter.channels[value] == true
             info.func = function()
-                currentFilter.channel = opt.value
-                UIDropDownMenu_SetText(MainFrame.channelDropdown, opt.text)
+                currentFilter.channels[value] = not currentFilter.channels[value] or nil
+                SetMultiDropdownText(MainFrame.channelDropdown, "全部频道", currentFilter.channels)
+                UpdateFilterSummary()
                 RefreshLogContent()
             end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
 
-    UIDropDownMenu_SetText(MainFrame.channelDropdown, "全部")
+    SetMultiDropdownText(MainFrame.channelDropdown, "全部频道", currentFilter.channels)
+end
+
+local function InitParticipantDropdown(dropdown, mode, selectedValues)
+    if not dropdown then return end
+    local options = BuildParticipantOptions(mode)
+    local emptyText = mode == "speaker" and "全部发言者" or "全部视角"
+
+    UIDropDownMenu_Initialize(dropdown, function(self, level)
+        local allInfo = UIDropDownMenu_CreateInfo()
+        allInfo.text = emptyText
+        allInfo.checked = not HasSelections(selectedValues)
+        allInfo.func = function()
+            wipe(selectedValues)
+            SetMultiDropdownText(dropdown, emptyText, selectedValues)
+            UpdateFilterSummary()
+            RefreshLogContent()
+        end
+        UIDropDownMenu_AddButton(allInfo, level)
+
+        for _, option in ipairs(options) do
+            local value = option.value
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.text
+            info.value = value
+            info.isNotRadio = true
+            info.keepShownOnClick = true
+            info.checked = selectedValues[value] == true
+            info.func = function()
+                selectedValues[value] = not selectedValues[value] or nil
+                SetMultiDropdownText(dropdown, emptyText, selectedValues)
+                UpdateFilterSummary()
+                RefreshLogContent()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    SetMultiDropdownText(dropdown, emptyText, selectedValues)
+end
+
+local function GetRecordSpeakerKeys(record)
+    local keys = {}
+    local senderID = record.s or (record.sender and record.sender.gameID)
+    local identity = ResolveRecordIdentity(record)
+    local primary = GetIdentitySelectorKey(record.ref or (identity and identity.ref), senderID)
+    if primary then keys[primary] = true end
+
+    if record.mk == "S" and record.ev then
+        if record.ev.from and record.ev.from.ref then keys["p:" .. tostring(record.ev.from.ref)] = true end
+        if record.ev.to and record.ev.to.ref then keys["p:" .. tostring(record.ev.to.ref)] = true end
+    end
+    return keys
+end
+
+local function GetRecordListenerKeys(record)
+    local keys = {}
+    for _, listener in ipairs(record.listeners or {}) do
+        local identity = ResolveListenerIdentity(listener)
+        local key = GetIdentitySelectorKey(listener.ref or listener.profileID or (identity and identity.ref), listener.gameID)
+        if key then keys[key] = true end
+    end
+    return keys
+end
+
+local function MatchesSelectedKeys(selectedValues, recordKeys)
+    if not HasSelections(selectedValues) then return true end
+    for key in pairs(recordKeys) do
+        if selectedValues[key] then return true end
+    end
+    return false
+end
+
+local function AddSearchPart(parts, value)
+    if value ~= nil and value ~= "" then parts[#parts + 1] = value end
+end
+
+local function AppendIdentitySearchParts(parts, identity)
+    if type(identity) ~= "table" then return end
+    AddSearchPart(parts, identity.n)
+    AddSearchPart(parts, identity.pn)
+    AddSearchPart(parts, identity.FN)
+    AddSearchPart(parts, identity.LN)
+    AddSearchPart(parts, identity.TI)
+    AddSearchPart(parts, identity.ref)
+    AddSearchPart(parts, identity.gameID)
+end
+
+local function RecordMatchesSearch(record, searchLower)
+    if not searchLower or searchLower == "" then return true end
+    local parts = {}
+    AddSearchPart(parts, record.m or record.content)
+    AddSearchPart(parts, record.s or (record.sender and record.sender.gameID))
+    AddSearchPart(parts, record.npc)
+    AddSearchPart(parts, record.ref)
+    AddSearchPart(parts, record.id)
+    AppendIdentitySearchParts(parts, ResolveRecordIdentity(record))
+
+    for _, listener in ipairs(record.listeners or {}) do
+        AddSearchPart(parts, listener.gameID)
+        AddSearchPart(parts, listener.ref or listener.profileID)
+        AppendIdentitySearchParts(parts, ResolveListenerIdentity(listener))
+    end
+
+    if record.ev then
+        local endpoints = {}
+        if record.ev.from then endpoints[#endpoints + 1] = record.ev.from end
+        if record.ev.to then endpoints[#endpoints + 1] = record.ev.to end
+        for _, endpoint in ipairs(endpoints) do
+            if endpoint then
+                AddSearchPart(parts, endpoint.ref)
+                AddSearchPart(parts, endpoint.n)
+                AddSearchPart(parts, endpoint.pn)
+                AppendIdentitySearchParts(parts, GetEndpointIdentity(endpoint))
+            end
+        end
+    end
+
+    for _, value in ipairs(parts) do
+        if value and tostring(value):lower():find(searchLower, 1, true) then return true end
+    end
+    return false
 end
 
 -- 获取筛选后的记录
@@ -345,32 +592,18 @@ local function GetFilteredRecords()
         for hourStr, hourRecords in pairs(hours) do
             for _, record in ipairs(hourRecords) do
                 local timestamp = record.t or record.timestamp or 0
-                local channel = record.c or record.channel
+                local channel = NormalizeRecordChannel(record.c or record.channel)
                 local content = record.m or record.content
 
                 -- 时间筛选
                 local timeMatch = (minTime == nil) or (timestamp >= minTime)
-                -- 频道筛选
-                local channelMatch = not currentFilter.channel or channel == currentFilter.channel
-                -- 搜索筛选（搜索内容、发送者、NPC名）
-                local searchMatch = true
-                if currentFilter.search ~= "" then
-                    local searchLower = currentFilter.search:lower()
-                    local sender = record.s or record.sender
-                    local senderName = sender
-                    if type(sender) == "table" then
-                        senderName = sender.name or sender.gameID or ""
-                    end
-                    local npcName = record.npc or ""
+                local channelMatch = not HasSelections(currentFilter.channels)
+                    or (channel and currentFilter.channels[channel] == true)
+                local speakerMatch = MatchesSelectedKeys(currentFilter.speakers, GetRecordSpeakerKeys(record))
+                local listenerMatch = MatchesSelectedKeys(currentFilter.listeners, GetRecordListenerKeys(record))
+                local searchMatch = RecordMatchesSearch(record, currentFilter.search:lower())
 
-                    local contentMatch = content and content:lower():find(searchLower, 1, true)
-                    local senderMatch = senderName and tostring(senderName):lower():find(searchLower, 1, true)
-                    local npcMatch = npcName and npcName:lower():find(searchLower, 1, true)
-
-                    searchMatch = contentMatch or senderMatch or npcMatch
-                end
-
-                if timeMatch and channelMatch and searchMatch then
+                if timeMatch and channelMatch and speakerMatch and listenerMatch and searchMatch then
                     table.insert(records, record)
                 end
             end
@@ -380,13 +613,18 @@ local function GetFilteredRecords()
     table.sort(records, function(a, b)
         local ta = a.t or a.timestamp or 0
         local tb = b.t or b.timestamp or 0
-        return ta > tb  -- 降序：最新的在前
+        if ta ~= tb then return ta < tb end
+        local sequenceA = tonumber(a.seq) or 0
+        local sequenceB = tonumber(b.seq) or 0
+        if sequenceA ~= sequenceB then return sequenceA < sequenceB end
+        return tostring(a.id or "") < tostring(b.id or "")
     end)
 
     if #records > LOG_RECENT_LIMIT then
         local limitedRecords = {}
-        for i = 1, LOG_RECENT_LIMIT do
-            limitedRecords[i] = records[i]
+        local startIndex = #records - LOG_RECENT_LIMIT + 1
+        for i = startIndex, #records do
+            limitedRecords[#limitedRecords + 1] = records[i]
         end
         return limitedRecords, #records
     end
@@ -452,6 +690,22 @@ local function EnsureLogRow(content, index)
     return row
 end
 
+local function FormatEventEndpoint(endpoint)
+    if type(endpoint) ~= "table" then return "未记录" end
+    local snapshot = GetEndpointIdentity(endpoint)
+    local displayName = (endpoint.n and endpoint.n ~= "" and endpoint.n) or BuildIdentityName(snapshot)
+    local profileName = endpoint.pn or (snapshot and snapshot.pn)
+    local label = displayName
+    if profileName and profileName ~= "" and profileName ~= displayName then
+        label = label and (label .. " / " .. profileName) or profileName
+    end
+    if not label or label == "" then label = "未命名人物卡" end
+    if endpoint.ref and endpoint.ref ~= "" then
+        label = label .. " [" .. tostring(endpoint.ref) .. "]"
+    end
+    return label
+end
+
 local function BuildLogLineTexts(record)
     local timestamp = record.t or record.timestamp or 0
     local channel = record.c or record.channel or ""
@@ -462,6 +716,29 @@ local function BuildLogLineTexts(record)
     end
 
     local timeStr = date("[%H:%M:%S]", timestamp)
+    if record.mk == "S" and record.ev then
+        local event = record.ev
+        local fromLabel = FormatEventEndpoint(event.from)
+        local toLabel = FormatEventEndpoint(event.to)
+        local observed = event.certainty == "observed"
+        local certaintyText = observed and "观测到" or "已记录"
+        if event.kind == "profile_switch" then
+            local lineText = format(
+                "|cFF888888%s|r |cFF6EC6BE━━ %s人物卡切换 ━━|r\n|cFF95B8B4%s|r  |cFF6EC6BE→|r  |cFFFFFFFF%s|r",
+                timeStr, certaintyText, fromLabel, toLabel
+            )
+            local plainText = format("%s [%s人物卡切换] %s -> %s", timeStr, certaintyText, fromLabel, toLabel)
+            return lineText, plainText
+        end
+
+        local lineText = format(
+            "|cFF888888%s|r |cFF6EC6BE◇ %s人物卡身份更新|r\n|cFF95B8B4%s|r  |cFF6EC6BE→|r  |cFFFFFFFF%s|r",
+            timeStr, certaintyText, fromLabel, toLabel
+        )
+        local plainText = format("%s [%s人物卡身份更新] %s -> %s", timeStr, certaintyText, fromLabel, toLabel)
+        return lineText, plainText
+    end
+
     local displayName, _, colorCode = GetDisplayName(record)
     local channelColor = CHANNEL_COLORS[channel] or CHANNEL_COLORS["CHAT_MSG_" .. channel] or "FFFFFF"
 
@@ -764,9 +1041,10 @@ local function CreateTabButton(parent, text, tabName, xOffset)
 end
 
 -- 刷新日志内容
-local function RefreshLogContent()
+RefreshLogContent = function()
     if not MainFrame or not MainFrame.logContent then return end
 
+    UpdateFilterSummary()
     InvalidateLogRender()
     local renderToken = MainFrame.logRenderToken
     UpdateLogLayoutWidth()
@@ -1172,6 +1450,7 @@ local function SwitchTab(tabName)
     if MainFrame.debugScroll then MainFrame.debugScroll:Hide() end
     if MainFrame.settingsScroll then MainFrame.settingsScroll:Hide() end
     if MainFrame.filterFrame then MainFrame.filterFrame:Hide() end
+    if MainFrame.ledgerHeader then MainFrame.ledgerHeader:Hide() end
 
     -- 更新按钮状态
     for _, btn in pairs(MainFrame.tabButtons or {}) do
@@ -1185,9 +1464,12 @@ local function SwitchTab(tabName)
     -- 显示对应内容
     if tabName == "log" then
         MainFrame.filterFrame:Show()
+        MainFrame.ledgerHeader:Show()
         MainFrame.logScroll:Show()
         InitDateDropdown()
         InitChannelDropdown()
+        InitParticipantDropdown(MainFrame.speakerDropdown, "speaker", currentFilter.speakers)
+        InitParticipantDropdown(MainFrame.listenerDropdown, "listener", currentFilter.listeners)
         RefreshLogContent()
     elseif tabName == "whitelist" or tabName == "blacklist" then
         MainFrame.listScroll:Show()
@@ -1207,7 +1489,7 @@ local function CreateMainFrame()
 
     -- 主窗口
     MainFrame = CreateFrame("Frame", "RPBoxMainFrame", UIParent, "BasicFrameTemplateWithInset")
-    MainFrame:SetSize(550, 450)
+    MainFrame:SetSize(780, 520)
     MainFrame:SetPoint("CENTER")
     MainFrame:SetMovable(true)
     MainFrame:EnableMouse(true)
@@ -1227,7 +1509,7 @@ local function CreateMainFrame()
 
     -- 启用调整大小
     MainFrame:SetResizable(true)
-    MainFrame:SetResizeBounds(400, 300, 1200, 900)
+    MainFrame:SetResizeBounds(680, 500, 1200, 900)
     MainFrame:SetClampedToScreen(true)
 
     -- 创建调整大小按钮
@@ -1267,61 +1549,130 @@ local function CreateMainFrame()
         end)
     end
 
-    -- 日志筛选栏
-    local filterFrame = CreateFrame("Frame", nil, MainFrame)
+    -- 档案筛选侧栏：发言者与收听视角分开，避免把不同角色卡混成一个人。
+    local filterFrame = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
     filterFrame:SetPoint("TOPLEFT", 12, -58)
-    filterFrame:SetPoint("TOPRIGHT", -30, -58)
-    filterFrame:SetHeight(28)
+    filterFrame:SetPoint("BOTTOMLEFT", 12, 40)
+    filterFrame:SetWidth(178)
+    if filterFrame.SetBackdrop then
+        filterFrame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        filterFrame:SetBackdropColor(0.035, 0.045, 0.06, 0.82)
+        filterFrame:SetBackdropBorderColor(0.25, 0.31, 0.4, 0.8)
+    end
 
-    -- 日期下拉框标签
+    local archiveTitle = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    archiveTitle:SetPoint("TOPLEFT", 12, -10)
+    archiveTitle:SetText("档案筛选")
+
+    local archiveHint = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    archiveHint:SetPoint("TOPLEFT", archiveTitle, "BOTTOMLEFT", 0, -3)
+    archiveHint:SetText("多选条件取交集")
+
     local dateLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    dateLabel:SetPoint("LEFT", 0, 0)
-    dateLabel:SetText("日期:")
-
-    -- 日期下拉框
+    dateLabel:SetPoint("TOPLEFT", 12, -50)
+    dateLabel:SetText("时间范围")
     local dateDropdown = CreateFrame("Frame", "RPBoxDateDropdown", filterFrame, "UIDropDownMenuTemplate")
-    dateDropdown:SetPoint("LEFT", dateLabel, "RIGHT", -10, -2)
-    UIDropDownMenu_SetWidth(dateDropdown, 100)
+    dateDropdown:SetPoint("TOPLEFT", -4, -62)
+    UIDropDownMenu_SetWidth(dateDropdown, 142)
 
-    MainFrame.filterFrame = filterFrame
-    MainFrame.dateDropdown = dateDropdown
+    local speakerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    speakerLabel:SetPoint("TOPLEFT", 12, -100)
+    speakerLabel:SetText("发言者 / 人物卡")
+    local speakerDropdown = CreateFrame("Frame", "RPBoxSpeakerDropdown", filterFrame, "UIDropDownMenuTemplate")
+    speakerDropdown:SetPoint("TOPLEFT", -4, -112)
+    UIDropDownMenu_SetWidth(speakerDropdown, 142)
 
-    -- 频道下拉框标签
+    local listenerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    listenerLabel:SetPoint("TOPLEFT", 12, -150)
+    listenerLabel:SetText("收听者 / 记录视角")
+    local listenerDropdown = CreateFrame("Frame", "RPBoxListenerDropdown", filterFrame, "UIDropDownMenuTemplate")
+    listenerDropdown:SetPoint("TOPLEFT", -4, -162)
+    UIDropDownMenu_SetWidth(listenerDropdown, 142)
+
     local channelLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    channelLabel:SetPoint("LEFT", dateDropdown, "RIGHT", 10, 2)
-    channelLabel:SetText("频道:")
-
-    -- 频道下拉框
+    channelLabel:SetPoint("TOPLEFT", 12, -200)
+    channelLabel:SetText("频道 / 节点")
     local channelDropdown = CreateFrame("Frame", "RPBoxChannelDropdown", filterFrame, "UIDropDownMenuTemplate")
-    channelDropdown:SetPoint("LEFT", channelLabel, "RIGHT", -10, -2)
-    UIDropDownMenu_SetWidth(channelDropdown, 80)
+    channelDropdown:SetPoint("TOPLEFT", -4, -212)
+    UIDropDownMenu_SetWidth(channelDropdown, 142)
 
-    MainFrame.channelDropdown = channelDropdown
-
-    -- 搜索框标签
     local searchLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    searchLabel:SetPoint("LEFT", channelDropdown, "RIGHT", 10, 2)
-    searchLabel:SetText("搜索:")
-
-    -- 搜索框
+    searchLabel:SetPoint("TOPLEFT", 12, -252)
+    searchLabel:SetText("全文与历史姓名")
     local searchBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
-    searchBox:SetSize(100, 20)
-    searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 5, 0)
+    searchBox:SetSize(150, 22)
+    searchBox:SetPoint("TOPLEFT", 12, -268)
     searchBox:SetAutoFocus(false)
+    searchBox:SetText(currentFilter.search)
     searchBox:SetScript("OnEnterPressed", function(self)
-        currentFilter.search = self:GetText()
+        currentFilter.search = strtrim(self:GetText() or "")
+        self:SetText(currentFilter.search)
+        UpdateFilterSummary()
         RefreshLogContent()
         self:ClearFocus()
     end)
     searchBox:SetScript("OnEscapePressed", function(self)
+        self:SetText(currentFilter.search)
         self:ClearFocus()
     end)
 
+    local summaryTitle = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    summaryTitle:SetPoint("TOPLEFT", 12, -306)
+    summaryTitle:SetText("已启用条件")
+    local filterSummary = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    filterSummary:SetPoint("TOPLEFT", summaryTitle, "BOTTOMLEFT", 0, -6)
+    filterSummary:SetPoint("RIGHT", filterFrame, "RIGHT", -12, 0)
+    filterSummary:SetJustifyH("LEFT")
+    filterSummary:SetJustifyV("TOP")
+    filterSummary:SetWordWrap(true)
+
+    local clearFilterBtn = CreateFrame("Button", nil, filterFrame, "UIPanelButtonTemplate")
+    clearFilterBtn:SetSize(150, 22)
+    clearFilterBtn:SetPoint("BOTTOM", 0, 10)
+    clearFilterBtn:SetText("清除全部筛选")
+    clearFilterBtn:SetScript("OnClick", function()
+        currentFilter.days = nil
+        wipe(currentFilter.channels)
+        wipe(currentFilter.speakers)
+        wipe(currentFilter.listeners)
+        currentFilter.search = ""
+        searchBox:SetText("")
+        InitDateDropdown()
+        InitChannelDropdown()
+        InitParticipantDropdown(speakerDropdown, "speaker", currentFilter.speakers)
+        InitParticipantDropdown(listenerDropdown, "listener", currentFilter.listeners)
+        UpdateFilterSummary()
+        RefreshLogContent()
+    end)
+
+    MainFrame.filterFrame = filterFrame
+    MainFrame.dateDropdown = dateDropdown
+    MainFrame.speakerDropdown = speakerDropdown
+    MainFrame.listenerDropdown = listenerDropdown
+    MainFrame.channelDropdown = channelDropdown
     MainFrame.searchBox = searchBox
+    MainFrame.filterSummary = filterSummary
+    MainFrame.clearFilterBtn = clearFilterBtn
+
+    local ledgerHeader = CreateFrame("Frame", nil, MainFrame)
+    ledgerHeader:SetPoint("TOPLEFT", 205, -58)
+    ledgerHeader:SetPoint("TOPRIGHT", -30, -58)
+    ledgerHeader:SetHeight(24)
+    local ledgerTitle = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    ledgerTitle:SetPoint("LEFT", 0, 0)
+    ledgerTitle:SetText("时间账本")
+    local ledgerHint = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    ledgerHint:SetPoint("RIGHT", 0, 0)
+    ledgerHint:SetText("按时间正序回放 · 滚动继续加载")
+    MainFrame.ledgerHeader = ledgerHeader
 
     -- 日志滚动框架
     local logScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
-    logScroll:SetPoint("TOPLEFT", 12, -88)
+    logScroll:SetPoint("TOPLEFT", 205, -84)
     logScroll:SetPoint("BOTTOMRIGHT", -30, 40)
     logScroll:SetScript("OnVerticalScroll", function(self, offset)
         if self._rpboxAdjustingScroll then return end
@@ -1475,7 +1826,7 @@ local function CreateMainFrame()
             -- 更新内容并显示
             local copyLines = {}
             local state = MainFrame.logState
-            for i = state.displayCount, 1, -1 do
+            for i = 1, state.displayCount do
                 local _, plainText = BuildLogLineTexts(state.records[i])
                 copyLines[#copyLines + 1] = plainText
             end
@@ -1518,11 +1869,15 @@ StaticPopupDialogs["RPBOX_CLEAR_LOG_CONFIRM"] = {
     button1 = "确定",
     button2 = "取消",
     OnAccept = function()
-        RPBox_ChatLog = {}
+        if ns.ClearRecords then
+            ns.ClearRecords(true, true)
+        else
+            RPBox_ChatLog = {}
+            if ns.UpdateSyncState then ns.UpdateSyncState() end
+        end
         if MainFrame and MainFrame:IsShown() and currentTab == "log" then
             RefreshLogContent()
         end
-        print("|cFF00FF00[RPBox]|r 聊天记录已清空")
     end,
     timeout = 0,
     whileDead = true,
@@ -1531,8 +1886,40 @@ StaticPopupDialogs["RPBOX_CLEAR_LOG_CONFIRM"] = {
 }
 
 -- 打开主界面
-function ns.OpenMainFrame()
+local function ApplyArchivePreset(preset)
+    if type(preset) ~= "table" then return end
+    if preset.reset then
+        currentFilter.days = nil
+        wipe(currentFilter.channels)
+        wipe(currentFilter.speakers)
+        wipe(currentFilter.listeners)
+        currentFilter.search = ""
+    end
+
+    if preset.datePreset == "all" then
+        currentFilter.days = nil
+    elseif type(preset.datePreset) == "number" then
+        currentFilter.days = preset.datePreset
+    end
+    if type(preset.search) == "string" then currentFilter.search = preset.search end
+
+    local selectionPresets = {
+        { source = preset.channels, target = currentFilter.channels },
+        { source = preset.speakers, target = currentFilter.speakers },
+        { source = preset.listeners, target = currentFilter.listeners },
+    }
+    for _, selection in ipairs(selectionPresets) do
+        if type(selection.source) == "table" then
+            wipe(selection.target)
+            for _, value in ipairs(selection.source) do selection.target[value] = true end
+        end
+    end
+end
+
+function ns.OpenMainFrame(preset)
+    ApplyArchivePreset(preset)
     local frame = CreateMainFrame()
+    if MainFrame.searchBox then MainFrame.searchBox:SetText(currentFilter.search) end
     SwitchTab("log")
     frame:Show()
 end
