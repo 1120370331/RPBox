@@ -6,7 +6,7 @@
 ## Version: 1.0.13
 ## Dependencies: totalRP3
 ## OptionalDeps: totalRP3_Extended
-## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_ProfileExport, RPBox_Config, RPBox_Sync
+## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_ProfileSnapshots, RPBox_ProfileExport, RPBox_Config, RPBox_Sync, RPBox_RecordState
 
 Locales\zhCN.lua
 

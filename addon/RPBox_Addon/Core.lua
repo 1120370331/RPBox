@@ -4,7 +4,7 @@
 local ADDON_NAME, ns = ...
 
 -- 版本信息
-ns.VERSION = "1.0.12"
+ns.VERSION = "1.0.13"
 
 -- 公开 API
 RPBox_API = ns
@@ -40,6 +40,28 @@ local DEFAULT_CONFIG = {
     guildOnly = false,  -- 是否只接受公会成员的消息
 }
 
+local RECORD_SCHEMA_VERSION = 2
+
+local function NewInstallID()
+    local playerID = ns.GetPlayerID and ns.GetPlayerID() or nil
+    local safePlayerID = tostring(playerID or "account"):gsub("[^%w]", "")
+    return table.concat({ tostring(time()), safePlayerID, tostring(math.random(100000, 999999)) }, "-")
+end
+
+local function InitRecordState()
+    RPBox_RecordState = RPBox_RecordState or {}
+    if not RPBox_RecordState.installID or RPBox_RecordState.installID == "" then
+        RPBox_RecordState.installID = NewInstallID()
+    end
+
+    RPBox_RecordState.sessionCounter = (tonumber(RPBox_RecordState.sessionCounter) or 0) + 1
+    RPBox_RecordState.sessionID = RPBox_RecordState.installID .. "." .. tostring(RPBox_RecordState.sessionCounter)
+    RPBox_RecordState.recordSequence = 0
+    RPBox_RecordState.snapshotSequence = tonumber(RPBox_RecordState.snapshotSequence) or 0
+    RPBox_RecordState.snapshotIndex = RPBox_RecordState.snapshotIndex or {}
+    RPBox_RecordState.observedProfiles = RPBox_RecordState.observedProfiles or {}
+end
+
 -- 初始化 SavedVariables
 local function InitSavedVariables()
     RPBox_Config = RPBox_Config or {}
@@ -51,8 +73,10 @@ local function InitSavedVariables()
 
     RPBox_ChatLog = RPBox_ChatLog or {}
     RPBox_ProfileCache = RPBox_ProfileCache or {}
+    RPBox_ProfileSnapshots = RPBox_ProfileSnapshots or {}
     RPBox_ProfileExport = RPBox_ProfileExport or {}
     RPBox_Sync = RPBox_Sync or { addon = {}, client = {} }
+    InitRecordState()
 end
 
 -- 获取单位ID (玩家名-服务器)
@@ -66,6 +90,191 @@ end
 -- 获取玩家自己的单位ID
 function ns.GetPlayerID()
     return ns.GetUnitID("player")
+end
+
+local function NormalizeIdentityValue(value)
+    if value == nil then return "" end
+    return tostring(value)
+end
+
+local function GetProfilePlayerData(profileData)
+    if type(profileData) ~= "table" then return nil end
+    if type(profileData.player) == "table" then
+        return profileData.player
+    end
+    return profileData
+end
+
+local function GetIdentityName(characteristics)
+    if type(characteristics) ~= "table" then return "" end
+    local firstName = NormalizeIdentityValue(characteristics.FN)
+    local lastName = NormalizeIdentityValue(characteristics.LN)
+    if firstName ~= "" and lastName ~= "" then
+        return firstName .. " " .. lastName
+    end
+    return firstName ~= "" and firstName or lastName
+end
+
+local function BuildIdentitySignature(profileID, gameID, characteristics, profileName)
+    characteristics = characteristics or {}
+    return table.concat({
+        NormalizeIdentityValue(profileID),
+        NormalizeIdentityValue(gameID),
+        NormalizeIdentityValue(profileName),
+        NormalizeIdentityValue(characteristics.FN),
+        NormalizeIdentityValue(characteristics.LN),
+        NormalizeIdentityValue(characteristics.TI),
+        NormalizeIdentityValue(characteristics.IC),
+        NormalizeIdentityValue(characteristics.CH),
+    }, "\31")
+end
+
+local function GetSnapshotSubjectKey(profileID, gameID)
+    if profileID and profileID ~= "" then
+        return "profile:" .. tostring(profileID) .. "\31game:" .. tostring(gameID or "unknown")
+    end
+    return "game:" .. tostring(gameID or "unknown")
+end
+
+local function BuildProfileIdentitySnapshot(profileID, profileData, gameID, profileName)
+    local playerData = GetProfilePlayerData(profileData) or {}
+    local characteristics = playerData.characteristics or {}
+    if not profileName and type(profileData) == "table" then
+        profileName = profileData.profileName
+    end
+
+    return {
+        ref = profileID,
+        gameID = gameID,
+        n = GetIdentityName(characteristics),
+        pn = profileName,
+        FN = characteristics.FN,
+        LN = characteristics.LN,
+        TI = characteristics.TI,
+        IC = characteristics.IC,
+        CH = characteristics.CH,
+        at = time(),
+    }, BuildIdentitySignature(profileID, gameID, characteristics, profileName)
+end
+
+-- GetProfileSnapshot returns one immutable identity observation captured with a record.
+function ns.GetProfileSnapshot(snapshotKey)
+    if not snapshotKey or not RPBox_ProfileSnapshots then return nil end
+    return RPBox_ProfileSnapshots[snapshotKey]
+end
+
+-- GetSnapshotSignature returns the compact identity fields used to detect a real change.
+function ns.GetSnapshotSignature(snapshot)
+    if type(snapshot) ~= "table" then return nil end
+    return BuildIdentitySignature(snapshot.ref, snapshot.gameID, snapshot, snapshot.pn)
+end
+
+-- CaptureProfileSnapshot stores a new immutable identity only when the observed identity changes.
+function ns.CaptureProfileSnapshot(profileID, profileData, gameID, profileName)
+    if not RPBox_RecordState or not RPBox_ProfileSnapshots then return nil, nil end
+
+    local subjectKey = GetSnapshotSubjectKey(profileID, gameID)
+    local snapshot, signature = BuildProfileIdentitySnapshot(profileID, profileData, gameID, profileName)
+    local index = RPBox_RecordState.snapshotIndex[subjectKey]
+    if index and index.signature == signature and index.key then
+        local existing = RPBox_ProfileSnapshots[index.key]
+        if existing then
+            return index.key, existing
+        end
+    end
+
+    local previousRevision = index and tonumber(index.rev) or 0
+    RPBox_RecordState.snapshotSequence = (tonumber(RPBox_RecordState.snapshotSequence) or 0) + 1
+    local snapshotKey = RPBox_RecordState.sessionID .. ".p" .. tostring(RPBox_RecordState.snapshotSequence)
+    snapshot.rev = previousRevision + 1
+
+    -- Never mutate an existing key: records already referring to it are history.
+    RPBox_ProfileSnapshots[snapshotKey] = snapshot
+    RPBox_RecordState.snapshotIndex[subjectKey] = {
+        key = snapshotKey,
+        signature = signature,
+        rev = snapshot.rev,
+    }
+    return snapshotKey, snapshot
+end
+
+-- MakeSnapshotEndpoint copies literal event endpoint data so later cache updates cannot rewrite it.
+function ns.MakeSnapshotEndpoint(profileID, snapshotKey, snapshot)
+    snapshot = snapshot or ns.GetProfileSnapshot(snapshotKey) or {}
+    return {
+        ref = profileID or snapshot.ref,
+        ps = snapshotKey,
+        n = snapshot.n or "",
+        pn = snapshot.pn,
+    }
+end
+
+-- ApplyRecordSchema assigns a collision-resistant session/sequence identity to a new record.
+function ns.ApplyRecordSchema(record)
+    if type(record) ~= "table" then return record end
+    if not RPBox_RecordState then return record end
+    if record.sv == RECORD_SCHEMA_VERSION and record.id and record.sid and record.seq then
+        return record
+    end
+
+    RPBox_RecordState.recordSequence = (tonumber(RPBox_RecordState.recordSequence) or 0) + 1
+    local sequence = RPBox_RecordState.recordSequence
+    record.sv = RECORD_SCHEMA_VERSION
+    record.sid = RPBox_RecordState.sessionID
+    record.seq = sequence
+    record.id = record.sid .. ".r" .. tostring(sequence)
+    return record
+end
+
+-- GetSelfProfileContext returns the active local profile and its management label.
+function ns.GetSelfProfileContext()
+    if not TRP3_API or not TRP3_API.profile then return nil end
+    if not TRP3_API.profile.getPlayerCurrentProfileID then return nil end
+
+    local profileID = TRP3_API.profile.getPlayerCurrentProfileID()
+    if not profileID then return nil end
+
+    local rootProfile = nil
+    if TRP3_API.profile.getPlayerCurrentProfile then
+        rootProfile = TRP3_API.profile.getPlayerCurrentProfile()
+    end
+    local playerData = rootProfile and rootProfile.player or nil
+    if not playerData and TRP3_API.profile.getData then
+        playerData = TRP3_API.profile.getData("player")
+    end
+
+    return {
+        profileID = profileID,
+        profile = playerData or {},
+        root = rootProfile,
+        profileName = rootProfile and rootProfile.profileName or nil,
+        gameID = ns.GetPlayerID(),
+    }
+end
+
+-- GetRemoteProfileContext safely reads the currently observed card for a unit.
+function ns.GetRemoteProfileContext(unitID)
+    if not unitID or not TRP3_API or not TRP3_API.register then return nil end
+    if not TRP3_API.register.isUnitIDKnown or not TRP3_API.register.isUnitIDKnown(unitID) then return nil end
+
+    local okCharacter, character = pcall(TRP3_API.register.getUnitIDCharacter, unitID)
+    if not okCharacter or not character or not character.profileID then return nil end
+
+    local profileID = character.profileID
+    local profile = nil
+    if TRP3_API.register.getProfileOrNil then
+        profile = TRP3_API.register.getProfileOrNil(profileID)
+    elseif TRP3_API.register.getProfile then
+        local okProfile, result = pcall(TRP3_API.register.getProfile, profileID)
+        if okProfile then profile = result end
+    end
+    if not profile then return nil end
+
+    return {
+        profileID = profileID,
+        profile = profile,
+        gameID = unitID,
+    }
 end
 
 -- 检查是否在黑名单
@@ -137,6 +346,9 @@ end
 function ns.CacheProfile(profileID, playerData)
     if not profileID or not playerData then return end
 
+    playerData = GetProfilePlayerData(playerData)
+    if not playerData then return end
+
     local cache = {
         -- characteristics
         v = playerData.characteristics and playerData.characteristics.v,
@@ -180,31 +392,14 @@ function ns.UpdateProfileCache(unitID)
         return
     end
 
-    if not TRP3_API or not TRP3_API.register then
-        -- print("|cFFFF0000[RPBox]|r UpdateProfileCache 失败: TRP3 API不可用")
-        return
-    end
-
-    -- 检查是否已知该玩家
-    if not TRP3_API.register.isUnitIDKnown(unitID) then
-        -- print("|cFFFFFF00[RPBox]|r UpdateProfileCache 跳过: TRP3尚未知晓玩家 " .. unitID)
-        return
-    end
-
-    local character = TRP3_API.register.getUnitIDCharacter(unitID)
-    if not character or not character.profileID then
-        -- print("|cFFFF0000[RPBox]|r UpdateProfileCache 失败: 无法获取角色信息")
-        return
-    end
-
-    local profileID = character.profileID
-    -- print("|cFF00FF00[RPBox]|r 获取到profileID: " .. tostring(profileID))
-
-    local profile = TRP3_API.register.getProfile(profileID)
-    if not profile or not (profile.characteristics or profile.about or profile.misc) then
+    local context = ns.GetRemoteProfileContext(unitID)
+    if not context then
         -- print("|cFFFF0000[RPBox]|r UpdateProfileCache 失败: 无法获取profile数据")
         return
     end
+
+    local profileID = context.profileID
+    local profile = context.profile
 
     -- 更新缓存
     ns.CacheProfile(profileID, profile)
@@ -256,6 +451,275 @@ function ns.ImportAllTRP3Profiles()
     if skipped > 0 then
         print("|cFFFFFF00[RPBox]|r 跳过: " .. skipped .. " 个无效数据")
     end
+end
+
+local localProfileBaseline = nil
+
+local function PersistProfileObservation(observation)
+    if not observation then return nil end
+    if observation.ps and ns.GetProfileSnapshot(observation.ps) then return observation end
+
+    local identity = observation.snapshot or {}
+    local profileData = {
+        characteristics = {
+            FN = identity.FN,
+            LN = identity.LN,
+            TI = identity.TI,
+            IC = identity.IC,
+            CH = identity.CH,
+        },
+    }
+    local snapshotKey, snapshot = ns.CaptureProfileSnapshot(
+        observation.ref,
+        profileData,
+        identity.gameID,
+        identity.pn
+    )
+    if not snapshotKey or not snapshot then return observation end
+
+    observation.ps = snapshotKey
+    observation.snapshot = snapshot
+    observation.signature = ns.GetSnapshotSignature(snapshot)
+    observation.endpoint = ns.MakeSnapshotEndpoint(observation.ref, snapshotKey, snapshot)
+    return observation
+end
+
+local function CaptureSelfObservation(persistSnapshot)
+    local context = ns.GetSelfProfileContext()
+    if not context then return nil end
+
+    ns.CacheProfile(context.profileID, context.profile)
+    local snapshot, signature = BuildProfileIdentitySnapshot(
+        context.profileID,
+        context.root or context.profile,
+        context.gameID,
+        context.profileName
+    )
+    local observation = {
+        ref = context.profileID,
+        snapshot = snapshot,
+        signature = signature,
+        endpoint = ns.MakeSnapshotEndpoint(context.profileID, nil, snapshot),
+    }
+    if persistSnapshot ~= false then
+        PersistProfileObservation(observation)
+    end
+    return observation
+end
+
+local function EmitProfileTimelineEvent(kind, certainty, fromEndpoint, toEndpoint, actorGameID)
+    if ns.AppendProfileTimelineEvent then
+        ns.AppendProfileTimelineEvent(kind, certainty, fromEndpoint, toEndpoint, actorGameID)
+    end
+end
+
+-- ObserveRemoteProfileIdentity captures remote changes as observations, without claiming when they happened.
+function ns.ObserveRemoteProfileIdentity(unitID, profileID, profileData, emitChange)
+    if not unitID or not profileID or not profileData then return nil, nil end
+    local playerID = ns.GetPlayerID()
+    if playerID and unitID == playerID then
+        return ns.CaptureProfileSnapshot(profileID, profileData, unitID)
+    end
+
+    local snapshotKey, snapshot = ns.CaptureProfileSnapshot(profileID, profileData, unitID)
+    if not snapshotKey or not snapshot or not RPBox_RecordState then return snapshotKey, snapshot end
+
+    local previousKey = RPBox_RecordState.observedProfiles[unitID]
+    RPBox_RecordState.observedProfiles[unitID] = snapshotKey
+    if previousKey and previousKey ~= snapshotKey and emitChange ~= false then
+        local previousSnapshot = ns.GetProfileSnapshot(previousKey)
+        if previousSnapshot then
+            local kind = previousSnapshot.ref ~= snapshot.ref and "profile_switch" or "profile_update"
+            EmitProfileTimelineEvent(
+                kind,
+                "observed",
+                ns.MakeSnapshotEndpoint(previousSnapshot.ref, previousKey, previousSnapshot),
+                ns.MakeSnapshotEndpoint(snapshot.ref, snapshotKey, snapshot),
+                unitID
+            )
+        end
+    end
+
+    return snapshotKey, snapshot
+end
+
+local function SeedLocalProfileBaseline()
+    if localProfileBaseline then return end
+    localProfileBaseline = CaptureSelfObservation()
+end
+
+local function OnLocalProfilesLoaded()
+    local current = CaptureSelfObservation(false)
+    if not current then return end
+    if not localProfileBaseline then
+        localProfileBaseline = PersistProfileObservation(current)
+        return
+    end
+
+    local previous = localProfileBaseline
+    if previous.ref ~= current.ref then
+        -- REGISTER_PROFILES_LOADED is the authoritative local switch signal.
+        PersistProfileObservation(previous)
+        PersistProfileObservation(current)
+        EmitProfileTimelineEvent("profile_switch", "exact", previous.endpoint, current.endpoint, ns.GetPlayerID())
+    elseif previous.signature ~= current.signature then
+        -- Same-ID reloads only establish that a changed identity is now observed.
+        PersistProfileObservation(previous)
+        PersistProfileObservation(current)
+        EmitProfileTimelineEvent("profile_update", "observed", previous.endpoint, current.endpoint, ns.GetPlayerID())
+    else
+        current = previous
+    end
+    localProfileBaseline = current
+end
+
+local function OnLocalProfileDataUpdated()
+    local current = CaptureSelfObservation(false)
+    if not current then return end
+    if not localProfileBaseline then
+        localProfileBaseline = PersistProfileObservation(current)
+        return
+    end
+
+    local previous = localProfileBaseline
+    if previous.ref == current.ref and previous.signature ~= current.signature then
+        PersistProfileObservation(previous)
+        PersistProfileObservation(current)
+        EmitProfileTimelineEvent("profile_update", "exact", previous.endpoint, current.endpoint, ns.GetPlayerID())
+    elseif previous.ref == current.ref then
+        current = previous
+    end
+    -- A differing ID is handled by REGISTER_PROFILES_LOADED; seeding here prevents its duplicate update event.
+    localProfileBaseline = current
+end
+
+local function MarkSnapshotReference(reachable, snapshotKey)
+    if snapshotKey and RPBox_ProfileSnapshots and RPBox_ProfileSnapshots[snapshotKey] then
+        reachable[snapshotKey] = true
+    end
+end
+
+local function MarkRecordSnapshotReferences(reachable, record)
+    if type(record) ~= "table" then return end
+    MarkSnapshotReference(reachable, record.ps)
+    if type(record.sender) == "table" then
+        MarkSnapshotReference(reachable, record.sender.ps)
+    end
+    for _, listener in ipairs(record.listeners or {}) do
+        if type(listener) == "table" then
+            MarkSnapshotReference(reachable, listener.ps)
+        end
+    end
+    if type(record.ev) == "table" then
+        if type(record.ev.from) == "table" then
+            MarkSnapshotReference(reachable, record.ev.from.ps)
+        end
+        if type(record.ev.to) == "table" then
+            MarkSnapshotReference(reachable, record.ev.to.ps)
+        end
+    end
+end
+
+local function IsNewerSnapshot(candidateKey, candidate, indexed)
+    if not indexed then return true end
+    local candidateRevision = tonumber(candidate.rev) or 0
+    local indexedRevision = tonumber(indexed.rev) or 0
+    if candidateRevision ~= indexedRevision then return candidateRevision > indexedRevision end
+
+    local candidateTime = tonumber(candidate.at) or 0
+    local indexedSnapshot = RPBox_ProfileSnapshots[indexed.key]
+    local indexedTime = indexedSnapshot and tonumber(indexedSnapshot.at) or 0
+    if candidateTime ~= indexedTime then return candidateTime > indexedTime end
+    return tostring(candidateKey) > tostring(indexed.key or "")
+end
+
+local function RebuildSnapshotIndex()
+    if not RPBox_RecordState then return end
+    local rebuilt = {}
+    for snapshotKey, snapshot in pairs(RPBox_ProfileSnapshots or {}) do
+        if type(snapshot) == "table" then
+            local subjectKey = GetSnapshotSubjectKey(snapshot.ref, snapshot.gameID)
+            if IsNewerSnapshot(snapshotKey, snapshot, rebuilt[subjectKey]) then
+                rebuilt[subjectKey] = {
+                    key = snapshotKey,
+                    signature = ns.GetSnapshotSignature(snapshot),
+                    rev = tonumber(snapshot.rev) or 0,
+                }
+            end
+        end
+    end
+    RPBox_RecordState.snapshotIndex = rebuilt
+end
+
+-- PruneProfileSnapshots keeps record/event references plus live observation baselines.
+-- The latter prevent a partial retention cleanup from fabricating a new remote/local change.
+function ns.PruneProfileSnapshots(keepObservationBaselines)
+    if not RPBox_ProfileSnapshots or not RPBox_RecordState then return 0 end
+    local reachable = {}
+
+    for _, hours in pairs(RPBox_ChatLog or {}) do
+        for _, records in pairs(hours) do
+            for _, record in ipairs(records) do
+                MarkRecordSnapshotReferences(reachable, record)
+            end
+        end
+    end
+
+    if keepObservationBaselines ~= false then
+        if localProfileBaseline and localProfileBaseline.ps then
+            MarkSnapshotReference(reachable, localProfileBaseline.ps)
+        end
+        for _, snapshotKey in pairs(RPBox_RecordState.observedProfiles or {}) do
+            MarkSnapshotReference(reachable, snapshotKey)
+        end
+    end
+
+    local retained = {}
+    local removed = 0
+    for snapshotKey, snapshot in pairs(RPBox_ProfileSnapshots) do
+        if reachable[snapshotKey] then
+            retained[snapshotKey] = snapshot
+        else
+            removed = removed + 1
+        end
+    end
+    RPBox_ProfileSnapshots = retained
+
+    -- Drop any pre-existing dangling observer entry; valid live observers were marked above.
+    local staleObservers = {}
+    for unitID, snapshotKey in pairs(RPBox_RecordState.observedProfiles or {}) do
+        if not RPBox_ProfileSnapshots[snapshotKey] then
+            staleObservers[#staleObservers + 1] = unitID
+        end
+    end
+    for _, unitID in ipairs(staleObservers) do
+        RPBox_RecordState.observedProfiles[unitID] = nil
+    end
+    if localProfileBaseline and localProfileBaseline.ps
+        and not RPBox_ProfileSnapshots[localProfileBaseline.ps] then
+        localProfileBaseline.ps = nil
+        localProfileBaseline.endpoint = ns.MakeSnapshotEndpoint(
+            localProfileBaseline.ref,
+            nil,
+            localProfileBaseline.snapshot
+        )
+    end
+
+    RebuildSnapshotIndex()
+    return removed
+end
+
+local function ResetProfileHistoryState()
+    RPBox_ProfileSnapshots = {}
+    if RPBox_RecordState then
+        -- Keep install/session/sequence fields so record and snapshot IDs are never reused.
+        RPBox_RecordState.snapshotIndex = {}
+        RPBox_RecordState.observedProfiles = {}
+    end
+
+    -- This fresh in-memory baseline is not history and owns no snapshot key. It lets the
+    -- next local switch materialize a valid before-snapshot without crossing the clear boundary.
+    localProfileBaseline = CaptureSelfObservation(false)
 end
 
 -- 显示缓存统计信息
@@ -445,7 +909,7 @@ function ns.UpdateSyncState()
     RPBox_Sync.addon = {
         lastUpdate = time(),
         recordCount = ns.GetTotalRecordCount(),
-        version = 1,
+        version = RECORD_SCHEMA_VERSION,
     }
 end
 
@@ -523,6 +987,7 @@ function ns.ClearRecordsBefore(timestamp)
             RPBox_ChatLog[date] = nil
         end
     end
+    ns.PruneProfileSnapshots(true)
     return cleared
 end
 
@@ -535,6 +1000,7 @@ function ns.ClearRecords(clearAll, confirmed)
         end
         local count = ns.GetTotalRecordCount()
         RPBox_ChatLog = {}
+        ResetProfileHistoryState()
         print(format(L["CLEAR_DONE"] or "[RPBox] 已清理 %d 条记录", count))
     else
         -- 只清理已同步的
@@ -561,17 +1027,35 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         -- 注册TRP3事件监听
         if TRP3_Addon and TRP3_Addon.RegisterCallback then
             -- print("|cFF00FF00[RPBox]|r 正在注册TRP3事件监听...")
-            TRP3_Addon.RegisterCallback(ns, "REGISTER_DATA_UPDATED", function(_, unitID, hasProfile)
-                -- 当TRP3收到新的人物卡数据时，自动更新缓存
-                -- print("|cFF00FF00[RPBox]|r TRP3事件触发: unitID=" .. tostring(unitID) .. ", hasProfile=" .. tostring(hasProfile))
-                if hasProfile and unitID then
-                    ns.UpdateProfileCache(unitID)
+            TRP3_Addon.RegisterCallback(ns, "REGISTER_PROFILES_LOADED", function()
+                OnLocalProfilesLoaded()
+            end)
+
+            TRP3_Addon.RegisterCallback(ns, "REGISTER_DATA_UPDATED", function(_, unitID, profileID)
+                local playerID = ns.GetPlayerID()
+                local selfContext = ns.GetSelfProfileContext()
+                local isLocalUpdate = (unitID and playerID and unitID == playerID)
+                    or (not unitID and selfContext and profileID == selfContext.profileID)
+
+                if isLocalUpdate then
+                    OnLocalProfileDataUpdated()
+                    return
+                end
+
+                if unitID then
+                    local context = ns.GetRemoteProfileContext(unitID)
+                    if context then
+                        ns.ObserveRemoteProfileIdentity(unitID, context.profileID, context.profile, true)
+                        ns.CacheProfile(context.profileID, context.profile)
+                    end
                 end
             end)
             -- print("|cFF00FF00[RPBox]|r TRP3事件监听注册成功！")
 
             -- 批量导入 TRP3 已有的人物卡数据
+            C_Timer.After(0, SeedLocalProfileBaseline)
             C_Timer.After(1, function()
+                SeedLocalProfileBaseline()
                 ns.ImportAllTRP3Profiles()
             end)
         else

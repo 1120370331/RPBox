@@ -1,358 +1,446 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
-import RCheckbox from '@/components/RCheckbox.vue'
 import RButton from '@/components/RButton.vue'
+import RCheckbox from '@/components/RCheckbox.vue'
 import REmpty from '@/components/REmpty.vue'
 import WowIcon from '@/components/WowIcon.vue'
+import type {
+  AccountChatLogs,
+  ChatRecord,
+  IdentityEndpoint,
+  Listener,
+  ProfileSnapshot,
+} from '@/types/chatLog'
 
 const { t } = useI18n()
 
-interface TRP3Info {
-  FN?: string
-  LN?: string
-  TI?: string
-  IC?: string
-  CH?: string  // 名字颜色
-}
-
-interface Listener {
-  gameID: string
-  profileID?: string
-}
-
-interface ChatRecord {
-  timestamp: number
-  channel: string
-  sender: {
-    gameID: string
-    trp3?: TRP3Info
-  }
-  content: string
-  mark?: string  // P(Player), N(NPC), B(Background)
-  npc?: string   // NPC名字（仅NPC消息）
-  nt?: string    // NPC说话类型: say/yell/whisper（仅NPC消息）
-  ref_id?: string  // TRP3 profile ref ID
-  raw_profile?: string  // 完整的TRP3 profile JSON
-  listeners?: Listener[]  // 收听者列表（新增字段，向前兼容）
-}
-
-interface AccountChatLogs {
-  account_id: string
-  last_update: number | null
-  record_count: number
-  records: ChatRecord[]
+interface ProfileOption {
+  key: string
+  name: string
+  detail: string
+  legacy: boolean
 }
 
 const emit = defineEmits<{
   archive: [records: ChatRecord[]]
 }>()
 
-// 获取所有记录的扁平列表
-const allRecords = computed(() => {
-  const records: ChatRecord[] = []
-  for (const account of accounts.value) {
-    records.push(...account.records)
-  }
-  return records
-})
-
-// 获取选中的记录对象
-function getSelectedRecords(): ChatRecord[] {
-  return allRecords.value.filter(r => selectedRecords.value.has(r.timestamp))
-}
-
-// 清除选中状态
-function clearSelection() {
-  selectedRecords.value.clear()
-}
-
-// 移除已归档的记录（添加到已归档集合）
-function removeArchivedRecords(timestamps: number[]) {
-  for (const ts of timestamps) {
-    archivedTimestamps.value.add(ts)
-    selectedRecords.value.delete(ts)
-  }
-  saveArchivedTimestamps()
-}
-
 const loading = ref(false)
+const syncError = ref('')
 const accounts = ref<AccountChatLogs[]>([])
-const selectedRecords = ref<Set<number>>(new Set())
+const selectedRecords = ref<Set<string>>(new Set())
 const expandedDates = ref<Set<string>>(new Set())
 const expandedHours = ref<Set<string>>(new Set())
 
-// 筛选条件
+const filterSearch = ref('')
 const filterStartDate = ref('')
 const filterEndDate = ref('')
 const filterChannels = ref<Set<string>>(new Set())
-const filterListeners = ref<Set<string>>(new Set())  // 收听者筛选（存储 gameID）
+const filterSenderProfiles = ref<Set<string>>(new Set())
+const filterListenerProfiles = ref<Set<string>>(new Set())
 
-// 已归档的 timestamp 集合（持久化到 localStorage）
-const archivedTimestamps = ref<Set<number>>(new Set(
-  JSON.parse(localStorage.getItem('archived_timestamps') || '[]')
-))
+const ARCHIVED_KEYS_STORAGE = 'rpbox_archived_record_keys_v2'
+const LEGACY_ARCHIVED_STORAGE = 'archived_timestamps'
 
-function saveArchivedTimestamps() {
-  localStorage.setItem('archived_timestamps', JSON.stringify([...archivedTimestamps.value]))
+function readStoredSet<T>(key: string): Set<T> {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]')
+    return new Set(Array.isArray(value) ? value : [])
+  } catch {
+    return new Set()
+  }
 }
 
-// 获取所有可用的收听者列表
-const availableListeners = computed(() => {
-  const listenersMap = new Map<string, { gameID: string, name: string }>()
+const archivedRecordKeys = ref<Set<string>>(readStoredSet<string>(ARCHIVED_KEYS_STORAGE))
+const legacyArchivedTimestamps = readStoredSet<number>(LEGACY_ARCHIVED_STORAGE)
 
-  for (const account of accounts.value) {
-    for (const record of account.records) {
-      // 向前兼容：如果没有 listeners 字段，跳过
-      if (!record.listeners || record.listeners.length === 0) continue
+function saveArchivedKeys() {
+  localStorage.setItem(ARCHIVED_KEYS_STORAGE, JSON.stringify([...archivedRecordKeys.value]))
+}
 
-      for (const listener of record.listeners) {
-        if (!listenersMap.has(listener.gameID)) {
-          // 提取角色名（去掉服务器后缀）
-          const name = listener.gameID.split('-')[0]
-          listenersMap.set(listener.gameID, { gameID: listener.gameID, name })
+function fallbackRecordKey(accountID: string, record: ChatRecord, ordinal: number): string {
+  const seed = [
+    accountID,
+    record.timestamp,
+    ordinal,
+    record.channel,
+    record.sender?.gameID || '',
+    record.content || '',
+  ].join('|')
+  let hash = 2166136261
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `legacy-client-${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
+function normalizeAccounts(logs: AccountChatLogs[]): AccountChatLogs[] {
+  let migrated = false
+  const normalized = logs.map(account => ({
+    ...account,
+    records: account.records.map((record, ordinal) => {
+      const normalizedRecord: ChatRecord = {
+        ...record,
+        account_id: record.account_id || account.account_id,
+        record_key: record.record_key || fallbackRecordKey(account.account_id, record, ordinal),
+        identity_source: record.identity_source || (record.profile_snapshot ? 'snapshot' : 'game_id'),
+      }
+      if (legacyArchivedTimestamps.has(normalizedRecord.timestamp)) {
+        archivedRecordKeys.value.add(normalizedRecord.record_key)
+        migrated = true
+      }
+      return normalizedRecord
+    }),
+  }))
+  if (migrated) {
+    saveArchivedKeys()
+    legacyArchivedTimestamps.clear()
+    localStorage.removeItem(LEGACY_ARCHIVED_STORAGE)
+  }
+  return normalized
+}
+
+const allRecords = computed(() => accounts.value.flatMap(account => account.records))
+
+function getSelectedRecords(): ChatRecord[] {
+  return visibleRecords.value
+    .filter(record => selectedRecords.value.has(record.record_key))
+    .sort((a, b) => (
+      a.timestamp - b.timestamp
+      || (a.sequence ?? 0) - (b.sequence ?? 0)
+      || a.record_key.localeCompare(b.record_key)
+    ))
+}
+
+function clearSelection() {
+  selectedRecords.value = new Set()
+}
+
+function removeArchivedRecords(recordKeys: string[]) {
+  for (const key of recordKeys) {
+    archivedRecordKeys.value.add(key)
+    selectedRecords.value.delete(key)
+  }
+  archivedRecordKeys.value = new Set(archivedRecordKeys.value)
+  selectedRecords.value = new Set(selectedRecords.value)
+  saveArchivedKeys()
+}
+
+function cleanWowText(text: string): string {
+  return text
+    .replace(/\{[^}]+\}/g, '')
+    .replace(/\|c[0-9a-fA-F]{8}/g, '')
+    .replace(/\|r/g, '')
+    .replace(/\|T[^|]+\|t/g, '')
+    .replace(/\|H[^|]+\|h/g, '')
+    .replace(/\|h/g, '')
+    .replace(/[\uE000-\uF8FF]/g, '')
+    .replace(/\uFFFD/g, '')
+    .replace(/[\u0000-\u001F]/g, '')
+    .trim()
+}
+
+function snapshotDisplayName(snapshot?: ProfileSnapshot): string {
+  if (!snapshot) return ''
+  if (snapshot.n) return cleanWowText(snapshot.n)
+  if (snapshot.FN) return cleanWowText(snapshot.LN ? `${snapshot.FN} ${snapshot.LN}` : snapshot.FN)
+  return ''
+}
+
+function endpointName(endpoint?: IdentityEndpoint): string {
+  if (!endpoint) return t('archives.staging.unknownProfile')
+  return cleanWowText(
+    endpoint.display_name
+    || endpoint.profile_name
+    || endpoint.ref_id
+    || t('archives.staging.unknownProfile'),
+  )
+}
+
+function senderProfileKeys(record: ChatRecord): string[] {
+  const keys: string[] = []
+  if (record.ref_id) keys.push(`ref:${record.ref_id}`)
+  else if (record.profile_snapshot_id) keys.push(`snapshot:${record.profile_snapshot_id}`)
+  else if (record.sender.gameID && record.mark !== 'N' && record.mark !== 'B') {
+    keys.push(`game:${record.sender.gameID}`)
+  }
+  for (const endpoint of [record.event?.from, record.event?.to]) {
+    const key = endpointProfileKey(endpoint)
+    if (key) keys.push(key)
+  }
+  return [...new Set(keys)]
+}
+
+function endpointProfileKey(endpoint?: IdentityEndpoint): string {
+  if (endpoint?.ref_id) return `ref:${endpoint.ref_id}`
+  if (endpoint?.snapshot_id) return `snapshot:${endpoint.snapshot_id}`
+  return ''
+}
+
+function listenerProfileKey(listener: Listener): string {
+  if (listener.profileID) return `ref:${listener.profileID}`
+  if (listener.snapshot_id) return `snapshot:${listener.snapshot_id}`
+  return `game:${listener.gameID}`
+}
+
+function optionFromRecord(record: ChatRecord, key: string): ProfileOption {
+  const snapshotName = snapshotDisplayName(record.profile_snapshot)
+  const legacyTRPName = record.sender.trp3?.FN
+    ? cleanWowText(record.sender.trp3.LN
+      ? `${record.sender.trp3.FN} ${record.sender.trp3.LN}`
+      : record.sender.trp3.FN)
+    : ''
+  const gameName = cleanWowText(record.sender.gameID.split('-')[0] || record.sender.gameID)
+  const profileName = cleanWowText(record.profile_snapshot?.pn || '')
+  return {
+    key,
+    name: profileName || snapshotName || legacyTRPName || gameName || t('archives.staging.unknownProfile'),
+    detail: [
+      profileName && snapshotName !== profileName ? snapshotName : '',
+      record.ref_id
+        || (record.identity_source === 'game_id' ? t('archives.staging.noProfileCard') : ''),
+    ].filter(Boolean).join(' · '),
+    legacy: record.identity_source !== 'snapshot',
+  }
+}
+
+function mergeProfileOption(map: Map<string, ProfileOption>, option: ProfileOption) {
+  const current = map.get(option.key)
+  if (!current || (current.legacy && !option.legacy) || (!current.detail && option.detail)) {
+    map.set(option.key, option)
+  }
+}
+
+const availableSenderProfiles = computed(() => {
+  const profiles = new Map<string, ProfileOption>()
+  for (const record of allRecords.value) {
+    for (const key of senderProfileKeys(record)) {
+      if (record.event) {
+        const endpoint = [record.event.from, record.event.to]
+          .find(item => endpointProfileKey(item) === key)
+        if (endpoint) {
+          mergeProfileOption(profiles, {
+            key,
+            name: cleanWowText(endpoint.profile_name || '') || endpointName(endpoint),
+            detail: [
+              endpoint.profile_name ? endpoint.display_name : '',
+              endpoint.ref_id,
+            ].filter(Boolean).join(' · '),
+            legacy: false,
+          })
+        } else {
+          mergeProfileOption(profiles, optionFromRecord(record, key))
         }
+      } else {
+        mergeProfileOption(profiles, optionFromRecord(record, key))
       }
     }
   }
-
-  return Array.from(listenersMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+  return [...profiles.values()].sort((a, b) => a.name.localeCompare(b.name))
 })
 
-// 按日期和小时分组的记录（过滤已归档 + 应用筛选条件）
+const availableListenerProfiles = computed(() => {
+  const profiles = new Map<string, ProfileOption>()
+  for (const record of allRecords.value) {
+    for (const listener of record.listeners || []) {
+      const key = listenerProfileKey(listener)
+      const name = snapshotDisplayName(listener.snapshot)
+        || cleanWowText(listener.gameID.split('-')[0] || listener.gameID)
+      const profileName = cleanWowText(listener.snapshot?.pn || '')
+      mergeProfileOption(profiles, {
+        key,
+        name: profileName || name || t('archives.staging.unknownProfile'),
+        detail: [
+          profileName && name !== profileName ? name : '',
+          listener.profileID || '',
+        ].filter(Boolean).join(' · '),
+        legacy: !listener.snapshot_id,
+      })
+    }
+  }
+  return [...profiles.values()].sort((a, b) => a.name.localeCompare(b.name))
+})
+
+function localDateKey(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function recordSearchText(record: ChatRecord): string {
+  const pieces = [
+    record.content,
+    record.npc,
+    record.sender.gameID,
+    snapshotDisplayName(record.profile_snapshot),
+    record.profile_snapshot?.pn,
+    record.ref_id,
+    record.event?.from ? endpointName(record.event.from) : '',
+    record.event?.to ? endpointName(record.event.to) : '',
+  ]
+  for (const listener of record.listeners || []) {
+    pieces.push(listener.gameID, snapshotDisplayName(listener.snapshot), listener.snapshot?.pn, listener.profileID)
+  }
+  return pieces.filter(Boolean).join(' ').toLocaleLowerCase()
+}
+
+function matchesSet(keys: string[], selected: Set<string>): boolean {
+  return selected.size === 0 || keys.some(key => selected.has(key))
+}
+
 const groupedRecords = computed(() => {
   const groups: Record<string, Record<string, ChatRecord[]>> = {}
+  const query = filterSearch.value.trim().toLocaleLowerCase()
 
-  for (const account of accounts.value) {
-    for (const record of account.records) {
-      // 过滤已归档的记录
-      if (archivedTimestamps.value.has(record.timestamp)) continue
+  for (const record of allRecords.value) {
+    if (archivedRecordKeys.value.has(record.record_key)) continue
+    const dateStr = localDateKey(record.timestamp)
+    if (filterStartDate.value && dateStr < filterStartDate.value) continue
+    if (filterEndDate.value && dateStr > filterEndDate.value) continue
+    if (filterChannels.value.size > 0 && !filterChannels.value.has(normalizeChannel(record.channel))) continue
+    if (!matchesSet(senderProfileKeys(record), filterSenderProfiles.value)) continue
 
-      const date = new Date(record.timestamp * 1000)
-      const dateStr = date.toISOString().split('T')[0]
-
-      // 应用日期筛选
-      if (filterStartDate.value && dateStr < filterStartDate.value) continue
-      if (filterEndDate.value && dateStr > filterEndDate.value) continue
-
-      // 应用频道筛选（标准化频道名称后比较）
-      if (filterChannels.value.size > 0 && !filterChannels.value.has(normalizeChannel(record.channel))) continue
-
-      // 应用收听者筛选（向前兼容：没有 listeners 字段的旧记录不过滤）
-      if (filterListeners.value.size > 0 && record.listeners) {
-        const hasMatchingListener = record.listeners.some(listener =>
-          filterListeners.value.has(listener.gameID)
-        )
-        if (!hasMatchingListener) continue
-      }
-
-      const hourStr = date.getHours().toString().padStart(2, '0')
-
-      if (!groups[dateStr]) groups[dateStr] = {}
-      if (!groups[dateStr][hourStr]) groups[dateStr][hourStr] = []
-      groups[dateStr][hourStr].push(record)
+    if (filterListenerProfiles.value.size > 0) {
+      const listenerKeys = (record.listeners || []).map(listenerProfileKey)
+      if (!matchesSet(listenerKeys, filterListenerProfiles.value)) continue
     }
+    if (query && !recordSearchText(record).includes(query)) continue
+
+    const hourStr = new Date(record.timestamp * 1000).getHours().toString().padStart(2, '0')
+    if (!groups[dateStr]) groups[dateStr] = {}
+    if (!groups[dateStr][hourStr]) groups[dateStr][hourStr] = []
+    groups[dateStr][hourStr].push(record)
   }
 
-  // 对每个小时内的记录按时间戳排序（从新到旧）
-  for (const dateKey in groups) {
-    for (const hourKey in groups[dateKey]) {
-      groups[dateKey][hourKey].sort((a, b) => b.timestamp - a.timestamp)
+  for (const date of Object.values(groups)) {
+    for (const records of Object.values(date)) {
+      records.sort((a, b) => (
+        b.timestamp - a.timestamp
+        || (b.sequence ?? 0) - (a.sequence ?? 0)
+        || b.record_key.localeCompare(a.record_key)
+      ))
     }
   }
-
   return groups
 })
 
-const totalRecords = computed(() => {
-  // 基于过滤后的 groupedRecords 计算
-  let count = 0
-  for (const date of Object.keys(groupedRecords.value)) {
-    for (const hour of Object.keys(groupedRecords.value[date])) {
-      count += groupedRecords.value[date][hour].length
-    }
-  }
-  return count
-})
+const totalRecords = computed(() => Object.values(groupedRecords.value)
+  .reduce((total, date) => total + Object.values(date).flat().length, 0))
+const visibleRecords = computed(() => Object.values(groupedRecords.value)
+  .flatMap(date => Object.values(date).flat()))
+const unarchivedRecordCount = computed(() => allRecords.value
+  .filter(record => !archivedRecordKeys.value.has(record.record_key)).length)
+const selectedCount = computed(() => getSelectedRecords().length)
+const activeFilterCount = computed(() => (
+  Number(Boolean(filterSearch.value.trim()))
+  + Number(Boolean(filterStartDate.value))
+  + Number(Boolean(filterEndDate.value))
+  + filterChannels.value.size
+  + filterSenderProfiles.value.size
+  + filterListenerProfiles.value.size
+))
 
-const selectedCount = computed(() => selectedRecords.value.size)
-
-// 滚动容器引用
-const contentRef = ref<HTMLElement | null>(null)
-
-// 滚动到底部
-function scrollToBottom() {
-  if (contentRef.value) {
-    setTimeout(() => {
-      contentRef.value!.scrollTop = contentRef.value!.scrollHeight
-    }, 100)
-  }
+function toggledSet(current: Set<string>, value: string): Set<string> {
+  const next = new Set(current)
+  if (next.has(value)) next.delete(value)
+  else next.add(value)
+  return next
 }
 
-// 切换频道筛选
-function toggleChannel(channel: string) {
-  if (filterChannels.value.has(channel)) {
-    filterChannels.value.delete(channel)
-  } else {
-    filterChannels.value.add(channel)
-  }
-  // 触发响应式更新
-  filterChannels.value = new Set(filterChannels.value)
+function toggleChannel(value: string) {
+  filterChannels.value = toggledSet(filterChannels.value, value)
 }
 
-// 切换收听者筛选
-function toggleListener(gameID: string) {
-  if (filterListeners.value.has(gameID)) {
-    filterListeners.value.delete(gameID)
-  } else {
-    filterListeners.value.add(gameID)
-  }
-  // 触发响应式更新
-  filterListeners.value = new Set(filterListeners.value)
+function toggleSenderProfile(value: string) {
+  filterSenderProfiles.value = toggledSet(filterSenderProfiles.value, value)
 }
 
-// 清除筛选
+function toggleListenerProfile(value: string) {
+  filterListenerProfiles.value = toggledSet(filterListenerProfiles.value, value)
+}
+
+function toggleExpandedDate(key: string) {
+  expandedDates.value = toggledSet(expandedDates.value, key)
+}
+
+function toggleExpandedHour(key: string) {
+  expandedHours.value = toggledSet(expandedHours.value, key)
+}
+
+function archiveSelected() {
+  emit('archive', getSelectedRecords())
+}
+
 function clearFilters() {
+  filterSearch.value = ''
   filterStartDate.value = ''
   filterEndDate.value = ''
-  filterChannels.value.clear()
-  filterListeners.value.clear()
+  filterChannels.value = new Set()
+  filterSenderProfiles.value = new Set()
+  filterListenerProfiles.value = new Set()
 }
 
 async function syncFromPlugin() {
   const wowPath = localStorage.getItem('wow_path') || ''
-  console.log('[StagingPool] wowPath:', wowPath)
-  if (!wowPath) {
-    console.log('[StagingPool] wowPath 为空，跳过同步')
-    return
-  }
+  if (!wowPath) return
   loading.value = true
+  syncError.value = ''
   try {
-    console.log('[StagingPool] 调用 scan_chat_logs...')
-    accounts.value = await invoke<AccountChatLogs[]>('scan_chat_logs', {
-      wowPath,
-    })
-    console.log('[StagingPool] 结果:', accounts.value)
-    // 默认展开最后一个日期（最新的）
+    const logs = await invoke<AccountChatLogs[]>('scan_chat_logs', { wowPath })
+    accounts.value = normalizeAccounts(logs)
+    clearSelection()
     const dates = Object.keys(groupedRecords.value).sort()
     if (dates.length > 0) {
-      expandedDates.value.add(dates[dates.length - 1])
-      // 展开该日期下的最后一个小时
       const lastDate = dates[dates.length - 1]
+      expandedDates.value = new Set([lastDate])
       const hours = Object.keys(groupedRecords.value[lastDate]).sort()
-      if (hours.length > 0) {
-        expandedHours.value.add(`${lastDate}-${hours[hours.length - 1]}`)
-      }
+      if (hours.length > 0) expandedHours.value = new Set([`${lastDate}-${hours[hours.length - 1]}`])
     }
-    // 滚动到底部
-    scrollToBottom()
-  } catch (e) {
-    console.error('同步失败:', e)
+  } catch (error) {
+    syncError.value = error instanceof Error ? error.message : String(error)
+    console.error('同步失败:', error)
   } finally {
     loading.value = false
   }
 }
 
-function toggleDate(date: string) {
-  if (expandedDates.value.has(date)) {
-    expandedDates.value.delete(date)
-  } else {
-    expandedDates.value.add(date)
-  }
+function toggleRecord(recordKey: string) {
+  const next = new Set(selectedRecords.value)
+  if (next.has(recordKey)) next.delete(recordKey)
+  else next.add(recordKey)
+  selectedRecords.value = next
 }
 
-function toggleHour(key: string) {
-  if (expandedHours.value.has(key)) {
-    expandedHours.value.delete(key)
-  } else {
-    expandedHours.value.add(key)
-  }
-}
-
-function toggleRecord(timestamp: number) {
-  if (selectedRecords.value.has(timestamp)) {
-    selectedRecords.value.delete(timestamp)
-  } else {
-    selectedRecords.value.add(timestamp)
-  }
-}
-
-// 获取日期下所有记录
 function getDateRecords(date: string): ChatRecord[] {
-  const hours = groupedRecords.value[date] || {}
-  return Object.values(hours).flat()
+  return Object.values(groupedRecords.value[date] || {}).flat()
 }
 
-// 获取小时下所有记录
 function getHourRecords(date: string, hour: string): ChatRecord[] {
   return groupedRecords.value[date]?.[hour] || []
 }
 
-// 判断日期是否全选
-function isDateAllSelected(date: string): boolean {
-  const records = getDateRecords(date)
-  return records.length > 0 && records.every(r => selectedRecords.value.has(r.timestamp))
+function areAllSelected(records: ChatRecord[]): boolean {
+  return records.length > 0 && records.every(record => selectedRecords.value.has(record.record_key))
 }
 
-// 判断日期是否部分选中
-function isDatePartialSelected(date: string): boolean {
-  const records = getDateRecords(date)
-  const selectedCount = records.filter(r => selectedRecords.value.has(r.timestamp)).length
-  return selectedCount > 0 && selectedCount < records.length
+function areSomeSelected(records: ChatRecord[]): boolean {
+  const count = records.filter(record => selectedRecords.value.has(record.record_key)).length
+  return count > 0 && count < records.length
 }
 
-// 判断小时是否全选
-function isHourAllSelected(date: string, hour: string): boolean {
-  const records = getHourRecords(date, hour)
-  return records.length > 0 && records.every(r => selectedRecords.value.has(r.timestamp))
-}
-
-// 判断小时是否部分选中
-function isHourPartialSelected(date: string, hour: string): boolean {
-  const records = getHourRecords(date, hour)
-  const selectedCount = records.filter(r => selectedRecords.value.has(r.timestamp)).length
-  return selectedCount > 0 && selectedCount < records.length
-}
-
-// 切换日期选中状态
-function toggleDateSelection(date: string) {
-  const records = getDateRecords(date)
-  const allSelected = isDateAllSelected(date)
-  for (const r of records) {
-    if (allSelected) {
-      selectedRecords.value.delete(r.timestamp)
-    } else {
-      selectedRecords.value.add(r.timestamp)
-    }
+function toggleRecords(records: ChatRecord[]) {
+  const next = new Set(selectedRecords.value)
+  const shouldRemove = areAllSelected(records)
+  for (const record of records) {
+    if (shouldRemove) next.delete(record.record_key)
+    else next.add(record.record_key)
   }
-}
-
-// 切换小时选中状态
-function toggleHourSelection(date: string, hour: string) {
-  const records = getHourRecords(date, hour)
-  const allSelected = isHourAllSelected(date, hour)
-  for (const r of records) {
-    if (allSelected) {
-      selectedRecords.value.delete(r.timestamp)
-    } else {
-      selectedRecords.value.add(r.timestamp)
-    }
-  }
-}
-
-// 清理WoW特殊格式字符
-function cleanWowText(text: string): string {
-  return text
-    .replace(/\|c[0-9a-fA-F]{8}/g, '') // 移除颜色开始标记 |cFFFFFFFF
-    .replace(/\|r/g, '') // 移除颜色结束标记 |r
-    .replace(/\|T[^|]+\|t/g, '') // 移除纹理标记 |Txxx|t
-    .replace(/\|H[^|]+\|h/g, '') // 移除超链接标记
-    .replace(/\|h/g, '')
-    .replace(/[\uE000-\uF8FF]/g, '') // 移除私用区Unicode字符
-    .replace(/\uFFFD/g, '') // 移除替换字符 �
-    .replace(/[\u0000-\u001F]/g, '') // 移除控制字符
-    .trim()
+  selectedRecords.value = next
 }
 
 function stripNpcPrefix(text: string): string {
@@ -361,325 +449,711 @@ function stripNpcPrefix(text: string): string {
 }
 
 function getRecordContent(record: ChatRecord): string {
-  if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) {
-    return stripNpcPrefix(record.content)
-  }
+  if (record.mark === 'B' || (record.mark === 'N' && !record.npc)) return stripNpcPrefix(record.content)
   return record.content
 }
 
 function getSenderName(record: ChatRecord): string {
-  // NPC消息显示NPC名字（清理特殊字符）
-  if (record.mark === 'N' && record.npc) {
-    return cleanWowText(record.npc)
-  }
-  // 玩家消息优先显示TRP3名字
+  if (record.mark === 'N' && record.npc) return cleanWowText(record.npc)
+  const snapshotName = snapshotDisplayName(record.profile_snapshot)
+  if (snapshotName) return snapshotName
   const trp3 = record.sender.trp3
-  if (trp3?.FN) {
-    return trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN
-  }
-  return record.sender.gameID.split('-')[0]
+  if (trp3?.FN) return cleanWowText(trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
+  return cleanWowText(record.sender.gameID.split('-')[0] || record.sender.gameID)
 }
 
 function getSenderIcon(record: ChatRecord): string {
-  return record.sender.trp3?.IC || ''
+  return record.profile_snapshot?.IC || record.sender.trp3?.IC || ''
 }
 
 function getSenderColor(record: ChatRecord): string {
-  return record.sender.trp3?.CH || ''
+  return record.profile_snapshot?.CH || record.sender.trp3?.CH || ''
 }
 
-function getMarkClass(mark?: string): string {
-  if (mark === 'N') return 'mark-npc'
-  if (mark === 'B') return 'mark-background'
+function identityEventTitle(record: ChatRecord): string {
+  return record.event?.kind === 'profile_update'
+    ? t('archives.staging.identityUpdated')
+    : t('archives.staging.identitySwitched')
+}
+
+function identityEventCertainty(record: ChatRecord): string {
+  return record.event?.certainty === 'exact'
+    ? t('archives.staging.identityExact')
+    : t('archives.staging.identityObserved')
+}
+
+function formatTime(timestamp: number): string {
+  return new Date(timestamp * 1000).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function normalizeChannel(channel: string): string {
+  const normalized = channel.replace(/^CHAT_MSG_/, '')
+  if (normalized === 'WHISPER_IN' || normalized === 'WHISPER_OUT') return 'WHISPER'
+  return normalized === 'TEXT_EMOTE' ? 'EMOTE' : normalized
+}
+
+function getChannelLabel(channel: string): string {
+  return t(`archives.staging.channel.${normalizeChannel(channel).toLowerCase()}`)
+}
+
+function getChannelClass(channel: string): string {
+  const normalized = normalizeChannel(channel)
+  if (normalized === 'YELL') return 'channel-yell'
+  if (normalized === 'WHISPER') return 'channel-whisper'
   return ''
 }
 
 function getNpcTalkLabel(nt?: string): string {
-  if (!nt) return ''
-  const key = `archives.staging.npcTalk.${nt}`
-  return t(key)
+  return nt ? t(`archives.staging.npcTalk.${nt}`) : ''
 }
 
-// 获取NPC说话类型对应的CSS类
 function getNpcTalkClass(nt?: string): string {
-  if (nt === 'yell') return 'npc-yell'
-  if (nt === 'whisper') return 'npc-whisper'
-  return 'npc-say'
+  return nt === 'yell' ? 'npc-yell' : nt === 'whisper' ? 'npc-whisper' : 'npc-say'
 }
 
-// 获取NPC说话类型对应的文字颜色
-function getNpcTalkTextColor(nt?: string): string {
-  if (nt === 'yell') return '#FF3333'
-  if (nt === 'whisper') return '#B39DDB'
-  return ''
-}
-
-function formatTime(timestamp: number): string {
-  return new Date(timestamp * 1000).toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-// 标准化频道名称（统一转换为短格式）
-function normalizeChannel(channel: string): string {
-  // 处理 CHAT_MSG_ 前缀
-  if (channel.startsWith('CHAT_MSG_')) {
-    channel = channel.replace('CHAT_MSG_', '')
-  }
-  // 将 TEXT_EMOTE 统一为 EMOTE
-  if (channel === 'TEXT_EMOTE') {
-    return 'EMOTE'
-  }
-  return channel
-}
-
-function getChannelLabel(channel: string): string {
-  // 标准化频道名称
-  const normalized = normalizeChannel(channel).toLowerCase()
-  const key = `archives.staging.channel.${normalized}`
-  return t(key)
-}
-
-// 获取频道对应的文字颜色
-function getChannelTextColor(channel: string): string {
-  const colorMap: Record<string, string> = {
-    'SAY': '',
-    'YELL': '#FF3333',
-    'WHISPER': '#B39DDB',
-    'EMOTE': '#FF8C00',
-    'TEXT_EMOTE': '#FF8C00',
-    'PARTY': '#AAAAFF',
-    'RAID': '#FF7F00',
-    'CHAT_MSG_SAY': '',
-    'CHAT_MSG_YELL': '#FF3333',
-    'CHAT_MSG_WHISPER': '#B39DDB',
-    'CHAT_MSG_EMOTE': '#FF8C00',
-    'CHAT_MSG_TEXT_EMOTE': '#FF8C00',
-    'CHAT_MSG_PARTY': '#AAAAFF',
-    'CHAT_MSG_RAID': '#FF7F00',
-  }
-  return colorMap[channel] || ''
-}
-
-// 获取频道标签的CSS类
-function getChannelClass(channel: string): string {
-  if (channel === 'YELL' || channel === 'CHAT_MSG_YELL') return 'channel-yell'
-  if (channel === 'WHISPER' || channel === 'CHAT_MSG_WHISPER') return 'channel-whisper'
-  return ''
+function isLegacyIdentity(record: ChatRecord): boolean {
+  return record.mark !== 'N'
+    && record.mark !== 'B'
+    && record.mark !== 'S'
+    && record.identity_source !== 'snapshot'
 }
 
 onMounted(() => {
-  const wowPath = localStorage.getItem('wow_path')
-  if (wowPath) syncFromPlugin()
+  if (localStorage.getItem('wow_path')) syncFromPlugin()
 })
 
-// 暴露方法供父组件调用
 defineExpose({
   getSelectedRecords,
   clearSelection,
   removeArchivedRecords,
-  syncFromPlugin
+  syncFromPlugin,
 })
 </script>
 
 <template>
   <div class="staging-pool">
-    <div class="staging-header">
-      <div class="staging-info">
-        <span>{{ t('archives.staging.titleWithCount', { count: totalRecords }) }}</span>
+    <aside class="filter-rail" aria-label="剧情回溯筛选">
+      <div class="rail-heading">
+        <div>
+          <span class="eyebrow">{{ t('archives.staging.archiveDesk') }}</span>
+          <h2>{{ t('archives.staging.filters') }}</h2>
+        </div>
+        <button
+          v-if="activeFilterCount > 0"
+          type="button"
+          class="clear-button"
+          @click="clearFilters"
+        >
+          {{ t('archives.filter.clearFilter') }}
+        </button>
       </div>
-      <div class="staging-actions">
-        <RButton :loading="loading" @click="syncFromPlugin">
-          <i class="ri-refresh-line"></i> {{ t('archives.staging.sync') }}
-        </RButton>
-      </div>
-    </div>
 
-    <!-- 筛选面板 -->
-    <div class="filter-panel">
-      <div class="filter-row">
-        <div class="filter-group">
-          <label>{{ t('archives.staging.startDate') }}</label>
-          <input type="date" v-model="filterStartDate" class="date-input" />
+      <label class="search-field">
+        <span>{{ t('archives.staging.searchLabel') }}</span>
+        <span class="search-input-wrap">
+          <i class="ri-search-line" aria-hidden="true"></i>
+          <input
+            v-model="filterSearch"
+            type="search"
+            :placeholder="t('archives.staging.searchPlaceholder')"
+          />
+        </span>
+      </label>
+
+      <fieldset class="filter-section">
+        <legend>{{ t('archives.staging.dateRange') }}</legend>
+        <div class="date-grid">
+          <label>
+            <span>{{ t('archives.staging.startDate') }}</span>
+            <input v-model="filterStartDate" type="date" />
+          </label>
+          <label>
+            <span>{{ t('archives.staging.endDate') }}</span>
+            <input v-model="filterEndDate" type="date" />
+          </label>
         </div>
-        <div class="filter-group">
-          <label>{{ t('archives.staging.endDate') }}</label>
-          <input type="date" v-model="filterEndDate" class="date-input" />
-        </div>
-        <RButton size="small" @click="clearFilters">
-          <i class="ri-close-line"></i> {{ t('archives.filter.clearFilter') }}
-        </RButton>
-      </div>
-      <div class="filter-row">
-        <label>{{ t('archives.staging.chatType') }}</label>
-        <div class="channel-filters">
+      </fieldset>
+
+      <fieldset class="filter-section">
+        <legend>{{ t('archives.staging.chatType') }}</legend>
+        <div class="filter-chips">
           <button
-            v-for="channel in ['SAY', 'YELL', 'EMOTE', 'PARTY', 'RAID', 'WHISPER']"
+            v-for="channel in ['SAY', 'YELL', 'EMOTE', 'PARTY', 'RAID', 'GUILD', 'WHISPER']"
             :key="channel"
-            class="channel-filter-btn"
+            type="button"
+            class="filter-chip"
             :class="{ active: filterChannels.has(channel) }"
+            :aria-pressed="filterChannels.has(channel)"
             @click="toggleChannel(channel)"
           >
             {{ getChannelLabel(channel) }}
           </button>
         </div>
-      </div>
-      <div class="filter-row">
-        <label>{{ t('archives.staging.listener') }}</label>
-        <div class="channel-filters">
+      </fieldset>
+
+      <fieldset class="filter-section">
+        <legend>
+          {{ t('archives.staging.senderProfile') }}
+          <small>{{ t('archives.staging.multiSelectOr') }}</small>
+        </legend>
+        <div v-if="availableSenderProfiles.length" class="profile-options">
           <button
-            v-for="listener in availableListeners"
-            :key="listener.gameID"
-            class="channel-filter-btn"
-            :class="{ active: filterListeners.has(listener.gameID) }"
-            @click="toggleListener(listener.gameID)"
+            v-for="profile in availableSenderProfiles"
+            :key="profile.key"
+            type="button"
+            class="profile-option"
+            :class="{ active: filterSenderProfiles.has(profile.key) }"
+            :aria-pressed="filterSenderProfiles.has(profile.key)"
+            @click="toggleSenderProfile(profile.key)"
           >
-            {{ listener.name }}
+            <span>{{ profile.name }}</span>
+            <small v-if="profile.detail">{{ profile.detail }}</small>
+            <em v-if="profile.legacy">{{ t('archives.staging.legacyShort') }}</em>
           </button>
-          <span v-if="availableListeners.length === 0" class="filter-empty-hint">
-            {{ t('archives.staging.noListenerData') }}
-          </span>
         </div>
-      </div>
-    </div>
+        <span v-else class="filter-empty-hint">{{ t('archives.staging.noProfileData') }}</span>
+      </fieldset>
 
-    <REmpty v-if="!loading && totalRecords === 0" :description="t('archives.staging.emptyHint')">
-      <router-link class="tutorial-link" :to="{ name: 'guide' }">
-        <i class="ri-book-open-line"></i> {{ t('archives.staging.viewTutorial') }}
-      </router-link>
-    </REmpty>
-
-    <div v-else class="staging-content" ref="contentRef">
-      <div
-        v-for="date in Object.keys(groupedRecords).sort().reverse()"
-        :key="date"
-        class="date-group"
-      >
-        <div class="date-header">
-          <span class="header-checkbox" @click.stop="toggleDateSelection(date)">
-            <RCheckbox
-              :model-value="isDateAllSelected(date)"
-              :indeterminate="isDatePartialSelected(date)"
-            />
-          </span>
-          <div class="date-header-content" @click="toggleDate(date)">
-            <i :class="expandedDates.has(date) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
-            <span>{{ date }}</span>
-            <span class="record-count">
-              {{ t('archives.staging.recordCount', { count: Object.values(groupedRecords[date]).flat().length }) }}
-            </span>
-          </div>
-        </div>
-
-        <div v-if="expandedDates.has(date)" class="hour-groups">
-          <div
-            v-for="hour in Object.keys(groupedRecords[date]).sort().reverse()"
-            :key="`${date}-${hour}`"
-            class="hour-group"
+      <fieldset class="filter-section">
+        <legend>
+          {{ t('archives.staging.listenerProfile') }}
+          <small>{{ t('archives.staging.multiSelectOr') }}</small>
+        </legend>
+        <div v-if="availableListenerProfiles.length" class="profile-options">
+          <button
+            v-for="profile in availableListenerProfiles"
+            :key="profile.key"
+            type="button"
+            class="profile-option"
+            :class="{ active: filterListenerProfiles.has(profile.key) }"
+            :aria-pressed="filterListenerProfiles.has(profile.key)"
+            @click="toggleListenerProfile(profile.key)"
           >
-            <div class="hour-header">
-              <span class="header-checkbox" @click.stop="toggleHourSelection(date, hour)">
-                <RCheckbox
-                  :model-value="isHourAllSelected(date, hour)"
-                  :indeterminate="isHourPartialSelected(date, hour)"
-                />
-              </span>
-              <div class="hour-header-content" @click="toggleHour(`${date}-${hour}`)">
-                <i :class="expandedHours.has(`${date}-${hour}`) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
-                <span>{{ hour }}:00 - {{ hour }}:59</span>
-                <span class="record-count">{{ t('archives.staging.recordCount', { count: groupedRecords[date][hour].length }) }}</span>
-              </div>
-            </div>
-
-            <div v-if="expandedHours.has(`${date}-${hour}`)" class="records">
-              <div
-                v-for="record in groupedRecords[date][hour]"
-                :key="record.timestamp"
-                class="record-item"
-                :class="[
-                  { selected: selectedRecords.has(record.timestamp) },
-                  getMarkClass(record.mark)
-                ]"
-                @click="toggleRecord(record.timestamp)"
-              >
-                <RCheckbox :model-value="selectedRecords.has(record.timestamp)" />
-                <span class="record-time">{{ formatTime(record.timestamp) }}</span>
-                <span v-if="record.mark === 'N' && record.nt" class="record-channel" :class="getNpcTalkClass(record.nt)">[NPC{{ getNpcTalkLabel(record.nt) }}]</span>
-                <span v-else class="record-channel" :class="getChannelClass(record.channel)">[{{ getChannelLabel(record.channel) }}]</span>
-                <template v-if="record.mark !== 'B'">
-                  <WowIcon v-if="getSenderIcon(record)" :icon="getSenderIcon(record)" :size="18" class="record-avatar" />
-                  <span class="record-sender" :style="getSenderColor(record) ? { color: '#' + getSenderColor(record) } : {}">{{ getSenderName(record) }}:</span>
-                </template>
-                <span
-                  class="record-content"
-                  :style="(record.mark === 'N' && record.nt)
-                    ? (getNpcTalkTextColor(record.nt) ? { color: getNpcTalkTextColor(record.nt) } : {})
-                    : (getChannelTextColor(record.channel) ? { color: getChannelTextColor(record.channel) } : {})"
-                >{{ getRecordContent(record) }}</span>
-              </div>
-            </div>
-          </div>
+            <span>{{ profile.name }}</span>
+            <small v-if="profile.detail">{{ profile.detail }}</small>
+            <em v-if="profile.legacy">{{ t('archives.staging.legacyShort') }}</em>
+          </button>
         </div>
-      </div>
-    </div>
+        <span v-else class="filter-empty-hint">{{ t('archives.staging.noListenerData') }}</span>
+        <p v-if="filterListenerProfiles.size" class="strict-filter-note">
+          {{ t('archives.staging.legacyListenerExcluded') }}
+        </p>
+      </fieldset>
 
-    <div v-if="selectedCount > 0" class="staging-footer">
-      <span>{{ t('archives.staging.selectedCount', { count: selectedCount }) }}</span>
-      <RButton type="primary" @click="$emit('archive', getSelectedRecords())">
-        {{ t('archives.staging.archiveSelected') }}
-      </RButton>
-    </div>
+      <div class="filter-summary" aria-live="polite">
+        <strong>{{ totalRecords }}</strong>
+        <span>{{ t('archives.staging.matchesFrom', { total: unarchivedRecordCount }) }}</span>
+        <small v-if="activeFilterCount">
+          {{ t('archives.staging.activeFilterCount', { count: activeFilterCount }) }}
+        </small>
+      </div>
+    </aside>
+
+    <section class="ledger">
+      <header class="ledger-header">
+        <div>
+          <span class="eyebrow">RPBOX · TRP3</span>
+          <h2>{{ t('archives.staging.timelineTitle') }}</h2>
+          <p>{{ t('archives.staging.timelineSubtitle') }}</p>
+        </div>
+        <RButton :loading="loading" @click="syncFromPlugin">
+          <i class="ri-refresh-line" aria-hidden="true"></i>
+          {{ t('archives.staging.sync') }}
+        </RButton>
+      </header>
+
+      <p v-if="syncError" class="sync-error" role="alert">{{ syncError }}</p>
+
+      <REmpty
+        v-if="!loading && totalRecords === 0"
+        :description="unarchivedRecordCount > 0
+          ? t('archives.staging.noMatches')
+          : t('archives.staging.emptyHint')"
+      >
+        <button
+          v-if="unarchivedRecordCount > 0"
+          type="button"
+          class="clear-button"
+          @click="clearFilters"
+        >
+          {{ t('archives.filter.clearFilter') }}
+        </button>
+        <router-link v-else class="tutorial-link" :to="{ name: 'guide' }">
+          <i class="ri-book-open-line" aria-hidden="true"></i>
+          {{ t('archives.staging.viewTutorial') }}
+        </router-link>
+      </REmpty>
+
+      <div v-else class="staging-content">
+        <section
+          v-for="date in Object.keys(groupedRecords).sort().reverse()"
+          :key="date"
+          class="date-group"
+        >
+          <div class="group-header date-header">
+            <button
+              type="button"
+              class="header-checkbox"
+              :aria-label="t('archives.staging.selectDateRecords', { date })"
+              @click.stop="toggleRecords(getDateRecords(date))"
+            >
+              <RCheckbox
+                :model-value="areAllSelected(getDateRecords(date))"
+                :indeterminate="areSomeSelected(getDateRecords(date))"
+              />
+            </button>
+            <button type="button" @click="toggleExpandedDate(date)">
+              <i :class="expandedDates.has(date) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
+              <span>{{ date }}</span>
+              <small>{{ t('archives.staging.recordCount', { count: getDateRecords(date).length }) }}</small>
+            </button>
+          </div>
+
+          <div v-if="expandedDates.has(date)" class="hour-groups">
+            <section
+              v-for="hour in Object.keys(groupedRecords[date]).sort().reverse()"
+              :key="`${date}-${hour}`"
+              class="hour-group"
+            >
+              <div class="group-header hour-header">
+                <button
+                  type="button"
+                  class="header-checkbox"
+                  :aria-label="t('archives.staging.selectHourRecords', { hour })"
+                  @click.stop="toggleRecords(getHourRecords(date, hour))"
+                >
+                  <RCheckbox
+                    :model-value="areAllSelected(getHourRecords(date, hour))"
+                    :indeterminate="areSomeSelected(getHourRecords(date, hour))"
+                  />
+                </button>
+                <button type="button" @click="toggleExpandedHour(`${date}-${hour}`)">
+                  <i :class="expandedHours.has(`${date}-${hour}`) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'"></i>
+                  <span>{{ hour }}:00—{{ hour }}:59</span>
+                  <small>{{ t('archives.staging.recordCount', { count: getHourRecords(date, hour).length }) }}</small>
+                </button>
+              </div>
+
+              <div v-if="expandedHours.has(`${date}-${hour}`)" class="records">
+                <article
+                  v-for="record in groupedRecords[date][hour]"
+                  :key="record.record_key"
+                  class="record-item"
+                  :class="{
+                    selected: selectedRecords.has(record.record_key),
+                    'mark-npc': record.mark === 'N',
+                    'mark-background': record.mark === 'B',
+                    'identity-event': Boolean(record.event) || record.mark === 'S',
+                  }"
+                  role="checkbox"
+                  :aria-checked="selectedRecords.has(record.record_key)"
+                  tabindex="0"
+                  @click="toggleRecord(record.record_key)"
+                  @keydown.enter.prevent="toggleRecord(record.record_key)"
+                  @keydown.space.prevent="toggleRecord(record.record_key)"
+                >
+                  <RCheckbox :model-value="selectedRecords.has(record.record_key)" />
+                  <time :datetime="new Date(record.timestamp * 1000).toISOString()">
+                    {{ formatTime(record.timestamp) }}
+                  </time>
+
+                  <template v-if="record.event || record.mark === 'S'">
+                    <span class="identity-glyph" aria-hidden="true"><i class="ri-swap-2-line"></i></span>
+                    <div class="identity-copy">
+                      <div>
+                        <strong>{{ identityEventTitle(record) }}</strong>
+                        <span class="certainty">{{ identityEventCertainty(record) }}</span>
+                      </div>
+                      <p>
+                        <span>{{ endpointName(record.event?.from) }}</span>
+                        <i class="ri-arrow-right-line" aria-hidden="true"></i>
+                        <span>{{ endpointName(record.event?.to) }}</span>
+                      </p>
+                    </div>
+                  </template>
+
+                  <template v-else>
+                    <span
+                      v-if="record.mark === 'N' && record.nt"
+                      class="record-channel"
+                      :class="getNpcTalkClass(record.nt)"
+                    >
+                      NPC{{ getNpcTalkLabel(record.nt) }}
+                    </span>
+                    <span v-else class="record-channel" :class="getChannelClass(record.channel)">
+                      {{ getChannelLabel(record.channel) }}
+                    </span>
+                    <div class="message-copy">
+                      <div v-if="record.mark !== 'B'" class="speaker-line">
+                        <WowIcon
+                          v-if="getSenderIcon(record)"
+                          :icon="getSenderIcon(record)"
+                          :size="18"
+                          class="record-avatar"
+                        />
+                        <strong :style="getSenderColor(record) ? { color: `#${getSenderColor(record)}` } : {}">
+                          {{ getSenderName(record) }}
+                        </strong>
+                        <span v-if="record.profile_snapshot?.pn" class="profile-name">
+                          {{ record.profile_snapshot.pn }}
+                        </span>
+                        <span v-if="isLegacyIdentity(record)" class="legacy-badge">
+                          {{ t('archives.staging.legacyInferred') }}
+                        </span>
+                      </div>
+                      <p>{{ getRecordContent(record) }}</p>
+                    </div>
+                  </template>
+                </article>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+
+      <footer v-if="selectedCount > 0" class="staging-footer">
+        <span>{{ t('archives.staging.selectedCount', { count: selectedCount }) }}</span>
+        <RButton type="primary" @click="archiveSelected">
+          {{ t('archives.staging.archiveSelected') }}
+        </RButton>
+      </footer>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .staging-pool {
-  display: flex;
-  flex-direction: column;
+  --archive-ink: var(--color-text-main, #2c1810);
+  --archive-parchment: var(--color-panel-bg, #f4e8d8);
+  --archive-copper: var(--color-accent, #b87333);
+  --archive-muted: var(--color-text-secondary, #6f6258);
+  --archive-identity: #3f7d7a;
+  --archive-identity-text: color-mix(in srgb, var(--archive-identity) 68%, var(--archive-ink));
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  min-height: 560px;
   height: 100%;
+  overflow: hidden;
+  color: var(--archive-ink);
+  background: color-mix(in srgb, var(--archive-parchment) 38%, var(--color-main-bg, #eed9c4));
+  border: 1px solid color-mix(in srgb, var(--archive-copper) 24%, var(--color-border));
+  border-radius: var(--radius-md);
 }
 
-.staging-header {
+.filter-rail {
+  overflow-y: auto;
+  padding: 18px 16px;
+  background:
+    linear-gradient(180deg, rgba(184, 115, 51, 0.08), transparent 140px),
+    color-mix(in srgb, var(--archive-parchment) 65%, var(--color-main-bg, #eed9c4));
+  border-right: 1px solid color-mix(in srgb, var(--archive-copper) 28%, var(--color-border));
+}
+
+.rail-heading,
+.ledger-header,
+.staging-footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid var(--color-border);
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.staging-info {
+.rail-heading h2,
+.ledger-header h2 {
+  margin: 2px 0 0;
+  color: var(--archive-ink);
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-size: 19px;
+}
+
+.eyebrow {
+  color: var(--archive-copper);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.clear-button {
+  padding: 4px 0;
+  color: var(--archive-copper);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.search-field {
+  display: grid;
+  gap: 6px;
+  margin: 18px 0;
+  color: var(--archive-muted);
+  font-size: 12px;
   font-weight: 600;
-  color: var(--color-primary);
+}
+
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  background: color-mix(in srgb, var(--archive-parchment) 76%, var(--color-card-bg, #fff));
+  border: 1px solid color-mix(in srgb, var(--archive-copper) 25%, var(--color-border));
+  border-radius: var(--radius-sm);
+}
+
+.search-input-wrap input,
+.date-grid input {
+  min-width: 0;
+  width: 100%;
+  padding: 8px 0;
+  color: var(--archive-ink);
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.filter-section {
+  min-width: 0;
+  margin: 0;
+  padding: 14px 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--archive-copper) 18%, transparent);
+}
+
+.filter-section legend {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 9px;
+  padding: 0;
+  color: var(--archive-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filter-section legend small {
+  color: var(--archive-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.date-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.date-grid label {
+  display: grid;
+  gap: 4px;
+  color: var(--archive-muted);
+  font-size: 10px;
+}
+
+.date-grid input {
+  padding: 7px;
+  background: color-mix(in srgb, var(--archive-parchment) 76%, var(--color-card-bg, #fff));
+  border: 1px solid color-mix(in srgb, var(--archive-copper) 22%, var(--color-border));
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.filter-chips,
+.profile-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chip,
+.profile-option {
+  color: var(--archive-muted);
+  background: color-mix(in srgb, var(--archive-parchment) 76%, var(--color-card-bg, #fff));
+  border: 1px solid color-mix(in srgb, var(--archive-copper) 20%, var(--color-border));
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.filter-chip {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.profile-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1px 6px;
+  max-width: 100%;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.profile-option span {
+  overflow: hidden;
+  color: var(--archive-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-option small {
+  grid-column: 1;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-option em {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--archive-muted);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.filter-chip.active,
+.profile-option.active {
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--archive-copper);
+  border-color: var(--archive-copper);
+}
+
+.profile-option.active span,
+.profile-option.active em {
+  color: var(--btn-primary-text, var(--color-text-light, #fff));
+}
+
+.filter-empty-hint,
+.strict-filter-note {
+  color: var(--archive-muted);
+  font-size: 11px;
+}
+
+.strict-filter-note {
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+.filter-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 1px 6px;
+  margin-top: 4px;
+  padding: 12px;
+  background: rgba(184, 115, 51, 0.09);
+  border-left: 2px solid var(--archive-copper);
+}
+
+.filter-summary strong {
+  color: var(--archive-copper);
+  font-family: Georgia, serif;
+  font-size: 22px;
+}
+
+.filter-summary span,
+.filter-summary small {
+  color: var(--archive-muted);
+  font-size: 11px;
+}
+
+.filter-summary small {
+  grid-column: 1 / -1;
+}
+
+.ledger {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--archive-parchment) 22%, var(--color-main-bg, #eed9c4));
+}
+
+.ledger-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--archive-copper) 20%, var(--color-border));
+}
+
+.ledger-header p {
+  margin: 3px 0 0;
+  color: var(--archive-muted);
+  font-size: 12px;
+}
+
+.sync-error {
+  margin: 10px 20px 0;
+  padding: 8px 10px;
+  color: #8d2d22;
+  background: rgba(180, 50, 40, 0.08);
+  border-left: 2px solid #a33a2c;
+  font-size: 12px;
 }
 
 .staging-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 12px 20px 80px;
 }
 
 .date-group {
   margin-bottom: 8px;
 }
 
-.date-header,
-.hour-header {
+.group-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  transition: background 0.2s;
 }
 
-.date-header:hover,
-.hour-header:hover {
-  background: var(--color-bg-secondary);
+.group-header > button:not(.header-checkbox) {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 5px;
+  color: var(--archive-ink);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.group-header button small {
+  color: var(--archive-muted);
+  font-weight: 400;
+}
+
+.date-header button {
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-weight: 700;
+}
+
+.hour-header {
+  margin-left: 18px;
+}
+
+.hour-header button {
+  color: var(--archive-muted);
+  font-size: 12px;
 }
 
 .header-checkbox {
   display: flex;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
   cursor: pointer;
 }
 
@@ -687,220 +1161,236 @@ defineExpose({
   pointer-events: none;
 }
 
-.date-header-content,
-.hour-header-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  cursor: pointer;
-}
-
-.date-header {
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.hour-header {
-  margin-left: 24px;
-  font-size: 14px;
-}
-
-.record-count {
-  color: var(--color-secondary);
-  font-weight: normal;
-}
-
-.hour-groups {
-  margin-left: 12px;
-}
-
 .records {
-  margin-left: 48px;
-  border-left: 2px solid var(--color-border);
-  padding-left: 12px;
+  position: relative;
+  margin-left: 31px;
+  padding-left: 18px;
+}
+
+.records::before {
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 1px;
+  background: color-mix(in srgb, var(--archive-copper) 24%, var(--color-border));
+  content: '';
 }
 
 .record-item {
-  display: flex;
-  align-items: flex-start;
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 66px auto minmax(0, 1fr);
+  align-items: start;
   gap: 8px;
-  padding: 8px;
-  cursor: pointer;
+  margin: 2px 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  font-size: 14px;
-  line-height: 1.5;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.record-item:hover {
-  background: var(--color-bg-secondary);
-}
-
+.record-item:hover,
 .record-item.selected {
-  background: rgba(128, 64, 48, 0.1);
+  background: rgba(184, 115, 51, 0.07);
+  border-color: rgba(184, 115, 51, 0.18);
 }
 
-.record-time {
-  color: var(--color-secondary);
-  flex-shrink: 0;
+.record-item:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--archive-copper);
+  outline-offset: 2px;
+}
+
+.record-item time {
+  padding-top: 2px;
+  color: var(--archive-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
 }
 
 .record-channel {
-  color: var(--color-accent);
-  flex-shrink: 0;
+  min-width: 36px;
+  margin-top: 1px;
+  padding: 2px 6px;
+  color: var(--archive-copper);
+  background: rgba(184, 115, 51, 0.08);
+  border-radius: 999px;
+  font-size: 10px;
+  text-align: center;
 }
 
-.record-channel.npc-say {
-  color: #9b59b6;  /* 紫色表示NPC说 */
-}
+.channel-yell,
+.npc-yell { color: #a33127; }
+.channel-whisper,
+.npc-whisper { color: #775592; }
+.npc-say { color: #76518d; }
 
-.record-channel.npc-yell {
-  color: #FF3333;  /* 红色表示NPC喊 */
-}
-
-.record-channel.npc-whisper {
-  color: #B39DDB;  /* 淡紫色表示NPC密语 */
-}
-
-.record-channel.channel-yell {
-  color: #FF3333;
-}
-
-.record-channel.channel-whisper {
-  color: #B39DDB;
+.speaker-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .record-avatar {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   border-radius: 3px;
 }
 
-.record-sender {
-  color: var(--color-primary);
-  font-weight: 500;
-  flex-shrink: 0;
+.message-copy {
+  min-width: 0;
 }
 
-.record-content {
-  color: var(--color-text);
+.message-copy strong {
+  color: var(--archive-ink);
+  font-weight: 650;
 }
 
-/* 消息类型样式 */
-.record-item.mark-npc .record-sender {
-  color: #9b59b6;  /* 紫色表示NPC */
+.message-copy p {
+  margin: 2px 0 0;
+  color: color-mix(in srgb, var(--archive-ink) 88%, var(--archive-muted));
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
-.record-item.mark-background {
+.profile-name,
+.legacy-badge,
+.certainty {
+  color: var(--archive-muted);
+  font-size: 10px;
+}
+
+.profile-name::before { content: '· '; }
+
+.legacy-badge {
+  padding: 1px 5px;
+  background: rgba(111, 98, 88, 0.08);
+  border: 1px solid rgba(111, 98, 88, 0.2);
+  border-radius: 999px;
+}
+
+.mark-background .message-copy p {
+  color: var(--archive-muted);
+  font-family: Georgia, 'Noto Serif SC', serif;
   font-style: italic;
-  opacity: 0.85;
 }
 
-.record-item.mark-background .record-content {
-  color: var(--color-secondary);
+.identity-event {
+  grid-template-columns: 20px 66px 32px minmax(0, 1fr);
+  margin: 8px 0;
+  color: var(--archive-identity-text);
+  background: color-mix(in srgb, var(--archive-identity) 8%, transparent);
+  border-color: color-mix(in srgb, var(--archive-identity) 28%, transparent);
+}
+
+.identity-event:hover,
+.identity-event.selected {
+  background: color-mix(in srgb, var(--archive-identity) 13%, transparent);
+  border-color: color-mix(in srgb, var(--archive-identity) 44%, transparent);
+}
+
+.identity-glyph {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: white;
+  background: var(--archive-identity);
+  border-radius: 50%;
+}
+
+.identity-copy strong {
+  color: var(--archive-identity-text);
+  font-family: Georgia, 'Noto Serif SC', serif;
+}
+
+.identity-copy > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.identity-copy p {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 2px 0 0;
+  color: var(--archive-identity-text);
 }
 
 .staging-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg);
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  min-width: 310px;
+  padding: 10px 12px 10px 16px;
+  color: var(--archive-ink);
+  background: color-mix(in srgb, var(--archive-parchment) 88%, var(--color-card-bg, #fff));
+  border: 1px solid rgba(184, 115, 51, 0.35);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(44, 24, 16, 0.14);
+  font-size: 12px;
 }
+
+.ledger { position: relative; }
 
 .tutorial-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #B87333;
-  font-size: 14px;
+  padding: 7px 12px;
+  color: var(--archive-copper);
   text-decoration: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  transition: all 0.2s;
 }
 
-.tutorial-link:hover {
-  background: rgba(184, 115, 51, 0.1);
+@media (max-width: 980px) {
+  .staging-pool {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .filter-rail {
+    max-height: 360px;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--archive-copper) 28%, var(--color-border));
+  }
+
+  .ledger { min-height: 520px; }
 }
 
-/* 筛选面板 */
-.filter-panel {
-  padding: 16px;
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-md);
-  margin-bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+@media (max-width: 640px) {
+  .ledger-header,
+  .rail-heading { align-items: flex-start; }
+  .date-grid { grid-template-columns: 1fr; }
+  .staging-content { padding-inline: 10px; }
+  .hour-header { margin-left: 6px; }
+  .records { margin-left: 10px; padding-left: 9px; }
+  .record-item,
+  .identity-event {
+    grid-template-columns: 20px 58px minmax(0, 1fr);
+  }
+  .record-channel,
+  .identity-glyph { grid-column: 3; }
+  .message-copy,
+  .identity-copy { grid-column: 3; }
+  .staging-footer {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    min-width: 0;
+  }
 }
 
-.filter-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.filter-group label {
-  font-size: 12px;
-  color: var(--color-secondary);
-  font-weight: 500;
-}
-
-.date-input {
-  padding: 6px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  background: #fff;
-  color: var(--color-primary);
-}
-
-.date-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-
-.channel-filters {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.channel-filter-btn {
-  padding: 6px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: #fff;
-  color: var(--color-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.channel-filter-btn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.channel-filter-btn.active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--btn-primary-text, #fff);
-  font-weight: 500;
-}
-
-.filter-empty-hint {
-  color: var(--color-secondary);
-  font-size: 13px;
-  font-style: italic;
-  padding: 6px 12px;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
 }
 </style>

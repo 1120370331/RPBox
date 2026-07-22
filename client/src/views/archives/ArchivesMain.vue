@@ -16,36 +16,7 @@ import { createStory, addStoryEntries, listStories, type CreateStoryEntryRequest
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
 import { getAddonManifest } from '@/api/addon'
 import { getGuild, type Guild } from '@/api/guild'
-
-// ChatRecord 类型定义
-interface TRP3Info {
-  FN?: string
-  LN?: string
-  TI?: string
-  IC?: string
-  CH?: string  // 名字颜色
-}
-
-interface Listener {
-  gameID: string
-  profileID?: string
-}
-
-interface ChatRecord {
-  timestamp: number
-  channel: string
-  sender: {
-    gameID: string
-    trp3?: TRP3Info
-  }
-  content: string
-  mark?: string  // P(Player), N(NPC), B(Background)
-  npc?: string   // NPC名字
-  nt?: string    // NPC说话类型
-  ref_id?: string  // TRP3 profile ref ID
-  raw_profile?: string  // 完整的TRP3 profile JSON
-  listeners?: Listener[]  // 收听者列表（新增字段，向前兼容）
-}
+import type { ChatRecord, IdentityEndpoint, ProfileSnapshot } from '@/types/chatLog'
 
 interface InstalledAddonInfo {
   installed: boolean
@@ -288,6 +259,35 @@ function stripNpcPrefix(content: string): string {
   return content.replace(/^\|+\s*/, '')
 }
 
+function snapshotDisplayName(snapshot?: ProfileSnapshot): string {
+  if (!snapshot) return ''
+  if (snapshot.n) return cleanTRP3Content(snapshot.n)
+  if (snapshot.FN) {
+    return cleanTRP3Content(snapshot.LN ? `${snapshot.FN} ${snapshot.LN}` : snapshot.FN)
+  }
+  return ''
+}
+
+function identityEndpointName(endpoint?: IdentityEndpoint): string {
+  if (!endpoint) return t('archives.staging.unknownProfile')
+  return cleanTRP3Content(
+    endpoint.display_name
+    || endpoint.profile_name
+    || endpoint.ref_id
+    || t('archives.staging.unknownProfile'),
+  )
+}
+
+function buildIdentityEventContent(record: ChatRecord): string {
+  const eventLabel = record.event?.kind === 'profile_update'
+    ? t('archives.staging.identityUpdated')
+    : t('archives.staging.identitySwitched')
+  const certainty = record.event?.certainty === 'exact'
+    ? t('archives.staging.identityExact')
+    : t('archives.staging.identityObserved')
+  return `${eventLabel}：${identityEndpointName(record.event?.from)} → ${identityEndpointName(record.event?.to)}（${certainty}）`
+}
+
 async function handleArchive(records: ChatRecord[]) {
   pendingRecords.value = records
   archiveMode.value = 'create'
@@ -307,7 +307,12 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
     let isNpc: boolean = false
     let content = record.content
 
-    if (record.mark === 'N' && record.npc) {
+    if (record.event || record.mark === 'S') {
+      speaker = ''
+      type = 'narration'
+      channel = 'SYSTEM'
+      content = buildIdentityEventContent(record)
+    } else if (record.mark === 'N' && record.npc) {
       speaker = record.npc
       isNpc = true
       if (record.nt) {
@@ -318,22 +323,25 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
       type = 'narration'
       content = stripNpcPrefix(content)
     } else {
-      speaker = trp3?.FN
+      const historicalName = snapshotDisplayName(record.profile_snapshot)
+      speaker = historicalName || (trp3?.FN
         ? (trp3.LN ? `${trp3.FN} ${trp3.LN}` : trp3.FN)
-        : record.sender.gameID.split('-')[0]
+        : record.sender.gameID.split('-')[0])
     }
 
+    const isIdentityEvent = Boolean(record.event) || record.mark === 'S'
+
     return {
-      source_id: `chat_${record.timestamp}`,
+      source_id: `chat_${record.record_key}`,
       type: type,
       speaker: speaker,
       content: cleanTRP3Content(content),
       channel: channel,
       timestamp: new Date(record.timestamp * 1000).toISOString(),
-      ref_id: record.ref_id,
-      game_id: record.sender.gameID,
-      trp3_data: record.raw_profile,
-      is_npc: isNpc,
+      ref_id: isIdentityEvent ? undefined : record.ref_id,
+      game_id: isIdentityEvent ? undefined : record.sender.gameID,
+      trp3_data: isIdentityEvent ? undefined : record.raw_profile,
+      is_npc: isIdentityEvent ? false : isNpc,
     }
   })
 }
@@ -378,8 +386,8 @@ async function handleCreateStory() {
       await addStoryEntries(storyId, entries)
 
       // 从待归档池移除已归档的记录
-      const archivedTimestamps = pendingRecords.value.map(r => r.timestamp)
-      stagingPoolRef.value?.removeArchivedRecords?.(archivedTimestamps)
+      const archivedRecordKeys = pendingRecords.value.map(record => record.record_key)
+      stagingPoolRef.value?.removeArchivedRecords?.(archivedRecordKeys)
       pendingRecords.value = []
     }
 
