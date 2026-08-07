@@ -91,3 +91,25 @@ func TestMigrateAccountBackupUniqueIndex(t *testing.T) {
 		t.Fatalf("create second backup with same account id: %v", err)
 	}
 }
+
+func TestMigrateAccountBackupUniqueIndexDropsDefaultLegacyIndex(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.AccountBackup{}, &model.AccountBackupVersion{})
+
+	if err := db.Exec("DROP INDEX IF EXISTS idx_user_account").Error; err != nil {
+		t.Fatalf("drop current index: %v", err)
+	}
+	if err := db.Exec("CREATE UNIQUE INDEX idx_account_backups_account_id ON account_backups(account_id)").Error; err != nil {
+		t.Fatalf("create default legacy index: %v", err)
+	}
+
+	if err := migrateAccountBackupUniqueIndex(db); err != nil {
+		t.Fatalf("migrate account backup unique index: %v", err)
+	}
+
+	if err := db.Create(&model.AccountBackup{UserID: 1, AccountID: "acc-1", Checksum: "a"}).Error; err != nil {
+		t.Fatalf("create first backup: %v", err)
+	}
+	if err := db.Create(&model.AccountBackup{UserID: 2, AccountID: "acc-1", Checksum: "b"}).Error; err != nil {
+		t.Fatalf("create second backup with same account id: %v", err)
+	}
+}

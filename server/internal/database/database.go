@@ -73,8 +73,14 @@ func migrateAccountBackupUniqueIndex(db *gorm.DB) error {
 	}
 
 	statements := []string{
+		"DROP INDEX IF EXISTS idx_account_backups_account_id",
 		"DROP INDEX IF EXISTS idx_user_account",
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_user_account ON account_backups(user_id, account_id)",
+	}
+	if db.Dialector.Name() == "postgres" {
+		statements = append([]string{
+			"ALTER TABLE account_backups DROP CONSTRAINT IF EXISTS idx_account_backups_account_id",
+		}, statements...)
 	}
 	for _, stmt := range statements {
 		if err := db.Exec(stmt).Error; err != nil {
