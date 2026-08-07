@@ -81,7 +81,7 @@ type ProfileVersion struct {
 // AccountBackup 账号备份（以账号为单位）
 type AccountBackup struct {
 	ID            uint      `gorm:"primarykey" json:"id"`
-	UserID        uint      `gorm:"index;not null" json:"user_id"`
+	UserID        uint      `gorm:"index;not null;uniqueIndex:idx_user_account" json:"user_id"`
 	AccountID     string    `gorm:"size:32;uniqueIndex:idx_user_account" json:"account_id"`
 	ProfilesData  string    `gorm:"type:text" json:"profiles_data,omitempty"` // JSON: 所有人物卡数据
 	ProfilesCount int       `json:"profiles_count"`

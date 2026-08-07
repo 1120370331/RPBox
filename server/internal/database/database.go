@@ -67,6 +67,24 @@ func migrateLegacyCommentLikeNotifications(db *gorm.DB) error {
 		Update("type", "post_comment_like").Error
 }
 
+func migrateAccountBackupUniqueIndex(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&model.AccountBackup{}) {
+		return nil
+	}
+
+	statements := []string{
+		"DROP INDEX IF EXISTS idx_user_account",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_user_account ON account_backups(user_id, account_id)",
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("%s: %w", stmt, err)
+		}
+	}
+
+	return nil
+}
+
 func Init(cfg *config.DatabaseConfig) error {
 	sslmode := cfg.SSLMode
 	if sslmode == "" {
@@ -169,6 +187,9 @@ func Init(cfg *config.DatabaseConfig) error {
 
 	if err := migrateLegacyCommentLikeNotifications(db); err != nil {
 		return fmt.Errorf("migrate legacy comment like notifications: %w", err)
+	}
+	if err := migrateAccountBackupUniqueIndex(db); err != nil {
+		return fmt.Errorf("migrate account backup unique index: %w", err)
 	}
 
 	// 手动迁移：修改 checksum 列类型为 text
