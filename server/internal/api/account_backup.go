@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"log"
 	"net/http"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/pkg/validator"
+	"gorm.io/gorm"
 )
 
 // listAccountBackups 获取用户所有账号备份
@@ -75,7 +77,13 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 	var existing model.AccountBackup
 	err := database.DB.Where("user_id = ? AND account_id = ?", userID, req.AccountID).First(&existing).Error
 
-	if err != nil {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("[AccountBackup] find error user=%d account=%s: %v", userID, req.AccountID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// 创建新备份
 		backup := model.AccountBackup{
 			UserID:        userID,
@@ -95,6 +103,7 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 			Version:       1,
 		}
 		if err := database.DB.Create(&backup).Error; err != nil {
+			log.Printf("[AccountBackup] create error user=%d account=%s: %v", userID, req.AccountID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 			return
 		}
