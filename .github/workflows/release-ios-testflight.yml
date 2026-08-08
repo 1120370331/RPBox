@@ -59,6 +59,15 @@ jobs:
         with:
           version: 9
 
+      - name: Ensure CocoaPods is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pod >/dev/null 2>&1; then
+            sudo gem install cocoapods -N
+          fi
+          pod --version
+
       - name: Resolve version
         id: version
         shell: bash
@@ -153,6 +162,9 @@ jobs:
           fi
           pnpm exec cap sync ios
           node ./scripts/prepareNativeShare.mjs ios
+          test -f ios/App/App.xcworkspace/contents.xcworkspacedata
+          test -f ios/App/Podfile.lock
+          test -f ios/App/Pods/Manifest.lock
 
       - name: Verify iOS camera setup
         shell: bash
@@ -224,6 +236,7 @@ jobs:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
           IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
           IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
+          IOS_REQUIRE_GENERATED_WORKSPACE: 'true'
         run: pnpm --filter rpbox-mobile verify:ios-project
 
       - name: Install signing assets

@@ -9,6 +9,7 @@ const expected = {
   teamId: process.env.IOS_TEAM_ID || '',
   bundleId: process.env.IOS_BUNDLE_ID || '',
   profileName: process.env.IOS_PROVISION_PROFILE_NAME || '',
+  requireGeneratedWorkspace: process.env.IOS_REQUIRE_GENERATED_WORKSPACE === 'true',
 }
 const errors = []
 const privacyFileReferenceId = '52B0F1002B00000000000001'
@@ -18,6 +19,9 @@ const projectPaths = {
   entitlements: path.join('ios', 'App', 'App', 'App.entitlements'),
   capacitorConfig: path.join('ios', 'App', 'App', 'capacitor.config.json'),
   pbxproj: path.join('ios', 'App', 'App.xcodeproj', 'project.pbxproj'),
+  workspaceContents: path.join('ios', 'App', 'App.xcworkspace', 'contents.xcworkspacedata'),
+  podfileLock: path.join('ios', 'App', 'Podfile.lock'),
+  podsManifest: path.join('ios', 'App', 'Pods', 'Manifest.lock'),
   privacyManifest: path.join('ios', 'App', 'App', 'PrivacyInfo.xcprivacy'),
 }
 
@@ -52,7 +56,7 @@ function requireSetting(settings, key, value, configurationName) {
   }
 }
 
-for (const [name, value] of Object.entries(expected)) {
+for (const [name, value] of Object.entries(expected).filter(([, value]) => typeof value === 'string')) {
   if (!value) {
     errors.push(`Missing environment value: ${name === 'version' ? 'IOS_EXPECTED_VERSION' : name === 'buildNumber' ? 'IOS_EXPECTED_BUILD_NUMBER' : name === 'teamId' ? 'IOS_TEAM_ID' : name === 'bundleId' ? 'IOS_BUNDLE_ID' : 'IOS_PROVISION_PROFILE_NAME'}`)
   }
@@ -63,6 +67,12 @@ const entitlements = readRequired(projectPaths.entitlements)
 const capacitorConfig = readRequired(projectPaths.capacitorConfig)
 const pbxproj = readRequired(projectPaths.pbxproj)
 const privacyManifest = readRequired(projectPaths.privacyManifest)
+
+if (expected.requireGeneratedWorkspace) {
+  readRequired(projectPaths.workspaceContents)
+  readRequired(projectPaths.podfileLock)
+  readRequired(projectPaths.podsManifest)
+}
 
 for (const key of [
   'NSCameraUsageDescription',
