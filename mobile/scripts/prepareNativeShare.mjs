@@ -8,6 +8,8 @@ const appId = 'app.rpbox.mobile'
 const appPackage = appId
 const associatedHosts = ['totalrpbox.com', 'www.totalrpbox.com']
 const appLinkPathPrefixes = ['/posts/', '/items/', '/stories/', '/profiles/', '/guild/', '/rpdb/', '/open-app.html']
+const iosPrivacyFileReferenceId = '52B0F1002B00000000000001'
+const iosPrivacyBuildFileId = '52B0F1012B00000000000001'
 
 function ensureFile(filePath, contents) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
@@ -427,6 +429,122 @@ function upsertPlistString(plist, key, value) {
   return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${block}\n</dict>\n</plist>\n`)
 }
 
+function findPlistArrayRange(plist, key) {
+  const keyIndex = plist.indexOf(`<key>${key}</key>`)
+  if (keyIndex < 0) return null
+
+  const openTagStart = plist.indexOf('<array>', keyIndex)
+  if (openTagStart < 0) return null
+
+  const tagPattern = /<\/?array>/g
+  tagPattern.lastIndex = openTagStart
+  let depth = 0
+  let match
+  while ((match = tagPattern.exec(plist)) !== null) {
+    if (match[0] === '<array>') {
+      depth += 1
+    } else {
+      depth -= 1
+      if (depth === 0) {
+        return {
+          closeTagStart: match.index,
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+function buildIosUrlTypeDictionary() {
+  return `\t\t<dict>
+\t\t\t<key>CFBundleURLName</key>
+\t\t\t<string>${appId}</string>
+\t\t\t<key>CFBundleURLSchemes</key>
+\t\t\t<array>
+\t\t\t\t<string>${appId}</string>
+\t\t\t</array>
+\t\t</dict>`
+}
+
+function upsertIosUrlType(plist) {
+  const urlTypeDictionary = buildIosUrlTypeDictionary()
+  const escapedAppId = appId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const rpboxDictionaryPattern = new RegExp(
+    `<dict>\\s*<key>CFBundleURLName<\\/key>\\s*<string>${escapedAppId}<\\/string>\\s*` +
+    `<key>CFBundleURLSchemes<\\/key>\\s*<array>[\\s\\S]*?<\\/array>\\s*<\\/dict>`,
+  )
+
+  if (rpboxDictionaryPattern.test(plist)) {
+    return plist.replace(rpboxDictionaryPattern, urlTypeDictionary.trim())
+  }
+
+  const urlTypesRange = findPlistArrayRange(plist, 'CFBundleURLTypes')
+  if (urlTypesRange) {
+    const beforeClose = plist.slice(0, urlTypesRange.closeTagStart).replace(/[ \t]*$/, '')
+    return `${beforeClose}${beforeClose.endsWith('\n') ? '' : '\n'}${urlTypeDictionary}\n\t${plist.slice(urlTypesRange.closeTagStart)}`
+  }
+
+  const urlTypesBlock = `\t<key>CFBundleURLTypes</key>
+\t<array>
+${urlTypeDictionary}
+\t</array>`
+  return plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${urlTypesBlock}\n</dict>\n</plist>\n`)
+}
+
+function insertBeforePbxSectionEnd(pbxproj, sectionName, entry, token) {
+  if (pbxproj.includes(token)) return pbxproj
+
+  const marker = `/* End ${sectionName} section */`
+  if (!pbxproj.includes(marker)) {
+    throw new Error(`Missing ${sectionName} section in iOS Xcode project`)
+  }
+  return pbxproj.replace(marker, `${entry}\n${marker}`)
+}
+
+function ensureIosPrivacyManifestReferences(pbxproj) {
+  pbxproj = insertBeforePbxSectionEnd(
+    pbxproj,
+    'PBXBuildFile',
+    `\t\t${iosPrivacyBuildFileId} /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = ${iosPrivacyFileReferenceId} /* PrivacyInfo.xcprivacy */; };`,
+    `${iosPrivacyBuildFileId} /* PrivacyInfo.xcprivacy in Resources */ =`,
+  )
+  pbxproj = insertBeforePbxSectionEnd(
+    pbxproj,
+    'PBXFileReference',
+    `\t\t${iosPrivacyFileReferenceId} /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };`,
+    `${iosPrivacyFileReferenceId} /* PrivacyInfo.xcprivacy */ =`,
+  )
+
+  const groupEntry = `${iosPrivacyFileReferenceId} /* PrivacyInfo.xcprivacy */,`
+  if (!pbxproj.includes(groupEntry)) {
+    const infoPlistEntry = pbxproj.match(/^(\s*)[A-F0-9]{24} \/\* Info\.plist \*\/,\s*$/m)
+    if (!infoPlistEntry) {
+      throw new Error('Missing Info.plist entry in iOS App PBX group')
+    }
+    pbxproj = pbxproj.replace(
+      infoPlistEntry[0],
+      `${infoPlistEntry[1]}${groupEntry}\n${infoPlistEntry[0]}`,
+    )
+  }
+
+  const resourceEntry = `${iosPrivacyBuildFileId} /* PrivacyInfo.xcprivacy in Resources */,`
+  if (!pbxproj.includes(resourceEntry)) {
+    const resourcesFilesPattern = /(isa = PBXResourcesBuildPhase;[\s\S]*?^(\s*)files = \(\r?\n)/m
+    const resourcesFilesMatch = pbxproj.match(resourcesFilesPattern)
+    if (!resourcesFilesMatch) {
+      throw new Error('Missing PBXResourcesBuildPhase files list in iOS Xcode project')
+    }
+    const indentUnit = resourcesFilesMatch[2].includes('\t') ? '\t' : '  '
+    pbxproj = pbxproj.replace(
+      resourcesFilesPattern,
+      `${resourcesFilesMatch[1]}${resourcesFilesMatch[2]}${indentUnit}${resourceEntry}\n`,
+    )
+  }
+
+  return pbxproj
+}
+
 function patchAndroid() {
   const stringsPath = path.join(mobileRoot, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml')
   if (!fs.existsSync(stringsPath)) return
@@ -468,24 +586,7 @@ function patchIos() {
   }
 
   let plist = fs.readFileSync(infoPlistPath, 'utf8')
-  const urlTypesBlock = `
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>${appId}</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>${appId}</string>
-			</array>
-		</dict>
-	</array>`
-
-  if (/<key>CFBundleURLTypes<\/key>\s*<array>[\s\S]*?<\/array>/.test(plist)) {
-    plist = plist.replace(/<key>CFBundleURLTypes<\/key>\s*<array>[\s\S]*?<\/array>/, urlTypesBlock.trim())
-  } else {
-    plist = plist.replace(/<\/dict>\s*<\/plist>\s*$/, `${urlTypesBlock}\n</dict>\n</plist>\n`)
-  }
+  plist = upsertIosUrlType(plist)
   plist = upsertPlistString(plist, 'NSCameraUsageDescription', 'RPBox 需要访问相机，以便拍摄并上传帖子、道具和评论图片。')
   plist = upsertPlistString(plist, 'NSPhotoLibraryUsageDescription', 'RPBox 需要访问照片，以便选择并上传帖子、道具和评论图片。')
   plist = upsertPlistString(plist, 'NSPhotoLibraryAddUsageDescription', 'RPBox 需要访问照片，以便保存和处理中转图片。')
@@ -531,13 +632,17 @@ ${associatedDomains.map((domain) => `\t\t<string>${domain}</string>`).join('\n')
   } else {
     pbxproj = pbxproj.replace(/INFOPLIST_FILE = App\/Info\.plist;/g, 'INFOPLIST_FILE = App/Info.plist;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
   }
+  pbxproj = ensureIosPrivacyManifestReferences(pbxproj)
   fs.writeFileSync(pbxprojPath, pbxproj, 'utf8')
 
   if (!pbxproj.includes('CODE_SIGN_ENTITLEMENTS = App/App.entitlements;')) {
     throw new Error(`Failed to inject CODE_SIGN_ENTITLEMENTS into ${pbxprojPath}`)
   }
+  if (!pbxproj.includes('PrivacyInfo.xcprivacy in Resources')) {
+    throw new Error(`Failed to add PrivacyInfo.xcprivacy to ${pbxprojPath}`)
+  }
 
-  const privacyManifestPath = path.join(mobileRoot, 'ios', 'App', 'PrivacyInfo.xcprivacy')
+  const privacyManifestPath = path.join(mobileRoot, 'ios', 'App', 'App', 'PrivacyInfo.xcprivacy')
   if (!fs.existsSync(privacyManifestPath)) {
     ensureFile(
       privacyManifestPath,

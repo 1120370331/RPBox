@@ -1,12 +1,13 @@
 {
   "name": "rpbox-mobile",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "type-check": "vue-tsc --noEmit",
     "test": "vitest run",
+    "verify:ios-project": "node ./scripts/verifyIosProject.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "prepare:native-share": "node ./scripts/prepareNativeShare.mjs",

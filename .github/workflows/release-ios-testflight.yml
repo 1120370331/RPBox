@@ -123,6 +123,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test mobile application
+        run: |
+          pnpm --filter rpbox-mobile test
+          pnpm --filter rpbox-mobile type-check
+
       - name: Build mobile web assets
         shell: bash
         env:
@@ -143,7 +148,9 @@ jobs:
           if [ ! -d ios/App ]; then
             pnpm exec cap add ios
           fi
-          pnpm dlx @capacitor/assets generate --ios
+          if [ ! -f ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png ]; then
+            pnpm dlx @capacitor/assets@3.0.5 generate --ios
+          fi
           pnpm exec cap sync ios
           node ./scripts/prepareNativeShare.mjs ios
 
@@ -197,13 +204,27 @@ jobs:
 
           perl -0777 -i -pe "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${VERSION};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" "$PBXPROJ"
-          perl -0777 -i -pe "s/DEVELOPMENT_TEAM = [^;]+;/DEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
+          perl -0777 -i -pe "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]+;/PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};/g" "$PBXPROJ"
           perl -0777 -i -pe "s/CODE_SIGN_STYLE = [^;]+;/CODE_SIGN_STYLE = Manual;/g" "$PBXPROJ"
+          if grep -q "DEVELOPMENT_TEAM =" "$PBXPROJ"; then
+            perl -0777 -i -pe "s/DEVELOPMENT_TEAM = [^;]+;/DEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
+          else
+            perl -0777 -i -pe "s/(CODE_SIGN_STYLE = Manual;)/\\1\\n\\t\\t\\t\\tDEVELOPMENT_TEAM = ${IOS_TEAM_ID};/g" "$PBXPROJ"
+          fi
           if grep -q "PROVISIONING_PROFILE_SPECIFIER =" "$PBXPROJ"; then
             perl -0777 -i -pe "s/PROVISIONING_PROFILE_SPECIFIER = [^;]+;/PROVISIONING_PROFILE_SPECIFIER = \"${IOS_PROVISION_PROFILE_NAME}\";/g" "$PBXPROJ"
           else
             perl -0777 -i -pe "s/(PRODUCT_BUNDLE_IDENTIFIER = ${IOS_BUNDLE_ID};)/\\1\\n\\t\\t\\t\\tPROVISIONING_PROFILE_SPECIFIER = \"${IOS_PROVISION_PROFILE_NAME}\";/g" "$PBXPROJ"
           fi
+
+      - name: Verify generated iOS project
+        env:
+          IOS_EXPECTED_VERSION: ${{ steps.version.outputs.VERSION }}
+          IOS_EXPECTED_BUILD_NUMBER: ${{ steps.version.outputs.BUILD_NUMBER }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
+        run: pnpm --filter rpbox-mobile verify:ios-project
 
       - name: Install signing assets
         shell: bash
@@ -280,9 +301,9 @@ jobs:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
           set -euo pipefail
-          SCHEME="$(xcodebuild -list -json -workspace "${{ env.XCODE_WORKSPACE }}" | python3 -c 'import json,sys; d=json.load(sys.stdin); schemes=d.get("workspace",{}).get("schemes",[]); print(schemes[0] if schemes else "")')"
+          SCHEME="${RESOLVED_XCODE_SCHEME:-}"
           if [ -z "$SCHEME" ]; then
-            echo "No iOS scheme found in workspace after sync."
+            echo "No resolved iOS scheme is available."
             exit 1
           fi
           xcodebuild \

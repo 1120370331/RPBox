@@ -1,23 +1,33 @@
 # 手机端发版与自动更新说明
 
-本文档说明 RPBox 手机端（Capacitor）发布流水线、服务端 updater 元数据，以及客户端自动检测更新流程。
+本文档说明 RPBox 手机端（Capacitor）发布流水线、iOS TestFlight 流程、服务端 updater 元数据，以及客户端自动检测更新流程。
 
 ## 1. 流水线总览
 
-- 触发方式：推送 `mobile-v*` tag（例如 `mobile-v0.1.0`）
+- Android 触发方式：推送 `mobile-v*` tag（例如 `mobile-v2.0.2`）
 - 工作流文件：`.github/workflows/release-mobile.yml`
 - 主要动作：
   1. 构建 Android Release APK
   2. 使用 keystore 签名 APK
   3. 生成 `latest-android.json` 元数据
   4. 上传 APK 与元数据到服务器 `releases/mobile`
-  5. 生成并上传 `latest-ios.json`（指向 App Store）
+- iOS 触发方式：推送 `mobile-ios-v*` tag（例如 `mobile-ios-v2.0.2`）
+- iOS 工作流文件：`.github/workflows/release-ios-testflight.yml`
+- iOS 主要动作：
+  1. 生成并校验 Capacitor iOS 工程
+  2. 使用 Distribution 证书和 App Store provisioning profile 创建 archive
+  3. 导出 IPA 并上传到 TestFlight
+  4. 生成并上传 `latest-ios.json`（指向 App Store）
 
 ## 2. 发布命令
 
 ```bash
-git tag mobile-v0.1.0
-git push origin mobile-v0.1.0
+git tag mobile-v2.0.2
+git push origin mobile-v2.0.2
+
+# iOS TestFlight
+git tag mobile-ios-v2.0.2
+git push origin mobile-ios-v2.0.2
 ```
 
 可选：在发版前新增更新说明文件 `mobile/release-notes/<version>.txt`，例如：
@@ -79,15 +89,27 @@ iOS (`latest-ios.json`)：
 
 - `MOBILE_RELEASE_PATH`（可选，不配则用 `${RELEASE_PATH}/mobile`）
 - `MOBILE_RELEASE_BASE_URL`（可选，不配则默认 `https://api.rpbox.app/releases/mobile`）
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
+- `ANDROID_SIGNING_KEYSTORE_BASE64`
+- `ANDROID_SIGNING_STORE_PASSWORD`
+- `ANDROID_SIGNING_KEY_ALIAS`
+- `ANDROID_SIGNING_KEY_PASSWORD`
 - `IOS_APP_STORE_URL`（用于生成 iOS updater 元数据）
+- `IOS_TEAM_ID`
+- `IOS_BUNDLE_ID`
+- `IOS_PROVISION_PROFILE_NAME`
+- `IOS_P12_BASE64`
+- `IOS_P12_PASSWORD`
+- `IOS_PROVISION_PROFILE_BASE64`
+- `IOS_KEYCHAIN_PASSWORD`（可选）
+- `ASC_ISSUER_ID`
+- `ASC_KEY_ID`
+- `ASC_API_KEY_BASE64`
+- `IOS_TESTFLIGHT_GROUPS`（可选）
 
 说明：
-- 当前 workflow 默认构建并上传 `debug APK`，优先保证下载链路可用（内测分发）。
-- 后续如需正式签名包，可在此基础上再接入签名步骤与密钥。
+- Android workflow 构建并上传签名的 Release APK。
+- iOS workflow 会在 macOS runner 上完成 Xcode archive、IPA 导出和 TestFlight 上传；Windows 本机不能替代这一步。
+- iOS workflow 在归档前会校验 Bundle ID、版本号、build number、签名方式、provisioning profile、相机权限、深链和隐私清单。
 
 ## 6. 服务端 updater 行为
 
