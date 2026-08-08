@@ -43,6 +43,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test mobile application
+        run: |
+          pnpm --filter rpbox-mobile test
+          pnpm --filter rpbox-mobile type-check
+
       - name: Get version from tag
         id: version
         run: |
@@ -87,7 +92,7 @@ jobs:
           if [ ! -d android ]; then
             pnpm exec cap add android
           fi
-          pnpm dlx @capacitor/assets generate --android
+          pnpm dlx @capacitor/assets@3.0.5 generate --android
           pnpm exec cap sync android
           node ./scripts/prepareNativeShare.mjs android
 
