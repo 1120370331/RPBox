@@ -3,6 +3,7 @@ import {
   createCharacterCard,
   getCharacterCardSources,
   listMyCharacterCards,
+  uploadCharacterCardImpressionImage,
   uploadCharacterCardPortrait,
 } from './characterCard'
 
@@ -78,5 +79,22 @@ describe('character card API contract', () => {
     )
     const formData = requestMock.post.mock.calls[0][1] as FormData
     expect(formData.get('image')).toBe(file)
+  })
+
+  it('uploads impression media with an explicit image kind', async () => {
+    requestMock.post.mockResolvedValue({ data: { image_ref: 'character-card-impression-pending://icon-token' } })
+    const file = new File(['icon'], 'glance-icon.png', { type: 'image/png' })
+
+    const imageRef = await uploadCharacterCardImpressionImage(file, 'icon')
+
+    expect(imageRef).toBe('character-card-impression-pending://icon-token')
+    expect(requestMock.post).toHaveBeenCalledWith(
+      '/upload/character-card-impression-image',
+      expect.any(FormData),
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
+    const formData = requestMock.post.mock.calls[0][1] as FormData
+    expect(formData.get('image')).toBe(file)
+    expect(formData.get('kind')).toBe('icon')
   })
 })

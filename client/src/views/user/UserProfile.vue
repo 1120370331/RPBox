@@ -654,12 +654,7 @@ function previewAchievementNotification() {
           </template>
         </div>
 
-        <CharacterCardWall
-          :user-id="Number(userId)"
-          :is-own-profile="isOwnProfile"
-        />
-
-        <!-- 3. 公会卡片 -->
+        <!-- 3. 公会卡片：桌面端承接身份卡右侧第二行 -->
         <div class="guilds-card">
           <div class="card-header">
             <h2 class="card-title">加入的公会</h2>
@@ -708,6 +703,11 @@ function previewAchievementNotification() {
             </template>
           </div>
         </div>
+
+        <CharacterCardWall
+          :user-id="Number(userId)"
+          :is-own-profile="isOwnProfile"
+        />
 
         <RPDBContributionSection
           :user-id="Number(userId)"
@@ -1019,7 +1019,8 @@ function previewAchievementNotification() {
 
 @media (min-width: 768px) {
   .identity-card {
-    grid-column: span 4;
+    grid-column: 1 / span 4;
+    grid-row: 1 / span 2;
   }
 }
 
@@ -1485,7 +1486,8 @@ function previewAchievementNotification() {
 
 @media (min-width: 768px) {
   .bio-card {
-    grid-column: span 8;
+    grid-column: 5 / -1;
+    grid-row: 1;
   }
 }
 
@@ -1917,7 +1919,8 @@ function previewAchievementNotification() {
 
 @media (min-width: 768px) {
   .guilds-card {
-    grid-column: span 8;
+    grid-column: 5 / -1;
+    grid-row: 2;
   }
 }
 

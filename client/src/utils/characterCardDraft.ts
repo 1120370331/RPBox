@@ -1,8 +1,65 @@
-import type { CharacterCard, UpdateCharacterCardRequest } from '@/api/characterCard'
+import type {
+  CharacterCard,
+  CharacterCardImpression,
+  UpdateCharacterCardRequest,
+} from '@/api/characterCard'
 
 export type CharacterCardEditorTab = 'basic' | 'background' | 'impression' | 'other'
 
 export interface CharacterCardDraft extends UpdateCharacterCardRequest {}
+
+const CHARACTER_CARD_IMPRESSION_SLOTS = 5
+
+function createEmptyCharacterCardImpression(slot: number): CharacterCardImpression {
+  return {
+    slot,
+    active: false,
+    title: '',
+    text: '',
+    trp3_icon: '',
+    icon_image_url: '',
+    icon_image_updated_at: null,
+    image_url: '',
+    image_updated_at: null,
+  }
+}
+
+export function createEmptyCharacterCardImpressions(): CharacterCardImpression[] {
+  return Array.from(
+    { length: CHARACTER_CARD_IMPRESSION_SLOTS },
+    (_, index) => createEmptyCharacterCardImpression(index + 1),
+  )
+}
+
+export function normalizeCharacterCardImpressions(
+  impressions: CharacterCardImpression[] | null | undefined,
+): CharacterCardImpression[] {
+  const bySlot = new Map<number, CharacterCardImpression>()
+  if (Array.isArray(impressions)) {
+    for (const impression of impressions) {
+      const slot = Number(impression?.slot)
+      if (Number.isInteger(slot) && slot >= 1 && slot <= CHARACTER_CARD_IMPRESSION_SLOTS && !bySlot.has(slot)) {
+        bySlot.set(slot, impression)
+      }
+    }
+  }
+
+  return createEmptyCharacterCardImpressions().map((empty) => {
+    const impression = bySlot.get(empty.slot)
+    if (!impression) return empty
+    return {
+      slot: empty.slot,
+      active: impression.active === true,
+      title: impression.title || '',
+      text: impression.text || '',
+      trp3_icon: impression.trp3_icon || '',
+      icon_image_url: impression.icon_image_url || '',
+      icon_image_updated_at: impression.icon_image_updated_at || null,
+      image_url: impression.image_url || '',
+      image_updated_at: impression.image_updated_at || null,
+    }
+  })
+}
 
 export function createEmptyCharacterCardDraft(): CharacterCardDraft {
   return {
@@ -22,10 +79,12 @@ export function createEmptyCharacterCardDraft(): CharacterCardDraft {
     residence: '',
     relationship_status: '',
     icon: '',
+    class_color: '',
     name_color: '',
     summary: '',
     background_story: '',
     first_impression: '',
+    impressions: createEmptyCharacterCardImpressions(),
     other_content: '',
     portrait_image_url: '',
     status: 'draft',
@@ -55,10 +114,12 @@ export function createCharacterCardDraft(card?: CharacterCard | null): Character
     residence: card.residence || '',
     relationship_status: card.relationship_status || '',
     icon: card.icon || '',
+    class_color: card.class_color || card.name_color || '',
     name_color: card.name_color || '',
     summary: card.summary || '',
     background_story: card.background_story || '',
     first_impression: card.first_impression || '',
+    impressions: normalizeCharacterCardImpressions(card.impressions),
     other_content: card.other_content || '',
     portrait_image_url: card.portrait_image_url || '',
     status: card.status === 'published' ? 'published' : 'draft',

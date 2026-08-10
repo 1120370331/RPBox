@@ -80,6 +80,9 @@ func TestCharacterCardCreatesBlankAndMapsOwnedBackupProfile(t *testing.T) {
 	if source.DisplayName != "艾琳 晨星" || source.Title != "巡林客" || source.Icon != "ability_hunter_beastcall" {
 		t.Fatalf("unexpected source summary: %+v", source)
 	}
+	if source.ClassColor != "DDBB88" || source.NameColor != "DDBB88" {
+		t.Fatalf("source did not expose the single TRP3 CH color through both compatibility fields: %+v", source)
+	}
 	if strings.Contains(sourcesResp.Body.String(), "player") || strings.Contains(sourcesResp.Body.String(), "characteristics") {
 		t.Fatalf("source response leaked raw profile data: %s", sourcesResp.Body.String())
 	}
@@ -108,7 +111,7 @@ func TestCharacterCardCreatesBlankAndMapsOwnedBackupProfile(t *testing.T) {
 		imported.FullTitle != "银月城远行巡林客" || imported.Race != "高等精灵" || imported.Class != "游侠" ||
 		imported.EyeColor != "琥珀色" || imported.EyeColorHex != "A1B2C3" || imported.Age != "127" ||
 		imported.Height != "一米七二" || imported.Weight != "轻盈" || imported.Birthplace != "银月城" ||
-		imported.Residence != "暴风城" || imported.RelationshipStatus != "2" || imported.NameColor != "DDBB88" {
+		imported.Residence != "暴风城" || imported.RelationshipStatus != "2" || imported.ClassColor != "DDBB88" || imported.NameColor != "DDBB88" {
 		t.Fatalf("TRP3 field mapping mismatch: %+v", imported)
 	}
 	if imported.SourceBackupID == nil || *imported.SourceBackupID != backup.ID || imported.SourceAccountID != backup.AccountID || imported.SourceProfileID != "profile-exact" {
@@ -372,7 +375,7 @@ func TestCharacterCardSyncOnlyOverwritesTRP3BasicFields(t *testing.T) {
 	if card.FirstName != "新名" || card.LastName != "新姓" || card.Title != "新称号" || card.FullTitle != "新完整头衔" ||
 		card.Race != "暗夜精灵" || card.Class != "德鲁伊" || card.EyeColor != "绿色" || card.EyeColorHex != "00AA11" ||
 		card.Age != "300" || card.Height != "很高" || card.Weight != "新体重" || card.Birthplace != "海加尔山" ||
-		card.Residence != "月光林地" || card.RelationshipStatus != "伴侣" || card.Icon != "new_icon" || card.NameColor != "ABCDEF" {
+		card.Residence != "月光林地" || card.RelationshipStatus != "伴侣" || card.Icon != "new_icon" || card.ClassColor != "ABCDEF" || card.NameColor != "ABCDEF" {
 		t.Fatalf("sync did not map all basic fields: %+v", card)
 	}
 	if card.DisplayName != "RPBox 自定义名" || card.Summary != "自定义摘要" || card.BackgroundStory != "<p>背景故事</p>" ||
@@ -380,6 +383,192 @@ func TestCharacterCardSyncOnlyOverwritesTRP3BasicFields(t *testing.T) {
 		card.PortraitImage != keptPortrait || card.PortraitImageUpdatedAt == nil || !card.PortraitImageUpdatedAt.Equal(portraitTime) ||
 		card.Status != model.CharacterCardStatusPublished || card.Visibility != model.CharacterCardVisibilityPublic || card.SortOrder != 9 {
 		t.Fatalf("sync overwrote RPBox-only fields: %+v", card)
+	}
+}
+
+func TestCharacterCardImpressionsImportVisibilityAndSyncBoundary(t *testing.T) {
+	db, server, owner, moderator := newCharacterCardTestServer(t)
+	if err := db.Model(&model.User{}).Where("id = ?", moderator.ID).Update("role", "moderator").Error; err != nil {
+		t.Fatalf("promote moderator: %v", err)
+	}
+	backup := model.AccountBackup{
+		UserID: owner.ID, AccountID: "impression-account", Checksum: "before",
+		ProfilesData: characterCardProfilesData(`{
+			"profileName":"五槽档案",
+			"player":{
+				"characteristics":{"FN":"初始名","LN":"星影","RA":"人类"},
+				"misc":{"PE":{
+					"1":{"AC":true,"IC":"ability_stealth","TI":"步伐轻盈","TX":"走路几乎没有声音。"},
+					"2":{"AC":false,"IC":"inv_misc_note_01","TI":"隐藏线索","TX":"只有所有者应看到。"},
+					"5":{"AC":true,"IC":"spell_fire_fire","TI":"灼热气息","TX":"靠近时能感到暖意。"}
+				}}
+			}
+		}`),
+	}
+	if err := db.Create(&backup).Error; err != nil {
+		t.Fatalf("create backup: %v", err)
+	}
+	token := newTestToken(t, owner)
+	createResp := performRequest(server.router, http.MethodPost, "/api/v1/character-cards", map[string]interface{}{
+		"source_type":       "backup",
+		"source_backup_id":  backup.ID,
+		"source_profile_id": "profile-exact",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create from backup expected 201, got %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	created := decodeCharacterCardResponse(t, createResp)
+	assertFiveCharacterCardImpressionSlots(t, created.Impressions)
+	if !created.Impressions[0].Active || created.Impressions[0].Title != "步伐轻盈" || created.Impressions[0].Text != "走路几乎没有声音。" || created.Impressions[0].TRP3Icon != "ability_stealth" {
+		t.Fatalf("slot 1 PE mapping mismatch: %+v", created.Impressions[0])
+	}
+	if created.Impressions[1].Active || created.Impressions[1].Title != "隐藏线索" {
+		t.Fatalf("inactive PE slot should still be returned to owner: %+v", created.Impressions[1])
+	}
+	if created.Impressions[2].Active || created.Impressions[2].Title != "" || !created.Impressions[4].Active {
+		t.Fatalf("missing/fifth PE slot mapping mismatch: %+v", created.Impressions)
+	}
+
+	requests := impressionRequestsFromDTOs(created.Impressions)
+	requests[0].Title = "RPBox 自定义印象"
+	requests[0].Text = "同步基础资料时必须保留。"
+	for index := 1; index < len(requests); index++ {
+		requests[index].Active = false
+	}
+	cardPath := "/api/v1/character-cards/" + strconv.FormatUint(uint64(created.ID), 10)
+	updateResp := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{
+		"impressions":      requests,
+		"first_impression": "<p>其他备注（兼容旧数据）</p>",
+		"status":           model.CharacterCardStatusPublished,
+		"visibility":       model.CharacterCardVisibilityPublic,
+	}, token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update impressions expected 200, got %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	updated := decodeCharacterCardResponse(t, updateResp)
+	assertFiveCharacterCardImpressionSlots(t, updated.Impressions)
+	if updated.FirstImpression != "<p>其他备注（兼容旧数据）</p>" {
+		t.Fatalf("legacy first_impression was not retained as other notes: %+v", updated)
+	}
+	if updated.ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("public save must enter moderation: %+v", updated)
+	}
+	if hidden := performRequest(server.router, http.MethodGet, cardPath, nil, ""); hidden.Code != http.StatusNotFound {
+		t.Fatalf("unapproved public card expected 404, got %d body=%s", hidden.Code, hidden.Body.String())
+	}
+	moderatorToken := newTestToken(t, moderator)
+	reviewResp := performRequest(server.router, http.MethodPost, "/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(created.ID), 10), map[string]interface{}{
+		"action": "approve",
+	}, moderatorToken)
+	if reviewResp.Code != http.StatusOK {
+		t.Fatalf("approve character card expected 200, got %d body=%s", reviewResp.Code, reviewResp.Body.String())
+	}
+
+	publicResp := performRequest(server.router, http.MethodGet, cardPath, nil, "")
+	if publicResp.Code != http.StatusOK {
+		t.Fatalf("public detail expected 200, got %d body=%s", publicResp.Code, publicResp.Body.String())
+	}
+	publicCard := decodeCharacterCardResponse(t, publicResp)
+	if len(publicCard.Impressions) != 1 || publicCard.Impressions[0].Slot != 1 || publicCard.Impressions[0].Title != "RPBox 自定义印象" {
+		t.Fatalf("public detail should return active impressions only: %+v", publicCard.Impressions)
+	}
+	ownerResp := performRequest(server.router, http.MethodGet, cardPath, nil, token)
+	if ownerResp.Code != http.StatusOK {
+		t.Fatalf("owner detail expected 200, got %d body=%s", ownerResp.Code, ownerResp.Body.String())
+	}
+	assertFiveCharacterCardImpressionSlots(t, decodeCharacterCardResponse(t, ownerResp).Impressions)
+	ownerList := performRequest(server.router, http.MethodGet, "/api/v1/character-cards", nil, token)
+	var ownerListPayload struct {
+		Cards []characterCardDTO `json:"character_cards"`
+	}
+	if ownerList.Code != http.StatusOK || json.Unmarshal(ownerList.Body.Bytes(), &ownerListPayload) != nil || len(ownerListPayload.Cards) != 1 {
+		t.Fatalf("owner list failed: code=%d body=%s", ownerList.Code, ownerList.Body.String())
+	}
+	assertFiveCharacterCardImpressionSlots(t, ownerListPayload.Cards[0].Impressions)
+	wallResp := performRequest(server.router, http.MethodGet, "/api/v1/users/"+strconv.FormatUint(uint64(owner.ID), 10)+"/character-cards", nil, "")
+	var wallPayload struct {
+		Cards []characterCardDTO `json:"character_cards"`
+	}
+	if wallResp.Code != http.StatusOK || json.Unmarshal(wallResp.Body.Bytes(), &wallPayload) != nil || len(wallPayload.Cards) != 1 || len(wallPayload.Cards[0].Impressions) != 1 {
+		t.Fatalf("public wall did not filter impressions: code=%d body=%s", wallResp.Code, wallResp.Body.String())
+	}
+
+	updatedProfiles := characterCardProfilesData(`{
+		"profileName":"变更后的档案",
+		"player":{
+			"characteristics":{"FN":"同步新名","LN":"星影","RA":"暗夜精灵"},
+			"misc":{"PE":{"1":{"AC":true,"IC":"different_icon","TI":"TRP3 新印象","TX":"不得覆盖 RPBox 编辑。"}}}
+		}
+	}`)
+	if err := db.Model(&model.AccountBackup{}).Where("id = ?", backup.ID).Update("profiles_data", updatedProfiles).Error; err != nil {
+		t.Fatalf("update backup: %v", err)
+	}
+	syncResp := performRequest(server.router, http.MethodPost, cardPath+"/sync-from-trp3", nil, token)
+	if syncResp.Code != http.StatusOK {
+		t.Fatalf("sync expected 200, got %d body=%s", syncResp.Code, syncResp.Body.String())
+	}
+	synced := decodeCharacterCardResponse(t, syncResp)
+	assertFiveCharacterCardImpressionSlots(t, synced.Impressions)
+	if synced.FirstName != "同步新名" || synced.Race != "暗夜精灵" {
+		t.Fatalf("sync did not update basic fields: %+v", synced)
+	}
+	if synced.Impressions[0].Title != "RPBox 自定义印象" || synced.Impressions[0].TRP3Icon != "ability_stealth" || synced.FirstImpression != "<p>其他备注（兼容旧数据）</p>" {
+		t.Fatalf("sync crossed the RPBox impression boundary: %+v", synced)
+	}
+}
+
+func TestCharacterCardImpressionValidationAndDatabaseConstraints(t *testing.T) {
+	db, server, owner, _ := newCharacterCardTestServer(t)
+	card := model.CharacterCard{UserID: owner.ID, Status: model.CharacterCardStatusDraft, Visibility: model.CharacterCardVisibilityPrivate}
+	if err := db.Create(&card).Error; err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	path := "/api/v1/character-cards/" + strconv.FormatUint(uint64(card.ID), 10)
+	token := newTestToken(t, owner)
+	requests := emptyCharacterCardImpressionRequests()
+	requests[0].Title = strings.Repeat("题", characterCardImpressionTitleMax)
+	requests[0].Text = strings.Repeat("文", characterCardImpressionTextMax)
+	if resp := performRequest(server.router, http.MethodPut, path, map[string]interface{}{"impressions": requests}, token); resp.Code != http.StatusOK {
+		t.Fatalf("80/500 boundary expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	tests := []struct {
+		name     string
+		requests []characterCardImpressionRequest
+	}{
+		{name: "title too long", requests: func() []characterCardImpressionRequest {
+			value := emptyCharacterCardImpressionRequests()
+			value[0].Title = strings.Repeat("题", characterCardImpressionTitleMax+1)
+			return value
+		}()},
+		{name: "text too long", requests: func() []characterCardImpressionRequest {
+			value := emptyCharacterCardImpressionRequests()
+			value[0].Text = strings.Repeat("文", characterCardImpressionTextMax+1)
+			return value
+		}()},
+		{name: "missing slot", requests: emptyCharacterCardImpressionRequests()[:4]},
+		{name: "duplicate slot", requests: func() []characterCardImpressionRequest {
+			value := emptyCharacterCardImpressionRequests()
+			value[4].Slot = 1
+			return value
+		}()},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resp := performRequest(server.router, http.MethodPut, path, map[string]interface{}{"impressions": test.requests}, token)
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("invalid impressions expected 400, got %d body=%s", resp.Code, resp.Body.String())
+			}
+		})
+	}
+
+	duplicate := model.CharacterCardImpression{CharacterCardID: card.ID, Slot: 1}
+	if err := db.Create(&duplicate).Error; err == nil {
+		t.Fatal("composite unique constraint accepted duplicate card/slot")
+	}
+	invalidSlot := model.CharacterCardImpression{CharacterCardID: card.ID, Slot: 6}
+	if err := db.Create(&invalidSlot).Error; err == nil {
+		t.Fatal("slot check constraint accepted slot 6")
 	}
 }
 
@@ -622,6 +811,320 @@ func TestCharacterCardPortraitUploadValidatesAuthBytesMIMEAndDimensions(t *testi
 	}
 }
 
+func TestCharacterCardPortraitGalleryModerationKeepsApprovedSnapshotAssets(t *testing.T) {
+	db, server, owner, moderator := newCharacterCardTestServer(t)
+	if err := db.Model(&model.User{}).Where("id = ?", moderator.ID).Update("role", "moderator").Error; err != nil {
+		t.Fatalf("promote moderator: %v", err)
+	}
+	ownerToken := newTestToken(t, owner)
+	moderatorToken := newTestToken(t, moderator)
+	createResp := performRequest(server.router, http.MethodPost, "/api/v1/character-cards", map[string]interface{}{"source_type": "blank"}, ownerToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create card expected 201, got %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	card := decodeCharacterCardResponse(t, createResp)
+	cardPath := "/api/v1/character-cards/" + strconv.FormatUint(uint64(card.ID), 10)
+
+	addPortrait := func(name string, width int) characterCardDTO {
+		t.Helper()
+		upload := performCharacterCardPortraitUpload(t, server.router, ownerToken, name, "image/png", characterCardTestPNGBytes(t, width, 5))
+		if upload.Code != http.StatusCreated {
+			t.Fatalf("upload portrait expected 201, got %d body=%s", upload.Code, upload.Body.String())
+		}
+		resp := performRequest(server.router, http.MethodPost, cardPath+"/portraits", map[string]interface{}{
+			"image_ref": decodeCharacterCardPortraitUploadRef(t, upload),
+		}, ownerToken)
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("add gallery portrait expected 201, got %d body=%s", resp.Code, resp.Body.String())
+		}
+		return decodeCharacterCardResponse(t, resp)
+	}
+
+	card = addPortrait("approved.png", 4)
+	if len(card.Portraits) != 1 || !card.Portraits[0].IsCover || card.Portraits[0].ImageURL == "" || card.PortraitImageURL == "" {
+		t.Fatalf("first gallery image did not become compatible cover: %+v", card)
+	}
+	firstPortrait := card.Portraits[0]
+	var firstStored model.CharacterCardPortrait
+	if err := db.First(&firstStored, firstPortrait.ID).Error; err != nil {
+		t.Fatalf("load first portrait: %v", err)
+	}
+	firstFile := characterCardTestUploadFile(server, firstStored.Image)
+
+	publish := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{
+		"display_name": "已审版本", "status": model.CharacterCardStatusPublished, "visibility": model.CharacterCardVisibilityPublic,
+	}, ownerToken)
+	if publish.Code != http.StatusOK || decodeCharacterCardResponse(t, publish).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("public save expected pending: code=%d body=%s", publish.Code, publish.Body.String())
+	}
+	if visitor := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, "", ""); visitor.Code != http.StatusNotFound {
+		t.Fatalf("pending gallery image leaked to visitor: %d", visitor.Code)
+	}
+	if moderatorView := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, moderatorToken, ""); moderatorView.Code != http.StatusOK {
+		t.Fatalf("moderator could not inspect pending gallery image: %d body=%s", moderatorView.Code, moderatorView.Body.String())
+	}
+	queue := performRequest(server.router, http.MethodGet, "/api/v1/moderator/review/character-cards", nil, moderatorToken)
+	if queue.Code != http.StatusOK || !strings.Contains(queue.Body.String(), `"display_name":"已审版本"`) {
+		t.Fatalf("moderator queue missing pending card: code=%d body=%s", queue.Code, queue.Body.String())
+	}
+	approve := performRequest(server.router, http.MethodPost, "/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(card.ID), 10), map[string]interface{}{"action": "approve"}, moderatorToken)
+	if approve.Code != http.StatusOK {
+		t.Fatalf("first approval expected 200, got %d body=%s", approve.Code, approve.Body.String())
+	}
+	approvedImage := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, "", "")
+	if approvedImage.Code != http.StatusOK || approvedImage.Header().Get("ETag") == "" || approvedImage.Header().Get("Cache-Control") != "private, max-age=31536000, immutable" {
+		t.Fatalf("approved gallery image cache contract mismatch: code=%d headers=%v", approvedImage.Code, approvedImage.Header())
+	}
+	if cached := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, "", approvedImage.Header().Get("ETag")); cached.Code != http.StatusNotModified {
+		t.Fatalf("gallery image ETag expected 304, got %d headers=%v", cached.Code, cached.Header())
+	}
+
+	card = addPortrait("pending.png", 7)
+	if len(card.Portraits) != 2 || card.ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("editing approved gallery should retain working copy and enter pending: %+v", card)
+	}
+	secondPortrait := card.Portraits[1]
+	coverResp := performRequest(server.router, http.MethodPut, cardPath+"/portraits/"+strconv.FormatUint(uint64(secondPortrait.ID), 10)+"/cover", nil, ownerToken)
+	if coverResp.Code != http.StatusOK {
+		t.Fatalf("set gallery cover expected 200, got %d body=%s", coverResp.Code, coverResp.Body.String())
+	}
+	coverCard := decodeCharacterCardResponse(t, coverResp)
+	if len(coverCard.Portraits) != 2 || coverCard.Portraits[0].ID != secondPortrait.ID || !coverCard.Portraits[0].IsCover {
+		t.Fatalf("set cover did not reorder gallery: %+v", coverCard.Portraits)
+	}
+	orderResp := performRequest(server.router, http.MethodPut, cardPath+"/portraits/order", map[string]interface{}{
+		"portrait_ids": []uint{firstPortrait.ID, secondPortrait.ID},
+	}, ownerToken)
+	if orderResp.Code != http.StatusOK || decodeCharacterCardResponse(t, orderResp).Portraits[0].ID != firstPortrait.ID {
+		t.Fatalf("explicit gallery order expected first portrait restored: code=%d body=%s", orderResp.Code, orderResp.Body.String())
+	}
+	if update := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{"display_name": "未审版本"}, ownerToken); update.Code != http.StatusOK {
+		t.Fatalf("update pending card expected 200, got %d body=%s", update.Code, update.Body.String())
+	}
+	deleteFirst := performRequest(server.router, http.MethodDelete, cardPath+"/portraits/"+strconv.FormatUint(uint64(firstPortrait.ID), 10), nil, ownerToken)
+	if deleteFirst.Code != http.StatusOK {
+		t.Fatalf("delete approved working portrait expected 200, got %d body=%s", deleteFirst.Code, deleteFirst.Body.String())
+	}
+	if _, err := os.Stat(firstFile); err != nil {
+		t.Fatalf("working-copy deletion destroyed asset still referenced by approved snapshot: %v", err)
+	}
+	publicDuringReview := performRequest(server.router, http.MethodGet, cardPath, nil, "")
+	if publicDuringReview.Code != http.StatusOK {
+		t.Fatalf("existing approved snapshot should remain public during review: %d body=%s", publicDuringReview.Code, publicDuringReview.Body.String())
+	}
+	approvedView := decodeCharacterCardResponse(t, publicDuringReview)
+	if approvedView.DisplayName != "已审版本" || len(approvedView.Portraits) != 1 || approvedView.Portraits[0].ID != firstPortrait.ID {
+		t.Fatalf("public reader saw unreviewed working copy: %+v", approvedView)
+	}
+	if visitor := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, "", ""); visitor.Code != http.StatusOK {
+		t.Fatalf("old approved image stopped serving during pending edit: %d", visitor.Code)
+	}
+	if visitor := performCharacterCardRequest(server, http.MethodGet, secondPortrait.ImageURL, "", ""); visitor.Code != http.StatusNotFound {
+		t.Fatalf("new pending image leaked publicly: %d", visitor.Code)
+	}
+	if moderatorView := performCharacterCardRequest(server, http.MethodGet, secondPortrait.ImageURL, moderatorToken, ""); moderatorView.Code != http.StatusOK {
+		t.Fatalf("moderator could not inspect new pending image: %d", moderatorView.Code)
+	}
+
+	reject := performRequest(server.router, http.MethodPost, "/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(card.ID), 10), map[string]interface{}{
+		"action": "reject", "comment": "请调整",
+	}, moderatorToken)
+	if reject.Code != http.StatusOK || decodeCharacterCardResponse(t, reject).ReviewStatus != model.CharacterCardReviewRejected {
+		t.Fatalf("reject expected rejected working copy: code=%d body=%s", reject.Code, reject.Body.String())
+	}
+	if visitor := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, "", ""); visitor.Code != http.StatusOK {
+		t.Fatalf("rejection should retain old approved image: %d", visitor.Code)
+	}
+
+	resubmit := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{"summary": "已修正"}, ownerToken)
+	if resubmit.Code != http.StatusOK || decodeCharacterCardResponse(t, resubmit).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("edit after rejection should resubmit: code=%d body=%s", resubmit.Code, resubmit.Body.String())
+	}
+	approve = performRequest(server.router, http.MethodPost, "/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(card.ID), 10), map[string]interface{}{"action": "approve"}, moderatorToken)
+	if approve.Code != http.StatusOK {
+		t.Fatalf("replacement approval expected 200, got %d body=%s", approve.Code, approve.Body.String())
+	}
+	finalPublic := performRequest(server.router, http.MethodGet, cardPath, nil, "")
+	finalCard := decodeCharacterCardResponse(t, finalPublic)
+	if finalPublic.Code != http.StatusOK || finalCard.DisplayName != "未审版本" || len(finalCard.Portraits) != 1 || finalCard.Portraits[0].ID != secondPortrait.ID || !finalCard.Portraits[0].IsCover {
+		t.Fatalf("approved replacement snapshot mismatch: code=%d card=%+v", finalPublic.Code, finalCard)
+	}
+	if oldImage := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, "", ""); oldImage.Code != http.StatusNotFound {
+		t.Fatalf("old portrait proxy remained public after replacement approval: %d", oldImage.Code)
+	}
+	if _, err := os.Stat(firstFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old snapshot asset was not cleaned after replacement approval: %v", err)
+	}
+}
+
+func TestCharacterCardImpressionImagesUsePrivateArchiveProxyAndCleanup(t *testing.T) {
+	db, server, owner, other := newCharacterCardTestServer(t)
+	ownerToken := newTestToken(t, owner)
+	otherToken := newTestToken(t, other)
+	createCard := func(token string) characterCardDTO {
+		t.Helper()
+		resp := performRequest(server.router, http.MethodPost, "/api/v1/character-cards", map[string]interface{}{"source_type": "blank"}, token)
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("blank card create expected 201, got %d body=%s", resp.Code, resp.Body.String())
+		}
+		return decodeCharacterCardResponse(t, resp)
+	}
+	ownerCard := createCard(ownerToken)
+	otherCard := createCard(otherToken)
+	ownerPath := "/api/v1/character-cards/" + strconv.FormatUint(uint64(ownerCard.ID), 10)
+	otherPath := "/api/v1/character-cards/" + strconv.FormatUint(uint64(otherCard.ID), 10)
+	validImageBytes := characterCardTestPNGBytes(t, 3, 5)
+	if resp := performCharacterCardImpressionUpload(t, server.router, "", characterCardImpressionKindIcon, "icon.png", "image/png", validImageBytes); resp.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated impression upload expected 401, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if resp := performCharacterCardImpressionUpload(t, server.router, ownerToken, "portrait", "icon.png", "image/png", validImageBytes); resp.Code != http.StatusBadRequest {
+		t.Fatalf("invalid impression kind expected 400, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	inlineRequests := emptyCharacterCardImpressionRequests()
+	inlineRequests[0].IconImageURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(characterCardTestPNGBytes(t, 3, 5))
+	if resp := performRequest(server.router, http.MethodPut, ownerPath, map[string]interface{}{"impressions": inlineRequests}, ownerToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("inline impression image expected 400, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	iconUpload := performCharacterCardImpressionUpload(t, server.router, ownerToken, characterCardImpressionKindIcon, "icon.png", "image/png", characterCardTestPNGBytes(t, 4, 4))
+	imageUpload := performCharacterCardImpressionUpload(t, server.router, ownerToken, characterCardImpressionKindImage, "scene.png", "image/png", characterCardTestPNGBytes(t, 8, 5))
+	if iconUpload.Code != http.StatusCreated || imageUpload.Code != http.StatusCreated {
+		t.Fatalf("impression uploads failed: icon=%d/%s image=%d/%s", iconUpload.Code, iconUpload.Body.String(), imageUpload.Code, imageUpload.Body.String())
+	}
+	iconRef := decodeCharacterCardImpressionUploadRef(t, iconUpload)
+	imageRef := decodeCharacterCardImpressionUploadRef(t, imageUpload)
+	if !strings.Contains(iconRef, "/pending/icon/") || !strings.Contains(imageRef, "/pending/image/") {
+		t.Fatalf("kind-specific pending references missing: icon=%q image=%q", iconRef, imageRef)
+	}
+	if resp := performRequest(server.router, http.MethodPut, ownerPath, map[string]interface{}{"portrait_image_url": iconRef}, ownerToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("impression icon pending reference used as portrait expected 400, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if _, err := os.Stat(characterCardTestUploadFile(server, iconRef)); err != nil {
+		t.Fatalf("rejected impression icon reference was consumed as portrait: %v", err)
+	}
+
+	portraitUpload := performCharacterCardPortraitUpload(t, server.router, ownerToken, "portrait.png", "image/png", validImageBytes)
+	if portraitUpload.Code != http.StatusCreated {
+		t.Fatalf("portrait upload for cross-type check expected 201, got %d body=%s", portraitUpload.Code, portraitUpload.Body.String())
+	}
+	portraitRef := decodeCharacterCardPortraitUploadRef(t, portraitUpload)
+	portraitAsIcon := emptyCharacterCardImpressionRequests()
+	portraitAsIcon[0].IconImageURL = portraitRef
+	if resp := performRequest(server.router, http.MethodPut, ownerPath, map[string]interface{}{"impressions": portraitAsIcon}, ownerToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("portrait pending reference used as impression icon expected 400, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if _, err := os.Stat(characterCardTestUploadFile(server, portraitRef)); err != nil {
+		t.Fatalf("rejected portrait reference was consumed as impression icon: %v", err)
+	}
+
+	foreignRequests := emptyCharacterCardImpressionRequests()
+	foreignRequests[0].IconImageURL = iconRef
+	if resp := performRequest(server.router, http.MethodPut, otherPath, map[string]interface{}{"impressions": foreignRequests}, otherToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("cross-user pending reference expected 400, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if _, err := os.Stat(characterCardTestUploadFile(server, iconRef)); err != nil {
+		t.Fatalf("rejected cross-user update consumed owner's pending image: %v", err)
+	}
+	mismatchedKind := emptyCharacterCardImpressionRequests()
+	mismatchedKind[0].ImageURL = iconRef
+	if resp := performRequest(server.router, http.MethodPut, ownerPath, map[string]interface{}{"impressions": mismatchedKind}, ownerToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("icon pending reference used as image expected 400, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	requests := emptyCharacterCardImpressionRequests()
+	requests[0].Active = true
+	requests[0].Title = "自定义图片印象"
+	requests[0].IconImageURL = iconRef
+	requests[0].ImageURL = imageRef
+	updateResp := performRequest(server.router, http.MethodPut, ownerPath, map[string]interface{}{"impressions": requests}, ownerToken)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("archive impression images expected 200, got %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	updated := decodeCharacterCardResponse(t, updateResp)
+	assertFiveCharacterCardImpressionSlots(t, updated.Impressions)
+	slot := updated.Impressions[0]
+	if !strings.Contains(slot.IconImageURL, "/images/character-card-impression-icon/") || !strings.Contains(slot.ImageURL, "/images/character-card-impression-image/") || slot.IconImageUpdatedAt == nil || slot.ImageUpdatedAt == nil {
+		t.Fatalf("impression DTO did not expose versioned proxy URLs: %+v", slot)
+	}
+	for _, pending := range []string{iconRef, imageRef} {
+		if _, err := os.Stat(characterCardTestUploadFile(server, pending)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("successful archive did not remove pending file %q: %v", pending, err)
+		}
+	}
+	var stored model.CharacterCardImpression
+	if err := db.Where("character_card_id = ? AND slot = ?", ownerCard.ID, 1).First(&stored).Error; err != nil {
+		t.Fatalf("load stored impression: %v", err)
+	}
+	if !strings.Contains(stored.IconImage, "/impression-icon/") || !strings.Contains(stored.Image, "/impression-image/") {
+		t.Fatalf("images were not copied into kind-specific private archive: %+v", stored)
+	}
+	iconFile := characterCardTestUploadFile(server, stored.IconImage)
+	imageFile := characterCardTestUploadFile(server, stored.Image)
+	for _, backing := range []string{stored.IconImage, stored.Image} {
+		if resp := performCharacterCardRequest(server, http.MethodGet, backing, ownerToken, ""); resp.Code != http.StatusNotFound {
+			t.Fatalf("protected backing object expected 404, got %d for %s", resp.Code, backing)
+		}
+	}
+
+	ownerImage := performCharacterCardRequest(server, http.MethodGet, slot.ImageURL, ownerToken, "")
+	if ownerImage.Code != http.StatusOK || ownerImage.Header().Get("ETag") == "" || ownerImage.Header().Get("Cache-Control") != "private, max-age=31536000, immutable" {
+		t.Fatalf("owner proxy response mismatch: code=%d headers=%v body=%s", ownerImage.Code, ownerImage.Header(), ownerImage.Body.String())
+	}
+	etag := ownerImage.Header().Get("ETag")
+	if cached := performCharacterCardRequest(server, http.MethodGet, slot.ImageURL, ownerToken, etag); cached.Code != http.StatusNotModified || cached.Header().Get("ETag") != etag {
+		t.Fatalf("impression proxy ETag expected 304, got code=%d headers=%v", cached.Code, cached.Header())
+	}
+	if visitor := performCharacterCardRequest(server, http.MethodGet, slot.ImageURL, "", ""); visitor.Code != http.StatusNotFound {
+		t.Fatalf("visitor draft impression image expected 404, got %d", visitor.Code)
+	}
+
+	publishRequests := impressionRequestsFromDTOs(updated.Impressions)
+	publishResp := performRequest(server.router, http.MethodPut, ownerPath, map[string]interface{}{
+		"display_name": "公开图片卡", "status": model.CharacterCardStatusPublished,
+		"visibility": model.CharacterCardVisibilityPublic, "impressions": publishRequests,
+	}, ownerToken)
+	if publishResp.Code != http.StatusOK {
+		t.Fatalf("publish image card expected 200, got %d body=%s", publishResp.Code, publishResp.Body.String())
+	}
+	published := decodeCharacterCardResponse(t, publishResp)
+	publicImageURL := published.Impressions[0].ImageURL
+	if visitor := performCharacterCardRequest(server, http.MethodGet, publicImageURL, "", ""); visitor.Code != http.StatusOK || strings.Contains(visitor.Header().Get("Cache-Control"), "public") {
+		t.Fatalf("active public impression image should be readable only through private cache: code=%d cache=%q", visitor.Code, visitor.Header().Get("Cache-Control"))
+	}
+
+	inactiveRequests := impressionRequestsFromDTOs(published.Impressions)
+	inactiveRequests[0].Active = false
+	inactiveResp := performRequest(server.router, http.MethodPut, ownerPath, map[string]interface{}{"impressions": inactiveRequests}, ownerToken)
+	if inactiveResp.Code != http.StatusOK {
+		t.Fatalf("disable impression expected 200, got %d body=%s", inactiveResp.Code, inactiveResp.Body.String())
+	}
+	inactive := decodeCharacterCardResponse(t, inactiveResp)
+	if inactive.Impressions[0].ImageUpdatedAt == nil || published.Impressions[0].ImageUpdatedAt == nil || !inactive.Impressions[0].ImageUpdatedAt.After(*published.Impressions[0].ImageUpdatedAt) {
+		t.Fatalf("active transition did not rotate image cache version: before=%v after=%v", published.Impressions[0].ImageUpdatedAt, inactive.Impressions[0].ImageUpdatedAt)
+	}
+	if visitor := performCharacterCardRequest(server, http.MethodGet, publicImageURL, "", ""); visitor.Code != http.StatusNotFound {
+		t.Fatalf("disabled impression image remained publicly readable: %d", visitor.Code)
+	}
+	if ownerView := performCharacterCardRequest(server, http.MethodGet, inactive.Impressions[0].ImageURL, ownerToken, ""); ownerView.Code != http.StatusOK {
+		t.Fatalf("owner should retain access to inactive impression image: %d", ownerView.Code)
+	}
+
+	deleteResp := performRequest(server.router, http.MethodDelete, ownerPath, nil, ownerToken)
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete card expected 200, got %d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+	for _, file := range []string{iconFile, imageFile} {
+		if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("card deletion did not remove impression image %q: %v", file, err)
+		}
+	}
+	var impressionCount int64
+	if err := db.Model(&model.CharacterCardImpression{}).Where("character_card_id = ?", ownerCard.ID).Count(&impressionCount).Error; err != nil || impressionCount != 0 {
+		t.Fatalf("card deletion left impression rows: count=%d err=%v", impressionCount, err)
+	}
+}
+
 func TestCharacterCardRejectsInvalidStateAndUnsafeRichText(t *testing.T) {
 	db, server, owner, _ := newCharacterCardTestServer(t)
 	card := model.CharacterCard{UserID: owner.ID, Status: model.CharacterCardStatusDraft, Visibility: model.CharacterCardVisibilityPrivate}
@@ -640,6 +1143,7 @@ func TestCharacterCardRejectsInvalidStateAndUnsafeRichText(t *testing.T) {
 		{"background_story": `<p style="position: fixed; inset: 0">unsafe</p>`},
 		{"other_content": `<p style="text-align: center; background-image: url(javascript:alert(1))">unsafe</p>`},
 		{"first_impression": `<p style="text-align: var(--alignment)">unsafe</p>`},
+		{"class_color": "ABCDEF", "name_color": "123456"},
 		{"display_name": strings.Repeat("人", 257)},
 	}
 	for _, body := range tests {
@@ -667,11 +1171,22 @@ func TestCharacterCardRejectsInvalidStateAndUnsafeRichText(t *testing.T) {
 	if stored.BackgroundStory != safeRichText {
 		t.Fatalf("safe rich text was not persisted: %q", stored.BackgroundStory)
 	}
+	colorResp := performRequest(server.router, http.MethodPut, path, map[string]interface{}{"class_color": "#aabbcc"}, token)
+	if colorResp.Code != http.StatusOK {
+		t.Fatalf("class_color compatibility update expected 200, got %d body=%s", colorResp.Code, colorResp.Body.String())
+	}
+	colored := decodeCharacterCardResponse(t, colorResp)
+	if colored.ClassColor != "AABBCC" || colored.NameColor != "AABBCC" {
+		t.Fatalf("single TRP3 CH color was not mirrored to both fields: %+v", colored)
+	}
 }
 
 func newCharacterCardTestServer(t *testing.T) (*gorm.DB, *Server, model.User, model.User) {
 	t.Helper()
-	db := testutil.NewTestDB(t, &model.User{}, &model.AccountBackup{}, &model.Character{}, &model.CharacterCard{})
+	db := testutil.NewTestDB(t,
+		&model.User{}, &model.AccountBackup{}, &model.AccountBackupVersion{}, &model.Character{},
+		&model.CharacterCard{}, &model.CharacterCardPortrait{}, &model.CharacterCardImpression{}, &model.CharacterCardPublication{},
+	)
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatalf("get test database handle: %v", err)
@@ -701,6 +1216,42 @@ func decodeCharacterCardResponse(t *testing.T, resp *httptest.ResponseRecorder) 
 		t.Fatalf("decode character card response: %v body=%s", err, resp.Body.String())
 	}
 	return payload.Card
+}
+
+func assertFiveCharacterCardImpressionSlots(t *testing.T, impressions []characterCardImpressionDTO) {
+	t.Helper()
+	if len(impressions) != characterCardImpressionSlotCount {
+		t.Fatalf("expected five impression slots, got %+v", impressions)
+	}
+	for index, impression := range impressions {
+		if impression.Slot != uint8(index+1) {
+			t.Fatalf("impression slots are not fixed in 1..5 order: %+v", impressions)
+		}
+	}
+}
+
+func impressionRequestsFromDTOs(impressions []characterCardImpressionDTO) []characterCardImpressionRequest {
+	requests := make([]characterCardImpressionRequest, 0, len(impressions))
+	for _, impression := range impressions {
+		requests = append(requests, characterCardImpressionRequest{
+			Slot:         impression.Slot,
+			Active:       impression.Active,
+			Title:        impression.Title,
+			Text:         impression.Text,
+			TRP3Icon:     impression.TRP3Icon,
+			IconImageURL: impression.IconImageURL,
+			ImageURL:     impression.ImageURL,
+		})
+	}
+	return requests
+}
+
+func emptyCharacterCardImpressionRequests() []characterCardImpressionRequest {
+	requests := make([]characterCardImpressionRequest, 0, characterCardImpressionSlotCount)
+	for slot := 1; slot <= characterCardImpressionSlotCount; slot++ {
+		requests = append(requests, characterCardImpressionRequest{Slot: uint8(slot)})
+	}
+	return requests
 }
 
 func writeCharacterCardTestPNG(t *testing.T, server *Server, relative string) string {
@@ -756,6 +1307,37 @@ func performCharacterCardPortraitUpload(t *testing.T, router http.Handler, token
 	return resp
 }
 
+func performCharacterCardImpressionUpload(t *testing.T, router http.Handler, token, kind, filename, contentType string, data []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("kind", kind); err != nil {
+		t.Fatalf("write impression kind: %v", err)
+	}
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image"; filename="%s"`, filepath.Base(filename)))
+	header.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		t.Fatalf("create impression image upload part: %v", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		t.Fatalf("write impression image: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close impression image upload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upload/character-card-impression-image", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	return resp
+}
+
 func decodeCharacterCardPortraitUploadRef(t *testing.T, resp *httptest.ResponseRecorder) string {
 	t.Helper()
 	var payload struct {
@@ -763,6 +1345,17 @@ func decodeCharacterCardPortraitUploadRef(t *testing.T, resp *httptest.ResponseR
 	}
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil || payload.Reference == "" {
 		t.Fatalf("decode portrait upload response: err=%v body=%s", err, resp.Body.String())
+	}
+	return payload.Reference
+}
+
+func decodeCharacterCardImpressionUploadRef(t *testing.T, resp *httptest.ResponseRecorder) string {
+	t.Helper()
+	var payload struct {
+		Reference string `json:"image_ref"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil || payload.Reference == "" {
+		t.Fatalf("decode impression image upload response: err=%v body=%s", err, resp.Body.String())
 	}
 	return payload.Reference
 }

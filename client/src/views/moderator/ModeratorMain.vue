@@ -9,13 +9,17 @@ import { getItem, resolveApiUrl } from '@/api/item'
 import { searchUsers, type UserMentionItem } from '@/api/user'
 import { getGuild } from '@/api/guild'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
+import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
 import ImageViewer from '@/components/ImageViewer.vue'
+import CharacterCardPortrait from '@/components/character-cards/CharacterCardPortrait.vue'
 import RPDBModerationPanel from '@/components/rpdb/RPDBModerationPanel.vue'
 import * as echarts from 'echarts'
 import {
   getModeratorStats,
   getPendingPosts,
   getPendingItems,
+  getPendingCharacterCards,
   getPendingPostEdits,
   reviewPostEdit,
   getPendingItemEdits,
@@ -23,6 +27,7 @@ import {
   getModeratorReports,
   reviewPost,
   reviewItem,
+  reviewCharacterCard,
   reviewModeratorReport,
   getAllPosts,
   type PostQueryParams,
@@ -75,6 +80,7 @@ import {
   type ReportReviewRequest,
   type PostEditReviewItem,
   type ItemEditReviewItem,
+  type CharacterCardReviewItem,
   type ImageReviewStatus,
   type PostCommentImageReviewItem,
   type ItemCommentImageReviewItem,
@@ -111,7 +117,7 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'sponsorCodes' | 'addons' | 'admin' | 'logs' | 'metrics'>('review')
-type ReviewSubTab = 'posts' | 'items' | 'rpdb' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'rpdbCommentImages' | 'userAvatars'
+type ReviewSubTab = 'posts' | 'items' | 'characterCards' | 'rpdb' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'rpdbCommentImages' | 'userAvatars'
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
 type AdminSubTab = 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'
@@ -187,6 +193,8 @@ const trp3MirrorCanUpload = computed(() => (
 const stats = ref<ModeratorStats | null>(null)
 const pendingPosts = ref<any[]>([])
 const pendingItems = ref<any[]>([])
+const pendingCharacterCards = ref<CharacterCardReviewItem[]>([])
+const characterCardReviewComments = ref<Record<number, string>>({})
 const pendingPostEdits = ref<PostEditReviewItem[]>([])
 const pendingItemEdits = ref<ItemEditReviewItem[]>([])
 const pendingGuilds = ref<any[]>([])
@@ -261,6 +269,7 @@ const reportActionDanger = computed(() => (
 const pendingReviewCount = computed(() => stats.value?.total_pending_reviews ?? (
   (stats.value?.pending_posts || 0)
   + (stats.value?.pending_items || 0)
+  + (stats.value?.pending_character_cards || 0)
   + (stats.value?.pending_guilds || 0)
   + (stats.value?.pending_reports || 0)
   + (stats.value?.pending_post_edits || 0)
@@ -357,7 +366,7 @@ onUnmounted(() => {
   }
 })
 
-const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'rpdb', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'rpdbCommentImages', 'userAvatars']
+const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'characterCards', 'rpdb', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'rpdbCommentImages', 'userAvatars']
 const manageSubTabs: ManageSubTab[] = ['posts', 'items', 'guilds', 'users']
 
 function isReviewSubTab(subTab: ModeratorSubTab): subTab is ReviewSubTab {
@@ -581,6 +590,19 @@ async function loadPendingItemCommentImages() {
   }
 }
 
+async function loadPendingCharacterCards() {
+  loading.value = true
+  try {
+    const res = await getPendingCharacterCards({ status: 'pending', page: page.value, page_size: pageSize.value })
+    pendingCharacterCards.value = res.character_cards || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载待审核人物卡失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadPendingRPDBCommentImages() {
   loading.value = true
   try {
@@ -703,6 +725,7 @@ function formatForumLevel(user: SafeUser): string {
 function loadReviewSubTab(subTab: ReviewSubTab) {
   if (subTab === 'posts') loadPendingPosts()
   else if (subTab === 'items') loadPendingItems()
+  else if (subTab === 'characterCards') loadPendingCharacterCards()
   else if (subTab === 'rpdb') return
   else if (subTab === 'postEdits') loadPendingPostEdits()
   else if (subTab === 'itemEdits') loadPendingItemEdits()
@@ -1791,6 +1814,34 @@ async function submitPreviewReview() {
   }
 }
 
+function moderatorCharacterCardName(card: CharacterCardReviewItem) {
+  return getCharacterCardDisplayName(card)
+}
+
+async function quickReviewCharacterCard(card: CharacterCardReviewItem, action: 'approve' | 'reject') {
+  const actionText = action === 'approve' ? '通过' : '拒绝'
+  const comment = characterCardReviewComments.value[card.id]?.trim() || ''
+  const confirmed = await dialog.confirm({
+    title: `${actionText}人物卡公开版本`,
+    message: action === 'approve'
+      ? `确认公开“${moderatorCharacterCardName(card)}”的当前审核快照吗？`
+      : `确认拒绝“${moderatorCharacterCardName(card)}”的当前公开申请吗？${comment ? '版主说明会展示给作者。' : '建议先填写版主说明。'}`,
+    type: action === 'approve' ? 'success' : 'warning',
+    confirmText: `${actionText}人物卡`,
+  })
+  if (!confirmed) return
+  try {
+    await reviewCharacterCard(card.id, { action, comment: comment || undefined })
+    const nextComments = { ...characterCardReviewComments.value }
+    delete nextComments[card.id]
+    characterCardReviewComments.value = nextComments
+    await Promise.all([loadPendingCharacterCards(), loadStats()])
+    toast.success(`人物卡审核已${actionText}`)
+  } catch (error: unknown) {
+    toast.error(error instanceof Error ? error.message : '人物卡审核失败')
+  }
+}
+
 // 快速审核（直接通过/拒绝）
 async function quickReview(type: 'post' | 'item' | 'guild', id: number, action: 'approve' | 'reject') {
   const actionText = action === 'approve' ? '通过' : '拒绝'
@@ -2555,6 +2606,13 @@ function formatBanTime(dateStr: string | null) {
           </div>
         </div>
         <div class="stat-card pending">
+          <div class="stat-icon"><i class="ri-id-card-line"></i></div>
+          <div class="stat-info">
+            <div class="stat-value">{{ stats?.pending_character_cards || 0 }}</div>
+            <div class="stat-label">人物卡审核</div>
+          </div>
+        </div>
+        <div class="stat-card pending">
           <div class="stat-icon"><i class="ri-edit-2-line"></i></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats?.pending_post_edits || 0 }}</div>
@@ -2697,6 +2755,18 @@ function formatBanTime(dateStr: string | null) {
           作品
           <span v-if="activeTab === 'review' && (stats?.pending_items || 0) > 0" class="review-badge">
             {{ stats?.pending_items }}
+          </span>
+        </button>
+        <button
+          v-if="activeTab === 'review'"
+          data-testid="moderator-tab-character-cards"
+          :class="{ active: activeSubTab === 'characterCards' }"
+          @click="switchSubTab('characterCards')"
+        >
+          <i class="ri-id-card-line"></i>
+          人物卡
+          <span v-if="(stats?.pending_character_cards || 0) > 0" class="review-badge">
+            {{ stats?.pending_character_cards }}
           </span>
         </button>
         <button
@@ -2932,6 +3002,55 @@ function formatBanTime(dateStr: string | null) {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 审核中心 - 人物卡公开版本 -->
+      <div v-if="activeTab === 'review' && activeSubTab === 'characterCards'" class="content-list anim-item" style="--delay: 4" data-testid="character-card-review-queue">
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingCharacterCards.length === 0" class="empty-state">
+          <i class="ri-id-card-line"></i>
+          <p>暂无待审核人物卡</p>
+        </div>
+        <div v-else class="item-list character-review-list">
+          <article v-for="characterCard in pendingCharacterCards" :key="characterCard.id" class="item-card character-review-card">
+            <div class="character-review-card__portrait">
+              <CharacterCardPortrait
+                v-if="characterCard.portrait_image_url"
+                :card="characterCard"
+                :alt="`${moderatorCharacterCardName(characterCard)}的封面`"
+                :width="360"
+                :quality="76"
+              />
+              <i v-else class="ri-user-star-line" aria-hidden="true"></i>
+            </div>
+            <div class="character-review-card__body">
+              <div class="item-header">
+                <div class="title-with-tags">
+                  <span class="item-title" :style="getCharacterCardDisplayColor(characterCard) ? { color: getCharacterCardDisplayColor(characterCard) } : undefined">{{ moderatorCharacterCardName(characterCard) }}</span>
+                  <span class="permission-warning-tag">{{ [characterCard.race, characterCard.class].filter(Boolean).join(' · ') || '身份未填写' }}</span>
+                </div>
+                <span class="status-badge pending">公开审核</span>
+              </div>
+              <div class="item-meta">
+                <span><i class="ri-user-line"></i>{{ characterCard.author_name || characterCard.author_username || `用户 #${characterCard.user_id}` }}</span>
+                <span><i class="ri-time-line"></i>{{ formatDate(characterCard.updated_at) }}</span>
+              </div>
+              <p class="character-review-card__summary">{{ characterCard.summary || '作者尚未填写人物摘要。' }}</p>
+              <label class="character-review-card__comment">
+                <span>版主说明（拒绝时建议填写）</span>
+                <textarea v-model="characterCardReviewComments[characterCard.id]" rows="2" maxlength="500" placeholder="向作者说明需要调整的内容"></textarea>
+              </label>
+              <div class="item-actions">
+                <button class="btn-approve" @click="quickReviewCharacterCard(characterCard, 'approve')"><i class="ri-checkbox-circle-line"></i>通过公开</button>
+                <button class="btn-reject" @click="quickReviewCharacterCard(characterCard, 'reject')"><i class="ri-close-circle-line"></i>拒绝</button>
+                <RouterLink class="btn-preview" :to="`/character-cards/${characterCard.id}`" target="_blank"><i class="ri-eye-line"></i>查看完整人物卡</RouterLink>
+              </div>
+            </div>
+          </article>
         </div>
       </div>
 
@@ -5394,6 +5513,27 @@ function formatBanTime(dateStr: string | null) {
   flex-wrap: wrap;
 }
 
+.character-review-list { gap: 16px; }
+.character-review-card {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid #DCC4AA;
+  background:
+    linear-gradient(90deg, rgba(184,115,51,.05) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--color-panel-bg, #fff);
+}
+.character-review-card__portrait { display: grid; min-height: 176px; place-items: center; overflow: hidden; border: 6px solid #352219; border-radius: 5px; background: #241710; color: #C99B70; }
+.character-review-card__portrait :deep(img), .character-review-card__portrait :deep(.character-portrait-state) { width: 100%; height: 100%; object-fit: cover; }
+.character-review-card__portrait > i { font-size: 40px; }
+.character-review-card__body { min-width: 0; }
+.character-review-card__summary { margin: 0 0 12px; color: var(--color-text-secondary, #8D7B68); font-size: 13px; line-height: 1.6; }
+.character-review-card__comment { display: grid; gap: 5px; margin-bottom: 12px; color: var(--color-text-secondary, #8D7B68); font-size: 11px; font-weight: 700; }
+.character-review-card__comment textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 10px; border: 1px solid var(--color-border, #E5D4C1); border-radius: 7px; outline: none; background: rgba(255,255,255,.88); color: var(--color-text-main, #2C1810); font: inherit; font-size: 12px; line-height: 1.5; }
+.character-review-card__comment textarea:focus { border-color: #B87333; box-shadow: 0 0 0 3px rgba(184,115,51,.12); }
+.character-review-card .btn-preview { text-decoration: none; }
+
 .edit-review-card {
   border: 1px solid var(--color-border, #E5D4C1);
 }
@@ -7311,6 +7451,9 @@ function formatBanTime(dateStr: string | null) {
 }
 
 @media (max-width: 768px) {
+  .character-review-card { grid-template-columns: 1fr; }
+  .character-review-card__portrait { width: min(220px, 100%); min-height: 250px; margin: 0 auto; }
+
   .report-batch-toolbar {
     align-items: stretch;
   }

@@ -157,6 +157,12 @@ func (s *Server) setupRoutes() {
 			auth.PUT("/character-cards/:id", s.updateCharacterCard)
 			auth.DELETE("/character-cards/:id", s.deleteCharacterCard)
 			auth.POST("/character-cards/:id/sync-from-trp3", s.syncCharacterCardFromTRP3)
+			auth.GET("/character-cards/:id/trp3-lua", s.exportCharacterCardTRP3Lua)
+			auth.POST("/character-cards/:id/write-back-trp3", s.writeBackCharacterCardTRP3)
+			auth.POST("/character-cards/:id/portraits", s.addCharacterCardPortrait)
+			auth.PUT("/character-cards/:id/portraits/order", s.reorderCharacterCardPortraits)
+			auth.PUT("/character-cards/:id/portraits/:portraitId/cover", s.setCharacterCardPortraitCover)
+			auth.DELETE("/character-cards/:id/portraits/:portraitId", s.deleteCharacterCardPortrait)
 
 			// 道具市场
 			auth.GET("/items", s.listItems)
@@ -190,6 +196,10 @@ func (s *Server) setupRoutes() {
 			auth.POST("/account-backups", s.upsertAccountBackup)
 			auth.DELETE("/account-backups/:account_id", s.deleteAccountBackup)
 			auth.GET("/account-backups/:account_id/versions", s.getAccountBackupVersions)
+			auth.GET("/account-backups/:account_id/versions/:version_id", s.getAccountBackupVersion)
+			auth.PUT("/account-backups/:account_id/versions/:version_id", s.renameAccountBackupVersion)
+			auth.POST("/account-backups/:account_id/versions/:version_id/restore", s.restoreAccountBackupVersion)
+			auth.DELETE("/account-backups/:account_id/versions/:version_id", s.deleteAccountBackupVersion)
 
 			// 标签管理
 			auth.GET("/tags", s.listTags)
@@ -296,6 +306,7 @@ func (s *Server) setupRoutes() {
 			auth.POST("/upload/attachment", s.uploadAttachment)
 			auth.POST("/upload/image", s.uploadImage)
 			auth.POST("/upload/character-card-portrait", s.uploadCharacterCardPortrait)
+			auth.POST("/upload/character-card-impression-image", s.uploadCharacterCardImpressionImage)
 			auth.POST("/upload/comment-image", s.uploadCommentImage)
 
 			// 合集管理
@@ -363,6 +374,8 @@ func (s *Server) setupRoutes() {
 				// 审核中心 - 帖子编辑
 				mod.GET("/review/post-edits", s.listPendingEdits)
 				mod.POST("/review/post-edits/:id", s.reviewPostEdit)
+				mod.GET("/review/character-cards", s.listPendingCharacterCards)
+				mod.POST("/review/character-cards/:id", s.reviewCharacterCard)
 
 				// 审核中心 - 评论图片
 				mod.GET("/review/post-comment-images", s.listPendingPostCommentImages)

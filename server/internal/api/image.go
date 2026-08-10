@@ -25,25 +25,26 @@ import (
 // getImage 获取图片（支持缩略图）
 // GET /api/v1/images/:type/:id?w=300&q=80
 // type: item-preview, post-cover, user-avatar, guild-banner, guild-avatar,
-// character-card-portrait
+// character-card-portrait, character-card-impression-icon,
+// character-card-impression-image
 func (s *Server) getImage(c *gin.Context) {
 	imageType := c.Param("type")
 	id := c.Param("id")
 	widthStr := c.DefaultQuery("w", "0")
 	qualityStr := c.DefaultQuery("q", "85")
 	version := c.Query("v")
-	var characterCardPortrait *model.CharacterCard
+	protectedCharacterCardImage := false
+	protectedImageValue := ""
+	protectedImageVersion := time.Time{}
+	protectedImageIdentity := id
 	if imageType == "character-card-portrait" {
 		idNum, err := strconv.ParseUint(id, 10, 32)
 		if err != nil || idNum == 0 {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
 			return
 		}
-		var card model.CharacterCard
-		if err := database.DB.Select(
-			"id", "user_id", "portrait_image", "portrait_image_updated_at",
-			"status", "visibility", "updated_at",
-		).First(&card, uint(idNum)).Error; err != nil {
+		value, currentVersion, err := s.loadProtectedCharacterCardPortrait(uint(idNum), optionalActiveUserID(c))
+		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
 			} else {
@@ -51,11 +52,42 @@ func (s *Server) getImage(c *gin.Context) {
 			}
 			return
 		}
-		if !canViewCharacterCard(card, optionalActiveUserID(c)) || strings.TrimSpace(card.PortraitImage) == "" {
+		protectedCharacterCardImage = true
+		protectedImageValue = value
+		protectedImageVersion = currentVersion
+	} else if imageType == "character-card-portrait-gallery" {
+		cardID, err := strconv.ParseUint(id, 10, 32)
+		portraitID, portraitErr := strconv.ParseUint(c.Query("portrait_id"), 10, 32)
+		if err != nil || cardID == 0 || portraitErr != nil || portraitID == 0 {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
 			return
 		}
-		characterCardPortrait = &card
+		value, currentVersion, err := s.loadProtectedCharacterCardGalleryPortrait(uint(cardID), uint(portraitID), optionalActiveUserID(c))
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load image"})
+			}
+			return
+		}
+		protectedCharacterCardImage = true
+		protectedImageValue = value
+		protectedImageVersion = currentVersion
+		protectedImageIdentity = id + "_" + strconv.FormatUint(portraitID, 10)
+	} else if imageType == "character-card-impression-icon" || imageType == "character-card-impression-image" {
+		value, currentVersion, err := s.loadProtectedCharacterCardImpressionImage(imageType, id, optionalActiveUserID(c))
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load image"})
+			}
+			return
+		}
+		protectedCharacterCardImage = true
+		protectedImageValue = value
+		protectedImageVersion = currentVersion
 	}
 
 	width, _ := strconv.Atoi(widthStr)
@@ -69,10 +101,10 @@ func (s *Server) getImage(c *gin.Context) {
 	}
 
 	cacheScope := "public"
-	// Character-card portraits can transition from public to private. Keeping
-	// even public responses in a private browser cache prevents a shared cache
-	// from serving an old immutable public object after that transition.
-	if characterCardPortrait != nil {
+	// Character-card images can transition from public to private. Keeping even
+	// public responses in a private browser cache prevents a shared cache from
+	// serving an old immutable public object after that transition.
+	if protectedCharacterCardImage {
 		cacheScope = "private"
 	}
 	cacheControl := cacheScope + ", max-age=86400"
@@ -86,18 +118,14 @@ func (s *Server) getImage(c *gin.Context) {
 	// 构造缓存路径
 	cacheDir := filepath.Join(s.cfg.Storage.Path, "cache", "images")
 	cacheVersion := version
-	if characterCardPortrait != nil {
-		portraitVersion := characterCardPortrait.UpdatedAt
-		if characterCardPortrait.PortraitImageUpdatedAt != nil {
-			portraitVersion = *characterCardPortrait.PortraitImageUpdatedAt
-		}
-		cacheVersion += "_current_" + portraitVersion.UTC().Format(time.RFC3339Nano)
+	if protectedCharacterCardImage {
+		cacheVersion += "_current_" + protectedImageVersion.UTC().Format(time.RFC3339Nano)
 	}
 	versionKey := ""
 	if cacheVersion != "" {
 		versionKey = fmt.Sprintf("_v%x", md5.Sum([]byte(cacheVersion)))
 	}
-	cacheKey := fmt.Sprintf("%s_%s_w%d_q%d%s.jpg", imageType, id, width, quality, versionKey)
+	cacheKey := fmt.Sprintf("%s_%s_w%d_q%d%s.jpg", imageType, protectedImageIdentity, width, quality, versionKey)
 	cachePath := filepath.Join(cacheDir, cacheKey)
 
 	// 检查缓存
@@ -118,8 +146,8 @@ func (s *Server) getImage(c *gin.Context) {
 
 	// 从数据库获取原图（URL或Base64）
 	var originalValue string
-	if characterCardPortrait != nil {
-		originalValue = characterCardPortrait.PortraitImage
+	if protectedCharacterCardImage {
+		originalValue = protectedImageValue
 	} else {
 		var err error
 		originalValue, err = s.getOriginalImageValue(imageType, id)

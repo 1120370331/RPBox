@@ -102,20 +102,25 @@ type AccountBackup struct {
 
 // AccountBackupVersion 账号备份版本历史
 type AccountBackupVersion struct {
-	ID           uint      `gorm:"primarykey" json:"id"`
-	BackupID     uint      `gorm:"index" json:"backup_id"`
-	Version      int       `json:"version"`
-	ProfilesData string    `gorm:"type:text" json:"profiles_data,omitempty"`
-	ToolsData    string    `gorm:"type:text" json:"tools_data,omitempty"`
-	RuntimeData  string    `gorm:"type:text" json:"runtime_data,omitempty"`
-	ConfigData   string    `gorm:"type:text" json:"config_data,omitempty"`
-	ExtraData    string    `gorm:"type:text" json:"extra_data,omitempty"`
-	RawTrp3Lua   string    `gorm:"type:text" json:"raw_trp3_lua,omitempty"`
-	RawTrp3Data  string    `gorm:"type:text" json:"raw_trp3_data_lua,omitempty"`
-	RawTrp3Ext   string    `gorm:"type:text" json:"raw_trp3_extended_lua,omitempty"`
-	Checksum     string    `gorm:"type:text" json:"checksum"`
-	ChangeLog    string    `gorm:"type:text" json:"change_log"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID            uint      `gorm:"primarykey" json:"id"`
+	BackupID      uint      `gorm:"index" json:"backup_id"`
+	Version       int       `json:"version"`
+	Name          string    `gorm:"size:128" json:"name"`
+	ContentHash   string    `gorm:"size:64;index" json:"content_hash"`
+	ProfilesData  string    `gorm:"type:text" json:"profiles_data,omitempty"`
+	ProfilesCount int       `json:"profiles_count"`
+	ToolsData     string    `gorm:"type:text" json:"tools_data,omitempty"`
+	ToolsCount    int       `json:"tools_count"`
+	RuntimeData   string    `gorm:"type:text" json:"runtime_data,omitempty"`
+	RuntimeSizeKB int       `json:"runtime_size_kb"`
+	ConfigData    string    `gorm:"type:text" json:"config_data,omitempty"`
+	ExtraData     string    `gorm:"type:text" json:"extra_data,omitempty"`
+	RawTrp3Lua    string    `gorm:"type:text" json:"raw_trp3_lua,omitempty"`
+	RawTrp3Data   string    `gorm:"type:text" json:"raw_trp3_data_lua,omitempty"`
+	RawTrp3Ext    string    `gorm:"type:text" json:"raw_trp3_extended_lua,omitempty"`
+	Checksum      string    `gorm:"type:text" json:"checksum"`
+	ChangeLog     string    `gorm:"type:text" json:"change_log"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // Story 剧情

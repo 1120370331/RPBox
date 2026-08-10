@@ -6,14 +6,23 @@ import {
   getCharacterCard,
   updateCharacterCard,
   type CharacterCard,
+  type CharacterCardPortraitImage,
 } from '@/api/characterCard'
-import CharacterCardPortrait from '@/components/character-cards/CharacterCardPortrait.vue'
+import { resolveApiUrl } from '@/api/item'
+import AuthenticatedImage from '@/components/AuthenticatedImage.vue'
+import CharacterCardImpressionMark from '@/components/character-cards/CharacterCardImpressionMark.vue'
+import CharacterCardGalleryImage from '@/components/character-cards/CharacterCardGalleryImage.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
 import { hydrateJumpCards, sanitizeJumpLinks } from '@/utils/jumpLink'
-import { getCharacterCardDisplayName, type CharacterCardEditorTab } from '@/utils/characterCardDraft'
-import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import {
+  getCharacterCardDisplayName,
+  normalizeCharacterCardImpressions,
+  type CharacterCardEditorTab,
+} from '@/utils/characterCardDraft'
+import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
+import { getCharacterCardCoverPortrait, normalizeCharacterCardPortraits } from '@/utils/characterCardPortraits'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +39,7 @@ const activeTab = ref<CharacterCardEditorTab>('basic')
 const backgroundRef = ref<HTMLElement | null>(null)
 const impressionRef = ref<HTMLElement | null>(null)
 const otherRef = ref<HTMLElement | null>(null)
+const selectedPortraitId = ref<number | null>(null)
 
 const tabs: Array<{ id: CharacterCardEditorTab; label: string }> = [
   { id: 'basic', label: '基础信息' },
@@ -39,10 +49,18 @@ const tabs: Array<{ id: CharacterCardEditorTab; label: string }> = [
 ]
 
 const isOwner = computed(() => Boolean(card.value && userStore.user?.id === card.value.user_id))
-const isPublic = computed(() => card.value?.status === 'published' && card.value?.visibility === 'public')
+const wantsPublic = computed(() => card.value?.status === 'published' && card.value?.visibility === 'public')
+const isPublic = computed(() => wantsPublic.value && (!card.value?.review_status || card.value.review_status === 'approved'))
 const displayName = computed(() => card.value ? getCharacterCardDisplayName(card.value) : '人物卡')
-const displayNameColor = computed(() => normalizeCharacterCardHexForCSS(card.value?.name_color))
+const displayNameColor = computed(() => getCharacterCardDisplayColor(card.value))
 const identityLine = computed(() => [card.value?.race, card.value?.class].filter(Boolean).join(' · '))
+const portraits = computed(() => normalizeCharacterCardPortraits(card.value))
+const selectedPortrait = computed<CharacterCardPortraitImage | null>(() => (
+  portraits.value.find((portrait) => portrait.id === selectedPortraitId.value)
+  || getCharacterCardCoverPortrait(portraits.value)
+))
+const activeImpressions = computed(() => normalizeCharacterCardImpressions(card.value?.impressions).filter((item) => item.active))
+const hasImpressionContent = computed(() => activeImpressions.value.length > 0 || Boolean(card.value?.first_impression))
 const basicFields = computed(() => {
   if (!card.value) return []
   return [
@@ -106,6 +124,7 @@ async function loadCard() {
   errorMessage.value = ''
   try {
     card.value = await getCharacterCard(cardId.value)
+    selectedPortraitId.value = getCharacterCardCoverPortrait(normalizeCharacterCardPortraits(card.value))?.id ?? null
   } catch {
     card.value = null
     errorMessage.value = '人物卡暂不可用'
@@ -127,11 +146,13 @@ async function togglePublicAccess() {
   if (!card.value || actionLoading.value) return
   actionLoading.value = true
   try {
-    const next = isPublic.value
+    const next = wantsPublic.value
       ? { visibility: 'private' as const }
       : { status: 'published' as const, visibility: 'public' as const }
     card.value = await updateCharacterCard(card.value.id, next)
-    toast.success(isPublic.value ? '人物卡已发布并公开' : '人物卡已设为仅自己可见')
+    toast.success(wantsPublic.value
+      ? (card.value.review_status === 'pending' ? '人物卡已提交公开审核' : '人物卡已发布并公开')
+      : '人物卡已设为仅自己可见')
   } catch (error: unknown) {
     toast.error(error instanceof Error ? error.message : '人物卡状态更新失败')
   } finally {
@@ -191,8 +212,8 @@ function goBack() {
         </button>
         <div v-if="isOwner" class="detail-toolbar__actions">
           <button type="button" class="toolbar-button" :disabled="actionLoading" @click="togglePublicAccess">
-            <i :class="isPublic ? 'ri-lock-line' : 'ri-global-line'" aria-hidden="true"></i>
-            {{ isPublic ? '设为仅自己可见' : '发布并公开' }}
+            <i :class="wantsPublic ? 'ri-lock-line' : 'ri-global-line'" aria-hidden="true"></i>
+            {{ wantsPublic ? '设为仅自己可见' : '发布并公开' }}
           </button>
           <RouterLink class="toolbar-button toolbar-button--primary" :to="`/character-cards/${card.id}/edit`">
             <i class="ri-edit-line" aria-hidden="true"></i>编辑人物卡
@@ -207,10 +228,11 @@ function goBack() {
         <aside class="character-portrait">
           <span class="character-portrait__index">RPBOX · CHARACTER {{ card.id }}</span>
           <div class="character-portrait__frame">
-            <CharacterCardPortrait
-              v-if="card.portrait_image_url"
+            <CharacterCardGalleryImage
+              v-if="selectedPortrait"
               class="character-portrait__image"
               :card="card"
+              :portrait="selectedPortrait"
               :alt="`${displayName}的角色肖像`"
               :width="1000"
               :quality="90"
@@ -220,10 +242,24 @@ function goBack() {
               <span>未收录角色肖像</span>
             </div>
             <span class="character-portrait__shade"></span>
-            <span v-if="isOwner && !isPublic" class="character-portrait__privacy">
-              <i :class="card.status === 'draft' ? 'ri-draft-line' : 'ri-lock-line'" aria-hidden="true"></i>
-              {{ card.status === 'draft' ? '草稿' : '仅自己可见' }}
+            <span v-if="isOwner && (!isPublic || card.review_status === 'pending')" class="character-portrait__privacy" :class="{ pending: card.review_status === 'pending' && wantsPublic }">
+              <i :class="card.review_status === 'pending' && wantsPublic ? 'ri-time-line' : card.status === 'draft' ? 'ri-draft-line' : 'ri-lock-line'" aria-hidden="true"></i>
+              {{ card.review_status === 'pending' && wantsPublic ? '审核中' : card.status === 'draft' ? '草稿' : '仅自己可见' }}
             </span>
+          </div>
+          <div v-if="portraits.length > 1" class="character-portrait__film" aria-label="角色画廊">
+            <button
+              v-for="(portrait, index) in portraits"
+              :key="portrait.id"
+              type="button"
+              :class="{ active: selectedPortrait?.id === portrait.id }"
+              :aria-label="`查看角色大图 ${index + 1}${portrait.is_cover ? '，封面' : ''}`"
+              :aria-pressed="selectedPortrait?.id === portrait.id"
+              @click="selectedPortraitId = portrait.id"
+            >
+              <CharacterCardGalleryImage :card="card" :portrait="portrait" alt="" :width="180" :quality="70" />
+              <span v-if="portrait.is_cover">封</span>
+            </button>
           </div>
           <div class="character-portrait__plaque">
             <h1 :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</h1>
@@ -236,11 +272,20 @@ function goBack() {
           <header class="character-file__header">
             <div>
               <span class="character-file__kicker">Adventurer dossier</span>
-              <h2>{{ displayName }}</h2>
+              <h2 :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</h2>
               <p>{{ card.summary || '这位角色尚未留下展示摘要。' }}</p>
             </div>
             <span v-if="isPublic" class="public-mark"><i class="ri-global-line" aria-hidden="true"></i>公开档案</span>
           </header>
+
+          <section v-if="isOwner && wantsPublic && card.review_status && card.review_status !== 'approved'" class="review-banner" :class="`review-banner--${card.review_status}`">
+            <i :class="card.review_status === 'rejected' ? 'ri-close-circle-line' : 'ri-time-line'" aria-hidden="true"></i>
+            <div>
+              <strong>{{ card.review_status === 'rejected' ? '公开版本未通过审核' : '公开版本正在审核' }}</strong>
+              <span v-if="card.review_status === 'rejected' && card.review_comment">版主说明：{{ card.review_comment }}</span>
+              <span v-else>你可以继续编辑工作副本；访客在审核完成前不会看到这次修改。</span>
+            </div>
+          </section>
 
           <nav class="detail-tabs" role="tablist" aria-label="人物卡资料分栏">
             <button
@@ -301,8 +346,52 @@ function goBack() {
             role="tabpanel"
             aria-labelledby="character-detail-tab-impression"
           >
-            <div v-if="card.first_impression" ref="impressionRef" class="character-rich" v-html="card.first_impression"></div>
-            <div v-else class="empty-chapter"><i class="ri-eye-2-line" aria-hidden="true"></i><span>第一印象尚未写下。</span></div>
+            <template v-if="hasImpressionContent">
+              <div v-if="activeImpressions.length" class="impression-readout" aria-label="已启用的第一印象">
+                <article
+                  v-for="impression in activeImpressions"
+                  :key="impression.slot"
+                  class="impression-entry"
+                  :class="{ 'impression-entry--with-image': impression.image_url }"
+                >
+                  <div class="impression-entry__mark">
+                    <CharacterCardImpressionMark
+                      :icon-image-url="impression.icon_image_url"
+                      :trp3-icon="impression.trp3_icon"
+                      :fallback-label="String(impression.slot)"
+                      :size="72"
+                    />
+                    <span v-if="impression.trp3_icon && !impression.icon_image_url" :title="impression.trp3_icon">
+                      TRP3 · {{ impression.trp3_icon }}
+                    </span>
+                    <span v-else-if="!impression.icon_image_url">默认观察印记</span>
+                  </div>
+
+                  <div class="impression-entry__copy">
+                    <span class="impression-entry__index">Observation {{ String(impression.slot).padStart(2, '0') }}</span>
+                    <h3>{{ impression.title || '未命名观察' }}</h3>
+                    <p>{{ impression.text || '这条观察只留下了一枚印记。' }}</p>
+                  </div>
+
+                  <figure v-if="impression.image_url" class="impression-entry__image">
+                    <AuthenticatedImage
+                      class="impression-entry__protected-image"
+                      :src="resolveApiUrl(impression.image_url)"
+                      :alt="`${impression.title || `第 ${impression.slot} 条印象`}的配图`"
+                    />
+                  </figure>
+                </article>
+              </div>
+
+              <section v-if="card.first_impression" class="impression-supplement">
+                <header>
+                  <span>Supplement</span>
+                  <h3>其他备注</h3>
+                </header>
+                <div ref="impressionRef" class="character-rich" v-html="card.first_impression"></div>
+              </section>
+            </template>
+            <div v-else class="empty-chapter"><i class="ri-eye-2-line" aria-hidden="true"></i><span>尚未启用第一印象观察记录。</span></div>
           </section>
 
           <section
@@ -365,6 +454,12 @@ function goBack() {
 .character-portrait__empty span { color: #B6A08E; font-size: 11px; }
 .character-portrait__shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(26, 14, 9, 0.56), transparent 42%); pointer-events: none; }
 .character-portrait__privacy { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(35, 21, 14, .8); color: #F0DCC7; font-size: 10px; backdrop-filter: blur(7px); }
+.character-portrait__privacy.pending { border-color: rgba(229,180,127,.5); background: rgba(113,69,30,.9); color: #FFE2B6; }
+.character-portrait__film { display: flex; gap: 7px; padding: 9px 9px 5px; overflow-x: auto; background: repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 9px, transparent 9px 18px); }
+.character-portrait__film button { position: relative; flex: 0 0 54px; height: 68px; overflow: hidden; padding: 0; border: 2px solid #573927; border-radius: 4px; background: #23160F; cursor: pointer; }
+.character-portrait__film button.active { border-color: #D9A66F; box-shadow: 0 0 0 2px rgba(217,166,111,.2); }
+.character-portrait__film button :deep(img), .character-portrait__film button :deep(.authenticated-image) { width: 100%; height: 100%; object-fit: cover; }
+.character-portrait__film button > span { position: absolute; right: 2px; bottom: 2px; display: grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; background: #B87333; color: #FFF; font-size: 8px; }
 .character-portrait__plaque { display: grid; gap: 4px; padding: 16px 12px 13px; text-align: center; }
 .character-portrait__plaque h1 { overflow: hidden; margin: 0; color: #F1D5B7; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .character-portrait__plaque strong { color: #D2B08F; font-size: 12px; font-weight: 500; }
@@ -376,6 +471,12 @@ function goBack() {
 .character-file__header h2 { margin: 5px 0 8px; font-family: Georgia, 'Noto Serif SC', serif; font-size: clamp(28px, 4vw, 42px); font-weight: 600; }
 .character-file__header p { max-width: 720px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.75; }
 .public-mark { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #CDA67F; border-radius: 999px; color: var(--rust); font-size: 10px; white-space: nowrap; }
+.review-banner { display: flex; gap: 10px; align-items: flex-start; margin: 18px 30px 0; padding: 12px 14px; border: 1px solid #D9B57F; border-radius: 9px; background: #FFF8E8; color: #765126; }
+.review-banner > i { margin-top: 1px; font-size: 20px; }
+.review-banner > div { display: grid; gap: 3px; }
+.review-banner strong { font-size: 12px; }
+.review-banner span { font-size: 10px; line-height: 1.55; }
+.review-banner--rejected { border-color: #D8A39A; background: #FFF0ED; color: #8C3D33; }
 
 .detail-tabs { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); padding: 0 24px; border-bottom: 1px solid var(--line); background: #FAF5EF; }
 .detail-tabs button { position: relative; min-height: 55px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
@@ -395,6 +496,136 @@ function goBack() {
 .basic-ledger div:nth-child(even) { margin-left: 18px; }
 .basic-ledger strong { overflow-wrap: anywhere; color: var(--walnut); font-size: 12px; }
 
+.impression-readout {
+  position: relative;
+  display: grid;
+  gap: 14px;
+}
+
+.impression-readout::before {
+  position: absolute;
+  top: 34px;
+  bottom: 34px;
+  left: 37px;
+  width: 1px;
+  background: linear-gradient(var(--copper), #d6b18d 50%, var(--copper));
+  content: '';
+}
+
+.impression-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 17px;
+  align-items: center;
+  overflow: hidden;
+  padding: 15px;
+  border: 1px solid #dbc8b5;
+  border-radius: 10px;
+  background:
+    linear-gradient(105deg, rgba(184, 115, 51, 0.09), transparent 34%),
+    #fffdf9;
+  box-shadow: 0 5px 14px rgba(75, 54, 33, 0.06);
+}
+
+.impression-entry--with-image { grid-template-columns: 86px minmax(160px, 1fr) minmax(150px, 210px); }
+
+.impression-entry__mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 7px;
+}
+
+.impression-entry__mark > span {
+  overflow: hidden;
+  width: 82px;
+  color: #9b7e67;
+  font: 700 7px/1.25 ui-monospace, Consolas, monospace;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.impression-entry__copy {
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.impression-entry__index {
+  color: var(--copper);
+  font: 800 8px/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.impression-entry__copy h3 {
+  margin: 5px 0 7px;
+  color: var(--ink);
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-size: 19px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.impression-entry__copy p {
+  margin: 0;
+  color: #665348;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.impression-entry__image {
+  align-self: stretch;
+  min-height: 112px;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid #b88c65;
+  border-radius: 7px;
+  background: #2a1a13;
+  box-shadow: inset 0 0 0 3px #1f130e;
+}
+
+.impression-entry__protected-image {
+  width: 100%;
+  height: 100%;
+  min-height: 112px;
+  max-height: 180px;
+  display: block;
+  object-fit: cover;
+  color: #d8b28d;
+}
+
+.impression-entry__protected-image :deep(.authenticated-image__state) { background: #2a1a13; }
+
+.impression-supplement {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px dashed #cdb49b;
+}
+
+.impression-supplement > header {
+  margin-bottom: 14px;
+}
+
+.impression-supplement > header span {
+  color: var(--copper);
+  font: 800 8px/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.impression-supplement > header h3 {
+  margin: 4px 0 0;
+  color: var(--walnut);
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-size: 19px;
+  font-weight: 600;
+}
+
 .character-rich { color: #4B3A30; font-size: 14px; line-height: 1.85; }
 .character-rich :deep(h1), .character-rich :deep(h2), .character-rich :deep(h3) { color: var(--ink); font-family: Georgia, 'Noto Serif SC', serif; }
 .character-rich :deep(img) { max-width: 100%; height: auto; border-radius: 8px; }
@@ -409,6 +640,7 @@ function goBack() {
 .detail-toolbar button:focus-visible,
 .toolbar-button:focus-visible,
 .detail-tabs button:focus-visible,
+.character-portrait__film button:focus-visible,
 .detail-state button:focus-visible { outline: 3px solid rgba(184,115,51,.3); outline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); clip-path: inset(50%); white-space: nowrap; }
 .spin { animation: detail-spin 900ms linear infinite; }
@@ -426,10 +658,17 @@ function goBack() {
   .toolbar-button { flex: 1; }
   .toolbar-button--danger { flex: 0 0 38px; }
   .character-file__header { grid-template-columns: 1fr; padding: 22px 18px; }
+  .review-banner { margin-right: 18px; margin-left: 18px; }
   .public-mark { justify-self: start; }
   .detail-tabs { padding: 0; overflow-x: auto; }
   .detail-tabs button { min-width: 104px; }
   .detail-panel { padding: 20px 16px; }
+  .impression-entry,
+  .impression-entry--with-image { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .impression-entry__image { grid-column: 1 / -1; min-height: 150px; }
+  .impression-entry__protected-image { min-height: 150px; max-height: 230px; }
+  .impression-entry__mark > span { width: 72px; }
+  .impression-readout::before { left: 48px; }
   .identity-summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .basic-ledger { grid-template-columns: 1fr; }
   .basic-ledger div:nth-child(n) { margin: 0; }

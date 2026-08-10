@@ -1,5 +1,6 @@
 mod addon_installer;
 mod chat_log;
+mod local_versions;
 mod lua_parser;
 mod scanner;
 mod sync_meta;
@@ -77,6 +78,182 @@ async fn update_profile(
     apply_updates(profile, &updates)?;
 
     replace_trp3_profiles(&lua_path, &profiles).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, serde::Serialize)]
+struct CharacterCardProfileWriteResult {
+    snapshot: Option<local_versions::LocalTRP3Snapshot>,
+}
+
+const CHARACTER_CARD_SHARED_CHARACTERISTICS: &[&str] = &[
+    "FN", "LN", "TI", "FT", "RA", "CL", "EC", "EH", "AG", "HE", "WE", "BP", "RE", "RS", "IC", "CH",
+];
+
+fn merge_character_card_profile(
+    existing: Option<&Value>,
+    exported: &Value,
+) -> Result<Value, String> {
+    let exported_profile = exported
+        .as_object()
+        .ok_or_else(|| "导出的人物卡结构错误".to_string())?;
+    let exported_characteristics = exported_profile
+        .get("player")
+        .and_then(Value::as_object)
+        .and_then(|player| player.get("characteristics"))
+        .and_then(Value::as_object)
+        .ok_or_else(|| "导出的人物卡缺少 player.characteristics".to_string())?;
+
+    let mut target_profile = match existing {
+        Some(Value::Object(profile)) => profile.clone(),
+        Some(_) => return Err("本地目标 profile 结构错误".to_string()),
+        None => Default::default(),
+    };
+
+    match exported_profile
+        .get("profileName")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
+        Some(name) => {
+            target_profile.insert("profileName".to_string(), Value::String(name.to_string()));
+        }
+        None => {
+            target_profile.remove("profileName");
+        }
+    }
+
+    let mut target_player = match target_profile.remove("player") {
+        Some(Value::Object(player)) => player,
+        Some(_) => return Err("本地目标 profile.player 结构错误".to_string()),
+        None => Default::default(),
+    };
+    let mut target_characteristics = match target_player.remove("characteristics") {
+        Some(Value::Object(characteristics)) => characteristics,
+        Some(_) => return Err("本地目标 profile.player.characteristics 结构错误".to_string()),
+        None => Default::default(),
+    };
+
+    for key in CHARACTER_CARD_SHARED_CHARACTERISTICS {
+        match exported_characteristics.get(*key) {
+            Some(Value::String(value)) if !value.trim().is_empty() => {
+                target_characteristics
+                    .insert((*key).to_string(), Value::String(value.trim().to_string()));
+            }
+            Some(value) if !value.is_null() && !value.is_string() => {
+                target_characteristics.insert((*key).to_string(), value.clone());
+            }
+            _ => {
+                target_characteristics.remove(*key);
+            }
+        }
+    }
+
+    target_player.insert(
+        "characteristics".to_string(),
+        Value::Object(target_characteristics),
+    );
+    target_profile.insert("player".to_string(), Value::Object(target_player));
+    Ok(Value::Object(target_profile))
+}
+
+#[tauri::command]
+async fn write_character_card_profile(
+    wow_path: String,
+    account_id: String,
+    profile_id: String,
+    profile: Value,
+    snapshot_name: Option<String>,
+) -> Result<CharacterCardProfileWriteResult, String> {
+    if writer::is_wow_running() {
+        return Err("检测到魔兽世界正在运行，请关闭游戏后再写入".to_string());
+    }
+    let trimmed_profile_id = profile_id.trim();
+    if trimmed_profile_id.is_empty()
+        || trimmed_profile_id.len() > 128
+        || trimmed_profile_id
+            .chars()
+            .any(|character| character.is_control())
+    {
+        return Err("TRP3 profile ID 无效".to_string());
+    }
+
+    let lua_path = local_versions::resolve_lua_path(&wow_path, &account_id)?;
+    if let Some(parent) = lua_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("创建 SavedVariables 目录失败: {}", error))?;
+    }
+    let mut profiles = if lua_path.is_file() {
+        lua_parser::parse_variable(&lua_path, "TRP3_Profiles").map_err(|error| error.to_string())?
+    } else {
+        Value::Object(Default::default())
+    };
+    let profiles_object = profiles
+        .as_object_mut()
+        .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
+    let merged_profile =
+        merge_character_card_profile(profiles_object.get(trimmed_profile_id), &profile)?;
+    profiles_object.insert(trimmed_profile_id.to_string(), merged_profile);
+
+    let had_local_file = lua_path.is_file();
+    let snapshot =
+        local_versions::create_snapshot(&wow_path, &account_id, snapshot_name.as_deref())?;
+    if had_local_file && snapshot.is_none() {
+        return Err("写入前无法建立强制本地快照".to_string());
+    }
+    replace_trp3_profiles(&lua_path, &profiles).map_err(|error| error.to_string())?;
+    Ok(CharacterCardProfileWriteResult { snapshot })
+}
+
+#[tauri::command]
+async fn list_local_trp3_snapshots(
+    wow_path: String,
+    account_id: String,
+) -> Result<Vec<local_versions::LocalTRP3Snapshot>, String> {
+    local_versions::list_snapshots(&wow_path, &account_id)
+}
+
+#[tauri::command]
+async fn read_local_trp3_snapshot(
+    wow_path: String,
+    account_id: String,
+    snapshot_id: String,
+) -> Result<local_versions::LocalTRP3SnapshotDetail, String> {
+    local_versions::read_snapshot(&wow_path, &account_id, &snapshot_id)
+}
+
+#[tauri::command]
+async fn rename_local_trp3_snapshot(
+    wow_path: String,
+    account_id: String,
+    snapshot_id: String,
+    name: String,
+) -> Result<local_versions::LocalTRP3Snapshot, String> {
+    local_versions::rename_snapshot(&wow_path, &account_id, &snapshot_id, &name)
+}
+
+#[tauri::command]
+async fn restore_local_trp3_snapshot(
+    wow_path: String,
+    account_id: String,
+    snapshot_id: String,
+    safety_snapshot_name: Option<String>,
+) -> Result<local_versions::LocalTRP3RestoreResult, String> {
+    local_versions::restore_snapshot(
+        &wow_path,
+        &account_id,
+        &snapshot_id,
+        safety_snapshot_name.as_deref(),
+    )
+}
+
+#[tauri::command]
+async fn delete_local_trp3_snapshot(
+    wow_path: String,
+    account_id: String,
+    snapshot_id: String,
+) -> Result<(), String> {
+    local_versions::delete_snapshot(&wow_path, &account_id, &snapshot_id)
 }
 
 #[tauri::command]
@@ -573,6 +750,75 @@ mod profile_lookup_tests {
         assert_eq!(characteristics["LN"], "保留的姓氏");
         assert_eq!(characteristics["RS"], 2);
     }
+
+    #[test]
+    fn character_card_writeback_preserves_unknown_local_sections_and_ignores_rpbox_only_data() {
+        let existing = serde_json::json!({
+            "profileName": "旧档案名",
+            "unknownTopLevel": { "keep": true },
+            "player": {
+                "characteristics": {
+                    "FN": "旧名字",
+                    "LN": "应被空值删除",
+                    "customCharacteristic": "保留"
+                },
+                "about": { "T1": { "TX": "本地长传记" } },
+                "misc": { "PE": { "1": { "TX": "本地第一印象" } }, "custom": 7 }
+            }
+        });
+        let exported = serde_json::json!({
+            "profileName": "新档案名",
+            "rpboxOnly": { "summary": "不得写入" },
+            "player": {
+                "characteristics": { "FN": "新名字", "LN": "", "RS": 3 },
+                "misc": { "PE": { "1": { "TX": "RPBox 第一印象" } } },
+                "about": { "T1": { "TX": "RPBox 内容" } }
+            }
+        });
+
+        let merged = merge_character_card_profile(Some(&existing), &exported)
+            .expect("shared fields should merge into the existing profile");
+
+        assert_eq!(merged["profileName"], "新档案名");
+        assert_eq!(merged["unknownTopLevel"]["keep"], true);
+        assert_eq!(merged["player"]["characteristics"]["FN"], "新名字");
+        assert_eq!(merged["player"]["characteristics"]["RS"], 3);
+        assert!(merged["player"]["characteristics"].get("LN").is_none());
+        assert_eq!(
+            merged["player"]["characteristics"]["customCharacteristic"],
+            "保留"
+        );
+        assert_eq!(merged["player"]["about"]["T1"]["TX"], "本地长传记");
+        assert_eq!(merged["player"]["misc"]["PE"]["1"]["TX"], "本地第一印象");
+        assert_eq!(merged["player"]["misc"]["custom"], 7);
+        assert!(merged.get("rpboxOnly").is_none());
+    }
+
+    #[test]
+    fn character_card_writeback_creates_a_minimal_new_trp3_profile() {
+        let exported = serde_json::json!({
+            "profileName": "新人物",
+            "player": {
+                "characteristics": { "FN": "新", "LN": "人物", "CH": "AABBCC" },
+                "misc": { "PE": { "1": { "TX": "不得写入" } } }
+            }
+        });
+
+        let merged = merge_character_card_profile(None, &exported)
+            .expect("a blank RPBox card should create a local profile");
+
+        assert_eq!(merged["profileName"], "新人物");
+        assert_eq!(merged["player"]["characteristics"]["FN"], "新");
+        assert_eq!(merged["player"]["characteristics"]["CH"], "AABBCC");
+        assert!(merged["player"].get("misc").is_none());
+        assert_eq!(
+            merged
+                .as_object()
+                .expect("profile should be an object")
+                .len(),
+            2
+        );
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -614,6 +860,12 @@ pub fn run() {
             is_wow_running,
             write_profile,
             update_profile,
+            write_character_card_profile,
+            list_local_trp3_snapshots,
+            read_local_trp3_snapshot,
+            rename_local_trp3_snapshot,
+            restore_local_trp3_snapshot,
+            delete_local_trp3_snapshot,
             clear_sync_cache,
             apply_cloud_profile,
             apply_account_backup,

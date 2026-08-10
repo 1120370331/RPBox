@@ -35,6 +35,7 @@ const card: CharacterCard = {
   summary: '常年巡守灰港以北的林地。',
   background_story: '',
   first_impression: '',
+  impressions: [],
   other_content: '',
   portrait_image_url: '',
   status: 'published',

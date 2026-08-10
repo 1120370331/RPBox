@@ -108,7 +108,13 @@ func (s *Server) characterCardOwnedPortraitStoragePath(c *gin.Context, userID ui
 	currentRoot := "/uploads/" + characterCardPortraitCurrentSubdir(userID) + "/"
 	switch {
 	case strings.HasPrefix(policyPath, pendingRoot):
-		return canonical, characterCardPortraitStoragePending, true
+		// Portrait pending files live directly below /pending. Nested kind
+		// directories belong to impression images and must not cross archives.
+		remainder := strings.TrimPrefix(policyPath, pendingRoot)
+		if remainder != "" && !strings.Contains(remainder, "/") {
+			return canonical, characterCardPortraitStoragePending, true
+		}
+		return "", characterCardPortraitStorageInvalid, false
 	case strings.HasPrefix(policyPath, currentRoot):
 		return canonical, characterCardPortraitStorageCurrent, true
 	default:
@@ -229,9 +235,93 @@ func (s *Server) uploadKeyFromOSSObjectKey(objectKey string) (string, bool) {
 func isCharacterCardPendingStorageKey(raw string) bool {
 	cleaned := strings.TrimPrefix(path.Clean("/"+strings.ReplaceAll(raw, `\`, "/")), "/")
 	parts := strings.Split(cleaned, "/")
-	if len(parts) != 4 || parts[0] != "character-cards" || parts[2] != "pending" || parts[3] == "" {
+	if len(parts) < 4 || len(parts) > 5 || parts[0] != "character-cards" || parts[2] != "pending" {
+		return false
+	}
+	if len(parts) == 4 && parts[3] == "" {
+		return false
+	}
+	if len(parts) == 5 && ((parts[3] != characterCardImpressionKindIcon && parts[3] != characterCardImpressionKindImage) || parts[4] == "") {
 		return false
 	}
 	userID, err := strconv.ParseUint(parts[1], 10, 32)
 	return err == nil && userID > 0
+}
+
+// cleanupCharacterCardUserStorage removes all archived and abandoned pending
+// character-card images for an account after its database deletion commits.
+func (s *Server) cleanupCharacterCardUserStorage(userID uint) error {
+	if userID == 0 || s == nil || s.cfg == nil {
+		return nil
+	}
+	keys := make(map[string]struct{})
+	localErr := s.collectLocalCharacterCardUserStorageKeys(userID, keys)
+	ossErr := s.collectOSSCharacterCardUserStorageKeys(userID, keys)
+	for key := range keys {
+		s.deleteUploadKey(key)
+	}
+	userRoot := filepath.Join(s.cfg.Storage.Path, uploadDirName, "character-cards", strconv.FormatUint(uint64(userID), 10))
+	if err := os.RemoveAll(userRoot); err != nil {
+		localErr = errors.Join(localErr, err)
+	}
+	return errors.Join(localErr, ossErr)
+}
+
+func (s *Server) collectLocalCharacterCardUserStorageKeys(userID uint, keys map[string]struct{}) error {
+	uploadRoot := filepath.Clean(filepath.Join(s.cfg.Storage.Path, uploadDirName))
+	userRoot := filepath.Join(uploadRoot, "character-cards", strconv.FormatUint(uint64(userID), 10))
+	err := filepath.WalkDir(userRoot, func(filePath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		relative, err := filepath.Rel(uploadRoot, filePath)
+		if err != nil {
+			return err
+		}
+		key := filepath.ToSlash(relative)
+		expectedPrefix := "character-cards/" + strconv.FormatUint(uint64(userID), 10) + "/"
+		if strings.HasPrefix(key, expectedPrefix) {
+			keys[key] = struct{}{}
+		}
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func (s *Server) collectOSSCharacterCardUserStorageKeys(userID uint, keys map[string]struct{}) error {
+	if !s.ossEnabled() {
+		return nil
+	}
+	bucket, err := s.getOSSBucket()
+	if err != nil {
+		return err
+	}
+	uploadPrefix := path.Join("character-cards", strconv.FormatUint(uint64(userID), 10))
+	objectPrefix := strings.TrimSuffix(s.buildOSSKey(uploadPrefix, ""), "/") + "/"
+	marker := ""
+	for {
+		options := []oss.Option{oss.Prefix(objectPrefix), oss.MaxKeys(1000)}
+		if marker != "" {
+			options = append(options, oss.Marker(marker))
+		}
+		result, err := bucket.ListObjects(options...)
+		if err != nil {
+			return err
+		}
+		for _, object := range result.Objects {
+			if key, ok := s.uploadKeyFromOSSObjectKey(object.Key); ok && strings.HasPrefix(key, uploadPrefix+"/") {
+				keys[key] = struct{}{}
+			}
+		}
+		if !result.IsTruncated || result.NextMarker == "" || result.NextMarker == marker {
+			return nil
+		}
+		marker = result.NextMarker
+	}
 }

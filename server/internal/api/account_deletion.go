@@ -32,6 +32,7 @@ type accountDeletionCleanupPlan struct {
 	collections         []model.Collection
 	characters          []model.Character
 	characterCards      []model.CharacterCard
+	cardImpressions     []model.CharacterCardImpression
 }
 
 type accountDeletionItemCleanup struct {
@@ -195,6 +196,12 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	}
 	if err := tx.Where("user_id = ?", userID).Find(&cleanupPlan.characterCards).Error; err != nil {
 		return err
+	}
+	cardIDs := characterCardIDs(cleanupPlan.characterCards)
+	if len(cardIDs) > 0 {
+		if err := tx.Where("character_card_id IN ?", cardIDs).Find(&cleanupPlan.cardImpressions).Error; err != nil {
+			return err
+		}
 	}
 	postCommentCleanupQuery := tx.Where("author_id = ?", userID)
 	if len(ownedPostIDs) > 0 {
@@ -529,6 +536,17 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	if err := tx.Where("user_id = ?", userID).Delete(&model.Character{}).Error; err != nil {
 		return err
 	}
+	if len(cleanupPlan.characterCards) > 0 {
+		if err := tx.Where("character_card_id IN ?", characterCardIDs(cleanupPlan.characterCards)).Delete(&model.CharacterCardPublication{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("character_card_id IN ?", characterCardIDs(cleanupPlan.characterCards)).Delete(&model.CharacterCardPortrait{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("character_card_id IN ?", characterCardIDs(cleanupPlan.characterCards)).Delete(&model.CharacterCardImpression{}).Error; err != nil {
+			return err
+		}
+	}
 	if err := tx.Where("user_id = ?", userID).Delete(&model.CharacterCard{}).Error; err != nil {
 		return err
 	}
@@ -684,8 +702,13 @@ func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeleti
 	for _, card := range plan.characterCards {
 		collectUploadKeysFromValue(c, card.PortraitImage, keys)
 	}
+	for _, impression := range plan.cardImpressions {
+		collectUploadKeysFromValue(c, impression.IconImage, keys)
+		collectUploadKeysFromValue(c, impression.Image, keys)
+	}
 
 	s.deleteUploadKeys(keys)
+	_ = s.cleanupCharacterCardUserStorage(plan.user.ID)
 	s.cleanupCommentImageURLs(nil, commentImageURLs...)
 }
 

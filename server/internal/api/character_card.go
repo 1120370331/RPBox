@@ -67,18 +67,24 @@ type characterCardDTO struct {
 	Residence          string `json:"residence"`
 	RelationshipStatus string `json:"relationship_status"`
 	Icon               string `json:"icon"`
+	ClassColor         string `json:"class_color"`
 	NameColor          string `json:"name_color"`
 
-	Summary         string `json:"summary"`
-	BackgroundStory string `json:"background_story,omitempty"`
-	FirstImpression string `json:"first_impression,omitempty"`
-	OtherContent    string `json:"other_content,omitempty"`
+	Summary         string                       `json:"summary"`
+	BackgroundStory string                       `json:"background_story,omitempty"`
+	FirstImpression string                       `json:"first_impression,omitempty"`
+	OtherContent    string                       `json:"other_content,omitempty"`
+	Impressions     []characterCardImpressionDTO `json:"impressions"`
+	Portraits       []characterCardPortraitDTO   `json:"portraits"`
 
 	PortraitImageURL       string     `json:"portrait_image_url"`
 	PortraitImageUpdatedAt *time.Time `json:"portrait_image_updated_at"`
 	Status                 string     `json:"status"`
 	Visibility             string     `json:"visibility"`
 	SortOrder              int        `json:"sort_order"`
+	ReviewStatus           string     `json:"review_status"`
+	ReviewComment          string     `json:"review_comment,omitempty"`
+	ReviewedAt             *time.Time `json:"reviewed_at,omitempty"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 }
@@ -95,6 +101,8 @@ type characterCardSourceDTO struct {
 	Race            string    `json:"race"`
 	Class           string    `json:"class"`
 	Icon            string    `json:"icon"`
+	ClassColor      string    `json:"class_color"`
+	NameColor       string    `json:"name_color"`
 	BackupUpdatedAt time.Time `json:"backup_updated_at"`
 }
 
@@ -123,12 +131,14 @@ type updateCharacterCardRequest struct {
 	Residence          *string `json:"residence"`
 	RelationshipStatus *string `json:"relationship_status"`
 	Icon               *string `json:"icon"`
+	ClassColor         *string `json:"class_color"`
 	NameColor          *string `json:"name_color"`
 
-	Summary         *string `json:"summary"`
-	BackgroundStory *string `json:"background_story"`
-	FirstImpression *string `json:"first_impression"`
-	OtherContent    *string `json:"other_content"`
+	Summary         *string                           `json:"summary"`
+	BackgroundStory *string                           `json:"background_story"`
+	FirstImpression *string                           `json:"first_impression"`
+	OtherContent    *string                           `json:"other_content"`
+	Impressions     *[]characterCardImpressionRequest `json:"impressions"`
 
 	// portrait_image_url is the primary write contract. portrait_image remains
 	// accepted for compatibility with callers that distinguish storage input
@@ -189,12 +199,14 @@ type trp3CharacterCardFields struct {
 	Residence          string
 	RelationshipStatus string
 	Icon               string
+	ClassColor         string
 	NameColor          string
 }
 
 type parsedTRP3CharacterCardProfile struct {
 	ProfileName string
 	Fields      trp3CharacterCardFields
+	Impressions []characterCardImpressionRequest
 }
 
 func (s *Server) listCharacterCardSources(c *gin.Context) {
@@ -260,6 +272,8 @@ func (s *Server) listCharacterCardSources(c *gin.Context) {
 				Race:            profile.Fields.Race,
 				Class:           profile.Fields.Class,
 				Icon:            profile.Fields.Icon,
+				ClassColor:      profile.Fields.ClassColor,
+				NameColor:       profile.Fields.NameColor,
 				BackupUpdatedAt: backup.UpdatedAt,
 			})
 		}
@@ -278,10 +292,20 @@ func (s *Server) listMyCharacterCards(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询人物卡失败"})
 		return
 	}
+	impressionsByCard, err := loadCharacterCardImpressions(database.DB, characterCardIDs(cards))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询人物卡第一印象失败"})
+		return
+	}
+	portraitsByCard, err := loadCharacterCardPortraits(database.DB, characterCardIDs(cards))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询人物卡角色大图失败"})
+		return
+	}
 
 	result := make([]characterCardDTO, 0, len(cards))
 	for _, card := range cards {
-		result = append(result, s.buildCharacterCardDTO(card, true, false))
+		result = append(result, s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, false))
 	}
 	c.JSON(http.StatusOK, gin.H{"character_cards": result})
 }
@@ -300,6 +324,7 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 		Status:     model.CharacterCardStatusDraft,
 		Visibility: model.CharacterCardVisibilityPrivate,
 	}
+	var impressions []model.CharacterCardImpression
 
 	switch sourceType {
 	case "blank":
@@ -311,7 +336,13 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := database.DB.Create(&card).Error; err != nil {
+		if err := database.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&card).Error; err != nil {
+				return err
+			}
+			impressions = defaultCharacterCardImpressions(card.ID)
+			return tx.Omit("CharacterCard").Create(&impressions).Error
+		}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建人物卡失败"})
 			return
 		}
@@ -339,7 +370,11 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 			if err := validateCharacterCard(card); err != nil {
 				return fmt.Errorf("%w: %v", errCharacterCardSourceCorrupt, err)
 			}
-			return tx.Create(&card).Error
+			if err := tx.Create(&card).Error; err != nil {
+				return err
+			}
+			impressions = characterCardImpressionsFromRequests(card.ID, profile.Impressions)
+			return tx.Omit("CharacterCard").Create(&impressions).Error
 		})
 		if err != nil {
 			switch {
@@ -358,7 +393,7 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"character_card": s.buildCharacterCardDTO(card, true, true)})
+	c.JSON(http.StatusCreated, gin.H{"character_card": s.buildCharacterCardDTO(card, impressions, nil, true, true)})
 }
 
 func (s *Server) getCharacterCard(c *gin.Context) {
@@ -377,12 +412,32 @@ func (s *Server) getCharacterCard(c *gin.Context) {
 		}
 		return
 	}
-	if !canViewCharacterCard(card, viewerID) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
+	ownerOrModerator := viewerID != 0 && (viewerID == card.UserID || isCharacterCardModerator(viewerID))
+	if !ownerOrModerator {
+		dto, visible, err := s.loadPublicCharacterCardDTO(card, true)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
+			return
+		}
+		if !visible {
+			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"character_card": dto})
+		return
+	}
+	impressionsByCard, err := loadCharacterCardImpressions(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡第一印象失败"})
+		return
+	}
+	portraitsByCard, err := loadCharacterCardPortraits(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡角色大图失败"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, viewerID == card.UserID, true)})
+	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, true)})
 }
 
 func (s *Server) updateCharacterCard(c *gin.Context) {
@@ -426,7 +481,10 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 	applyCharacterCardStringUpdate(req.Residence, &candidate.Residence, "residence", updates, true)
 	applyCharacterCardStringUpdate(req.RelationshipStatus, &candidate.RelationshipStatus, "relationship_status", updates, true)
 	applyCharacterCardStringUpdate(req.Icon, &candidate.Icon, "icon", updates, true)
-	applyCharacterCardStringUpdate(req.NameColor, &candidate.NameColor, "name_color", updates, true)
+	if err := applyCharacterCardTRP3ColorUpdate(req.ClassColor, req.NameColor, &candidate, updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	applyCharacterCardStringUpdate(req.Summary, &candidate.Summary, "summary", updates, true)
 	applyCharacterCardStringUpdate(req.BackgroundStory, &candidate.BackgroundStory, "background_story", updates, false)
 	applyCharacterCardStringUpdate(req.FirstImpression, &candidate.FirstImpression, "first_impression", updates, false)
@@ -470,12 +528,43 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	impressionsByCard, err := loadCharacterCardImpressions(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡第一印象失败"})
+		return
+	}
+	impressionPlan := characterCardImpressionUpdatePlan{
+		Rows: fixedCharacterCardImpressions(card.ID, impressionsByCard[card.ID]),
+	}
+	impressionsNeedSave := false
+	if req.Impressions != nil {
+		impressionPlan, err = s.prepareCharacterCardImpressionUpdate(c, userID, card, impressionsByCard[card.ID], *req.Impressions)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		impressionsNeedSave = true
+		// Impression rows are part of the card aggregate, so an impression-only
+		// edit must also advance the card's ordering/version timestamp.
+		updates["updated_at"] = time.Now().UTC()
+	}
 
 	newPortraitGenerated := false
 	pendingPortraitToCleanup := ""
+	var portraitRows []model.CharacterCardPortrait
+	var portraitRowToDelete *model.CharacterCardPortrait
+	var portraitRowToUpdate *model.CharacterCardPortrait
+	var portraitRowToCreate *model.CharacterCardPortrait
 	if portraitSet {
+		portraitRows, err = ensureCharacterCardPortraitRows(database.DB, card)
+		if err != nil {
+			s.cleanupGeneratedCharacterCardImpressionImages(c, userID, impressionPlan)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取角色大图失败"})
+			return
+		}
 		normalized, err := s.normalizeCharacterCardPortrait(c, userID, card, portraitValue)
 		if err != nil {
+			s.cleanupGeneratedCharacterCardImpressionImages(c, userID, impressionPlan)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -484,6 +573,28 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 		pendingPortraitToCleanup = normalized.PendingSource
 		if normalizedPortrait != card.PortraitImage {
 			now := time.Now().UTC()
+			if normalizedPortrait == "" && len(portraitRows) > 0 {
+				removed := portraitRows[0]
+				portraitRowToDelete = &removed
+				portraitRows = portraitRows[1:]
+				if len(portraitRows) > 0 {
+					normalizedPortrait = portraitRows[0].Image
+				}
+			} else if normalizedPortrait != "" && len(portraitRows) > 0 {
+				updated := portraitRows[0]
+				updated.Image = normalizedPortrait
+				updated.ImageUpdatedAt = &now
+				portraitRowToUpdate = &updated
+				portraitRows[0] = updated
+			} else if normalizedPortrait != "" {
+				created := model.CharacterCardPortrait{
+					CharacterCardID: card.ID,
+					SortOrder:       0,
+					Image:           normalizedPortrait,
+					ImageUpdatedAt:  &now,
+				}
+				portraitRowToCreate = &created
+			}
 			candidate.PortraitImage = normalizedPortrait
 			candidate.PortraitImageUpdatedAt = &now
 			updates["portrait_image"] = normalizedPortrait
@@ -501,38 +612,113 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 			updates["portrait_image_updated_at"] = now
 		}
 	}
-
-	if len(updates) == 0 {
-		c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, true, true)})
-		return
+	if candidate.Status != card.Status || candidate.Visibility != card.Visibility {
+		if rotateCharacterCardImpressionImageVersions(impressionPlan.Rows, time.Now().UTC()) {
+			impressionsNeedSave = true
+		}
 	}
 
-	result := database.DB.Model(&model.CharacterCard{}).
-		Where("id = ? AND user_id = ?", card.ID, userID).
-		Updates(updates)
-	if result.Error != nil || result.RowsAffected == 0 {
+	if len(updates) == 0 && !impressionsNeedSave {
+		portraitsByCard, _ := loadCharacterCardPortraits(database.DB, []uint{card.ID})
+		c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionPlan.Rows, portraitsByCard[card.ID], true, true)})
+		return
+	}
+	reviewNow := time.Now().UTC()
+	applyCharacterCardReviewMutation(&candidate, updates, true, reviewNow)
+	publicationAssetsToCheck := map[string]struct{}{}
+	if candidate.Status != model.CharacterCardStatusPublished || candidate.Visibility != model.CharacterCardVisibilityPublic {
+		if snapshot, _, loadErr := loadCharacterCardPublication(database.DB, card.ID); loadErr == nil {
+			publicationAssetsToCheck = characterCardSnapshotAssetPaths(snapshot)
+		}
+	}
+
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := ensureCharacterCardApprovedSnapshotBeforeMutation(tx, card); err != nil {
+			return err
+		}
+		if portraitRowToDelete != nil {
+			if err := tx.Delete(&model.CharacterCardPortrait{}, portraitRowToDelete.ID).Error; err != nil {
+				return err
+			}
+			if err := persistCharacterCardPortraitSortRows(tx, portraitRows); err != nil {
+				return err
+			}
+		}
+		if portraitRowToUpdate != nil {
+			if err := tx.Model(&model.CharacterCardPortrait{}).Where("id = ? AND character_card_id = ?", portraitRowToUpdate.ID, card.ID).
+				Updates(map[string]interface{}{"image": portraitRowToUpdate.Image, "image_updated_at": portraitRowToUpdate.ImageUpdatedAt}).Error; err != nil {
+				return err
+			}
+		}
+		if portraitRowToCreate != nil {
+			if err := tx.Create(portraitRowToCreate).Error; err != nil {
+				return err
+			}
+		}
+		if len(updates) > 0 {
+			result := tx.Model(&model.CharacterCard{}).
+				Where("id = ? AND user_id = ?", card.ID, userID).
+				Updates(updates)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return gorm.ErrRecordNotFound
+			}
+		}
+		if impressionsNeedSave {
+			if err := saveCharacterCardImpressions(tx, impressionPlan.Rows); err != nil {
+				return err
+			}
+		}
+		if candidate.Status != model.CharacterCardStatusPublished || candidate.Visibility != model.CharacterCardVisibilityPublic {
+			if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPublication{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		if newPortraitGenerated {
 			s.cleanupOwnedCharacterCardPortrait(c, userID, candidate.PortraitImage)
 		}
-		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新人物卡失败"})
-		} else {
+		s.cleanupGeneratedCharacterCardImpressionImages(c, userID, impressionPlan)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新人物卡失败"})
 		}
 		return
 	}
 
 	if portraitSet && candidate.PortraitImage != card.PortraitImage {
-		s.cleanupOwnedCharacterCardPortrait(c, userID, card.PortraitImage)
+		s.cleanupCharacterCardAssetIfUnreferenced(c, userID, card.ID, card.PortraitImage)
+	}
+	if portraitRowToDelete != nil {
+		s.cleanupCharacterCardAssetIfUnreferenced(c, userID, card.ID, portraitRowToDelete.Image)
 	}
 	if pendingPortraitToCleanup != "" {
 		s.cleanupOwnedCharacterCardPendingPortrait(c, userID, pendingPortraitToCleanup)
+	}
+	s.finishCharacterCardImpressionImageUpdate(c, userID, card.ID, impressionPlan)
+	for asset := range publicationAssetsToCheck {
+		s.cleanupCharacterCardAssetIfUnreferenced(c, userID, card.ID, asset)
 	}
 	if err := database.DB.First(&card, card.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, true, true)})
+	impressionsByCard, err = loadCharacterCardImpressions(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡第一印象失败"})
+		return
+	}
+	portraitsByCard, err := loadCharacterCardPortraits(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡角色大图失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, true)})
 }
 
 func (s *Server) deleteCharacterCard(c *gin.Context) {
@@ -551,14 +737,57 @@ func (s *Server) deleteCharacterCard(c *gin.Context) {
 		}
 		return
 	}
-	if err := database.DB.Where("id = ? AND user_id = ?", card.ID, userID).Delete(&model.CharacterCard{}).Error; err != nil {
+	impressionsByCard, err := loadCharacterCardImpressions(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡第一印象失败"})
+		return
+	}
+	impressions := impressionsByCard[card.ID]
+	portraits, err := loadCharacterCardPortraitRows(database.DB, card.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡角色大图失败"})
+		return
+	}
+	assets := map[string]struct{}{}
+	addAsset := func(value string) {
+		if value = strings.TrimSpace(value); value != "" {
+			assets[value] = struct{}{}
+		}
+	}
+	addAsset(card.PortraitImage)
+	for _, portrait := range portraits {
+		addAsset(portrait.Image)
+	}
+	for _, impression := range impressions {
+		addAsset(impression.IconImage)
+		addAsset(impression.Image)
+	}
+	if snapshot, _, loadErr := loadCharacterCardPublication(database.DB, card.ID); loadErr == nil {
+		for asset := range characterCardSnapshotAssetPaths(snapshot) {
+			addAsset(asset)
+		}
+	}
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPublication{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPortrait{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardImpression{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ? AND user_id = ?", card.ID, userID).Delete(&model.CharacterCard{}).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除人物卡失败"})
 		return
 	}
 
 	// Posts contain stable IDs in their rich text and are intentionally not
 	// rewritten or deleted when a card disappears.
-	s.cleanupOwnedCharacterCardPortrait(c, userID, card.PortraitImage)
+	for asset := range assets {
+		s.cleanupCharacterCardAssetIfUnreferenced(c, userID, card.ID, asset)
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
@@ -592,6 +821,10 @@ func (s *Server) syncCharacterCardFromTRP3(c *gin.Context) {
 		}
 
 		updates := trp3CharacterCardUpdateMap(profile.Fields)
+		if err := ensureCharacterCardApprovedSnapshotBeforeMutation(tx, card); err != nil {
+			return err
+		}
+		applyCharacterCardReviewMutation(&candidate, updates, true, time.Now().UTC())
 		if err := tx.Model(&model.CharacterCard{}).
 			Where("id = ? AND user_id = ?", card.ID, userID).
 			Updates(updates).Error; err != nil {
@@ -611,7 +844,17 @@ func (s *Server) syncCharacterCardFromTRP3(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, true, true)})
+	impressionsByCard, loadErr := loadCharacterCardImpressions(database.DB, []uint{card.ID})
+	if loadErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡第一印象失败"})
+		return
+	}
+	portraitsByCard, err := loadCharacterCardPortraits(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡角色大图失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, true)})
 }
 
 func (s *Server) listPublicUserCharacterCards(c *gin.Context) {
@@ -637,22 +880,36 @@ func (s *Server) listPublicUserCharacterCards(c *gin.Context) {
 	}
 
 	var cards []model.CharacterCard
-	if err := database.DB.Where("user_id = ? AND status = ? AND visibility = ?", userID, model.CharacterCardStatusPublished, model.CharacterCardVisibilityPublic).
-		Omit("background_story", "first_impression", "other_content").
+	if err := database.DB.Where("user_id = ?", userID).
 		Order("sort_order ASC, updated_at DESC, id DESC").
 		Find(&cards).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询人物卡失败"})
 		return
 	}
-
 	result := make([]characterCardDTO, 0, len(cards))
 	for _, card := range cards {
-		result = append(result, s.buildCharacterCardDTO(card, false, false))
+		dto, visible, err := s.loadPublicCharacterCardDTO(card, false)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询人物卡失败"})
+			return
+		}
+		if visible {
+			result = append(result, dto)
+		}
 	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].SortOrder != result[j].SortOrder {
+			return result[i].SortOrder < result[j].SortOrder
+		}
+		if !result[i].UpdatedAt.Equal(result[j].UpdatedAt) {
+			return result[i].UpdatedAt.After(result[j].UpdatedAt)
+		}
+		return result[i].ID > result[j].ID
+	})
 	c.JSON(http.StatusOK, gin.H{"character_cards": result})
 }
 
-func (s *Server) buildCharacterCardDTO(card model.CharacterCard, ownerView, includeRichText bool) characterCardDTO {
+func (s *Server) buildCharacterCardDTO(card model.CharacterCard, impressions []model.CharacterCardImpression, portraits []model.CharacterCardPortrait, ownerView, includeRichText bool) characterCardDTO {
 	displayName := card.DisplayName
 	if strings.TrimSpace(displayName) == "" {
 		displayName = joinedCharacterCardName(card.FirstName, card.LastName)
@@ -676,13 +933,17 @@ func (s *Server) buildCharacterCardDTO(card model.CharacterCard, ownerView, incl
 		Residence:              card.Residence,
 		RelationshipStatus:     card.RelationshipStatus,
 		Icon:                   card.Icon,
-		NameColor:              card.NameColor,
+		ClassColor:             canonicalCharacterCardTRP3Color(card.ClassColor, card.NameColor),
+		NameColor:              canonicalCharacterCardTRP3Color(card.ClassColor, card.NameColor),
 		Summary:                card.Summary,
+		Impressions:            s.buildCharacterCardImpressionDTOs(card, impressions, ownerView),
+		Portraits:              s.buildCharacterCardPortraitDTOs(card, portraits),
 		PortraitImageURL:       s.characterCardPortraitURL(card),
 		PortraitImageUpdatedAt: card.PortraitImageUpdatedAt,
 		Status:                 card.Status,
 		Visibility:             card.Visibility,
 		SortOrder:              card.SortOrder,
+		ReviewStatus:           normalizedCharacterCardReviewStatus(card.ReviewStatus),
 		CreatedAt:              card.CreatedAt,
 		UpdatedAt:              card.UpdatedAt,
 	}
@@ -691,6 +952,8 @@ func (s *Server) buildCharacterCardDTO(card model.CharacterCard, ownerView, incl
 		dto.SourceBackupID = card.SourceBackupID
 		dto.SourceAccountID = card.SourceAccountID
 		dto.SourceProfileID = card.SourceProfileID
+		dto.ReviewComment = card.ReviewComment
+		dto.ReviewedAt = card.ReviewedAt
 	}
 	if includeRichText {
 		dto.BackgroundStory = card.BackgroundStory
@@ -725,7 +988,9 @@ func canViewCharacterCard(card model.CharacterCard, viewerID uint) bool {
 	if viewerID != 0 && card.UserID == viewerID {
 		return true
 	}
-	return card.Status == model.CharacterCardStatusPublished && card.Visibility == model.CharacterCardVisibilityPublic
+	status := normalizedCharacterCardReviewStatus(card.ReviewStatus)
+	return card.Status == model.CharacterCardStatusPublished && card.Visibility == model.CharacterCardVisibilityPublic &&
+		(status == model.CharacterCardReviewNone || status == model.CharacterCardReviewApproved)
 }
 
 func optionalActiveUserID(c *gin.Context) uint {
@@ -816,6 +1081,7 @@ func parseTRP3CharacterCardProfile(raw json.RawMessage) (parsedTRP3CharacterCard
 	}
 	var player struct {
 		Characteristics json.RawMessage `json:"characteristics"`
+		Misc            json.RawMessage `json:"misc"`
 	}
 	if err := json.Unmarshal(profileEnvelope.Player, &player); err != nil {
 		return parsedTRP3CharacterCardProfile{}, err
@@ -846,6 +1112,12 @@ func parseTRP3CharacterCardProfile(raw json.RawMessage) (parsedTRP3CharacterCard
 		}
 		values[name] = value
 	}
+	// PE is an optional, independently authored TRP3 section. Ignore malformed
+	// glance data instead of blocking basic-field import or sync.
+	impressions, err := parseTRP3CharacterCardImpressions(player.Misc)
+	if err != nil {
+		impressions, _ = parseTRP3CharacterCardImpressions(nil)
+	}
 
 	return parsedTRP3CharacterCardProfile{
 		ProfileName: strings.TrimSpace(profileEnvelope.ProfileName),
@@ -865,9 +1137,90 @@ func parseTRP3CharacterCardProfile(raw json.RawMessage) (parsedTRP3CharacterCard
 			Residence:          values["RE"],
 			RelationshipStatus: values["RS"],
 			Icon:               values["IC"],
+			ClassColor:         values["CH"],
 			NameColor:          values["CH"],
 		},
+		Impressions: impressions,
 	}, nil
+}
+
+func parseTRP3CharacterCardImpressions(rawMisc json.RawMessage) ([]characterCardImpressionRequest, error) {
+	requests := make([]characterCardImpressionRequest, 0, characterCardImpressionSlotCount)
+	for slot := 1; slot <= characterCardImpressionSlotCount; slot++ {
+		requests = append(requests, characterCardImpressionRequest{Slot: uint8(slot)})
+	}
+	if len(rawMisc) == 0 || string(bytes.TrimSpace(rawMisc)) == "null" {
+		return requests, nil
+	}
+	var misc map[string]json.RawMessage
+	if err := json.Unmarshal(rawMisc, &misc); err != nil || misc == nil {
+		if err == nil {
+			err = errors.New("player.misc is not an object")
+		}
+		return nil, err
+	}
+	peRaw, exists := misc["PE"]
+	if !exists || len(peRaw) == 0 {
+		return requests, nil
+	}
+	trimmedPE := bytes.TrimSpace(peRaw)
+	if bytes.Equal(trimmedPE, []byte("null")) || bytes.Equal(trimmedPE, []byte("[]")) {
+		return requests, nil
+	}
+	var slots map[string]json.RawMessage
+	if err := json.Unmarshal(peRaw, &slots); err != nil || slots == nil {
+		if err == nil {
+			err = errors.New("player.misc.PE is not an object")
+		}
+		return nil, err
+	}
+	for index := range requests {
+		slotKey := strconv.Itoa(index + 1)
+		slotRaw, exists := slots[slotKey]
+		if !exists || len(slotRaw) == 0 || string(bytes.TrimSpace(slotRaw)) == "null" {
+			continue
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(slotRaw, &fields); err != nil || fields == nil {
+			continue
+		}
+		candidate := characterCardImpressionRequest{Slot: uint8(index + 1)}
+		if activeRaw, exists := fields["AC"]; exists && !bytes.Equal(bytes.TrimSpace(activeRaw), []byte("null")) {
+			if err := json.Unmarshal(activeRaw, &candidate.Active); err != nil {
+				continue
+			}
+		}
+		read := func(name string) (string, error) {
+			value, exists := fields[name]
+			if !exists {
+				return "", nil
+			}
+			return characterCardTRP3Scalar("PE."+slotKey+"."+name, value)
+		}
+		var err error
+		if candidate.TRP3Icon, err = read("IC"); err != nil {
+			continue
+		}
+		if candidate.Title, err = read("TI"); err != nil {
+			continue
+		}
+		if candidate.Text, err = read("TX"); err != nil {
+			continue
+		}
+		candidate.TRP3Icon = truncateCharacterCardRunes(candidate.TRP3Icon, 128)
+		candidate.Title = truncateCharacterCardRunes(candidate.Title, characterCardImpressionTitleMax)
+		candidate.Text = truncateCharacterCardRunes(candidate.Text, characterCardImpressionTextMax)
+		requests[index] = candidate
+	}
+	return validateCharacterCardImpressionRequests(requests)
+}
+
+func truncateCharacterCardRunes(value string, maxRunes int) string {
+	if maxRunes < 0 || utf8.RuneCountInString(value) <= maxRunes {
+		return value
+	}
+	runes := []rune(value)
+	return string(runes[:maxRunes])
 }
 
 func characterCardTRP3Scalar(field string, raw json.RawMessage) (string, error) {
@@ -905,6 +1258,7 @@ func applyTRP3CharacterCardFields(card *model.CharacterCard, fields trp3Characte
 	card.Residence = fields.Residence
 	card.RelationshipStatus = fields.RelationshipStatus
 	card.Icon = fields.Icon
+	card.ClassColor = fields.ClassColor
 	card.NameColor = fields.NameColor
 }
 
@@ -925,6 +1279,7 @@ func trp3CharacterCardUpdateMap(fields trp3CharacterCardFields) map[string]inter
 		"residence":           fields.Residence,
 		"relationship_status": fields.RelationshipStatus,
 		"icon":                fields.Icon,
+		"class_color":         fields.ClassColor,
 		"name_color":          fields.NameColor,
 	}
 }
@@ -959,6 +1314,44 @@ func applyCharacterCardStringUpdate(input *string, target *string, column string
 	updates[column] = value
 }
 
+func canonicalCharacterCardTRP3Color(classColor, nameColor string) string {
+	value := strings.TrimSpace(classColor)
+	if value == "" {
+		value = strings.TrimSpace(nameColor)
+	}
+	value = strings.TrimPrefix(value, "#")
+	return strings.ToUpper(value)
+}
+
+func applyCharacterCardTRP3ColorUpdate(classColor, nameColor *string, card *model.CharacterCard, updates map[string]interface{}) error {
+	if classColor == nil && nameColor == nil {
+		canonical := canonicalCharacterCardTRP3Color(card.ClassColor, card.NameColor)
+		card.ClassColor = canonical
+		card.NameColor = canonical
+		return nil
+	}
+	classValue := ""
+	nameValue := ""
+	if classColor != nil {
+		classValue = canonicalCharacterCardTRP3Color(*classColor, "")
+	}
+	if nameColor != nil {
+		nameValue = canonicalCharacterCardTRP3Color(*nameColor, "")
+	}
+	if classColor != nil && nameColor != nil && classValue != nameValue {
+		return errors.New("class_color 与 name_color 必须一致（TRP3 仅有一个 CH 颜色）")
+	}
+	canonical := classValue
+	if classColor == nil {
+		canonical = nameValue
+	}
+	card.ClassColor = canonical
+	card.NameColor = canonical
+	updates["class_color"] = canonical
+	updates["name_color"] = canonical
+	return nil
+}
+
 func validateCharacterCard(card model.CharacterCard) error {
 	fields := []struct {
 		name  string
@@ -981,6 +1374,7 @@ func validateCharacterCard(card model.CharacterCard) error {
 		{"residence", card.Residence, 256},
 		{"relationship_status", card.RelationshipStatus, 64},
 		{"icon", card.Icon, 128},
+		{"class_color", card.ClassColor, 16},
 		{"name_color", card.NameColor, 16},
 		{"summary", card.Summary, 1000},
 		{"source_account_id", card.SourceAccountID, 32},
@@ -996,6 +1390,12 @@ func validateCharacterCard(card model.CharacterCard) error {
 	}
 	if card.NameColor != "" && !isCharacterCardHexColor(card.NameColor) {
 		return errors.New("name_color 必须是 6 或 8 位十六进制颜色")
+	}
+	if card.ClassColor != "" && !isCharacterCardHexColor(card.ClassColor) {
+		return errors.New("class_color 必须是 6 或 8 位十六进制颜色")
+	}
+	if canonicalCharacterCardTRP3Color(card.ClassColor, "") != canonicalCharacterCardTRP3Color("", card.NameColor) {
+		return errors.New("class_color 与 name_color 必须一致（TRP3 仅有一个 CH 颜色）")
 	}
 	if card.SourceAccountID != "" {
 		if err := validateCharacterCardSourceAccountID(card.SourceAccountID); err != nil {
@@ -1329,11 +1729,18 @@ func (s *Server) isCurrentCharacterCardPortraitURL(c *gin.Context, cardID uint, 
 }
 
 func validateCharacterCardPortraitBytes(data []byte, declaredType string) (string, error) {
+	return validateCharacterCardImageBytes(data, declaredType, "角色大图")
+}
+
+func validateCharacterCardImageBytes(data []byte, declaredType, label string) (string, error) {
+	if label == "" {
+		label = "图片"
+	}
 	if len(data) == 0 {
-		return "", errors.New("角色大图不能为空")
+		return "", fmt.Errorf("%s不能为空", label)
 	}
 	if len(data) > characterCardPortraitMaxBytes {
-		return "", errors.New("角色大图不能超过 20MB")
+		return "", fmt.Errorf("%s不能超过 20MB", label)
 	}
 	detectedType := strings.TrimSpace(strings.Split(http.DetectContentType(data), ";")[0])
 	if detectedType == "image/jpg" {
@@ -1343,21 +1750,21 @@ func validateCharacterCardPortraitBytes(data []byte, declaredType string) (strin
 		"image/jpeg": {}, "image/png": {}, "image/gif": {}, "image/webp": {},
 	}
 	if _, ok := allowed[detectedType]; !ok {
-		return "", errors.New("角色大图仅支持 JPEG、PNG、GIF 或 WebP")
+		return "", fmt.Errorf("%s仅支持 JPEG、PNG、GIF 或 WebP", label)
 	}
 	declaredType = strings.TrimSpace(strings.Split(declaredType, ";")[0])
 	if declaredType == "image/jpg" {
 		declaredType = "image/jpeg"
 	}
 	if declaredType != "" && declaredType != "application/octet-stream" && declaredType != detectedType {
-		return "", errors.New("角色大图 MIME 与文件内容不一致")
+		return "", fmt.Errorf("%s MIME 与文件内容不一致", label)
 	}
 	config, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || config.Width <= 0 || config.Height <= 0 {
-		return "", errors.New("角色大图文件已损坏")
+		return "", fmt.Errorf("%s文件已损坏", label)
 	}
 	if config.Width > characterCardPortraitMaxSide || config.Height > characterCardPortraitMaxSide || int64(config.Width)*int64(config.Height) > characterCardPortraitMaxPixels {
-		return "", errors.New("角色大图尺寸过大")
+		return "", fmt.Errorf("%s尺寸过大", label)
 	}
 	return detectedType, nil
 }
