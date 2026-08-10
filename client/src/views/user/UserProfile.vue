@@ -13,6 +13,7 @@ import RModal from '@/components/RModal.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import AchievementMedal from '@/components/AchievementMedal.vue'
 import RPDBContributionSection from '@/components/rpdb/RPDBContributionSection.vue'
+import CharacterCardWall from '@/components/character-cards/CharacterCardWall.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import {
@@ -652,6 +653,11 @@ function previewAchievementNotification() {
             </div>
           </template>
         </div>
+
+        <CharacterCardWall
+          :user-id="Number(userId)"
+          :is-own-profile="isOwnProfile"
+        />
 
         <!-- 3. 公会卡片 -->
         <div class="guilds-card">

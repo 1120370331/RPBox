@@ -226,6 +226,127 @@ function ns.ApplyRecordSchema(record)
     return record
 end
 
+local function NormalizeLinkLabel(label)
+    label = tostring(label or "")
+    if label == "" then return "[]" end
+    if label:match("^%[.*%]$") then return label end
+    return "[" .. label .. "]"
+end
+
+local function StripLinkBrackets(label)
+    label = NormalizeLinkLabel(label)
+    return label:gsub("^%[", ""):gsub("%]$", "")
+end
+
+local function ClassifyNativeChatLink(payload)
+    payload = tostring(payload or "")
+
+    local itemID = payload:match("^item:(%d+)")
+    if itemID then return "item", tonumber(itemID) end
+
+    local spellID = payload:match("^spell:(%d+)")
+    if spellID then return "spell", tonumber(spellID) end
+
+    return nil, nil
+end
+
+local function BuildTRP3LinkMarker(content)
+    content = tostring(content or "")
+    local name, numericID = content:match("^(.*):(%d+)$")
+    return {
+        t = "trp3",
+        n = name or content,
+        id = numericID and tonumber(numericID) or nil,
+        raw = "[TRP3:" .. content .. "]",
+    }
+end
+
+-- ExtractChatLinks returns compact markers for native item/spell links and TRP3 text links.
+function ns.ExtractChatLinks(text)
+    local links = {}
+    if not text or text == "" then return links end
+    text = tostring(text)
+
+    for color, payload, label in text:gmatch("|c(%x%x%x%x%x%x%x%x)|H([^|]+)|h(%b[])|h|r") do
+        local linkType, id = ClassifyNativeChatLink(payload)
+        if linkType then
+            links[#links + 1] = {
+                t = linkType,
+                id = id,
+                n = StripLinkBrackets(label),
+                p = payload,
+                c = color,
+                raw = "|c" .. color .. "|H" .. payload .. "|h" .. label .. "|h|r",
+            }
+        end
+    end
+
+    local withoutColoredLinks = text:gsub("|c%x%x%x%x%x%x%x%x|H[^|]+|h%b[]|h|r", "")
+    for payload, label in withoutColoredLinks:gmatch("|H([^|]+)|h(%b[])|h") do
+        local linkType, id = ClassifyNativeChatLink(payload)
+        if linkType then
+            links[#links + 1] = {
+                t = linkType,
+                id = id,
+                n = StripLinkBrackets(label),
+                p = payload,
+                raw = "|H" .. payload .. "|h" .. label .. "|h",
+            }
+        end
+    end
+
+    for content in text:gmatch("%[TRP3:([^%]]+)%]") do
+        links[#links + 1] = BuildTRP3LinkMarker(content)
+    end
+
+    return links
+end
+
+local function RenderNativeLinkLabel(payload, label, colorize, color)
+    local linkType = ClassifyNativeChatLink(payload)
+    local rendered = NormalizeLinkLabel(label)
+    if linkType and colorize then
+        local linkColor = color
+        if not linkColor and linkType == "spell" then linkColor = "FF71D5FF" end
+        if not linkColor then linkColor = "FFFFD100" end
+        return "|c" .. linkColor .. rendered .. "|r"
+    end
+    return rendered
+end
+
+local function RenderTRP3LinkLabel(content, colorize)
+    local marker = BuildTRP3LinkMarker(content)
+    local rendered = NormalizeLinkLabel(marker.n)
+    if colorize then return "|cFFFFD100" .. rendered .. "|r" end
+    return rendered
+end
+
+-- RenderChatLinkLabels collapses chat hyperlink source into readable bracket labels.
+function ns.RenderChatLinkLabels(text, colorize)
+    if not text or text == "" then return text end
+    colorize = colorize == true
+    text = tostring(text)
+
+    text = text:gsub("|c(%x%x%x%x%x%x%x%x)|H([^|]+)|h(%b[])|h|r", function(color, payload, label)
+        return RenderNativeLinkLabel(payload, label, colorize, color)
+    end)
+
+    text = text:gsub("|H([^|]+)|h(%b[])|h", function(payload, label)
+        return RenderNativeLinkLabel(payload, label, colorize)
+    end)
+
+    text = text:gsub("%[TRP3:([^%]]+)%]", function(content)
+        return RenderTRP3LinkLabel(content, colorize)
+    end)
+
+    text = text:gsub("|T.-|t", "")
+    if not colorize then
+        text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+        text = text:gsub("|r", "")
+    end
+    return text
+end
+
 -- GetSelfProfileContext returns the active local profile and its management label.
 function ns.GetSelfProfileContext()
     if not TRP3_API or not TRP3_API.profile then return nil end

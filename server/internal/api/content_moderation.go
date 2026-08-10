@@ -124,6 +124,7 @@ func (s *Server) applySensitiveViolation(userID uint, contentType string, conten
 	now := time.Now()
 	decision := sensitiveDecision{}
 	var deletedPost *model.Post
+	var deletedCommentImageURLs []string
 
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		var user model.User
@@ -136,19 +137,28 @@ func (s *Server) applySensitiveViolation(userID uint, contentType string, conten
 		if contentID != nil {
 			switch contentType {
 			case "post":
+				imageURLs, err := loadCommentImageURLs(tx, &model.Comment{}, "post_id = ?", *contentID)
+				if err != nil {
+					return err
+				}
 				post, err := deletePostForModeration(tx, *contentID)
 				if err != nil {
 					return err
 				}
 				deletedPost = post
+				deletedCommentImageURLs = append(deletedCommentImageURLs, imageURLs...)
 			case "comment":
-				if err := deleteCommentForModeration(tx, *contentID); err != nil {
+				comment, err := deleteCommentForModeration(tx, *contentID)
+				if err != nil {
 					return err
 				}
+				deletedCommentImageURLs = append(deletedCommentImageURLs, comment.ImageURL)
 			case "item_comment":
-				if err := deleteItemCommentForModeration(tx, *contentID); err != nil {
+				comment, err := deleteItemCommentForModeration(tx, *contentID)
+				if err != nil {
 					return err
 				}
+				deletedCommentImageURLs = append(deletedCommentImageURLs, comment.ImageURL)
 			}
 		}
 
@@ -184,6 +194,9 @@ func (s *Server) applySensitiveViolation(userID uint, contentType string, conten
 		}
 		return nil
 	})
+	if err == nil {
+		s.cleanupCommentImageURLs(nil, deletedCommentImageURLs...)
+	}
 
 	return decision, deletedPost, err
 }
@@ -277,45 +290,40 @@ func deletePostForModeration(tx *gorm.DB, postID uint) (*model.Post, error) {
 	return &post, nil
 }
 
-func deleteCommentForModeration(tx *gorm.DB, commentID uint) error {
+func deleteCommentForModeration(tx *gorm.DB, commentID uint) (*model.Comment, error) {
 	var comment model.Comment
 	if err := tx.First(&comment, commentID).Error; err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := tx.Where("comment_id = ?", commentID).Delete(&model.CommentLike{}).Error; err != nil {
-		return err
+		return nil, err
 	}
 	if err := tx.Delete(&comment).Error; err != nil {
-		return err
+		return nil, err
 	}
-	return tx.Model(&model.Post{}).
+	if !isCommentImageVisible(comment.ImageURL, comment.ImageReviewStatus) {
+		return &comment, nil
+	}
+	if err := tx.Model(&model.Post{}).
 		Where("id = ?", comment.PostID).
-		Update("comment_count", gorm.Expr("CASE WHEN comment_count > 0 THEN comment_count - 1 ELSE 0 END")).Error
+		Update("comment_count", gorm.Expr("CASE WHEN comment_count > 0 THEN comment_count - 1 ELSE 0 END")).Error; err != nil {
+		return nil, err
+	}
+	return &comment, nil
 }
 
-func deleteItemCommentForModeration(tx *gorm.DB, commentID uint) error {
+func deleteItemCommentForModeration(tx *gorm.DB, commentID uint) (*model.ItemComment, error) {
 	var comment model.ItemComment
 	if err := tx.First(&comment, commentID).Error; err != nil {
-		return err
+		return nil, err
 	}
 	if err := tx.Delete(&comment).Error; err != nil {
-		return err
+		return nil, err
 	}
 
-	var avgRating float64
-	var count int64
-	if err := tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", comment.ItemID).Count(&count).Error; err != nil {
-		return err
+	if err := recalculateVisibleItemCommentRating(tx, comment.ItemID); err != nil {
+		return nil, err
 	}
-	if err := tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", comment.ItemID).Select("AVG(rating)").Scan(&avgRating).Error; err != nil {
-		return err
-	}
-
-	return tx.Model(&model.Item{}).
-		Where("id = ?", comment.ItemID).
-		Updates(map[string]interface{}{
-			"rating":       avgRating,
-			"rating_count": count,
-		}).Error
+	return &comment, nil
 }

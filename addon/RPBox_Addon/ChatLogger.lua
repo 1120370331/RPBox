@@ -442,16 +442,25 @@ local function OnChatMessage(self, event, msg, sender, ...)
         end
     end
 
+    local recordMessage = parsedMsg or msg
+
     -- 构建记录
     local record = {
         t = time(),
         c = CHANNEL_SHORT[event] or event,
-        m = parsedMsg or msg,
+        m = recordMessage,
         mk = mk,
         s = senderID,
         ref = profileID,
         ps = senderProfileSnapshot,
     }
+
+    if ns.ExtractChatLinks then
+        local links = ns.ExtractChatLinks(recordMessage)
+        if links and #links > 0 then
+            record.lk = links
+        end
+    end
 
     -- 添加收听者信息（当前登录的角色）
     local listenerContext = ns.GetSelfProfileContext and ns.GetSelfProfileContext() or nil

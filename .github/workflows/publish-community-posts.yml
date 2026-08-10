@@ -1,0 +1,49 @@
+name: Publish Community Posts
+
+on:
+  workflow_dispatch:
+    inputs:
+      post_file:
+        description: "JSON post file to publish"
+        required: true
+        default: "scripts/community-posts/wowhead-rp-items.json"
+        type: string
+      status:
+        description: "Post status"
+        required: true
+        default: "published"
+        type: choice
+        options:
+          - draft
+          - published
+      dry_run:
+        description: "Validate payload without publishing"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  publish:
+    name: Publish Posts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Publish community posts
+        env:
+          RPBOX_API_BASE: ${{ secrets.RPBOX_API_BASE }}
+          RPBOX_USERNAME: ${{ secrets.RPBOX_USERNAME }}
+          RPBOX_PASSWORD: ${{ secrets.RPBOX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          args=(--post-file "${{ github.event.inputs.post_file }}" --status "${{ github.event.inputs.status }}")
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          node scripts/rpbox-post.mjs "${args[@]}"

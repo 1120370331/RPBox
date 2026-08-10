@@ -91,6 +91,62 @@ func migrateAccountBackupUniqueIndex(db *gorm.DB) error {
 	return nil
 }
 
+// reconcileVisibleCommentMetrics repairs counters that were historically updated
+// before a comment image finished moderation. It is safe to run on every startup.
+func reconcileVisibleCommentMetrics(db *gorm.DB) {
+	statements := []string{
+		`WITH visible_counts AS (
+			SELECT p.id AS post_id, COUNT(c.id) AS comment_count
+			FROM posts p
+			LEFT JOIN comments c ON c.post_id = p.id
+				AND (COALESCE(BTRIM(c.image_url), '') = '' OR c.image_review_status = 'approved')
+			GROUP BY p.id
+		)
+		UPDATE posts p
+		SET comment_count = visible_counts.comment_count
+		FROM visible_counts
+		WHERE p.id = visible_counts.post_id
+			AND p.comment_count IS DISTINCT FROM visible_counts.comment_count`,
+		`WITH visible_ratings AS (
+			SELECT i.id AS item_id,
+				COUNT(ic.id) AS rating_count,
+				COALESCE(AVG(ic.rating), 0)::double precision AS rating
+			FROM items i
+			LEFT JOIN item_comments ic ON ic.item_id = i.id
+				AND ic.parent_id IS NULL
+				AND ic.rating > 0
+				AND (COALESCE(BTRIM(ic.image_url), '') = '' OR ic.image_review_status = 'approved')
+			GROUP BY i.id
+		)
+		UPDATE items i
+		SET rating_count = visible_ratings.rating_count,
+			rating = visible_ratings.rating
+		FROM visible_ratings
+		WHERE i.id = visible_ratings.item_id
+			AND (i.rating_count IS DISTINCT FROM visible_ratings.rating_count
+				OR i.rating IS DISTINCT FROM visible_ratings.rating)`,
+		`WITH visible_counts AS (
+			SELECT w.id AS work_id, COUNT(c.id) AS comment_count
+			FROM rpdb_works w
+			LEFT JOIN rpdb_comments c ON c.work_id = w.id
+				AND c.status = 'published'
+				AND (COALESCE(BTRIM(c.image_url), '') = '' OR c.image_review_status = 'approved')
+			GROUP BY w.id
+		)
+		UPDATE rpdb_works w
+		SET comment_count = visible_counts.comment_count
+		FROM visible_counts
+		WHERE w.id = visible_counts.work_id
+			AND w.comment_count IS DISTINCT FROM visible_counts.comment_count`,
+	}
+
+	for _, statement := range statements {
+		if err := db.Exec(statement).Error; err != nil {
+			log.Printf("[DB Migration] reconcile visible comment metrics - %v", err)
+		}
+	}
+}
+
 func Init(cfg *config.DatabaseConfig) error {
 	sslmode := cfg.SSLMode
 	if sslmode == "" {
@@ -129,6 +185,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.StoryMusicTrackStory{},
 		&model.StoryMusicSegment{},
 		&model.Character{},
+		&model.CharacterCard{},
 		&model.Tag{},
 		&model.StoryTag{},
 		&model.Guild{},
@@ -208,6 +265,8 @@ func Init(cfg *config.DatabaseConfig) error {
 		"UPDATE comments SET image_review_status = 'none' WHERE COALESCE(BTRIM(image_url), '') = '' AND COALESCE(BTRIM(image_review_status), '') = ''",
 		"UPDATE item_comments SET image_review_status = 'approved' WHERE COALESCE(BTRIM(image_url), '') <> '' AND COALESCE(BTRIM(image_review_status), '') IN ('', 'none')",
 		"UPDATE item_comments SET image_review_status = 'none' WHERE COALESCE(BTRIM(image_url), '') = '' AND COALESCE(BTRIM(image_review_status), '') = ''",
+		"UPDATE rpdb_comments SET image_review_status = 'approved' WHERE COALESCE(BTRIM(image_url), '') <> '' AND COALESCE(BTRIM(image_review_status), '') IN ('', 'none')",
+		"UPDATE rpdb_comments SET image_review_status = 'none' WHERE COALESCE(BTRIM(image_url), '') = '' AND COALESCE(BTRIM(image_review_status), '') = ''",
 		"UPDATE rpdb_works SET visibility = CASE WHEN is_public = true THEN 'public' ELSE 'private' END WHERE COALESCE(BTRIM(visibility), '') = ''",
 	}
 	for _, sql := range migrations {
@@ -215,6 +274,7 @@ func Init(cfg *config.DatabaseConfig) error {
 			log.Printf("[DB Migration] %s - %v", sql, err)
 		}
 	}
+	reconcileVisibleCommentMetrics(db)
 	if err := db.Exec("UPDATE users SET sponsor_level = 2 WHERE is_sponsor = true AND (sponsor_level IS NULL OR sponsor_level = 0)").Error; err != nil {
 		log.Printf("[DB Migration] update sponsor_level from is_sponsor - %v", err)
 	}

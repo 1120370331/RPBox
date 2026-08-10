@@ -61,10 +61,12 @@ async fn write_profile(path: String, raw_lua: String) -> Result<(), String> {
 #[tauri::command]
 async fn update_profile(
     wow_path: String,
+    account_id: Option<String>,
     profile_id: String,
     updates: Value,
 ) -> Result<(), String> {
-    let (lua_path, mut profiles) = find_profiles_file(&wow_path, &profile_id)?;
+    let (lua_path, mut profiles) =
+        find_profiles_file(&wow_path, account_id.as_deref(), &profile_id)?;
     let obj = profiles
         .as_object_mut()
         .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
@@ -90,12 +92,25 @@ async fn clear_sync_cache(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn find_profiles_file(wow_path: &str, profile_id: &str) -> Result<(PathBuf, Value), String> {
+fn find_profiles_file(
+    wow_path: &str,
+    account_id: Option<&str>,
+    profile_id: &str,
+) -> Result<(PathBuf, Value), String> {
     let normalized = wow_path::normalize_wow_path(wow_path)
         .ok_or_else(|| "未找到有效的WoW路径，请选择包含 WTF/Account 的目录".to_string())?;
     let account_root = normalized.join("Account");
     if !account_root.exists() {
         return Err("WTF/Account 目录不存在".to_string());
+    }
+    let canonical_account_root = std::fs::canonicalize(&account_root)
+        .map_err(|e| format!("无法解析 WTF/Account 目录: {}", e))?;
+
+    if let Some(account_id) = account_id {
+        validate_account_id(account_id)?;
+        let account_dir = account_root.join(account_id);
+        return load_profile_from_account(&canonical_account_root, &account_dir, profile_id)?
+            .ok_or_else(|| "指定来源账号中未找到人物卡".to_string());
     }
 
     let entries = std::fs::read_dir(&account_root).map_err(|e| format!("读取目录失败: {}", e))?;
@@ -109,23 +124,67 @@ fn find_profiles_file(wow_path: &str, profile_id: &str) -> Result<(PathBuf, Valu
             continue;
         }
 
-        let lua_path = entry.path().join("SavedVariables").join("totalRP3.lua");
-        if !lua_path.exists() {
-            continue;
-        }
-
-        let data =
-            lua_parser::parse_variable(&lua_path, "TRP3_Profiles").map_err(|e| e.to_string())?;
-        if data
-            .as_object()
-            .and_then(|obj| obj.get(profile_id))
-            .is_some()
+        if let Some(result) =
+            load_profile_from_account(&canonical_account_root, &entry.path(), profile_id)?
         {
-            return Ok((lua_path, data));
+            return Ok(result);
         }
     }
 
     Err("未找到指定人物卡".to_string())
+}
+
+fn validate_account_id(account_id: &str) -> Result<(), String> {
+    let mut components = Path::new(account_id).components();
+    let is_single_normal_component =
+        matches!(components.next(), Some(std::path::Component::Normal(_)))
+            && components.next().is_none();
+    let is_unsafe = account_id.trim().is_empty()
+        || account_id == "."
+        || account_id == ".."
+        || account_id.contains('/')
+        || account_id.contains('\\')
+        || account_id.contains('\0')
+        || !is_single_normal_component;
+
+    if is_unsafe {
+        return Err("来源账号标识无效".to_string());
+    }
+
+    Ok(())
+}
+
+fn load_profile_from_account(
+    canonical_account_root: &Path,
+    account_dir: &Path,
+    profile_id: &str,
+) -> Result<Option<(PathBuf, Value)>, String> {
+    if !account_dir.is_dir() {
+        return Ok(None);
+    }
+
+    let lua_path = account_dir.join("SavedVariables").join("totalRP3.lua");
+    if !lua_path.is_file() {
+        return Ok(None);
+    }
+
+    let canonical_lua_path =
+        std::fs::canonicalize(&lua_path).map_err(|e| format!("无法解析 TRP3 人物卡文件: {}", e))?;
+    if !canonical_lua_path.starts_with(canonical_account_root) {
+        return Err("TRP3 人物卡文件不在 WTF/Account 目录内".to_string());
+    }
+
+    let data = lua_parser::parse_variable(&canonical_lua_path, "TRP3_Profiles")
+        .map_err(|e| e.to_string())?;
+    if data
+        .as_object()
+        .and_then(|profiles| profiles.get(profile_id))
+        .is_none()
+    {
+        return Ok(None);
+    }
+
+    Ok(Some((canonical_lua_path, data)))
 }
 
 fn apply_updates(profile: &mut Value, updates: &Value) -> Result<(), String> {
@@ -145,12 +204,30 @@ fn apply_updates(profile: &mut Value, updates: &Value) -> Result<(), String> {
         set_str_field(characteristics, &["FN"], chars.get("firstName"));
         set_str_field(characteristics, &["LN"], chars.get("lastName"));
         set_str_field(characteristics, &["TI"], chars.get("title"));
+        set_str_field(characteristics, &["FT"], chars.get("fullTitle"));
         set_str_field(characteristics, &["RA"], chars.get("race"));
         set_str_field(characteristics, &["CL"], chars.get("class"));
         set_str_field(characteristics, &["AG"], chars.get("age"));
         set_str_field(characteristics, &["EC"], chars.get("eyeColor"));
+        set_str_field(characteristics, &["EH"], chars.get("eyeColorHex"));
         set_str_field(characteristics, &["HE"], chars.get("height"));
         set_str_field(characteristics, &["WE"], chars.get("weight"));
+        set_str_field(characteristics, &["BP"], chars.get("birthplace"));
+        set_str_field(characteristics, &["RE"], chars.get("residence"));
+        set_integer_field(
+            characteristics,
+            &["RS"],
+            chars.get("relationshipStatus"),
+            "感情状态",
+        )?;
+        set_str_field(characteristics, &["IC"], chars.get("icon"));
+        set_str_field(
+            characteristics,
+            &["CH"],
+            chars
+                .get("nameColor")
+                .or_else(|| chars.get("classColorHex")),
+        );
     }
 
     if let Some(about_updates) = updates.get("about") {
@@ -189,8 +266,18 @@ fn apply_updates(profile: &mut Value, updates: &Value) -> Result<(), String> {
 }
 
 fn set_str_field(target: &mut Value, path: &[&str], value: Option<&Value>) {
-    let text = value.and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let Some(value) = value else {
+        return;
+    };
+    if value.is_null() {
+        remove_field(target, path);
+        return;
+    }
+    let Some(text) = value.as_str() else {
+        return;
+    };
     if text.is_empty() {
+        remove_field(target, path);
         return;
     }
 
@@ -213,7 +300,278 @@ fn set_str_field(target: &mut Value, path: &[&str], value: Option<&Value>) {
         current
             .as_object_mut()
             .unwrap()
-            .insert(last.to_string(), Value::from(text));
+            .insert(last.to_string(), Value::from(text.to_string()));
+    }
+}
+
+fn remove_field(target: &mut Value, path: &[&str]) {
+    let Some((last, parents)) = path.split_last() else {
+        return;
+    };
+    let mut current = target;
+    for key in parents {
+        let Some(next) = current
+            .as_object_mut()
+            .and_then(|object| object.get_mut(*key))
+        else {
+            return;
+        };
+        current = next;
+    }
+    if let Some(object) = current.as_object_mut() {
+        object.remove(*last);
+    }
+}
+
+fn set_integer_field(
+    target: &mut Value,
+    path: &[&str],
+    value: Option<&Value>,
+    field_name: &str,
+) -> Result<(), String> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+
+    if value.is_null() || matches!(value, Value::String(text) if text.trim().is_empty()) {
+        remove_field(target, path);
+        return Ok(());
+    }
+
+    let number = match value {
+        Value::String(text) => text
+            .trim()
+            .parse::<i64>()
+            .map_err(|_| format!("{}必须是整数枚举值", field_name))?,
+        Value::Number(number) => number
+            .as_i64()
+            .ok_or_else(|| format!("{}必须是整数枚举值", field_name))?,
+        _ => return Err(format!("{}必须是整数枚举值", field_name)),
+    };
+
+    let mut current = target;
+    for key in path.iter().take(path.len().saturating_sub(1)) {
+        if !current.is_object() {
+            *current = Value::Object(Default::default());
+        }
+        current = current
+            .as_object_mut()
+            .expect("object was initialized above")
+            .entry(key.to_string())
+            .or_insert_with(|| Value::Object(Default::default()));
+    }
+
+    if let Some(last) = path.last() {
+        if !current.is_object() {
+            *current = Value::Object(Default::default());
+        }
+        current
+            .as_object_mut()
+            .expect("object was initialized above")
+            .insert(last.to_string(), Value::from(number));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod profile_lookup_tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TestWowDir {
+        root: PathBuf,
+    }
+
+    impl TestWowDir {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after Unix epoch")
+                .as_nanos();
+            let root = std::env::temp_dir().join(format!(
+                "rpbox-profile-lookup-{}-{unique}",
+                std::process::id()
+            ));
+            fs::create_dir_all(root.join("WTF").join("Account"))
+                .expect("test account root should be created");
+            Self { root }
+        }
+
+        fn wtf_path(&self) -> PathBuf {
+            self.root.join("WTF")
+        }
+
+        fn write_profile(&self, account_id: &str, marker: &str) -> PathBuf {
+            let saved_variables = self
+                .wtf_path()
+                .join("Account")
+                .join(account_id)
+                .join("SavedVariables");
+            fs::create_dir_all(&saved_variables)
+                .expect("test SavedVariables directory should be created");
+            let lua_path = saved_variables.join("totalRP3.lua");
+            fs::write(
+                &lua_path,
+                format!(
+                    r#"TRP3_Profiles = {{
+  ["shared-profile"] = {{
+    ["marker"] = "{marker}",
+  }},
+}}
+"#
+                ),
+            )
+            .expect("test profile fixture should be written");
+            lua_path
+        }
+    }
+
+    impl Drop for TestWowDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn exact_account_lookup_does_not_select_a_duplicate_profile_from_another_account() {
+        let wow = TestWowDir::new();
+        wow.write_profile("ACCOUNT-A", "ACCOUNT-A");
+        let expected_path = wow.write_profile("ACCOUNT-B", "ACCOUNT-B");
+        let wow_path = wow.wtf_path();
+
+        let (lua_path, profiles) = find_profiles_file(
+            wow_path.to_str().expect("temporary path should be UTF-8"),
+            Some("ACCOUNT-B"),
+            "shared-profile",
+        )
+        .expect("profile should be found in the requested account");
+
+        assert_eq!(
+            lua_path,
+            fs::canonicalize(expected_path).expect("fixture path should be canonicalizable")
+        );
+        assert_eq!(
+            profiles["shared-profile"]["marker"].as_str(),
+            Some("ACCOUNT-B")
+        );
+    }
+
+    #[test]
+    fn exact_account_lookup_rejects_parent_directory_traversal() {
+        let wow = TestWowDir::new();
+        wow.write_profile("ACCOUNT-A", "ACCOUNT-A");
+        let wow_path = wow.wtf_path();
+
+        let error = find_profiles_file(
+            wow_path.to_str().expect("temporary path should be UTF-8"),
+            Some("../ACCOUNT-A"),
+            "shared-profile",
+        )
+        .expect_err("unsafe account identifiers must be rejected");
+
+        assert_eq!(error, "来源账号标识无效");
+    }
+
+    #[test]
+    fn exact_account_lookup_rejects_an_empty_account_identifier() {
+        let wow = TestWowDir::new();
+        wow.write_profile("ACCOUNT-A", "ACCOUNT-A");
+        let wow_path = wow.wtf_path();
+
+        let error = find_profiles_file(
+            wow_path.to_str().expect("temporary path should be UTF-8"),
+            Some(""),
+            "shared-profile",
+        )
+        .expect_err("an explicitly supplied account identifier cannot be empty");
+
+        assert_eq!(error, "来源账号标识无效");
+    }
+
+    #[test]
+    fn exact_account_lookup_does_not_fall_back_when_profile_is_missing() {
+        let wow = TestWowDir::new();
+        wow.write_profile("ACCOUNT-A", "ACCOUNT-A");
+        let wow_path = wow.wtf_path();
+
+        let error = find_profiles_file(
+            wow_path.to_str().expect("temporary path should be UTF-8"),
+            Some("ACCOUNT-B"),
+            "shared-profile",
+        )
+        .expect_err("account-scoped lookup must not scan other accounts");
+
+        assert_eq!(error, "指定来源账号中未找到人物卡");
+    }
+
+    #[test]
+    fn relationship_status_is_written_as_a_lua_number() {
+        let mut profile = serde_json::json!({
+            "player": { "characteristics": { "RS": 1 } }
+        });
+        let updates = serde_json::json!({
+            "characteristics": { "relationshipStatus": "4" }
+        });
+
+        apply_updates(&mut profile, &updates).expect("numeric relationship status should be valid");
+
+        assert_eq!(profile["player"]["characteristics"]["RS"], 4);
+        assert!(profile["player"]["characteristics"]["RS"].is_number());
+    }
+
+    #[test]
+    fn relationship_status_rejects_non_numeric_values_without_overwriting() {
+        let mut profile = serde_json::json!({
+            "player": { "characteristics": { "RS": 2 } }
+        });
+        let updates = serde_json::json!({
+            "characteristics": { "relationshipStatus": "married" }
+        });
+
+        let error = apply_updates(&mut profile, &updates)
+            .expect_err("non-numeric relationship status must be rejected");
+
+        assert_eq!(error, "感情状态必须是整数枚举值");
+        assert_eq!(profile["player"]["characteristics"]["RS"], 2);
+    }
+
+    #[test]
+    fn empty_relationship_status_removes_the_existing_value() {
+        let mut profile = serde_json::json!({
+            "player": { "characteristics": { "RS": 3 } }
+        });
+        let updates = serde_json::json!({
+            "characteristics": { "relationshipStatus": "" }
+        });
+
+        apply_updates(&mut profile, &updates).expect("empty values should clear existing data");
+
+        assert!(profile["player"]["characteristics"].get("RS").is_none());
+    }
+
+    #[test]
+    fn empty_string_fields_are_removed_but_omitted_fields_are_preserved() {
+        let mut profile = serde_json::json!({
+            "player": {
+                "characteristics": {
+                    "FN": "旧名字",
+                    "LN": "保留的姓氏",
+                    "RS": 2
+                }
+            }
+        });
+        let updates = serde_json::json!({
+            "characteristics": { "firstName": "" }
+        });
+
+        apply_updates(&mut profile, &updates).expect("an empty string should clear the field");
+
+        let characteristics = &profile["player"]["characteristics"];
+        assert!(characteristics.get("FN").is_none());
+        assert_eq!(characteristics["LN"], "保留的姓氏");
+        assert_eq!(characteristics["RS"], 2);
     }
 }
 

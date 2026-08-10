@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -911,6 +912,11 @@ func (s *Server) deleteItem(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权删除此道具"})
 		return
 	}
+	commentImageURLs, err := loadCommentImageURLs(database.DB, &model.ItemComment{}, "item_id = ?", item.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取评论配图失败"})
+		return
+	}
 
 	// 删除关联数据
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemTag{})
@@ -929,6 +935,7 @@ func (s *Server) deleteItem(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	s.cleanupCommentImageURLs(c, commentImageURLs...)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
@@ -1053,7 +1060,7 @@ func (s *Server) getItemComments(c *gin.Context) {
 	}
 	var comments []model.ItemComment
 
-	if err := database.DB.Where("item_id = ?", id).Order("created_at ASC").Find(&comments).Error; err != nil {
+	if err := visibleCommentImages(database.DB.Where("item_id = ?", id)).Order("created_at ASC").Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1114,9 +1121,6 @@ func (s *Server) getItemComments(c *gin.Context) {
 
 	var result []CommentWithUser
 	for _, comment := range comments {
-		if comment.ImageURL != "" && comment.ImageReviewStatus != "approved" {
-			comment.ImageURL = ""
-		}
 		var user model.User
 		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").First(&user, comment.UserID)
 		nameColor, nameBold := userDisplayStyle(user)
@@ -1140,6 +1144,100 @@ func (s *Server) getItemComments(c *gin.Context) {
 	})
 }
 
+func recalculateVisibleItemCommentRating(tx *gorm.DB, itemID uint) error {
+	var avgRating float64
+	var count int64
+	if err := visibleCommentImages(tx.Model(&model.ItemComment{})).
+		Where("item_id = ? AND rating > 0 AND parent_id IS NULL", itemID).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		if err := visibleCommentImages(tx.Model(&model.ItemComment{})).
+			Where("item_id = ? AND rating > 0 AND parent_id IS NULL", itemID).
+			Select("COALESCE(AVG(rating), 0)").Scan(&avgRating).Error; err != nil {
+			return err
+		}
+	}
+	return tx.Model(&model.Item{}).Where("id = ?", itemID).Updates(map[string]interface{}{
+		"rating":       avgRating,
+		"rating_count": count,
+	}).Error
+}
+
+func awardItemCommentPublication(tx *gorm.DB, comment model.ItemComment, item model.Item) (bool, error) {
+	commentOwnerID := item.AuthorID
+	if comment.ParentID != nil {
+		var parent model.ItemComment
+		if err := tx.Select("user_id").First(&parent, *comment.ParentID).Error; err == nil {
+			commentOwnerID = parent.UserID
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, err
+		}
+	}
+
+	if err := recalculateVisibleItemCommentRating(tx, item.ID); err != nil {
+		return false, err
+	}
+	commentReward, err := service.AwardActivityReward(tx, comment.UserID, "item_comment_create", fmt.Sprintf("item-comment:%d", comment.ID), 0, service.CommentCreateExperience)
+	if err != nil {
+		return false, err
+	}
+	if commentOwnerID != comment.UserID {
+		rewardReference := fmt.Sprintf("item:%d:comment:%d", item.ID, comment.ID)
+		if comment.ParentID != nil {
+			rewardReference = fmt.Sprintf("item-comment:%d:owner:%d", comment.ID, commentOwnerID)
+		}
+		if _, err := service.AwardActivityReward(tx, commentOwnerID, "item_comment_received", rewardReference, 0, service.CommentReceivedExperience); err != nil {
+			return false, err
+		}
+	}
+	return commentReward.Granted, nil
+}
+
+func notifyItemCommentPublication(comment model.ItemComment, item model.Item) {
+	notificationPreview := buildCommentNotificationPreview(comment.Content)
+	if comment.ParentID != nil {
+		var parent model.ItemComment
+		parentFound := true
+		if err := database.DB.Select("user_id").First(&parent, *comment.ParentID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return
+			}
+			parentFound = false
+		}
+		if parentFound && parent.UserID != comment.UserID {
+			_ = service.CreateNotification(&model.Notification{
+				UserID: parent.UserID, Type: "item_comment", ActorID: &comment.UserID,
+				TargetType: "item_comment", TargetID: comment.ID,
+				Content: "在作品《" + item.Name + "》中回复了你的评论：" + notificationPreview,
+			})
+		}
+		if item.AuthorID != comment.UserID && (!parentFound || item.AuthorID != parent.UserID) {
+			_ = service.CreateNotification(&model.Notification{
+				UserID: item.AuthorID, Type: "item_comment", ActorID: &comment.UserID,
+				TargetType: "item_comment", TargetID: comment.ID,
+				Content: "在你的作品《" + item.Name + "》中回复了评论：" + notificationPreview,
+			})
+		}
+	} else if item.AuthorID != comment.UserID {
+		_ = service.CreateNotification(&model.Notification{
+			UserID: item.AuthorID, Type: "item_comment", ActorID: &comment.UserID,
+			TargetType: "item", TargetID: item.ID,
+			Content: "评论了你的作品《" + item.Name + "》：" + notificationPreview,
+		})
+	}
+
+	if comment.Content != "" {
+		mentionPreview := service.NormalizeMentionPreview(comment.Content)
+		if len([]rune(mentionPreview)) > 50 {
+			mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+		}
+		mentionMessage := "在作品《" + item.Name + "》的评论中提到了你：" + mentionPreview
+		service.CreateMentionNotifications(comment.UserID, "item_comment", comment.ID, mentionMessage, comment.Content)
+	}
+}
+
 // addItemComment 添加评论（带评分）
 func (s *Server) addItemComment(c *gin.Context) {
 	userID := c.GetUint("userID")
@@ -1160,6 +1258,9 @@ func (s *Server) addItemComment(c *gin.Context) {
 	req.ImageURL = strings.TrimSpace(req.ImageURL)
 	if req.Content == "" && req.ImageURL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "评论内容和图片不能同时为空"})
+		return
+	}
+	if !s.requireValidCommentImageReference(c, req.ImageURL) {
 		return
 	}
 	if s.enforcePostCommentHardRules(c, userID, "item_comment", nil, req.Content) {
@@ -1204,12 +1305,19 @@ func (s *Server) addItemComment(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "父评论不属于该作品"})
 			return
 		}
+		if !isCommentImageVisible(parent.ImageURL, parent.ImageReviewStatus) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "回复目标尚未通过审核"})
+			return
+		}
 	}
 
 	// 检查用户是否已发表过评分评论（只在提交评分时检查）
 	if req.Rating > 0 && req.ParentID == nil {
 		var existingRatingComment model.ItemComment
-		if err := database.DB.Where("item_id = ? AND user_id = ? AND rating > 0 AND parent_id IS NULL", id, userID).First(&existingRatingComment).Error; err == nil {
+		if err := database.DB.
+			Where("item_id = ? AND user_id = ? AND rating > 0 AND parent_id IS NULL", id, userID).
+			Where("NOT (COALESCE(TRIM(image_url), '') <> '' AND image_review_status = ?)", commentImageReviewRejected).
+			First(&existingRatingComment).Error; err == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "您已经对此道具发表过评分评价，每个用户只能发表一次评分"})
 			return
 		}
@@ -1222,45 +1330,23 @@ func (s *Server) addItemComment(c *gin.Context) {
 		Rating:            req.Rating,
 		Content:           req.Content,
 		ImageURL:          req.ImageURL,
-		ImageReviewStatus: "none",
+		ImageReviewStatus: commentImageReviewNone,
 		ParentID:          req.ParentID,
 	}
 	if req.ImageURL != "" {
-		comment.ImageReviewStatus = "pending"
+		comment.ImageReviewStatus = commentImageReviewPending
 	}
 
-	commentOwnerID := item.AuthorID
-	if req.ParentID != nil {
-		commentOwnerID = parent.UserID
-	}
-
-	var avgRating float64
-	var count int64
+	publishImmediately := req.ImageURL == ""
+	shouldNotify := false
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&comment).Error; err != nil {
 			return err
 		}
-
-		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0 AND parent_id IS NULL", id).Count(&count)
-		tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0 AND parent_id IS NULL", id).Select("COALESCE(AVG(rating), 0)").Scan(&avgRating)
-
-		if err := tx.Model(&item).Updates(map[string]interface{}{
-			"rating":       avgRating,
-			"rating_count": count,
-		}).Error; err != nil {
+		if publishImmediately {
+			var err error
+			shouldNotify, err = awardItemCommentPublication(tx, comment, item)
 			return err
-		}
-		if _, err := service.AwardActivityReward(tx, userID, "item_comment_create", fmt.Sprintf("item-comment:%d", comment.ID), 0, service.CommentCreateExperience); err != nil {
-			return err
-		}
-		if commentOwnerID != userID {
-			rewardReference := fmt.Sprintf("item:%d:comment:%d", item.ID, comment.ID)
-			if req.ParentID != nil {
-				rewardReference = fmt.Sprintf("item-comment:%d:owner:%d", comment.ID, commentOwnerID)
-			}
-			if _, err := service.AwardActivityReward(tx, commentOwnerID, "item_comment_received", rewardReference, 0, service.CommentReceivedExperience); err != nil {
-				return err
-			}
 		}
 		return nil
 	}); err != nil {
@@ -1268,54 +1354,8 @@ func (s *Server) addItemComment(c *gin.Context) {
 		return
 	}
 
-	// 创建通知（不给自己发通知）
-	notificationPreview := buildCommentNotificationPreview(req.Content)
-	if req.ParentID != nil {
-		if parent.UserID != userID {
-			content := "在作品《" + item.Name + "》中回复了你的评论：" + notificationPreview
-			notification := model.Notification{
-				UserID:     parent.UserID,
-				Type:       "item_comment",
-				ActorID:    &userID,
-				TargetType: "item_comment",
-				TargetID:   comment.ID,
-				Content:    content,
-			}
-			service.CreateNotification(&notification)
-		}
-		if item.AuthorID != userID && item.AuthorID != parent.UserID {
-			content := "在你的作品《" + item.Name + "》中回复了评论：" + notificationPreview
-			notification := model.Notification{
-				UserID:     item.AuthorID,
-				Type:       "item_comment",
-				ActorID:    &userID,
-				TargetType: "item_comment",
-				TargetID:   comment.ID,
-				Content:    content,
-			}
-			service.CreateNotification(&notification)
-		}
-	} else if item.AuthorID != userID {
-		content := "评论了你的作品《" + item.Name + "》：" + notificationPreview
-		notification := model.Notification{
-			UserID:     item.AuthorID,
-			Type:       "item_comment",
-			ActorID:    &userID,
-			TargetType: "item",
-			TargetID:   uint(itemID),
-			Content:    content,
-		}
-		service.CreateNotification(&notification)
-	}
-
-	// @提及通知
-	if req.Content != "" {
-		mentionPreview := service.NormalizeMentionPreview(req.Content)
-		if len([]rune(mentionPreview)) > 50 {
-			mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
-		}
-		mentionMessage := "在作品《" + item.Name + "》的评论中提到了你：" + mentionPreview
-		service.CreateMentionNotifications(userID, "item_comment", comment.ID, mentionMessage, req.Content)
+	if publishImmediately && shouldNotify {
+		notifyItemCommentPublication(comment, item)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

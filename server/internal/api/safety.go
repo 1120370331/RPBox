@@ -434,6 +434,10 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		if targetName == "" {
 			targetName = buildMissingReportTitle(targetType, targetID)
 		}
+		commentImageURLs, err := loadCommentImageURLs(database.DB, &model.Comment{}, "post_id = ?", targetID)
+		if err != nil {
+			return "", 0, false, err
+		}
 
 		if err := database.DB.Where(
 			"comment_id IN (?)",
@@ -449,6 +453,7 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		if err := database.DB.Delete(&post).Error; err != nil {
 			return "", 0, false, err
 		}
+		s.cleanupCommentImageURLs(c, commentImageURLs...)
 		return targetName, post.AuthorID, false, nil
 	case reportTargetItem:
 		var item model.Item
@@ -463,6 +468,10 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		if targetName == "" {
 			targetName = buildMissingReportTitle(targetType, targetID)
 		}
+		commentImageURLs, err := loadCommentImageURLs(database.DB, &model.ItemComment{}, "item_id = ?", targetID)
+		if err != nil {
+			return "", 0, false, err
+		}
 
 		var itemImages []model.ItemImage
 		_ = database.DB.Where("item_id = ?", targetID).Find(&itemImages).Error
@@ -476,6 +485,7 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		if err := database.DB.Delete(&item).Error; err != nil {
 			return "", 0, false, err
 		}
+		s.cleanupCommentImageURLs(c, commentImageURLs...)
 		return targetName, item.AuthorID, false, nil
 	case reportTargetComment:
 		var comment model.Comment
@@ -493,9 +503,12 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		if err := database.DB.Delete(&comment).Error; err != nil {
 			return "", 0, false, err
 		}
-		_ = database.DB.Model(&model.Post{}).
-			Where("id = ? AND comment_count > 0", comment.PostID).
-			Update("comment_count", gorm.Expr("comment_count - 1")).Error
+		if isCommentImageVisible(comment.ImageURL, comment.ImageReviewStatus) {
+			_ = database.DB.Model(&model.Post{}).
+				Where("id = ? AND comment_count > 0", comment.PostID).
+				Update("comment_count", gorm.Expr("comment_count - 1")).Error
+		}
+		s.cleanupCommentImageURLs(c, comment.ImageURL)
 		return targetName, comment.AuthorID, false, nil
 	case reportTargetItemComment:
 		var comment model.ItemComment
@@ -512,14 +525,8 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 			return "", 0, false, err
 		}
 
-		var avgRating float64
-		var ratingCount int64
-		_ = database.DB.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", itemID).Count(&ratingCount).Error
-		_ = database.DB.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", itemID).Select("AVG(rating)").Scan(&avgRating).Error
-		_ = database.DB.Model(&model.Item{}).Where("id = ?", itemID).Updates(map[string]interface{}{
-			"rating":       avgRating,
-			"rating_count": ratingCount,
-		}).Error
+		_ = recalculateVisibleItemCommentRating(database.DB, itemID)
+		s.cleanupCommentImageURLs(c, comment.ImageURL)
 
 		return targetName, comment.UserID, false, nil
 	case reportTargetRPDBComment:
@@ -537,6 +544,7 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		}); err != nil {
 			return "", 0, false, err
 		}
+		s.cleanupCommentImageURLs(c, comment.ImageURL)
 		return targetName, comment.AuthorID, false, nil
 	case reportTargetStory:
 		var story model.Story
@@ -573,6 +581,10 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		if targetName == "" {
 			targetName = buildMissingReportTitle(targetType, targetID)
 		}
+		commentImageURLs, err := loadCommentImageURLs(database.DB, &model.RPDBComment{}, "work_id = ?", targetID)
+		if err != nil {
+			return "", 0, false, err
+		}
 		if err := database.DB.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Where(
 				"comment_id IN (?)",
@@ -595,6 +607,7 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		}); err != nil {
 			return "", 0, false, err
 		}
+		s.cleanupCommentImageURLs(c, commentImageURLs...)
 		return targetName, work.AuthorID, false, nil
 	default:
 		return "", 0, false, errors.New("unsupported report target")
@@ -1128,7 +1141,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 
 	var rpdbComments []model.RPDBComment
 	if len(rpdbCommentIDs) > 0 {
-		_ = database.DB.Select("id", "work_id", "author_id", "content").Where("id IN ?", rpdbCommentIDs).Find(&rpdbComments).Error
+		_ = database.DB.Select("id", "work_id", "author_id", "content", "image_url").Where("id IN ?", rpdbCommentIDs).Find(&rpdbComments).Error
 	}
 	rpdbCommentMap := make(map[uint]model.RPDBComment, len(rpdbComments))
 	for _, comment := range rpdbComments {
@@ -1268,6 +1281,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 			parentTargetID = comment.WorkID
 			parentTargetTitle = rpdbWorkMap[comment.WorkID].Title
 			targetPreviewText = normalizeReportPreviewText(comment.Content, 220)
+			targetPreviewImage = comment.ImageURL
 			targetURL = fmt.Sprintf("/rpdb/%d?comment=%d", comment.WorkID, row.TargetID)
 			if targetUserID == 0 {
 				targetUserID = comment.AuthorID

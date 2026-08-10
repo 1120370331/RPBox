@@ -488,7 +488,7 @@
   background: var(--color-accent, #B87333);
 }
 
-.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home) {
+.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--character-card) {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 14px;
@@ -514,11 +514,143 @@
   object-fit: cover;
 }
 
-.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home) .jump-card__content {
+.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--character-card) .jump-card__content {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+}
+
+.jump-card--character-card {
+  display: grid;
+  grid-template-columns: 5px 88px minmax(0, 1fr) 38px;
+  min-height: 122px;
+  overflow: hidden;
+  margin: 16px 0;
+  border-color: #D9B997;
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(184, 115, 51, 0.08), transparent 36%),
+    var(--color-panel-bg, #fff);
+  box-shadow: 0 6px 18px rgba(var(--shadow-base), 0.12);
+}
+
+.jump-card--character-card[data-jump-pending="true"] {
+  cursor: wait;
+}
+
+.jump-card--character-card:not([data-jump-verified="true"]):not([data-jump-safe-placeholder="true"]) > * {
+  visibility: hidden;
+}
+
+.jump-card--character-card:not([data-jump-verified="true"]):not([data-jump-safe-placeholder="true"])::after {
+  content: '人物卡引用 · 正在验证访问权限';
+  position: absolute;
+  inset: 0 0 0 5px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--color-panel-bg, #fff);
+  color: #8C7B70;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.jump-card--character-card:hover,
+.jump-card--character-card:focus-visible {
+  border-color: #B87333;
+  box-shadow: 0 10px 24px rgba(var(--shadow-base), 0.18), 0 0 0 2px rgba(184, 115, 51, 0.08);
+}
+
+.jump-card__character-rail {
+  align-self: stretch;
+  background: linear-gradient(#804030, #C48A55 50%, #804030);
+}
+
+.jump-card__character-portrait {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  overflow: hidden;
+  border-right: 1px solid #D8C1AA;
+  background:
+    radial-gradient(circle, rgba(184, 115, 51, 0.2), transparent 48%),
+    #302019;
+  color: #C89261;
+  font-size: 28px;
+}
+
+.jump-card__character-portrait img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  object-fit: cover;
+  transition: transform 0.24s ease, filter 0.24s ease;
+}
+
+.jump-card--character-card:hover .jump-card__character-portrait img,
+.jump-card--character-card:focus-visible .jump-card__character-portrait img {
+  filter: saturate(0.94) contrast(1.03);
+  transform: scale(1.035);
+}
+
+.jump-card__character-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 15px;
+}
+
+.jump-card__character-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #9A5A2D;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.jump-card--character-card .jump-card__title {
+  overflow: hidden;
+  color: #2C1810;
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-size: 18px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jump-card__character-subtitle {
+  overflow: hidden;
+  color: #804030;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jump-card__character-summary {
+  overflow: hidden;
+  color: var(--color-text-secondary, #8C7B70);
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jump-card__character-open {
+  display: grid;
+  place-items: center;
+  border-left: 1px solid #E2D1C0;
+  background: #F8F0E8;
+  color: #9A5A2D;
+  font-size: 16px;
 }
 
 .jump-card--rpdb-item,
@@ -719,7 +851,7 @@
     padding-right: 16px;
   }
 
-  .jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home) {
+  .jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--character-card) {
     grid-template-columns: 1fr;
   }
 
@@ -746,5 +878,25 @@
 
   .jump-card__rpdb-metrics {
     gap: 8px;
+  }
+
+  .jump-card--character-card {
+    grid-template-columns: 4px 70px minmax(0, 1fr) 30px;
+    min-height: 106px;
+  }
+
+  .jump-card__character-body {
+    padding: 9px 10px;
+  }
+
+  .jump-card__character-summary {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jump-card,
+  .jump-card__character-portrait img {
+    transition: none;
   }
 }

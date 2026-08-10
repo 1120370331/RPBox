@@ -126,6 +126,8 @@ export interface RPDBComment {
   author_name_bold?: boolean
   parent_id?: number
   content: string
+  image_url?: string
+  image_review_status?: 'none' | 'pending' | 'approved' | 'rejected'
   like_count: number
   liked: boolean
   created_at: string
@@ -248,9 +250,10 @@ export function listRPDBComments(id: number) {
   return request.get<{ comments: RPDBComment[] }>(`/rpdb/works/${id}/comments`)
 }
 
-export function createRPDBComment(id: number, content: string, parentId?: number) {
+export function createRPDBComment(id: number, content: string, parentId?: number, imageUrl = '') {
   return request.post<{ comment: RPDBComment }>(`/rpdb/works/${id}/comments`, {
     content,
+    image_url: imageUrl,
     parent_id: parentId,
   })
 }

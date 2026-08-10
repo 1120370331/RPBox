@@ -14,6 +14,7 @@ export interface ModeratorStats {
   pending_item_edits?: number
   pending_post_comment_images?: number
   pending_item_comment_images?: number
+  pending_rpdb_comment_images?: number
   pending_user_avatars?: number
   total_pending_reviews?: number
   total_posts: number
@@ -258,6 +259,21 @@ export interface ItemCommentImageReviewItem {
   item_name: string
 }
 
+export interface RPDBCommentImageReviewItem {
+  id: number
+  work_id: number
+  author_id: number
+  parent_id?: number | null
+  content: string
+  image_url: string
+  image_review_status: ImageReviewStatus
+  image_review_comment?: string
+  image_reviewed_at?: string | null
+  created_at: string
+  author_name: string
+  work_title: string
+}
+
 export interface UserAvatarReviewItem {
   id: number
   username: string
@@ -284,6 +300,14 @@ export function getPendingItemCommentImages(params?: ImageReviewQueryParams) {
 
 export function reviewItemCommentImage(id: number, data: ReviewRequest) {
   return request.post<{ message: string; comment: ItemCommentImageReviewItem }>(`/moderator/review/item-comment-images/${id}`, data)
+}
+
+export function getPendingRPDBCommentImages(params?: ImageReviewQueryParams) {
+  return request.get<{ comments: RPDBCommentImageReviewItem[]; total: number }>('/moderator/review/rpdb-comment-images', { params })
+}
+
+export function reviewRPDBCommentImage(id: number, data: ReviewRequest) {
+  return request.post<{ message: string; comment: RPDBCommentImageReviewItem }>(`/moderator/review/rpdb-comment-images/${id}`, data)
 }
 
 export function getPendingUserAvatars(params?: ImageReviewQueryParams) {

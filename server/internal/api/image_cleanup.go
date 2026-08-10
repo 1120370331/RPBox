@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"gorm.io/gorm"
 )
 
 var (
@@ -42,6 +43,90 @@ func (s *Server) deleteUploadKeys(keys map[string]struct{}) {
 	for key := range keys {
 		s.deleteUploadKey(key)
 	}
+}
+
+// cleanupCommentImageURLs removes OSS-backed comment images after their
+// database records have been deleted. A single upload can be referenced by
+// more than one comment, so deletion is conservative across all comment
+// tables.
+func (s *Server) cleanupCommentImageURLs(c *gin.Context, imageURLs ...string) {
+	keys := make(map[string]struct{})
+	for _, imageURL := range imageURLs {
+		key := extractCommentImageStorageKey(c, imageURL)
+		if key == "" {
+			continue
+		}
+		keys[key] = struct{}{}
+	}
+
+	for key := range keys {
+		if isCommentImageKeyReferenced(key) {
+			continue
+		}
+		s.deleteUploadKey(key)
+	}
+}
+
+func extractCommentImageStorageKey(c *gin.Context, raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	if parsed.IsAbs() && c != nil && !isSameHost(c, parsed.Host) {
+		return ""
+	}
+	key := uploadsKeyFromPath(parsed.Path)
+	if !isValidCommentImageStorageKey(key, 0) {
+		return ""
+	}
+	return strings.TrimPrefix(path.Clean("/"+key), "/")
+}
+
+func isCommentImageKeyReferenced(key string) bool {
+	if key == "" || database.DB == nil {
+		return false
+	}
+	patterns := uploadKeyMatchPatterns(key)
+	if len(patterns) == 0 {
+		return false
+	}
+
+	for _, target := range []interface{}{&model.Comment{}, &model.ItemComment{}, &model.RPDBComment{}} {
+		query := database.DB.Model(target)
+		orParts := make([]string, 0, len(patterns))
+		args := make([]interface{}, 0, len(patterns))
+		for _, pattern := range patterns {
+			orParts = append(orParts, "image_url LIKE ?")
+			args = append(args, pattern)
+		}
+
+		var count int64
+		if err := query.Where("("+strings.Join(orParts, " OR ")+")", args...).Limit(1).Count(&count).Error; err != nil {
+			// Query failures must never turn into destructive cleanup.
+			log.Printf("[comment-image-cleanup] reference check failed for %s: %v", key, err)
+			return true
+		}
+		if count > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func loadCommentImageURLs(db *gorm.DB, target interface{}, condition string, args ...interface{}) ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	var imageURLs []string
+	err := db.Model(target).
+		Where(condition, args...).
+		Where("COALESCE(TRIM(image_url), '') <> ''").
+		Pluck("image_url", &imageURLs).Error
+	return imageURLs, err
 }
 
 // deleteUnreferencedUploadKeys only deletes keys that are not still referenced by other posts.
@@ -101,6 +186,9 @@ func uploadKeyMatchPatterns(key string) []string {
 
 func (s *Server) deleteUploadKey(key string) {
 	if key == "" || s == nil {
+		return
+	}
+	if isOSSOnlyCommentImagePath(key) && isCommentImageKeyReferenced(key) {
 		return
 	}
 	if s.ossEnabled() {

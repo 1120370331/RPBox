@@ -2,13 +2,14 @@
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
+import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, resolveApiUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import ImageViewer from '@/components/ImageViewer.vue'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
 import CommentReplyBox from '@/components/CommentReplyBox.vue'
+import CommentImagePicker from '@/components/CommentImagePicker.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
@@ -35,6 +36,8 @@ const comments = ref<ItemComment[]>([])
 const newRating = ref(0)
 const hoverRating = ref(0)
 const newComment = ref('')
+const commentImageURL = ref('')
+const commentImageUploading = ref(false)
 const showEmojiPicker = ref(false)
 const showReplyEmojiPicker = ref(false)
 const emojiButtonRef = ref<HTMLElement | null>(null)
@@ -43,6 +46,7 @@ const commentEditorRef = ref<any>(null)
 const replyEditorRef = ref<{ insertToken?: (token: string) => void } | null>(null)
 const replyingTo = ref<ItemComment | null>(null)
 const replyContent = ref('')
+const replyImageURL = ref('')
 const showImportCode = ref(false)
 const isLiked = ref(false)
 const isFavorited = ref(false)
@@ -122,7 +126,7 @@ const canSubmit = computed(() => {
   if (newRating.value > 0) {
     return commentLength.value >= 10
   }
-  return commentLength.value > 0
+  return commentLength.value > 0 || !!commentImageURL.value
 })
 
 interface ItemCommentReply extends ItemComment {
@@ -327,12 +331,14 @@ async function handleAddComment() {
   submitting.value = true
   try {
     const id = Number(route.params.id)
-    await addItemComment(id, newRating.value, newComment.value)
+    const hasImage = !!commentImageURL.value
+    await addItemComment(id, newRating.value, newComment.value.trim(), undefined, commentImageURL.value)
     newComment.value = ''
+    commentImageURL.value = ''
     newRating.value = 0
     await loadComments()
     await loadItemDetail()
-    toast.success(t('market.detail.messages.commentSuccess'))
+    toast.success(hasImage ? '配图评论已提交审核，通过后将在评论区展示' : t('market.detail.messages.commentSuccess'))
   } catch (error: any) {
     console.error('添加评论失败:', error)
     toast.error(error.message || t('market.detail.messages.commentFailed'))
@@ -476,6 +482,11 @@ function renderCommentContent(content: string) {
   return renderEmoteContent(content, emoteStore.emoteMap)
 }
 
+function openCommentImage(src: string) {
+  if (!src) return
+  openContentViewer([resolveApiUrl(src)], 0)
+}
+
 function buildReportExcerpt(content: string) {
   const text = content.replace(/\s+/g, ' ').trim()
   if (!text) return '评论'
@@ -538,6 +549,7 @@ async function submitSafetyReport(payload: { reason: string; detail: string; hid
 async function startReply(comment: ItemComment) {
   replyingTo.value = comment
   replyContent.value = ''
+  replyImageURL.value = ''
   replyEditorRef.value = null
   showReplyEmojiPicker.value = false
   await nextTick()
@@ -546,6 +558,7 @@ async function startReply(comment: ItemComment) {
 function cancelReply() {
   replyingTo.value = null
   replyContent.value = ''
+  replyImageURL.value = ''
   showReplyEmojiPicker.value = false
   replyEmojiTrigger.value = null
   replyEditorRef.value = null
@@ -559,14 +572,15 @@ function setReplyEditorRef(instance: any, commentId: number) {
 
 async function submitReply() {
   const content = replyContent.value.trim()
-  if (!content || !replyingTo.value || submittingReply.value) return
+  if ((!content && !replyImageURL.value) || !replyingTo.value || submittingReply.value) return
   submittingReply.value = true
   try {
     const id = Number(route.params.id)
-    await addItemComment(id, 0, content, replyingTo.value.id)
+    const hasImage = !!replyImageURL.value
+    await addItemComment(id, 0, content, replyingTo.value.id, replyImageURL.value)
     cancelReply()
     await loadComments()
-    toast.success('回复已发布')
+    toast.success(hasImage ? '配图回复已提交审核，通过后将在评论区展示' : '回复已发布')
   } catch (error: any) {
     console.error('回复失败:', error)
     toast.error(error.message || t('market.detail.messages.commentFailed'))
@@ -852,6 +866,12 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
             v-model="newComment"
             :placeholder="t('market.detail.comments.placeholder')"
           />
+          <CommentImagePicker
+            v-model="commentImageURL"
+            :disabled="submitting"
+            @update:uploading="commentImageUploading = $event"
+            @preview="openCommentImage"
+          />
           <div class="review-footer">
             <button ref="emojiButtonRef" class="emoji-btn" @click="showEmojiPicker = true" type="button">
               <i class="ri-emotion-line"></i>
@@ -862,7 +882,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
             <button
               class="submit-review-btn"
               @click="handleAddComment"
-              :disabled="!canSubmit || submitting"
+              :disabled="!canSubmit || submitting || commentImageUploading"
             >
               {{ submitting ? t('market.detail.comments.submitting') : t('market.detail.comments.submit') }}
             </button>
@@ -898,7 +918,10 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
                 </div>
                 <span class="comment-time">{{ new Date(comment.created_at).toLocaleDateString() }}</span>
               </div>
-              <div class="comment-content" v-html="renderCommentContent(comment.content)"></div>
+              <div v-if="comment.content" class="comment-content" v-html="renderCommentContent(comment.content)"></div>
+              <button v-if="comment.image_url" type="button" class="comment-image" @click="openCommentImage(comment.image_url)">
+                <img :src="resolveApiUrl(comment.image_url)" alt="评论配图" loading="lazy" />
+              </button>
               <div class="comment-actions">
                 <button class="comment-reply-btn" type="button" @click="startReply(comment)">
                   <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
@@ -914,12 +937,15 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
                 v-if="replyingTo?.id === comment.id"
                 :ref="(instance) => setReplyEditorRef(instance, comment.id)"
                 v-model="replyContent"
+                :image-url="replyImageURL"
                 :placeholder="t('community.detail.replyTo', { name: comment.username || t('market.detail.comments.anonymous') })"
                 :disabled="submittingReply"
                 :auto-focus="true"
                 :cancel-label="t('community.create.cancel')"
                 :submit-label="t('community.action.reply')"
                 @open-emoji="openReplyEmojiPicker"
+                @update:image-url="replyImageURL = $event"
+                @preview-image="openCommentImage"
                 @cancel="cancelReply"
                 @submit="submitReply"
               />
@@ -947,7 +973,10 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
                       </div>
                       <span class="comment-time">{{ new Date(reply.created_at).toLocaleDateString() }}</span>
                     </div>
-                    <div class="comment-content reply-content" v-html="renderCommentContent(reply.content)"></div>
+                    <div v-if="reply.content" class="comment-content reply-content" v-html="renderCommentContent(reply.content)"></div>
+                    <button v-if="reply.image_url" type="button" class="comment-image reply-image" @click="openCommentImage(reply.image_url)">
+                      <img :src="resolveApiUrl(reply.image_url)" alt="回复配图" loading="lazy" />
+                    </button>
                     <div class="comment-actions">
                       <button class="comment-reply-btn" type="button" @click="startReply(reply)">
                         <i class="ri-reply-line"></i> {{ t('community.action.reply') }}
@@ -963,12 +992,15 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
                       v-if="replyingTo?.id === reply.id"
                       :ref="(instance) => setReplyEditorRef(instance, reply.id)"
                       v-model="replyContent"
+                      :image-url="replyImageURL"
                       :placeholder="t('community.detail.replyTo', { name: reply.username || t('market.detail.comments.anonymous') })"
                       :disabled="submittingReply"
                       :auto-focus="true"
                       :cancel-label="t('community.create.cancel')"
                       :submit-label="t('community.action.reply')"
                       @open-emoji="openReplyEmojiPicker"
+                      @update:image-url="replyImageURL = $event"
+                      @preview-image="openCommentImage"
                       @cancel="cancelReply"
                       @submit="submitReply"
                     />
@@ -1778,6 +1810,10 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   gap: 12px;
 }
 
+.review-input-box > .comment-image-picker {
+  margin-top: 12px;
+}
+
 .comment-item.comment-highlight {
   background: rgba(184, 115, 51, 0.14);
   box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.45);
@@ -1859,6 +1895,31 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
+}
+
+.comment-image {
+  display: block;
+  width: min(100%, 360px);
+  max-height: 280px;
+  overflow: hidden;
+  margin-top: 10px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card-bg);
+  cursor: zoom-in;
+}
+
+.comment-image img {
+  display: block;
+  width: 100%;
+  max-height: 278px;
+  object-fit: contain;
+}
+
+.comment-image.reply-image {
+  width: min(100%, 300px);
+  max-height: 230px;
 }
 
 .comment-actions {

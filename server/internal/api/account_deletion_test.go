@@ -29,6 +29,7 @@ func TestDeleteAccount(t *testing.T) {
 		&model.StoryMusicTrackStory{},
 		&model.StoryMusicSegment{},
 		&model.Character{},
+		&model.CharacterCard{},
 		&model.Tag{},
 		&model.StoryTag{},
 		&model.Guild{},
@@ -61,6 +62,9 @@ func TestDeleteAccount(t *testing.T) {
 		&model.CollectionPost{},
 		&model.CollectionItem{},
 		&model.CollectionFavorite{},
+		&model.RPDBWork{},
+		&model.RPDBComment{},
+		&model.RPDBCommentLike{},
 	)
 	database.DB = db
 
@@ -158,6 +162,13 @@ func TestDeleteAccount(t *testing.T) {
 	if err := db.Create(&model.AccountBackupVersion{BackupID: backup.ID, Version: 1, Checksum: "sum"}).Error; err != nil {
 		t.Fatalf("create backup version: %v", err)
 	}
+	characterCard := model.CharacterCard{
+		UserID: user.ID, DisplayName: "Owned Character Card",
+		Status: model.CharacterCardStatusPublished, Visibility: model.CharacterCardVisibilityPublic,
+	}
+	if err := db.Create(&characterCard).Error; err != nil {
+		t.Fatalf("create character card: %v", err)
+	}
 
 	story := model.Story{UserID: user.ID, Title: "Story"}
 	if err := db.Create(&story).Error; err != nil {
@@ -234,6 +245,7 @@ func TestDeleteAccount(t *testing.T) {
 	assertCount("profile_versions", &model.ProfileVersion{}, 0, "profile_id = ?", profile.ID)
 	assertCount("account_backups", &model.AccountBackup{}, 0, "user_id = ?", user.ID)
 	assertCount("account_backup_versions", &model.AccountBackupVersion{}, 0, "backup_id = ?", backup.ID)
+	assertCount("character_cards", &model.CharacterCard{}, 0, "user_id = ?", user.ID)
 	assertCount("owned_posts", &model.Post{}, 0, "author_id = ?", user.ID)
 	assertCount("owned_items", &model.Item{}, 0, "author_id = ?", user.ID)
 	assertCount("stories", &model.Story{}, 0, "user_id = ?", user.ID)

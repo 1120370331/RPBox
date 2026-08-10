@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -18,37 +19,83 @@ import (
 	"github.com/nfnt/resize"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
+	"gorm.io/gorm"
 )
 
 // getImage 获取图片（支持缩略图）
 // GET /api/v1/images/:type/:id?w=300&q=80
-// type: item-preview, post-cover, user-avatar, guild-banner, guild-avatar
+// type: item-preview, post-cover, user-avatar, guild-banner, guild-avatar,
+// character-card-portrait
 func (s *Server) getImage(c *gin.Context) {
 	imageType := c.Param("type")
 	id := c.Param("id")
 	widthStr := c.DefaultQuery("w", "0")
 	qualityStr := c.DefaultQuery("q", "85")
 	version := c.Query("v")
+	var characterCardPortrait *model.CharacterCard
+	if imageType == "character-card-portrait" {
+		idNum, err := strconv.ParseUint(id, 10, 32)
+		if err != nil || idNum == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+			return
+		}
+		var card model.CharacterCard
+		if err := database.DB.Select(
+			"id", "user_id", "portrait_image", "portrait_image_updated_at",
+			"status", "visibility", "updated_at",
+		).First(&card, uint(idNum)).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load image"})
+			}
+			return
+		}
+		if !canViewCharacterCard(card, optionalActiveUserID(c)) || strings.TrimSpace(card.PortraitImage) == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+			return
+		}
+		characterCardPortrait = &card
+	}
 
 	width, _ := strconv.Atoi(widthStr)
 	quality, _ := strconv.Atoi(qualityStr)
+	if width < 0 || width > 4096 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid image width"})
+		return
+	}
 	if quality <= 0 || quality > 100 {
 		quality = 85
 	}
 
-	cacheControl := "public, max-age=86400"
+	cacheScope := "public"
+	// Character-card portraits can transition from public to private. Keeping
+	// even public responses in a private browser cache prevents a shared cache
+	// from serving an old immutable public object after that transition.
+	if characterCardPortrait != nil {
+		cacheScope = "private"
+	}
+	cacheControl := cacheScope + ", max-age=86400"
 	if width == 0 {
-		cacheControl = "public, max-age=3600"
+		cacheControl = cacheScope + ", max-age=3600"
 	}
 	if version != "" {
-		cacheControl = "public, max-age=31536000, immutable"
+		cacheControl = cacheScope + ", max-age=31536000, immutable"
 	}
 
 	// 构造缓存路径
 	cacheDir := filepath.Join(s.cfg.Storage.Path, "cache", "images")
+	cacheVersion := version
+	if characterCardPortrait != nil {
+		portraitVersion := characterCardPortrait.UpdatedAt
+		if characterCardPortrait.PortraitImageUpdatedAt != nil {
+			portraitVersion = *characterCardPortrait.PortraitImageUpdatedAt
+		}
+		cacheVersion += "_current_" + portraitVersion.UTC().Format(time.RFC3339Nano)
+	}
 	versionKey := ""
-	if version != "" {
-		versionKey = fmt.Sprintf("_v%x", md5.Sum([]byte(version)))
+	if cacheVersion != "" {
+		versionKey = fmt.Sprintf("_v%x", md5.Sum([]byte(cacheVersion)))
 	}
 	cacheKey := fmt.Sprintf("%s_%s_w%d_q%d%s.jpg", imageType, id, width, quality, versionKey)
 	cachePath := filepath.Join(cacheDir, cacheKey)
@@ -57,6 +104,8 @@ func (s *Server) getImage(c *gin.Context) {
 	if data, err := os.ReadFile(cachePath); err == nil {
 		etag := fmt.Sprintf(`"%x"`, md5.Sum(data))
 		if c.GetHeader("If-None-Match") == etag {
+			c.Header("Cache-Control", cacheControl)
+			c.Header("ETag", etag)
 			c.Status(http.StatusNotModified)
 			return
 		}
@@ -68,10 +117,16 @@ func (s *Server) getImage(c *gin.Context) {
 	}
 
 	// 从数据库获取原图（URL或Base64）
-	originalValue, err := s.getOriginalImageValue(imageType, id)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
-		return
+	var originalValue string
+	if characterCardPortrait != nil {
+		originalValue = characterCardPortrait.PortraitImage
+	} else {
+		var err error
+		originalValue, err = s.getOriginalImageValue(imageType, id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+			return
+		}
 	}
 
 	if originalValue == "" {
@@ -101,6 +156,8 @@ func (s *Server) getImage(c *gin.Context) {
 	if width == 0 {
 		etag := fmt.Sprintf(`"%x"`, md5.Sum(imgData))
 		if c.GetHeader("If-None-Match") == etag {
+			c.Header("Cache-Control", cacheControl)
+			c.Header("ETag", etag)
 			c.Status(http.StatusNotModified)
 			return
 		}
@@ -129,6 +186,8 @@ func (s *Server) getImage(c *gin.Context) {
 	if originalWidth <= width {
 		etag := fmt.Sprintf(`"%x"`, md5.Sum(imgData))
 		if c.GetHeader("If-None-Match") == etag {
+			c.Header("Cache-Control", cacheControl)
+			c.Header("ETag", etag)
 			c.Status(http.StatusNotModified)
 			return
 		}
@@ -162,6 +221,8 @@ func (s *Server) getImage(c *gin.Context) {
 	// 返回
 	etag := fmt.Sprintf(`"%x"`, md5.Sum(result))
 	if c.GetHeader("If-None-Match") == etag {
+		c.Header("Cache-Control", cacheControl)
+		c.Header("ETag", etag)
 		c.Status(http.StatusNotModified)
 		return
 	}

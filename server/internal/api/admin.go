@@ -677,6 +677,11 @@ func (s *Server) deleteUserPosts(c *gin.Context) {
 
 	var posts []model.Post
 	database.DB.Select("id, content, cover_image").Where("author_id = ?", id).Find(&posts)
+	commentImageURLs, err := loadCommentImageURLs(database.DB, &model.Comment{}, "post_id IN ?", postIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取评论配图失败"})
+		return
+	}
 	for _, post := range posts {
 		s.cleanupPostImages(c, post)
 	}
@@ -690,6 +695,11 @@ func (s *Server) deleteUserPosts(c *gin.Context) {
 
 	// 删除帖子
 	result := database.DB.Where("author_id = ?", id).Delete(&model.Post{})
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除帖子失败"})
+		return
+	}
+	s.cleanupCommentImageURLs(c, commentImageURLs...)
 
 	// 更新用户帖子计数
 	database.DB.Model(&user).Update("post_count", 0)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -22,7 +23,21 @@ type CreateCommentRequest struct {
 	ParentID *uint  `json:"parent_id"`
 }
 
-const maxPendingCommentReviewRequests = 5
+const (
+	maxPendingCommentReviewRequests = 5
+	commentImageReviewNone          = "none"
+	commentImageReviewPending       = "pending"
+	commentImageReviewApproved      = "approved"
+	commentImageReviewRejected      = "rejected"
+)
+
+func isCommentImageVisible(imageURL, reviewStatus string) bool {
+	return strings.TrimSpace(imageURL) == "" || reviewStatus == commentImageReviewApproved
+}
+
+func visibleCommentImages(query *gorm.DB) *gorm.DB {
+	return query.Where("(COALESCE(TRIM(image_url), '') = '' OR image_review_status = ?)", commentImageReviewApproved)
+}
 
 func buildCommentNotificationPreview(content string) string {
 	preview := strings.TrimSpace(content)
@@ -51,22 +66,91 @@ func createPostCommentNotification(userID, actorID, targetID uint, content strin
 	_ = service.CreateNotification(&notification)
 }
 
+func awardPostCommentPublication(tx *gorm.DB, comment model.Comment, post model.Post) (bool, error) {
+	commentOwnerID := post.AuthorID
+	if comment.ParentID != nil {
+		var parent model.Comment
+		if err := tx.Select("author_id").First(&parent, *comment.ParentID).Error; err == nil {
+			commentOwnerID = parent.AuthorID
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, err
+		}
+	}
+
+	if err := tx.Model(&model.Post{}).
+		Where("id = ?", post.ID).
+		UpdateColumn("comment_count", gorm.Expr("comment_count + ?", 1)).Error; err != nil {
+		return false, err
+	}
+	commentReward, err := service.AwardActivityReward(tx, comment.AuthorID, "post_comment_create", fmt.Sprintf("post-comment:%d", comment.ID), 0, service.CommentCreateExperience)
+	if err != nil {
+		return false, err
+	}
+	if commentOwnerID != comment.AuthorID {
+		if _, err := service.AwardActivityReward(tx, commentOwnerID, "post_comment_received", fmt.Sprintf("comment:%d:owner:%d", comment.ID, commentOwnerID), 0, service.CommentReceivedExperience); err != nil {
+			return false, err
+		}
+	}
+	return commentReward.Granted, nil
+}
+
+func notifyPostCommentPublication(comment model.Comment, post model.Post) {
+	notificationPreview := buildCommentNotificationPreview(comment.Content)
+	if comment.ParentID != nil {
+		var parent model.Comment
+		parentFound := true
+		if err := database.DB.Select("author_id").First(&parent, *comment.ParentID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return
+			}
+			parentFound = false
+		}
+		if parentFound && parent.AuthorID != comment.AuthorID {
+			content := "在《" + post.Title + "》中回复了你的评论：" + notificationPreview
+			createPostCommentNotification(parent.AuthorID, comment.AuthorID, comment.ID, content)
+		}
+		if post.AuthorID != comment.AuthorID && (!parentFound || post.AuthorID != parent.AuthorID) {
+			content := "在你的帖子《" + post.Title + "》中回复了评论：" + notificationPreview
+			createPostCommentNotification(post.AuthorID, comment.AuthorID, comment.ID, content)
+		}
+	} else if post.AuthorID != comment.AuthorID {
+		content := "评论了你的帖子《" + post.Title + "》：" + notificationPreview
+		createPostCommentNotification(post.AuthorID, comment.AuthorID, comment.ID, content)
+	}
+
+	if comment.Content != "" {
+		mentionPreview := service.NormalizeMentionPreview(comment.Content)
+		if len([]rune(mentionPreview)) > 50 {
+			mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
+		}
+		mentionMessage := "在《" + post.Title + "》的评论中提到了你：" + mentionPreview
+		service.CreateMentionNotifications(comment.AuthorID, "comment", comment.ID, mentionMessage, comment.Content)
+	}
+}
+
 func pendingCommentReviewRequestCount(userID uint) (int64, error) {
 	var postCommentPending int64
 	if err := database.DB.Model(&model.Comment{}).
-		Where("author_id = ? AND image_review_status = ?", userID, "pending").
+		Where("author_id = ? AND image_review_status = ?", userID, commentImageReviewPending).
 		Count(&postCommentPending).Error; err != nil {
 		return 0, err
 	}
 
 	var itemCommentPending int64
 	if err := database.DB.Model(&model.ItemComment{}).
-		Where("user_id = ? AND image_review_status = ?", userID, "pending").
+		Where("user_id = ? AND image_review_status = ?", userID, commentImageReviewPending).
 		Count(&itemCommentPending).Error; err != nil {
 		return 0, err
 	}
 
-	return postCommentPending + itemCommentPending, nil
+	var rpdbCommentPending int64
+	if err := database.DB.Model(&model.RPDBComment{}).
+		Where("author_id = ? AND image_review_status = ?", userID, commentImageReviewPending).
+		Count(&rpdbCommentPending).Error; err != nil {
+		return 0, err
+	}
+
+	return postCommentPending + itemCommentPending + rpdbCommentPending, nil
 }
 
 // listComments 获取帖子的评论列表
@@ -86,7 +170,8 @@ func (s *Server) listComments(c *gin.Context) {
 	}
 
 	var comments []model.Comment
-	database.DB.Where("post_id = ?", postID).Order("created_at ASC").Find(&comments)
+	visibleCommentImages(database.DB.Where("post_id = ?", postID)).
+		Order("created_at ASC").Find(&comments)
 	if userID != 0 {
 		blockedIDs, err := getBlockedUserIDs(userID)
 		if err != nil {
@@ -172,9 +257,6 @@ func (s *Server) listComments(c *gin.Context) {
 	}
 	result := make([]CommentWithAuthor, len(comments))
 	for i, comment := range comments {
-		if comment.ImageURL != "" && comment.ImageReviewStatus != "approved" {
-			comment.ImageURL = ""
-		}
 		author := userMap[comment.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
 		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
@@ -218,6 +300,9 @@ func (s *Server) createComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "评论内容和图片不能同时为空"})
 		return
 	}
+	if !s.requireValidCommentImageReference(c, req.ImageURL) {
+		return
+	}
 	if s.enforcePostCommentHardRules(c, userID, "comment", nil, req.Content) {
 		return
 	}
@@ -244,6 +329,10 @@ func (s *Server) createComment(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "父评论不属于该帖子"})
 			return
 		}
+		if !isCommentImageVisible(parent.ImageURL, parent.ImageReviewStatus) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "回复目标尚未通过审核"})
+			return
+		}
 	}
 
 	comment := model.Comment{
@@ -251,34 +340,23 @@ func (s *Server) createComment(c *gin.Context) {
 		AuthorID:          userID,
 		Content:           req.Content,
 		ImageURL:          req.ImageURL,
-		ImageReviewStatus: "none",
+		ImageReviewStatus: commentImageReviewNone,
 		ParentID:          req.ParentID,
 	}
 	if req.ImageURL != "" {
-		comment.ImageReviewStatus = "pending"
+		comment.ImageReviewStatus = commentImageReviewPending
 	}
 
-	commentOwnerID := post.AuthorID
-	if req.ParentID != nil {
-		commentOwnerID = parent.AuthorID
-	}
-
+	publishImmediately := req.ImageURL == ""
+	shouldNotify := false
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&comment).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.Post{}).
-			Where("id = ?", post.ID).
-			Update("comment_count", gorm.Expr("comment_count + ?", 1)).Error; err != nil {
+		if publishImmediately {
+			var err error
+			shouldNotify, err = awardPostCommentPublication(tx, comment, post)
 			return err
-		}
-		if _, err := service.AwardActivityReward(tx, userID, "post_comment_create", fmt.Sprintf("post-comment:%d", comment.ID), 0, service.CommentCreateExperience); err != nil {
-			return err
-		}
-		if commentOwnerID != userID {
-			if _, err := service.AwardActivityReward(tx, commentOwnerID, "post_comment_received", fmt.Sprintf("comment:%d:owner:%d", comment.ID, commentOwnerID), 0, service.CommentReceivedExperience); err != nil {
-				return err
-			}
 		}
 		return nil
 	}); err != nil {
@@ -286,34 +364,8 @@ func (s *Server) createComment(c *gin.Context) {
 		return
 	}
 
-	// 创建通知
-	notificationPreview := buildCommentNotificationPreview(req.Content)
-	if req.ParentID != nil {
-		// 回复评论：通知被回复的评论作者
-		if parent.AuthorID != userID {
-			content := "在《" + post.Title + "》中回复了你的评论：" + notificationPreview
-			createPostCommentNotification(parent.AuthorID, userID, comment.ID, content)
-		}
-		if post.AuthorID != userID && post.AuthorID != parent.AuthorID {
-			content := "在你的帖子《" + post.Title + "》中回复了评论：" + notificationPreview
-			createPostCommentNotification(post.AuthorID, userID, comment.ID, content)
-		}
-	} else {
-		// 直接评论帖子：通知帖子作者
-		if post.AuthorID != userID {
-			content := "评论了你的帖子《" + post.Title + "》：" + notificationPreview
-			createPostCommentNotification(post.AuthorID, userID, comment.ID, content)
-		}
-	}
-
-	// @提及通知
-	if req.Content != "" {
-		mentionPreview := service.NormalizeMentionPreview(req.Content)
-		if len([]rune(mentionPreview)) > 50 {
-			mentionPreview = string([]rune(mentionPreview)[:50]) + "..."
-		}
-		mentionMessage := "在《" + post.Title + "》的评论中提到了你：" + mentionPreview
-		service.CreateMentionNotifications(userID, "comment", comment.ID, mentionMessage, req.Content)
+	if publishImmediately && shouldNotify {
+		notifyPostCommentPublication(comment, post)
 	}
 
 	c.JSON(http.StatusCreated, comment)
@@ -353,12 +405,23 @@ func (s *Server) deleteComment(c *gin.Context) {
 		return
 	}
 
-	// 删除评论及其点赞记录
-	database.DB.Where("comment_id = ?", commentID).Delete(&model.CommentLike{})
-	database.DB.Delete(&comment)
-
-	// 更新帖子评论数
-	database.DB.Model(&model.Post{}).Where("id = ?", postID).Update("comment_count", database.DB.Raw("comment_count - 1"))
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("comment_id = ?", commentID).Delete(&model.CommentLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&comment).Error; err != nil {
+			return err
+		}
+		if !isCommentImageVisible(comment.ImageURL, comment.ImageReviewStatus) {
+			return nil
+		}
+		return tx.Model(&model.Post{}).Where("id = ?", postID).
+			UpdateColumn("comment_count", gorm.Expr("CASE WHEN comment_count > 0 THEN comment_count - 1 ELSE 0 END")).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+	s.cleanupCommentImageURLs(c, comment.ImageURL)
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
@@ -371,6 +434,10 @@ func (s *Server) likeComment(c *gin.Context) {
 	// 检查评论是否存在
 	var comment model.Comment
 	if err := database.DB.First(&comment, commentID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		return
+	}
+	if !isCommentImageVisible(comment.ImageURL, comment.ImageReviewStatus) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
 		return
 	}

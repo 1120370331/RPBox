@@ -6,6 +6,7 @@ import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
+import MobileCommentImagePicker from '@/components/MobileCommentImagePicker.vue'
 import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
@@ -42,6 +43,8 @@ const comments = ref<ItemComment[]>([])
 const liked = ref(false)
 const favorited = ref(false)
 const commentText = ref('')
+const commentImageURL = ref('')
+const commentImageUploading = ref(false)
 const commentInputRef = ref<HTMLTextAreaElement | null>(null)
 const emojiPickerOpen = ref(false)
 const rating = ref(0)
@@ -92,6 +95,11 @@ function canUseCommentSafetyActions(comment: ItemComment): boolean {
 const commentPreviewHtml = computed(() => {
   void emoteVersion.value
   return renderTextWithEmotes(commentText.value || '')
+})
+const commentCanSubmit = computed(() => {
+  const content = commentText.value.trim()
+  if (rating.value > 0) return Array.from(content).length >= 10
+  return Boolean(content || commentImageURL.value)
 })
 
 function buildReportExcerpt(content: string) {
@@ -425,15 +433,19 @@ async function blockCommentAuthor(comment: ItemComment) {
 }
 
 async function submitComment() {
-  if (!item.value || !commentText.value.trim()) return
+  if (!item.value || !commentCanSubmit.value || commentImageUploading.value || submitting.value) return
   submitting.value = true
   try {
-    await createItemComment(item.value.id, commentText.value.trim(), rating.value)
+    const hasImage = !!commentImageURL.value
+    await createItemComment(item.value.id, commentText.value.trim(), rating.value, commentImageURL.value)
     commentText.value = ''
+    commentImageURL.value = ''
     rating.value = 0
     await loadItemDetail()
+    toast.success(hasImage ? '配图评论已提交审核，通过后将在评论区展示' : '评论已发布')
   } catch (error) {
     console.error('Failed to create item comment', error)
+    toast.error((error as Error)?.message || '评论发布失败')
   } finally {
     submitting.value = false
   }
@@ -597,7 +609,13 @@ onMounted(async () => {
             </button>
           </div>
           <div v-if="commentText.trim()" class="comment-preview" v-html="commentPreviewHtml" />
-          <button class="comment-submit" :disabled="submitting || !commentText.trim()" @click="submitComment">
+          <MobileCommentImagePicker
+            v-model="commentImageURL"
+            :disabled="submitting"
+            @update:uploading="commentImageUploading = $event"
+            @preview="openImagePreview"
+          />
+          <button class="comment-submit" :disabled="submitting || commentImageUploading || !commentCanSubmit" @click="submitComment">
             {{ submitting ? $t('common.action.submitting') : $t('market.submitComment') }}
           </button>
         </section>
@@ -629,7 +647,10 @@ onMounted(async () => {
               </div>
               <time>{{ formatTime(comment.created_at) }}</time>
             </header>
-            <p v-html="renderCommentHtml(comment.content)" />
+            <p v-if="comment.content" v-html="renderCommentHtml(comment.content)" />
+            <button v-if="comment.image_url" type="button" class="comment-image" @click="openImagePreview(resolveApiUrl(comment.image_url))">
+              <img :src="resolveApiUrl(comment.image_url)" alt="评论配图" loading="lazy">
+            </button>
             <div class="rate" v-if="comment.rating > 0">★ {{ comment.rating }}</div>
             <div v-if="canUseCommentSafetyActions(comment)" class="comment-actions">
               <button type="button" class="comment-safety-btn" @click="openCommentReport(comment)">
@@ -939,6 +960,7 @@ onMounted(async () => {
 
 .comment-box .comment-submit {
   width: 100%;
+  margin-top: 10px;
   border: none;
   border-radius: var(--radius-sm);
   background: var(--color-secondary);
@@ -1021,6 +1043,25 @@ onMounted(async () => {
   line-height: 1.66;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.comment-image {
+  display: block;
+  width: min(100%, 320px);
+  max-height: 260px;
+  overflow: hidden;
+  margin-top: 8px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel-bg);
+}
+
+.comment-image img {
+  display: block;
+  width: 100%;
+  max-height: 258px;
+  object-fit: contain;
 }
 
 .comment-actions {

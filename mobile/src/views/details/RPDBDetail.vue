@@ -27,6 +27,7 @@ import {
 } from '@/api/rpdb'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
+import MobileCommentImagePicker from '@/components/MobileCommentImagePicker.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
 import MobileRPDBWorkCard from '@/components/MobileRPDBWorkCard.vue'
 import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
@@ -56,6 +57,8 @@ const previewOpen = ref(false)
 const previewSrc = ref('')
 const actionBusy = ref('')
 const commentText = ref('')
+const commentImageURL = ref('')
+const commentImageUploading = ref(false)
 const commentSubmitting = ref(false)
 const emojiOpen = ref(false)
 const commentInput = ref<HTMLTextAreaElement | null>(null)
@@ -365,16 +368,18 @@ async function createListAndAdd() {
 
 async function submitComment(parentId?: number) {
   const content = commentText.value.trim()
-  if (!work.value || !content || commentSubmitting.value) return
+  const hasImage = Boolean(commentImageURL.value)
+  if (!work.value || (!content && !hasImage) || commentImageUploading.value || commentSubmitting.value) return
   commentSubmitting.value = true
   try {
-    await createRPDBComment(work.value.id, content, parentId)
+    await createRPDBComment(work.value.id, content, parentId, commentImageURL.value)
     const result = await listRPDBComments(work.value.id)
     comments.value = result.comments || []
     work.value.comment_count = comments.value.length
     commentText.value = ''
+    commentImageURL.value = ''
     replyingTo.value = null
-    toast.success('评论已发布')
+    toast.success(hasImage ? '配图评论已提交审核，通过后将在评论区展示' : '评论已发布')
   } catch (error) {
     toast.error((error as Error).message || '评论发布失败')
   } finally {
@@ -385,7 +390,14 @@ async function submitComment(parentId?: number) {
 function startReply(item: RPDBComment) {
   replyingTo.value = item
   commentText.value = ''
+  commentImageURL.value = ''
   void nextTick(() => commentInput.value?.focus())
+}
+
+function cancelReply() {
+  replyingTo.value = null
+  commentText.value = ''
+  commentImageURL.value = ''
 }
 
 async function toggleCommentLike(item: RPDBComment) {
@@ -752,11 +764,22 @@ onMounted(load)
           <div class="comment-composer">
             <div v-if="replyingTo" class="replying-banner">
               <span>回复 {{ replyingTo.author_name || '匿名玩家' }}</span>
-              <button type="button" @click="replyingTo = null; commentText = ''"><i class="ri-close-line" /></button>
+              <button type="button" @click="cancelReply"><i class="ri-close-line" /></button>
             </div>
             <textarea ref="commentInput" v-model="commentText" rows="3" :placeholder="replyingTo ? `回复 ${replyingTo.author_name || '匿名玩家'}` : '分享你的使用经验或获取建议'" />
             <button type="button" class="emoji-button" aria-label="选择表情" @click="emojiOpen = true"><i class="ri-emotion-line" /></button>
-            <button type="button" class="comment-submit" :disabled="commentSubmitting || !commentText.trim()" @click="submitComment(replyingTo?.id)">
+            <MobileCommentImagePicker
+              v-model="commentImageURL"
+              :disabled="commentSubmitting"
+              @update:uploading="commentImageUploading = $event"
+              @preview="openPreview"
+            />
+            <button
+              type="button"
+              class="comment-submit"
+              :disabled="commentSubmitting || commentImageUploading || (!commentText.trim() && !commentImageURL)"
+              @click="submitComment(replyingTo?.id)"
+            >
               {{ commentSubmitting ? '发布中' : '发表评论' }}
             </button>
           </div>
@@ -773,7 +796,10 @@ onMounted(load)
                   <small>{{ formatTime(item.created_at) }}</small>
                 </span>
               </div>
-              <p>{{ item.content }}</p>
+              <p v-if="item.content">{{ item.content }}</p>
+              <button v-if="item.image_url" type="button" class="comment-image" @click="openPreview(resolveRPDBMediaUrl(item.image_url))">
+                <img :src="resolveRPDBMediaUrl(item.image_url)" alt="评论配图" loading="lazy">
+              </button>
               <div class="comment-actions">
                 <button
                   type="button"
@@ -794,6 +820,9 @@ onMounted(load)
                     <b>{{ reply.author_name || '匿名玩家' }}</b>
                     {{ reply.content }}
                   </p>
+                  <button v-if="reply.image_url" type="button" class="comment-image reply-image" @click="openPreview(resolveRPDBMediaUrl(reply.image_url))">
+                    <img :src="resolveRPDBMediaUrl(reply.image_url)" alt="回复配图" loading="lazy">
+                  </button>
                   <div class="reply-actions">
                     <button
                       type="button"
@@ -1675,6 +1704,11 @@ onMounted(load)
   opacity: 0.5;
 }
 
+.comment-composer :deep(.mobile-comment-image-picker) {
+  grid-column: 1;
+  margin-top: 0;
+}
+
 .comment-list > article {
   padding: 12px 0;
   border-top: 1px solid var(--detail-line);
@@ -1708,6 +1742,30 @@ onMounted(load)
   font-size: 13px;
   line-height: 1.65;
   white-space: pre-wrap;
+}
+
+.comment-image {
+  display: block;
+  width: min(calc(100% - 40px), 320px);
+  max-height: 260px;
+  overflow: hidden;
+  margin: 9px 0 0 40px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel-bg);
+}
+
+.comment-image img {
+  display: block;
+  width: 100%;
+  max-height: 258px;
+  object-fit: contain;
+}
+
+.comment-image.reply-image {
+  width: min(100%, 280px);
+  margin: 7px 0 0;
 }
 
 .comment-actions {

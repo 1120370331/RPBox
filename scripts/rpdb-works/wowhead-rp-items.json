@@ -1,0 +1,170 @@
+{
+  "works": [
+    {
+      "title": "伪装雕文",
+      "summary": "盗贼专属雕文，可复制敌对人型目标外貌，适合潜入、易容和间谍 RP。",
+      "content": "<p><strong>伪装雕文</strong>（Glyph of Disguise）是一个很适合潜入、伪装、间谍 RP 的盗贼专属雕文。</p><p>核心效果是：潜行者对敌对人型生物使用搜索/偷窃相关玩法后，可以复制其外貌，持续一段时间。实际 RP 时可以拿来演出潜入据点、混入人群、假扮哨兵、短时间借用 NPC 外形等桥段。</p><p>建议提前找好目标外观，配合潜行、暗影步/接近目标、表情宏和台词，做“换装”“易容”“潜入身份”的现场演出。</p><p>截图参考：<a href=\"https://www.wowhead.com/item=45768/glyph-of-disguise#screenshots\">Wowhead 截图页</a></p>",
+      "rp_use_cases": "潜入据点；假扮守卫或敌对阵营成员；间谍、刺客、情报交易、身份错位剧情；短时间借用 NPC 外观进行现场演出。",
+      "effect_description": "复制敌对人型目标外貌，形成临时易容效果。",
+      "restrictions": {
+        "class": "潜行者/盗贼专属",
+        "notes": "具体可用性会随版本和雕文系统调整，使用前建议在目标版本实际测试。"
+      },
+      "availability_status": "available",
+      "bind_type": "no",
+      "faction": "neutral",
+      "references": [
+        {
+          "external_type": "item",
+          "external_id": "45768",
+          "name": "伪装雕文",
+          "description": "盗贼专属雕文，用于复制敌对人型目标外貌。",
+          "acquisition_method": "一般可通过拍卖行购买雕文。",
+          "source": "wowhead",
+          "url": "https://www.wowhead.com/item=45768/glyph-of-disguise",
+          "locale": "zhCN",
+          "is_primary": true,
+          "sort_order": 0
+        }
+      ],
+      "media": [
+        {
+          "type": "embed",
+          "url": "https://www.wowhead.com/item=45768/glyph-of-disguise#screenshots",
+          "caption": "Wowhead 截图页",
+          "sort_order": 0
+        }
+      ],
+      "guide_steps": [
+        {
+          "sort_order": 1,
+          "title": "获取方式",
+          "body": "通常直接在拍卖行搜索并购买伪装雕文。",
+          "zone": "拍卖行"
+        },
+        {
+          "sort_order": 2,
+          "title": "RP 使用建议",
+          "body": "提前寻找适合剧情的敌对人型目标，确认外观复制效果后再进入正式 RP。"
+        }
+      ],
+      "tag_names": ["RP道具", "潜入", "易容", "盗贼"]
+    },
+    {
+      "title": "暗影水晶聚焦透镜",
+      "summary": "珠宝加工制造的紫色光束道具，适合暗影注能、锁定、抽取和仪式施法 RP。",
+      "content": "<p><strong>暗影水晶聚焦透镜</strong>（Shadow Crystal Focusing Lens）是珠宝加工制造的聚焦透镜之一，可以对当前目标投射紫色/暗影感很强的目标光束。</p><p>这个效果非常适合演出：注能、抽取、锁定、暗影施法、仪式牵引、远程扫描等场景。多人同时使用时，视觉效果会更明显。</p><p>截图参考：<a href=\"https://www.wowhead.com/item=42420/shadow-crystal-focusing-lens#screenshots\">Wowhead 截图页</a></p>",
+      "rp_use_cases": "暗影注能；仪式施法；能量抽取；远程锁定；目标扫描；多人法阵导流。",
+      "effect_description": "向当前目标投射紫色 targeting beam，可表现暗影、水晶、仪式或注能效果。",
+      "restrictions": {
+        "charges": "通常有使用次数限制，RP 前建议多备几组。"
+      },
+      "availability_status": "available",
+      "bind_type": "no",
+      "faction": "neutral",
+      "references": [
+        {
+          "external_type": "item",
+          "external_id": "42420",
+          "name": "暗影水晶聚焦透镜",
+          "description": "对当前目标投射紫色目标光束。",
+          "acquisition_method": "珠宝加工制造，通常也可以在拍卖行购买。",
+          "source": "wowhead",
+          "url": "https://www.wowhead.com/item=42420/shadow-crystal-focusing-lens",
+          "locale": "zhCN",
+          "is_primary": true,
+          "sort_order": 0
+        }
+      ],
+      "media": [
+        {
+          "type": "embed",
+          "url": "https://www.wowhead.com/item=42420/shadow-crystal-focusing-lens#screenshots",
+          "caption": "Wowhead 截图页",
+          "sort_order": 0
+        }
+      ],
+      "guide_steps": [
+        {
+          "sort_order": 1,
+          "title": "获取方式",
+          "body": "由珠宝加工制造；如果自己不会珠宝加工，一般可直接从拍卖行购买。",
+          "zone": "拍卖行 / 珠宝加工"
+        },
+        {
+          "sort_order": 2,
+          "title": "RP 使用建议",
+          "body": "对准角色或 NPC 后配合 /me 文本，例如“水晶折射出暗紫色光线，开始向目标体内注入能量”。"
+        }
+      ],
+      "tag_names": ["RP道具", "珠宝加工", "注能", "暗影"]
+    },
+    {
+      "title": "黑玉/暗影翡翠聚焦透镜",
+      "summary": "绿色系聚焦透镜，可制造醒目的碧绿光束，适合翡翠注能、自然魔法、邪能或暗影仪式 RP。",
+      "content": "<p><strong>黑玉聚焦透镜</strong>（Dark Jade Focusing Lens）和 <strong>暗影翡翠聚焦透镜</strong>（Shadow Jade Focusing Lens）都属于珠宝加工聚焦透镜系列，可以用来对目标打出非常醒目的绿色/暗色光束。</p><p>适合 RP 场景：翡翠注能、自然魔法牵引、邪能/暗影仪式、治疗前置锁定、炼金或法阵实验等。</p><p>截图参考：<a href=\"https://www.wowhead.com/item=42421/dark-jade-focusing-lens#screenshots\">黑玉聚焦透镜截图页</a> / <a href=\"https://www.wowhead.com/item=42422/shadow-jade-focusing-lens#screenshots\">暗影翡翠聚焦透镜截图页</a></p>",
+      "rp_use_cases": "翡翠注能；自然魔法牵引；邪能仪式；治疗锁定；炼金实验；法阵导流。",
+      "effect_description": "向目标投射绿色/暗色光束，适合表现注能、施法、净化、抽取和导流过程。",
+      "restrictions": {
+        "charges": "通常有使用次数限制，RP 前建议多备几组。"
+      },
+      "availability_status": "available",
+      "bind_type": "no",
+      "faction": "neutral",
+      "references": [
+        {
+          "external_type": "item",
+          "external_id": "42421",
+          "name": "黑玉聚焦透镜",
+          "description": "绿色系目标光束透镜。",
+          "acquisition_method": "珠宝加工制造，常见获取方式是拍卖行购买。",
+          "source": "wowhead",
+          "url": "https://www.wowhead.com/item=42421/dark-jade-focusing-lens",
+          "locale": "zhCN",
+          "is_primary": true,
+          "sort_order": 0
+        },
+        {
+          "external_type": "item",
+          "external_id": "42422",
+          "name": "暗影翡翠聚焦透镜",
+          "description": "绿色/暗色目标光束透镜。",
+          "acquisition_method": "珠宝加工制造，常见获取方式是拍卖行购买。",
+          "source": "wowhead",
+          "url": "https://www.wowhead.com/item=42422/shadow-jade-focusing-lens",
+          "locale": "zhCN",
+          "is_primary": false,
+          "sort_order": 1
+        }
+      ],
+      "media": [
+        {
+          "type": "embed",
+          "url": "https://www.wowhead.com/item=42421/dark-jade-focusing-lens#screenshots",
+          "caption": "黑玉聚焦透镜 Wowhead 截图页",
+          "sort_order": 0
+        },
+        {
+          "type": "embed",
+          "url": "https://www.wowhead.com/item=42422/shadow-jade-focusing-lens#screenshots",
+          "caption": "暗影翡翠聚焦透镜 Wowhead 截图页",
+          "sort_order": 1
+        }
+      ],
+      "guide_steps": [
+        {
+          "sort_order": 1,
+          "title": "获取方式",
+          "body": "由珠宝加工制造；如果自己不会珠宝加工，一般可直接从拍卖行购买。",
+          "zone": "拍卖行 / 珠宝加工"
+        },
+        {
+          "sort_order": 2,
+          "title": "RP 使用建议",
+          "body": "一个人负责光束锁定，另一个人接施法台词，可以很好地表现“注能、导流、净化、抽取”的过程。"
+        }
+      ],
+      "tag_names": ["RP道具", "珠宝加工", "翡翠", "注能"]
+    }
+  ]
+}

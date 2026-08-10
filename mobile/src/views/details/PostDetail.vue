@@ -6,6 +6,7 @@ import { resolveApiUrl } from '@/api/image'
 import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import MobileEmojiPicker from '@/components/MobileEmojiPicker.vue'
+import MobileCommentImagePicker from '@/components/MobileCommentImagePicker.vue'
 import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
@@ -41,6 +42,8 @@ const comments = ref<PostComment[]>([])
 const liked = ref(false)
 const favorited = ref(false)
 const commentText = ref('')
+const commentImageURL = ref('')
+const commentImageUploading = ref(false)
 const commentInputRef = ref<HTMLTextAreaElement | null>(null)
 const emojiPickerOpen = ref(false)
 const authorName = ref('')
@@ -186,13 +189,15 @@ async function toggleFavorite() {
 }
 
 async function submitComment() {
-  if (!post.value || !commentText.value.trim()) return
+  if (!post.value || (!commentText.value.trim() && !commentImageURL.value)) return
   submitting.value = true
   try {
-    await createPostComment(post.value.id, commentText.value.trim())
+    const hasImage = !!commentImageURL.value
+    await createPostComment(post.value.id, commentText.value.trim(), undefined, commentImageURL.value)
     commentText.value = ''
+    commentImageURL.value = ''
     await loadPostDetail()
-    toast.success(t('community.commentPosted'))
+    toast.success(hasImage ? '配图评论已提交审核，通过后将在评论区展示' : t('community.commentPosted'))
   } catch (error) {
     toast.error((error as Error)?.message || t('community.commentFailed'))
     console.error('Failed to create post comment', error)
@@ -466,8 +471,15 @@ function normalizeAppHref(href: string) {
   return href
 }
 
+function openCommentImage(src: string) {
+  if (!src) return
+  imagePreviewSrc.value = resolveApiUrl(src)
+  imagePreviewOpen.value = true
+}
+
 watch(postId, () => {
   commentText.value = ''
+  commentImageURL.value = ''
   emojiPickerOpen.value = false
   loadPostDetail()
 })
@@ -570,7 +582,13 @@ onMounted(async () => {
             </button>
           </div>
           <div v-if="commentText.trim()" class="comment-preview" v-html="commentPreviewHtml" />
-          <button class="comment-submit" :disabled="submitting || !commentText.trim()" @click="submitComment">
+          <MobileCommentImagePicker
+            v-model="commentImageURL"
+            :disabled="submitting"
+            @update:uploading="commentImageUploading = $event"
+            @preview="openCommentImage"
+          />
+          <button class="comment-submit" :disabled="submitting || commentImageUploading || (!commentText.trim() && !commentImageURL)" @click="submitComment">
             {{ submitting ? $t('common.action.submitting') : $t('community.submitComment') }}
           </button>
         </section>
@@ -605,7 +623,10 @@ onMounted(async () => {
               </div>
               <time>{{ formatTime(comment.created_at) }}</time>
             </header>
-            <p v-html="renderCommentHtml(comment.content)" />
+            <p v-if="comment.content" v-html="renderCommentHtml(comment.content)" />
+            <button v-if="comment.image_url" type="button" class="comment-image" @click="openCommentImage(comment.image_url)">
+              <img :src="resolveApiUrl(comment.image_url)" alt="评论配图" loading="lazy">
+            </button>
             <div v-if="canUseCommentSafetyActions(comment)" class="comment-actions">
               <button type="button" class="comment-safety-btn" @click="openCommentReport(comment)">
                 <i class="ri-alarm-warning-line" /> 举报评论
@@ -1004,6 +1025,25 @@ onMounted(async () => {
   line-height: 1.68;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.comment-image {
+  display: block;
+  width: min(100%, 320px);
+  max-height: 260px;
+  overflow: hidden;
+  margin-top: 8px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel-bg);
+}
+
+.comment-image img {
+  display: block;
+  width: 100%;
+  max-height: 258px;
+  object-fit: contain;
 }
 
 .comment-actions {

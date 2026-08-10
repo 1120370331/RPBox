@@ -62,6 +62,8 @@ export interface Comment {
   post_id: number
   author_id: number
   content: string
+  image_url?: string
+  image_review_status?: 'none' | 'pending' | 'approved' | 'rejected'
   parent_id?: number
   like_count: number
   created_at: string
@@ -217,8 +219,8 @@ export async function listComments(postId: number): Promise<{ comments: CommentW
   return request.get(`/posts/${postId}/comments`)
 }
 
-export async function createComment(postId: number, content: string, parentId?: number): Promise<Comment> {
-  return request.post(`/posts/${postId}/comments`, { content, parent_id: parentId })
+export async function createComment(postId: number, content: string, parentId?: number, imageUrl = ''): Promise<Comment> {
+  return request.post(`/posts/${postId}/comments`, { content, image_url: imageUrl, parent_id: parentId })
 }
 
 export async function deleteComment(postId: number, commentId: number): Promise<void> {

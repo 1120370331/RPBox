@@ -255,15 +255,20 @@ func (RPDBViewEvent) TableName() string { return "rpdb_view_events" }
 
 // RPDBComment supports threaded discussion beneath a work.
 type RPDBComment struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	WorkID    uint      `gorm:"index;not null" json:"work_id"`
-	AuthorID  uint      `gorm:"index;not null" json:"author_id"`
-	ParentID  *uint     `gorm:"index" json:"parent_id"`
-	Content   string    `gorm:"type:text;not null" json:"content"`
-	LikeCount int       `gorm:"default:0" json:"like_count"`
-	Status    string    `gorm:"size:20;default:published;index" json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                 uint       `gorm:"primarykey" json:"id"`
+	WorkID             uint       `gorm:"index;not null" json:"work_id"`
+	AuthorID           uint       `gorm:"index;not null" json:"author_id"`
+	ParentID           *uint      `gorm:"index" json:"parent_id"`
+	Content            string     `gorm:"type:text;not null" json:"content"`
+	ImageURL           string     `gorm:"type:text" json:"image_url"`
+	ImageReviewStatus  string     `gorm:"size:20;default:none;index" json:"image_review_status"` // none|pending|approved|rejected
+	ImageReviewerID    *uint      `gorm:"index" json:"image_reviewer_id"`
+	ImageReviewedAt    *time.Time `json:"image_reviewed_at"`
+	ImageReviewComment string     `gorm:"size:512" json:"image_review_comment"`
+	LikeCount          int        `gorm:"default:0" json:"like_count"`
+	Status             string     `gorm:"size:20;default:published;index" json:"status"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 func (RPDBComment) TableName() string { return "rpdb_comments" }

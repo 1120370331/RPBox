@@ -8,8 +8,9 @@ import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
 import UserLevelBadge from './UserLevelBadge.vue'
 import RPDBJumpPreview from './rpdb/RPDBJumpPreview.vue'
+import CharacterCardJumpPreview from './character-cards/CharacterCardJumpPreview.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
-import { handleJumpLinkClick, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
+import { handleJumpLinkClick, handleJumpLinkKeydown, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
 import { getUserInfo } from '@/api/user'
 import { getModeratorStats } from '@/api/moderator'
 
@@ -43,11 +44,13 @@ onMounted(() => {
     }
   }
   document.addEventListener('click', handleGlobalJumpLink, true)
+  document.addEventListener('keydown', handleGlobalJumpLinkKeydown, true)
   refreshJumpReturn()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleGlobalJumpLink, true)
+  document.removeEventListener('keydown', handleGlobalJumpLinkKeydown, true)
   notificationStore.disconnectWebSocket()
 })
 
@@ -92,6 +95,7 @@ async function loadModeratorPendingCount() {
       + (stats.pending_item_edits || 0)
       + (stats.pending_post_comment_images || 0)
       + (stats.pending_item_comment_images || 0)
+      + (stats.pending_rpdb_comment_images || 0)
       + (stats.pending_user_avatars || 0)
       + (stats.pending_rpdb_works || 0)
       + (stats.pending_rpdb_media || 0)
@@ -139,7 +143,12 @@ function handleGlobalJumpLink(event: MouseEvent) {
   handleJumpLinkClick(event, router, { ignoreEditor: true, returnTo })
 }
 
-function resolvePostReturnTarget(event: MouseEvent) {
+function handleGlobalJumpLinkKeydown(event: KeyboardEvent) {
+  const returnTo = resolvePostReturnTarget(event)
+  handleJumpLinkKeydown(event, router, { ignoreEditor: true, returnTo })
+}
+
+function resolvePostReturnTarget(event: Event) {
   const target = event.target
   const element = target instanceof Element ? target : (target instanceof Node ? target.parentElement : null)
   if (!element) return
@@ -403,6 +412,7 @@ onBeforeUnmount(() => {
     <RToast />
 
     <RPDBJumpPreview />
+    <CharacterCardJumpPreview />
   </div>
 </template>
 

@@ -98,6 +98,8 @@ export interface ItemComment {
   user_id: number
   rating: number
   content: string
+  image_url?: string
+  image_review_status?: 'none' | 'pending' | 'approved' | 'rejected'
   created_at: string
   updated_at: string
   username: string
@@ -154,8 +156,8 @@ export function downloadItem(id: number) { return request.post(`/items/${id}/dow
 export function listItemComments(id: number) {
   return request.get<ItemComment[] | { comments: ItemComment[] }>(`/items/${id}/comments`)
 }
-export function createItemComment(id: number, content: string, rating = 0) {
-  return request.post(`/items/${id}/comments`, { content, rating })
+export function createItemComment(id: number, content: string, rating = 0, imageUrl = '') {
+  return request.post(`/items/${id}/comments`, { content, rating, image_url: imageUrl })
 }
 
 export function getItemTags(id: number) {

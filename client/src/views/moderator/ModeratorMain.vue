@@ -39,6 +39,8 @@ import {
   reviewPostCommentImage,
   getPendingItemCommentImages,
   reviewItemCommentImage,
+  getPendingRPDBCommentImages,
+  reviewRPDBCommentImage,
   getPendingUserAvatars,
   reviewUserAvatar,
   getAllGuilds,
@@ -76,6 +78,7 @@ import {
   type ImageReviewStatus,
   type PostCommentImageReviewItem,
   type ItemCommentImageReviewItem,
+  type RPDBCommentImageReviewItem,
   type UserAvatarReviewItem,
   type SafeUser,
   type SponsorRedeemCode,
@@ -108,7 +111,7 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 // 标签页
 const activeTab = ref<'review' | 'manage' | 'sponsorCodes' | 'addons' | 'admin' | 'logs' | 'metrics'>('review')
-type ReviewSubTab = 'posts' | 'items' | 'rpdb' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'userAvatars'
+type ReviewSubTab = 'posts' | 'items' | 'rpdb' | 'postEdits' | 'itemEdits' | 'guilds' | 'reports' | 'postCommentImages' | 'itemCommentImages' | 'rpdbCommentImages' | 'userAvatars'
 type ManageSubTab = 'posts' | 'items' | 'guilds' | 'users'
 type ModeratorSubTab = ReviewSubTab | ManageSubTab
 type AdminSubTab = 'moderators' | 'guilds' | 'sponsors' | 'experience' | 'system'
@@ -190,6 +193,7 @@ const pendingGuilds = ref<any[]>([])
 const pendingReports = ref<ReportReviewItem[]>([])
 const pendingPostCommentImages = ref<PostCommentImageReviewItem[]>([])
 const pendingItemCommentImages = ref<ItemCommentImageReviewItem[]>([])
+const pendingRPDBCommentImages = ref<RPDBCommentImageReviewItem[]>([])
 const pendingUserAvatars = ref<UserAvatarReviewItem[]>([])
 const allPosts = ref<any[]>([])
 const allItems = ref<any[]>([])
@@ -263,6 +267,7 @@ const pendingReviewCount = computed(() => stats.value?.total_pending_reviews ?? 
   + (stats.value?.pending_item_edits || 0)
   + (stats.value?.pending_post_comment_images || 0)
   + (stats.value?.pending_item_comment_images || 0)
+  + (stats.value?.pending_rpdb_comment_images || 0)
   + (stats.value?.pending_user_avatars || 0)
 ))
 
@@ -352,7 +357,7 @@ onUnmounted(() => {
   }
 })
 
-const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'rpdb', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'userAvatars']
+const reviewSubTabs: ReviewSubTab[] = ['posts', 'items', 'rpdb', 'postEdits', 'itemEdits', 'guilds', 'reports', 'postCommentImages', 'itemCommentImages', 'rpdbCommentImages', 'userAvatars']
 const manageSubTabs: ManageSubTab[] = ['posts', 'items', 'guilds', 'users']
 
 function isReviewSubTab(subTab: ModeratorSubTab): subTab is ReviewSubTab {
@@ -363,11 +368,11 @@ function isManageSubTab(subTab: ModeratorSubTab): subTab is ManageSubTab {
   return manageSubTabs.includes(subTab as ManageSubTab)
 }
 
-function getImageReviewDraftKey(type: 'post' | 'item' | 'avatar', id: number) {
+function getImageReviewDraftKey(type: 'post' | 'item' | 'rpdb' | 'avatar', id: number) {
   return `${type}-${id}`
 }
 
-function clearImageReviewDraft(type: 'post' | 'item' | 'avatar', id: number) {
+function clearImageReviewDraft(type: 'post' | 'item' | 'rpdb' | 'avatar', id: number) {
   const key = getImageReviewDraftKey(type, id)
   const next = { ...imageReviewCommentDrafts.value }
   delete next[key]
@@ -576,6 +581,23 @@ async function loadPendingItemCommentImages() {
   }
 }
 
+async function loadPendingRPDBCommentImages() {
+  loading.value = true
+  try {
+    const res = await getPendingRPDBCommentImages({
+      page: page.value,
+      page_size: pageSize.value,
+      status: imageReviewStatus.value
+    })
+    pendingRPDBCommentImages.value = res.comments || []
+    total.value = res.total
+  } catch (error) {
+    console.error('加载待审核 RP 数据库评论图片失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadPendingUserAvatars() {
   loading.value = true
   try {
@@ -688,6 +710,7 @@ function loadReviewSubTab(subTab: ReviewSubTab) {
   else if (subTab === 'reports') loadPendingReports()
   else if (subTab === 'postCommentImages') loadPendingPostCommentImages()
   else if (subTab === 'itemCommentImages') loadPendingItemCommentImages()
+  else if (subTab === 'rpdbCommentImages') loadPendingRPDBCommentImages()
   else loadPendingUserAvatars()
 }
 
@@ -1076,6 +1099,7 @@ function formatActionType(type: string): string {
     'review_guild': '审核公会',
     'review_post_comment_image': '审核帖子评论图片',
     'review_item_comment_image': '审核道具评论图片',
+    'review_rpdb_comment_image': '审核 RP 数据库评论图片',
     'review_user_avatar': '审核用户头像',
     'delete_guild': '删除公会',
     'change_guild_owner': '更换会长',
@@ -1880,13 +1904,19 @@ function handleImageReviewStatusChange() {
 }
 
 async function quickReviewImage(
-  type: 'postComment' | 'itemComment' | 'avatar',
+  type: 'postComment' | 'itemComment' | 'rpdbComment' | 'avatar',
   id: number,
   action: 'approve' | 'reject',
   comment?: string
 ) {
   const actionText = action === 'approve' ? '通过' : '拒绝'
-  const typeText = type === 'postComment' ? '帖子评论图片' : type === 'itemComment' ? '道具评论图片' : '头像'
+  const typeText = type === 'postComment'
+    ? '帖子评论图片'
+    : type === 'itemComment'
+      ? '道具评论图片'
+      : type === 'rpdbComment'
+        ? 'RP 数据库评论图片'
+        : '头像'
 
   const confirmed = await dialog.confirm({
     title: `${actionText}${typeText}`,
@@ -1911,6 +1941,10 @@ async function quickReviewImage(
       await reviewItemCommentImage(id, payload)
       clearImageReviewDraft('item', id)
       await loadPendingItemCommentImages()
+    } else if (type === 'rpdbComment') {
+      await reviewRPDBCommentImage(id, payload)
+      clearImageReviewDraft('rpdb', id)
+      await loadPendingRPDBCommentImages()
     } else {
       await reviewUserAvatar(id, payload)
       clearImageReviewDraft('avatar', id)
@@ -2747,6 +2781,17 @@ function formatBanTime(dateStr: string | null) {
         </button>
         <button
           v-if="activeTab === 'review'"
+          :class="{ active: activeSubTab === 'rpdbCommentImages' }"
+          @click="switchSubTab('rpdbCommentImages')"
+        >
+          <i class="ri-gallery-line"></i>
+          数据库评论图
+          <span v-if="(stats?.pending_rpdb_comment_images || 0) > 0" class="review-badge">
+            {{ stats?.pending_rpdb_comment_images }}
+          </span>
+        </button>
+        <button
+          v-if="activeTab === 'review'"
           :class="{ active: activeSubTab === 'userAvatars' }"
           @click="switchSubTab('userAvatars')"
         >
@@ -3370,6 +3415,73 @@ function formatBanTime(dateStr: string | null) {
                 <button
                   class="btn-reject"
                   @click="quickReviewImage('itemComment', comment.id, 'reject', imageReviewCommentDrafts[getImageReviewDraftKey('item', comment.id)])"
+                >
+                  <i class="ri-close-circle-line"></i> 拒绝
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 审核中心 - RP 数据库评论图片 -->
+      <div v-if="activeTab === 'review' && activeSubTab === 'rpdbCommentImages'" class="content-list anim-item" style="--delay: 4">
+        <div class="filter-bar">
+          <select v-model="imageReviewStatus" @change="handleImageReviewStatusChange">
+            <option value="pending">待审核</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已拒绝</option>
+          </select>
+        </div>
+        <div v-if="loading" class="loading">
+          <i class="ri-loader-4-line loading-spinner"></i>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="pendingRPDBCommentImages.length === 0" class="empty-state">
+          <i class="ri-gallery-line"></i>
+          <p>暂无 RP 数据库评论图片</p>
+        </div>
+        <div v-else class="item-list">
+          <div v-for="comment in pendingRPDBCommentImages" :key="comment.id" class="item-card image-review-card">
+            <div class="item-header">
+              <span class="item-title">{{ comment.work_title || `RP 数据库作品 #${comment.work_id}` }}</span>
+              <span class="status-badge" :class="comment.image_review_status">{{ getReviewStatusLabel(comment.image_review_status) }}</span>
+            </div>
+            <div class="item-meta">
+              <span><i class="ri-user-line"></i> {{ comment.author_name }}</span>
+              <span><i class="ri-hashtag"></i> 评论 #{{ comment.id }}</span>
+              <span><i class="ri-time-line"></i> {{ formatDate(comment.created_at) }}</span>
+            </div>
+            <div class="image-review-body">
+              <img class="image-review-thumb" :src="resolveImageUrl(comment.image_url)" alt="RP 数据库评论图片" @click="openImageViewer([comment.image_url])" />
+              <div class="image-review-main">
+                <p class="image-review-text">{{ comment.content || '（无评论文字）' }}</p>
+                <textarea
+                  v-if="comment.image_review_status === 'pending'"
+                  v-model="imageReviewCommentDrafts[getImageReviewDraftKey('rpdb', comment.id)]"
+                  class="image-review-comment"
+                  rows="2"
+                  placeholder="审核备注（可选）"
+                />
+                <p v-else-if="comment.image_review_comment" class="image-review-history">
+                  审核备注：{{ comment.image_review_comment }}
+                </p>
+              </div>
+            </div>
+            <div class="item-actions">
+              <button class="btn-preview" @click="openImageViewer([comment.image_url])">
+                <i class="ri-zoom-in-line"></i> 查看大图
+              </button>
+              <template v-if="comment.image_review_status === 'pending'">
+                <button
+                  class="btn-approve"
+                  @click="quickReviewImage('rpdbComment', comment.id, 'approve', imageReviewCommentDrafts[getImageReviewDraftKey('rpdb', comment.id)])"
+                >
+                  <i class="ri-checkbox-circle-line"></i> 通过
+                </button>
+                <button
+                  class="btn-reject"
+                  @click="quickReviewImage('rpdbComment', comment.id, 'reject', imageReviewCommentDrafts[getImageReviewDraftKey('rpdb', comment.id)])"
                 >
                   <i class="ri-close-circle-line"></i> 拒绝
                 </button>
