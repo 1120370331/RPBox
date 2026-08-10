@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/rpbox/server/internal/database"
@@ -30,6 +32,9 @@ func TestDeleteAccount(t *testing.T) {
 		&model.StoryMusicSegment{},
 		&model.Character{},
 		&model.CharacterCard{},
+		&model.CharacterCardPortrait{},
+		&model.CharacterCardImpression{},
+		&model.CharacterCardPublication{},
 		&model.Tag{},
 		&model.StoryTag{},
 		&model.Guild{},
@@ -169,6 +174,10 @@ func TestDeleteAccount(t *testing.T) {
 	if err := db.Create(&characterCard).Error; err != nil {
 		t.Fatalf("create character card: %v", err)
 	}
+	cardImpression := model.CharacterCardImpression{CharacterCardID: characterCard.ID, Slot: 1, Active: true, Title: "Owned impression"}
+	if err := db.Create(&cardImpression).Error; err != nil {
+		t.Fatalf("create character card impression: %v", err)
+	}
 
 	story := model.Story{UserID: user.ID, Title: "Story"}
 	if err := db.Create(&story).Error; err != nil {
@@ -205,6 +214,19 @@ func TestDeleteAccount(t *testing.T) {
 	}
 
 	server := newTestServer(t, db)
+	portraitPath := writeCharacterCardTestPNG(t, server, fmt.Sprintf("character-cards/%d/portrait/account.png", user.ID))
+	iconPath := writeCharacterCardTestPNG(t, server, fmt.Sprintf("character-cards/%d/impression-icon/account.png", user.ID))
+	imagePath := writeCharacterCardTestPNG(t, server, fmt.Sprintf("character-cards/%d/impression-image/account.png", user.ID))
+	abandonedPendingPath := writeCharacterCardTestPNG(t, server, fmt.Sprintf("character-cards/%d/pending/icon/abandoned.png", user.ID))
+	if err := db.Model(&model.CharacterCard{}).Where("id = ?", characterCard.ID).Update("portrait_image", portraitPath).Error; err != nil {
+		t.Fatalf("set character card portrait: %v", err)
+	}
+	if err := db.Model(&model.CharacterCardImpression{}).Where("id = ?", cardImpression.ID).Updates(map[string]interface{}{
+		"icon_image": iconPath,
+		"image":      imagePath,
+	}).Error; err != nil {
+		t.Fatalf("set impression images: %v", err)
+	}
 	token := newTestToken(t, user)
 
 	resp := performRequest(server.router, http.MethodDelete, "/api/v1/user/account", map[string]string{
@@ -246,11 +268,17 @@ func TestDeleteAccount(t *testing.T) {
 	assertCount("account_backups", &model.AccountBackup{}, 0, "user_id = ?", user.ID)
 	assertCount("account_backup_versions", &model.AccountBackupVersion{}, 0, "backup_id = ?", backup.ID)
 	assertCount("character_cards", &model.CharacterCard{}, 0, "user_id = ?", user.ID)
+	assertCount("character_card_impressions", &model.CharacterCardImpression{}, 0, "character_card_id = ?", characterCard.ID)
 	assertCount("owned_posts", &model.Post{}, 0, "author_id = ?", user.ID)
 	assertCount("owned_items", &model.Item{}, 0, "author_id = ?", user.ID)
 	assertCount("stories", &model.Story{}, 0, "user_id = ?", user.ID)
 	assertCount("collections", &model.Collection{}, 0, "author_id = ?", user.ID)
 	assertCount("notifications", &model.Notification{}, 0, "user_id = ? OR actor_id = ?", user.ID, user.ID)
+	for _, reference := range []string{portraitPath, iconPath, imagePath, abandonedPendingPath} {
+		if _, err := os.Stat(characterCardTestUploadFile(server, reference)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("account deletion left character-card image %q: %v", reference, err)
+		}
+	}
 
 	var refreshedPost model.Post
 	if err := db.First(&refreshedPost, otherPost.ID).Error; err != nil {

@@ -3362,6 +3362,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "tempfile",
  "thiserror 1.0.69",
  "zip 0.6.6",
 ]

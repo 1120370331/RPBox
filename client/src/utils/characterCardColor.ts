@@ -23,3 +23,10 @@ export function normalizeCharacterCardHexForTRP3(value?: string | null): string 
   }
   return color
 }
+
+/** Returns the RPBox/TRP3 name dye, preferring the explicit name field for legacy cards. */
+export function getCharacterCardDisplayColor(
+  card?: { name_color?: string | null; class_color?: string | null } | null,
+): string {
+  return normalizeCharacterCardHexForCSS(card?.name_color || card?.class_color)
+}

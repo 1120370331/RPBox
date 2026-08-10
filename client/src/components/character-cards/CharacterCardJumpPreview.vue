@@ -5,6 +5,7 @@ import {
   getCharacterCard,
   type CharacterCard,
 } from '@/api/characterCard'
+import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import CharacterCardPortrait from './CharacterCardPortrait.vue'
 
 const CARD_SELECTOR = '[data-jump-type="character_card"]'
@@ -38,6 +39,7 @@ const summary = computed(() => characterCard.value?.summary
   || [characterCard.value?.race, characterCard.value?.class].filter(Boolean).join(' · ')
   || '角色摘要尚未填写。')
 const identity = computed(() => [characterCard.value?.race, characterCard.value?.class].filter(Boolean).join(' · '))
+const nameColor = computed(() => getCharacterCardDisplayColor(characterCard.value))
 
 function resolveId(card: HTMLElement) {
   const direct = Number(card.getAttribute('data-jump-id'))
@@ -52,7 +54,9 @@ function fetchPreview(id: number) {
   if (pending) return pending
   const request = getCharacterCard(id)
     .then((result) => {
-      if (result.status !== 'published' || result.visibility !== 'public') {
+      if (result.status !== 'published'
+        || result.visibility !== 'public'
+        || (result.review_status && result.review_status !== 'approved')) {
         throw Object.assign(new Error('character card is not public'), { status: 404 })
       }
       return result
@@ -266,7 +270,7 @@ onBeforeUnmount(() => {
             <span><i class="ri-id-card-line" aria-hidden="true"></i>人物卡</span>
             <small>{{ loading ? '查阅中' : '公开档案' }}</small>
           </div>
-          <h3>{{ name }}</h3>
+          <h3 :style="nameColor ? { color: nameColor } : undefined">{{ name }}</h3>
           <strong>{{ loading ? '正在读取最新资料…' : title }}</strong>
           <span v-if="!loading && identity" class="character-preview__identity">{{ identity }}</span>
           <p>{{ loading ? '请稍候，正在确认这份档案仍可访问。' : summary }}</p>

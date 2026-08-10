@@ -5,6 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { dialog } from '../../composables/useDialog'
 import * as accountBackupApi from '../../api/accountBackup'
+import AccountBackupVersionHistory from '../../components/sync/AccountBackupVersionHistory.vue'
+import LocalTRP3VersionHistory from '../../components/sync/LocalTRP3VersionHistory.vue'
 
 interface ProfileItem {
   id: string
@@ -585,6 +587,15 @@ async function restoreAll() {
   }
 }
 
+async function handleCloudVersionRestored(backup: accountBackupApi.AccountBackup) {
+  cloudBackups.value.set(backup.account_id, backup)
+  if (backup.account_id === selectedAccount.value) await loadFullBackup()
+}
+
+async function handleLocalVersionRestored() {
+  await loadProfiles()
+}
+
 const workflowSteps = computed(() => [
   { key: 'scan', label: t('sync.steps.scan'), desc: t('sync.steps.scanDesc'), icon: 'ri-search-line' },
   { key: 'backup', label: t('sync.steps.backup'), desc: t('sync.steps.backupDesc'), icon: 'ri-shield-check-line' },
@@ -1059,6 +1070,20 @@ const workflowSteps = computed(() => [
               </button>
             </div>
           </div>
+          <div class="card version-history-card">
+            <LocalTRP3VersionHistory
+              v-if="selectedAccount && wowPath"
+              :wow-path="wowPath"
+              :account-id="selectedAccount"
+              @restored="handleLocalVersionRestored"
+            />
+          </div>
+          <div v-if="selectedAccount && currentBackup" class="card version-history-card">
+            <AccountBackupVersionHistory
+              :account-id="selectedAccount"
+              @restored="handleCloudVersionRestored"
+            />
+          </div>
         </div>
 
         <!-- 查看云端备份视图 -->
@@ -1086,6 +1111,12 @@ const workflowSteps = computed(() => [
           </div>
 
           <div v-else class="cloud-content">
+            <div class="cloud-section version-history-card">
+              <AccountBackupVersionHistory
+                :account-id="selectedAccount"
+                @restored="handleCloudVersionRestored"
+              />
+            </div>
             <!-- 数据概览 -->
             <div class="cloud-summary">
               <div class="summary-card">
@@ -1686,6 +1717,13 @@ const workflowSteps = computed(() => [
 
 .right-body {
   gap: 12px;
+}
+
+.version-history-card {
+  padding: 16px;
+  border: 1px solid var(--color-border, #E5D4C1);
+  border-radius: 12px;
+  background: var(--color-panel-bg, #fff);
 }
 
 .search-bar {

@@ -6,6 +6,7 @@ import {
   type CharacterCardSummary,
 } from '@/api/characterCard'
 import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
+import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import CharacterCardPortrait from './CharacterCardPortrait.vue'
 
 const props = defineProps<{
@@ -55,10 +56,22 @@ function secondaryLine(card: CharacterCardSummary) {
   return card.title || card.full_title || [card.race, card.class].filter(Boolean).join(' · ') || '身份尚待记录'
 }
 
+function displayNameColor(card: CharacterCardSummary) {
+  return getCharacterCardDisplayColor(card)
+}
+
 function statusLabel(card: CharacterCardSummary) {
   if (card.status === 'draft') return '草稿'
   if (card.visibility === 'private') return '仅自己可见'
+  if (card.review_status === 'pending') return '审核中'
+  if (card.review_status === 'rejected') return '未通过审核'
   return ''
+}
+
+function statusIcon(card: CharacterCardSummary) {
+  if (card.review_status === 'pending' && card.status === 'published' && card.visibility === 'public') return 'ri-time-line'
+  if (card.review_status === 'rejected' && card.status === 'published' && card.visibility === 'public') return 'ri-close-circle-line'
+  return card.status === 'draft' ? 'ri-draft-line' : 'ri-lock-line'
 }
 </script>
 
@@ -134,7 +147,7 @@ function statusLabel(card: CharacterCardSummary) {
           </span>
           <span class="portrait-card__shade"></span>
           <span v-if="isOwnProfile && statusLabel(card)" class="portrait-card__status">
-            <i :class="card.status === 'draft' ? 'ri-draft-line' : 'ri-lock-line'" aria-hidden="true"></i>
+            <i :class="statusIcon(card)" aria-hidden="true"></i>
             {{ statusLabel(card) }}
           </span>
           <span class="portrait-card__reveal">
@@ -143,7 +156,7 @@ function statusLabel(card: CharacterCardSummary) {
           </span>
         </span>
         <span class="portrait-card__plaque">
-          <strong>{{ displayName(card) }}</strong>
+          <strong :style="displayNameColor(card) ? { color: displayNameColor(card) } : undefined">{{ displayName(card) }}</strong>
           <span>{{ secondaryLine(card) }}</span>
         </span>
       </RouterLink>

@@ -3,7 +3,32 @@ import request from './request'
 
 export type CharacterCardStatus = 'draft' | 'published'
 export type CharacterCardVisibility = 'private' | 'public'
+export type CharacterCardReviewStatus = 'pending' | 'approved' | 'rejected'
 export type CharacterCardSourceType = 'blank' | 'backup'
+export type CharacterCardImpressionImageKind = 'icon' | 'image'
+
+export interface CharacterCardPortraitImage {
+  id: number
+  image_url: string
+  image_updated_at: string | null
+  sort_order: number
+  is_cover: boolean
+}
+
+export interface CharacterCardImpressionUpdate {
+  slot: number
+  active: boolean
+  title: string
+  text: string
+  trp3_icon: string
+  icon_image_url: string
+  image_url: string
+}
+
+export interface CharacterCardImpression extends CharacterCardImpressionUpdate {
+  readonly icon_image_updated_at: string | null
+  readonly image_updated_at: string | null
+}
 
 export interface CharacterCardSource {
   backup_id: number
@@ -43,12 +68,17 @@ export interface CharacterCardSummary {
   residence: string
   relationship_status: string
   icon: string
+  class_color: string
   name_color: string
   summary: string
   portrait_image_url?: string | null
   portrait_image_updated_at?: string | null
+  portraits?: CharacterCardPortraitImage[]
   status: CharacterCardStatus
   visibility: CharacterCardVisibility
+  review_status?: CharacterCardReviewStatus | null
+  review_comment?: string | null
+  reviewed_at?: string | null
   sort_order?: number
   created_at: string
   updated_at: string
@@ -57,6 +87,7 @@ export interface CharacterCardSummary {
 export interface CharacterCard extends CharacterCardSummary {
   background_story: string
   first_impression: string
+  impressions: CharacterCardImpression[]
   other_content: string
 }
 
@@ -83,10 +114,12 @@ export interface UpdateCharacterCardRequest {
   residence: string
   relationship_status: string
   icon: string
+  class_color: string
   name_color: string
   summary: string
   background_story: string
   first_impression: string
+  impressions: CharacterCardImpressionUpdate[]
   other_content: string
   portrait_image_url: string
   status: CharacterCardStatus
@@ -177,6 +210,73 @@ export async function uploadCharacterCardPortrait(file: File): Promise<string> {
   const portraitRef = body?.portrait_image_ref?.trim() || ''
   if (!portraitRef) throw new Error('上传服务没有返回图片引用')
   return portraitRef
+}
+
+export async function addCharacterCardPortrait(id: number, imageRef: string): Promise<CharacterCard> {
+  const response = await request.post<unknown>(`/character-cards/${id}/portraits`, { image_ref: imageRef })
+  return unwrapCharacterCard(response)
+}
+
+export async function reorderCharacterCardPortraits(id: number, portraitIds: number[]): Promise<CharacterCard> {
+  const response = await request.put<unknown>(`/character-cards/${id}/portraits/order`, {
+    portrait_ids: portraitIds,
+  })
+  return unwrapCharacterCard(response)
+}
+
+export async function setCharacterCardPortraitCover(id: number, portraitId: number): Promise<CharacterCard> {
+  const response = await request.put<unknown>(`/character-cards/${id}/portraits/${portraitId}/cover`)
+  return unwrapCharacterCard(response)
+}
+
+export async function deleteCharacterCardPortrait(id: number, portraitId: number): Promise<CharacterCard> {
+  const response = await request.delete<unknown>(`/character-cards/${id}/portraits/${portraitId}`)
+  return unwrapCharacterCard(response)
+}
+
+export interface CharacterCardTRP3Export {
+  profile_id: string
+  profile: Record<string, unknown>
+  lua: string
+}
+
+export interface CharacterCardTRP3WriteBack extends CharacterCardTRP3Export {
+  backup?: unknown
+  snapshot?: unknown
+}
+
+export async function getCharacterCardTRP3Lua(id: number): Promise<CharacterCardTRP3Export> {
+  const response = await request.get<CharacterCardTRP3Export | DataEnvelope<CharacterCardTRP3Export>>(
+    `/character-cards/${id}/trp3-lua`,
+  )
+  return unwrapData(response)
+}
+
+export async function writeBackCharacterCardToTRP3(
+  id: number,
+  payload: { backup_id?: number; profile_id?: string; snapshot_name?: string },
+): Promise<CharacterCardTRP3WriteBack> {
+  const response = await request.post<CharacterCardTRP3WriteBack | DataEnvelope<CharacterCardTRP3WriteBack>>(
+    `/character-cards/${id}/write-back-trp3`,
+    payload,
+  )
+  return unwrapData(response)
+}
+
+export async function uploadCharacterCardImpressionImage(
+  file: File,
+  kind: CharacterCardImpressionImageKind,
+): Promise<string> {
+  const formData = new FormData()
+  formData.append('image', file)
+  formData.append('kind', kind)
+  const response = await request.post<unknown>('/upload/character-card-impression-image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  const body = unwrapData(response as { image_ref?: string } | DataEnvelope<{ image_ref?: string }>)
+  const imageRef = body?.image_ref?.trim() || ''
+  if (!imageRef) throw new Error('上传服务没有返回图片引用')
+  return imageRef
 }
 
 export function getCharacterCardPortraitUrl(

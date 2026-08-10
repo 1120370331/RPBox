@@ -1,4 +1,5 @@
 import request from './request'
+import type { CharacterCard } from './characterCard'
 import type { RPDBMedia, RPDBWork } from './rpdb'
 
 // 类型定义
@@ -16,6 +17,7 @@ export interface ModeratorStats {
   pending_item_comment_images?: number
   pending_rpdb_comment_images?: number
   pending_user_avatars?: number
+  pending_character_cards?: number
   total_pending_reviews?: number
   total_posts: number
   total_items: number
@@ -257,6 +259,31 @@ export interface ItemCommentImageReviewItem {
   created_at: string
   author_name: string
   item_name: string
+}
+
+// ========== 审核中心 - 人物卡 ==========
+
+export interface CharacterCardReviewItem extends CharacterCard {
+  author_name?: string
+  author_username?: string
+}
+
+export function getPendingCharacterCards(params?: {
+  status?: 'pending'
+  page?: number
+  page_size?: number
+}) {
+  return request.get<{ character_cards: CharacterCardReviewItem[]; total: number }>(
+    '/moderator/review/character-cards',
+    { params },
+  )
+}
+
+export function reviewCharacterCard(id: number, data: ReviewRequest) {
+  return request.post<{ message?: string; character_card?: CharacterCardReviewItem }>(
+    `/moderator/review/character-cards/${id}`,
+    data,
+  )
 }
 
 export interface RPDBCommentImageReviewItem {

@@ -1513,6 +1513,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	var pendingPostEdits, pendingItemEdits int64
 	var pendingPostCommentImages, pendingItemCommentImages, pendingRPDBCommentImages, pendingUserAvatars int64
 	var pendingRPDBWorks, pendingRPDBMedia, pendingRPDBRevisions int64
+	var pendingCharacterCards int64
 	var totalPosts, totalItems int64
 	var todayPosts, todayItems int64
 	var pendingGuilds, totalGuilds int64
@@ -1544,6 +1545,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.RPDBWork{}).Where("review_status = ?", model.RPDBReviewPending).Count(&pendingRPDBWorks)
 	database.DB.Model(&model.RPDBMedia{}).Where("review_status = ?", model.RPDBReviewPending).Count(&pendingRPDBMedia)
 	database.DB.Model(&model.RPDBRevision{}).Where("status = ?", model.RPDBReviewPending).Count(&pendingRPDBRevisions)
+	database.DB.Model(&model.CharacterCard{}).Where("review_status = ?", model.CharacterCardReviewPending).Count(&pendingCharacterCards)
 
 	// 总数量
 	database.DB.Model(&model.Post{}).Count(&totalPosts)
@@ -1557,7 +1559,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", today).Count(&todayItems)
 	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", today).Count(&todayUsers)
 
-	totalPendingReviews := pendingPosts + pendingItems + pendingGuilds + pendingReports + pendingPostEdits + pendingItemEdits + pendingPostCommentImages + pendingItemCommentImages + pendingRPDBCommentImages + pendingUserAvatars + pendingRPDBWorks + pendingRPDBMedia + pendingRPDBRevisions
+	totalPendingReviews := pendingPosts + pendingItems + pendingGuilds + pendingReports + pendingPostEdits + pendingItemEdits + pendingPostCommentImages + pendingItemCommentImages + pendingRPDBCommentImages + pendingUserAvatars + pendingRPDBWorks + pendingRPDBMedia + pendingRPDBRevisions + pendingCharacterCards
 
 	c.JSON(http.StatusOK, gin.H{
 		"pending_posts":               pendingPosts,
@@ -1573,6 +1575,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 		"pending_rpdb_works":          pendingRPDBWorks,
 		"pending_rpdb_media":          pendingRPDBMedia,
 		"pending_rpdb_revisions":      pendingRPDBRevisions,
+		"pending_character_cards":     pendingCharacterCards,
 		"total_pending_reviews":       totalPendingReviews,
 		"total_posts":                 totalPosts,
 		"total_items":                 totalItems,

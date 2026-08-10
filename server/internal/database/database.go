@@ -91,6 +91,19 @@ func migrateAccountBackupUniqueIndex(db *gorm.DB) error {
 	return nil
 }
 
+func backfillCharacterCardTRP3Color(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&model.CharacterCard{}) {
+		return nil
+	}
+	if err := db.Exec("UPDATE character_cards SET class_color = name_color WHERE (class_color IS NULL OR class_color = '') AND name_color IS NOT NULL AND name_color <> ''").Error; err != nil {
+		return fmt.Errorf("backfill character card class_color: %w", err)
+	}
+	if err := db.Exec("UPDATE character_cards SET name_color = class_color WHERE (name_color IS NULL OR name_color = '') AND class_color IS NOT NULL AND class_color <> ''").Error; err != nil {
+		return fmt.Errorf("backfill character card name_color: %w", err)
+	}
+	return nil
+}
+
 // reconcileVisibleCommentMetrics repairs counters that were historically updated
 // before a comment image finished moderation. It is safe to run on every startup.
 func reconcileVisibleCommentMetrics(db *gorm.DB) {
@@ -186,6 +199,9 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.StoryMusicSegment{},
 		&model.Character{},
 		&model.CharacterCard{},
+		&model.CharacterCardPortrait{},
+		&model.CharacterCardImpression{},
+		&model.CharacterCardPublication{},
 		&model.Tag{},
 		&model.StoryTag{},
 		&model.Guild{},
@@ -253,6 +269,9 @@ func Init(cfg *config.DatabaseConfig) error {
 	}
 	if err := migrateAccountBackupUniqueIndex(db); err != nil {
 		return fmt.Errorf("migrate account backup unique index: %w", err)
+	}
+	if err := backfillCharacterCardTRP3Color(db); err != nil {
+		return err
 	}
 
 	// 手动迁移：修改 checksum 列类型为 text
