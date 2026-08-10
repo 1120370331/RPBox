@@ -3,6 +3,7 @@
 
 local ADDON_NAME, ns = ...
 local L = ns.L or {}
+local UI = ns.UI
 
 -- 主窗口引用
 local MainFrame = nil
@@ -1311,11 +1312,12 @@ end
 
 -- 创建标签按钮
 local function CreateTabButton(parent, text, tabName, xOffset)
-    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate,BackdropTemplate")
     btn:SetSize(80, 24)
     btn:SetPoint("TOPLEFT", 12 + xOffset, -30)
     btn:SetText(text)
     btn.tabName = tabName
+    UI.RegisterButton(btn, { tab = true })
     return btn
 end
 
@@ -1364,10 +1366,11 @@ local function RefreshListContent(listType)
             row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.text:SetPoint("LEFT", 5, 0)
 
-            row.removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            row.removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate,BackdropTemplate")
             row.removeBtn:SetSize(50, 20)
             row.removeBtn:SetPoint("RIGHT", -5, 0)
             row.removeBtn:SetText("移除")
+            UI.RegisterButton(row.removeBtn, { variant = "danger" })
         end
 
         row:SetPoint("TOPLEFT", 0, -yOffset)
@@ -1522,31 +1525,43 @@ local function RefreshSettingsContent()
     local yOffset = 0
 
     -- 功能开关区域
-    local enableTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    enableTitle:SetPoint("TOPLEFT", 5, -yOffset)
-    enableTitle:SetText("功能开关")
+    if not content.enableTitle then
+        content.enableTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        content.enableTitle:SetText("功能开关")
+        UI.RegisterText(content.enableTitle, "heading")
+    end
+    content.enableTitle:SetPoint("TOPLEFT", 5, -yOffset)
+    content.enableTitle:Show()
     yOffset = yOffset + 30
 
     -- 总开关
     if not content.enabledCb then
-        content.enabledCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.enabledCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
         content.enabledCb.text = content.enabledCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         content.enabledCb.text:SetPoint("LEFT", content.enabledCb, "RIGHT", 2, 0)
+        UI.RegisterCheckButton(content.enabledCb)
+        UI.RegisterText(content.enabledCb.text, "primary")
     end
     content.enabledCb:SetPoint("TOPLEFT", 10, -yOffset)
     content.enabledCb.text:SetText("开启聊天记录功能")
     content.enabledCb:SetChecked(RPBox_Config.enabled ~= false)
     content.enabledCb:SetScript("OnClick", function(self)
         RPBox_Config.enabled = self:GetChecked()
+        UI.RefreshCheckButton(self)
     end)
+    UI.RefreshCheckButton(content.enabledCb)
     content.enabledCb:Show()
     yOffset = yOffset + 26
 
     -- 频道监听设置标题
     yOffset = yOffset + 15
-    local title = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 5, -yOffset)
-    title:SetText("频道监听设置")
+    if not content.channelTitle then
+        content.channelTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        content.channelTitle:SetText("频道监听设置")
+        UI.RegisterText(content.channelTitle, "heading")
+    end
+    content.channelTitle:SetPoint("TOPLEFT", 5, -yOffset)
+    content.channelTitle:Show()
     yOffset = yOffset + 25
 
     -- 频道复选框
@@ -1554,10 +1569,12 @@ local function RefreshSettingsContent()
     for i, channelInfo in ipairs(CHANNEL_CONFIG) do
         local cb = content.checkboxes[i]
         if not cb then
-            cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+            cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
             cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             cb.text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
             content.checkboxes[i] = cb
+            UI.RegisterCheckButton(cb)
+            UI.RegisterText(cb.text, "primary")
         end
 
         cb:SetPoint("TOPLEFT", 10, -yOffset)
@@ -1574,68 +1591,139 @@ local function RefreshSettingsContent()
         cb:SetScript("OnClick", function(self)
             RPBox_Config.channels = RPBox_Config.channels or {}
             RPBox_Config.channels[self.channelKey] = self:GetChecked()
+            UI.RefreshCheckButton(self)
         end)
 
+        UI.RefreshCheckButton(cb)
         cb:Show()
         yOffset = yOffset + 26
     end
 
     -- 屏蔽设置标题
     yOffset = yOffset + 15
-    local filterTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    filterTitle:SetPoint("TOPLEFT", 5, -yOffset)
-    filterTitle:SetText("屏蔽设置")
+    if not content.filterTitle then
+        content.filterTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        content.filterTitle:SetText("屏蔽设置")
+        UI.RegisterText(content.filterTitle, "heading")
+    end
+    content.filterTitle:SetPoint("TOPLEFT", 5, -yOffset)
+    content.filterTitle:Show()
     yOffset = yOffset + 25
 
     -- 屏蔽自己复选框
     if not content.ignoreSelfCb then
-        content.ignoreSelfCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.ignoreSelfCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
         content.ignoreSelfCb.text = content.ignoreSelfCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         content.ignoreSelfCb.text:SetPoint("LEFT", content.ignoreSelfCb, "RIGHT", 2, 0)
+        UI.RegisterCheckButton(content.ignoreSelfCb)
+        UI.RegisterText(content.ignoreSelfCb.text, "primary")
     end
     content.ignoreSelfCb:SetPoint("TOPLEFT", 10, -yOffset)
     content.ignoreSelfCb.text:SetText("屏蔽自己的消息")
     content.ignoreSelfCb:SetChecked(RPBox_Config.ignoreSelf == true)
     content.ignoreSelfCb:SetScript("OnClick", function(self)
         RPBox_Config.ignoreSelf = self:GetChecked()
+        UI.RefreshCheckButton(self)
     end)
+    UI.RefreshCheckButton(content.ignoreSelfCb)
     content.ignoreSelfCb:Show()
     yOffset = yOffset + 26
 
     -- 只接受公会成员复选框
     if not content.guildOnlyCb then
-        content.guildOnlyCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.guildOnlyCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
         content.guildOnlyCb.text = content.guildOnlyCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         content.guildOnlyCb.text:SetPoint("LEFT", content.guildOnlyCb, "RIGHT", 2, 0)
+        UI.RegisterCheckButton(content.guildOnlyCb)
+        UI.RegisterText(content.guildOnlyCb.text, "primary")
     end
     content.guildOnlyCb:SetPoint("TOPLEFT", 10, -yOffset)
     content.guildOnlyCb.text:SetText("只接受公会成员的消息")
     content.guildOnlyCb:SetChecked(RPBox_Config.guildOnly == true)
     content.guildOnlyCb:SetScript("OnClick", function(self)
         RPBox_Config.guildOnly = self:GetChecked()
+        UI.RefreshCheckButton(self)
     end)
+    UI.RefreshCheckButton(content.guildOnlyCb)
     content.guildOnlyCb:Show()
     yOffset = yOffset + 26
 
     -- 显示设置标题
     yOffset = yOffset + 15
-    local displayTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    displayTitle:SetPoint("TOPLEFT", 5, -yOffset)
-    displayTitle:SetText("显示设置")
+    if not content.displayTitle then
+        content.displayTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        content.displayTitle:SetText("显示设置")
+        UI.RegisterText(content.displayTitle, "heading")
+    end
+    content.displayTitle:SetPoint("TOPLEFT", 5, -yOffset)
+    content.displayTitle:Show()
     yOffset = yOffset + 25
+
+    -- 可即时切换的完整框体方案。简约档案保留 RPBox 铜色品牌线索，
+    -- 但去掉暴雪原生的雕花、厚边框和高光材质。
+    if not content.themeLabel then
+        content.themeLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.themeLabel:SetText("界面主题")
+        UI.RegisterText(content.themeLabel, "primary")
+    end
+    content.themeLabel:SetPoint("TOPLEFT", 10, -yOffset)
+    content.themeLabel:Show()
+
+    if not content.themeClassicBtn then
+        content.themeClassicBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate,BackdropTemplate")
+        content.themeClassicBtn:SetSize(92, 22)
+        content.themeClassicBtn:SetText("经典原生")
+        UI.RegisterButton(content.themeClassicBtn, { tab = true })
+        content.themeClassicBtn:SetScript("OnClick", function()
+            UI.SetTheme(UI.THEME_CLASSIC)
+            RefreshSettingsContent()
+        end)
+    end
+    content.themeClassicBtn:SetPoint("TOPLEFT", 96, -yOffset + 4)
+    content.themeClassicBtn:SetEnabled(UI.GetTheme() ~= UI.THEME_CLASSIC)
+    UI.SetButtonSelected(content.themeClassicBtn, UI.GetTheme() == UI.THEME_CLASSIC)
+    content.themeClassicBtn:Show()
+
+    if not content.themeModernBtn then
+        content.themeModernBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate,BackdropTemplate")
+        content.themeModernBtn:SetSize(104, 22)
+        content.themeModernBtn:SetText("简约档案")
+        UI.RegisterButton(content.themeModernBtn, { tab = true })
+        content.themeModernBtn:SetScript("OnClick", function()
+            UI.SetTheme(UI.THEME_MODERN)
+            RefreshSettingsContent()
+        end)
+    end
+    content.themeModernBtn:SetPoint("LEFT", content.themeClassicBtn, "RIGHT", 6, 0)
+    content.themeModernBtn:SetEnabled(UI.GetTheme() ~= UI.THEME_MODERN)
+    UI.SetButtonSelected(content.themeModernBtn, UI.GetTheme() == UI.THEME_MODERN)
+    content.themeModernBtn:Show()
+
+    if not content.themeHint then
+        content.themeHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        content.themeHint:SetText("简约档案：扁平深色框体、铜色状态线；切换即时生效")
+        UI.RegisterText(content.themeHint, "muted")
+    end
+    content.themeHint:SetPoint("TOPLEFT", 10, -yOffset - 28)
+    content.themeHint:Show()
+    yOffset = yOffset + 52
 
     -- 显示图标复选框
     if not content.showIconCb then
-        content.showIconCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        content.showIconCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
         content.showIconCb.text = content.showIconCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         content.showIconCb.text:SetPoint("LEFT", content.showIconCb, "RIGHT", 2, 0)
+        UI.RegisterCheckButton(content.showIconCb)
+        UI.RegisterText(content.showIconCb.text, "primary")
     end
     content.showIconCb:SetPoint("TOPLEFT", 10, -yOffset)
     content.showIconCb.text:SetText("在记录中显示头像图标")
     content.showIconCb:SetChecked(RPBox_Config.showIcon ~= false)
     content.showIconCb:SetScript("OnClick", function(self)
         RPBox_Config.showIcon = self:GetChecked()
+        UI.RefreshCheckButton(self)
     end)
+    UI.RefreshCheckButton(content.showIconCb)
     content.showIconCb:Show()
     yOffset = yOffset + 26
 
@@ -1643,17 +1731,19 @@ local function RefreshSettingsContent()
     yOffset = yOffset + 15
     if not content.viewWindowSizeTitle then
         content.viewWindowSizeTitle = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        UI.RegisterText(content.viewWindowSizeTitle, "primary")
     end
     content.viewWindowSizeTitle:SetPoint("TOPLEFT", 10, -yOffset)
     content.viewWindowSizeTitle:SetText("每页回放条数:")
     content.viewWindowSizeTitle:Show()
 
     if not content.viewWindowSizeBox then
-        local eb = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+        local eb = CreateFrame("EditBox", nil, content, "InputBoxTemplate,BackdropTemplate")
         eb:SetSize(56, 20)
         eb:SetAutoFocus(false)
         eb:SetNumeric(true)
         content.viewWindowSizeBox = eb
+        UI.RegisterEditBox(eb)
     end
 
     local viewWindowSizeBox = content.viewWindowSizeBox
@@ -1680,6 +1770,7 @@ local function RefreshSettingsContent()
 
     if not content.viewWindowSizeHint then
         content.viewWindowSizeHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        UI.RegisterText(content.viewWindowSizeHint, "muted")
     end
     content.viewWindowSizeHint:SetPoint("LEFT", viewWindowSizeBox, "RIGHT", 8, 0)
     content.viewWindowSizeHint:SetText("建议 80（范围 40-120，硬上限 120）")
@@ -1688,6 +1779,7 @@ local function RefreshSettingsContent()
 
     content:SetHeight(yOffset + 20)
     MainFrame.statusText:SetText("设置")
+    UI.ApplyAll()
 end
 
 -- 切换标签页
@@ -1705,18 +1797,18 @@ local function SwitchTab(tabName)
     if MainFrame.settingsScroll then MainFrame.settingsScroll:Hide() end
     if MainFrame.filterFrame then MainFrame.filterFrame:Hide() end
     if MainFrame.ledgerHeader then MainFrame.ledgerHeader:Hide() end
+    if MainFrame.logSurface then MainFrame.logSurface:Hide() end
 
     -- 更新按钮状态
     for _, btn in pairs(MainFrame.tabButtons or {}) do
-        if btn.tabName == tabName then
-            btn:SetEnabled(false)
-        else
-            btn:SetEnabled(true)
-        end
+        local selected = btn.tabName == tabName
+        btn:SetEnabled(not selected)
+        UI.SetButtonSelected(btn, selected)
     end
 
     -- 显示对应内容
     if tabName == "log" then
+        if MainFrame.logSurface and UI.IsModern() then MainFrame.logSurface:Show() end
         MainFrame.filterFrame:Show()
         MainFrame.ledgerHeader:Show()
         MainFrame.logScroll:Show()
@@ -1743,7 +1835,7 @@ local function CreateMainFrame()
     if MainFrame then return MainFrame end
 
     -- 主窗口
-    MainFrame = CreateFrame("Frame", "RPBoxMainFrame", UIParent, "BasicFrameTemplateWithInset")
+    MainFrame = CreateFrame("Frame", "RPBoxMainFrame", UIParent, "BasicFrameTemplateWithInset,BackdropTemplate")
     MainFrame:SetSize(780, 560)
     MainFrame:SetPoint("CENTER")
     MainFrame:SetMovable(true)
@@ -1768,7 +1860,7 @@ local function CreateMainFrame()
     MainFrame:SetClampedToScreen(true)
 
     -- 创建调整大小按钮
-    local resizeButton = CreateFrame("Button", nil, MainFrame)
+    local resizeButton = CreateFrame("Button", nil, MainFrame, "BackdropTemplate")
     resizeButton:SetSize(16, 16)
     resizeButton:SetPoint("BOTTOMRIGHT", -5, 5)
     resizeButton:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
@@ -1780,9 +1872,14 @@ local function CreateMainFrame()
     resizeButton:SetScript("OnMouseUp", function(self, button)
         MainFrame:StopMovingOrSizing()
     end)
+    UI.RegisterButton(resizeButton)
     MainFrame.resizeButton = resizeButton
 
     MainFrame.TitleText:SetText("RPBox")
+    UI.RegisterWindow(MainFrame, {
+        title = "RPBox",
+        context = "RP 档案",
+    })
 
     -- 标签按钮
     MainFrame.tabButtons = {}
@@ -1804,40 +1901,55 @@ local function CreateMainFrame()
         end)
     end
 
+    -- 简约主题的统一内容底板；经典主题继续使用暴雪原生 inset。
+    local contentSurface = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
+    contentSurface:SetPoint("TOPLEFT", 10, -56)
+    contentSurface:SetPoint("BOTTOMRIGHT", -28, 38)
+    contentSurface:EnableMouse(false)
+    UI.RegisterPanel(contentSurface, {
+        modernOnly = true,
+        alwaysVisible = true,
+        background = UI.COLORS.surface,
+        border = UI.COLORS.borderDim,
+    })
+    MainFrame.contentSurface = contentSurface
+
     -- 档案筛选侧栏：发言者与收听视角分开，避免把不同角色卡混成一个人。
     local filterFrame = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
     filterFrame:SetPoint("TOPLEFT", 12, -58)
     filterFrame:SetPoint("BOTTOMLEFT", 12, 40)
     filterFrame:SetWidth(178)
-    if filterFrame.SetBackdrop then
-        filterFrame:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        filterFrame:SetBackdropColor(0.035, 0.045, 0.06, 0.82)
-        filterFrame:SetBackdropBorderColor(0.25, 0.31, 0.4, 0.8)
-    end
+    UI.RegisterPanel(filterFrame, {
+        background = UI.COLORS.raised,
+        border = UI.COLORS.border,
+        classicBackground = { 0.035, 0.045, 0.06, 0.82 },
+        classicBorder = { 0.25, 0.31, 0.4, 0.8 },
+    })
 
     local archiveTitle = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     archiveTitle:SetPoint("TOPLEFT", 12, -10)
     archiveTitle:SetText("档案筛选")
+    UI.RegisterText(archiveTitle, "heading")
 
     local archiveHint = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     archiveHint:SetPoint("TOPLEFT", archiveTitle, "BOTTOMLEFT", 0, -3)
     archiveHint:SetText("多选条件取交集")
+    UI.RegisterText(archiveHint, "muted")
 
     local dateLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     dateLabel:SetPoint("TOPLEFT", 12, -50)
     dateLabel:SetText("时间范围")
-    local dateDropdown = CreateFrame("Frame", "RPBoxDateDropdown", filterFrame, "UIDropDownMenuTemplate")
+    UI.RegisterText(dateLabel, "primary")
+    local dateDropdown = CreateFrame("Frame", "RPBoxDateDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
     dateDropdown:SetPoint("TOPLEFT", -4, -62)
     UIDropDownMenu_SetWidth(dateDropdown, 142)
+    UI.RegisterDropdown(dateDropdown)
 
     local exactStartLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     exactStartLabel:SetPoint("TOPLEFT", 12, -102)
     exactStartLabel:SetText("起")
-    local exactStartBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
+    UI.RegisterText(exactStartLabel, "primary")
+    local exactStartBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate,BackdropTemplate")
     exactStartBox:SetSize(132, 22)
     exactStartBox:SetPoint("TOPLEFT", 34, -98)
     exactStartBox:SetAutoFocus(false)
@@ -1850,11 +1962,13 @@ local function CreateMainFrame()
         self:SetText(currentFilter.startTimeText or "")
         self:ClearFocus()
     end)
+    UI.RegisterEditBox(exactStartBox)
 
     local exactEndLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     exactEndLabel:SetPoint("TOPLEFT", 12, -128)
     exactEndLabel:SetText("止")
-    local exactEndBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
+    UI.RegisterText(exactEndLabel, "primary")
+    local exactEndBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate,BackdropTemplate")
     exactEndBox:SetSize(132, 22)
     exactEndBox:SetPoint("TOPLEFT", 34, -124)
     exactEndBox:SetAutoFocus(false)
@@ -1867,36 +1981,45 @@ local function CreateMainFrame()
         self:SetText(currentFilter.endTimeText or "")
         self:ClearFocus()
     end)
+    UI.RegisterEditBox(exactEndBox)
 
     local exactTimeHint = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     exactTimeHint:SetPoint("TOPLEFT", 34, -150)
     exactTimeHint:SetText("YYYY-MM-DD HH:MM")
+    UI.RegisterText(exactTimeHint, "muted")
 
     local speakerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     speakerLabel:SetPoint("TOPLEFT", 12, -178)
     speakerLabel:SetText("发言者 / 人物卡")
-    local speakerDropdown = CreateFrame("Frame", "RPBoxSpeakerDropdown", filterFrame, "UIDropDownMenuTemplate")
+    UI.RegisterText(speakerLabel, "primary")
+    local speakerDropdown = CreateFrame("Frame", "RPBoxSpeakerDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
     speakerDropdown:SetPoint("TOPLEFT", -4, -190)
     UIDropDownMenu_SetWidth(speakerDropdown, 142)
+    UI.RegisterDropdown(speakerDropdown)
 
     local listenerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     listenerLabel:SetPoint("TOPLEFT", 12, -232)
     listenerLabel:SetText("收听者 / 记录视角")
-    local listenerDropdown = CreateFrame("Frame", "RPBoxListenerDropdown", filterFrame, "UIDropDownMenuTemplate")
+    UI.RegisterText(listenerLabel, "primary")
+    local listenerDropdown = CreateFrame("Frame", "RPBoxListenerDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
     listenerDropdown:SetPoint("TOPLEFT", -4, -244)
     UIDropDownMenu_SetWidth(listenerDropdown, 142)
+    UI.RegisterDropdown(listenerDropdown)
 
     local channelLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     channelLabel:SetPoint("TOPLEFT", 12, -286)
     channelLabel:SetText("频道 / 节点")
-    local channelDropdown = CreateFrame("Frame", "RPBoxChannelDropdown", filterFrame, "UIDropDownMenuTemplate")
+    UI.RegisterText(channelLabel, "primary")
+    local channelDropdown = CreateFrame("Frame", "RPBoxChannelDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
     channelDropdown:SetPoint("TOPLEFT", -4, -298)
     UIDropDownMenu_SetWidth(channelDropdown, 142)
+    UI.RegisterDropdown(channelDropdown)
 
     local searchLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     searchLabel:SetPoint("TOPLEFT", 12, -340)
     searchLabel:SetText("全文与历史姓名")
-    local searchBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
+    UI.RegisterText(searchLabel, "primary")
+    local searchBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate,BackdropTemplate")
     searchBox:SetSize(150, 22)
     searchBox:SetPoint("TOPLEFT", 12, -356)
     searchBox:SetAutoFocus(false)
@@ -1912,18 +2035,21 @@ local function CreateMainFrame()
         self:SetText(currentFilter.search)
         self:ClearFocus()
     end)
+    UI.RegisterEditBox(searchBox)
 
     local summaryTitle = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     summaryTitle:SetPoint("TOPLEFT", 12, -394)
     summaryTitle:SetText("已启用条件")
+    UI.RegisterText(summaryTitle, "primary")
     local filterSummary = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     filterSummary:SetPoint("TOPLEFT", summaryTitle, "BOTTOMLEFT", 0, -6)
     filterSummary:SetPoint("RIGHT", filterFrame, "RIGHT", -12, 0)
     filterSummary:SetJustifyH("LEFT")
     filterSummary:SetJustifyV("TOP")
     filterSummary:SetWordWrap(true)
+    UI.RegisterText(filterSummary, "muted")
 
-    local clearFilterBtn = CreateFrame("Button", nil, filterFrame, "UIPanelButtonTemplate")
+    local clearFilterBtn = CreateFrame("Button", nil, filterFrame, "UIPanelButtonTemplate,BackdropTemplate")
     clearFilterBtn:SetSize(150, 22)
     clearFilterBtn:SetPoint("BOTTOM", 0, 10)
     clearFilterBtn:SetText("清除全部筛选")
@@ -1942,6 +2068,7 @@ local function CreateMainFrame()
         UpdateFilterSummary()
         RefreshLogContent()
     end)
+    UI.RegisterButton(clearFilterBtn)
 
     MainFrame.filterFrame = filterFrame
     MainFrame.dateDropdown = dateDropdown
@@ -1954,6 +2081,18 @@ local function CreateMainFrame()
     MainFrame.filterSummary = filterSummary
     MainFrame.clearFilterBtn = clearFilterBtn
 
+    -- 日志区域使用独立的扁平底板，形成“侧栏 + 时间账本”的双栏结构。
+    local logSurface = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
+    logSurface:SetPoint("TOPLEFT", 198, -56)
+    logSurface:SetPoint("BOTTOMRIGHT", -28, 38)
+    logSurface:EnableMouse(false)
+    UI.RegisterPanel(logSurface, {
+        modernOnly = true,
+        background = UI.COLORS.canvas,
+        border = UI.COLORS.borderDim,
+    })
+    MainFrame.logSurface = logSurface
+
     local ledgerHeader = CreateFrame("Frame", nil, MainFrame)
     ledgerHeader:SetPoint("TOPLEFT", 205, -58)
     ledgerHeader:SetPoint("TOPRIGHT", -30, -58)
@@ -1961,36 +2100,41 @@ local function CreateMainFrame()
     local ledgerTitle = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     ledgerTitle:SetPoint("LEFT", 0, 0)
     ledgerTitle:SetText("时间账本 · 最新优先")
+    UI.RegisterText(ledgerTitle, "heading")
 
-    local latestPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
+    local latestPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate,BackdropTemplate")
     latestPageBtn:SetSize(48, 20)
     latestPageBtn:SetPoint("RIGHT", 0, 0)
     latestPageBtn:SetText("最新")
     latestPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(1) end
     end)
+    UI.RegisterButton(latestPageBtn)
 
-    local nextPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
+    local nextPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate,BackdropTemplate")
     nextPageBtn:SetSize(66, 20)
     nextPageBtn:SetPoint("RIGHT", latestPageBtn, "LEFT", -4, 0)
     nextPageBtn:SetText("较早 →")
     nextPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(MainFrame.logState.page + 1) end
     end)
+    UI.RegisterButton(nextPageBtn)
 
     local pageProgress = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     pageProgress:SetWidth(72)
     pageProgress:SetPoint("RIGHT", nextPageBtn, "LEFT", -4, 0)
     pageProgress:SetJustifyH("CENTER")
     pageProgress:SetText("0 / 0 页")
+    UI.RegisterText(pageProgress, "muted")
 
-    local prevPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
+    local prevPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate,BackdropTemplate")
     prevPageBtn:SetSize(62, 20)
     prevPageBtn:SetPoint("RIGHT", pageProgress, "LEFT", -4, 0)
     prevPageBtn:SetText("← 较新")
     prevPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(MainFrame.logState.page - 1) end
     end)
+    UI.RegisterButton(prevPageBtn)
 
     MainFrame.ledgerHeader = ledgerHeader
     MainFrame.prevPageBtn = prevPageBtn
@@ -2077,10 +2221,11 @@ local function CreateMainFrame()
     -- 底部状态栏
     local statusText = MainFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     statusText:SetPoint("BOTTOMLEFT", 12, 12)
+    UI.RegisterText(statusText, "muted")
     MainFrame.statusText = statusText
 
     -- 刷新按钮
-    local refreshBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate")
+    local refreshBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate,BackdropTemplate")
     refreshBtn:SetSize(60, 22)
     refreshBtn:SetPoint("BOTTOMRIGHT", -35, 8)
     refreshBtn:SetText("刷新")
@@ -2096,9 +2241,10 @@ local function CreateMainFrame()
             SwitchTab(currentTab)
         end
     end)
+    UI.RegisterButton(refreshBtn)
 
     -- 复制按钮
-    local copyBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate")
+    local copyBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate,BackdropTemplate")
     copyBtn:SetSize(60, 22)
     copyBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -5, 0)
     copyBtn:SetText("复制")
@@ -2110,7 +2256,7 @@ local function CreateMainFrame()
 
         -- 创建对话框（如果不存在）
         if not MainFrame.copyDialog then
-            local dialog = CreateFrame("Frame", "RPBoxCopyDialog", UIParent, "BasicFrameTemplateWithInset")
+            local dialog = CreateFrame("Frame", "RPBoxCopyDialog", UIParent, "BasicFrameTemplateWithInset,BackdropTemplate")
             dialog:SetSize(450, 350)
             dialog:SetPoint("CENTER")
             dialog:SetMovable(true)
@@ -2120,6 +2266,10 @@ local function CreateMainFrame()
             dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
             dialog:SetFrameStrata("DIALOG")
             dialog.TitleText:SetText("复制当前页 (Ctrl+A 全选, Ctrl+C 复制)")
+            UI.RegisterWindow(dialog, {
+                title = "复制当前页",
+                context = "CTRL+A / CTRL+C",
+            })
 
             -- 设置关闭按钮
             dialog.CloseButton:SetScript("OnClick", function()
@@ -2131,7 +2281,7 @@ local function CreateMainFrame()
             scroll:SetPoint("TOPLEFT", 10, -30)
             scroll:SetPoint("BOTTOMRIGHT", -30, 10)
 
-            local editBox = CreateFrame("EditBox", nil, scroll)
+            local editBox = CreateFrame("EditBox", nil, scroll, "BackdropTemplate")
             editBox:SetMultiLine(true)
             editBox:SetFontObject(GameFontHighlightSmall)
             editBox:SetWidth(390)
@@ -2141,10 +2291,17 @@ local function CreateMainFrame()
                 self:ClearFocus()
                 dialog:Hide()
             end)
+            UI.RegisterEditBox(editBox)
             scroll:SetScrollChild(editBox)
 
             dialog.editBox = editBox
             MainFrame.copyDialog = dialog
+            if dialog._rpboxModernClose then
+                dialog._rpboxModernClose:SetScript("OnClick", function()
+                    dialog.editBox:ClearFocus()
+                    dialog:Hide()
+                end)
+            end
 
             -- 确保初始状态是隐藏的
             dialog:Hide()
@@ -2171,27 +2328,32 @@ local function CreateMainFrame()
             MainFrame.copyDialog.editBox:SetFocus()
         end
     end)
+    UI.RegisterButton(copyBtn)
     MainFrame.copyBtn = copyBtn
 
     -- 导出按钮 (reload)
-    local exportBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate")
+    local exportBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate,BackdropTemplate")
     exportBtn:SetSize(60, 22)
     exportBtn:SetPoint("RIGHT", copyBtn, "LEFT", -5, 0)
     exportBtn:SetText("导出")
     exportBtn:SetScript("OnClick", function()
         ReloadUI()
     end)
+    UI.RegisterButton(exportBtn)
     MainFrame.exportBtn = exportBtn
 
     -- 清空按钮
-    local clearBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate")
+    local clearBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate,BackdropTemplate")
     clearBtn:SetSize(60, 22)
     clearBtn:SetPoint("RIGHT", exportBtn, "LEFT", -5, 0)
     clearBtn:SetText("清空")
     clearBtn:SetScript("OnClick", function()
         StaticPopup_Show("RPBOX_CLEAR_LOG_CONFIRM")
     end)
+    UI.RegisterButton(clearBtn, { variant = "danger" })
     MainFrame.clearBtn = clearBtn
+
+    UI.ApplyAll()
 
     return MainFrame
 end

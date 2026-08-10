@@ -137,6 +137,9 @@ local function new_object(kind, name, parent, template)
         _scripts = {},
         _hooks = {},
         _children = {},
+        _regions = {},
+        _textColor = { 1, 1, 1, 1 },
+        _alpha = 1,
     }, ObjectMeta)
 
     if parent and parent._children then
@@ -166,6 +169,8 @@ function ObjectMethods:SetPushedTexture(value) self._pushedTexture = value end
 function ObjectMethods:SetBackdrop(value) self._backdrop = value end
 function ObjectMethods:SetBackdropColor(...) self._backdropColor = {...} end
 function ObjectMethods:SetBackdropBorderColor(...) self._backdropBorderColor = {...} end
+function ObjectMethods:SetAlpha(value) self._alpha = value end
+function ObjectMethods:GetAlpha() return self._alpha end
 function ObjectMethods:SetAutoFocus(value) self._autoFocus = value end
 function ObjectMethods:SetNumeric(value) self._numeric = value end
 function ObjectMethods:SetMultiLine(value) self._multiLine = value end
@@ -174,15 +179,27 @@ function ObjectMethods:SetJustifyH(value) self._justifyH = value end
 function ObjectMethods:SetJustifyV(value) self._justifyV = value end
 function ObjectMethods:SetWordWrap(value) self._wordWrap = value end
 function ObjectMethods:SetNonSpaceWrap(value) self._nonSpaceWrap = value end
-function ObjectMethods:SetText(value) self._text = tostring(value or "") end
+function ObjectMethods:SetText(value)
+    self._text = tostring(value or "")
+    if self._fontString then self._fontString._text = self._text end
+end
 function ObjectMethods:GetText() return self._text end
+function ObjectMethods:SetTextColor(r, g, b, a) self._textColor = { r, g, b, a or 1 } end
+function ObjectMethods:GetTextColor() return table.unpack(self._textColor) end
 function ObjectMethods:GetStringHeight()
     local _, newlines = tostring(self._text or ""):gsub("\n", "")
     return math.max(16, (newlines + 1) * 16)
 end
 function ObjectMethods:SetChecked(value) self._checked = not not value end
 function ObjectMethods:GetChecked() return self._checked end
-function ObjectMethods:SetEnabled(value) self._enabled = not not value end
+function ObjectMethods:SetEnabled(value)
+    local enabled = not not value
+    if self._enabled == enabled then return end
+    self._enabled = enabled
+    local event = enabled and "OnEnable" or "OnDisable"
+    if self._scripts[event] then self._scripts[event](self) end
+    for _, callback in ipairs(self._hooks[event] or {}) do callback(self) end
+end
 function ObjectMethods:IsEnabled() return self._enabled end
 function ObjectMethods:SetScript(event, callback) self._scripts[event] = callback end
 function ObjectMethods:HookScript(event, callback)
@@ -211,9 +228,15 @@ function ObjectMethods:GetVerticalScrollRange()
     return math.max(childHeight - (self._height or 0), 0)
 end
 function ObjectMethods:GetChildren() return table.unpack(self._children) end
+function ObjectMethods:GetRegions() return table.unpack(self._regions) end
+function ObjectMethods:GetObjectType() return self._kind end
+function ObjectMethods:IsObjectType(kind) return self._kind == kind end
 function ObjectMethods:CreateFontString(name, layer, template)
-    return new_object("FontString", name, nil, template)
+    local fontString = new_object("FontString", name, nil, template)
+    self._regions[#self._regions + 1] = fontString
+    return fontString
 end
+function ObjectMethods:GetFontString() return self._fontString end
 function ObjectMethods:ClearFocus() self._focused = false end
 function ObjectMethods:SetFocus() self._focused = true end
 function ObjectMethods:HighlightText() self._highlighted = true end
@@ -231,9 +254,29 @@ GameFontHighlightSmall = {}
 
 function CreateFrame(kind, name, parent, template)
     local frame = new_object(kind, name, parent, template)
-    if template == "BasicFrameTemplateWithInset" then
+    if template and template:find("BasicFrameTemplateWithInset", 1, true) then
         frame.TitleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         frame.CloseButton = new_object("Button", nil, frame, nil)
+        frame.Bg = new_object("Texture", nil, nil, nil)
+        frame.TitleBg = new_object("Texture", nil, nil, nil)
+        frame.NineSlice = new_object("Frame", nil, frame, nil)
+        frame.Inset = new_object("Frame", nil, frame, nil)
+        frame._regions[#frame._regions + 1] = frame.Bg
+        frame._regions[#frame._regions + 1] = frame.TitleBg
+    end
+    if kind == "Button" and template and template:find("UIPanelButtonTemplate", 1, true) then
+        frame._fontString = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local normalTexture = new_object("Texture", nil, nil, nil)
+        frame._regions[#frame._regions + 1] = normalTexture
+    elseif kind == "EditBox" and template and template:find("InputBoxTemplate", 1, true) then
+        local inputTexture = new_object("Texture", nil, nil, nil)
+        frame._regions[#frame._regions + 1] = inputTexture
+    elseif template and template:find("UIDropDownMenuTemplate", 1, true) then
+        local dropdownTexture = new_object("Texture", nil, nil, nil)
+        frame._regions[#frame._regions + 1] = dropdownTexture
+    elseif kind == "CheckButton" and template and template:find("UICheckButtonTemplate", 1, true) then
+        local checkTexture = new_object("Texture", nil, nil, nil)
+        frame._regions[#frame._regions + 1] = checkTexture
     end
     return frame
 end
@@ -420,10 +463,15 @@ local function append_live_records(count, prefix)
     end
 end
 
-local chunk, loadError = loadfile("addon/RPBox_Addon/MainFrame.lua")
-if not chunk then fail("could not load production MainFrame.lua: " .. tostring(loadError)) end
-local ok, loadRuntimeError = xpcall(function() chunk("RPBox_Addon", ns) end, debug.traceback)
-if not ok then fail("production MainFrame.lua failed during load:\n" .. tostring(loadRuntimeError)) end
+local function load_addon_file(path)
+    local chunk, loadError = loadfile(path)
+    if not chunk then fail("could not load production file " .. path .. ": " .. tostring(loadError)) end
+    local ok, loadRuntimeError = xpcall(function() chunk("RPBox_Addon", ns) end, debug.traceback)
+    if not ok then fail("production file failed during load " .. path .. ":\n" .. tostring(loadRuntimeError)) end
+end
+
+load_addon_file("addon/RPBox_Addon/Theme.lua")
+load_addon_file("addon/RPBox_Addon/MainFrame.lua")
 
 local function click(button)
     assert_true(button ~= nil, "button was not created")
@@ -464,6 +512,10 @@ end
 ns.OpenMainFrame()
 local frame = _G.RPBoxMainFrame
 assert_true(frame ~= nil and frame:IsShown(), "OpenMainFrame did not create and show the production frame")
+assert_equal(frame._rpboxTheme, "modern", "new installs should use the modern addon theme")
+assert_true(frame._rpboxModernChrome and frame._rpboxModernChrome:IsShown(), "modern title chrome was not shown")
+assert_true(not frame.TitleText:IsShown(), "native title chrome should be hidden by the modern theme")
+assert_true(frame._backdrop ~= nil, "modern frame backdrop was not applied")
 Timer.drain()
 assert_settled(frame, "initial playback")
 assert_equal(frame.logState.totalMatched, TOTAL_INITIAL_RECORDS, "the full long archive was not reachable")
@@ -533,6 +585,20 @@ assert_contains(frame.logContent.rows[frame.logState.displayCount].text:GetText(
 -- Drive the production settings UI: values are clamped to 40..120 and only
 -- the bounded row pool grows, never the full archive.
 click(find_tab(frame, "settings"))
+local settingsContent = frame.settingsContent
+assert_true(settingsContent.themeClassicBtn ~= nil and settingsContent.themeModernBtn ~= nil, "theme controls were not created")
+assert_true(settingsContent.themeModernBtn:IsEnabled() == false, "active modern theme should be selected")
+click(settingsContent.themeClassicBtn)
+assert_equal(RPBox_Config.uiTheme, "classic", "classic theme selection was not persisted")
+assert_equal(frame._rpboxTheme, "classic", "classic theme was not applied immediately")
+assert_true(frame.TitleText:IsShown(), "classic theme should restore native title chrome")
+assert_true(not frame._rpboxModernChrome:IsShown(), "classic theme should hide modern title chrome")
+assert_true(frame.contentSurface:IsShown() == false, "classic theme should hide the modern content surface")
+click(settingsContent.themeModernBtn)
+assert_equal(RPBox_Config.uiTheme, "modern", "modern theme selection was not persisted")
+assert_equal(frame._rpboxTheme, "modern", "modern theme was not restored immediately")
+assert_true(frame._rpboxModernChrome:IsShown(), "modern title chrome should be restored")
+assert_true(settingsContent.themeModernBtn:IsEnabled() == false, "restored modern theme should be selected")
 local pageSizeBox = frame.settingsContent.viewWindowSizeBox
 assert_true(pageSizeBox ~= nil, "playback page-size setting was not created")
 press_enter(pageSizeBox, "1")
