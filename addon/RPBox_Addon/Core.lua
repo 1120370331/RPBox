@@ -36,6 +36,7 @@ local DEFAULT_CONFIG = {
     },
     -- 显示设置
     showIcon = true,  -- 是否显示头像图标
+    uiTheme = "modern",  -- modern: 简约档案；classic: 暴雪原生
     ignoreSelf = false,  -- 是否屏蔽自己的消息
     guildOnly = false,  -- 是否只接受公会成员的消息
 }

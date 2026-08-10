@@ -11,6 +11,7 @@
 Locales\zhCN.lua
 
 Core.lua
+Theme.lua
 MainFrame.lua
 ChatLogger.lua
 LogWindow.lua
