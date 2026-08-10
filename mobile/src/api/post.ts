@@ -118,6 +118,8 @@ export interface PostComment {
   post_id: number
   author_id: number
   content: string
+  image_url?: string
+  image_review_status?: 'none' | 'pending' | 'approved' | 'rejected'
   parent_id?: number
   like_count: number
   created_at: string
@@ -185,9 +187,10 @@ export function listPostComments(postId: number) {
   return request.get<{ comments: PostComment[] }>(`/posts/${postId}/comments`)
 }
 
-export function createPostComment(postId: number, content: string, parentId?: number) {
+export function createPostComment(postId: number, content: string, parentId?: number, imageUrl = '') {
   return request.post<PostComment>(`/posts/${postId}/comments`, {
     content,
+    image_url: imageUrl,
     parent_id: parentId,
   })
 }

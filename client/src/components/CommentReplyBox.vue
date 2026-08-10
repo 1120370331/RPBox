@@ -1,23 +1,32 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from 'vue'
+import CommentImagePicker from '@/components/CommentImagePicker.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: string
+  imageUrl?: string
+  allowImage?: boolean
   placeholder?: string
   disabled?: boolean
   autoFocus?: boolean
   cancelLabel: string
   submitLabel: string
-}>()
+}>(), {
+  imageUrl: '',
+  allowImage: true,
+})
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
+  (e: 'update:imageUrl', value: string): void
   (e: 'openEmoji', event: MouseEvent): void
+  (e: 'previewImage', src: string): void
   (e: 'cancel'): void
   (e: 'submit'): void
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const imageUploading = ref(false)
 
 function updateValue(event: Event) {
   emit('update:modelValue', (event.target as HTMLTextAreaElement).value)
@@ -70,13 +79,22 @@ defineExpose({
       rows="3"
       @input="updateValue"
     ></textarea>
+    <CommentImagePicker
+      v-if="allowImage"
+      compact
+      :model-value="imageUrl"
+      :disabled="disabled"
+      @update:model-value="emit('update:imageUrl', $event)"
+      @update:uploading="imageUploading = $event"
+      @preview="emit('previewImage', $event)"
+    />
     <div class="reply-actions">
       <button class="emoji-btn-small" type="button" :disabled="disabled" @click="emit('openEmoji', $event)">
         <i class="ri-emotion-line"></i>
       </button>
       <div class="reply-actions-right">
         <button class="cancel-btn" type="button" :disabled="disabled" @click="emit('cancel')">{{ cancelLabel }}</button>
-        <button class="submit-btn" type="button" :disabled="disabled || !modelValue.trim()" @click="emit('submit')">{{ submitLabel }}</button>
+        <button class="submit-btn" type="button" :disabled="disabled || imageUploading || (!modelValue.trim() && !imageUrl)" @click="emit('submit')">{{ submitLabel }}</button>
       </div>
     </div>
   </div>
@@ -114,6 +132,10 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  margin-top: 8px;
+}
+
+.comment-image-picker {
   margin-top: 8px;
 }
 

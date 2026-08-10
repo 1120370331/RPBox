@@ -27,6 +27,12 @@ local function assert_contains(text, expected, message)
     end
 end
 
+local function assert_not_contains(text, expected, message)
+    if tostring(text or ""):find(expected, 1, true) then
+        fail((message or "text contained unexpected value") .. ": " .. tostring(expected))
+    end
+end
+
 local Timer = {
     now = 0,
     nextSequence = 0,
@@ -286,11 +292,26 @@ local snapshots = {
 
 local newMessageCallbacks = {}
 local listChangeCallbacks = {}
+local function render_chat_link_labels(text)
+    text = tostring(text or "")
+    text = text:gsub("|c%x%x%x%x%x%x%x%x|H[^|]+|h(%b[])|h|r", "%1")
+    text = text:gsub("|H[^|]+|h(%b[])|h", "%1")
+    text = text:gsub("%[TRP3:([^%]]+)%]", function(content)
+        local name = content:match("^(.*):%d+$") or content
+        return "[" .. name .. "]"
+    end)
+    text = text:gsub("|T.-|t", "")
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+    text = text:gsub("|r", "")
+    return text
+end
+
 local ns = {
     L = {},
     GetProfileSnapshot = function(key) return snapshots[key] end,
     GetCachedProfile = function() return nil end,
     GetPlayerID = function() return "Tester-SmokeRealm" end,
+    RenderChatLinkLabels = function(text) return render_chat_link_labels(text) end,
     RemoveFromWhitelist = function() end,
     RemoveFromBlacklist = function() end,
     RegisterOnNewMessage = function(callback) newMessageCallbacks[#newMessageCallbacks + 1] = callback end,
@@ -365,6 +386,8 @@ for index = 1, TOTAL_INITIAL_RECORDS do
                 to = { ref = "profile-new", ps = "snap-new", n = "新卡名", pn = "新人物卡" },
             },
         }
+    elseif index == TOTAL_INITIAL_RECORDS then
+        record = regular_record(index, "|cffffffff|Hitem:6948::::::::80:64:::::::::|h[炉石]|h|r |cff71d5ff|Hspell:100|h[冲锋]|h|r [TRP3:海兽之血宝石:1]")
     else
         record = regular_record(index)
     end
@@ -445,26 +468,67 @@ Timer.drain()
 assert_settled(frame, "initial playback")
 assert_equal(frame.logState.totalMatched, TOTAL_INITIAL_RECORDS, "the full long archive was not reachable")
 assert_equal(frame.logState.pageSize, 80, "default playback page size")
-assert_equal(frame.logState.page, 1, "first open should show the earliest page")
-assert_equal(frame.logState.startIndex, 1, "first page should start at the oldest record")
+assert_equal(frame.logState.page, 1, "first open should show the latest page")
+assert_equal(frame.logState.startIndex, 1, "first page should start at the newest display position")
 assert_equal(frame.logState.endIndex, 80, "default page should contain 80 records")
 assert_equal(frame.logShownRowCount, 80, "default page visible row count")
-assert_contains(frame.logContent.rows[1].text:GetText(), "legacy-marker", "oldest record was not rendered first")
+local latestRowText = frame.logContent.rows[1].text:GetText()
+assert_contains(latestRowText, "[炉石]", "native item link label was not rendered")
+assert_contains(latestRowText, "[冲锋]", "native spell link label was not rendered")
+assert_contains(latestRowText, "[海兽之血宝石]", "TRP3 text link label was not rendered")
+assert_not_contains(latestRowText, "|Hitem", "native item link source leaked into display")
+assert_not_contains(latestRowText, "|Hspell", "native spell link source leaked into display")
+assert_not_contains(latestRowText, "[TRP3:海兽之血宝石:1]", "TRP3 link source leaked into display")
+click(frame.copyBtn)
+local latestCopiedText = frame.copyDialog.editBox:GetText()
+assert_contains(latestCopiedText, "[炉石]", "copy should include rendered item label")
+assert_contains(latestCopiedText, "[冲锋]", "copy should include rendered spell label")
+assert_contains(latestCopiedText, "[海兽之血宝石]", "copy should include rendered TRP3 label")
+assert_not_contains(latestCopiedText, "|Hitem", "copy leaked native item source")
+assert_not_contains(latestCopiedText, "|Hspell", "copy leaked native spell source")
+assert_not_contains(latestCopiedText, "[TRP3:海兽之血宝石:1]", "copy leaked TRP3 source")
+click(frame.copyBtn)
+
+-- Exact time range filtering uses inclusive start/end timestamps while the
+-- rendered page remains newest-first.
+assert_true(frame.exactStartBox ~= nil and frame.exactEndBox ~= nil, "exact time filter boxes were not created")
+press_enter(frame.exactStartBox, date("%Y-%m-%d %H:%M:%S", BASE_TIMESTAMP + 3190))
+Timer.drain()
+press_enter(frame.exactEndBox, date("%Y-%m-%d %H:%M:%S", BASE_TIMESTAMP + TOTAL_INITIAL_RECORDS))
+Timer.drain()
+assert_equal(frame.logState.totalMatched, 16, "exact time range should include only the bounded records")
+assert_equal(frame.dateDropdown:GetText(), "精确区间", "date dropdown should show exact range mode")
+assert_contains(frame.filterSummary:GetText(), "精确", "exact time filter summary missing")
+assert_contains(frame.logContent.rows[1].text:GetText(), "[炉石]", "exact time range should keep newest record at top")
+assert_contains(frame.logContent.rows[frame.logState.displayCount].text:GetText(), "record-03190", "exact time range should include the oldest bounded record")
+click(frame.clearFilterBtn)
+Timer.drain()
+assert_equal(frame.logState.totalMatched, TOTAL_INITIAL_RECORDS, "clearing filters should restore the full archive")
+assert_equal(frame.exactStartBox:GetText(), "", "clearing filters should reset exact start time")
+assert_equal(frame.exactEndBox:GetText(), "", "clearing filters should reset exact end time")
 
 -- Page buttons must traverse the entire archive and clamp at both ends.
 click(frame.nextPageBtn)
 Timer.drain()
-assert_equal(frame.logState.page, 2, "continue button should move to the next page")
+assert_equal(frame.logState.page, 2, "older button should move to the next page")
 click(frame.prevPageBtn)
 Timer.drain()
-assert_equal(frame.logState.page, 1, "earlier button should move to the previous page")
-assert_equal(click(frame.prevPageBtn), false, "earlier button should be disabled on the first page")
-assert_equal(frame.logState.page, 1, "first-page boundary should not underflow")
+assert_equal(frame.logState.page, 1, "newer button should move to the previous page")
+assert_equal(click(frame.prevPageBtn), false, "newer button should be disabled on the latest page")
+assert_equal(click(frame.latestPageBtn), false, "latest button should be disabled on the latest page")
+assert_equal(frame.logState.page, 1, "latest-page boundary should not underflow")
+click(frame.nextPageBtn)
+Timer.drain()
+assert_equal(frame.logState.page, 2, "older navigation setup")
 click(frame.latestPageBtn)
 Timer.drain()
-assert_equal(frame.logState.page, frame.logState.totalPages, "latest button should reach the newest page")
-assert_equal(click(frame.nextPageBtn), false, "continue button should be disabled on the latest page")
-assert_equal(frame.logState.endIndex, TOTAL_INITIAL_RECORDS, "latest page should reach the final record")
+assert_equal(frame.logState.page, 1, "latest button should return to the newest page")
+while frame.logState.page < frame.logState.totalPages do
+    click(frame.nextPageBtn)
+    Timer.drain()
+end
+assert_equal(click(frame.nextPageBtn), false, "older button should be disabled on the oldest page")
+assert_contains(frame.logContent.rows[frame.logState.displayCount].text:GetText(), "legacy-marker", "oldest record was not reachable")
 
 -- Drive the production settings UI: values are clamped to 40..120 and only
 -- the bounded row pool grows, never the full archive.
@@ -498,9 +562,15 @@ assert_equal(copiedStart, 121, "copy test should be on page two")
 click(frame.copyBtn)
 local copiedText = frame.copyDialog.editBox:GetText()
 assert_equal(count_text_lines(copiedText), copiedEnd - copiedStart + 1, "copy should contain exactly the current page")
-assert_contains(copiedText, "record-00121", "copy omitted the first record on the current page")
-assert_true(not copiedText:find("legacy-marker", 1, true), "copy leaked a record from the previous page")
-assert_true(not copiedText:find("record-00241", 1, true), "copy leaked a record from the next page")
+local copiedChronoStart = frame.logState.totalMatched - copiedEnd + 1
+local copiedChronoEnd = frame.logState.totalMatched - copiedStart + 1
+local copiedOldestMarker = string.format("record-%05d", copiedChronoStart)
+local copiedNewestMarker = string.format("record-%05d", copiedChronoEnd)
+assert_contains(copiedText, copiedOldestMarker, "copy omitted the oldest record on the current displayed page")
+assert_contains(copiedText, copiedNewestMarker, "copy omitted the newest record on the current displayed page")
+assert_true(copiedText:find(copiedOldestMarker, 1, true) < copiedText:find(copiedNewestMarker, 1, true), "copy should keep the newest displayed record at the bottom")
+assert_not_contains(copiedText, string.format("record-%05d", copiedChronoStart - 1), "copy leaked an older record from the next page")
+assert_not_contains(copiedText, string.format("record-%05d", copiedChronoEnd + 1), "copy leaked a newer record from the previous page")
 click(frame.copyBtn)
 
 -- Old embedded identities and v2 profile-switch nodes must both survive the
@@ -560,7 +630,7 @@ assert_equal(#Timer.queue, queuedDuringScan, "messages during a scan scheduled r
 Timer.drain()
 assert_equal(Timer.completedScans - completedBeforeLatestBurst, 2, "pending scan data should settle through one follow-up rescan")
 assert_equal(frame.logState.totalMatched, nextRecordIndex, "messages received during scanning were not eventually included")
-assert_equal(frame.logState.page, frame.logState.totalPages, "latest-page playback should continue following the newest page")
+assert_equal(frame.logState.page, 1, "latest-page playback should continue following the newest page")
 assert_equal(frame.logState.records[frame.logState.totalMatched].m, "pending-during-scan-007", "newest pending record was not reachable")
 assert_settled(frame, "live playback")
 

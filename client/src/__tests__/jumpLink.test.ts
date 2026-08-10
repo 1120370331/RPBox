@@ -8,9 +8,10 @@ import {
   sanitizeJumpLinks,
 } from '../utils/jumpLink'
 
-const { getGuildMock, getPostEmbedPreviewMock } = vi.hoisted(() => ({
+const { getGuildMock, getPostEmbedPreviewMock, getCharacterCardMock } = vi.hoisted(() => ({
   getGuildMock: vi.fn(),
   getPostEmbedPreviewMock: vi.fn(),
+  getCharacterCardMock: vi.fn(),
 }))
 
 vi.mock('@/api/guild', () => ({
@@ -19,6 +20,13 @@ vi.mock('@/api/guild', () => ({
 
 vi.mock('@/api/post', () => ({
   getPostEmbedPreview: getPostEmbedPreviewMock,
+}))
+
+vi.mock('@/api/characterCard', () => ({
+  getCharacterCard: getCharacterCardMock,
+  getCharacterCardPortraitUrl: (card: { id: number; portrait_image_url?: string }) => (
+    card.portrait_image_url ? `/api/v1/images/character-card-portrait/${card.id}` : ''
+  ),
 }))
 
 describe('jumpLink utils', () => {
@@ -197,5 +205,143 @@ describe('jumpLink utils', () => {
     card.addEventListener('click', (event) => handleJumpLinkClick(event as MouseEvent, router as any))
     card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('redacts persisted character-card snapshots before validation and stays redacted on network failure', async () => {
+    getCharacterCardMock.mockRejectedValue(new Error('network unavailable'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    document.body.innerHTML = `
+      <div id="content">
+        <span
+          class="jump-card jump-card--character-card"
+          data-jump-href="/character-cards/27"
+          data-jump-id="27"
+          data-jump-type="character_card"
+          data-jump-title="不应泄漏的角色名"
+          data-jump-summary="不应泄漏的摘要"
+          data-jump-image="/private-portrait.jpg"
+          aria-label="查看人物卡：不应泄漏的角色名"
+        >
+          <span class="jump-card__character-portrait"><img src="/private-portrait.jpg"></span>
+          <span class="jump-card__character-body">
+            <span class="jump-card__character-kind">人物卡</span>
+            <span class="jump-card__title">不应泄漏的角色名</span>
+            <span class="jump-card__character-subtitle">秘密称号</span>
+            <span class="jump-card__character-summary">不应泄漏的摘要</span>
+          </span>
+        </span>
+      </div>
+    `
+    const container = document.getElementById('content') as HTMLElement
+
+    sanitizeJumpLinks(container)
+    const card = container.querySelector('.jump-card') as HTMLElement
+    expect(card.getAttribute('data-jump-pending')).toBe('true')
+    expect(card.getAttribute('aria-disabled')).toBe('true')
+    expect(card.textContent).toContain('正在验证访问权限')
+    expect(card.textContent).not.toContain('不应泄漏')
+    expect(card.textContent).not.toContain('秘密称号')
+    expect(card.querySelector('img')).toBeNull()
+    expect(card.hasAttribute('aria-label')).toBe(false)
+    expect(getCharacterCardMock).not.toHaveBeenCalled()
+
+    hydrateJumpCards(container)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(getCharacterCardMock).toHaveBeenCalledWith(27)
+    expect(card.getAttribute('data-jump-unavailable')).toBe('true')
+    expect(card.getAttribute('aria-disabled')).toBe('true')
+    expect(card.getAttribute('data-jump-title')).toBe('人物卡暂不可用')
+    expect(card.hasAttribute('data-jump-summary')).toBe(false)
+    expect(card.hasAttribute('data-jump-image')).toBe(false)
+    expect(card.textContent).toContain('人物卡暂不可用')
+    expect(card.textContent).not.toContain('不应泄漏')
+    expect(card.querySelector('img')).toBeNull()
+
+    const router = { push: vi.fn() }
+    card.addEventListener('click', (event) => handleJumpLinkClick(event as MouseEvent, router as any))
+    card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('adds character identity and portrait only after a fresh public-access check succeeds', async () => {
+    getCharacterCardMock.mockResolvedValue({
+      id: 29,
+      user_id: 1,
+      display_name: '刚验证的公开角色',
+      first_name: '',
+      last_name: '',
+      title: '公开称号',
+      full_title: '',
+      race: '人类',
+      class: '法师',
+      summary: '鉴权成功后才显示的摘要',
+      portrait_image_url: '/portrait.jpg',
+      status: 'published',
+      visibility: 'public',
+      updated_at: '2026-08-10T00:00:00Z',
+    })
+    document.body.innerHTML = `
+      <div id="content">
+        <span class="jump-card jump-card--character-card" data-jump-href="/character-cards/29" data-jump-id="29" data-jump-type="character_card">
+          <span class="jump-card__title">旧快照名称</span>
+        </span>
+      </div>
+    `
+    const container = document.getElementById('content') as HTMLElement
+
+    sanitizeJumpLinks(container)
+    const embedded = container.querySelector<HTMLElement>('.jump-card')!
+    expect(embedded.textContent).not.toContain('旧快照名称')
+    expect(embedded.textContent).not.toContain('刚验证的公开角色')
+
+    hydrateJumpCards(container)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(embedded.getAttribute('data-jump-verified')).toBe('true')
+    expect(embedded.getAttribute('data-jump-pending')).toBeNull()
+    expect(embedded.textContent).toContain('刚验证的公开角色')
+    expect(embedded.textContent).toContain('鉴权成功后才显示的摘要')
+    expect(embedded.querySelector('img')?.getAttribute('src')).toContain('/api/v1/images/character-card-portrait/29')
+    expect(embedded.hasAttribute('data-jump-summary')).toBe(false)
+    expect(embedded.hasAttribute('data-jump-image')).toBe(false)
+  })
+
+  it('redacts a character-card embed that is still owner-readable but no longer public', async () => {
+    getCharacterCardMock.mockResolvedValue({
+      id: 28,
+      user_id: 1,
+      display_name: '已经转私密的角色',
+      first_name: '',
+      last_name: '',
+      title: '旧称号',
+      full_title: '',
+      race: '',
+      class: '',
+      summary: '旧摘要',
+      portrait_image_url: '/private-portrait.jpg',
+      status: 'published',
+      visibility: 'private',
+      updated_at: '2026-08-10T00:00:00Z',
+    })
+    document.body.innerHTML = `
+      <div id="content">
+        <span class="jump-card jump-card--character-card" data-jump-href="/character-cards/28" data-jump-id="28" data-jump-type="character_card">
+          <span class="jump-card__character-portrait"><img src="/private-portrait.jpg"></span>
+          <span class="jump-card__title">已经转私密的角色</span>
+          <span class="jump-card__character-subtitle">旧称号</span>
+          <span class="jump-card__character-summary">旧摘要</span>
+        </span>
+      </div>
+    `
+
+    hydrateJumpCards(document.getElementById('content'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const embedded = document.querySelector<HTMLElement>('.jump-card')!
+    expect(embedded.getAttribute('data-jump-unavailable')).toBe('true')
+    expect(embedded.textContent).toContain('人物卡暂不可用')
+    expect(embedded.textContent).not.toContain('已经转私密的角色')
+    expect(embedded.querySelector('img')).toBeNull()
   })
 })

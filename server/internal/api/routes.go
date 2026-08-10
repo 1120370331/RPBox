@@ -86,6 +86,9 @@ func (s *Server) setupRoutes() {
 
 		// 通用图片服务（支持缩略图）
 		v1.GET("/images/:type/:id", s.getImage)
+		// RPBox 人物卡公开读取；handler 内部同时识别可选登录身份。
+		v1.GET("/character-cards/:id", s.getCharacterCard)
+		v1.GET("/users/:id/character-cards", s.listPublicUserCharacterCards)
 
 		// 需要认证的接口
 		auth := v1.Group("")
@@ -146,6 +149,14 @@ func (s *Server) setupRoutes() {
 			auth.GET("/characters/:id", s.getCharacter)
 			auth.PUT("/characters/:id", s.updateCharacter)
 			auth.DELETE("/characters/:id", s.deleteCharacter)
+
+			// RPBox 原生人物卡管理
+			auth.GET("/character-card-sources", s.listCharacterCardSources)
+			auth.GET("/character-cards", s.listMyCharacterCards)
+			auth.POST("/character-cards", s.createCharacterCard)
+			auth.PUT("/character-cards/:id", s.updateCharacterCard)
+			auth.DELETE("/character-cards/:id", s.deleteCharacterCard)
+			auth.POST("/character-cards/:id/sync-from-trp3", s.syncCharacterCardFromTRP3)
 
 			// 道具市场
 			auth.GET("/items", s.listItems)
@@ -284,6 +295,8 @@ func (s *Server) setupRoutes() {
 			// 通用图片上传
 			auth.POST("/upload/attachment", s.uploadAttachment)
 			auth.POST("/upload/image", s.uploadImage)
+			auth.POST("/upload/character-card-portrait", s.uploadCharacterCardPortrait)
+			auth.POST("/upload/comment-image", s.uploadCommentImage)
 
 			// 合集管理
 			auth.GET("/collections", s.listCollections)
@@ -356,6 +369,8 @@ func (s *Server) setupRoutes() {
 				mod.POST("/review/post-comment-images/:id", s.reviewPostCommentImage)
 				mod.GET("/review/item-comment-images", s.listPendingItemCommentImages)
 				mod.POST("/review/item-comment-images/:id", s.reviewItemCommentImage)
+				mod.GET("/review/rpdb-comment-images", s.listPendingRPDBCommentImages)
+				mod.POST("/review/rpdb-comment-images/:id", s.reviewRPDBCommentImage)
 				mod.GET("/review/user-avatars", s.listPendingUserAvatars)
 				mod.POST("/review/user-avatars/:id", s.reviewUserAvatar)
 

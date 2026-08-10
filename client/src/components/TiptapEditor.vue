@@ -107,6 +107,7 @@ type JumpVariant =
   | 'rpdb-item'
   | 'rpdb-transmog'
   | 'rpdb-home'
+  | 'character-card'
 
 function normalizeJumpText(value: unknown) {
   return String(value || '').trim()
@@ -137,6 +138,7 @@ function resolveJumpVariant(attrs: Record<string, any>): JumpVariant | '' {
     if (rpdbType === 'home_showcase') return 'rpdb-home'
     return 'rpdb-item'
   }
+  if (type === 'character_card') return 'character-card'
   if (type === 'story') {
     return label.includes('公会') ? 'story-guild' : 'story-mine'
   }
@@ -148,6 +150,7 @@ function buildJumpBaseAttrs(attrs: Record<string, any>, variant: string, styleVa
   const label = normalizeJumpText(attrs.label)
   const title = normalizeJumpText(attrs.title)
   const type = normalizeJumpText(attrs.type)
+  const jumpId = normalizeJumpText(attrs.jumpId)
   const status = normalizeJumpText(attrs.status)
   const visibility = normalizeJumpText(attrs.visibility)
   const guild = normalizeJumpText(attrs.guild)
@@ -171,6 +174,7 @@ function buildJumpBaseAttrs(attrs: Record<string, any>, variant: string, styleVa
     tabindex: '0',
     'data-jump-href': href,
     'data-jump-type': type,
+    'data-jump-id': jumpId,
     'data-jump-label': label,
     'data-jump-title': title,
     'data-jump-variant': variant,
@@ -196,6 +200,26 @@ function buildJumpTag(label: string, variant: string) {
   return ['span', { class: `jump-tag ${variant}`.trim() }, label]
 }
 
+function buildCharacterCardPlaceholderAttrs(attrs: Record<string, any>) {
+  const rawId = normalizeJumpText(attrs.jumpId)
+  const jumpId = /^[1-9]\d*$/.test(rawId) ? rawId : ''
+  const href = jumpId ? `/character-cards/${jumpId}` : normalizeJumpText(attrs.href)
+  return {
+    class: 'jump-card jump-card--character-card',
+    role: 'group',
+    tabindex: '-1',
+    'aria-disabled': 'true',
+    'data-jump-href': href,
+    'data-jump-type': 'character_card',
+    'data-jump-id': jumpId,
+    'data-jump-label': '人物卡引用',
+    'data-jump-title': '正在验证人物卡访问权限',
+    'data-jump-variant': 'character-card',
+    'data-jump-pending': 'true',
+    'data-jump-safe-placeholder': 'true',
+  }
+}
+
 function buildJumpCard(attrs: Record<string, any>): any {
   const label = normalizeJumpText(attrs.label) || '跳转'
   const title = normalizeJumpText(attrs.title)
@@ -208,7 +232,9 @@ function buildJumpCard(attrs: Record<string, any>): any {
   const image = normalizeJumpText(attrs.image)
   const type = normalizeJumpText(attrs.type)
   const variant = resolveJumpVariant(attrs)
-  const baseAttrs = buildJumpBaseAttrs(attrs, variant)
+  const baseAttrs = variant === 'character-card'
+    ? buildCharacterCardPlaceholderAttrs(attrs)
+    : buildJumpBaseAttrs(attrs, variant)
 
   if (!variant) {
     return [
@@ -281,6 +307,24 @@ function buildJumpCard(attrs: Record<string, any>): any {
           ['span', { class: 'jump-card__arrow' }, '→'],
         ],
       ],
+    ]
+  }
+
+  if (variant === 'character-card') {
+    return [
+      'span',
+      baseAttrs,
+      ['span', { class: 'jump-card__character-rail' }],
+      ['span', { class: 'jump-card__character-portrait' }, ['i', { class: 'ri-shield-keyhole-line', 'aria-hidden': 'true' }]],
+      [
+        'span',
+        { class: 'jump-card__character-body' },
+        ['span', { class: 'jump-card__character-kind' }, ['i', { class: 'ri-shield-keyhole-line', 'aria-hidden': 'true' }], '人物卡引用'],
+        ['span', { class: 'jump-card__title' }, '人物卡'],
+        ['span', { class: 'jump-card__character-subtitle' }, '访问时验证权限'],
+        ['span', { class: 'jump-card__character-summary' }, '名称、摘要和肖像不会保存到帖子快照中。'],
+      ],
+      ['span', { class: 'jump-card__character-open', title: '保存后验证人物卡' }, ['i', { class: 'ri-lock-line', 'aria-hidden': 'true' }]],
     ]
   }
 
@@ -411,6 +455,7 @@ function parseJumpAttrs(node: HTMLElement) {
   let label = node.getAttribute('data-jump-label') || ''
   let title = node.getAttribute('data-jump-title') || ''
   const type = node.getAttribute('data-jump-type') || ''
+  let jumpId = node.getAttribute('data-jump-id') || ''
   const variant = node.getAttribute('data-jump-variant') || ''
   const status = node.getAttribute('data-jump-status') || ''
   const visibility = node.getAttribute('data-jump-visibility') || ''
@@ -427,8 +472,13 @@ function parseJumpAttrs(node: HTMLElement) {
   const favorites = node.getAttribute('data-jump-favorites') || ''
   const lists = node.getAttribute('data-jump-lists') || ''
 
+  if (type === 'character_card' && !jumpId) {
+    const match = href.match(/\/character-cards\/(\d+)(?:$|[/?#])/i)
+    jumpId = match?.[1] || ''
+  }
+
   if (!image) {
-    const img = node.querySelector('.jump-card__bg-image, .jump-card__image, .jump-card__logo-image, .jump-card__thumb img, .jump-card__rpdb-media img')
+    const img = node.querySelector('.jump-card__bg-image, .jump-card__image, .jump-card__logo-image, .jump-card__thumb img, .jump-card__rpdb-media img, .jump-card__character-portrait img')
     if (img) {
       image = img.getAttribute('src') || ''
     }
@@ -464,6 +514,7 @@ function parseJumpAttrs(node: HTMLElement) {
     label: label.trim(),
     title: title.trim(),
     type: type.trim(),
+    jumpId: jumpId.trim(),
     variant: variant.trim(),
     status: status.trim(),
     visibility: visibility.trim(),
@@ -620,6 +671,7 @@ const JumpLinkExtension = Node.create({
       label: { default: '' },
       title: { default: '' },
       type: { default: '' },
+      jumpId: { default: '' },
       variant: { default: '' },
       status: { default: '' },
       visibility: { default: '' },

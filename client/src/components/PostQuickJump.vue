@@ -12,6 +12,12 @@ import {
   type RPDBWork,
   type RPDBWorkType,
 } from '@/api/rpdb'
+import {
+  getCharacterCardPortraitUrl,
+  listMyCharacterCards,
+  type CharacterCardSummary,
+} from '@/api/characterCard'
+import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
 
 const props = defineProps<{
   modelValue: boolean
@@ -28,10 +34,11 @@ type GuildStoryCard = {
   story: GuildStoryWithUploader
 }
 
-const activeTab = ref<'guild' | 'post' | 'rpdb' | 'guildHome'>('guild')
+const activeTab = ref<'guild' | 'post' | 'rpdb' | 'characterCard' | 'guildHome'>('guild')
 const loadingGuildStories = ref(false)
 const loadingPosts = ref(false)
 const loadingRPDBWorks = ref(false)
+const loadingCharacterCards = ref(false)
 const loadingGuilds = ref(false)
 const hasLoaded = ref(false)
 
@@ -39,8 +46,10 @@ const guilds = ref<Guild[]>([])
 const guildStories = ref<GuildStoryCard[]>([])
 const publicPosts = ref<PostWithAuthor[]>([])
 const publicRPDBWorks = ref<RPDBWork[]>([])
+const publicCharacterCards = ref<CharacterCardSummary[]>([])
 const postSearch = ref('')
 const rpdbSearch = ref('')
+const characterCardSearch = ref('')
 const rpdbType = ref<RPDBWorkType | ''>('')
 
 const open = computed({
@@ -86,6 +95,22 @@ const filteredRPDBWorks = computed(() => {
   })
 })
 
+const filteredCharacterCards = computed(() => {
+  const keyword = characterCardSearch.value.trim().toLowerCase()
+  return publicCharacterCards.value.filter((card) => {
+    if (card.status !== 'published' || card.visibility !== 'public') return false
+    if (!keyword) return true
+    return [
+      getCharacterCardDisplayName(card),
+      card.title,
+      card.full_title,
+      card.race,
+      card.class,
+      card.summary,
+    ].some((value) => String(value || '').toLowerCase().includes(keyword))
+  })
+})
+
 watch(() => props.modelValue, (isOpen) => {
   if (isOpen) {
     void loadAll()
@@ -99,7 +124,21 @@ async function loadAll() {
     loadGuildsAndStories(),
     loadPublicPosts(),
     loadPublicRPDBWorks(),
+    loadCharacterCards(),
   ])
+}
+
+async function loadCharacterCards() {
+  loadingCharacterCards.value = true
+  try {
+    const response = await listMyCharacterCards()
+    publicCharacterCards.value = response.character_cards || []
+  } catch (error) {
+    console.error('加载人物卡失败:', error)
+    publicCharacterCards.value = []
+  } finally {
+    loadingCharacterCards.value = false
+  }
 }
 
 async function loadGuildsAndStories() {
@@ -210,6 +249,8 @@ type JumpCardAttrs = {
   label: string
   title: string
   type: string
+  jumpId?: number
+  safePlaceholder?: boolean
   variant: string
   status?: string
   visibility?: string
@@ -235,6 +276,8 @@ function buildJumpCard(attrs: JumpCardAttrs) {
   const dataAttrs = [
     ['data-jump-href', attrs.href],
     ['data-jump-type', attrs.type],
+    ['data-jump-id', attrs.jumpId],
+    ['data-jump-safe-placeholder', attrs.safePlaceholder ? 'true' : undefined],
     ['data-jump-label', attrs.label],
     ['data-jump-title', attrs.title],
     ['data-jump-variant', attrs.variant],
@@ -415,6 +458,23 @@ function insertRPDBWork(work: RPDBWork) {
   emit('update:modelValue', false)
 }
 
+function resolveCharacterCardPortrait(card: CharacterCardSummary) {
+  return getCharacterCardPortraitUrl(card, { w: 360, q: 84 })
+}
+
+function insertCharacterCard(card: CharacterCardSummary) {
+  props.onInsert(buildJumpCard({
+    href: `/character-cards/${card.id}`,
+    label: '人物卡引用',
+    title: '人物卡',
+    type: 'character_card',
+    jumpId: card.id,
+    variant: 'character-card',
+    safePlaceholder: true,
+  }))
+  emit('update:modelValue', false)
+}
+
 function closeDialog() {
   emit('update:modelValue', false)
 }
@@ -438,13 +498,14 @@ function escapeHtml(value: string) {
         </div>
         <div>
           <div class="quick-jump__intro-title">把站内内容插入正文</div>
-          <div class="quick-jump__intro-text">选择公会剧情、公开帖子、RP 数据库作品或公会主页，生成可点击的站内内容卡片。</div>
+          <div class="quick-jump__intro-text">选择公会剧情、公开帖子、人物卡、RP 数据库作品或公会主页，生成可点击的站内内容卡片。</div>
         </div>
       </div>
 
       <div class="quick-jump__tabs">
         <button :class="{ active: activeTab === 'guild' }" @click="activeTab = 'guild'">公会剧情</button>
         <button :class="{ active: activeTab === 'post' }" @click="activeTab = 'post'">公开帖子</button>
+        <button :class="{ active: activeTab === 'characterCard' }" @click="activeTab = 'characterCard'">人物卡</button>
         <button :class="{ active: activeTab === 'rpdb' }" @click="activeTab = 'rpdb'">RP数据库</button>
         <button :class="{ active: activeTab === 'guildHome' }" @click="activeTab = 'guildHome'">公会主页</button>
       </div>
@@ -528,6 +589,41 @@ function escapeHtml(value: string) {
               </div>
             </div>
             <RButton size="sm" type="primary" @click="insertRPDBWork(work)">插入链接</RButton>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="activeTab === 'characterCard'" class="quick-jump__body">
+        <div class="jump-search">
+          <i class="ri-search-line"></i>
+          <input v-model="characterCardSearch" type="text" placeholder="搜索自己已发布的公开人物卡…" />
+        </div>
+        <div v-if="loadingCharacterCards" class="jump-loading">正在查阅人物档案…</div>
+        <div v-else-if="filteredCharacterCards.length === 0" class="jump-empty character-card-empty">
+          <i class="ri-user-search-line" aria-hidden="true"></i>
+          <span>暂无可插入的公开人物卡</span>
+          <small>人物卡需要同时设为“已发布”和“公开可见”。</small>
+        </div>
+        <div v-else class="jump-list jump-list--characters">
+          <div v-for="card in filteredCharacterCards" :key="card.id" class="jump-item jump-item--character">
+            <div class="jump-character__portrait" :class="{ empty: !resolveCharacterCardPortrait(card) }">
+              <img
+                v-if="resolveCharacterCardPortrait(card)"
+                :src="resolveCharacterCardPortrait(card)"
+                :alt="`${getCharacterCardDisplayName(card)}的角色肖像`"
+                loading="lazy"
+              />
+              <i v-else class="ri-user-star-line" aria-hidden="true"></i>
+            </div>
+            <div class="jump-item__info">
+              <div class="jump-item__eyebrow jump-item__eyebrow--character"><i class="ri-id-card-line"></i>公开人物卡</div>
+              <div class="jump-item__title">{{ getCharacterCardDisplayName(card) }}</div>
+              <div class="jump-item__summary">{{ card.summary || [card.race, card.class].filter(Boolean).join(' · ') || '角色摘要尚未填写。' }}</div>
+              <div class="jump-item__meta">
+                <span>{{ card.title || card.full_title || '无称号记录' }}</span>
+              </div>
+            </div>
+            <RButton size="sm" type="primary" @click="insertCharacterCard(card)">插入链接</RButton>
           </div>
         </div>
       </div>
@@ -659,6 +755,12 @@ function escapeHtml(value: string) {
   padding-right: 4px;
 }
 
+.jump-list--characters {
+  max-height: 430px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .jump-item {
   display: flex;
   align-items: center;
@@ -679,6 +781,66 @@ function escapeHtml(value: string) {
   overflow: hidden;
   padding: 0 12px 0 0;
   border-left: 3px solid var(--rpdb-accent);
+}
+
+.jump-item--character {
+  position: relative;
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto;
+  min-height: 94px;
+  overflow: hidden;
+  padding: 0 12px 0 0;
+  border-color: #DEC5AD;
+  border-left: 3px solid #B87333;
+  background: linear-gradient(90deg, #FFF9F3, #FFF);
+}
+
+.jump-character__portrait {
+  align-self: stretch;
+  min-height: 94px;
+  overflow: hidden;
+  border-right: 1px solid #E3D3C3;
+  background: #302017;
+}
+
+.jump-character__portrait img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.jump-character__portrait.empty {
+  display: grid;
+  place-items: center;
+  color: #C79060;
+  font-size: 25px;
+}
+
+.jump-item--character .jump-item__info {
+  padding: 10px 12px;
+}
+
+.jump-item__eyebrow--character {
+  color: #9A5A2D;
+}
+
+.character-card-empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 32px 0;
+}
+
+.character-card-empty i {
+  margin-bottom: 4px;
+  color: #B87333;
+  font-size: 26px;
+}
+
+.character-card-empty small {
+  color: #AA9684;
+  font-size: 10px;
 }
 
 .jump-item--rpdb-transmog { --rpdb-accent: #55758B; }
@@ -799,6 +961,23 @@ function escapeHtml(value: string) {
   .jump-item--rpdb :deep(.r-button) {
     grid-column: 1 / -1;
     margin: 0 8px 8px;
+  }
+
+  .jump-item--character {
+    grid-template-columns: 60px minmax(0, 1fr);
+    padding-right: 8px;
+  }
+
+  .jump-item--character :deep(.r-button) {
+    grid-column: 1 / -1;
+    margin: 0 8px 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-jump__tabs button,
+  .profile-source {
+    transition: none;
   }
 }
 </style>

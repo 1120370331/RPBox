@@ -55,6 +55,8 @@ export interface ItemComment {
   user_id: number
   rating: number
   content: string
+  image_url?: string
+  image_review_status?: 'none' | 'pending' | 'approved' | 'rejected'
   parent_id?: number
   created_at: string
   updated_at: string
@@ -153,8 +155,8 @@ export function getItemComments(id: number) {
 }
 
 // 添加评论（带评分）
-export function addItemComment(id: number, rating: number, content: string, parentId?: number) {
-  return request.post(`/items/${id}/comments`, { rating, content, parent_id: parentId })
+export function addItemComment(id: number, rating: number, content: string, parentId?: number, imageUrl = '') {
+  return request.post(`/items/${id}/comments`, { rating, content, image_url: imageUrl, parent_id: parentId })
 }
 
 // 获取道具标签

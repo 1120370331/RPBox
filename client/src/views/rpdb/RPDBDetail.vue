@@ -22,6 +22,7 @@ import {
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
 import CommentReplyBox from '@/components/CommentReplyBox.vue'
+import CommentImagePicker from '@/components/CommentImagePicker.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
@@ -53,6 +54,8 @@ const comments = ref<RPDBComment[]>([])
 const recommendations = ref<RPDBRecommendation[]>([])
 const loading = ref(true)
 const comment = ref('')
+const commentImageURL = ref('')
+const commentImageUploading = ref(false)
 const submittingComment = ref(false)
 const articleContentRef = ref<HTMLElement | null>(null)
 const commentEditorRef = ref<any>(null)
@@ -63,6 +66,7 @@ const showEmojiPicker = ref(false)
 const showReplyEmojiPicker = ref(false)
 const replyingTo = ref<RPDBComment | null>(null)
 const replyContent = ref('')
+const replyImageURL = ref('')
 const submittingReply = ref(false)
 const showImageViewer = ref(false)
 const viewerImages = ref<string[]>([])
@@ -487,12 +491,15 @@ async function copyTransmogShareCode() {
 }
 
 async function submitComment() {
-  if (!work.value || !comment.value.trim()) return
+  if (!work.value || (!comment.value.trim() && !commentImageURL.value)) return
   submittingComment.value = true
   try {
-    await createRPDBComment(work.value.id, comment.value)
+    const hasImage = !!commentImageURL.value
+    await createRPDBComment(work.value.id, comment.value.trim(), undefined, commentImageURL.value)
     comment.value = ''
+    commentImageURL.value = ''
     await load()
+    toast.success(hasImage ? '配图评论已提交审核，通过后将在评论区展示' : '评论已发布')
   } catch (error) {
     toast.error((error as Error).message)
   } finally {
@@ -509,21 +516,25 @@ function setReplyEditorRef(instance: { insertToken?: (token: string) => void } |
 function startReply(item: RPDBComment) {
   replyingTo.value = item
   replyContent.value = ''
+  replyImageURL.value = ''
 }
 
 function cancelReply() {
   replyingTo.value = null
   replyContent.value = ''
+  replyImageURL.value = ''
   replyEditorRef.value = null
 }
 
 async function submitReply() {
-  if (!work.value || !replyingTo.value || !replyContent.value.trim()) return
+  if (!work.value || !replyingTo.value || (!replyContent.value.trim() && !replyImageURL.value)) return
   submittingReply.value = true
   try {
-    await createRPDBComment(work.value.id, replyContent.value, replyingTo.value.id)
+    const hasImage = !!replyImageURL.value
+    await createRPDBComment(work.value.id, replyContent.value.trim(), replyingTo.value.id, replyImageURL.value)
     cancelReply()
     await load()
+    toast.success(hasImage ? '配图回复已提交审核，通过后将在评论区展示' : '回复已发布')
   } catch (error) {
     toast.error((error as Error).message)
   } finally {
@@ -535,6 +546,11 @@ function openImageViewer(images: string[], index: number) {
   viewerImages.value = images
   viewerStartIndex.value = index
   showImageViewer.value = images.length > 0
+}
+
+function openCommentImage(src: string) {
+  if (!src) return
+  openImageViewer([resolveApiUrl(src)], 0)
 }
 
 function setupArticleImagePreview() {
@@ -849,7 +865,10 @@ onBeforeUnmount(() => {
                   </button>
                   <span class="comment-time">{{ formatCommentTime(item.created_at) }}</span>
                 </div>
-                <div class="comment-text" v-html="renderComment(item.content)"></div>
+                <div v-if="item.content" class="comment-text" v-html="renderComment(item.content)"></div>
+                <button v-if="item.image_url" type="button" class="comment-image" @click="openCommentImage(item.image_url)">
+                  <img :src="resolveApiUrl(item.image_url)" alt="评论配图" loading="lazy" />
+                </button>
                 <div class="comment-actions">
                   <button class="reply-btn" type="button" @click="startReply(item)">
                     <i class="ri-reply-line"></i> 回复
@@ -887,12 +906,15 @@ onBeforeUnmount(() => {
                   v-if="replyingTo?.id === item.id"
                   :ref="(instance) => setReplyEditorRef(instance, item.id)"
                   v-model="replyContent"
+                  :image-url="replyImageURL"
                   :placeholder="`回复 ${item.author_name || '匿名玩家'}`"
                   :disabled="submittingReply"
                   :auto-focus="true"
                   cancel-label="取消"
                   submit-label="回复"
                   @open-emoji="openReplyEmojiPicker"
+                  @update:image-url="replyImageURL = $event"
+                  @preview-image="openCommentImage"
                   @cancel="cancelReply"
                   @submit="submitReply"
                 />
@@ -922,7 +944,10 @@ onBeforeUnmount(() => {
                           <span v-if="reply.like_count">{{ reply.like_count }}</span>
                         </button>
                       </div>
-                      <div class="reply-text" v-html="renderComment(reply.content)"></div>
+                      <div v-if="reply.content" class="reply-text" v-html="renderComment(reply.content)"></div>
+                      <button v-if="reply.image_url" type="button" class="comment-image reply-image" @click="openCommentImage(reply.image_url)">
+                        <img :src="resolveApiUrl(reply.image_url)" alt="回复配图" loading="lazy" />
+                      </button>
                       <div class="comment-actions">
                         <button class="reply-btn" type="button" @click="startReply(reply)">
                           <i class="ri-reply-line"></i> 回复
@@ -960,12 +985,15 @@ onBeforeUnmount(() => {
                         v-if="replyingTo?.id === reply.id"
                         :ref="(instance) => setReplyEditorRef(instance, reply.id)"
                         v-model="replyContent"
+                        :image-url="replyImageURL"
                         :placeholder="`回复 ${reply.author_name || '匿名玩家'}`"
                         :disabled="submittingReply"
                         :auto-focus="true"
                         cancel-label="取消"
                         submit-label="回复"
                         @open-emoji="openReplyEmojiPicker"
+                        @update:image-url="replyImageURL = $event"
+                        @preview-image="openCommentImage"
                         @cancel="cancelReply"
                         @submit="submitReply"
                       />
@@ -979,11 +1007,17 @@ onBeforeUnmount(() => {
 
           <div class="comment-input-box">
             <EmoteEditor ref="commentEditorRef" v-model="comment" placeholder="补充使用经验、版本变化或替代获取方式" :disabled="submittingComment" />
+            <CommentImagePicker
+              v-model="commentImageURL"
+              :disabled="submittingComment"
+              @update:uploading="commentImageUploading = $event"
+              @preview="openCommentImage"
+            />
             <div class="input-footer">
               <button ref="emojiButtonRef" class="emoji-btn" type="button" @click="showEmojiPicker = true">
                 <i class="ri-emotion-line"></i>
               </button>
-              <button class="post-btn" type="button" :disabled="submittingComment || !comment.trim()" @click="submitComment">
+              <button class="post-btn" type="button" :disabled="submittingComment || commentImageUploading || (!comment.trim() && !commentImageURL)" @click="submitComment">
                 发表评论
               </button>
             </div>
@@ -1106,6 +1140,7 @@ onBeforeUnmount(() => {
 .comment-input-box:focus-within{box-shadow:0 0 0 3px var(--color-primary-light)}
 .comment-input-box :deep(.emote-editor-input){width:100%;min-height:80px;border:0;outline:0;background:transparent;color:var(--color-primary);font:inherit;font-size:14px;line-height:1.6;resize:none}
 .comment-input-box :deep(.emote-editor-input)::before{color:var(--color-text-muted);opacity:.6}
+.comment-input-box>.comment-image-picker{margin-top:12px}
 .input-footer{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border-light)}
 .post-btn{padding:8px 20px;border:0;background:var(--color-text-main);color:var(--btn-primary-text,var(--color-text-light));font-size:11px;font-weight:500;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:background .3s}
 .post-btn:hover{background:var(--color-secondary)}
@@ -1130,6 +1165,7 @@ onBeforeUnmount(() => {
 .reply-to-name{color:var(--color-secondary);font-weight:500}
 .comment-text{margin:0;color:var(--color-primary);font-size:14px;line-height:1.6}
 .reply-text{margin:0;color:var(--color-primary);font-size:13px;line-height:1.5}
+.comment-image{display:block;width:min(100%,360px);max-height:280px;overflow:hidden;margin-top:10px;padding:0;border:1px solid var(--color-border);border-radius:8px;background:var(--color-card-bg);cursor:zoom-in}.comment-image img{display:block;width:100%;max-height:278px;object-fit:contain}.comment-image.reply-image{width:min(100%,300px);max-height:230px}
 .comment-text :deep(.comment-emote),.reply-text :deep(.comment-emote){display:inline-block;width:64px;height:64px;margin:4px 6px 4px 0;object-fit:contain;vertical-align:middle}
 .comment-text :deep(.comment-mention),.reply-text :deep(.comment-mention){display:inline-flex;align-items:center;margin:0 2px;padding:2px 8px;border-radius:999px;background:var(--color-primary-light);color:var(--color-secondary);font-weight:600}
 .comment-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:8px}

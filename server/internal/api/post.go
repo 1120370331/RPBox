@@ -1009,7 +1009,6 @@ func (s *Server) updatePost(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
 		return
 	}
-
 	var req UpdatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
@@ -1345,6 +1344,11 @@ func (s *Server) deletePost(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
 		return
 	}
+	commentImageURLs, err := loadCommentImageURLs(database.DB, &model.Comment{}, "post_id = ?", post.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取评论配图失败"})
+		return
+	}
 
 	// 删除关联数据
 	database.DB.Where("post_id = ?", id).Delete(&model.PostTag{})
@@ -1354,7 +1358,11 @@ func (s *Server) deletePost(c *gin.Context) {
 	database.DB.Where("post_id = ?", id).Delete(&model.PostEditRequest{})
 
 	s.cleanupPostImages(c, post)
-	database.DB.Delete(&post)
+	if err := database.DB.Delete(&post).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+	s.cleanupCommentImageURLs(c, commentImageURLs...)
 	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})

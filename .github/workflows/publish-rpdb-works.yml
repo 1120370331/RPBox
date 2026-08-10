@@ -1,0 +1,48 @@
+name: Publish RPDB Works
+
+on:
+  workflow_dispatch:
+    inputs:
+      work_file:
+        description: "JSON RPDB work file to publish"
+        required: true
+        default: "scripts/rpdb-works/wowhead-rp-items.json"
+        type: string
+      status:
+        description: "Work status"
+        required: true
+        default: "published"
+        type: choice
+        options:
+          - published
+      dry_run:
+        description: "Validate payload without publishing"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  publish:
+    name: Publish RPDB Works
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Publish RPDB works
+        env:
+          RPBOX_API_BASE: ${{ secrets.RPBOX_API_BASE }}
+          RPBOX_USERNAME: ${{ secrets.RPBOX_USERNAME }}
+          RPBOX_PASSWORD: ${{ secrets.RPBOX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          args=(--work-file "${{ github.event.inputs.work_file }}" --status "${{ github.event.inputs.status }}")
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          node scripts/rpbox-rpdb.mjs "${args[@]}"

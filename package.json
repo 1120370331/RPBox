@@ -4,6 +4,8 @@
   "scripts": {
     "dev:mobile": "pnpm --filter rpbox-mobile dev",
     "dev:client": "pnpm --filter rpbox-client dev",
-    "build:mobile": "pnpm --filter rpbox-mobile build"
+    "build:mobile": "pnpm --filter rpbox-mobile build",
+    "post:community": "node scripts/rpbox-post.mjs",
+    "post:rpdb": "node scripts/rpbox-rpdb.mjs"
   }
 }

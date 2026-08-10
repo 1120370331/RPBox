@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -183,6 +184,10 @@ func (s *Server) changeRPDBCommentLike(c *gin.Context, add bool) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
 		return
 	}
+	if !isCommentImageVisible(comment.ImageURL, comment.ImageReviewStatus) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		return
+	}
 
 	created := false
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
@@ -246,7 +251,7 @@ func (s *Server) listRPDBComments(c *gin.Context) {
 		return
 	}
 	var comments []model.RPDBComment
-	if err := database.DB.Where("work_id = ? AND status = ?", workID, "published").
+	if err := visibleCommentImages(database.DB.Where("work_id = ? AND status = ?", workID, "published")).
 		Order("created_at ASC").Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "加载评论失败"})
 		return
@@ -331,6 +336,73 @@ func (s *Server) listRPDBComments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"comments": response})
 }
 
+func awardRPDBCommentPublication(tx *gorm.DB, comment model.RPDBComment, work model.RPDBWork) (bool, error) {
+	commentOwnerID := work.AuthorID
+	if comment.ParentID != nil {
+		var parent model.RPDBComment
+		if err := tx.Select("author_id").First(&parent, *comment.ParentID).Error; err == nil {
+			commentOwnerID = parent.AuthorID
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, err
+		}
+	}
+
+	if err := tx.Model(&model.RPDBWork{}).Where("id = ?", work.ID).
+		UpdateColumn("comment_count", gorm.Expr("comment_count + 1")).Error; err != nil {
+		return false, err
+	}
+	commentReward, err := service.AwardActivityReward(
+		tx,
+		comment.AuthorID,
+		"rpdb_comment_create",
+		fmt.Sprintf("rpdb-comment:%d", comment.ID),
+		0,
+		service.CommentCreateExperience,
+	)
+	if err != nil {
+		return false, err
+	}
+	if commentOwnerID != comment.AuthorID {
+		if _, err := service.AwardActivityReward(
+			tx,
+			commentOwnerID,
+			"rpdb_comment_received",
+			fmt.Sprintf("rpdb-comment:%d:owner:%d", comment.ID, commentOwnerID),
+			0,
+			service.CommentReceivedExperience,
+		); err != nil {
+			return false, err
+		}
+	}
+	return commentReward.Granted, nil
+}
+
+func notifyRPDBCommentPublication(comment model.RPDBComment, work model.RPDBWork) {
+	commentOwnerID := work.AuthorID
+	content := "有人评论了你的 RP 数据库作品《" + work.Title + "》"
+	if comment.ParentID != nil {
+		var parent model.RPDBComment
+		if err := database.DB.Select("author_id").First(&parent, *comment.ParentID).Error; err == nil {
+			commentOwnerID = parent.AuthorID
+			content = "有人回复了你在 RP 数据库作品《" + work.Title + "》中的评论"
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
+	}
+	if commentOwnerID == comment.AuthorID {
+		return
+	}
+	actorID := comment.AuthorID
+	_ = service.CreateNotification(&model.Notification{
+		UserID:     commentOwnerID,
+		Type:       "rpdb_comment",
+		ActorID:    &actorID,
+		TargetType: "rpdb_work",
+		TargetID:   work.ID,
+		Content:    content,
+	})
+}
+
 func (s *Server) createRPDBComment(c *gin.Context) {
 	userID := c.GetUint("userID")
 	workID, ok := parseRPDBWorkID(c)
@@ -352,6 +424,7 @@ func (s *Server) createRPDBComment(c *gin.Context) {
 	}
 	var request struct {
 		Content  string `json:"content"`
+		ImageURL string `json:"image_url"`
 		ParentID *uint  `json:"parent_id"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -359,78 +432,68 @@ func (s *Server) createRPDBComment(c *gin.Context) {
 		return
 	}
 	request.Content = strings.TrimSpace(request.Content)
-	if request.Content == "" || len([]rune(request.Content)) > 2000 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "评论长度必须为 1 到 2000 个字符"})
+	request.ImageURL = strings.TrimSpace(request.ImageURL)
+	if (request.Content == "" && request.ImageURL == "") || len([]rune(request.Content)) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "评论内容和图片不能同时为空，文字最多 2000 个字符"})
 		return
 	}
-	commentOwnerID := work.AuthorID
+	if !s.requireValidCommentImageReference(c, request.ImageURL) {
+		return
+	}
+	if request.ImageURL != "" {
+		pendingCount, err := pendingCommentReviewRequestCount(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "检查待审核评论数量失败"})
+			return
+		}
+		if pendingCount >= maxPendingCommentReviewRequests {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "你最多只能同时有5条待审核评论申请"})
+			return
+		}
+	}
 	if request.ParentID != nil {
 		var parent model.RPDBComment
 		if err := database.DB.Where("id = ? AND work_id = ?", *request.ParentID, workID).First(&parent).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "回复目标不存在"})
 			return
 		}
-		commentOwnerID = parent.AuthorID
+		if !isCommentImageVisible(parent.ImageURL, parent.ImageReviewStatus) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "回复目标尚未通过审核"})
+			return
+		}
 	}
 
 	comment := model.RPDBComment{
-		WorkID:   workID,
-		AuthorID: userID,
-		ParentID: request.ParentID,
-		Content:  request.Content,
-		Status:   "published",
+		WorkID:            workID,
+		AuthorID:          userID,
+		ParentID:          request.ParentID,
+		Content:           request.Content,
+		ImageURL:          request.ImageURL,
+		ImageReviewStatus: commentImageReviewNone,
+		Status:            model.RPDBStatusPublished,
 	}
+	if request.ImageURL != "" {
+		comment.ImageReviewStatus = commentImageReviewPending
+	}
+	publishImmediately := request.ImageURL == ""
+	shouldNotify := false
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&comment).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&model.RPDBWork{}).Where("id = ?", workID).
-			UpdateColumn("comment_count", gorm.Expr("comment_count + 1")).Error; err != nil {
+		if publishImmediately {
+			var err error
+			shouldNotify, err = awardRPDBCommentPublication(tx, comment, work)
 			return err
-		}
-		if _, err := service.AwardActivityReward(
-			tx,
-			userID,
-			"rpdb_comment_create",
-			fmt.Sprintf("rpdb-comment:%d", comment.ID),
-			0,
-			service.CommentCreateExperience,
-		); err != nil {
-			return err
-		}
-		if commentOwnerID != userID {
-			if _, err := service.AwardActivityReward(
-				tx,
-				commentOwnerID,
-				"rpdb_comment_received",
-				fmt.Sprintf("rpdb-comment:%d:owner:%d", comment.ID, commentOwnerID),
-				0,
-				service.CommentReceivedExperience,
-			); err != nil {
-				return err
-			}
 		}
 		return nil
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "发布评论失败"})
 		return
 	}
-	s.bumpRPDBListCache(c.Request.Context())
-
-	if commentOwnerID != userID {
-		actorID := userID
-		content := "有人评论了你的 RP 数据库作品《" + work.Title + "》"
-		if request.ParentID != nil {
-			content = "有人回复了你在 RP 数据库作品《" + work.Title + "》中的评论"
-		}
-		_ = service.CreateNotification(&model.Notification{
-			UserID:     commentOwnerID,
-			Type:       "rpdb_comment",
-			ActorID:    &actorID,
-			TargetType: "rpdb_work",
-			TargetID:   workID,
-			Content:    content,
-		})
+	if publishImmediately && shouldNotify {
+		s.bumpRPDBListCache(c.Request.Context())
+		notifyRPDBCommentPublication(comment, work)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"comment": comment})
@@ -464,6 +527,7 @@ func (s *Server) deleteRPDBComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除评论失败"})
 		return
 	}
+	s.cleanupCommentImageURLs(c, comment.ImageURL)
 	s.bumpRPDBListCache(c.Request.Context())
 	c.Status(http.StatusNoContent)
 }
@@ -485,6 +549,9 @@ func deleteRPDBCommentRecord(tx *gorm.DB, comment model.RPDBComment) error {
 	}
 	if err := tx.Delete(&comment).Error; err != nil {
 		return err
+	}
+	if !isCommentImageVisible(comment.ImageURL, comment.ImageReviewStatus) {
+		return nil
 	}
 	return tx.Model(&model.RPDBWork{}).Where("id = ?", comment.WorkID).
 		UpdateColumn("comment_count", gorm.Expr("CASE WHEN comment_count > 0 THEN comment_count - 1 ELSE 0 END")).Error

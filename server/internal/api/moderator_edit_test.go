@@ -279,7 +279,7 @@ func TestPostEditReviewCleansOrphanEditRequest(t *testing.T) {
 }
 
 func TestDeletePostClearsPostEditRequests(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.PostEditRequest{})
+	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.PostEditRequest{}, &model.Comment{})
 	author := model.User{Username: "author", Email: "author-delete@example.com", PassHash: "hash", Role: "user"}
 	if err := db.Create(&author).Error; err != nil {
 		t.Fatalf("create author: %v", err)

@@ -211,6 +211,10 @@ end
 -- 当前筛选条件
 local currentFilter = {
     days = nil,  -- nil=全部, 0=今天, 3=3天内, 7=7天内, 30=30天内
+    startTime = nil,
+    endTime = nil,
+    startTimeText = "",
+    endTimeText = "",
     channels = {},
     speakers = {},
     listeners = {},
@@ -226,6 +230,8 @@ local LOG_LIVE_REFRESH_INTERVAL = 1
 local RefreshLogContent
 local RenderLogPage
 local SchedulePendingLiveRefresh
+local InitDateDropdown
+local UpdateFilterSummary
 
 local CHANNEL_FILTER_OPTIONS = {
     { value = "SAY", text = "说话" },
@@ -278,6 +284,117 @@ local function GetDatePresetText(days)
     if days == 7 then return "7天内" end
     if days == 30 then return "30天内" end
     return "全部时间"
+end
+
+local function HasExactTimeFilter()
+    return currentFilter.startTime ~= nil or currentFilter.endTime ~= nil
+end
+
+local function GetDateDropdownText()
+    if HasExactTimeFilter() then return "精确区间" end
+    return GetDatePresetText(currentFilter.days)
+end
+
+local function GetExactTimeRangeText()
+    if not HasExactTimeFilter() then return nil end
+    local startText = currentFilter.startTimeText or ""
+    local endText = currentFilter.endTimeText or ""
+    if startText ~= "" and endText ~= "" then
+        return "精确 " .. startText .. " → " .. endText
+    elseif startText ~= "" then
+        return "精确 ≥ " .. startText
+    elseif endText ~= "" then
+        return "精确 ≤ " .. endText
+    end
+    return nil
+end
+
+local function SyncExactTimeInputs()
+    if MainFrame and MainFrame.exactStartBox then
+        MainFrame.exactStartBox:SetText(currentFilter.startTimeText or "")
+    end
+    if MainFrame and MainFrame.exactEndBox then
+        MainFrame.exactEndBox:SetText(currentFilter.endTimeText or "")
+    end
+end
+
+local function ClearExactTimeFilter()
+    currentFilter.startTime = nil
+    currentFilter.endTime = nil
+    currentFilter.startTimeText = ""
+    currentFilter.endTimeText = ""
+    SyncExactTimeInputs()
+end
+
+local function ParseExactTimeInput(text, isEnd)
+    text = strtrim(text or "")
+    if text == "" then return nil, nil end
+
+    local year, month, day, hour, minute, second =
+        text:match("^(%d%d%d%d)[%-/](%d%d?)[%-/](%d%d?)%s+(%d%d?)[:：](%d%d?)[:：](%d%d?)$")
+    if not year then
+        year, month, day, hour, minute =
+            text:match("^(%d%d%d%d)[%-/](%d%d?)[%-/](%d%d?)%s+(%d%d?)[:：](%d%d?)$")
+    end
+    if not year then
+        year, month, day = text:match("^(%d%d%d%d)[%-/](%d%d?)[%-/](%d%d?)$")
+        if year then
+            hour = isEnd and 23 or 0
+            minute = isEnd and 59 or 0
+            second = isEnd and 59 or 0
+        end
+    end
+    if not year then
+        return nil, "时间格式请使用 YYYY-MM-DD HH:MM"
+    end
+
+    local hasExplicitSeconds = second ~= nil
+    year, month, day = tonumber(year), tonumber(month), tonumber(day)
+    hour, minute = tonumber(hour) or 0, tonumber(minute) or 0
+    second = tonumber(second) or (isEnd and not hasExplicitSeconds and 59 or 0)
+    if month < 1 or month > 12 or day < 1 or day > 31
+        or hour < 0 or hour > 23 or minute < 0 or minute > 59 or second < 0 or second > 59 then
+        return nil, "时间数值超出范围"
+    end
+
+    local timestamp = time({ year = year, month = month, day = day, hour = hour, min = minute, sec = second })
+    local check = date("*t", timestamp)
+    if not check or check.year ~= year or check.month ~= month or check.day ~= day
+        or check.hour ~= hour or check.min ~= minute or check.sec ~= second then
+        return nil, "日期不存在"
+    end
+    return timestamp, nil
+end
+
+local function ApplyExactTimeFilter()
+    if not MainFrame then return end
+    local startText = MainFrame.exactStartBox and strtrim(MainFrame.exactStartBox:GetText() or "") or ""
+    local endText = MainFrame.exactEndBox and strtrim(MainFrame.exactEndBox:GetText() or "") or ""
+    local startTime, startError = ParseExactTimeInput(startText, false)
+    local endTime, endError = ParseExactTimeInput(endText, true)
+
+    if startError or endError then
+        if MainFrame.statusText then
+            MainFrame.statusText:SetText("|cFFFF4040精确时间格式：YYYY-MM-DD HH:MM|r")
+        end
+        return
+    end
+    if startTime and endTime and startTime > endTime then
+        if MainFrame.statusText then
+            MainFrame.statusText:SetText("|cFFFF4040精确时间起点不能晚于终点|r")
+        end
+        return
+    end
+
+    currentFilter.days = nil
+    currentFilter.startTime = startTime
+    currentFilter.endTime = endTime
+    currentFilter.startTimeText = startText
+    currentFilter.endTimeText = endText
+    SyncExactTimeInputs()
+    InitDateDropdown()
+    UpdateFilterSummary()
+    RefreshLogContent()
 end
 
 local function GetIdentitySelectorKey(profileID, gameID)
@@ -352,10 +469,12 @@ local function BuildParticipantOptions(mode)
     return MainFrame.participantOptions[mode] or {}
 end
 
-local function UpdateFilterSummary()
+UpdateFilterSummary = function()
     if not MainFrame or not MainFrame.filterSummary then return end
     local parts = {}
     if currentFilter.days ~= nil then parts[#parts + 1] = GetDatePresetText(currentFilter.days) end
+    local exactTimeText = GetExactTimeRangeText()
+    if exactTimeText then parts[#parts + 1] = exactTimeText end
 
     local speakerCount = CountSelected(currentFilter.speakers)
     local listenerCount = CountSelected(currentFilter.listeners)
@@ -383,7 +502,7 @@ local function GetAvailableDates()
 end
 
 -- 初始化日期下拉框（改为天数范围选择）
-local function InitDateDropdown()
+InitDateDropdown = function()
     if not MainFrame or not MainFrame.dateDropdown then return end
 
     local dayOptions = {
@@ -402,9 +521,10 @@ local function InitDateDropdown()
             local info = UIDropDownMenu_CreateInfo()
             info.text = optionText
             info.value = value
-            info.checked = (currentFilter.days == value)
+            info.checked = (not HasExactTimeFilter() and currentFilter.days == value)
             info.func = function()
                 currentFilter.days = value
+                ClearExactTimeFilter()
                 UIDropDownMenu_SetText(MainFrame.dateDropdown, optionText)
                 UpdateFilterSummary()
                 RefreshLogContent()
@@ -413,7 +533,7 @@ local function InitDateDropdown()
         end
     end)
 
-    UIDropDownMenu_SetText(MainFrame.dateDropdown, GetDatePresetText(currentFilter.days))
+    UIDropDownMenu_SetText(MainFrame.dateDropdown, GetDateDropdownText())
 end
 
 -- 初始化频道下拉框
@@ -574,22 +694,27 @@ local function RecordMatchesSearch(record, searchLower)
     return false
 end
 
-local function GetFilterMinTime()
+local function GetFilterTimeRange()
+    if HasExactTimeFilter() then
+        return currentFilter.startTime, currentFilter.endTime
+    end
+
     local now = time()
     if currentFilter.days ~= nil then
         if currentFilter.days == 0 then
             local today = date("*t", now)
             today.hour, today.min, today.sec = 0, 0, 0
-            return time(today)
+            return time(today), nil
         end
-        return now - (currentFilter.days * 24 * 60 * 60)
+        return now - (currentFilter.days * 24 * 60 * 60), nil
     end
-    return nil
+    return nil, nil
 end
 
-local function RecordMatchesCurrentFilter(record, minTime, searchLower)
+local function RecordMatchesCurrentFilter(record, minTime, maxTime, searchLower)
     local timestamp = record.t or record.timestamp or 0
     if minTime and timestamp < minTime then return false end
+    if maxTime and timestamp > maxTime then return false end
 
     local channel = NormalizeRecordChannel(record.c or record.channel)
     if HasSelections(currentFilter.channels)
@@ -715,6 +840,25 @@ local function FormatEventEndpoint(endpoint)
     return label
 end
 
+local function RenderMessageLinks(text)
+    if ns.RenderChatLinkLabels then
+        return ns.RenderChatLinkLabels(text, false)
+    end
+    return text
+end
+
+local function GetDisplayRecordIndex(state, rowIndex)
+    if not state then return nil end
+    return state.totalMatched - (state.startIndex + rowIndex - 1) + 1
+end
+
+local function GetDisplayedChronologicalRange(state)
+    if not state or state.displayCount <= 0 then return nil, nil end
+    local chronoStart = state.totalMatched - state.endIndex + 1
+    local chronoEnd = state.totalMatched - state.startIndex + 1
+    return chronoStart, chronoEnd
+end
+
 local function BuildLogLineTexts(record)
     local timestamp = record.t or record.timestamp or 0
     local channel = record.c or record.channel or ""
@@ -799,12 +943,15 @@ local function BuildLogLineTexts(record)
         npcData = ParseNPCMessage(msgContent)
     end
 
+    local displayMsgContent = RenderMessageLinks(msgContent)
+    local plainMsgContent = displayMsgContent
     local lineText, plainText
     local icon = GetInlineIcon(record)
     local senderTag = format("|cFF666666[来自%s]|r", displayName)
     local plainSenderTag = format("[来自%s]", displayName)
 
     if npcData then
+        npcData.message = RenderMessageLinks(npcData.message)
         if npcData.name and npcData.name ~= "" then
             local npcColor = "|cFF" .. npcData.color
             if npcData.type == "whisper" then
@@ -836,32 +983,32 @@ local function BuildLogLineTexts(record)
         end
     elseif channel == "CHAT_MSG_EMOTE" or channel == "EMOTE" then
         lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
-            timeStr, nameColor, displayName, icon, channelColor, msgContent)
-        plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
+            timeStr, nameColor, displayName, icon, channelColor, displayMsgContent)
+        plainText = format("%s [%s] %s", timeStr, displayName, plainMsgContent)
     elseif channel == "TEXT_EMOTE" or channel == "CHAT_MSG_TEXT_EMOTE" then
         lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s |cFF%s%s|r",
-            timeStr, nameColor, displayName, icon, channelColor, msgContent)
-        plainText = format("%s [%s] %s", timeStr, displayName, msgContent)
+            timeStr, nameColor, displayName, icon, channelColor, displayMsgContent)
+        plainText = format("%s [%s] %s", timeStr, displayName, plainMsgContent)
     elseif channel == "CHAT_MSG_YELL" or channel == "YELL" then
         lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 大喊：|cFF%s%s|r",
-            timeStr, nameColor, displayName, icon, channelColor, msgContent)
-        plainText = format("%s [%s] 大喊：%s", timeStr, displayName, msgContent)
+            timeStr, nameColor, displayName, icon, channelColor, displayMsgContent)
+        plainText = format("%s [%s] 大喊：%s", timeStr, displayName, plainMsgContent)
     elseif channel == "WHISPER_IN" or channel == "CHAT_MSG_WHISPER" then
         lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 悄悄地说：|cFF%s%s|r",
-            timeStr, nameColor, displayName, icon, channelColor, msgContent)
-        plainText = format("%s [%s] 悄悄地说：%s", timeStr, displayName, msgContent)
+            timeStr, nameColor, displayName, icon, channelColor, displayMsgContent)
+        plainText = format("%s [%s] 悄悄地说：%s", timeStr, displayName, plainMsgContent)
     elseif channel == "WHISPER_OUT" or channel == "CHAT_MSG_WHISPER_INFORM" then
         lineText = format("|cFF888888%s|r 你悄悄地对 |cFF%s[%s]|r%s 说：|cFF%s%s|r",
-            timeStr, nameColor, displayName, icon, channelColor, msgContent)
-        plainText = format("%s 你悄悄地对 [%s] 说：%s", timeStr, displayName, msgContent)
+            timeStr, nameColor, displayName, icon, channelColor, displayMsgContent)
+        plainText = format("%s 你悄悄地对 [%s] 说：%s", timeStr, displayName, plainMsgContent)
     elseif channel == "GUILD" or channel == "CHAT_MSG_GUILD" then
         lineText = format("|cFF888888%s|r |cFF40FF40[公会]|r|cFF%s[%s]|r%s 说：|cFF40FF40%s|r",
-            timeStr, nameColor, displayName, icon, msgContent)
-        plainText = format("%s [公会][%s] 说：%s", timeStr, displayName, msgContent)
+            timeStr, nameColor, displayName, icon, displayMsgContent)
+        plainText = format("%s [公会][%s] 说：%s", timeStr, displayName, plainMsgContent)
     else
         lineText = format("|cFF888888%s|r |cFF%s[%s]|r%s 说：|cFF%s%s|r",
-            timeStr, nameColor, displayName, icon, channelColor, msgContent)
-        plainText = format("%s [%s] 说：%s", timeStr, displayName, msgContent)
+            timeStr, nameColor, displayName, icon, channelColor, displayMsgContent)
+        plainText = format("%s [%s] 说：%s", timeStr, displayName, plainMsgContent)
     end
 
     return lineText, plainText
@@ -905,7 +1052,7 @@ local function SetLogNavigationState(state, scanning)
         MainFrame.nextPageBtn:SetEnabled(not busy and state ~= nil and state.page < state.totalPages)
     end
     if MainFrame.latestPageBtn then
-        MainFrame.latestPageBtn:SetEnabled(not busy and state ~= nil and state.page < state.totalPages)
+        MainFrame.latestPageBtn:SetEnabled(not busy and state ~= nil and state.page > 1)
     end
     if MainFrame.pageProgress then
         if scanning then
@@ -985,7 +1132,7 @@ SchedulePendingLiveRefresh = function()
 
         local state = MainFrame.logState
         local requestedPage = state and state.page or 1
-        local followLatest = state and state.page == state.totalPages or false
+        local followLatest = state and state.page == 1 or false
         MainFrame.logLiveRefreshPending = false
         MainFrame.logLastLiveRefreshAt = GetLiveRefreshClock()
         RefreshLogContent({ requestedPage = requestedPage, followLatest = followLatest })
@@ -1032,7 +1179,7 @@ RenderLogPage = function(page, restoreScrollOffset)
             row:SetPoint("TOPLEFT", 0, -state.yOffset)
             row:SetPoint("TOPRIGHT", 0, -state.yOffset)
 
-            local recordIndex = state.startIndex + rowIndex - 1
+            local recordIndex = GetDisplayRecordIndex(state, rowIndex)
             local textHeight = select(1, RenderLogRow(row, state.records[recordIndex]))
             row:Show()
             state.yOffset = state.yOffset + textHeight + 6
@@ -1093,7 +1240,7 @@ local function CompleteLogScan(scan)
 
     local pageSize = GetLogPageSize()
     local totalPages = max(1, math.ceil(totalMatched / pageSize))
-    local requestedPage = scan.followLatest and totalPages or scan.requestedPage
+    local requestedPage = scan.followLatest and 1 or scan.requestedPage
     requestedPage = max(1, min(requestedPage or 1, totalPages))
     MainFrame.logState = {
         records = scan.matches,
@@ -1108,6 +1255,7 @@ end
 
 local function StartLogScan(renderToken, requestedPage, followLatest)
     local buckets, totalRecords = BuildChronologicalLogBuckets()
+    local minTime, maxTime = GetFilterTimeRange()
     local scan = {
         renderToken = renderToken,
         requestedPage = requestedPage or 1,
@@ -1118,7 +1266,8 @@ local function StartLogScan(renderToken, requestedPage, followLatest)
         recordIndex = 1,
         scanned = 0,
         matches = {},
-        minTime = GetFilterMinTime(),
+        minTime = minTime,
+        maxTime = maxTime,
         searchLower = currentFilter.search:lower(),
         speakerOptions = { byKey = {}, list = {} },
         listenerOptions = { byKey = {}, list = {} },
@@ -1137,7 +1286,7 @@ local function StartLogScan(renderToken, requestedPage, followLatest)
             local record = records[scan.recordIndex]
             if record then
                 IndexRecordParticipants(scan.speakerOptions, scan.listenerOptions, record)
-                if RecordMatchesCurrentFilter(record, scan.minTime, scan.searchLower) then
+                if RecordMatchesCurrentFilter(record, scan.minTime, scan.maxTime, scan.searchLower) then
                     scan.matches[#scan.matches + 1] = record
                 end
                 scan.recordIndex = scan.recordIndex + 1
@@ -1572,6 +1721,7 @@ local function SwitchTab(tabName)
         MainFrame.ledgerHeader:Show()
         MainFrame.logScroll:Show()
         InitDateDropdown()
+        SyncExactTimeInputs()
         InitChannelDropdown()
         InitParticipantDropdown(MainFrame.speakerDropdown, "speaker", currentFilter.speakers)
         InitParticipantDropdown(MainFrame.listenerDropdown, "listener", currentFilter.listeners)
@@ -1594,7 +1744,7 @@ local function CreateMainFrame()
 
     -- 主窗口
     MainFrame = CreateFrame("Frame", "RPBoxMainFrame", UIParent, "BasicFrameTemplateWithInset")
-    MainFrame:SetSize(780, 520)
+    MainFrame:SetSize(780, 560)
     MainFrame:SetPoint("CENTER")
     MainFrame:SetMovable(true)
     MainFrame:EnableMouse(true)
@@ -1614,7 +1764,7 @@ local function CreateMainFrame()
 
     -- 启用调整大小
     MainFrame:SetResizable(true)
-    MainFrame:SetResizeBounds(680, 500, 1200, 900)
+    MainFrame:SetResizeBounds(680, 540, 1200, 900)
     MainFrame:SetClampedToScreen(true)
 
     -- 创建调整大小按钮
@@ -1684,33 +1834,71 @@ local function CreateMainFrame()
     dateDropdown:SetPoint("TOPLEFT", -4, -62)
     UIDropDownMenu_SetWidth(dateDropdown, 142)
 
+    local exactStartLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    exactStartLabel:SetPoint("TOPLEFT", 12, -102)
+    exactStartLabel:SetText("起")
+    local exactStartBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
+    exactStartBox:SetSize(132, 22)
+    exactStartBox:SetPoint("TOPLEFT", 34, -98)
+    exactStartBox:SetAutoFocus(false)
+    exactStartBox:SetText(currentFilter.startTimeText or "")
+    exactStartBox:SetScript("OnEnterPressed", function(self)
+        ApplyExactTimeFilter()
+        self:ClearFocus()
+    end)
+    exactStartBox:SetScript("OnEscapePressed", function(self)
+        self:SetText(currentFilter.startTimeText or "")
+        self:ClearFocus()
+    end)
+
+    local exactEndLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    exactEndLabel:SetPoint("TOPLEFT", 12, -128)
+    exactEndLabel:SetText("止")
+    local exactEndBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
+    exactEndBox:SetSize(132, 22)
+    exactEndBox:SetPoint("TOPLEFT", 34, -124)
+    exactEndBox:SetAutoFocus(false)
+    exactEndBox:SetText(currentFilter.endTimeText or "")
+    exactEndBox:SetScript("OnEnterPressed", function(self)
+        ApplyExactTimeFilter()
+        self:ClearFocus()
+    end)
+    exactEndBox:SetScript("OnEscapePressed", function(self)
+        self:SetText(currentFilter.endTimeText or "")
+        self:ClearFocus()
+    end)
+
+    local exactTimeHint = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    exactTimeHint:SetPoint("TOPLEFT", 34, -150)
+    exactTimeHint:SetText("YYYY-MM-DD HH:MM")
+
     local speakerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    speakerLabel:SetPoint("TOPLEFT", 12, -100)
+    speakerLabel:SetPoint("TOPLEFT", 12, -178)
     speakerLabel:SetText("发言者 / 人物卡")
     local speakerDropdown = CreateFrame("Frame", "RPBoxSpeakerDropdown", filterFrame, "UIDropDownMenuTemplate")
-    speakerDropdown:SetPoint("TOPLEFT", -4, -112)
+    speakerDropdown:SetPoint("TOPLEFT", -4, -190)
     UIDropDownMenu_SetWidth(speakerDropdown, 142)
 
     local listenerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    listenerLabel:SetPoint("TOPLEFT", 12, -150)
+    listenerLabel:SetPoint("TOPLEFT", 12, -232)
     listenerLabel:SetText("收听者 / 记录视角")
     local listenerDropdown = CreateFrame("Frame", "RPBoxListenerDropdown", filterFrame, "UIDropDownMenuTemplate")
-    listenerDropdown:SetPoint("TOPLEFT", -4, -162)
+    listenerDropdown:SetPoint("TOPLEFT", -4, -244)
     UIDropDownMenu_SetWidth(listenerDropdown, 142)
 
     local channelLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    channelLabel:SetPoint("TOPLEFT", 12, -200)
+    channelLabel:SetPoint("TOPLEFT", 12, -286)
     channelLabel:SetText("频道 / 节点")
     local channelDropdown = CreateFrame("Frame", "RPBoxChannelDropdown", filterFrame, "UIDropDownMenuTemplate")
-    channelDropdown:SetPoint("TOPLEFT", -4, -212)
+    channelDropdown:SetPoint("TOPLEFT", -4, -298)
     UIDropDownMenu_SetWidth(channelDropdown, 142)
 
     local searchLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    searchLabel:SetPoint("TOPLEFT", 12, -252)
+    searchLabel:SetPoint("TOPLEFT", 12, -340)
     searchLabel:SetText("全文与历史姓名")
     local searchBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate")
     searchBox:SetSize(150, 22)
-    searchBox:SetPoint("TOPLEFT", 12, -268)
+    searchBox:SetPoint("TOPLEFT", 12, -356)
     searchBox:SetAutoFocus(false)
     searchBox:SetText(currentFilter.search)
     searchBox:SetScript("OnEnterPressed", function(self)
@@ -1726,7 +1914,7 @@ local function CreateMainFrame()
     end)
 
     local summaryTitle = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    summaryTitle:SetPoint("TOPLEFT", 12, -306)
+    summaryTitle:SetPoint("TOPLEFT", 12, -394)
     summaryTitle:SetText("已启用条件")
     local filterSummary = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     filterSummary:SetPoint("TOPLEFT", summaryTitle, "BOTTOMLEFT", 0, -6)
@@ -1741,6 +1929,7 @@ local function CreateMainFrame()
     clearFilterBtn:SetText("清除全部筛选")
     clearFilterBtn:SetScript("OnClick", function()
         currentFilter.days = nil
+        ClearExactTimeFilter()
         wipe(currentFilter.channels)
         wipe(currentFilter.speakers)
         wipe(currentFilter.listeners)
@@ -1756,6 +1945,8 @@ local function CreateMainFrame()
 
     MainFrame.filterFrame = filterFrame
     MainFrame.dateDropdown = dateDropdown
+    MainFrame.exactStartBox = exactStartBox
+    MainFrame.exactEndBox = exactEndBox
     MainFrame.speakerDropdown = speakerDropdown
     MainFrame.listenerDropdown = listenerDropdown
     MainFrame.channelDropdown = channelDropdown
@@ -1769,20 +1960,20 @@ local function CreateMainFrame()
     ledgerHeader:SetHeight(24)
     local ledgerTitle = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     ledgerTitle:SetPoint("LEFT", 0, 0)
-    ledgerTitle:SetText("时间账本 · 正序")
+    ledgerTitle:SetText("时间账本 · 最新优先")
 
     local latestPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
     latestPageBtn:SetSize(48, 20)
     latestPageBtn:SetPoint("RIGHT", 0, 0)
     latestPageBtn:SetText("最新")
     latestPageBtn:SetScript("OnClick", function()
-        if MainFrame.logState then RenderLogPage(MainFrame.logState.totalPages) end
+        if MainFrame.logState then RenderLogPage(1) end
     end)
 
     local nextPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
     nextPageBtn:SetSize(66, 20)
     nextPageBtn:SetPoint("RIGHT", latestPageBtn, "LEFT", -4, 0)
-    nextPageBtn:SetText("继续 →")
+    nextPageBtn:SetText("较早 →")
     nextPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(MainFrame.logState.page + 1) end
     end)
@@ -1796,7 +1987,7 @@ local function CreateMainFrame()
     local prevPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate")
     prevPageBtn:SetSize(62, 20)
     prevPageBtn:SetPoint("RIGHT", pageProgress, "LEFT", -4, 0)
-    prevPageBtn:SetText("← 较早")
+    prevPageBtn:SetText("← 较新")
     prevPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(MainFrame.logState.page - 1) end
     end)
@@ -1899,7 +2090,7 @@ local function CreateMainFrame()
             local scan = MainFrame.logScan
             RefreshLogContent({
                 requestedPage = state and state.page or (scan and scan.requestedPage) or 1,
-                followLatest = (state and state.page == state.totalPages) or (scan and scan.followLatest) or false,
+                followLatest = (state and state.page == 1) or (scan and scan.followLatest) or false,
             })
         else
             SwitchTab(currentTab)
@@ -1967,7 +2158,8 @@ local function CreateMainFrame()
             -- 更新内容并显示
             local copyLines = {}
             local state = MainFrame.logState
-            for i = state.startIndex, state.endIndex do
+            local chronoStart, chronoEnd = GetDisplayedChronologicalRange(state)
+            for i = chronoStart, chronoEnd do
                 local _, plainText = BuildLogLineTexts(state.records[i])
                 copyLines[#copyLines + 1] = plainText
             end
@@ -2031,6 +2223,7 @@ local function ApplyArchivePreset(preset)
     if type(preset) ~= "table" then return end
     if preset.reset then
         currentFilter.days = nil
+        ClearExactTimeFilter()
         wipe(currentFilter.channels)
         wipe(currentFilter.speakers)
         wipe(currentFilter.listeners)
@@ -2038,9 +2231,22 @@ local function ApplyArchivePreset(preset)
     end
 
     if preset.datePreset == "all" then
+        ClearExactTimeFilter()
         currentFilter.days = nil
     elseif type(preset.datePreset) == "number" then
+        ClearExactTimeFilter()
         currentFilter.days = preset.datePreset
+    end
+    if type(preset.startTime) == "string" or type(preset.endTime) == "string" then
+        local startText = strtrim(preset.startTime or "")
+        local endText = strtrim(preset.endTime or "")
+        local startTime = ParseExactTimeInput(startText, false)
+        local endTime = ParseExactTimeInput(endText, true)
+        currentFilter.days = nil
+        currentFilter.startTime = startTime
+        currentFilter.endTime = endTime
+        currentFilter.startTimeText = startText
+        currentFilter.endTimeText = endText
     end
     if type(preset.search) == "string" then currentFilter.search = preset.search end
 

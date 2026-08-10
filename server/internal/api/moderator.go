@@ -17,6 +17,11 @@ import (
 	"gorm.io/gorm"
 )
 
+var (
+	errCommentImageMissing         = errors.New("comment image missing")
+	errCommentImageAlreadyReviewed = errors.New("comment image already reviewed")
+)
+
 // logAdminAction 记录管理员操作日志
 func logAdminAction(c *gin.Context, actionType, targetType string, targetID uint, targetName string, details map[string]interface{}) {
 	userID := c.GetUint("userID")
@@ -563,16 +568,6 @@ func (s *Server) reviewPostCommentImage(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
-	var comment model.Comment
-	if err := database.DB.First(&comment, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
-		return
-	}
-	if strings.TrimSpace(comment.ImageURL) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "该评论没有图片"})
-		return
-	}
-
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
@@ -584,18 +579,67 @@ func (s *Server) reviewPostCommentImage(c *gin.Context) {
 	}
 
 	now := time.Now()
-	comment.ImageReviewerID = &userID
-	comment.ImageReviewedAt = &now
-	comment.ImageReviewComment = strings.TrimSpace(req.Comment)
+	reviewComment := strings.TrimSpace(req.Comment)
+	nextStatus := commentImageReviewRejected
 	if req.Action == "approve" {
-		comment.ImageReviewStatus = "approved"
-	} else {
-		comment.ImageReviewStatus = "rejected"
+		nextStatus = commentImageReviewApproved
 	}
+	var comment model.Comment
+	var post model.Post
+	shouldNotify := false
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&comment, id).Error; err != nil {
+			return err
+		}
+		if strings.TrimSpace(comment.ImageURL) == "" {
+			return errCommentImageMissing
+		}
+		if comment.ImageReviewStatus != commentImageReviewPending {
+			return errCommentImageAlreadyReviewed
+		}
 
-	if err := database.DB.Save(&comment).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		result := tx.Model(&model.Comment{}).
+			Where("id = ? AND image_review_status = ?", comment.ID, commentImageReviewPending).
+			Updates(map[string]interface{}{
+				"image_reviewer_id":    userID,
+				"image_reviewed_at":    now,
+				"image_review_comment": reviewComment,
+				"image_review_status":  nextStatus,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errCommentImageAlreadyReviewed
+		}
+		comment.ImageReviewerID = &userID
+		comment.ImageReviewedAt = &now
+		comment.ImageReviewComment = reviewComment
+		comment.ImageReviewStatus = nextStatus
+		if req.Action != "approve" {
+			return nil
+		}
+		if err := tx.First(&post, comment.PostID).Error; err != nil {
+			return err
+		}
+		var err error
+		shouldNotify, err = awardPostCommentPublication(tx, comment, post)
+		return err
+	}); err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		case errors.Is(err, errCommentImageMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该评论没有图片"})
+		case errors.Is(err, errCommentImageAlreadyReviewed):
+			c.JSON(http.StatusConflict, gin.H{"error": "该评论图片已完成审核"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		}
 		return
+	}
+	if req.Action == "approve" && shouldNotify {
+		notifyPostCommentPublication(comment, post)
 	}
 
 	logAdminAction(c, "review_post_comment_image", "comment", comment.ID, strconv.FormatUint(uint64(comment.ID), 10), map[string]interface{}{
@@ -674,16 +718,6 @@ func (s *Server) reviewItemCommentImage(c *gin.Context) {
 	userID := c.GetUint("userID")
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 
-	var comment model.ItemComment
-	if err := database.DB.First(&comment, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
-		return
-	}
-	if strings.TrimSpace(comment.ImageURL) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "该评论没有图片"})
-		return
-	}
-
 	var req ReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
@@ -695,18 +729,67 @@ func (s *Server) reviewItemCommentImage(c *gin.Context) {
 	}
 
 	now := time.Now()
-	comment.ImageReviewerID = &userID
-	comment.ImageReviewedAt = &now
-	comment.ImageReviewComment = strings.TrimSpace(req.Comment)
+	reviewComment := strings.TrimSpace(req.Comment)
+	nextStatus := commentImageReviewRejected
 	if req.Action == "approve" {
-		comment.ImageReviewStatus = "approved"
-	} else {
-		comment.ImageReviewStatus = "rejected"
+		nextStatus = commentImageReviewApproved
 	}
+	var comment model.ItemComment
+	var item model.Item
+	shouldNotify := false
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&comment, id).Error; err != nil {
+			return err
+		}
+		if strings.TrimSpace(comment.ImageURL) == "" {
+			return errCommentImageMissing
+		}
+		if comment.ImageReviewStatus != commentImageReviewPending {
+			return errCommentImageAlreadyReviewed
+		}
 
-	if err := database.DB.Save(&comment).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		result := tx.Model(&model.ItemComment{}).
+			Where("id = ? AND image_review_status = ?", comment.ID, commentImageReviewPending).
+			Updates(map[string]interface{}{
+				"image_reviewer_id":    userID,
+				"image_reviewed_at":    now,
+				"image_review_comment": reviewComment,
+				"image_review_status":  nextStatus,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errCommentImageAlreadyReviewed
+		}
+		comment.ImageReviewerID = &userID
+		comment.ImageReviewedAt = &now
+		comment.ImageReviewComment = reviewComment
+		comment.ImageReviewStatus = nextStatus
+		if req.Action != "approve" {
+			return nil
+		}
+		if err := tx.First(&item, comment.ItemID).Error; err != nil {
+			return err
+		}
+		var err error
+		shouldNotify, err = awardItemCommentPublication(tx, comment, item)
+		return err
+	}); err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		case errors.Is(err, errCommentImageMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该评论没有图片"})
+		case errors.Is(err, errCommentImageAlreadyReviewed):
+			c.JSON(http.StatusConflict, gin.H{"error": "该评论图片已完成审核"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		}
 		return
+	}
+	if req.Action == "approve" && shouldNotify {
+		notifyItemCommentPublication(comment, item)
 	}
 
 	logAdminAction(c, "review_item_comment_image", "item_comment", comment.ID, strconv.FormatUint(uint64(comment.ID), 10), map[string]interface{}{
@@ -714,6 +797,156 @@ func (s *Server) reviewItemCommentImage(c *gin.Context) {
 		"comment": req.Comment,
 	})
 
+	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "comment": comment})
+}
+
+// listPendingRPDBCommentImages 获取 RP 数据库评论配图审核列表。
+func (s *Server) listPendingRPDBCommentImages(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := strings.TrimSpace(c.DefaultQuery("status", commentImageReviewPending))
+	if status != commentImageReviewPending && status != commentImageReviewApproved && status != commentImageReviewRejected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的status参数"})
+		return
+	}
+
+	query := database.DB.Model(&model.RPDBComment{}).
+		Where("COALESCE(TRIM(image_url), '') <> ''").
+		Where("image_review_status = ?", status)
+
+	var total int64
+	query.Count(&total)
+
+	var comments []model.RPDBComment
+	query.Order("created_at ASC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&comments)
+
+	authorIDs := make([]uint, 0, len(comments))
+	workIDs := make([]uint, 0, len(comments))
+	for _, comment := range comments {
+		authorIDs = append(authorIDs, comment.AuthorID)
+		workIDs = append(workIDs, comment.WorkID)
+	}
+
+	var users []model.User
+	if len(authorIDs) > 0 {
+		database.DB.Select("id", "username").Where("id IN ?", authorIDs).Find(&users)
+	}
+	userMap := make(map[uint]model.User, len(users))
+	for _, user := range users {
+		userMap[user.ID] = user
+	}
+
+	var works []model.RPDBWork
+	if len(workIDs) > 0 {
+		database.DB.Select("id", "title").Where("id IN ?", workIDs).Find(&works)
+	}
+	workMap := make(map[uint]model.RPDBWork, len(works))
+	for _, work := range works {
+		workMap[work.ID] = work
+	}
+
+	type rpdbCommentImageReviewItem struct {
+		model.RPDBComment
+		AuthorName string `json:"author_name"`
+		WorkTitle  string `json:"work_title"`
+	}
+	result := make([]rpdbCommentImageReviewItem, len(comments))
+	for i, comment := range comments {
+		result[i] = rpdbCommentImageReviewItem{
+			RPDBComment: comment,
+			AuthorName:  userMap[comment.AuthorID].Username,
+			WorkTitle:   workMap[comment.WorkID].Title,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"comments": result, "total": total})
+}
+
+// reviewRPDBCommentImage 审核 RP 数据库评论配图，并在通过后发布整条评论。
+func (s *Server) reviewRPDBCommentImage(c *gin.Context) {
+	userID := c.GetUint("userID")
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+
+	var req ReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的审核操作"})
+		return
+	}
+
+	var comment model.RPDBComment
+	var work model.RPDBWork
+	shouldNotify := false
+	now := time.Now()
+	reviewComment := strings.TrimSpace(req.Comment)
+	nextStatus := commentImageReviewRejected
+	if req.Action == "approve" {
+		nextStatus = commentImageReviewApproved
+	}
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&comment, id).Error; err != nil {
+			return err
+		}
+		if strings.TrimSpace(comment.ImageURL) == "" {
+			return errCommentImageMissing
+		}
+		if comment.ImageReviewStatus != commentImageReviewPending {
+			return errCommentImageAlreadyReviewed
+		}
+
+		result := tx.Model(&model.RPDBComment{}).
+			Where("id = ? AND image_review_status = ?", comment.ID, commentImageReviewPending).
+			Updates(map[string]interface{}{
+				"image_reviewer_id":    userID,
+				"image_reviewed_at":    now,
+				"image_review_comment": reviewComment,
+				"image_review_status":  nextStatus,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errCommentImageAlreadyReviewed
+		}
+		comment.ImageReviewerID = &userID
+		comment.ImageReviewedAt = &now
+		comment.ImageReviewComment = reviewComment
+		comment.ImageReviewStatus = nextStatus
+		if req.Action != "approve" {
+			return nil
+		}
+		if err := tx.First(&work, comment.WorkID).Error; err != nil {
+			return err
+		}
+		var err error
+		shouldNotify, err = awardRPDBCommentPublication(tx, comment, work)
+		return err
+	}); err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		case errors.Is(err, errCommentImageMissing):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该评论没有图片"})
+		case errors.Is(err, errCommentImageAlreadyReviewed):
+			c.JSON(http.StatusConflict, gin.H{"error": "该评论图片已完成审核"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存审核结果失败"})
+		}
+		return
+	}
+
+	if req.Action == "approve" {
+		s.bumpRPDBListCache(c.Request.Context())
+		if shouldNotify {
+			notifyRPDBCommentPublication(comment, work)
+		}
+	}
+	logAdminAction(c, "review_rpdb_comment_image", "rpdb_comment", comment.ID, strconv.FormatUint(uint64(comment.ID), 10), map[string]interface{}{
+		"action": req.Action, "comment": req.Comment,
+	})
 	c.JSON(http.StatusOK, gin.H{"message": "审核完成", "comment": comment})
 }
 
@@ -1050,6 +1283,11 @@ func (s *Server) deletePostByMod(c *gin.Context) {
 	}
 
 	postTitle := post.Title // 保存标题用于日志
+	commentImageURLs, err := loadCommentImageURLs(database.DB, &model.Comment{}, "post_id = ?", post.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取评论配图失败"})
+		return
+	}
 
 	// 删除关联数据
 	database.DB.Where("post_id = ?", id).Delete(&model.PostTag{})
@@ -1058,7 +1296,11 @@ func (s *Server) deletePostByMod(c *gin.Context) {
 	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
 
 	s.cleanupPostImages(c, post)
-	database.DB.Delete(&post)
+	if err := database.DB.Delete(&post).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+	s.cleanupCommentImageURLs(c, commentImageURLs...)
 
 	// 记录日志
 	logAdminAction(c, "delete_post", "post", uint(id), postTitle, nil)
@@ -1216,6 +1458,11 @@ func (s *Server) deleteItemByMod(c *gin.Context) {
 	}
 
 	itemName := item.Name // 保存名称用于日志
+	commentImageURLs, err := loadCommentImageURLs(database.DB, &model.ItemComment{}, "item_id = ?", item.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取评论配图失败"})
+		return
+	}
 
 	// 删除关联数据
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemTag{})
@@ -1228,7 +1475,11 @@ func (s *Server) deleteItemByMod(c *gin.Context) {
 	database.DB.Where("item_id = ?", id).Find(&itemImages)
 	s.cleanupItemImages(c, item, itemImages)
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemImage{})
-	database.DB.Delete(&item)
+	if err := database.DB.Delete(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+	s.cleanupCommentImageURLs(c, commentImageURLs...)
 
 	// 记录日志
 	logAdminAction(c, "delete_item", "item", uint(id), itemName, nil)
@@ -1260,7 +1511,7 @@ func (s *Server) hideItemByMod(c *gin.Context) {
 func (s *Server) getModeratorStats(c *gin.Context) {
 	var pendingPosts, pendingItems, pendingReports int64
 	var pendingPostEdits, pendingItemEdits int64
-	var pendingPostCommentImages, pendingItemCommentImages, pendingUserAvatars int64
+	var pendingPostCommentImages, pendingItemCommentImages, pendingRPDBCommentImages, pendingUserAvatars int64
 	var pendingRPDBWorks, pendingRPDBMedia, pendingRPDBRevisions int64
 	var totalPosts, totalItems int64
 	var todayPosts, todayItems int64
@@ -1282,6 +1533,10 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 		Where("COALESCE(BTRIM(image_url), '') <> ''").
 		Where("image_review_status = ?", "pending").
 		Count(&pendingItemCommentImages)
+	database.DB.Model(&model.RPDBComment{}).
+		Where("COALESCE(BTRIM(image_url), '') <> ''").
+		Where("image_review_status = ?", commentImageReviewPending).
+		Count(&pendingRPDBCommentImages)
 	database.DB.Model(&model.User{}).
 		Where("COALESCE(BTRIM(avatar), '') <> ''").
 		Where("avatar_review_status = ?", "pending").
@@ -1302,7 +1557,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 	database.DB.Model(&model.Item{}).Where("DATE(created_at) = ?", today).Count(&todayItems)
 	database.DB.Model(&model.User{}).Where("DATE(created_at) = ?", today).Count(&todayUsers)
 
-	totalPendingReviews := pendingPosts + pendingItems + pendingGuilds + pendingReports + pendingPostEdits + pendingItemEdits + pendingPostCommentImages + pendingItemCommentImages + pendingUserAvatars + pendingRPDBWorks + pendingRPDBMedia + pendingRPDBRevisions
+	totalPendingReviews := pendingPosts + pendingItems + pendingGuilds + pendingReports + pendingPostEdits + pendingItemEdits + pendingPostCommentImages + pendingItemCommentImages + pendingRPDBCommentImages + pendingUserAvatars + pendingRPDBWorks + pendingRPDBMedia + pendingRPDBRevisions
 
 	c.JSON(http.StatusOK, gin.H{
 		"pending_posts":               pendingPosts,
@@ -1313,6 +1568,7 @@ func (s *Server) getModeratorStats(c *gin.Context) {
 		"pending_item_edits":          pendingItemEdits,
 		"pending_post_comment_images": pendingPostCommentImages,
 		"pending_item_comment_images": pendingItemCommentImages,
+		"pending_rpdb_comment_images": pendingRPDBCommentImages,
 		"pending_user_avatars":        pendingUserAvatars,
 		"pending_rpdb_works":          pendingRPDBWorks,
 		"pending_rpdb_media":          pendingRPDBMedia,

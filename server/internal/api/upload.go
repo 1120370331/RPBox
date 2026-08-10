@@ -23,6 +23,15 @@ func (s *Server) getUploadObject(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 		return
 	}
+	cleanedPath := strings.ReplaceAll(rawPath, `\`, "/")
+	cleanedPath = strings.TrimPrefix(path.Clean("/"+cleanedPath), "/")
+	// Character-card portraits are served only by the permission-aware image
+	// endpoint. Never expose their backing objects through the generic upload
+	// route, even when the card itself is public.
+	if strings.HasPrefix(strings.ToLower(cleanedPath), "character-cards/") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
 
 	var (
 		data        []byte
@@ -30,10 +39,13 @@ func (s *Server) getUploadObject(c *gin.Context) {
 		err         error
 	)
 
-	if s.ossEnabled() {
+	ossOnlyCommentImage := isOSSOnlyCommentImagePath(rawPath)
+	if ossOnlyCommentImage && !s.ossEnabled() {
+		err = fmt.Errorf("comment image OSS is unavailable")
+	} else if s.ossEnabled() {
 		ossKey := s.buildOSSKey(rawPath, "")
 		data, contentType, err = s.readImageFromOSS(ossKey)
-		if err != nil {
+		if err != nil && !ossOnlyCommentImage {
 			data, contentType, err = s.readImageFromLocalPath(path.Join("/uploads", rawPath))
 		}
 	} else {

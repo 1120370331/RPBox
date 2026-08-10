@@ -1,0 +1,22 @@
+{
+  "posts": [
+    {
+      "title": "【RP道具】伪装雕文：盗贼专属的临时易容术",
+      "category": "other",
+      "status": "published",
+      "content": "这次补一个很适合潜入、伪装、间谍 RP 的小玩具：盗贼的 **伪装雕文**（Glyph of Disguise）。\n\n核心效果很直观：潜行者对敌对人型生物使用搜索/偷窃相关玩法后，可以复制其外貌，持续一段时间。实际 RP 时可以拿来演出潜入据点、混入人群、假扮哨兵、短时间借用 NPC 外形等桥段。\n\n- Wowhead：<https://www.wowhead.com/item=45768/glyph-of-disguise>\n- 截图页：<https://www.wowhead.com/item=45768/glyph-of-disguise#screenshots>\n- 获取方式：一般直接去拍卖行购买雕文，使用职业限定为潜行者/盗贼。\n- RP 用法：提前找好目标外观，配合潜行、暗影步/接近目标、表情宏和台词，可以做“换装”“易容”“潜入身份”的现场演出。\n\n注意：这是偏娱乐和外观玩法的内容，不是强度道具；具体可用性会随版本和雕文系统调整，使用前建议先在目标版本里实际测试一次。"
+    },
+    {
+      "title": "【RP道具】暗影水晶聚焦透镜：紫色光束注能",
+      "category": "other",
+      "status": "published",
+      "content": "珠宝加工的小玩具里有一类非常适合 RP 的“聚焦透镜”，其中 **暗影水晶聚焦透镜**（Shadow Crystal Focusing Lens）可以对当前目标投射紫色/暗影感很强的目标光束。\n\n这个效果非常适合演出：注能、抽取、锁定、暗影施法、仪式牵引、远程扫描等场景。多人同时使用时，视觉效果会更明显。\n\n- Wowhead：<https://www.wowhead.com/item=42420/shadow-crystal-focusing-lens>\n- 截图页：<https://www.wowhead.com/item=42420/shadow-crystal-focusing-lens#screenshots>\n- 效果描述：向当前目标投射紫色 targeting beam。\n- 获取方式：珠宝加工制造，通常也可以在拍卖行购买。\n- RP 用法：对准角色或 NPC 后配合 `/me` 文本，例如“水晶折射出暗紫色光线，开始向目标体内注入能量”。\n\n小提示：这类透镜通常有使用次数限制，建议开 RP 前多备几组。"
+    },
+    {
+      "title": "【RP道具】黑玉/暗影翡翠聚焦透镜：碧绿光束施法",
+      "category": "other",
+      "status": "published",
+      "content": "再补两个同系列的绿色系聚焦透镜：**黑玉聚焦透镜**（Dark Jade Focusing Lens）和 **暗影翡翠聚焦透镜**（Shadow Jade Focusing Lens）。它们都来自珠宝加工聚焦透镜系列，可以用来对目标打出非常醒目的绿色/暗色光束。\n\n适合 RP 场景：翡翠注能、自然魔法牵引、邪能/暗影仪式、治疗前置锁定、炼金或法阵实验等。\n\n- 黑玉聚焦透镜：<https://www.wowhead.com/item=42421/dark-jade-focusing-lens>\n- 暗影翡翠聚焦透镜：<https://www.wowhead.com/item=42422/shadow-jade-focusing-lens>\n- 系列检索页：<https://www.wowhead.com/items/consumables/other/name:Focusing+Lens>\n- 获取方式：珠宝加工制造，常见获取方式是拍卖行购买。\n- RP 用法：一个人负责光束锁定，另一个人接施法台词，能很好地表现“注能、导流、净化、抽取”的过程。\n\n如果你只想买一个，建议先看截图页和游戏内实测颜色，再按角色设定选更像自然、翡翠、邪能或暗影的一款。"
+    }
+  ]
+}

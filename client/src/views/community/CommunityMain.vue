@@ -1483,7 +1483,11 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   height: auto;
   min-height: 120px;
   background:
-    linear-gradient(135deg, rgba(255, 249, 240, 0.95), rgba(245, 239, 231, 0.98));
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-panel-bg) 94%, var(--color-accent) 6%),
+      var(--color-card-bg)
+    );
   color: var(--color-text-main, #2C1810);
   display: grid;
   place-items: center;

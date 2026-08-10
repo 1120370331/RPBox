@@ -24,12 +24,14 @@ type accountDeletionCleanupPlan struct {
 	items               []accountDeletionItemCleanup
 	comments            []model.Comment
 	itemComments        []model.ItemComment
+	rpdbComments        []model.RPDBComment
 	storyEntries        []model.StoryEntry
 	storyMusicTracks    []model.StoryMusicTrack
 	storyMusicPlaylists []model.StoryMusicPlaylist
 	guilds              []model.Guild
 	collections         []model.Collection
 	characters          []model.Character
+	characterCards      []model.CharacterCard
 }
 
 type accountDeletionItemCleanup struct {
@@ -73,6 +75,7 @@ func (s *Server) deleteAccount(c *gin.Context) {
 	s.cleanupDeletedAccountUploads(c, cleanupPlan)
 	s.invalidateUserProfileCache(c.Request.Context(), userID)
 	s.bumpPostListCache(c.Request.Context())
+	s.bumpRPDBListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "账号已删除"})
 }
@@ -190,15 +193,25 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	if err := tx.Where("user_id = ?", userID).Find(&cleanupPlan.characters).Error; err != nil {
 		return err
 	}
-	if len(userCommentIDs) > 0 {
-		if err := tx.Where("id IN ?", userCommentIDs).Find(&cleanupPlan.comments).Error; err != nil {
-			return err
-		}
+	if err := tx.Where("user_id = ?", userID).Find(&cleanupPlan.characterCards).Error; err != nil {
+		return err
 	}
-	if len(userItemCommentIDs) > 0 {
-		if err := tx.Where("id IN ?", userItemCommentIDs).Find(&cleanupPlan.itemComments).Error; err != nil {
-			return err
-		}
+	postCommentCleanupQuery := tx.Where("author_id = ?", userID)
+	if len(ownedPostIDs) > 0 {
+		postCommentCleanupQuery = tx.Where("author_id = ? OR post_id IN ?", userID, ownedPostIDs)
+	}
+	if err := postCommentCleanupQuery.Find(&cleanupPlan.comments).Error; err != nil {
+		return err
+	}
+	itemCommentCleanupQuery := tx.Where("user_id = ?", userID)
+	if len(ownedItemIDs) > 0 {
+		itemCommentCleanupQuery = tx.Where("user_id = ? OR item_id IN ?", userID, ownedItemIDs)
+	}
+	if err := itemCommentCleanupQuery.Find(&cleanupPlan.itemComments).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("author_id = ?", userID).Find(&cleanupPlan.rpdbComments).Error; err != nil {
+		return err
 	}
 	if len(ownedStoryIDs) > 0 {
 		if err := tx.Where("story_id IN ?", ownedStoryIDs).Find(&cleanupPlan.storyEntries).Error; err != nil {
@@ -455,6 +468,12 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		}
 	}
 
+	for _, comment := range cleanupPlan.rpdbComments {
+		if err := deleteRPDBCommentRecord(tx, comment); err != nil {
+			return err
+		}
+	}
+
 	if err := tx.Where("user_id = ?", userID).Delete(&model.PostLike{}).Error; err != nil {
 		return err
 	}
@@ -508,6 +527,9 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		return err
 	}
 	if err := tx.Where("user_id = ?", userID).Delete(&model.Character{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("user_id = ?", userID).Delete(&model.CharacterCard{}).Error; err != nil {
 		return err
 	}
 	if err := tx.Where("user_id = ?", userID).Delete(&model.UserDailyActivity{}).Error; err != nil {
@@ -594,6 +616,7 @@ func anonymizeDeletedUser(tx *gorm.DB, user model.User) error {
 
 func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeletionCleanupPlan) {
 	keys := make(map[string]struct{})
+	commentImageURLs := make([]string, 0, len(plan.comments)+len(plan.itemComments)+len(plan.rpdbComments))
 
 	collectUploadKeysFromValue(c, plan.user.Avatar, keys)
 
@@ -612,11 +635,27 @@ func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeleti
 	}
 
 	for _, comment := range plan.comments {
-		collectUploadKeysFromValue(c, comment.ImageURL, keys)
+		if extractCommentImageStorageKey(nil, comment.ImageURL) != "" {
+			commentImageURLs = append(commentImageURLs, comment.ImageURL)
+		} else {
+			collectUploadKeysFromValue(c, comment.ImageURL, keys)
+		}
 	}
 
 	for _, comment := range plan.itemComments {
-		collectUploadKeysFromValue(c, comment.ImageURL, keys)
+		if extractCommentImageStorageKey(nil, comment.ImageURL) != "" {
+			commentImageURLs = append(commentImageURLs, comment.ImageURL)
+		} else {
+			collectUploadKeysFromValue(c, comment.ImageURL, keys)
+		}
+	}
+
+	for _, comment := range plan.rpdbComments {
+		if extractCommentImageStorageKey(nil, comment.ImageURL) != "" {
+			commentImageURLs = append(commentImageURLs, comment.ImageURL)
+		} else {
+			collectUploadKeysFromValue(c, comment.ImageURL, keys)
+		}
 	}
 
 	for _, entry := range plan.storyEntries {
@@ -642,7 +681,12 @@ func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeleti
 		collectUploadKeysFromValue(c, character.CustomAvatar, keys)
 	}
 
+	for _, card := range plan.characterCards {
+		collectUploadKeysFromValue(c, card.PortraitImage, keys)
+	}
+
 	s.deleteUploadKeys(keys)
+	s.cleanupCommentImageURLs(nil, commentImageURLs...)
 }
 
 func deleteNotificationsByTarget(tx *gorm.DB, targetType string, ids []uint) error {
@@ -668,7 +712,7 @@ func recalculateCommentLikeCounts(tx *gorm.DB, commentIDs []uint) error {
 func recalculatePostCounts(tx *gorm.DB, postIDs []uint) error {
 	for _, postID := range uniqueUintValues(postIDs) {
 		var commentCount int64
-		if err := tx.Model(&model.Comment{}).Where("post_id = ?", postID).Count(&commentCount).Error; err != nil {
+		if err := visibleCommentImages(tx.Model(&model.Comment{})).Where("post_id = ?", postID).Count(&commentCount).Error; err != nil {
 			return err
 		}
 		var likeCount int64
@@ -699,12 +743,12 @@ func recalculatePostCounts(tx *gorm.DB, postIDs []uint) error {
 func recalculateItemMetrics(tx *gorm.DB, itemIDs []uint) error {
 	for _, itemID := range uniqueUintValues(itemIDs) {
 		var ratingCount int64
-		if err := tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", itemID).Count(&ratingCount).Error; err != nil {
+		if err := visibleCommentImages(tx.Model(&model.ItemComment{})).Where("item_id = ? AND rating > 0 AND parent_id IS NULL", itemID).Count(&ratingCount).Error; err != nil {
 			return err
 		}
 		var avgRating float64
 		if ratingCount > 0 {
-			if err := tx.Model(&model.ItemComment{}).Where("item_id = ? AND rating > 0", itemID).Select("AVG(rating)").Scan(&avgRating).Error; err != nil {
+			if err := visibleCommentImages(tx.Model(&model.ItemComment{})).Where("item_id = ? AND rating > 0 AND parent_id IS NULL", itemID).Select("AVG(rating)").Scan(&avgRating).Error; err != nil {
 				return err
 			}
 		}
