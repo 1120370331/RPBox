@@ -1365,6 +1365,7 @@ local function RefreshListContent(listType)
 
             row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             row.text:SetPoint("LEFT", 5, 0)
+            UI.RegisterText(row.text, "primary")
 
             row.removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate,BackdropTemplate")
             row.removeBtn:SetSize(50, 20)
@@ -1873,6 +1874,27 @@ local function CreateMainFrame()
         MainFrame:StopMovingOrSizing()
     end)
     UI.RegisterButton(resizeButton)
+
+    local resizeHorizontal = CreateFrame("Frame", nil, resizeButton, "BackdropTemplate")
+    resizeHorizontal:SetSize(9, 1)
+    resizeHorizontal:SetPoint("BOTTOMRIGHT", -2, 2)
+    resizeHorizontal:EnableMouse(false)
+    UI.RegisterPanel(resizeHorizontal, {
+        modernOnly = true,
+        alwaysVisible = true,
+        background = UI.COLORS.accent,
+        border = UI.COLORS.accent,
+    })
+    local resizeVertical = CreateFrame("Frame", nil, resizeButton, "BackdropTemplate")
+    resizeVertical:SetSize(1, 9)
+    resizeVertical:SetPoint("BOTTOMRIGHT", -2, 2)
+    resizeVertical:EnableMouse(false)
+    UI.RegisterPanel(resizeVertical, {
+        modernOnly = true,
+        alwaysVisible = true,
+        background = UI.COLORS.accent,
+        border = UI.COLORS.accent,
+    })
     MainFrame.resizeButton = resizeButton
 
     MainFrame.TitleText:SetText("RPBox")
