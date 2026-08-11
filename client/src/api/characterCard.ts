@@ -181,6 +181,13 @@ export async function getCharacterCard(id: number): Promise<CharacterCard> {
   return unwrapCharacterCard(response)
 }
 
+export async function getCharacterCardSharePath(id: number): Promise<string> {
+  const response = await request.get<{ path: string } | DataEnvelope<{ path: string }>>(`/character-cards/${id}/share`)
+  const body = unwrapData(response)
+  if (!body?.path) throw new Error('Missing character card share path')
+  return body.path
+}
+
 export async function updateCharacterCard(
   id: number,
   payload: Partial<UpdateCharacterCardRequest>,

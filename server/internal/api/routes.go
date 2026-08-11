@@ -88,6 +88,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/images/:type/:id", s.getImage)
 		// RPBox 人物卡公开读取；handler 内部同时识别可选登录身份。
 		v1.GET("/character-cards/:id", s.getCharacterCard)
+		v1.GET("/character-cards/:id/share", s.getCharacterCardShare)
 		v1.GET("/users/:id/character-cards", s.listPublicUserCharacterCards)
 
 		// 需要认证的接口

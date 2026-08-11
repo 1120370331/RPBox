@@ -5,18 +5,21 @@ import { useI18n } from 'vue-i18n'
 import {
   deleteCharacterCard,
   getCharacterCard,
+  getCharacterCardSharePath,
   updateCharacterCard,
   type CharacterCard,
   type CharacterCardPortraitImage,
 } from '@/api/characterCard'
 import { resolveApiUrl } from '@/api/item'
 import AuthenticatedImage from '@/components/AuthenticatedImage.vue'
+import ImageViewer from '@/components/ImageViewer.vue'
 import CharacterCardImpressionMark from '@/components/character-cards/CharacterCardImpressionMark.vue'
 import CharacterCardGalleryImage from '@/components/character-cards/CharacterCardGalleryImage.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
 import { hydrateJumpCards, sanitizeJumpLinks } from '@/utils/jumpLink'
+import { attachImagePreview } from '@/utils/imagePreview'
 import {
   getCharacterCardDisplayName,
   normalizeCharacterCardImpressions,
@@ -24,6 +27,7 @@ import {
 } from '@/utils/characterCardDraft'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardCoverPortrait, normalizeCharacterCardPortraits } from '@/utils/characterCardPortraits'
+import { buildPublicSitePathUrl } from '@/utils/desktopDeepLink'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,12 +40,18 @@ const cardId = computed(() => Number(route.params.id))
 const card = ref<CharacterCard | null>(null)
 const loading = ref(true)
 const actionLoading = ref(false)
+const shareLoading = ref(false)
 const errorMessage = ref('')
 const activeTab = ref<CharacterCardEditorTab>('basic')
 const backgroundRef = ref<HTMLElement | null>(null)
 const impressionRef = ref<HTMLElement | null>(null)
 const otherRef = ref<HTMLElement | null>(null)
+const portraitFrameRef = ref<HTMLElement | null>(null)
+const portraitFilmRef = ref<HTMLElement | null>(null)
 const selectedPortraitId = ref<number | null>(null)
+const showImageViewer = ref(false)
+const viewerImages = ref<string[]>([])
+const viewerStartIndex = ref(0)
 
 const tabs = computed<Array<{ id: CharacterCardEditorTab; label: string }>>(() => [
   { id: 'basic', label: t('characterCards.tabs.basic') },
@@ -53,6 +63,19 @@ const tabs = computed<Array<{ id: CharacterCardEditorTab; label: string }>>(() =
 const isOwner = computed(() => Boolean(card.value && userStore.user?.id === card.value.user_id))
 const wantsPublic = computed(() => card.value?.status === 'published' && card.value?.visibility === 'public')
 const isPublic = computed(() => wantsPublic.value && (!card.value?.review_status || card.value.review_status === 'approved'))
+const canShare = computed(() => Boolean(
+  card.value?.status === 'published'
+  && card.value?.visibility === 'public'
+  && card.value?.review_status === 'approved',
+))
+const shareUnavailableReason = computed(() => {
+  if (!card.value || canShare.value) return ''
+  if (card.value.status !== 'published') return t('characterCards.detail.shareDraftUnavailable')
+  if (card.value.visibility !== 'public') return t('characterCards.detail.sharePrivateUnavailable')
+  if (card.value.review_status === 'pending') return t('characterCards.detail.sharePendingUnavailable')
+  if (card.value.review_status === 'rejected') return t('characterCards.detail.shareRejectedUnavailable')
+  return t('characterCards.detail.shareReviewUnavailable')
+})
 const displayName = computed(() => card.value ? getCharacterCardDisplayName(card.value) : t('characterCards.detail.displayFallback'))
 const displayNameColor = computed(() => getCharacterCardDisplayColor(card.value))
 const identityLine = computed(() => [card.value?.race, card.value?.class].filter(Boolean).join(' · '))
@@ -139,9 +162,45 @@ async function loadCard() {
 async function hydrateRichContent() {
   await nextTick()
   for (const container of [backgroundRef.value, impressionRef.value, otherRef.value]) {
+    attachImagePreview(container, openImageViewer, t('characterCards.detail.viewImage'))
     sanitizeJumpLinks(container)
     hydrateJumpCards(container)
   }
+}
+
+function imageSourceWithin(container: HTMLElement | null): string {
+  const image = container?.querySelector<HTMLImageElement>('img')
+  return image?.currentSrc || image?.src || image?.getAttribute('src') || ''
+}
+
+function openImageViewer(images: string[], index = 0) {
+  const selectedSource = images[index] || ''
+  const uniqueImages = images.filter((source, sourceIndex) => (
+    Boolean(source) && images.indexOf(source) === sourceIndex
+  ))
+  if (!uniqueImages.length) return
+
+  viewerImages.value = uniqueImages
+  viewerStartIndex.value = Math.max(0, uniqueImages.indexOf(selectedSource))
+  showImageViewer.value = true
+}
+
+function openPortraitViewer() {
+  const frameSource = imageSourceWithin(portraitFrameRef.value)
+  const buttons = Array.from(portraitFilmRef.value?.querySelectorAll<HTMLButtonElement>('button') || [])
+  if (!buttons.length) {
+    openImageViewer([frameSource])
+    return
+  }
+
+  const activeIndex = buttons.findIndex((button) => button.classList.contains('active'))
+  const sources = buttons.map((button) => imageSourceWithin(button))
+  if (activeIndex >= 0 && frameSource) sources[activeIndex] = frameSource
+  openImageViewer(sources, activeIndex >= 0 ? activeIndex : 0)
+}
+
+function openImageFromEvent(event: Event) {
+  openImageViewer([imageSourceWithin(event.currentTarget as HTMLElement)])
 }
 
 async function togglePublicAccess() {
@@ -184,6 +243,46 @@ async function removeCard() {
   }
 }
 
+async function shareCard() {
+  if (!card.value || !canShare.value || shareLoading.value) return
+  shareLoading.value = true
+  try {
+    const sharePath = await getCharacterCardSharePath(card.value.id)
+    const url = buildPublicSitePathUrl(sharePath)
+    if (navigator.share) {
+      await navigator.share({
+        title: displayName.value,
+        text: t('characterCards.detail.shareText', { name: displayName.value }),
+        url,
+      })
+      toast.success(t('characterCards.detail.shareSuccess'))
+      return
+    }
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = url
+      textarea.setAttribute('readonly', 'true')
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      if (!copied) throw new Error('Clipboard copy failed')
+    }
+    toast.success(t('characterCards.detail.shareCopied'))
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return
+    console.error('分享人物卡失败:', error)
+    toast.error(t('characterCards.detail.shareFailed'))
+  } finally {
+    shareLoading.value = false
+  }
+}
+
 function goBack() {
   if (card.value?.user_id) {
     void router.push(`/user/${card.value.user_id}`)
@@ -212,24 +311,43 @@ function goBack() {
         <button type="button" class="detail-toolbar__back" @click="goBack">
           <i class="ri-arrow-left-line" aria-hidden="true"></i>{{ t('characterCards.detail.backWall') }}
         </button>
-        <div v-if="isOwner" class="detail-toolbar__actions">
-          <button type="button" class="toolbar-button" :disabled="actionLoading" @click="togglePublicAccess">
-            <i :class="wantsPublic ? 'ri-lock-line' : 'ri-global-line'" aria-hidden="true"></i>
-            {{ t(wantsPublic ? 'characterCards.detail.makePrivate' : 'characterCards.detail.publishPublic') }}
+        <div v-if="isOwner || canShare" class="detail-toolbar__actions">
+          <button v-if="canShare" type="button" class="toolbar-button toolbar-button--share" :disabled="shareLoading" @click="shareCard">
+            <i :class="shareLoading ? 'ri-loader-4-line spin' : 'ri-share-forward-line'" aria-hidden="true"></i>
+            {{ t('characterCards.detail.share') }}
           </button>
-          <RouterLink class="toolbar-button toolbar-button--primary" :to="`/character-cards/${card.id}/edit`">
-            <i class="ri-edit-line" aria-hidden="true"></i>{{ t('characterCards.detail.edit') }}
-          </RouterLink>
-          <button type="button" class="toolbar-button toolbar-button--danger" :disabled="actionLoading" @click="removeCard">
-            <i class="ri-delete-bin-line" aria-hidden="true"></i><span class="sr-only">{{ t('characterCards.detail.deleteTitle') }}</span>
-          </button>
+          <span v-else-if="isOwner" class="share-unavailable" :title="shareUnavailableReason">
+            <i class="ri-information-line" aria-hidden="true"></i>{{ shareUnavailableReason }}
+          </span>
+          <template v-if="isOwner">
+            <button type="button" class="toolbar-button" :disabled="actionLoading" @click="togglePublicAccess">
+              <i :class="wantsPublic ? 'ri-lock-line' : 'ri-global-line'" aria-hidden="true"></i>
+              {{ t(wantsPublic ? 'characterCards.detail.makePrivate' : 'characterCards.detail.publishPublic') }}
+            </button>
+            <RouterLink class="toolbar-button toolbar-button--primary" :to="`/character-cards/${card.id}/edit`">
+              <i class="ri-edit-line" aria-hidden="true"></i>{{ t('characterCards.detail.edit') }}
+            </RouterLink>
+            <button type="button" class="toolbar-button toolbar-button--danger" :disabled="actionLoading" @click="removeCard">
+              <i class="ri-delete-bin-line" aria-hidden="true"></i><span class="sr-only">{{ t('characterCards.detail.deleteTitle') }}</span>
+            </button>
+          </template>
         </div>
       </header>
 
       <div class="detail-shell">
         <aside class="character-portrait">
           <span class="character-portrait__index">RPBOX · CHARACTER {{ card.id }}</span>
-          <div class="character-portrait__frame">
+          <div
+            ref="portraitFrameRef"
+            class="character-portrait__frame"
+            :class="{ 'is-previewable': selectedPortrait }"
+            :role="selectedPortrait ? 'button' : undefined"
+            :tabindex="selectedPortrait ? 0 : undefined"
+            :aria-label="selectedPortrait ? t('characterCards.detail.previewPortrait', { name: displayName }) : undefined"
+            @click="openPortraitViewer"
+            @keydown.enter.prevent="openPortraitViewer"
+            @keydown.space.prevent="openPortraitViewer"
+          >
             <CharacterCardGalleryImage
               v-if="selectedPortrait"
               class="character-portrait__image"
@@ -244,12 +362,16 @@ function goBack() {
               <span>{{ t('characterCards.detail.portraitMissing') }}</span>
             </div>
             <span class="character-portrait__shade"></span>
+            <span v-if="selectedPortrait" class="character-portrait__zoom" aria-hidden="true">
+              <i class="ri-zoom-in-line"></i>
+              {{ t('characterCards.detail.viewImage') }}
+            </span>
             <span v-if="isOwner && (!isPublic || card.review_status === 'pending')" class="character-portrait__privacy" :class="{ pending: card.review_status === 'pending' && wantsPublic }">
               <i :class="card.review_status === 'pending' && wantsPublic ? 'ri-time-line' : card.status === 'draft' ? 'ri-draft-line' : 'ri-lock-line'" aria-hidden="true"></i>
               {{ t(card.review_status === 'pending' && wantsPublic ? 'characterCards.common.status.pending' : card.status === 'draft' ? 'characterCards.common.status.draft' : 'characterCards.common.status.private') }}
             </span>
           </div>
-          <div v-if="portraits.length > 1" class="character-portrait__film" :aria-label="t('characterCards.detail.galleryAria')">
+          <div v-if="portraits.length > 1" ref="portraitFilmRef" class="character-portrait__film" :aria-label="t('characterCards.detail.galleryAria')">
             <button
               v-for="(portrait, index) in portraits"
               :key="portrait.id"
@@ -356,7 +478,16 @@ function goBack() {
                   class="impression-entry"
                   :class="{ 'impression-entry--with-image': impression.image_url }"
                 >
-                  <div class="impression-entry__mark">
+                  <div
+                    class="impression-entry__mark"
+                    :class="{ 'is-previewable': impression.icon_image_url }"
+                    :role="impression.icon_image_url ? 'button' : undefined"
+                    :tabindex="impression.icon_image_url ? 0 : undefined"
+                    :aria-label="impression.icon_image_url ? t('characterCards.detail.previewImpressionIcon', { title: impression.title || t('characterCards.common.impressionFallbackTitle', { slot: impression.slot }) }) : undefined"
+                    @click="impression.icon_image_url && openImageFromEvent($event)"
+                    @keydown.enter.prevent="impression.icon_image_url && openImageFromEvent($event)"
+                    @keydown.space.prevent="impression.icon_image_url && openImageFromEvent($event)"
+                  >
                     <CharacterCardImpressionMark
                       :icon-image-url="impression.icon_image_url"
                       :trp3-icon="impression.trp3_icon"
@@ -367,6 +498,7 @@ function goBack() {
                       TRP3 · {{ impression.trp3_icon }}
                     </span>
                     <span v-else-if="!impression.icon_image_url">{{ t('characterCards.detail.defaultMark') }}</span>
+                    <i v-if="impression.icon_image_url" class="impression-entry__mark-zoom ri-zoom-in-line" aria-hidden="true"></i>
                   </div>
 
                   <div class="impression-entry__copy">
@@ -375,12 +507,22 @@ function goBack() {
                     <p>{{ impression.text || t('characterCards.detail.observationEmpty') }}</p>
                   </div>
 
-                  <figure v-if="impression.image_url" class="impression-entry__image">
+                  <figure
+                    v-if="impression.image_url"
+                    class="impression-entry__image"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('characterCards.detail.previewImpressionImage', { title: impression.title || t('characterCards.common.impressionFallbackTitle', { slot: impression.slot }) })"
+                    @click="openImageFromEvent"
+                    @keydown.enter.prevent="openImageFromEvent"
+                    @keydown.space.prevent="openImageFromEvent"
+                  >
                     <AuthenticatedImage
                       class="impression-entry__protected-image"
                       :src="resolveApiUrl(impression.image_url)"
                       :alt="t('characterCards.common.impressionImageAlt', { title: impression.title || t('characterCards.common.impressionFallbackTitle', { slot: impression.slot }) })"
                     />
+                    <span class="impression-entry__image-zoom" aria-hidden="true"><i class="ri-zoom-in-line"></i></span>
                   </figure>
                 </article>
               </div>
@@ -410,6 +552,12 @@ function goBack() {
         </article>
       </div>
     </template>
+
+    <ImageViewer
+      v-model="showImageViewer"
+      :images="viewerImages"
+      :start-index="viewerStartIndex"
+    />
   </main>
 </template>
 
@@ -439,18 +587,25 @@ function goBack() {
 .detail-toolbar__actions { display: flex; align-items: center; gap: 7px; }
 .toolbar-button { display: inline-flex; min-height: 38px; align-items: center; justify-content: center; gap: 6px; padding: 0 13px; border: 1px solid var(--btn-outline-border); border-radius: 7px; background: var(--color-panel-bg); color: var(--btn-outline-text); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; text-decoration: none; }
 .toolbar-button--primary { border-color: var(--btn-primary-bg); background: var(--btn-primary-bg); color: var(--btn-primary-text); }
+.toolbar-button--share { border-color: var(--color-border-hover); background: var(--tag-bg); color: var(--tag-text); }
 .toolbar-button--danger { width: 38px; padding: 0; color: var(--btn-danger-bg); }
+.share-unavailable { display: inline-flex; max-width: 270px; min-height: 38px; align-items: center; gap: 6px; padding: 0 10px; border: 1px dashed var(--color-border); border-radius: 7px; color: var(--color-text-secondary); font-size: 10px; line-height: 1.35; }
+.share-unavailable i { flex: 0 0 auto; color: var(--color-warning-dark); font-size: 14px; }
 
 .detail-shell { display: grid; grid-template-columns: minmax(280px, 350px) minmax(0, 1fr); gap: 22px; align-items: start; }
 
 .character-portrait { position: sticky; top: 18px; min-width: 0; padding: 9px; border: 1px solid var(--gradient-border); border-radius: 8px; background: var(--gradient-end); box-shadow: 0 16px 36px color-mix(in srgb, var(--color-primary) 28%, transparent); }
 .character-portrait__index { display: block; padding: 5px 8px 11px; color: var(--gradient-text-muted); font: 700 9px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.14em; }
 .character-portrait__frame { position: relative; overflow: hidden; aspect-ratio: 3 / 4; border: 1px solid var(--gradient-border); }
+.character-portrait__frame.is-previewable { cursor: zoom-in; }
 .character-portrait__image { width: 100%; height: 100%; display: block; object-fit: cover; }
 .character-portrait__empty { display: grid; width: 100%; height: 100%; place-content: center; gap: 10px; background: radial-gradient(circle, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent 48%), var(--gradient-end); color: var(--gradient-text); text-align: center; }
 .character-portrait__empty i { font-size: 56px; }
 .character-portrait__empty span { color: var(--gradient-text-muted); font-size: 11px; }
 .character-portrait__shade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in srgb, var(--gradient-end) 58%, transparent), transparent 42%); pointer-events: none; }
+.character-portrait__zoom { position: absolute; right: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid var(--gradient-border); border-radius: 999px; background: color-mix(in srgb, var(--gradient-end) 82%, transparent); color: var(--gradient-text); font-size: 9px; opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity .18s ease, transform .18s ease; backdrop-filter: blur(7px); }
+.character-portrait__frame:hover .character-portrait__zoom,
+.character-portrait__frame:focus-visible .character-portrait__zoom { opacity: 1; transform: translateY(0); }
 .character-portrait__privacy { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--gradient-border); border-radius: 999px; background: color-mix(in srgb, var(--gradient-end) 82%, transparent); color: var(--gradient-text); font-size: 10px; backdrop-filter: blur(7px); }
 .character-portrait__privacy.pending { border-color: var(--color-warning-border); background: color-mix(in srgb, var(--color-warning) 30%, var(--gradient-end)); color: var(--gradient-text); }
 .character-portrait__film { display: flex; gap: 7px; padding: 9px 9px 5px; overflow-x: auto; background: repeating-linear-gradient(90deg, var(--gradient-surface) 0 9px, transparent 9px 18px); }
@@ -537,6 +692,11 @@ function goBack() {
   gap: 7px;
 }
 
+.impression-entry__mark.is-previewable { cursor: zoom-in; }
+.impression-entry__mark-zoom { position: absolute; top: -2px; right: 1px; display: grid; width: 21px; height: 21px; place-items: center; border: 1px solid var(--gradient-border); border-radius: 50%; background: var(--gradient-end); color: var(--gradient-text); font-size: 10px; opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.impression-entry__mark.is-previewable:hover .impression-entry__mark-zoom,
+.impression-entry__mark.is-previewable:focus-visible .impression-entry__mark-zoom { opacity: 1; }
+
 .impression-entry__mark > span {
   overflow: hidden;
   width: 82px;
@@ -577,6 +737,7 @@ function goBack() {
 }
 
 .impression-entry__image {
+  position: relative;
   align-self: stretch;
   min-height: 112px;
   overflow: hidden;
@@ -585,7 +746,12 @@ function goBack() {
   border-radius: 7px;
   background: var(--gradient-end);
   box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--gradient-end) 82%, black);
+  cursor: zoom-in;
 }
+
+.impression-entry__image-zoom { position: absolute; right: 8px; bottom: 8px; display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--gradient-border); border-radius: 50%; background: color-mix(in srgb, var(--gradient-end) 82%, transparent); color: var(--gradient-text); opacity: 0; pointer-events: none; transition: opacity .18s ease; backdrop-filter: blur(6px); }
+.impression-entry__image:hover .impression-entry__image-zoom,
+.impression-entry__image:focus-visible .impression-entry__image-zoom { opacity: 1; }
 
 .impression-entry__protected-image {
   width: 100%;
@@ -627,6 +793,11 @@ function goBack() {
 .character-rich { color: var(--color-text-main); font-size: 14px; line-height: 1.85; }
 .character-rich :deep(h1), .character-rich :deep(h2), .character-rich :deep(h3) { color: var(--ink); font-family: Georgia, 'Noto Serif SC', serif; }
 .character-rich :deep(img) { max-width: 100%; height: auto; border-radius: 8px; }
+.character-rich :deep(.image-preview) { position: relative; display: inline-block; max-width: 100%; overflow: hidden; border-radius: 8px; cursor: zoom-in; }
+.character-rich :deep(.image-preview img) { display: block; }
+.character-rich :deep(.image-preview-overlay) { position: absolute; inset: auto 10px 10px auto; display: inline-flex; align-items: center; padding: 5px 8px; border: 1px solid var(--gradient-border); border-radius: 999px; background: color-mix(in srgb, var(--gradient-end) 82%, transparent); color: var(--gradient-text); font-size: 9px; opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity .18s ease, transform .18s ease; backdrop-filter: blur(6px); }
+.character-rich :deep(.image-preview:hover .image-preview-overlay),
+.character-rich :deep(.image-preview:focus-within .image-preview-overlay) { opacity: 1; transform: translateY(0); }
 .character-rich :deep(a) { color: var(--rust); }
 .empty-chapter { display: grid; min-height: 290px; place-content: center; justify-items: center; gap: 10px; color: var(--muted); }
 .empty-chapter i { color: var(--color-accent); font-size: 36px; }
@@ -636,6 +807,9 @@ function goBack() {
 .toolbar-button:focus-visible,
 .detail-tabs button:focus-visible,
 .character-portrait__film button:focus-visible,
+.character-portrait__frame:focus-visible,
+.impression-entry__mark:focus-visible,
+.impression-entry__image:focus-visible,
 .detail-state button:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-accent) 32%, transparent); outline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); clip-path: inset(50%); white-space: nowrap; }
 .spin { animation: detail-spin 900ms linear infinite; }
@@ -671,5 +845,9 @@ function goBack() {
 
 @media (prefers-reduced-motion: reduce) {
   .spin { animation: none; }
+  .character-portrait__zoom,
+  .impression-entry__mark-zoom,
+  .impression-entry__image-zoom,
+  .character-rich :deep(.image-preview-overlay) { transition: none; }
 }
 </style>

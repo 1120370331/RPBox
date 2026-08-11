@@ -561,14 +561,29 @@ func (s *Server) deleteGuild(c *gin.Context) {
 		return
 	}
 
-	// 删除成员记录
-	database.DB.Where("guild_id = ?", id).Delete(&model.GuildMember{})
-	// 删除公会标签
-	database.DB.Where("guild_id = ?", id).Delete(&model.Tag{})
-	// 删除剧情归档
-	database.DB.Where("guild_id = ?", id).Delete(&model.StoryGuild{})
-	// 删除公会
-	database.DB.Delete(&guild)
+	var memberUserIDs []uint
+	if err := database.DB.Model(&model.GuildMember{}).
+		Where("guild_id = ?", id).
+		Pluck("user_id", &memberUserIDs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取公会成员失败"})
+		return
+	}
+
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		return deleteGuildRecords(tx, []uint{uint(id)})
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解散公会失败"})
+		return
+	}
+
+	uploadKeys := make(map[string]struct{})
+	collectUploadKeysFromValue(c, guild.Avatar, uploadKeys)
+	collectUploadKeysFromValue(c, guild.Banner, uploadKeys)
+	s.deleteUploadKeys(uploadKeys)
+	s.bumpPostListCache(c.Request.Context())
+	for _, memberUserID := range memberUserIDs {
+		s.invalidateUserProfileCache(c.Request.Context(), memberUserID)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "公会已解散"})
 }

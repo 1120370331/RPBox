@@ -15,6 +15,7 @@ describe('appLink helpers', () => {
     expect(normalizeInAppPath('/posts/12')).toBe('/posts/12')
     expect(normalizeInAppPath('items/7')).toBe('/items/7')
     expect(normalizeInAppPath('/rpdb/19')).toBe('/rpdb/19')
+    expect(normalizeInAppPath('/character-cards/23')).toBe('/character-cards/23')
     expect(normalizeInAppPath('/guild/2/posts/')).toBe('/guild/2/posts')
   })
 
@@ -40,6 +41,7 @@ describe('appLink helpers', () => {
   it('builds direct public site route url', () => {
     expect(buildPublicSitePathUrl('/posts/12')).toBe('https://totalrpbox.com/posts/12')
     expect(buildPublicSitePathUrl('/rpdb/19')).toBe('https://totalrpbox.com/rpdb/19')
+    expect(buildPublicSitePathUrl('/character-cards/23')).toBe('https://totalrpbox.com/character-cards/23')
   })
 
   it('resolves path from custom scheme, redirect and direct site urls', () => {
@@ -48,5 +50,6 @@ describe('appLink helpers', () => {
     expect(resolveInAppPathFromUrl('https://totalrpbox.com/open-app.html?path=%2Fitems%2F8')).toBe('/items/8')
     expect(resolveInAppPathFromUrl('https://totalrpbox.com/items/8')).toBe('/items/8')
     expect(resolveInAppPathFromUrl('https://www.totalrpbox.com/items/8')).toBe('/items/8')
+    expect(resolveInAppPathFromUrl('https://totalrpbox.com/character-cards/23')).toBe('/character-cards/23')
   })
 })

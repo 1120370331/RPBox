@@ -12,6 +12,8 @@ describe('CharacterCardColorField', () => {
       global: { plugins: [i18n] },
     })
 
+    expect(wrapper.text()).not.toContain('打开名字颜色取色器')
+    expect(wrapper.get('input[type="color"]').attributes('aria-label')).toBe('名字颜色取色器')
     expect(wrapper.get<HTMLInputElement>('.character-dye__hex').element.value).toBe('#C9D5E780')
     await wrapper.get<HTMLInputElement>('input[type="color"]').setValue('#336699')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['#336699'])

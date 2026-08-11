@@ -70,7 +70,6 @@ function selectColor(value: string) {
     <label class="character-dye__label" :for="inputId">{{ label }}</label>
     <div class="character-dye__well">
       <label class="character-dye__swatch" :style="{ '--dye-color': currentColor }">
-        <span class="sr-only">{{ t('characterCards.colorField.openPicker', { label }) }}</span>
         <input
           type="color"
           :value="pickerColor"
@@ -117,7 +116,7 @@ function selectColor(value: string) {
 .character-dye__label { color: var(--color-text-secondary); font-size: 10px; font-weight: 700; }
 .character-dye__well {
   display: grid;
-  min-height: 42px;
+  height: 42px;
   grid-template-columns: 42px auto minmax(0, 1fr);
   align-items: center;
   overflow: hidden;
@@ -131,7 +130,6 @@ function selectColor(value: string) {
   display: grid;
   width: 42px;
   height: 100%;
-  min-height: 42px;
   place-items: center;
   overflow: hidden;
   border-right: 1px solid var(--color-border);

@@ -7,6 +7,7 @@ import { getGuild, type Guild } from '@/api/guild'
 import { resolveApiUrl } from '@/api/item'
 import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
+import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
@@ -242,10 +243,14 @@ onMounted(async () => {
         <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
         <div class="post-footer">
           <div class="author-info">
-            <div class="author-avatar">
-              <img v-if="post.author_avatar" :src="resolveApiUrl(post.author_avatar)" alt="" />
-              <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
-            </div>
+            <UserAvatarPopover
+              class="author-avatar"
+              :user-id="post.author_id"
+              :avatar-url="post.author_avatar ? resolveApiUrl(post.author_avatar) : ''"
+              :username="post.author_name"
+              :name-color="post.author_name_color"
+              :name-bold="post.author_name_bold"
+            />
             <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
             <span class="post-time">{{ formatDate(post.created_at) }}</span>
           </div>

@@ -41,9 +41,36 @@ export interface SponsorUser {
   name_bold?: boolean
 }
 
+export interface PublicUserProfile {
+  id: number
+  username: string
+  avatar?: string
+  role?: string
+  is_sponsor?: boolean
+  sponsor_level?: number
+  name_color?: string
+  name_bold?: boolean
+  bio?: string
+  location?: string
+  website?: string
+  post_count?: number
+  guild_count?: number
+  item_count?: number
+  story_count?: number
+  created_at?: string
+  forum_level?: number
+  forum_level_name?: string
+  forum_level_color?: string
+  forum_level_bold?: boolean
+}
+
 // 获取当前用户信息
 export async function getUserInfo(): Promise<UserInfo> {
   return request.get('/user/info')
+}
+
+export async function getUserProfile(id: number): Promise<PublicUserProfile> {
+  return request.get(`/users/${id}`)
 }
 
 // 更新用户信息
