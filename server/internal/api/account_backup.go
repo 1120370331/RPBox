@@ -47,19 +47,20 @@ func (s *Server) getAccountBackup(c *gin.Context) {
 func (s *Server) upsertAccountBackup(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	var req struct {
-		AccountID     string `json:"account_id" binding:"required"`
-		ProfilesData  string `json:"profiles_data" binding:"required"`
-		ProfilesCount int    `json:"profiles_count"`
-		ToolsData     string `json:"tools_data"`
-		ToolsCount    int    `json:"tools_count"`
-		RuntimeData   string `json:"runtime_data"`
-		RuntimeSizeKB int    `json:"runtime_size_kb"`
-		ConfigData    string `json:"config_data"`
-		ExtraData     string `json:"extra_data"`
-		RawTrp3Lua    string `json:"raw_trp3_lua"`
-		RawTrp3Data   string `json:"raw_trp3_data_lua"`
-		RawTrp3Ext    string `json:"raw_trp3_extended_lua"`
-		Checksum      string `json:"checksum" binding:"required"`
+		AccountID      string `json:"account_id" binding:"required"`
+		ProfilesData   string `json:"profiles_data" binding:"required"`
+		ProfilesCount  int    `json:"profiles_count"`
+		ToolsData      string `json:"tools_data"`
+		ToolsCount     int    `json:"tools_count"`
+		RuntimeData    string `json:"runtime_data"`
+		RuntimeSizeKB  int    `json:"runtime_size_kb"`
+		ConfigData     string `json:"config_data"`
+		ExtraData      string `json:"extra_data"`
+		RawTrp3Lua     string `json:"raw_trp3_lua"`
+		RawTrp3Data    string `json:"raw_trp3_data_lua"`
+		RawTrp3Ext     string `json:"raw_trp3_extended_lua"`
+		Checksum       string `json:"checksum" binding:"required"`
+		SnapshotReason string `json:"snapshot_reason"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
@@ -73,12 +74,17 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "profiles_data 必须是 profile 对象"})
 		return
 	}
+	snapshotReason, err := validateAccountBackupSnapshotReason(req.SnapshotReason)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	log.Printf("[AccountBackup] upsert - account=%s, profiles=%d, tools_data_len=%d, tools_count=%d, runtime_data_len=%d, runtime_kb=%d, raw_trp3_len=%d, raw_data_len=%d, raw_ext_len=%d",
 		req.AccountID, req.ProfilesCount, len(req.ToolsData), req.ToolsCount, len(req.RuntimeData), req.RuntimeSizeKB, len(req.RawTrp3Lua), len(req.RawTrp3Data), len(req.RawTrp3Ext))
 
 	var existing model.AccountBackup
-	err := database.DB.Where("user_id = ? AND account_id = ?", userID, req.AccountID).First(&existing).Error
+	err = database.DB.Where("user_id = ? AND account_id = ?", userID, req.AccountID).First(&existing).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
@@ -109,7 +115,7 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&existing, existing.ID).Error; err != nil {
 			return err
 		}
-		if _, err := createAccountBackupSnapshot(tx, existing, "", "sync"); err != nil {
+		if _, err := createAccountBackupSnapshot(tx, existing, "", snapshotReason); err != nil {
 			return err
 		}
 		existing.ProfilesData = req.ProfilesData
@@ -324,6 +330,19 @@ func validateAccountBackupVersionName(raw string) (string, error) {
 		return "", err
 	}
 	return name, nil
+}
+
+func validateAccountBackupSnapshotReason(raw string) (string, error) {
+	reason := strings.TrimSpace(raw)
+	if reason == "" {
+		return "sync", nil
+	}
+	switch reason {
+	case "before_manual_backup", "restore_sync", "sync":
+		return reason, nil
+	default:
+		return "", errors.New("snapshot_reason 无效")
+	}
 }
 
 func createAccountBackupSnapshot(tx *gorm.DB, backup model.AccountBackup, requestedName, reason string) (model.AccountBackupVersion, error) {

@@ -11,6 +11,8 @@ pub struct LocalTRP3Snapshot {
     pub id: String,
     pub name: String,
     pub account_id: String,
+    #[serde(default)]
+    pub reason: String,
     pub checksum: String,
     pub created_at: String,
     pub size_bytes: u64,
@@ -197,6 +199,15 @@ pub fn create_snapshot(
     account_id: &str,
     name: Option<&str>,
 ) -> Result<Option<LocalTRP3Snapshot>, String> {
+    create_snapshot_with_reason(wow_path_value, account_id, name, "manual")
+}
+
+pub fn create_snapshot_with_reason(
+    wow_path_value: &str,
+    account_id: &str,
+    name: Option<&str>,
+    reason: &str,
+) -> Result<Option<LocalTRP3Snapshot>, String> {
     let lua_path = resolve_lua_path(wow_path_value, account_id)?;
     if !lua_path.is_file() {
         return Ok(None);
@@ -220,6 +231,7 @@ pub fn create_snapshot(
         id: id.clone(),
         name: clean_snapshot_name(name, &created_at, &checksum),
         account_id: account_id.to_string(),
+        reason: reason.trim().to_string(),
         checksum,
         created_at,
         size_bytes: content.len() as u64,
@@ -309,7 +321,12 @@ pub fn restore_snapshot(
         return Err("检测到魔兽世界正在运行，请关闭游戏后再恢复".to_string());
     }
     let detail = read_snapshot(wow_path_value, account_id, snapshot_id)?;
-    let safety_snapshot = create_snapshot(wow_path_value, account_id, safety_snapshot_name)?;
+    let safety_snapshot = create_snapshot_with_reason(
+        wow_path_value,
+        account_id,
+        safety_snapshot_name,
+        "before_restore",
+    )?;
     let lua_path = resolve_lua_path(wow_path_value, account_id)?;
     writer::write_profile_to_local(&lua_path, &detail.content)
         .map_err(|error| error.to_string())?;

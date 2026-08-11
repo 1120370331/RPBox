@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import CharacterCardJumpPreview from './CharacterCardJumpPreview.vue'
 import type { CharacterCard } from '@/api/characterCard'
 
@@ -54,7 +55,7 @@ async function mountPreview() {
   return mount(CharacterCardJumpPreview, {
     attachTo: document.body,
     global: {
-      plugins: [router],
+      plugins: [router, i18n],
       stubs: { CharacterCardPortrait: true },
     },
   })
@@ -74,6 +75,7 @@ describe('CharacterCardJumpPreview', () => {
   let wrapper: VueWrapper | null = null
 
   beforeEach(() => {
+    i18n.global.locale.value = 'zh-CN'
     vi.useFakeTimers()
     mocks.getCharacterCard.mockReset()
   })

@@ -196,8 +196,12 @@ async fn write_character_card_profile(
     profiles_object.insert(trimmed_profile_id.to_string(), merged_profile);
 
     let had_local_file = lua_path.is_file();
-    let snapshot =
-        local_versions::create_snapshot(&wow_path, &account_id, snapshot_name.as_deref())?;
+    let snapshot = local_versions::create_snapshot_with_reason(
+        &wow_path,
+        &account_id,
+        snapshot_name.as_deref(),
+        "before_character_card_writeback",
+    )?;
     if had_local_file && snapshot.is_none() {
         return Err("写入前无法建立强制本地快照".to_string());
     }

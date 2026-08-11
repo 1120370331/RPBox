@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
 
 let colorFieldSequence = 0
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   modelValue: string
@@ -68,11 +70,11 @@ function selectColor(value: string) {
     <label class="character-dye__label" :for="inputId">{{ label }}</label>
     <div class="character-dye__well">
       <label class="character-dye__swatch" :style="{ '--dye-color': currentColor }">
-        <span class="sr-only">打开{{ label }}取色器</span>
+        <span class="sr-only">{{ t('characterCards.colorField.openPicker', { label }) }}</span>
         <input
           type="color"
           :value="pickerColor"
-          :aria-label="`${label}取色器`"
+          :aria-label="t('characterCards.colorField.picker', { label })"
           @input="selectColor(($event.target as HTMLInputElement).value)"
         />
       </label>
@@ -91,20 +93,20 @@ function selectColor(value: string) {
         @input="commitText(($event.target as HTMLInputElement).value)"
       />
     </div>
-    <div class="character-dye__presets" aria-label="常用染料">
+    <div class="character-dye__presets" :aria-label="t('characterCards.colorField.presets')">
       <button
         v-for="preset in presets"
         :key="preset"
         type="button"
         :class="{ active: currentColor === preset.toUpperCase() }"
         :style="{ '--preset-color': preset }"
-        :aria-label="`使用颜色 ${preset}`"
+        :aria-label="t('characterCards.colorField.useColor', { color: preset })"
         :aria-pressed="currentColor === preset.toUpperCase()"
         @click="selectColor(preset)"
       ></button>
     </div>
     <small v-if="invalid" :id="errorId" class="character-dye__error" role="alert">
-      请输入 #RRGGBB 或 #RRGGBBAA 格式。
+      {{ t('characterCards.colorField.invalid') }}
     </small>
     <small v-else-if="hint" :id="hintId" class="character-dye__hint">{{ hint }}</small>
   </div>
@@ -112,17 +114,17 @@ function selectColor(value: string) {
 
 <style scoped>
 .character-dye { display: grid; min-width: 0; gap: 6px; }
-.character-dye__label { color: var(--muted, #8C7B70); font-size: 10px; font-weight: 700; }
+.character-dye__label { color: var(--color-text-secondary); font-size: 10px; font-weight: 700; }
 .character-dye__well {
   display: grid;
   min-height: 42px;
   grid-template-columns: 42px auto minmax(0, 1fr);
   align-items: center;
   overflow: hidden;
-  border: 1px solid var(--line, #E3D4C5);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
-  background: #FFF;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: var(--input-bg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-text-light) 18%, transparent);
 }
 .character-dye__swatch {
   position: relative;
@@ -132,7 +134,7 @@ function selectColor(value: string) {
   min-height: 42px;
   place-items: center;
   overflow: hidden;
-  border-right: 1px solid rgba(75, 54, 33, 0.2);
+  border-right: 1px solid var(--color-border);
   background:
     radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.62), transparent 26%),
     var(--dye-color);
@@ -143,21 +145,21 @@ function selectColor(value: string) {
   height: 9px;
   border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 50%;
-  box-shadow: 0 7px 14px rgba(44, 24, 16, 0.22);
+  box-shadow: 0 7px 14px color-mix(in srgb, var(--color-primary) 24%, transparent);
   content: '';
 }
 .character-dye__swatch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.character-dye__swatch:focus-within { outline: 3px solid rgba(184, 115, 51, 0.28); outline-offset: -3px; }
-.character-dye__prefix { padding-left: 10px; color: #A07D60; font: 800 8px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.08em; }
-.character-dye__hex { min-width: 0; padding: 10px 10px 10px 7px; border: 0; outline: none; color: var(--ink, #2C1810); font: 700 11px/1.2 ui-monospace, Consolas, monospace; text-transform: uppercase; }
-.character-dye__well:focus-within { border-color: var(--copper, #B87333); box-shadow: 0 0 0 3px rgba(184, 115, 51, 0.11); }
-.character-dye--invalid .character-dye__well { border-color: #A94F42; box-shadow: 0 0 0 3px rgba(169, 79, 66, 0.1); }
+.character-dye__swatch:focus-within { outline: 3px solid color-mix(in srgb, var(--color-accent) 30%, transparent); outline-offset: -3px; }
+.character-dye__prefix { padding-left: 10px; color: var(--color-text-muted); font: 800 8px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.08em; }
+.character-dye__hex { min-width: 0; padding: 10px 10px 10px 7px; border: 0; outline: none; color: var(--color-text-main); font: 700 11px/1.2 ui-monospace, Consolas, monospace; text-transform: uppercase; }
+.character-dye__well:focus-within { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent); }
+.character-dye--invalid .character-dye__well { border-color: var(--btn-danger-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--btn-danger-bg) 12%, transparent); }
 .character-dye__presets { display: flex; flex-wrap: wrap; gap: 5px; }
-.character-dye__presets button { width: 18px; height: 18px; padding: 0; border: 2px solid #FFF; border-radius: 50%; outline: 1px solid #D8C4B2; background: var(--preset-color); cursor: pointer; }
-.character-dye__presets button.active { outline: 2px solid var(--rust, #804030); outline-offset: 1px; }
-.character-dye__presets button:focus-visible { outline: 3px solid var(--copper, #B87333); outline-offset: 2px; }
-.character-dye__error { color: #9D4036; }
-.character-dye__hint { color: var(--muted, #8C7B70); }
+.character-dye__presets button { width: 18px; height: 18px; padding: 0; border: 2px solid var(--color-panel-bg); border-radius: 50%; outline: 1px solid var(--color-border); background: var(--preset-color); cursor: pointer; }
+.character-dye__presets button.active { outline: 2px solid var(--color-secondary); outline-offset: 1px; }
+.character-dye__presets button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 2px; }
+.character-dye__error { color: var(--btn-danger-bg); }
+.character-dye__hint { color: var(--color-text-secondary); }
 .character-dye__error, .character-dye__hint { font-size: 9px; line-height: 1.45; }
 
 @media (prefers-reduced-motion: reduce) {

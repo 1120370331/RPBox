@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import AuthenticatedImage from './AuthenticatedImage.vue'
 
 describe('AuthenticatedImage', () => {
@@ -8,6 +9,7 @@ describe('AuthenticatedImage', () => {
   const revokeObjectURL = vi.fn()
 
   beforeEach(() => {
+    i18n.global.locale.value = 'zh-CN'
     localStorage.clear()
     fetchMock.mockReset()
     createObjectURL.mockReset()
@@ -35,6 +37,7 @@ describe('AuthenticatedImage', () => {
 
     const wrapper = mount(AuthenticatedImage, {
       props: { src: '/api/v1/images/private/1', alt: '私有图片' },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 
@@ -62,6 +65,7 @@ describe('AuthenticatedImage', () => {
 
     const wrapper = mount(AuthenticatedImage, {
       props: { src: '/api/v1/images/private/relative', alt: '受保护图片' },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 
@@ -99,6 +103,7 @@ describe('AuthenticatedImage', () => {
 
     const wrapper = mount(AuthenticatedImage, {
       props: { src: '/api/v1/images/private/slow', alt: '切换中的图片' },
+      global: { plugins: [i18n] },
     })
     await wrapper.vm.$nextTick()
     const firstSignal = fetchMock.mock.calls[0][1].signal as AbortSignal
@@ -124,6 +129,7 @@ describe('AuthenticatedImage', () => {
 
     const wrapper = mount(AuthenticatedImage, {
       props: { src: 'https://api.example.test/public-image', alt: '公开图片' },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 
@@ -147,6 +153,7 @@ describe('AuthenticatedImage', () => {
 
     const wrapper = mount(AuthenticatedImage, {
       props: { src: '/api/v1/images/private/forbidden', alt: '不可用印象图' },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 

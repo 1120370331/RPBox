@@ -470,7 +470,8 @@ async function confirmUpload() {
       raw_trp3_lua: currentAccount?.raw_trp3_lua,
       raw_trp3_data_lua: currentAccount?.raw_trp3_data_lua,
       raw_trp3_extended_lua: currentAccount?.raw_trp3_extended_lua,
-      checksum: computeLocalChecksum()
+      checksum: computeLocalChecksum(),
+      snapshot_reason: 'before_manual_backup'
     })
     await loadProfiles()
     await dialog.alert({ title: t('sync.dialog.success'), message: t('sync.dialog.backupSuccess'), type: 'success' })
@@ -575,7 +576,8 @@ async function restoreAll() {
         runtime_size_kb: fullBackup.runtime_size_kb,
         config_data: fullBackup.config_data,
         extra_data: fullBackup.extra_data,
-        checksum: newChecksum
+        checksum: newChecksum,
+        snapshot_reason: 'restore_sync'
       })
       await loadProfiles()
     }

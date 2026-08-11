@@ -1,6 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import CharacterCardPortrait from './CharacterCardPortrait.vue'
+
+i18n.global.locale.value = 'zh-CN'
 
 const mocks = vi.hoisted(() => ({
   getCharacterCardPortraitUrl: vi.fn((card: { id: number }) => `/portrait/${card.id}`),
@@ -53,6 +56,7 @@ describe('CharacterCardPortrait', () => {
 
     const wrapper = mount(CharacterCardPortrait, {
       props: { card: portraitCard(1), alt: '第一张肖像' },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 
@@ -83,6 +87,7 @@ describe('CharacterCardPortrait', () => {
 
     const wrapper = mount(CharacterCardPortrait, {
       props: { card: portraitCard(3), alt: '不可用肖像' },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 

@@ -1,8 +1,11 @@
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import CharacterCardWall from './CharacterCardWall.vue'
 import type { CharacterCardSummary } from '@/api/characterCard'
+
+i18n.global.locale.value = 'zh-CN'
 
 const mocks = vi.hoisted(() => ({
   listMyCharacterCards: vi.fn(),
@@ -51,6 +54,7 @@ function mountWall(isOwnProfile: boolean) {
   return mount(CharacterCardWall, {
     props: { userId: 8, isOwnProfile },
     global: {
+      plugins: [i18n],
       stubs: {
         RouterLink: RouterLinkStub,
         CharacterCardPortrait: true,
