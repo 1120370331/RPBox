@@ -115,6 +115,7 @@ const publicRoutes = new Set([
   'rpdb-detail',
   'rpdb-create',
   'rpdb-preview',
+  'character-card-detail',
 ])
 
 function parseJwt(token: string): { exp?: number } | null {

@@ -8,6 +8,7 @@ import guild from './guild'
 import profile from './profile'
 import profiles from './profiles'
 import collection from './collection'
+import characterCards from './characterCards'
 
 export default {
   common,
@@ -20,4 +21,5 @@ export default {
   profile,
   profiles,
   collection,
+  characterCards,
 }

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, ref, watch } from 'vue'
+import i18n from '@/i18n'
+
+const t = i18n.global.t
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -10,7 +13,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   startIndex: 0,
   showDownload: false,
-  downloadLabel: 'Download',
+  downloadLabel: '',
 })
 
 const emit = defineEmits<{
@@ -43,6 +46,7 @@ let controlsFadeTimer: ReturnType<typeof setTimeout> | null = null
 let closingFromHistory = false
 
 const currentImage = computed(() => props.images[currentIndex.value] || '')
+const resolvedDownloadLabel = computed(() => props.downloadLabel || t('common.imageViewer.download'))
 const transformStyle = computed(() => ({
   transform: `translate3d(${translateX.value}px, ${translateY.value}px, 0) scale(${scale.value}) rotate(${rotation.value}deg)`,
 }))
@@ -311,15 +315,18 @@ function clearHistoryEntry() {
   <div
     v-if="modelValue"
     class="image-viewer-modal"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="t('common.imageViewer.aria')"
     @click.self="closeViewer"
     @mousemove="handleUserActivity"
     @touchstart="handleUserActivity"
   >
-    <button class="viewer-close viewer-control" :class="{ 'controls-hidden': !controlsVisible }" @click="closeViewer">
+    <button type="button" class="viewer-close viewer-control" :class="{ 'controls-hidden': !controlsVisible }" :title="t('common.imageViewer.close')" :aria-label="t('common.imageViewer.close')" @click="closeViewer">
       <i class="ri-close-line"></i>
     </button>
 
-    <button class="viewer-nav prev viewer-control" :class="{ 'controls-hidden': !controlsVisible }" @click="prevImage" v-if="images.length > 1">
+    <button v-if="images.length > 1" type="button" class="viewer-nav prev viewer-control" :class="{ 'controls-hidden': !controlsVisible }" :title="t('common.imageViewer.previous')" :aria-label="t('common.imageViewer.previous')" @click="prevImage">
       <i class="ri-arrow-left-s-line"></i>
     </button>
 
@@ -334,33 +341,33 @@ function clearHistoryEntry() {
       @pointercancel="handlePointerUp"
       @pointerleave="handlePointerUp"
     >
-      <img v-if="currentImage" :src="currentImage" alt="" :style="transformStyle" draggable="false" @dragstart.prevent />
+      <img v-if="currentImage" :src="currentImage" :alt="t('common.imageViewer.image', { current: currentIndex + 1, total: images.length })" :style="transformStyle" draggable="false" @dragstart.prevent />
     </div>
 
-    <button class="viewer-nav next viewer-control" :class="{ 'controls-hidden': !controlsVisible }" @click="nextImage" v-if="images.length > 1">
+    <button v-if="images.length > 1" type="button" class="viewer-nav next viewer-control" :class="{ 'controls-hidden': !controlsVisible }" :title="t('common.imageViewer.next')" :aria-label="t('common.imageViewer.next')" @click="nextImage">
       <i class="ri-arrow-right-s-line"></i>
     </button>
 
     <div class="viewer-toolbar viewer-control" :class="{ 'controls-hidden': !controlsVisible }" v-if="images.length > 0">
       <span class="viewer-counter">{{ currentIndex + 1 }} / {{ images.length }}</span>
-      <button class="viewer-tool-btn" @click="zoomOut" title="缩小 (-)">
+      <button type="button" class="viewer-tool-btn" :title="t('common.imageViewer.zoomOut')" :aria-label="t('common.imageViewer.zoomOut')" @click="zoomOut">
         <i class="ri-zoom-out-line"></i>
       </button>
       <span class="viewer-scale">{{ Math.round(scale * 100) }}%</span>
-      <button class="viewer-tool-btn" @click="zoomIn" title="放大 (+)">
+      <button type="button" class="viewer-tool-btn" :title="t('common.imageViewer.zoomIn')" :aria-label="t('common.imageViewer.zoomIn')" @click="zoomIn">
         <i class="ri-zoom-in-line"></i>
       </button>
-      <button class="viewer-tool-btn" @click="rotateLeft" title="左转 90°">
+      <button type="button" class="viewer-tool-btn" :title="t('common.imageViewer.rotateLeft')" :aria-label="t('common.imageViewer.rotateLeft')" @click="rotateLeft">
         <i class="ri-anticlockwise-2-line"></i>
       </button>
-      <button class="viewer-tool-btn" @click="rotateRight" title="右转 90° (R)">
+      <button type="button" class="viewer-tool-btn" :title="t('common.imageViewer.rotateRight')" :aria-label="t('common.imageViewer.rotateRight')" @click="rotateRight">
         <i class="ri-clockwise-2-line"></i>
       </button>
-      <button class="viewer-tool-btn" @click="resetTransform" title="重置 (0)">
+      <button type="button" class="viewer-tool-btn" :title="t('common.imageViewer.reset')" :aria-label="t('common.imageViewer.reset')" @click="resetTransform">
         <i class="ri-refresh-line"></i>
       </button>
-      <button v-if="showDownload" class="viewer-download" @click="handleDownload">
-        <i class="ri-download-line"></i> {{ downloadLabel }}
+      <button v-if="showDownload" type="button" class="viewer-download" @click="handleDownload">
+        <i class="ri-download-line"></i> {{ resolvedDownloadLabel }}
       </button>
     </div>
   </div>

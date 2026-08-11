@@ -8,6 +8,7 @@ const SUPPORTED_PATH_PATTERNS = [
   /^\/stories\/\d+$/,
   /^\/rpdb\/\d+$/,
   /^\/profiles\/\d+$/,
+  /^\/character-cards\/\d+$/,
   /^\/guild\/\d+$/,
   /^\/guild\/\d+\/posts$/,
   /^\/guild\/\d+\/stories$/,

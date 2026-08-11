@@ -7,6 +7,7 @@ import { getGuild, type Guild } from '@/api/guild'
 import { getImageUrl, resolveApiUrl } from '@/api/item'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
 
 type FeedTab = 'posts' | 'events'
 type EventStatus = 'live' | 'upcoming' | 'ended'
@@ -784,10 +785,14 @@ function setEventStatusFilter(filter: EventStatusFilter) {
               </div>
               <div class="card-footer">
                 <div class="author-info">
-                  <div class="author-avatar small">
-                    <img v-if="post.author_avatar" :src="resolveApiUrl(post.author_avatar)" alt="" loading="lazy" />
-                    <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
-                  </div>
+                  <UserAvatarPopover
+                    class="author-avatar small"
+                    :user-id="post.author_id"
+                    :avatar-url="post.author_avatar ? resolveApiUrl(post.author_avatar) : ''"
+                    :username="post.author_name"
+                    :name-color="post.author_name_color"
+                    :name-bold="post.author_name_bold"
+                  />
                   <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
                   <UserLevelBadge
                     :level="post.author_forum_level"

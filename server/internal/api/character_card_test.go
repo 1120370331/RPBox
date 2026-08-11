@@ -1181,6 +1181,51 @@ func TestCharacterCardRejectsInvalidStateAndUnsafeRichText(t *testing.T) {
 	}
 }
 
+func TestCharacterCardShareRequiresApprovedPublicVersion(t *testing.T) {
+	db, server, owner, _ := newCharacterCardTestServer(t)
+	cards := []model.CharacterCard{
+		{
+			UserID: owner.ID, DisplayName: "Approved", Status: model.CharacterCardStatusPublished,
+			Visibility: model.CharacterCardVisibilityPublic, ReviewStatus: model.CharacterCardReviewApproved,
+		},
+		{
+			UserID: owner.ID, DisplayName: "Pending", Status: model.CharacterCardStatusPublished,
+			Visibility: model.CharacterCardVisibilityPublic, ReviewStatus: model.CharacterCardReviewPending,
+		},
+		{
+			UserID: owner.ID, DisplayName: "Private", Status: model.CharacterCardStatusPublished,
+			Visibility: model.CharacterCardVisibilityPrivate, ReviewStatus: model.CharacterCardReviewApproved,
+		},
+	}
+	if err := db.Create(&cards).Error; err != nil {
+		t.Fatalf("create share cards: %v", err)
+	}
+
+	approvedPath := "/api/v1/character-cards/" + strconv.FormatUint(uint64(cards[0].ID), 10) + "/share"
+	approved := performRequest(server.router, http.MethodGet, approvedPath, nil, "")
+	if approved.Code != http.StatusOK {
+		t.Fatalf("approved public share expected 200, got %d body=%s", approved.Code, approved.Body.String())
+	}
+	var payload struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(approved.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode share response: %v", err)
+	}
+	wantPath := "/character-cards/" + strconv.FormatUint(uint64(cards[0].ID), 10)
+	if payload.Path != wantPath {
+		t.Fatalf("expected share path %q, got %q", wantPath, payload.Path)
+	}
+
+	for _, card := range cards[1:] {
+		path := "/api/v1/character-cards/" + strconv.FormatUint(uint64(card.ID), 10) + "/share"
+		resp := performRequest(server.router, http.MethodGet, path, nil, "")
+		if resp.Code != http.StatusConflict {
+			t.Fatalf("ineligible card %d expected 409, got %d body=%s", card.ID, resp.Code, resp.Body.String())
+		}
+	}
+}
+
 func newCharacterCardTestServer(t *testing.T) (*gorm.DB, *Server, model.User, model.User) {
 	t.Helper()
 	db := testutil.NewTestDB(t,

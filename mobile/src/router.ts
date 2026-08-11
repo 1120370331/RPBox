@@ -157,6 +157,11 @@ const router = createRouter({
       component: () => import('./views/details/ProfileDetail.vue'),
     },
     {
+      path: '/character-cards/:id',
+      name: 'character-card-detail',
+      component: () => import('./views/details/CharacterCardDetail.vue'),
+    },
+    {
       path: '/my-favorites',
       name: 'my-favorites',
       component: () => import('./views/profile/MyFavorites.vue'),
@@ -196,7 +201,7 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const userStore = useUserStore()
-  const publicPages = ['login', 'register', 'forgot-password', 'legal-terms', 'legal-privacy']
+  const publicPages = ['login', 'register', 'forgot-password', 'legal-terms', 'legal-privacy', 'character-card-detail']
   if (!publicPages.includes(to.name as string) && !userStore.token) {
     return { name: 'login' }
   }

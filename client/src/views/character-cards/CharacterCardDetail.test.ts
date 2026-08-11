@@ -12,12 +12,14 @@ const mocks = vi.hoisted(() => ({
   getCharacterCard: vi.fn(),
   updateCharacterCard: vi.fn(),
   deleteCharacterCard: vi.fn(),
+  getCharacterCardSharePath: vi.fn(),
 }))
 
 vi.mock('@/api/characterCard', () => ({
   getCharacterCard: mocks.getCharacterCard,
   updateCharacterCard: mocks.updateCharacterCard,
   deleteCharacterCard: mocks.deleteCharacterCard,
+  getCharacterCardSharePath: mocks.getCharacterCardSharePath,
   getCharacterCardPortraitUrl: vi.fn(() => ''),
 }))
 
@@ -96,11 +98,46 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
   localStorage.clear()
   document.body.innerHTML = ''
 })
 
 describe('CharacterCardDetail tabs', () => {
+  it('shares only an approved public character card through its public route', async () => {
+    const approvedCard: CharacterCard = { ...card, review_status: 'approved' }
+    mocks.getCharacterCard.mockResolvedValue(approvedCard)
+    mocks.getCharacterCardSharePath.mockResolvedValue('/character-cards/12')
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/character-cards/:id', component: CharacterCardDetail }],
+    })
+    await router.push('/character-cards/12')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardDetail, {
+      global: {
+        plugins: [createPinia(), router, i18n],
+        stubs: { CharacterCardPortrait: true },
+      },
+    })
+    await flushPromises()
+
+    const shareButton = wrapper.findAll('button').find((button) => button.text().includes('分享人物卡'))
+    expect(shareButton).toBeTruthy()
+    await shareButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getCharacterCardSharePath).toHaveBeenCalledWith(12)
+    expect(writeText).toHaveBeenCalledWith('https://totalrpbox.com/character-cards/12')
+    wrapper.unmount()
+  })
+
   it('keeps tab focus, selection, and panel relationships synchronized', async () => {
     mocks.getCharacterCard.mockResolvedValue({
       ...card,
@@ -175,7 +212,13 @@ describe('CharacterCardDetail tabs', () => {
     const wrapper = mount(CharacterCardDetail, {
       global: {
         plugins: [createPinia(), router, i18n],
-        stubs: { CharacterCardPortrait: true },
+        stubs: {
+          CharacterCardPortrait: true,
+          ImageViewer: {
+            props: ['modelValue', 'images', 'startIndex'],
+            template: '<div v-if="modelValue" class="image-viewer-stub" :data-images="images.join(\'|\')" :data-start="startIndex" />',
+          },
+        },
       },
     })
     await flushPromises()
@@ -201,6 +244,57 @@ describe('CharacterCardDetail tabs', () => {
     )
     expect(wrapper.get('.impression-entry__protected-image img').attributes('src'))
       .toMatch(/^blob:detail-protected-/)
+
+    await wrapper.get('.impression-entry__image').trigger('click')
+    expect(wrapper.get('.image-viewer-stub').attributes('data-images'))
+      .toMatch(/^blob:detail-protected-/)
+
+    await wrapper.get('.impression-entry__mark.is-previewable').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.get('.image-viewer-stub').attributes('data-images'))
+      .toMatch(/^blob:detail-protected-/)
+    wrapper.unmount()
+  })
+
+  it('opens the complete character-art gallery from the main portrait', async () => {
+    mocks.getCharacterCard.mockResolvedValue({
+      ...card,
+      portraits: [
+        { id: 31, image_url: '/api/v1/images/character-card-portrait/31?v=1', image_updated_at: null, sort_order: 0, is_cover: true },
+        { id: 32, image_url: '/api/v1/images/character-card-portrait/32?v=1', image_updated_at: null, sort_order: 1, is_cover: false },
+      ],
+    })
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => ({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['portrait'], { type: 'image/png' })),
+    })))
+    let objectUrlIndex = 0
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:portrait-${++objectUrlIndex}`)
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/character-cards/:id', component: CharacterCardDetail }],
+    })
+    await router.push('/character-cards/12')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardDetail, {
+      global: {
+        plugins: [createPinia(), router, i18n],
+        stubs: {
+          ImageViewer: {
+            props: ['modelValue', 'images', 'startIndex'],
+            template: '<div v-if="modelValue" class="image-viewer-stub" :data-images="images.join(\'|\')" :data-start="startIndex" />',
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('.character-portrait__frame').trigger('click')
+    const viewer = wrapper.get('.image-viewer-stub')
+    expect(viewer.attributes('data-images').split('|')).toHaveLength(2)
+    expect(viewer.attributes('data-start')).toBe('0')
     wrapper.unmount()
   })
 })

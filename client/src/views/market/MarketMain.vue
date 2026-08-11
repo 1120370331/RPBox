@@ -6,6 +6,7 @@ import { listItems, type Item, getImageUrl, resolveApiUrl } from '@/api/item'
 import { getPresetTags, type Tag } from '@/api/tag'
 import LazyBgImage from '@/components/LazyBgImage.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
 const router = useRouter()
@@ -242,12 +243,15 @@ watch([sortBy], () => {
           <div class="card-meta">
             <span class="type-badge">{{ typeMap[item.type as keyof typeof typeMap] || item.type }}</span>
             <div class="card-author">
-              <span v-if="item.author_avatar" class="author-avatar">
-                <img :src="resolveApiUrl(item.author_avatar)" alt="" loading="lazy" />
-              </span>
-              <span v-else class="author-avatar placeholder">
-                {{ (item.author_username || 'U').charAt(0) }}
-              </span>
+              <UserAvatarPopover
+                class="author-avatar"
+                :class="{ placeholder: !item.author_avatar }"
+                :user-id="item.author_id"
+                :avatar-url="item.author_avatar ? resolveApiUrl(item.author_avatar) : ''"
+                :username="item.author_username || t('market.item.anonymous')"
+                :name-color="item.author_name_color"
+                :name-bold="item.author_name_bold"
+              />
               <span class="author-name" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || t('market.item.anonymous') }}</span>
               <UserLevelBadge
                 :level="item.author_forum_level"

@@ -25,6 +25,7 @@ import CommentReplyBox from '@/components/CommentReplyBox.vue'
 import CommentImagePicker from '@/components/CommentImagePicker.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import RPDBMediaGallery from '@/components/rpdb/RPDBMediaGallery.vue'
 import RPDBWorkCard from '@/components/rpdb/RPDBWorkCard.vue'
@@ -656,15 +657,14 @@ onBeforeUnmount(() => {
         <h1>{{ work.title }}</h1>
         <p class="summary">{{ work.summary }}</p>
         <div class="author">
-          <span class="author-avatar">
-            <span>{{ (work.author_name || 'R').slice(0, 1).toUpperCase() }}</span>
-            <img
-              v-if="work.author_avatar"
-              :src="resolveApiUrl(work.author_avatar)"
-              :alt="`${work.author_name || '发布者'}的头像`"
-              @error="($event.currentTarget as HTMLImageElement).hidden = true"
-            >
-          </span>
+          <UserAvatarPopover
+            class="author-avatar"
+            :user-id="work.author_id"
+            :avatar-url="work.author_avatar ? resolveApiUrl(work.author_avatar) : ''"
+            :username="work.author_name || '匿名贡献者'"
+            :name-color="work.author_name_color"
+            :name-bold="work.author_name_bold"
+          />
           <span>
             由 {{ work.author_name || '匿名贡献者' }} 发布
             <small>v{{ work.version }}</small>
@@ -845,10 +845,14 @@ onBeforeUnmount(() => {
 
           <div class="comments-list">
             <div v-for="item in organizedComments" :id="`comment-${item.id}`" :key="item.id" class="comment-item">
-              <div class="comment-avatar">
-                <img v-if="item.author_avatar" :src="resolveApiUrl(item.author_avatar)" alt="" />
-                <span v-else>{{ (item.author_name || '匿').charAt(0) }}</span>
-              </div>
+              <UserAvatarPopover
+                class="comment-avatar"
+                :user-id="item.author_id"
+                :avatar-url="item.author_avatar ? resolveApiUrl(item.author_avatar) : ''"
+                :username="item.author_name || '匿名玩家'"
+                :name-color="item.author_name_color"
+                :name-bold="item.author_name_bold"
+              />
               <div class="comment-body">
                 <div class="comment-meta">
                   <span class="comment-author" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_name || '匿名玩家' }}</span>
@@ -921,10 +925,14 @@ onBeforeUnmount(() => {
 
                 <div v-if="item.replies && item.replies.length > 0" class="replies-list">
                   <div v-for="reply in item.replies" :id="`comment-${reply.id}`" :key="reply.id" class="reply-item">
-                    <div class="reply-avatar">
-                      <img v-if="reply.author_avatar" :src="resolveApiUrl(reply.author_avatar)" alt="" />
-                      <span v-else>{{ (reply.author_name || '匿').charAt(0) }}</span>
-                    </div>
+                    <UserAvatarPopover
+                      class="reply-avatar"
+                      :user-id="reply.author_id"
+                      :avatar-url="reply.author_avatar ? resolveApiUrl(reply.author_avatar) : ''"
+                      :username="reply.author_name || '匿名玩家'"
+                      :name-color="reply.author_name_color"
+                      :name-bold="reply.author_name_bold"
+                    />
                     <div class="reply-body">
                       <div class="reply-meta">
                         <span class="reply-author" :style="buildNameStyle(reply.author_name_color, reply.author_name_bold)">{{ reply.author_name || '匿名玩家' }}</span>

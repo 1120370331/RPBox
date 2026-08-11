@@ -12,6 +12,7 @@ const SUPPORTED_PUBLIC_PATH_PATTERNS = [
   /^\/items\/\d+$/,
   /^\/stories\/\d+$/,
   /^\/profiles\/\d+$/,
+  /^\/character-cards\/\d+$/,
   /^\/guild\/\d+$/,
   /^\/guild\/\d+\/posts$/,
   /^\/guild\/\d+\/stories$/,

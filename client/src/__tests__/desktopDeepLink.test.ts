@@ -13,6 +13,7 @@ describe('desktop deep link utils', () => {
     expect(normalizeSharedPath('/posts/12')).toBe('/posts/12')
     expect(normalizeSharedPath('items/7')).toBe('/items/7')
     expect(normalizeSharedPath('/guild/2/posts/')).toBe('/guild/2/posts')
+    expect(normalizeSharedPath('/character-cards/23')).toBe('/character-cards/23')
     expect(normalizeSharedPath('/posts/abc')).toBeNull()
   })
 
@@ -28,11 +29,13 @@ describe('desktop deep link utils', () => {
     expect(mapSharedPathToDesktopRoute('/items/8')).toBe('/market/8')
     expect(mapSharedPathToDesktopRoute('/stories/5')).toBe('/archives/story/5')
     expect(mapSharedPathToDesktopRoute('/profiles/9')).toBe('/user/9')
+    expect(mapSharedPathToDesktopRoute('/character-cards/23')).toBe('/character-cards/23')
     expect(mapSharedPathToDesktopRoute('/guild/4/stories')).toBe('/guild/4/stories')
   })
 
   it('builds public links for supported shared paths', () => {
     expect(buildPublicSitePathUrl('/posts/12')).toBe('https://totalrpbox.com/posts/12')
+    expect(buildPublicSitePathUrl('/character-cards/23')).toBe('https://totalrpbox.com/character-cards/23')
     expect(() => buildPublicSitePathUrl('/community/post/12')).toThrow('Unsupported shared path')
   })
 
@@ -40,6 +43,7 @@ describe('desktop deep link utils', () => {
     expect(resolveDesktopRouteFromUrl('rpbox://open?path=%2Fposts%2F12')).toBe('/community/post/12')
     expect(resolveDesktopRouteFromUrl('https://totalrpbox.com/items/8')).toBe('/market/8')
     expect(resolveDesktopRouteFromUrl('https://totalrpbox.com/profiles/9')).toBe('/user/9')
+    expect(resolveDesktopRouteFromUrl('rpbox://open?path=%2Fcharacter-cards%2F23')).toBe('/character-cards/23')
   })
 
   it('navigates the first supported deep link url', async () => {

@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@/stores/toast'
 import { useDialog } from '@/composables/useDialog'
-import { useUserStore } from '@/stores/user'
 import {
+  deleteGuild,
   getGuild,
   listGuildMembers,
   updateMemberRole,
@@ -27,10 +27,9 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToastStore()
 const { confirm } = useDialog()
-const userStore = useUserStore()
 
 const guildId = computed(() => Number(route.params.id))
 const guild = ref<Guild | null>(null)
@@ -41,6 +40,7 @@ const avatarUploading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
 const avatarCropperOpen = ref(false)
 const avatarCropperFile = ref<File | null>(null)
+const disbanding = ref(false)
 
 const guildAvatarUrl = computed(() => {
   if (!guild.value || (!guild.value.avatar_url && !guild.value.avatar)) return ''
@@ -266,6 +266,31 @@ async function handleReviewApplication(app: GuildApplication, action: 'approve' 
   }
 }
 
+async function handleDisband() {
+  if (!guild.value || !isOwner.value || disbanding.value) return
+
+  const confirmed = await confirm({
+    title: t('guild.manage.danger.confirmTitle'),
+    message: t('guild.manage.danger.confirmMessage', { name: guild.value.name }),
+    type: 'error',
+    confirmText: t('guild.manage.danger.confirmAction'),
+    cancelText: t('common.button.cancel'),
+  })
+  if (!confirmed) return
+
+  disbanding.value = true
+  try {
+    await deleteGuild(guildId.value)
+    toast.success(t('guild.manage.danger.success'))
+    await router.replace('/guild')
+  } catch (e: any) {
+    console.error('解散公会失败:', e)
+    toast.error(e.message || t('guild.manage.danger.failed'))
+  } finally {
+    disbanding.value = false
+  }
+}
+
 // 获取角色标签
 function getRoleLabel(role: string): string {
   if (!role) return ''
@@ -282,7 +307,7 @@ function getStatusLabel(status: string): string {
 function formatDate(dateStr: string): string {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -309,7 +334,7 @@ onMounted(async () => {
       <!-- 页面头部 -->
       <header class="page-header">
         <div class="header-left">
-          <button class="back-btn" @click="router.push(`/guild/${guildId}`)">
+          <button type="button" class="back-btn" @click="router.push(`/guild/${guildId}`)">
             <i class="ri-arrow-left-line"></i>
             {{ t('guild.manage.back') }}
           </button>
@@ -319,7 +344,7 @@ onMounted(async () => {
 
       <div class="avatar-panel">
         <div class="avatar-preview" :class="{ editable: isAdmin }" @click="isAdmin && triggerAvatarUpload()">
-          <img v-if="guildAvatarUrl" :src="guildAvatarUrl" alt="" />
+          <img v-if="guildAvatarUrl" :src="guildAvatarUrl" :alt="t('guild.manage.avatarAlt', { name: guild.name })" />
           <span v-else>{{ guild.name?.charAt(0) || 'G' }}</span>
           <div v-if="isAdmin" class="avatar-overlay">
             <i class="ri-camera-line"></i>
@@ -339,7 +364,7 @@ onMounted(async () => {
           :output-width="512"
           :output-height="512"
           :max-size-k-b="512"
-          title="调整公会头像"
+          :title="t('guild.manage.cropAvatar')"
           round-preview
           @cropped="handleAvatarCropped"
           @error="handleAvatarCropperError"
@@ -349,6 +374,7 @@ onMounted(async () => {
       <!-- 标签页导航 -->
       <div class="tabs">
         <button
+          type="button"
           :class="{ active: activeTab === 'members' }"
           @click="activeTab = 'members'"
         >
@@ -356,6 +382,7 @@ onMounted(async () => {
           {{ t('guild.manage.tabs.members') }}
         </button>
         <button
+          type="button"
           :class="{ active: activeTab === 'applications' }"
           @click="activeTab = 'applications'"
         >
@@ -426,12 +453,14 @@ onMounted(async () => {
         <!-- 筛选器 -->
         <div class="filter-bar">
           <button
+            type="button"
             :class="{ active: applicationFilter === 'pending' }"
             @click="applicationFilter = 'pending'; loadApplications()"
           >
             {{ t('guild.manage.applications.pending') }}
           </button>
           <button
+            type="button"
             :class="{ active: applicationFilter === 'all' }"
             @click="applicationFilter = 'all'; loadApplications()"
           >
@@ -479,6 +508,21 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+
+      <section v-if="isOwner" class="danger-zone" aria-labelledby="guild-danger-title">
+        <div class="danger-zone__mark" aria-hidden="true">
+          <i class="ri-error-warning-line"></i>
+        </div>
+        <div class="danger-zone__content">
+          <span class="danger-zone__eyebrow">{{ t('guild.manage.danger.eyebrow') }}</span>
+          <h2 id="guild-danger-title">{{ t('guild.manage.danger.title') }}</h2>
+          <p>{{ t('guild.manage.danger.description') }}</p>
+        </div>
+        <RButton type="danger" :loading="disbanding" @click="handleDisband">
+          <i class="ri-delete-bin-6-line"></i>
+          {{ t('guild.manage.danger.action') }}
+        </RButton>
+      </section>
     </div>
   </div>
 </template>
@@ -487,12 +531,13 @@ onMounted(async () => {
 .guild-manage {
   padding: 24px;
   min-height: 100vh;
+  color: var(--color-text-main);
 }
 
 .loading {
   text-align: center;
   padding: 40px;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .manage-container {
@@ -516,10 +561,10 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #fff;
-  border: 1px solid #E8DCC8;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #B87333;
+  color: var(--link-color);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -527,8 +572,8 @@ onMounted(async () => {
 }
 
 .back-btn:hover {
-  background: #FBF5EF;
-  border-color: #D4A373;
+  background: var(--btn-outline-hover);
+  border-color: var(--color-border-hover);
 }
 
 .back-btn i {
@@ -538,7 +583,7 @@ onMounted(async () => {
 .page-title {
   font-size: 24px;
   font-weight: 700;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -547,9 +592,10 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   padding: 16px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: var(--shadow-sm);
   margin-bottom: 24px;
 }
 
@@ -557,8 +603,8 @@ onMounted(async () => {
   width: 72px;
   height: 72px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -566,8 +612,8 @@ onMounted(async () => {
   font-weight: 700;
   overflow: hidden;
   position: relative;
-  border: 2px solid #fff;
-  box-shadow: 0 4px 12px rgba(44, 24, 16, 0.2);
+  border: 2px solid var(--color-panel-bg);
+  box-shadow: var(--shadow-md);
 }
 
 .avatar-preview.editable {
@@ -590,7 +636,7 @@ onMounted(async () => {
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
-  color: #fff;
+  color: var(--color-text-light);
   font-size: 18px;
 }
 
@@ -607,7 +653,7 @@ onMounted(async () => {
 .avatar-title {
   font-size: 14px;
   font-weight: 600;
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 .avatar-actions {
@@ -620,7 +666,8 @@ onMounted(async () => {
   display: flex;
   gap: 8px;
   margin-bottom: 24px;
-  background: #FBF5EF;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
   padding: 6px;
   border-radius: 12px;
 }
@@ -635,7 +682,7 @@ onMounted(async () => {
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -644,13 +691,13 @@ onMounted(async () => {
 }
 
 .tabs button:hover {
-  background: rgba(212, 163, 115, 0.1);
+  background: var(--color-card-bg-hover);
 }
 
 .tabs button.active {
-  background: #fff;
-  color: #4B3621;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
+  box-shadow: var(--shadow-sm);
 }
 
 .tabs button i {
@@ -661,8 +708,8 @@ onMounted(async () => {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: #FF9800;
-  color: #fff;
+  background: var(--badge-bg);
+  color: var(--btn-primary-text);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
@@ -673,10 +720,11 @@ onMounted(async () => {
 
 /* 标签页内容 */
 .tab-content {
-  background: #fff;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 筛选栏 */
@@ -685,7 +733,7 @@ onMounted(async () => {
   gap: 8px;
   margin-bottom: 20px;
   padding: 4px;
-  background: #FBF5EF;
+  background: var(--color-card-bg);
   border-radius: 8px;
 }
 
@@ -695,7 +743,7 @@ onMounted(async () => {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -703,13 +751,13 @@ onMounted(async () => {
 }
 
 .filter-bar button:hover {
-  background: rgba(212, 163, 115, 0.1);
+  background: var(--color-card-bg-hover);
 }
 
 .filter-bar button.active {
-  background: #fff;
-  color: #4B3621;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 成员列表 */
@@ -724,15 +772,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: #FBF5EF;
+  background: var(--color-card-bg);
   border-radius: 10px;
-  border: 1px solid #E8DCC8;
+  border: 1px solid var(--color-border);
   transition: all 0.2s;
 }
 
 .member-item:hover {
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: var(--color-card-bg-hover);
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
 }
 
 .member-info {
@@ -746,26 +795,26 @@ onMounted(async () => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--color-accent-contrast);
   flex-shrink: 0;
 }
 
 .member-details h3 {
   font-size: 15px;
   font-weight: 600;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 4px 0;
 }
 
 .join-date {
   font-size: 12px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -787,15 +836,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: #FBF5EF;
+  background: var(--color-card-bg);
   border-radius: 10px;
-  border: 1px solid #E8DCC8;
+  border: 1px solid var(--color-border);
   transition: all 0.2s;
 }
 
 .application-item:hover {
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: var(--color-card-bg-hover);
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
 }
 
 .app-info {
@@ -809,13 +859,13 @@ onMounted(async () => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--color-accent-contrast);
   flex-shrink: 0;
 }
 
@@ -827,20 +877,20 @@ onMounted(async () => {
 .app-details h3 {
   font-size: 15px;
   font-weight: 600;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 6px 0;
 }
 
 .app-message {
   font-size: 13px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 6px 0;
   line-height: 1.5;
 }
 
 .app-date {
   font-size: 12px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -860,20 +910,20 @@ onMounted(async () => {
 }
 
 .role-badge.owner {
-  background: linear-gradient(135deg, #B87333, #D4A373);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+  color: var(--color-accent-contrast);
 }
 
 .role-badge.admin {
-  background: rgba(184, 115, 51, 0.15);
-  color: #B87333;
-  border: 1px solid rgba(184, 115, 51, 0.3);
+  background: var(--tag-bg);
+  color: var(--tag-text);
+  border: 1px solid var(--color-border-hover);
 }
 
 .role-badge.member {
-  background: rgba(140, 123, 112, 0.1);
-  color: #856a52;
-  border: 1px solid rgba(140, 123, 112, 0.2);
+  background: var(--btn-secondary-bg);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
 }
 
 /* 状态徽章 */
@@ -886,20 +936,106 @@ onMounted(async () => {
 }
 
 .status-badge.pending {
-  background: rgba(255, 152, 0, 0.1);
-  color: #FF9800;
-  border: 1px solid rgba(255, 152, 0, 0.3);
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+  border: 1px solid var(--color-warning-border);
 }
 
 .status-badge.approved {
-  background: rgba(76, 175, 80, 0.1);
-  color: #4CAF50;
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: var(--color-success-light);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
 }
 
 .status-badge.rejected {
-  background: rgba(244, 67, 54, 0.1);
-  color: #F44336;
-  border: 1px solid rgba(244, 67, 54, 0.3);
+  background: color-mix(in srgb, var(--btn-danger-bg) 12%, transparent);
+  color: var(--btn-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--btn-danger-bg) 40%, transparent);
+}
+
+.danger-zone {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--btn-danger-bg) 42%, var(--color-border));
+  border-left: 4px solid var(--btn-danger-bg);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--btn-danger-bg) 7%, var(--color-panel-bg));
+  box-shadow: var(--shadow-sm);
+}
+
+.danger-zone__mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--btn-danger-bg) 14%, transparent);
+  color: var(--btn-danger-bg);
+  font-size: 24px;
+}
+
+.danger-zone__content {
+  min-width: 0;
+}
+
+.danger-zone__eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--btn-danger-bg);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.danger-zone h2 {
+  margin: 0;
+  color: var(--color-text-main);
+  font-size: 17px;
+}
+
+.danger-zone p {
+  max-width: 760px;
+  margin: 5px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .guild-manage {
+    padding: 16px;
+  }
+
+  .header-left,
+  .member-item,
+  .application-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .member-actions,
+  .app-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .danger-zone {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .danger-zone__mark {
+    width: 44px;
+    height: 44px;
+  }
+
+  .danger-zone :deep(.r-button) {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 </style>

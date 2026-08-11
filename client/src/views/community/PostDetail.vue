@@ -10,6 +10,7 @@ import CommentReplyBox from '@/components/CommentReplyBox.vue'
 import CommentImagePicker from '@/components/CommentImagePicker.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -759,10 +760,14 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
           <!-- 文章头部：作者 + 操作 -->
           <div class="article-top">
             <div class="author-section">
-              <div class="author-avatar">
-                <img v-if="authorAvatar" :src="authorAvatar" alt="" />
-                <span v-else>{{ post.author_name?.charAt(0) || 'U' }}</span>
-              </div>
+              <UserAvatarPopover
+                class="author-avatar"
+                :user-id="post.author_id"
+                :avatar-url="authorAvatar"
+                :username="post.author_name"
+                :name-color="post.author_name_color"
+                :name-bold="post.author_name_bold"
+              />
               <div class="author-info">
                 <div class="author-name-row">
                   <h4 class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</h4>
@@ -861,10 +866,14 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
           <!-- 评论列表 -->
           <div class="comments-list">
             <div v-for="comment in organizedComments" :key="comment.id" class="comment-item" :id="`comment-${comment.id}`">
-              <div class="comment-avatar">
-                <img v-if="comment.author_avatar" :src="resolveApiUrl(comment.author_avatar)" alt="" />
-                <span v-else>{{ comment.author_name.charAt(0) }}</span>
-              </div>
+              <UserAvatarPopover
+                class="comment-avatar"
+                :user-id="comment.author_id"
+                :avatar-url="comment.author_avatar ? resolveApiUrl(comment.author_avatar) : ''"
+                :username="comment.author_name"
+                :name-color="comment.author_name_color"
+                :name-bold="comment.author_name_bold"
+              />
               <div class="comment-body">
                 <div class="comment-meta">
                   <span class="comment-author" :style="buildNameStyle(comment.author_name_color, comment.author_name_bold)">{{ comment.author_name }}</span>
@@ -920,10 +929,14 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
                 <div v-if="comment.replies && comment.replies.length > 0" class="replies-list">
                   <div v-for="reply in comment.replies" :key="reply.id" class="reply-item" :id="`comment-${reply.id}`">
-                    <div class="reply-avatar">
-                      <img v-if="reply.author_avatar" :src="resolveApiUrl(reply.author_avatar)" alt="" />
-                      <span v-else>{{ reply.author_name.charAt(0) }}</span>
-                    </div>
+                    <UserAvatarPopover
+                      class="reply-avatar"
+                      :user-id="reply.author_id"
+                      :avatar-url="reply.author_avatar ? resolveApiUrl(reply.author_avatar) : ''"
+                      :username="reply.author_name"
+                      :name-color="reply.author_name_color"
+                      :name-bold="reply.author_name_bold"
+                    />
                     <div class="reply-body">
                       <div class="reply-meta">
                         <span class="reply-author" :style="buildNameStyle(reply.author_name_color, reply.author_name_bold)">{{ reply.author_name }}</span>

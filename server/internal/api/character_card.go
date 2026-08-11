@@ -440,6 +440,33 @@ func (s *Server) getCharacterCard(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, true)})
 }
 
+// getCharacterCardShare returns a share path only for approved public cards.
+func (s *Server) getCharacterCardShare(c *gin.Context) {
+	id, ok := parseCharacterCardID(c)
+	if !ok {
+		return
+	}
+
+	var card model.CharacterCard
+	if err := database.DB.Select("id", "status", "visibility", "review_status").First(&card, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
+		}
+		return
+	}
+
+	if card.Status != model.CharacterCardStatusPublished ||
+		card.Visibility != model.CharacterCardVisibilityPublic ||
+		normalizedCharacterCardReviewStatus(card.ReviewStatus) != model.CharacterCardReviewApproved {
+		c.JSON(http.StatusConflict, gin.H{"error": "人物卡公开版本尚未通过审核，暂不可分享"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"path": fmt.Sprintf("/character-cards/%d", card.ID)})
+}
+
 func (s *Server) updateCharacterCard(c *gin.Context) {
 	id, ok := parseCharacterCardID(c)
 	if !ok {

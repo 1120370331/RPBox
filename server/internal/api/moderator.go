@@ -1841,11 +1841,18 @@ func (s *Server) deleteGuildByMod(c *gin.Context) {
 
 	guildName := guild.Name // 保存名称用于日志
 
-	// 删除关联数据
-	database.DB.Where("guild_id = ?", id).Delete(&model.GuildMember{})
-	database.DB.Where("guild_id = ?", id).Delete(&model.StoryGuild{})
-	database.DB.Where("guild_id = ?", id).Delete(&model.Tag{})
-	database.DB.Delete(&guild)
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		return deleteGuildRecords(tx, []uint{uint(id)})
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除公会失败"})
+		return
+	}
+
+	uploadKeys := make(map[string]struct{})
+	collectUploadKeysFromValue(c, guild.Avatar, uploadKeys)
+	collectUploadKeysFromValue(c, guild.Banner, uploadKeys)
+	s.deleteUploadKeys(uploadKeys)
+	s.bumpPostListCache(c.Request.Context())
 
 	// 记录日志
 	logAdminAction(c, "delete_guild", "guild", uint(id), guildName, nil)

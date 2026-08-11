@@ -11,6 +11,7 @@ import EmoteEditor from '@/components/EmoteEditor.vue'
 import CommentReplyBox from '@/components/CommentReplyBox.vue'
 import CommentImagePicker from '@/components/CommentImagePicker.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
+import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
 import SafetyReportDialog from '@/components/SafetyReportDialog.vue'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -895,10 +896,14 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
             {{ t('market.detail.comments.empty') }}
           </div>
           <div v-else v-for="comment in organizedComments" :key="comment.id" class="comment-item" :id="`item-comment-${comment.id}`">
-            <div class="comment-avatar">
-              <img v-if="comment.avatar" :src="comment.avatar" alt="" />
-              <span v-else>{{ comment.username?.charAt(0) || 'U' }}</span>
-            </div>
+            <UserAvatarPopover
+              class="comment-avatar"
+              :user-id="comment.user_id"
+              :avatar-url="comment.avatar"
+              :username="comment.username || t('market.detail.comments.anonymous')"
+              :name-color="comment.name_color"
+              :name-bold="comment.name_bold"
+            />
             <div class="comment-body">
               <div class="comment-header">
                 <div class="comment-user-info">
@@ -952,10 +957,14 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
               <div v-if="comment.replies.length > 0" class="replies-list">
                 <div v-for="reply in comment.replies" :key="reply.id" class="reply-item" :id="`item-comment-${reply.id}`">
-                  <div class="reply-avatar">
-                    <img v-if="reply.avatar" :src="reply.avatar" alt="" />
-                    <span v-else>{{ reply.username?.charAt(0) || 'U' }}</span>
-                  </div>
+                  <UserAvatarPopover
+                    class="reply-avatar"
+                    :user-id="reply.user_id"
+                    :avatar-url="reply.avatar"
+                    :username="reply.username || t('market.detail.comments.anonymous')"
+                    :name-color="reply.name_color"
+                    :name-bold="reply.name_bold"
+                  />
                   <div class="reply-body">
                     <div class="reply-header">
                       <div class="comment-author-row">

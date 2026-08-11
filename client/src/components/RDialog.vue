@@ -45,6 +45,7 @@ const typeColors = {
             </button>
             <button
               class="r-dialog__btn r-dialog__btn--confirm"
+              :class="{ 'r-dialog__btn--danger': dialog.state.value.options.type === 'error' }"
               @click="dialog.close(true)"
             >
               {{ dialog.state.value.options.confirmText || t('common.button.confirm') }}
@@ -130,6 +131,15 @@ const typeColors = {
 }
 .r-dialog__btn--confirm:hover {
   background: var(--btn-primary-hover);
+}
+
+.r-dialog__btn--danger {
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
+}
+
+.r-dialog__btn--danger:hover {
+  background: var(--btn-danger-hover);
 }
 
 .r-dialog-enter-active, .r-dialog-leave-active { transition: all 0.2s; }

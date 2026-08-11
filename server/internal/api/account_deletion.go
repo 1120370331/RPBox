@@ -434,25 +434,7 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	}
 
 	if len(ownedGuildIDs) > 0 {
-		if err := deleteNotificationsByTarget(tx, "guild", ownedGuildIDs); err != nil {
-			return err
-		}
-		if err := tx.Model(&model.Post{}).Where("guild_id IN ?", ownedGuildIDs).Update("guild_id", nil).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("guild_id IN ?", ownedGuildIDs).Delete(&model.GuildMember{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("guild_id IN ?", ownedGuildIDs).Delete(&model.GuildApplication{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("guild_id IN ?", ownedGuildIDs).Delete(&model.Tag{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("guild_id IN ?", ownedGuildIDs).Delete(&model.StoryGuild{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("id IN ?", ownedGuildIDs).Delete(&model.Guild{}).Error; err != nil {
+		if err := deleteGuildRecords(tx, ownedGuildIDs); err != nil {
 			return err
 		}
 	}
