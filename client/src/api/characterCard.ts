@@ -74,6 +74,7 @@ export interface CharacterCardSummary {
   portrait_image_url?: string | null
   portrait_image_updated_at?: string | null
   portraits?: CharacterCardPortraitImage[]
+  impressions?: CharacterCardImpression[]
   status: CharacterCardStatus
   visibility: CharacterCardVisibility
   review_status?: CharacterCardReviewStatus | null

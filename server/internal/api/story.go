@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -33,17 +34,101 @@ type CreateStoryRequest struct {
 
 // CreateStoryEntryRequest 创建剧情条目请求
 type CreateStoryEntryRequest struct {
-	SourceID  string `json:"source_id"`
-	Type      string `json:"type"`
-	Speaker   string `json:"speaker"`
-	Content   string `json:"content" binding:"required"`
-	Channel   string `json:"channel"`
-	Timestamp string `json:"timestamp"`
+	SourceID        string `json:"source_id"`
+	Type            string `json:"type"`
+	Speaker         string `json:"speaker"`
+	Content         string `json:"content" binding:"required"`
+	Channel         string `json:"channel"`
+	Timestamp       string `json:"timestamp"`
+	CharacterID     *uint  `json:"character_id"`
+	CharacterCardID *uint  `json:"character_card_id"`
 	// 角色信息
 	RefID    string `json:"ref_id"`    // TRP3 ref ID
 	GameID   string `json:"game_id"`   // 游戏内ID
 	TRP3Data string `json:"trp3_data"` // 完整TRP3 profile JSON
 	IsNPC    bool   `json:"is_npc"`    // 是否NPC
+}
+
+var (
+	errStoryEntryBindingConflict       = errors.New("story entry binding conflict")
+	errStoryEntryBindingUnsupported    = errors.New("story entry binding unsupported")
+	errStoryEntryCharacterNotFound     = errors.New("story entry character not found")
+	errStoryEntryCharacterCardNotFound = errors.New("story entry character card not found")
+)
+
+type optionalStoryEntryUint struct {
+	Set   bool
+	Value *uint
+}
+
+func (value *optionalStoryEntryUint) UnmarshalJSON(data []byte) error {
+	value.Set = true
+	if strings.TrimSpace(string(data)) == "null" {
+		value.Value = nil
+		return nil
+	}
+	var parsed uint
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	value.Value = &parsed
+	return nil
+}
+
+func resolveStoryEntryBinding(tx *gorm.DB, userID uint, characterID, characterCardID *uint) (*uint, *uint, error) {
+	if characterID != nil && characterCardID != nil {
+		return nil, nil, errStoryEntryBindingConflict
+	}
+	if characterID != nil {
+		if *characterID == 0 {
+			return nil, nil, errStoryEntryBindingConflict
+		}
+		var character model.Character
+		if err := tx.Select("id").Where("id = ? AND user_id = ?", *characterID, userID).First(&character).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil, errStoryEntryCharacterNotFound
+			}
+			return nil, nil, err
+		}
+		resolved := character.ID
+		return &resolved, nil, nil
+	}
+	if characterCardID != nil {
+		if *characterCardID == 0 {
+			return nil, nil, errStoryEntryBindingConflict
+		}
+		var characterCard model.CharacterCard
+		if err := tx.Select("id").Where("id = ? AND user_id = ?", *characterCardID, userID).First(&characterCard).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil, errStoryEntryCharacterCardNotFound
+			}
+			return nil, nil, err
+		}
+		resolved := characterCard.ID
+		return nil, &resolved, nil
+	}
+	return nil, nil, nil
+}
+
+func storyEntryAllowsCharacterBinding(entryType string) bool {
+	entryType = strings.TrimSpace(entryType)
+	return entryType == "" || entryType == "dialogue"
+}
+
+func respondStoryEntryBindingError(c *gin.Context, err error) bool {
+	switch {
+	case errors.Is(err, errStoryEntryBindingConflict):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能关联一张人物卡"})
+		return true
+	case errors.Is(err, errStoryEntryBindingUnsupported):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只有对话条目可以关联人物卡"})
+		return true
+	case errors.Is(err, errStoryEntryCharacterNotFound), errors.Is(err, errStoryEntryCharacterCardNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
+		return true
+	default:
+		return false
+	}
 }
 
 // ExistingStoryEntrySourceIDsRequest 查询剧情中已存在的来源记录 ID。
@@ -373,12 +458,86 @@ func (s *Server) getStory(c *gin.Context) {
 
 	// 获取剧情条目
 	var entries []model.StoryEntry
-	database.DB.Where("story_id = ?", id).Order("timestamp, sort_order").Find(&entries)
+	if err := database.DB.Where("story_id = ?", id).Order("timestamp, sort_order").Find(&entries).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取剧情条目失败"})
+		return
+	}
+	characterCards, err := s.loadStoryCharacterCards(entries, story.UserID, isOwner)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 RPBox 人物卡失败"})
+		return
+	}
+	if !isOwner {
+		entries = redactUnavailableStoryCharacterCardBindings(entries, characterCards)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"story":   story,
-		"entries": entries,
+		"story":           story,
+		"entries":         entries,
+		"character_cards": characterCards,
 	})
+}
+
+func (s *Server) loadStoryCharacterCards(entries []model.StoryEntry, ownerID uint, ownerView bool) (map[uint]characterCardDTO, error) {
+	ids := make([]uint, 0)
+	seen := make(map[uint]struct{})
+	for _, entry := range entries {
+		if entry.CharacterCardID == nil || *entry.CharacterCardID == 0 {
+			continue
+		}
+		if _, exists := seen[*entry.CharacterCardID]; exists {
+			continue
+		}
+		seen[*entry.CharacterCardID] = struct{}{}
+		ids = append(ids, *entry.CharacterCardID)
+	}
+	result := make(map[uint]characterCardDTO, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	var cards []model.CharacterCard
+	if err := database.DB.Where("id IN ? AND user_id = ?", ids, ownerID).Find(&cards).Error; err != nil {
+		return nil, err
+	}
+	if ownerView {
+		impressionsByCard, err := loadCharacterCardImpressions(database.DB, characterCardIDs(cards))
+		if err != nil {
+			return nil, err
+		}
+		portraitsByCard, err := loadCharacterCardPortraits(database.DB, characterCardIDs(cards))
+		if err != nil {
+			return nil, err
+		}
+		for _, card := range cards {
+			result[card.ID] = s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, false)
+		}
+		return result, nil
+	}
+
+	for _, card := range cards {
+		dto, visible, err := s.loadPublicCharacterCardDTO(card, false)
+		if err != nil {
+			return nil, err
+		}
+		if visible {
+			result[card.ID] = dto
+		}
+	}
+	return result, nil
+}
+
+func redactUnavailableStoryCharacterCardBindings(entries []model.StoryEntry, cards map[uint]characterCardDTO) []model.StoryEntry {
+	redacted := append([]model.StoryEntry(nil), entries...)
+	for i := range redacted {
+		if redacted[i].CharacterCardID == nil {
+			continue
+		}
+		if _, visible := cards[*redacted[i].CharacterCardID]; !visible {
+			redacted[i].CharacterCardID = nil
+		}
+	}
+	return redacted
 }
 
 func (s *Server) updateStory(c *gin.Context) {
@@ -770,6 +929,7 @@ func (s *Server) archiveEntriesToStory(c *gin.Context) {
 				SourceID:        entry.SourceID,
 				Type:            entry.Type,
 				CharacterID:     entry.CharacterID,
+				CharacterCardID: entry.CharacterCardID,
 				Speaker:         entry.Speaker,
 				Content:         entry.Content,
 				Channel:         entry.Channel,
@@ -880,9 +1040,22 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 			}
 
 			var characterID *uint
+			var characterCardID *uint
+			hasRequestedBinding := req.CharacterID != nil || req.CharacterCardID != nil || req.RefID != "" || req.GameID != "" || req.TRP3Data != ""
+			if !storyEntryAllowsCharacterBinding(req.Type) && hasRequestedBinding {
+				return errStoryEntryBindingUnsupported
+			}
+			if (req.CharacterID != nil || req.CharacterCardID != nil) && (req.RefID != "" || req.GameID != "" || req.TRP3Data != "") {
+				return errStoryEntryBindingConflict
+			}
+			var bindingErr error
+			characterID, characterCardID, bindingErr = resolveStoryEntryBinding(tx, userID, req.CharacterID, req.CharacterCardID)
+			if bindingErr != nil {
+				return bindingErr
+			}
 
 			// 如果有角色信息，查找或创建角色
-			if req.RefID != "" || req.GameID != "" {
+			if characterID == nil && characterCardID == nil && (req.RefID != "" || req.GameID != "") {
 				character := findOrCreateCharacter(userID, req.RefID, req.GameID, req.TRP3Data, req.IsNPC)
 				if character != nil {
 					characterID = &character.ID
@@ -890,14 +1063,15 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 			}
 
 			entry := model.StoryEntry{
-				StoryID:     uint(id),
-				SourceID:    req.SourceID,
-				Type:        req.Type,
-				CharacterID: characterID,
-				Speaker:     req.Speaker,
-				Content:     req.Content,
-				Channel:     req.Channel,
-				SortOrder:   maxOrder + createdCount + 1,
+				StoryID:         uint(id),
+				SourceID:        req.SourceID,
+				Type:            req.Type,
+				CharacterID:     characterID,
+				CharacterCardID: characterCardID,
+				Speaker:         req.Speaker,
+				Content:         req.Content,
+				Channel:         req.Channel,
+				SortOrder:       maxOrder + createdCount + 1,
 			}
 			if req.Timestamp != "" {
 				if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
@@ -961,6 +1135,9 @@ func (s *Server) addStoryEntries(c *gin.Context) {
 		}
 		return nil
 	}); err != nil {
+		if respondStoryEntryBindingError(c, err) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "添加失败"})
 		return
 	}
@@ -1104,7 +1281,16 @@ func (s *Server) getPublicStory(c *gin.Context) {
 
 	// 获取条目
 	var entries []model.StoryEntry
-	database.DB.Where("story_id = ?", story.ID).Order("timestamp, sort_order").Find(&entries)
+	if err := database.DB.Where("story_id = ?", story.ID).Order("timestamp, sort_order").Find(&entries).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取剧情条目失败"})
+		return
+	}
+	characterCards, err := s.loadStoryCharacterCards(entries, story.UserID, false)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 RPBox 人物卡失败"})
+		return
+	}
+	entries = redactUnavailableStoryCharacterCardBindings(entries, characterCards)
 
 	// 收集所有角色ID
 	characterIDs := make([]uint, 0)
@@ -1131,12 +1317,13 @@ func (s *Server) getPublicStory(c *gin.Context) {
 	musicTracks, musicSegments := s.loadPublicStoryMusic(story.ID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"story":          story,
-		"entries":        entries,
-		"characters":     charactersMap,
-		"author":         user.Username,
-		"music_tracks":   musicTracks,
-		"music_segments": musicSegments,
+		"story":           story,
+		"entries":         entries,
+		"characters":      charactersMap,
+		"character_cards": characterCards,
+		"author":          user.Username,
+		"music_tracks":    musicTracks,
+		"music_segments":  musicSegments,
 	})
 }
 
@@ -1153,12 +1340,13 @@ func generateShareCode() string {
 
 // UpdateStoryEntryRequest 更新剧情条目请求
 type UpdateStoryEntryRequest struct {
-	Content     string     `json:"content"`
-	Speaker     string     `json:"speaker"`
-	Channel     string     `json:"channel"`
-	Type        string     `json:"type"`
-	CharacterID *uint      `json:"character_id"`
-	Timestamp   *time.Time `json:"timestamp"`
+	Content         string                 `json:"content"`
+	Speaker         string                 `json:"speaker"`
+	Channel         string                 `json:"channel"`
+	Type            string                 `json:"type"`
+	CharacterID     optionalStoryEntryUint `json:"character_id"`
+	CharacterCardID optionalStoryEntryUint `json:"character_card_id"`
+	Timestamp       *time.Time             `json:"timestamp"`
 }
 
 // updateStoryEntry 更新剧情条目
@@ -1202,8 +1390,48 @@ func (s *Server) updateStoryEntry(c *gin.Context) {
 	if req.Type != "" {
 		entry.Type = req.Type
 	}
-	if req.CharacterID != nil {
-		entry.CharacterID = req.CharacterID
+	if !storyEntryAllowsCharacterBinding(entry.Type) {
+		if req.CharacterID.Value != nil || req.CharacterCardID.Value != nil {
+			respondStoryEntryBindingError(c, errStoryEntryBindingUnsupported)
+			return
+		}
+		entry.CharacterID = nil
+		entry.CharacterCardID = nil
+	}
+	if req.CharacterID.Set || req.CharacterCardID.Set {
+		if req.CharacterID.Value != nil && req.CharacterCardID.Value != nil {
+			respondStoryEntryBindingError(c, errStoryEntryBindingConflict)
+			return
+		}
+		nextCharacterID := entry.CharacterID
+		nextCharacterCardID := entry.CharacterCardID
+		if req.CharacterID.Set {
+			nextCharacterID = req.CharacterID.Value
+			if req.CharacterID.Value != nil {
+				nextCharacterCardID = nil
+			}
+		}
+		if req.CharacterCardID.Set {
+			nextCharacterCardID = req.CharacterCardID.Value
+			if req.CharacterCardID.Value != nil {
+				nextCharacterID = nil
+			}
+		}
+		resolvedCharacterID, resolvedCharacterCardID, err := resolveStoryEntryBinding(
+			database.DB,
+			userID,
+			nextCharacterID,
+			nextCharacterCardID,
+		)
+		if err != nil {
+			if respondStoryEntryBindingError(c, err) {
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "校验人物卡失败"})
+			return
+		}
+		entry.CharacterID = resolvedCharacterID
+		entry.CharacterCardID = resolvedCharacterCardID
 	}
 	if req.Timestamp != nil {
 		entry.Timestamp = *req.Timestamp

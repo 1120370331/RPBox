@@ -1,4 +1,5 @@
 import request from './request'
+import type { CharacterCardSummary } from './characterCard'
 
 export interface Story {
   id: number
@@ -32,7 +33,8 @@ export interface StoryEntry {
   story_id: number
   source_id: string
   type: 'dialogue' | 'narration' | 'image'
-  character_id?: number  // 关联的角色ID
+  character_id?: number | null  // 关联的 TRP3/剧情角色 ID
+  character_card_id?: number | null  // 关联的 RPBox 人物卡 ID
   speaker: string
   content: string
   channel: string
@@ -60,6 +62,8 @@ export interface CreateStoryEntryRequest {
   content: string
   channel?: string
   timestamp?: string
+  character_id?: number | null
+  character_card_id?: number | null
   // 角色信息（用于创建/关联Character）
   ref_id?: string      // TRP3 ref ID
   game_id?: string     // 游戏内ID
@@ -99,7 +103,11 @@ export async function listStories(params?: StoryFilterParams): Promise<{ stories
   return request.get(`/stories${query ? '?' + query : ''}`)
 }
 
-export async function getStory(id: number): Promise<{ story: Story; entries: StoryEntry[] }> {
+export async function getStory(id: number): Promise<{
+  story: Story
+  entries: StoryEntry[]
+  character_cards?: Record<number, CharacterCardSummary>
+}> {
   return request.get(`/stories/${id}`)
 }
 
@@ -165,6 +173,7 @@ export interface UpdateStoryEntryRequest {
   channel?: string
   type?: string
   character_id?: number | null
+  character_card_id?: number | null
   timestamp?: string
 }
 
@@ -364,6 +373,7 @@ export interface PublicStoryResponse {
   story: Story
   entries: StoryEntry[]
   characters: Record<number, import('./character').Character>
+  character_cards?: Record<number, CharacterCardSummary>
   author: string
   music_tracks?: StoryMusicTrack[]
   music_segments?: StoryMusicSegment[]

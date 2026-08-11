@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { getPublicStory, type Story, type StoryEntry, type StoryMusicSegment, type StoryMusicTrack } from '@/api/story'
 import { createContentReport } from '@/api/safety'
 import { type Character } from '@/api/character'
+import type { CharacterCardSummary } from '@/api/characterCard'
+import { getCharacterCardDisplayColor, normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
 import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import RModal from '@/components/RModal.vue'
@@ -21,6 +24,7 @@ const error = ref('')
 const story = ref<Story | null>(null)
 const entries = ref<StoryEntry[]>([])
 const characters = ref<Record<number, Character>>({})
+const characterCards = ref<Record<number, CharacterCardSummary>>({})
 const author = ref('')
 const musicTracks = ref<StoryMusicTrack[]>([])
 const musicSegments = ref<StoryMusicSegment[]>([])
@@ -157,6 +161,7 @@ async function loadStory() {
     story.value = res.story
     entries.value = res.entries || []
     characters.value = res.characters || {}
+    characterCards.value = res.character_cards || {}
     author.value = res.author
     musicTracks.value = res.music_tracks || []
     musicSegments.value = res.music_segments || []
@@ -574,6 +579,16 @@ function getEntryCharacter(entry: StoryEntry): Character | undefined {
   return undefined
 }
 
+function getEntryCharacterCard(entry: StoryEntry): CharacterCardSummary | undefined {
+  if (!entry.character_card_id) return undefined
+  return characterCards.value[entry.character_card_id]
+    || characterCards.value[String(entry.character_card_id) as unknown as number]
+}
+
+function hasEntryCharacterProfile(entry: StoryEntry): boolean {
+  return Boolean(getEntryCharacter(entry) || getEntryCharacterCard(entry))
+}
+
 function getCharacterDisplayName(character: Character): string {
   if (character.custom_name) return character.custom_name
   if (character.first_name) {
@@ -588,6 +603,8 @@ function getEntrySpeakerName(entry: StoryEntry): string {
   if (entry.type === 'narration') return '旁白'
   // Keep playback faithful to the name captured on this historical entry.
   if (entry.speaker) return entry.speaker
+  const characterCard = getEntryCharacterCard(entry)
+  if (characterCard) return getCharacterCardDisplayName(characterCard)
   const character = getEntryCharacter(entry)
   if (character) {
     return getCharacterDisplayName(character)
@@ -602,6 +619,8 @@ function getEntrySpeakerInitial(entry: StoryEntry): string {
 
 // 获取条目的头像图标
 function getEntryIcon(entry: StoryEntry): string {
+  const characterCard = getEntryCharacterCard(entry)
+  if (characterCard?.icon) return characterCard.icon
   const character = getEntryCharacter(entry)
   if (character) {
     return character.custom_avatar || character.icon || ''
@@ -611,9 +630,11 @@ function getEntryIcon(entry: StoryEntry): string {
 
 // 获取条目的名字颜色
 function getEntryColor(entry: StoryEntry): string {
+  const characterCard = getEntryCharacterCard(entry)
+  if (characterCard) return getCharacterCardDisplayColor(characterCard)
   const character = getEntryCharacter(entry)
   if (character) {
-    return character.custom_color || character.color || ''
+    return normalizeCharacterCardHexForCSS(character.custom_color || character.color)
   }
   return ''
 }
@@ -679,7 +700,7 @@ function isNpcEntry(entry: StoryEntry): boolean {
 function showCharacterInfo(entry: StoryEntry, event: MouseEvent) {
   if (entry.type === 'narration' || entry.type === 'image') return
   if (isNpcEntry(entry)) return  // NPC不显示角色卡片
-  if (!getEntryCharacter(entry)) return
+  if (!hasEntryCharacterProfile(entry)) return
 
   selectedEntry.value = entry
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
@@ -759,7 +780,7 @@ onUnmounted(() => {
           <div
             v-if="entry.type !== 'image'"
             class="entry-avatar"
-            :class="{ clickable: entry.type !== 'narration' && !isNpcEntry(entry) && !!getEntryCharacter(entry) }"
+            :class="{ clickable: entry.type !== 'narration' && !isNpcEntry(entry) && hasEntryCharacterProfile(entry) }"
             @click="showCharacterInfo(entry, $event)"
           >
             <template v-if="entry.type === 'narration'">
@@ -775,7 +796,7 @@ onUnmounted(() => {
           </div>
           <div class="entry-body">
             <div v-if="entry.type !== 'image'" class="entry-speaker">
-              <span :style="entry.type !== 'narration' && getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">
+              <span :style="entry.type !== 'narration' && getEntryColor(entry) ? { color: getEntryColor(entry) } : {}">
                 {{ getEntrySpeakerName(entry) }}
               </span>
               <span v-if="entry.channel && entry.type !== 'narration'" class="entry-channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
@@ -884,6 +905,7 @@ onUnmounted(() => {
   <CharacterCard
     v-model:visible="showCharacterCard"
     :character="selectedEntry ? getEntryCharacter(selectedEntry) : undefined"
+    :character-card="selectedEntry ? getEntryCharacterCard(selectedEntry) : undefined"
     :speaker="selectedEntry ? getEntrySpeakerName(selectedEntry) : undefined"
     :position="characterCardPosition"
     :editable="false"
@@ -1074,31 +1096,44 @@ onUnmounted(() => {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: #B87333;
-  color: #fff;
+  overflow: hidden;
+  border: 1px solid var(--color-border-hover);
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--color-accent) 24%, transparent), transparent 58%),
+    var(--gradient-end);
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   font-size: 18px;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.entry-avatar :deep(.wow-icon),
+.entry-avatar :deep(.wow-icon img) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
 }
 
 .entry-avatar.clickable {
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .entry-avatar.clickable:hover {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-md);
 }
 
 .avatar-narration {
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
-  background: #a98467;
+  color: var(--color-text-secondary);
+  background: var(--color-card-bg-hover);
   width: 100%;
   height: 100%;
   display: flex;
@@ -1110,8 +1145,8 @@ onUnmounted(() => {
 .avatar-npc {
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
-  background: #9b59b6;
+  color: var(--color-text-secondary);
+  background: var(--color-card-bg-hover);
   width: 100%;
   height: 100%;
   display: flex;
@@ -1121,11 +1156,11 @@ onUnmounted(() => {
 }
 
 .entry-item.narration .entry-avatar {
-  background: #a98467;
+  background: var(--color-card-bg);
 }
 
 .entry-item.narration .entry-speaker {
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .entry-body {

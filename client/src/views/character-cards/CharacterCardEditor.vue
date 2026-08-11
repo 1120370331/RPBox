@@ -37,6 +37,7 @@ import {
   createCharacterCardDraft,
   createEmptyCharacterCardDraft,
   getCharacterCardDisplayName,
+  type CharacterCardDraft,
   type CharacterCardEditorTab,
 } from '@/utils/characterCardDraft'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
@@ -56,6 +57,9 @@ interface LocalAccountOption {
 }
 
 type RichTextTab = Exclude<CharacterCardEditorTab, 'basic'>
+type SaveStatus = 'saved' | 'waiting' | 'saving' | 'failed'
+
+const AUTO_SAVE_DELAY_MS = 1200
 
 const route = useRoute()
 const router = useRouter()
@@ -69,6 +73,8 @@ const card = ref<CharacterCard | null>(null)
 const form = reactive(createEmptyCharacterCardDraft())
 const loading = ref(true)
 const saving = ref(false)
+const saveStatus = ref<SaveStatus>('saved')
+const saveErrorMessage = ref('')
 const loadError = ref('')
 const activeTab = ref<CharacterCardEditorTab>('basic')
 const originalSnapshot = ref('')
@@ -118,7 +124,8 @@ const tabs = computed<Array<{ id: CharacterCardEditorTab; label: string; icon: s
 
 const displayName = computed(() => getCharacterCardDisplayName(form))
 const displayNameColor = computed(() => getCharacterCardDisplayColor(form))
-const isDirty = computed(() => originalSnapshot.value !== JSON.stringify(form))
+const formSnapshot = computed(() => JSON.stringify(form))
+const isDirty = computed(() => originalSnapshot.value !== formSnapshot.value)
 const hasPortrait = computed(() => portraits.value.length > 0 || Boolean(form.portrait_image_url))
 const selectedPortrait = computed(() => (
   portraits.value.find((portrait) => portrait.id === selectedPortraitId.value)
@@ -134,6 +141,22 @@ const publicReviewPending = computed(() => (
 const imageUploadInProgress = computed(() => (
   portraitUploading.value || Object.values(impressionUploading).some(Boolean)
 ))
+const saveStatusText = computed(() => {
+  if (imageUploadInProgress.value) return t('characterCards.editor.uploadPending')
+  return t(`characterCards.editor.autoSave.${saveStatus.value}`)
+})
+const saveStatusIcon = computed(() => {
+  if (imageUploadInProgress.value || saveStatus.value === 'saving') return 'ri-loader-4-line spin'
+  if (saveStatus.value === 'waiting') return 'ri-time-line'
+  if (saveStatus.value === 'failed') return 'ri-error-warning-line'
+  return 'ri-cloud-line'
+})
+
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+let saveLoopPromise: Promise<CharacterCard | null> | null = null
+let saveRequested = false
+let manualFeedbackRequested = false
+let detailNavigationRequested = false
 
 const isTauriRuntime = computed(() => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window)
 const wowPath = computed(() => localStorage.getItem('wow_path')?.trim() || '')
@@ -154,10 +177,46 @@ watch(() => form.name_color, (value) => {
 watch(writeBackAccountId, (accountId) => {
   syncCloudAfterWriteBack.value = cloudBackups.value.some((backup) => backup.account_id === accountId)
 })
+watch(formSnapshot, (snapshot) => {
+  if (loading.value || !card.value) return
+  if (snapshot === originalSnapshot.value) {
+    clearAutoSaveTimer()
+    if (!saving.value) saveStatus.value = 'saved'
+    return
+  }
+  if (saving.value) {
+    saveRequested = true
+    return
+  }
+  saveStatus.value = 'waiting'
+  scheduleAutoSave()
+})
+watch(imageUploadInProgress, (uploading) => {
+  if (!uploading && isDirty.value) {
+    saveStatus.value = 'waiting'
+    scheduleAutoSave()
+  }
+})
 onBeforeUnmount(() => {
+  clearAutoSaveTimer()
   revokeAllPortraitPreviewObjectUrls()
   revokeAllImpressionPreviewObjectUrls()
 })
+
+function clearAutoSaveTimer() {
+  if (autoSaveTimer === null) return
+  clearTimeout(autoSaveTimer)
+  autoSaveTimer = null
+}
+
+function scheduleAutoSave() {
+  clearAutoSaveTimer()
+  if (!card.value || !isDirty.value || imageUploadInProgress.value || saving.value) return
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null
+    void enqueueSave(false, false)
+  }, AUTO_SAVE_DELAY_MS)
+}
 
 async function loadCard() {
   if (!Number.isFinite(cardId.value) || cardId.value <= 0) {
@@ -183,13 +242,16 @@ async function loadCard() {
 }
 
 function applyCard(nextCard: CharacterCard) {
+  clearAutoSaveTimer()
   card.value = nextCard
   Object.assign(form, createCharacterCardDraft(nextCard))
   portraits.value = normalizeCharacterCardPortraits(nextCard)
   selectedPortraitId.value = getCharacterCardCoverPortrait(portraits.value)?.id ?? null
   revokeUploadedPortraitPreview()
   revokeAllImpressionPreviewObjectUrls()
-  originalSnapshot.value = JSON.stringify(form)
+  originalSnapshot.value = formSnapshot.value
+  saveStatus.value = 'saved'
+  saveErrorMessage.value = ''
 }
 
 function applySyncedCard(nextCard: CharacterCard) {
@@ -542,8 +604,8 @@ function revokeAllImpressionPreviewObjectUrls() {
   for (const key of Object.keys(impressionImagePreviews)) delete impressionImagePreviews[key]
 }
 
-function createImpressionUpdatePayload() {
-  return form.impressions.map((impression) => ({
+function createImpressionUpdatePayload(impressions = form.impressions) {
+  return impressions.map((impression) => ({
     slot: impression.slot,
     active: impression.active,
     title: impression.title,
@@ -554,29 +616,110 @@ function createImpressionUpdatePayload() {
   }))
 }
 
-async function saveCard(returnToDetail = false): Promise<CharacterCard | null> {
-  if (saving.value || imageUploadInProgress.value || !card.value) return null
-  saving.value = true
-  try {
-    const result = await updateCharacterCard(card.value.id, {
-      ...form,
-      impressions: createImpressionUpdatePayload(),
+function createUpdatePayload(snapshot: string): CharacterCardDraft {
+  const draft = JSON.parse(snapshot) as CharacterCardDraft
+  return {
+    ...draft,
+    impressions: createImpressionUpdatePayload(draft.impressions),
+  }
+}
+
+function enqueueSave(manualFeedback: boolean, returnToDetail: boolean): Promise<CharacterCard | null> {
+  clearAutoSaveTimer()
+  saveRequested = true
+  manualFeedbackRequested ||= manualFeedback
+  detailNavigationRequested ||= returnToDetail
+  if (!saveLoopPromise) {
+    saveLoopPromise = drainSaveQueue().finally(() => {
+      saveLoopPromise = null
     })
-    applyCard(result)
+  }
+  return saveLoopPromise
+}
+
+async function drainSaveQueue(): Promise<CharacterCard | null> {
+  let lastSavedCard = card.value
+  let terminalError: unknown = null
+
+  while (saveRequested || isDirty.value) {
+    saveRequested = false
+    if (!card.value || imageUploadInProgress.value) break
+    if (!isDirty.value) break
+
+    const savingCardId = card.value.id
+    const submittedSnapshot = formSnapshot.value
+    saving.value = true
+    saveStatus.value = 'saving'
+    saveErrorMessage.value = ''
+    terminalError = null
+
+    try {
+      const result = await updateCharacterCard(
+        savingCardId,
+        createUpdatePayload(submittedSnapshot),
+      )
+      if (!card.value || card.value.id !== savingCardId) return null
+      lastSavedCard = result
+
+      if (formSnapshot.value === submittedSnapshot) {
+        applyCard(result)
+      } else {
+        card.value = result
+        originalSnapshot.value = submittedSnapshot
+        saveRequested = true
+      }
+    } catch (error: unknown) {
+      terminalError = error
+      saveErrorMessage.value = error instanceof Error
+        ? error.message
+        : t('characterCards.editor.saveFailed')
+      saveStatus.value = 'failed'
+      if (formSnapshot.value !== submittedSnapshot) {
+        saveRequested = true
+        continue
+      }
+      break
+    } finally {
+      saving.value = false
+    }
+  }
+
+  const shouldNotify = manualFeedbackRequested
+  const shouldNavigate = detailNavigationRequested
+  manualFeedbackRequested = false
+  detailNavigationRequested = false
+
+  if (terminalError || isDirty.value) {
+    if (terminalError && shouldNotify) toast.error(saveErrorMessage.value)
+    return null
+  }
+
+  saveStatus.value = 'saved'
+  saveErrorMessage.value = ''
+  if (shouldNotify && lastSavedCard) {
     toast.success(
-      result.status === 'published' && result.visibility === 'public' && result.review_status === 'pending'
+      lastSavedCard.status === 'published'
+        && lastSavedCard.visibility === 'public'
+        && lastSavedCard.review_status === 'pending'
         ? t('characterCards.editor.savedPending')
         : t('characterCards.editor.saved'),
-      result.review_status === 'pending' ? 6000 : 3000,
+      lastSavedCard.review_status === 'pending' ? 6000 : 3000,
     )
-    if (returnToDetail) await router.push(`/character-cards/${result.id}`)
-    return result
-  } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : t('characterCards.editor.saveFailed'))
-    return null
-  } finally {
-    saving.value = false
   }
+  if (shouldNavigate && lastSavedCard) {
+    await router.push(`/character-cards/${lastSavedCard.id}`)
+  }
+  return lastSavedCard
+}
+
+function saveCard(returnToDetail = false): Promise<CharacterCard | null> {
+  if (imageUploadInProgress.value || !card.value) return Promise.resolve(null)
+  return enqueueSave(true, returnToDetail)
+}
+
+function flushCardChanges(): Promise<CharacterCard | null> {
+  if (imageUploadInProgress.value || !card.value) return Promise.resolve(null)
+  return enqueueSave(false, false)
 }
 
 async function syncFromBackup() {
@@ -671,7 +814,9 @@ async function writeBackToLocalTRP3() {
 
   writingBack.value = true
   try {
-    const savedCard = isDirty.value ? await saveCard(false) : card.value
+    const savedCard = isDirty.value || saving.value
+      ? await flushCardChanges()
+      : card.value
     if (!savedCard) return
     const targetProfileId = writeBackProfileId.value.trim()
     const exported = await getCharacterCardTRP3Lua(savedCard.id)
@@ -718,7 +863,13 @@ async function writeBackToLocalTRP3() {
 }
 
 async function goBack() {
-  if (isDirty.value) {
+  clearAutoSaveTimer()
+  if (isDirty.value || saving.value) {
+    const savedCard = await flushCardChanges()
+    if (savedCard && !isDirty.value) {
+      await router.push(`/character-cards/${savedCard.id}`)
+      return
+    }
     const confirmed = await dialog.confirm({
       title: t('characterCards.editor.leaveTitle'),
       message: t('characterCards.editor.leaveMessage'),
@@ -760,7 +911,9 @@ async function goBack() {
           <h1 :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</h1>
         </div>
         <div class="editor-header__actions">
-          <span v-if="isDirty" class="unsaved-mark"><i class="ri-circle-fill" aria-hidden="true"></i>{{ t('characterCards.editor.unsaved') }}</span>
+          <span class="save-sync" :class="`save-sync--${saveStatus}`" role="status">
+            <i :class="saveStatusIcon" aria-hidden="true"></i>{{ saveStatusText }}
+          </span>
           <button type="button" class="button button--quiet" :disabled="saving || imageUploadInProgress" @click="saveCard(false)">
             {{ saving ? t('characterCards.common.saving') : t('characterCards.common.save') }}
           </button>
@@ -925,25 +1078,22 @@ async function goBack() {
 
             <div class="form-section">
               <h3>{{ t('characterCards.editor.colorsTitle') }}</h3>
-              <div class="form-grid form-grid--three">
-                <label><span>{{ t('characterCards.editor.fields.eyeColor') }}</span><input v-model="form.eye_color" maxlength="64" /></label>
+              <div class="character-color-grid">
+                <label class="character-color-grid__text"><span>{{ t('characterCards.editor.fields.eyeColor') }}</span><input v-model="form.eye_color" maxlength="64" /></label>
                 <CharacterCardColorField
                   v-model="form.eye_color_hex"
                   field-id="character-eye-color"
                   :label="t('characterCards.editor.eyeColorValue')"
-                  :hint="t('characterCards.editor.eyeColorHint')"
                 />
                 <CharacterCardColorField
                   v-model="form.class_color"
                   field-id="character-class-color"
                   :label="t('characterCards.editor.classColor')"
-                  :hint="t('characterCards.editor.classColorHint')"
                 />
                 <CharacterCardColorField
                   v-model="form.name_color"
                   field-id="character-name-color"
                   :label="t('characterCards.editor.nameColor')"
-                  :hint="t('characterCards.editor.nameColorHint')"
                 />
               </div>
             </div>
@@ -1167,8 +1317,8 @@ async function goBack() {
 
       <footer class="save-dock">
         <div>
-          <strong>{{ imageUploadInProgress ? t('characterCards.editor.uploadPending') : (isDirty ? t('characterCards.editor.unsavedChanges') : t('characterCards.editor.allSaved')) }}</strong>
-          <span>{{ imageUploadInProgress ? t('characterCards.editor.uploadPendingBody') : t('characterCards.editor.saveBody') }}</span>
+          <strong>{{ saveStatusText }}</strong>
+          <span>{{ saveStatus === 'failed' && saveErrorMessage ? saveErrorMessage : t('characterCards.editor.autoSave.body') }}</span>
         </div>
         <button type="button" class="button button--primary" :disabled="saving || imageUploadInProgress || !isDirty" @click="saveCard(false)">
           <i class="ri-save-3-line" aria-hidden="true"></i>{{ saving ? t('characterCards.common.saving') : t('characterCards.editor.saveWhole') }}
@@ -1326,8 +1476,10 @@ async function goBack() {
 .editor-header__identity h1 { overflow: hidden; margin: 3px 0 0; font-family: Georgia, 'Noto Serif SC', serif; font-size: 21px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .editor-header__actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 
-.unsaved-mark { display: inline-flex; align-items: center; gap: 5px; color: var(--color-warning-dark); font-size: 10px; }
-.unsaved-mark i { font-size: 6px; }
+.save-sync { display: inline-flex; align-items: center; gap: 5px; color: var(--color-success); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.save-sync--waiting { color: var(--color-warning-dark); }
+.save-sync--saving { color: var(--color-accent); }
+.save-sync--failed { color: var(--btn-danger-bg); }
 
 .button {
   display: inline-flex;
@@ -1513,6 +1665,11 @@ async function goBack() {
 .form-grid input:focus,
 .summary-field textarea:focus,
 .visibility-grid select:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent); }
+.character-color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
+.character-color-grid > * { min-width: 0; align-self: start; }
+.character-color-grid__text { display: grid; min-width: 0; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.character-color-grid__text input { width: 100%; height: 42px; box-sizing: border-box; padding: 0 11px; border: 1px solid var(--input-border); border-radius: 8px; outline: none; background: var(--input-bg); color: var(--ink); font: inherit; font-size: 12px; }
+.character-color-grid__text input:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent); }
 .summary-field { position: relative; }
 .summary-field textarea { resize: vertical; line-height: 1.65; }
 .summary-field small { position: absolute; right: 9px; bottom: 8px; color: var(--color-text-muted); font-weight: 400; }
@@ -1903,6 +2060,7 @@ async function goBack() {
   .observation-image-station__frame { max-height: 220px; }
   .impression-notes > header { grid-template-columns: 1fr; gap: 6px; }
   .form-grid--three,
+  .character-color-grid,
   .visibility-grid { grid-template-columns: 1fr; }
   .form-span-two { grid-column: auto; }
   .save-dock { right: 10px; bottom: 10px; left: 10px; max-width: none; justify-content: space-between; }

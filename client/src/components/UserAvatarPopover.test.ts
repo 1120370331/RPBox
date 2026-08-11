@@ -102,4 +102,42 @@ describe('UserAvatarPopover', () => {
     expect(router.currentRoute.value.fullPath).toBe('/user/5')
     wrapper.unmount()
   })
+
+  it('keeps list avatars compact and clickable without opening a hover preview', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/user/:id', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(UserAvatarPopover, {
+      attachTo: document.body,
+      props: {
+        userId: 5,
+        username: '月桂旅人',
+        avatarUrl: '/avatar.png',
+        size: 20,
+        showPopover: false,
+      },
+      global: { plugins: [router, i18n] },
+    })
+
+    const trigger = wrapper.get('.user-avatar-popover__trigger')
+    expect(trigger.attributes('style')).toContain('width: 20px')
+    expect(trigger.attributes('style')).toContain('height: 20px')
+    expect(trigger.attributes('aria-haspopup')).toBeUndefined()
+    await trigger.trigger('mouseenter')
+    await flushPromises()
+
+    expect(document.querySelector('.user-avatar-popover')).toBeNull()
+    expect(mocks.getUserProfile).not.toHaveBeenCalled()
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/user/5')
+    wrapper.unmount()
+  })
 })

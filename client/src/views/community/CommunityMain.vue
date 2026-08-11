@@ -792,6 +792,9 @@ function setEventStatusFilter(filter: EventStatusFilter) {
                     :username="post.author_name"
                     :name-color="post.author_name_color"
                     :name-bold="post.author_name_bold"
+                    :size="24"
+                    radius="4px"
+                    :show-popover="false"
                   />
                   <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
                   <UserLevelBadge

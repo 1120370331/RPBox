@@ -250,6 +250,8 @@ onMounted(async () => {
               :username="post.author_name"
               :name-color="post.author_name_color"
               :name-bold="post.author_name_bold"
+              :size="32"
+              :show-popover="false"
             />
             <span class="author-name" :style="buildNameStyle(post.author_name_color, post.author_name_bold)">{{ post.author_name }}</span>
             <span class="post-time">{{ formatDate(post.created_at) }}</span>

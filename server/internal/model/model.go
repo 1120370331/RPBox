@@ -158,6 +158,7 @@ type StoryEntry struct {
 	SourceID        string    `gorm:"size:64" json:"source_id"`             // 来源聊天记录ID
 	Type            string    `gorm:"size:20;default:dialogue" json:"type"` // dialogue, narration, image
 	CharacterID     *uint     `gorm:"index" json:"character_id"`            // 关联角色ID（可空，旁白无角色）
+	CharacterCardID *uint     `gorm:"index" json:"character_card_id"`       // 关联 RPBox 人物卡 ID（与 CharacterID 二选一）
 	Speaker         string    `gorm:"size:128" json:"speaker"`              // 说话者名字快照
 	Content         string    `gorm:"type:text" json:"content"`
 	Channel         string    `gorm:"size:32" json:"channel"`

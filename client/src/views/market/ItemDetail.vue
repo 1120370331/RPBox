@@ -903,6 +903,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
               :username="comment.username || t('market.detail.comments.anonymous')"
               :name-color="comment.name_color"
               :name-bold="comment.name_bold"
+              :size="40"
+              :show-popover="false"
             />
             <div class="comment-body">
               <div class="comment-header">
@@ -964,6 +966,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
                     :username="reply.username || t('market.detail.comments.anonymous')"
                     :name-color="reply.name_color"
                     :name-bold="reply.name_bold"
+                    :size="32"
+                    :show-popover="false"
                   />
                   <div class="reply-body">
                     <div class="reply-header">

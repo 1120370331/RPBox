@@ -5,6 +5,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry, deleteStoryEntry, updateEntriesBackgroundColor, batchDeleteEntries, archiveEntriesToStory, listStories, listBookmarks, createBookmark, updateBookmark, deleteBookmark, updateLastViewBookmark, getStoryMusic, createStoryMusicSegment, updateStoryMusicSegment, deleteStoryMusicSegment, type Story, type StoryEntry, type StoryBookmark, type StoryMusicSegment, type StoryMusicTrack, type StoryMusicPlaylist } from '@/api/story'
 import { getCharacter, updateCharacter, listCharacters, type Character } from '@/api/character'
+import { listMyCharacterCards, type CharacterCardSummary } from '@/api/characterCard'
+import { getCharacterCardDisplayColor, normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
 import { listTags, getStoryTags, addStoryTag, removeStoryTag, type Tag } from '@/api/tag'
 import { listGuilds, getStoryGuilds, archiveStoryToGuild, removeStoryFromGuild, type Guild } from '@/api/guild'
 import { useDialog } from '@/composables/useDialog'
@@ -49,6 +52,7 @@ const newEntryType = ref('dialogue')
 const newEntryChannel = ref('SAY')
 const newEntryTimestamp = ref('')
 const newEntryCharacterId = ref<number | null>(null)
+const newEntryCharacterCardId = ref<number | null>(null)
 const adding = ref(false)
 
 // 图片条目相关
@@ -59,6 +63,8 @@ const newEntryImageOffset = ref(0)
 
 // 可选人物卡列表
 const availableCharacters = ref<Character[]>([])
+const availableCharacterCards = ref<CharacterCardSummary[]>([])
+const characterCardsMap = ref<Map<number, CharacterCardSummary>>(new Map())
 
 // 发布分享
 const publishing = ref(false)
@@ -99,6 +105,7 @@ const editEntrySpeaker = ref('')
 const editEntryChannel = ref('SAY')
 const editEntryType = ref('dialogue')
 const editEntryCharacterId = ref<number | null>(null)
+const editEntryCharacterCardId = ref<number | null>(null)
 const editEntryTimestamp = ref('')
 const editEntryImageOffset = ref(0)
 const savingEntry = ref(false)
@@ -150,6 +157,16 @@ const savingBookmark = ref(false)
 const bookmarkColors = ['#E57373', '#F06292', '#BA68C8', '#64B5F6', '#4DB6AC', '#81C784', '#FFD54F', '#FFB74D']
 
 const storyId = computed(() => Number(route.params.id))
+const newEntryBindingValue = computed(() => {
+  if (newEntryCharacterCardId.value) return `rpbox:${newEntryCharacterCardId.value}`
+  if (newEntryCharacterId.value) return `trp3:${newEntryCharacterId.value}`
+  return ''
+})
+const editEntryBindingValue = computed(() => {
+  if (editEntryCharacterCardId.value) return `rpbox:${editEntryCharacterCardId.value}`
+  if (editEntryCharacterId.value) return `trp3:${editEntryCharacterId.value}`
+  return ''
+})
 
 // 背景音乐管理
 const showMusicModal = ref(false)
@@ -356,6 +373,8 @@ async function loadStory() {
     const res = await getStory(storyId.value)
     story.value = res.story
     entries.value = res.entries || []
+    const loadedCharacterCards = Object.values(res.character_cards || {})
+    characterCardsMap.value = new Map(loadedCharacterCards.map(card => [card.id, card]))
     console.log('[StoryDetail] entries:', entries.value)
     console.log('[StoryDetail] 第一条entry:', entries.value[0])
     editTitle.value = res.story.title
@@ -523,6 +542,7 @@ async function handleAddEntry() {
 
     const speaker = newEntryType.value === 'image' ? '' : newEntrySpeaker.value
     const channel = newEntryType.value === 'image' ? '' : newEntryChannel.value
+    const canBindCharacter = newEntryType.value === 'dialogue'
 
     await addStoryEntries(storyId.value, [{
       content: content,
@@ -530,6 +550,8 @@ async function handleAddEntry() {
       type: newEntryType.value,
       channel: channel,
       timestamp: timestamp,
+      character_id: canBindCharacter ? newEntryCharacterId.value : null,
+      character_card_id: canBindCharacter ? newEntryCharacterCardId.value : null,
     }])
 
     // 清理表单
@@ -540,6 +562,7 @@ async function handleAddEntry() {
     newEntryChannel.value = 'SAY'
     newEntryTimestamp.value = ''
     newEntryCharacterId.value = null
+    newEntryCharacterCardId.value = null
     newEntryImageOffset.value = 0
     clearImage()
     await loadStory()
@@ -636,27 +659,42 @@ async function loadGuilds() {
 
 // 加载可选人物卡列表
 async function loadAvailableCharacters() {
-  try {
-    const res = await listCharacters()
-    availableCharacters.value = res.characters || []
-  } catch (e) {
-    console.error('加载人物卡失败:', e)
+  const [legacyResult, rpboxResult] = await Promise.allSettled([
+    listCharacters(),
+    listMyCharacterCards(),
+  ])
+  if (legacyResult.status === 'fulfilled') {
+    availableCharacters.value = legacyResult.value.characters || []
+  } else {
+    console.error('加载 TRP3 人物卡失败:', legacyResult.reason)
+  }
+  if (rpboxResult.status === 'fulfilled') {
+    availableCharacterCards.value = rpboxResult.value.character_cards || []
+    const merged = new Map(characterCardsMap.value)
+    for (const card of availableCharacterCards.value) merged.set(card.id, card)
+    characterCardsMap.value = merged
+  } else {
+    console.error('加载 RPBox 人物卡失败:', rpboxResult.reason)
   }
 }
 
 // 选择人物卡时自动填充说话者名称
-function handleCharacterSelect(characterId: number | null) {
-  newEntryCharacterId.value = characterId
-  if (characterId) {
-    const character = availableCharacters.value.find(c => c.id === characterId)
-    if (character) {
-      const name = character.custom_name ||
-        (character.first_name ?
-          (character.last_name ? `${character.first_name} ${character.last_name}` : character.first_name)
-          : character.game_id?.split('-')[0] || '')
-      newEntrySpeaker.value = name
-    }
+function handleCharacterSelect(binding: string) {
+  newEntryCharacterId.value = null
+  newEntryCharacterCardId.value = null
+  const [kind, rawId] = binding.split(':')
+  const id = Number(rawId)
+  if (!Number.isInteger(id) || id <= 0) return
+  if (kind === 'rpbox') {
+    newEntryCharacterCardId.value = id
+    const card = availableCharacterCards.value.find(item => item.id === id)
+    if (card) newEntrySpeaker.value = getCharacterCardDisplayName(card)
+    return
   }
+  if (kind !== 'trp3') return
+  newEntryCharacterId.value = id
+  const character = availableCharacters.value.find(item => item.id === id)
+  if (character) newEntrySpeaker.value = getCharacterDisplayName(character)
 }
 
 // 获取人物卡显示名称
@@ -676,6 +714,8 @@ function getEntrySpeakerName(entry: StoryEntry): string {
   // Prefer it over the mutable Character record so later profile edits do not
   // rewrite the visible history.
   if (entry.speaker) return entry.speaker
+  const characterCard = getEntryCharacterCard(entry)
+  if (characterCard) return getCharacterCardDisplayName(characterCard)
   const character = getEntryCharacter(entry)
   if (character) {
     return getCharacterDisplayName(character)
@@ -743,6 +783,7 @@ function copyShareLink() {
 
 function showCharacterInfo(entry: StoryEntry, event: MouseEvent) {
   if (entry.type === 'narration' || entry.type === 'image') return
+  if (!getEntryCharacter(entry) && !getEntryCharacterCard(entry)) return
   selectedCharacter.value = entry
   // 记录点击位置
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
@@ -761,8 +802,19 @@ function getEntryCharacter(entry: StoryEntry): Character | undefined {
   return undefined
 }
 
+function getEntryCharacterCard(entry: StoryEntry): CharacterCardSummary | undefined {
+  if (entry.character_card_id) return characterCardsMap.value.get(entry.character_card_id)
+  return undefined
+}
+
+function hasEntryCharacterProfile(entry: StoryEntry): boolean {
+  return Boolean(getEntryCharacter(entry) || getEntryCharacterCard(entry))
+}
+
 // 获取条目的头像图标
 function getEntryIcon(entry: StoryEntry): string {
+  const characterCard = getEntryCharacterCard(entry)
+  if (characterCard?.icon) return characterCard.icon
   const character = getEntryCharacter(entry)
   if (character) {
     return character.custom_avatar || character.icon || ''
@@ -772,9 +824,11 @@ function getEntryIcon(entry: StoryEntry): string {
 
 // 获取条目的名字颜色
 function getEntryColor(entry: StoryEntry): string {
+  const characterCard = getEntryCharacterCard(entry)
+  if (characterCard) return getCharacterCardDisplayColor(characterCard)
   const character = getEntryCharacter(entry)
   if (character) {
-    return character.custom_color || character.color || ''
+    return normalizeCharacterCardHexForCSS(character.custom_color || character.color)
   }
   return ''
 }
@@ -1224,7 +1278,8 @@ function startEditEntry(entry: StoryEntry) {
   // 将 TEXT_EMOTE 统一转换为 EMOTE，因为编辑表单中只有 EMOTE 选项
   editEntryChannel.value = entry.channel === 'TEXT_EMOTE' ? 'EMOTE' : (entry.channel || 'SAY')
   editEntryType.value = entry.type || 'dialogue'
-  editEntryCharacterId.value = entry.character_id || null
+  editEntryCharacterCardId.value = entry.character_card_id || null
+  editEntryCharacterId.value = editEntryCharacterCardId.value ? null : (entry.character_id || null)
   // 初始化时间（格式化为 datetime-local）
   const timestamp = new Date(entry.timestamp)
   const year = timestamp.getFullYear()
@@ -1252,7 +1307,9 @@ async function saveEntryEdit() {
     const isImage = editEntryType.value === 'image'
     const speaker = isImage ? '' : editEntrySpeaker.value
     const channel = isImage ? '' : editEntryChannel.value
-    const characterId = isImage ? null : editEntryCharacterId.value
+    const canBindCharacter = editEntryType.value === 'dialogue'
+    const characterId = canBindCharacter ? editEntryCharacterId.value : null
+    const characterCardId = canBindCharacter ? editEntryCharacterCardId.value : null
 
     await updateStoryEntry(storyId.value, editingEntry.value.id, {
       content: editEntryContent.value,
@@ -1260,6 +1317,7 @@ async function saveEntryEdit() {
       channel: channel,
       type: editEntryType.value,
       character_id: characterId,
+      character_card_id: characterCardId,
       timestamp: entryTime.toISOString(),
     })
 
@@ -1281,18 +1339,22 @@ async function saveEntryEdit() {
 }
 
 // 编辑时选择人物卡
-function handleEditCharacterSelect(characterId: number | null) {
-  editEntryCharacterId.value = characterId
-  if (characterId) {
-    const character = availableCharacters.value.find(c => c.id === characterId)
-    if (character) {
-      const name = character.custom_name ||
-        (character.first_name ?
-          (character.last_name ? `${character.first_name} ${character.last_name}` : character.first_name)
-          : character.game_id?.split('-')[0] || '')
-      editEntrySpeaker.value = name
-    }
+function handleEditCharacterSelect(binding: string) {
+  editEntryCharacterId.value = null
+  editEntryCharacterCardId.value = null
+  const [kind, rawId] = binding.split(':')
+  const id = Number(rawId)
+  if (!Number.isInteger(id) || id <= 0) return
+  if (kind === 'rpbox') {
+    editEntryCharacterCardId.value = id
+    const card = availableCharacterCards.value.find(item => item.id === id)
+    if (card) editEntrySpeaker.value = getCharacterCardDisplayName(card)
+    return
   }
+  if (kind !== 'trp3') return
+  editEntryCharacterId.value = id
+  const character = availableCharacters.value.find(item => item.id === id)
+  if (character) editEntrySpeaker.value = getCharacterDisplayName(character)
 }
 
 async function handleDeleteEntry(entry: StoryEntry) {
@@ -2547,7 +2609,7 @@ onBeforeUnmount(() => {
             <div
               v-if="entry.type !== 'image'"
               class="entry-avatar"
-              :class="{ clickable: entry.type !== 'narration' && !entryManageMode }"
+              :class="{ clickable: entry.type !== 'narration' && !entryManageMode && hasEntryCharacterProfile(entry) }"
               @click.stop="!entryManageMode && showCharacterInfo(entry, $event)"
             >
               <span v-if="isNpcEntry(entry)" class="avatar-npc">NPC</span>
@@ -2557,7 +2619,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="entry-content">
               <div class="entry-header">
-                <span v-if="entry.type !== 'image'" class="speaker" :style="getEntryColor(entry) ? { color: '#' + getEntryColor(entry) } : {}">
+                <span v-if="entry.type !== 'image'" class="speaker" :style="getEntryColor(entry) ? { color: getEntryColor(entry) } : {}">
                   {{ getEntrySpeakerName(entry) }}
                 </span>
                 <span v-if="entry.channel && entry.type !== 'narration' && entry.type !== 'image'" class="channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
@@ -3010,20 +3072,26 @@ onBeforeUnmount(() => {
           />
           <span class="field-hint">同一秒内排序用，0-999，数值越大越靠后</span>
         </div>
-        <div v-if="newEntryType !== 'image'" class="form-field">
-          <label>选择人物卡</label>
+        <div v-if="newEntryType === 'dialogue'" class="form-field">
+          <label>{{ t('archives.entryBinding.label') }}</label>
           <select
-            :value="newEntryCharacterId"
-            @change="handleCharacterSelect(($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+            :value="newEntryBindingValue"
+            @change="handleCharacterSelect(($event.target as HTMLSelectElement).value)"
             class="character-select"
           >
-            <option :value="null">-- 不关联人物卡 --</option>
-            <option v-for="char in availableCharacters" :key="char.id" :value="char.id">
-              {{ getCharacterDisplayName(char) }}
-              <template v-if="char.is_npc"> (NPC)</template>
-            </option>
+            <option value="">-- {{ t('archives.entryBinding.none') }} --</option>
+            <optgroup v-if="availableCharacterCards.length" :label="t('archives.entryBinding.rpboxGroup')">
+              <option v-for="card in availableCharacterCards" :key="`rpbox-${card.id}`" :value="`rpbox:${card.id}`">
+                {{ getCharacterCardDisplayName(card) }}
+              </option>
+            </optgroup>
+            <optgroup v-if="availableCharacters.length" :label="t('archives.entryBinding.trp3Group')">
+              <option v-for="char in availableCharacters" :key="`trp3-${char.id}`" :value="`trp3:${char.id}`">
+                {{ getCharacterDisplayName(char) }}{{ char.is_npc ? ` (${t('archives.entryBinding.npcSuffix')})` : '' }}
+              </option>
+            </optgroup>
           </select>
-          <span class="field-hint">选择后自动填充说话者名称</span>
+          <span class="field-hint">{{ t('archives.entryBinding.hint') }}</span>
         </div>
         <div v-if="newEntryType !== 'image'" class="form-field">
           <label>说话者</label>
@@ -3086,6 +3154,7 @@ onBeforeUnmount(() => {
     <CharacterCard
       v-model:visible="showCharacterModal"
       :character="selectedCharacter ? getEntryCharacter(selectedCharacter) : undefined"
+      :character-card="selectedCharacter ? getEntryCharacterCard(selectedCharacter) : undefined"
       :speaker="selectedCharacter ? getEntrySpeakerName(selectedCharacter) : undefined"
       :position="characterCardPosition"
       @edit="handleEditCharacter"
@@ -3288,20 +3357,26 @@ onBeforeUnmount(() => {
             </select>
           </div>
         </div>
-        <div v-if="editEntryType !== 'image'" class="form-field">
-          <label>选择人物卡</label>
+        <div v-if="editEntryType === 'dialogue'" class="form-field">
+          <label>{{ t('archives.entryBinding.label') }}</label>
           <select
-            :value="editEntryCharacterId"
-            @change="handleEditCharacterSelect(($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+            :value="editEntryBindingValue"
+            @change="handleEditCharacterSelect(($event.target as HTMLSelectElement).value)"
             class="character-select"
           >
-            <option :value="null">-- 不关联人物卡 --</option>
-            <option v-for="char in availableCharacters" :key="char.id" :value="char.id">
-              {{ getCharacterDisplayName(char) }}
-              <template v-if="char.is_npc"> (NPC)</template>
-            </option>
+            <option value="">-- {{ t('archives.entryBinding.none') }} --</option>
+            <optgroup v-if="availableCharacterCards.length" :label="t('archives.entryBinding.rpboxGroup')">
+              <option v-for="card in availableCharacterCards" :key="`rpbox-${card.id}`" :value="`rpbox:${card.id}`">
+                {{ getCharacterCardDisplayName(card) }}
+              </option>
+            </optgroup>
+            <optgroup v-if="availableCharacters.length" :label="t('archives.entryBinding.trp3Group')">
+              <option v-for="char in availableCharacters" :key="`trp3-${char.id}`" :value="`trp3:${char.id}`">
+                {{ getCharacterDisplayName(char) }}{{ char.is_npc ? ` (${t('archives.entryBinding.npcSuffix')})` : '' }}
+              </option>
+            </optgroup>
           </select>
-          <span class="field-hint">选择后自动填充说话者名称</span>
+          <span class="field-hint">{{ t('archives.entryBinding.hint') }}</span>
         </div>
         <div v-if="editEntryType !== 'image'" class="form-field">
           <label>说话者</label>
@@ -4111,15 +4186,18 @@ onBeforeUnmount(() => {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  border: 1px solid var(--color-border-hover);
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--color-accent) 24%, transparent), transparent 58%),
+    var(--gradient-end);
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   flex-shrink: 0;
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .entry-avatar :deep(.wow-icon) {
@@ -4336,13 +4414,14 @@ onBeforeUnmount(() => {
 }
 
 .entry-item.narration {
-  background: linear-gradient(to right, rgba(184, 115, 51, 0.08), rgba(184, 115, 51, 0.02));
+  background: linear-gradient(to right, color-mix(in srgb, var(--color-accent) 9%, transparent), transparent);
   border: none;
   border-left: 3px solid var(--color-accent, #B87333);
 }
 
 .entry-item.narration .entry-avatar {
-  background: var(--color-text-secondary, #a98467);
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
 }
 
 .share-content {
@@ -4383,12 +4462,12 @@ onBeforeUnmount(() => {
 /* 头像可点击样式 */
 .entry-avatar.clickable {
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .entry-avatar.clickable:hover {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-md);
 }
 
 .avatar-fallback {
@@ -4399,8 +4478,8 @@ onBeforeUnmount(() => {
 .avatar-npc {
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-secondary, #666);
-  background: var(--color-card-bg-hover, #e0e0e0);
+  color: var(--color-text-secondary);
+  background: var(--color-card-bg-hover);
   width: 100%;
   height: 100%;
   display: flex;
@@ -4412,8 +4491,8 @@ onBeforeUnmount(() => {
 .avatar-narration {
   font-size: 10px;
   font-weight: 600;
-  color: var(--color-text-secondary, #666);
-  background: var(--color-card-bg-hover, #e0e0e0);
+  color: var(--color-text-secondary);
+  background: var(--color-card-bg-hover);
   width: 100%;
   height: 100%;
   display: flex;

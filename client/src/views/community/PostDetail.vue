@@ -767,6 +767,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                 :username="post.author_name"
                 :name-color="post.author_name_color"
                 :name-bold="post.author_name_bold"
+                :size="48"
               />
               <div class="author-info">
                 <div class="author-name-row">
@@ -873,6 +874,8 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                 :username="comment.author_name"
                 :name-color="comment.author_name_color"
                 :name-bold="comment.author_name_bold"
+                :size="32"
+                :show-popover="false"
               />
               <div class="comment-body">
                 <div class="comment-meta">
@@ -936,6 +939,8 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                       :username="reply.author_name"
                       :name-color="reply.author_name_color"
                       :name-bold="reply.author_name_bold"
+                      :size="28"
+                      :show-popover="false"
                     />
                     <div class="reply-body">
                       <div class="reply-meta">

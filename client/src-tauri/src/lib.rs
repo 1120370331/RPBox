@@ -183,19 +183,13 @@ async fn write_character_card_profile(
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("创建 SavedVariables 目录失败: {}", error))?;
     }
-    let mut profiles = if lua_path.is_file() {
-        lua_parser::parse_variable(&lua_path, "TRP3_Profiles").map_err(|error| error.to_string())?
-    } else {
-        Value::Object(Default::default())
-    };
-    let profiles_object = profiles
-        .as_object_mut()
-        .ok_or_else(|| "TRP3_Profiles 数据格式错误".to_string())?;
+    let (source, existing_profile) =
+        writer::read_trp3_profile_source(&lua_path, trimmed_profile_id)
+            .map_err(|error| error.to_string())?;
     let merged_profile =
-        merge_character_card_profile(profiles_object.get(trimmed_profile_id), &profile)?;
-    profiles_object.insert(trimmed_profile_id.to_string(), merged_profile);
+        merge_character_card_profile(existing_profile.as_ref(), &profile)?;
 
-    let had_local_file = lua_path.is_file();
+    let had_local_file = source.is_some();
     let snapshot = local_versions::create_snapshot_with_reason(
         &wow_path,
         &account_id,
@@ -205,7 +199,13 @@ async fn write_character_card_profile(
     if had_local_file && snapshot.is_none() {
         return Err("写入前无法建立强制本地快照".to_string());
     }
-    replace_trp3_profiles(&lua_path, &profiles).map_err(|error| error.to_string())?;
+    writer::write_trp3_profile_precisely(
+        &lua_path,
+        source.as_deref(),
+        trimmed_profile_id,
+        &merged_profile,
+    )
+    .map_err(|error| error.to_string())?;
     Ok(CharacterCardProfileWriteResult { snapshot })
 }
 
