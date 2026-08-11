@@ -17,6 +17,9 @@ interface Props {
   avatarUrl?: string
   nameColor?: string
   nameBold?: boolean
+  size?: number
+  radius?: string
+  showPopover?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -25,6 +28,9 @@ const props = withDefaults(defineProps<Props>(), {
   avatarUrl: '',
   nameColor: '',
   nameBold: false,
+  size: 32,
+  radius: '50%',
+  showPopover: true,
 })
 
 const t = i18n.global.t
@@ -48,6 +54,18 @@ const displayNameStyle = computed(() => buildNameStyle(
   profile.value?.name_color || props.nameColor,
   profile.value?.name_bold ?? props.nameBold,
 ))
+const triggerStyle = computed(() => {
+  const size = `${Math.max(1, props.size)}px`
+  return {
+    width: size,
+    height: size,
+    minWidth: size,
+    maxWidth: size,
+    minHeight: size,
+    maxHeight: size,
+    borderRadius: props.radius,
+  }
+})
 
 function triggerElement(): HTMLElement | null {
   return (triggerRef.value as any)?.$el || null
@@ -77,7 +95,7 @@ async function loadData() {
 }
 
 async function openPopover() {
-  if (!canOpen.value) return
+  if (!props.showPopover || !canOpen.value) return
   clearCloseTimer()
   visible.value = true
   await nextTick()
@@ -91,6 +109,7 @@ function closePopover() {
 }
 
 function scheduleClose() {
+  if (!props.showPopover) return
   clearCloseTimer()
   closeTimer = setTimeout(closePopover, 140)
 }
@@ -152,10 +171,11 @@ onBeforeUnmount(() => {
     ref="triggerRef"
     v-bind="$attrs"
     class="user-avatar-popover__trigger"
+    :style="triggerStyle"
     :to="`/user/${userId}`"
     :aria-label="t('common.userPopover.openProfile', { name: displayName })"
-    :aria-expanded="visible"
-    aria-haspopup="dialog"
+    :aria-expanded="showPopover ? visible : undefined"
+    :aria-haspopup="showPopover ? 'dialog' : undefined"
     @click.stop
     @mouseenter="openPopover"
     @mouseleave="scheduleClose"
@@ -172,7 +192,7 @@ onBeforeUnmount(() => {
     />
     <span v-else>{{ displayInitial }}</span>
   </RouterLink>
-  <span v-else v-bind="$attrs" class="user-avatar-popover__trigger user-avatar-popover__trigger--disabled">
+  <span v-else v-bind="$attrs" class="user-avatar-popover__trigger user-avatar-popover__trigger--disabled" :style="triggerStyle">
     <img
       v-if="avatarSource && !avatarFailed"
       :src="avatarSource"
@@ -186,7 +206,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <Transition name="user-popover">
       <aside
-        v-if="visible"
+        v-if="showPopover && visible"
         ref="popoverRef"
         class="user-avatar-popover"
         :style="{ left: `${position.left}px`, top: `${position.top}px` }"
@@ -292,10 +312,14 @@ onBeforeUnmount(() => {
 <style scoped>
 .user-avatar-popover__trigger {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
   color: inherit;
   cursor: pointer;
+  font-weight: 700;
+  line-height: 1;
   text-decoration: none;
 }
 

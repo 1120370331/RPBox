@@ -664,6 +664,7 @@ onBeforeUnmount(() => {
             :username="work.author_name || '匿名贡献者'"
             :name-color="work.author_name_color"
             :name-bold="work.author_name_bold"
+            :size="36"
           />
           <span>
             由 {{ work.author_name || '匿名贡献者' }} 发布
@@ -852,6 +853,8 @@ onBeforeUnmount(() => {
                 :username="item.author_name || '匿名玩家'"
                 :name-color="item.author_name_color"
                 :name-bold="item.author_name_bold"
+                :size="32"
+                :show-popover="false"
               />
               <div class="comment-body">
                 <div class="comment-meta">
@@ -932,6 +935,8 @@ onBeforeUnmount(() => {
                       :username="reply.author_name || '匿名玩家'"
                       :name-color="reply.author_name_color"
                       :name-bold="reply.author_name_bold"
+                      :size="28"
+                      :show-popover="false"
                     />
                     <div class="reply-body">
                       <div class="reply-meta">

@@ -251,6 +251,8 @@ watch([sortBy], () => {
                 :username="item.author_username || t('market.item.anonymous')"
                 :name-color="item.author_name_color"
                 :name-bold="item.author_name_bold"
+                :size="20"
+                :show-popover="false"
               />
               <span class="author-name" :style="buildNameStyle(item.author_name_color, item.author_name_bold)">{{ item.author_username || t('market.item.anonymous') }}</span>
               <UserLevelBadge

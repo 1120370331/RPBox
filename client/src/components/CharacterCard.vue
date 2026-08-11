@@ -1,110 +1,129 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { type Character } from '@/api/character'
-import WowIcon from './WowIcon.vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { Character } from '@/api/character'
+import type { CharacterCardSummary } from '@/api/characterCard'
+import { getCharacterCardDisplayColor, normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
+import CharacterCardImpressionMark from './character-cards/CharacterCardImpressionMark.vue'
+import CharacterCardPortrait from './character-cards/CharacterCardPortrait.vue'
 import RButton from './RButton.vue'
+import WowIcon from './WowIcon.vue'
 
 interface Props {
   visible: boolean
   character?: Character
+  characterCard?: CharacterCardSummary
   speaker?: string
   position?: { x: number; y: number }
   editable?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  editable: true
-})
+interface InfoItem {
+  label: string
+  value: string
+}
 
+interface GlanceSlot {
+  slot: number
+  icon: string
+  iconImageUrl: string
+  title: string
+  text: string
+  rpbox: boolean
+}
+
+const CARD_WIDTH = 340
+const VIEWPORT_GAP = 12
+
+const props = withDefaults(defineProps<Props>(), {
+  editable: true,
+})
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  'edit': [character: Character]
+  edit: [character: Character]
 }>()
+const { t } = useI18n()
+let clickListenerTimer: number | null = null
 
 const isVisible = computed({
   get: () => props.visible,
-  set: (val) => emit('update:visible', val)
+  set: (value) => emit('update:visible', value),
 })
-
-// 计算卡片位置（确保不超出屏幕）
-const cardStyle = computed(() => {
-  if (!props.position) return {}
-
-  const cardHeight = 400  // 估算卡片高度
-  const cardWidth = 320   // 卡片宽度
-  const padding = 20      // 边距
-
-  let top = props.position.y
-  let left = props.position.x + padding
-
-  // 检查是否超出底部
-  if (top + cardHeight > window.innerHeight - padding) {
-    top = window.innerHeight - cardHeight - padding
-  }
-
-  // 检查是否超出顶部
-  if (top < padding) {
-    top = padding
-  }
-
-  // 检查是否超出右侧
-  if (left + cardWidth > window.innerWidth - padding) {
-    left = props.position.x - cardWidth - padding
-  }
-
-  return {
-    top: `${top}px`,
-    left: `${left}px`,
-  }
-})
-
-// 获取显示名称
+const isRPBoxCard = computed(() => Boolean(props.characterCard))
 const displayName = computed(() => {
-  if (!props.character) return props.speaker || '未知'
-  return props.character.custom_name ||
-    (props.character.first_name
-      ? (props.character.last_name
-        ? `${props.character.first_name} ${props.character.last_name}`
-        : props.character.first_name)
-      : props.speaker || '未知')
+  if (props.characterCard) return getCharacterCardDisplayName(props.characterCard)
+  if (!props.character) return props.speaker || t('archives.characterPopover.unknown')
+  return props.character.custom_name
+    || [props.character.first_name, props.character.last_name].filter(Boolean).join(' ')
+    || props.speaker
+    || t('archives.characterPopover.unknown')
 })
-
-// 获取显示颜色
 const displayColor = computed(() => {
-  if (!props.character) return ''
-  return props.character.custom_color || props.character.color || ''
+  if (props.characterCard) return getCharacterCardDisplayColor(props.characterCard)
+  return normalizeCharacterCardHexForCSS(props.character?.custom_color || props.character?.color)
 })
-
-// 获取显示图标
 const displayIcon = computed(() => {
-  if (!props.character) return ''
-  return props.character.custom_avatar || props.character.icon || ''
+  if (props.characterCard) return props.characterCard.icon || ''
+  return props.character?.custom_avatar || props.character?.icon || ''
 })
+const title = computed(() => props.characterCard?.title || props.character?.title || '')
+const fullTitle = computed(() => props.characterCard?.full_title || props.character?.full_title || '')
+const summary = computed(() => props.characterCard?.summary?.trim() || '')
+const portraitAvailable = computed(() => Boolean(props.characterCard?.portrait_image_url))
 
-// 解析第一印象（PE/Glance）数据 - 来自misc_info.PE
-interface GlanceSlot {
-  active: boolean
-  icon: string
-  title: string
-  text: string
-}
+const infoItems = computed<InfoItem[]>(() => {
+  const source = props.characterCard || props.character
+  if (!source) return []
+  const values: Array<[string, string | undefined | null]> = [
+    [t('archives.characterPopover.race'), source.race],
+    [t('archives.characterPopover.class'), source.class],
+    [t('archives.characterPopover.age'), source.age],
+    [t('archives.characterPopover.height'), source.height],
+    [t('archives.characterPopover.eyes'), source.eye_color],
+  ]
+  if (props.characterCard) {
+    values.push(
+      [t('archives.characterPopover.weight'), props.characterCard.weight],
+      [t('archives.characterPopover.birthplace'), props.characterCard.birthplace],
+      [t('archives.characterPopover.residence'), props.characterCard.residence],
+    )
+  }
+  return values
+    .filter((item): item is [string, string] => Boolean(item[1]?.trim()))
+    .map(([label, value]) => ({ label, value }))
+})
 
 const glanceSlots = computed<GlanceSlot[]>(() => {
+  if (props.characterCard) {
+    return (props.characterCard.impressions || [])
+      .filter((slot) => slot.active)
+      .sort((a, b) => a.slot - b.slot)
+      .map((slot) => ({
+        slot: slot.slot,
+        icon: slot.trp3_icon || '',
+        iconImageUrl: slot.icon_image_url || '',
+        title: slot.title || t('archives.characterPopover.unnamedImpression'),
+        text: slot.text || '',
+        rpbox: true,
+      }))
+  }
   if (!props.character?.misc_info) return []
   try {
     const misc = JSON.parse(props.character.misc_info)
     if (!misc.PE) return []
     const slots: GlanceSlot[] = []
-    for (let i = 1; i <= 5; i++) {
-      const slot = misc.PE[String(i)]
-      if (slot && slot.AC) {
-        slots.push({
-          active: slot.AC,
-          icon: slot.IC || '',
-          title: slot.TI || '',
-          text: slot.TX || ''
-        })
-      }
+    for (let slot = 1; slot <= 5; slot += 1) {
+      const value = misc.PE[String(slot)]
+      if (!value?.AC) continue
+      slots.push({
+        slot,
+        icon: value.IC || '',
+        iconImageUrl: '',
+        title: value.TI || t('archives.characterPopover.unnamedImpression'),
+        text: value.TX || '',
+        rpbox: false,
+      })
     }
     return slots
   } catch {
@@ -112,323 +131,408 @@ const glanceSlots = computed<GlanceSlot[]>(() => {
   }
 })
 
+const cardStyle = computed(() => {
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  if (!props.position) {
+    return {
+      top: `${VIEWPORT_GAP}px`,
+      left: `${Math.max(VIEWPORT_GAP, (viewportWidth - CARD_WIDTH) / 2)}px`,
+    }
+  }
+
+  let left = props.position.x + VIEWPORT_GAP
+  if (left + CARD_WIDTH > viewportWidth - VIEWPORT_GAP) {
+    left = props.position.x - CARD_WIDTH - VIEWPORT_GAP
+  }
+  left = Math.max(VIEWPORT_GAP, Math.min(left, viewportWidth - CARD_WIDTH - VIEWPORT_GAP))
+  const maxTop = Math.max(VIEWPORT_GAP, viewportHeight - Math.min(560, viewportHeight - VIEWPORT_GAP * 2) - VIEWPORT_GAP)
+  const top = Math.max(VIEWPORT_GAP, Math.min(props.position.y, maxTop))
+  return { top: `${top}px`, left: `${left}px` }
+})
+
 function close() {
   isVisible.value = false
 }
 
 function handleEdit() {
-  if (props.character) {
-    emit('edit', props.character)
-  }
+  if (props.character) emit('edit', props.character)
 }
 
-// 点击外部关闭
-function handleClickOutside(e: MouseEvent) {
-  const target = e.target as HTMLElement
-  if (!target.closest('.character-card')) {
-    close()
-  }
+function handleClickOutside(event: MouseEvent) {
+  const target = event.target
+  if (target instanceof Element && !target.closest('.story-character-card')) close()
 }
 
-watch(isVisible, (val) => {
-  if (val) {
-    setTimeout(() => {
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') close()
+}
+
+watch(isVisible, (visible) => {
+  if (clickListenerTimer !== null) {
+    window.clearTimeout(clickListenerTimer)
+    clickListenerTimer = null
+  }
+  if (visible) {
+    clickListenerTimer = window.setTimeout(() => {
+      clickListenerTimer = null
       document.addEventListener('click', handleClickOutside)
-    }, 100)
-  } else {
-    document.removeEventListener('click', handleClickOutside)
+    }, 0)
+    document.addEventListener('keydown', handleKeydown)
+    return
   }
+  document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleKeydown)
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (clickListenerTimer !== null) window.clearTimeout(clickListenerTimer)
+  document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
 <template>
   <Teleport to="body">
-    <Transition name="card-slide">
-      <div v-if="isVisible" class="character-card" :style="cardStyle">
-        <div class="card-arrow"></div>
+    <Transition name="story-character-card">
+      <aside
+        v-if="isVisible"
+        class="story-character-card"
+        :style="cardStyle"
+        role="dialog"
+        :aria-label="displayName"
+        data-testid="story-character-card"
+      >
+        <span class="card-rail" aria-hidden="true"></span>
+        <header class="card-header">
+          <div class="avatar" :class="{ portrait: portraitAvailable }">
+            <CharacterCardPortrait
+              v-if="props.characterCard && portraitAvailable"
+              :card="props.characterCard"
+              :alt="t('archives.characterPopover.portraitAlt', { name: displayName })"
+              :width="180"
+              :quality="76"
+            >
+              <template #fallback>
+                <span class="avatar-text">{{ displayName.charAt(0) }}</span>
+              </template>
+            </CharacterCardPortrait>
+            <WowIcon v-else-if="displayIcon" :icon="displayIcon" :size="68" :fallback="displayName.charAt(0)" />
+            <span v-else class="avatar-text">{{ displayName.charAt(0) }}</span>
+          </div>
 
-        <!-- 头部 -->
-        <div class="card-header">
-          <div class="avatar-section">
-            <div class="avatar">
-              <WowIcon v-if="displayIcon" :icon="displayIcon" :size="64" :fallback="displayName.charAt(0)" />
-              <span v-else class="avatar-text">{{ displayName.charAt(0) }}</span>
-            </div>
+          <div class="identity">
+            <span class="source-badge">
+              <i :class="isRPBoxCard ? 'ri-id-card-line' : 'ri-gamepad-line'" aria-hidden="true"></i>
+              {{ t(isRPBoxCard ? 'archives.characterPopover.rpbox' : 'archives.characterPopover.trp3') }}
+            </span>
+            <h3 :style="displayColor ? { color: displayColor } : undefined">{{ displayName }}</h3>
+            <p v-if="title">{{ title }}</p>
+            <small v-if="fullTitle">{{ fullTitle }}</small>
           </div>
-          <div class="info-section">
-            <div class="name" :style="displayColor ? { color: '#' + displayColor } : {}">
-              {{ displayName }}
-            </div>
-            <div v-if="character?.title" class="title">{{ character.title }}</div>
-            <div v-if="character?.full_title" class="full-title">{{ character.full_title }}</div>
-          </div>
-          <button class="btn-close" @click="close">
-            <i class="ri-close-line"></i>
+
+          <button
+            type="button"
+            class="close-button"
+            :aria-label="t('archives.characterPopover.close')"
+            @click="close"
+          >
+            <i class="ri-close-line" aria-hidden="true"></i>
           </button>
-        </div>
+        </header>
 
-        <!-- 基本信息 -->
-        <div v-if="character" class="card-body">
-          <div class="info-grid">
-            <div v-if="character.race" class="info-item">
-              <span class="label">种族</span>
-              <span class="value">{{ character.race }}</span>
+        <div class="card-body">
+          <dl v-if="infoItems.length" class="info-grid">
+            <div v-for="item in infoItems" :key="item.label" class="info-item">
+              <dt>{{ item.label }}</dt>
+              <dd>{{ item.value }}</dd>
             </div>
-            <div v-if="character.class" class="info-item">
-              <span class="label">职业</span>
-              <span class="value">{{ character.class }}</span>
-            </div>
-            <div v-if="character.age" class="info-item">
-              <span class="label">年龄</span>
-              <span class="value">{{ character.age }}</span>
-            </div>
-            <div v-if="character.height" class="info-item">
-              <span class="label">身高</span>
-              <span class="value">{{ character.height }}</span>
-            </div>
-            <div v-if="character.eye_color" class="info-item">
-              <span class="label">瞳色</span>
-              <span class="value">{{ character.eye_color }}</span>
-            </div>
-          </div>
+          </dl>
 
-          <!-- 第一印象 (Glance/PE) -->
-          <div v-if="glanceSlots.length > 0" class="glance-section">
-            <div class="section-title">第一印象</div>
+          <section v-if="summary" class="summary-section">
+            <h4>{{ t('archives.characterPopover.summary') }}</h4>
+            <p>{{ summary }}</p>
+          </section>
+
+          <section v-if="glanceSlots.length" class="glance-section">
+            <h4>{{ t('archives.characterPopover.firstImpression') }}</h4>
             <div class="glance-list">
-              <div v-for="(slot, idx) in glanceSlots" :key="idx" class="glance-item">
-                <WowIcon v-if="slot.icon" :icon="slot.icon" :size="24" class="glance-icon" />
-                <div class="glance-content">
-                  <div class="glance-title">{{ slot.title }}</div>
-                  <div v-if="slot.text" class="glance-text">{{ slot.text }}</div>
+              <article v-for="slot in glanceSlots" :key="slot.slot" class="glance-item">
+                <CharacterCardImpressionMark
+                  v-if="slot.rpbox"
+                  :icon-image-url="slot.iconImageUrl"
+                  :trp3-icon="slot.icon"
+                  :fallback-label="String(slot.slot)"
+                  :size="30"
+                />
+                <WowIcon v-else :icon="slot.icon" :size="30" :fallback="String(slot.slot)" />
+                <div>
+                  <strong>{{ slot.title }}</strong>
+                  <p v-if="slot.text">{{ slot.text }}</p>
                 </div>
-              </div>
+              </article>
             </div>
-          </div>
+          </section>
+
+          <p v-if="!infoItems.length && !summary && !glanceSlots.length" class="empty-state">
+            {{ t('archives.characterPopover.empty') }}
+          </p>
         </div>
 
-        <!-- 底部操作 -->
-        <div v-if="editable && character" class="card-footer">
+        <footer v-if="editable && character && !characterCard" class="card-footer">
           <RButton size="small" @click="handleEdit">
-            <i class="ri-edit-line"></i> 编辑本剧情角色
+            <i class="ri-edit-line" aria-hidden="true"></i>
+            {{ t('archives.characterPopover.editStoryCharacter') }}
           </RButton>
-        </div>
-      </div>
+        </footer>
+      </aside>
     </Transition>
   </Teleport>
 </template>
 
 <style scoped>
-.character-card {
+.story-character-card {
   position: fixed;
-  z-index: 1000;
-  width: 320px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 2500;
+  display: flex;
+  width: min(340px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 24px));
+  flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--color-border-hover);
+  border-radius: var(--radius-md);
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
+  box-shadow: var(--shadow-lg);
 }
 
-.card-arrow {
+.card-rail {
   position: absolute;
-  left: -8px;
-  top: 24px;
-  width: 0;
-  height: 0;
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
-  border-right: 8px solid #fff;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: linear-gradient(var(--gradient-start), var(--color-accent) 50%, var(--gradient-end));
 }
 
 .card-header {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  background: linear-gradient(135deg, #f8f4f0 0%, #efe8e0 100%);
   position: relative;
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 12px 16px 18px;
+  border-bottom: 1px solid var(--color-border);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 9%, transparent), transparent 58%),
+    var(--color-card-bg);
 }
 
-.avatar-section .avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 8px;
+.avatar {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
   overflow: hidden;
-  background: var(--color-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--color-border-hover);
+  border-radius: var(--radius-sm);
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--color-accent) 24%, transparent), transparent 58%),
+    var(--gradient-end);
+  color: var(--gradient-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.avatar :deep(.wow-icon),
+.avatar :deep(.character-portrait-state),
+.avatar :deep(img) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
 }
 
 .avatar-text {
-  font-size: 24px;
+  color: var(--gradient-text);
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-size: 25px;
   font-weight: 600;
-  color: var(--btn-primary-text, #fff);
 }
 
-.info-section {
-  flex: 1;
-  min-width: 0;
-}
+.identity { min-width: 0; }
 
-.info-section .name {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-primary);
-  margin-bottom: 4px;
-}
-
-.info-section .title {
-  font-size: 13px;
-  color: var(--color-accent);
-  font-style: italic;
-}
-
-.info-section .full-title {
-  font-size: 12px;
-  color: var(--color-secondary);
-  margin-top: 2px;
-}
-
-.btn-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
+.source-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: var(--color-secondary);
-  transition: all 0.2s;
+  gap: 4px;
+  color: var(--color-accent);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
 }
 
-.btn-close:hover {
-  background: rgba(0, 0, 0, 0.2);
-  color: var(--color-primary);
+.identity h3 {
+  overflow: hidden;
+  margin: 5px 0 1px;
+  color: var(--color-text-main);
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity p,
+.identity small {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity p { color: var(--color-secondary); font-weight: 600; }
+
+.close-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  align-self: start;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.close-button:hover,
+.close-button:focus-visible {
+  border-color: var(--color-border-hover);
+  outline: none;
+  background: var(--btn-outline-hover);
+  color: var(--color-text-main);
 }
 
 .card-body {
-  padding: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 15px 18px 17px;
 }
 
 .info-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 14px;
+  margin: 0;
 }
 
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.info-item.full {
-  grid-column: 1 / -1;
-}
-
-.info-item .label {
-  font-size: 11px;
-  color: var(--color-secondary);
+.info-item { min-width: 0; }
+.info-item dt,
+.summary-section h4,
+.glance-section h4 {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .09em;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+}
+.info-item dd {
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: var(--color-text-main);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.info-item .value {
-  font-size: 13px;
-  color: var(--color-primary);
-}
-
-/* 第一印象 (Glance) */
+.summary-section,
 .glance-section {
-  margin-top: 16px;
-  padding-top: 12px;
+  margin-top: 14px;
+  padding-top: 13px;
   border-top: 1px solid var(--color-border);
 }
 
-.section-title {
+.summary-section p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 7px 0 0;
+  color: var(--color-text-secondary);
   font-size: 11px;
-  color: var(--color-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 10px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .glance-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  gap: 9px;
+  margin-top: 9px;
 }
 
 .glance-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
 }
 
-.glance-icon {
-  flex-shrink: 0;
-  border-radius: 4px;
+.glance-item :deep(.wow-icon) { border-radius: 7px; }
+.glance-item strong {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-main);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glance-item p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.glance-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.glance-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.glance-text {
-  font-size: 12px;
-  color: var(--color-secondary);
-  margin-top: 2px;
-  line-height: 1.4;
+.empty-state {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  text-align: center;
 }
 
 .card-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-card-bg);
 }
 
-/* 动画 */
-.card-slide-enter-active {
-  animation: cardSlideIn 0.25s ease-out;
+.story-character-card-enter-active,
+.story-character-card-leave-active { transition: opacity 140ms ease, transform 140ms ease; }
+.story-character-card-enter-from,
+.story-character-card-leave-to { opacity: 0; transform: translateY(3px); }
+
+@media (max-width: 420px) {
+  .card-header { grid-template-columns: 58px minmax(0, 1fr) 28px; }
+  .avatar { width: 58px; height: 58px; }
 }
 
-.card-slide-leave-active {
-  animation: cardSlideOut 0.2s ease-in;
-}
-
-@keyframes cardSlideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes cardSlideOut {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
+@media (prefers-reduced-motion: reduce) {
+  .story-character-card-enter-active,
+  .story-character-card-leave-active { transition: none; }
 }
 </style>

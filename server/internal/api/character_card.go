@@ -795,6 +795,13 @@ func (s *Server) deleteCharacterCard(c *gin.Context) {
 		}
 	}
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&model.StoryEntry{}) {
+			if err := tx.Model(&model.StoryEntry{}).
+				Where("character_card_id = ?", card.ID).
+				Update("character_card_id", nil).Error; err != nil {
+				return err
+			}
+		}
 		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPublication{}).Error; err != nil {
 			return err
 		}

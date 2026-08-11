@@ -176,6 +176,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
@@ -185,6 +186,151 @@ afterEach(() => {
 })
 
 describe('CharacterCardEditor tabs', () => {
+  it('keeps the four color controls aligned in two columns without helper captions', async () => {
+    mocks.getCharacterCard.mockResolvedValue(card)
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/character-cards/:id/edit', component: CharacterCardEditor }],
+    })
+    await router.push('/character-cards/12/edit')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardEditor, {
+      global: {
+        plugins: [createPinia(), router, i18n],
+        stubs: {
+          TiptapEditor: editorStub,
+          PostQuickJump: true,
+          ImageCropperDialog: true,
+          RModal: true,
+          CharacterCardPortrait: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const colorGrid = wrapper.get('.character-color-grid')
+    expect(colorGrid.findAll('.character-dye')).toHaveLength(3)
+    expect(colorGrid.findAll('.character-dye__hint')).toHaveLength(0)
+    expect(colorGrid.text()).not.toContain('承接 TRP3')
+    expect(colorGrid.text()).not.toContain('修改任一项会同步')
+    wrapper.unmount()
+  })
+
+  it('automatically saves the complete card to cloud after a short editing pause', async () => {
+    mocks.getCharacterCard.mockResolvedValue(card)
+    mocks.updateCharacterCard.mockImplementation(async (_id: number, payload: Partial<CharacterCard>) => ({
+      ...card,
+      ...payload,
+      updated_at: '2026-08-10T09:00:00Z',
+    }))
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/character-cards/:id/edit', component: CharacterCardEditor }],
+    })
+    await router.push('/character-cards/12/edit')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia(), router, i18n],
+        stubs: {
+          TiptapEditor: editorStub,
+          PostQuickJump: true,
+          ImageCropperDialog: true,
+          RModal: true,
+          CharacterCardPortrait: true,
+        },
+      },
+    })
+    await flushPromises()
+    vi.useFakeTimers()
+
+    await wrapper.findAll<HTMLInputElement>('#character-panel-basic input')[0].setValue('自动保存的伊莉娅')
+    expect(wrapper.get('.save-sync').text()).toContain('等待自动保存')
+    expect(mocks.updateCharacterCard).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1199)
+    expect(mocks.updateCharacterCard).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
+
+    expect(mocks.updateCharacterCard).toHaveBeenCalledTimes(1)
+    expect(mocks.updateCharacterCard).toHaveBeenCalledWith(12, expect.objectContaining({
+      first_name: '自动保存的伊莉娅',
+      background_story: '<p>旧背景</p>',
+      impressions: expect.arrayContaining([expect.objectContaining({ slot: 1 })]),
+    }))
+    expect(wrapper.get('.save-sync').text()).toContain('已自动保存到云端')
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('queues edits made during an active cloud save without overwriting the newer form', async () => {
+    mocks.getCharacterCard.mockResolvedValue(card)
+    let resolveFirstSave: ((saved: CharacterCard) => void) | undefined
+    let firstPayload: Partial<CharacterCard> | undefined
+    mocks.updateCharacterCard
+      .mockImplementationOnce((_id: number, payload: Partial<CharacterCard>) => {
+        firstPayload = payload
+        return new Promise<CharacterCard>((resolve) => {
+          resolveFirstSave = resolve
+        })
+      })
+      .mockImplementation(async (_id: number, payload: Partial<CharacterCard>) => ({
+        ...card,
+        ...payload,
+        updated_at: '2026-08-10T10:00:00Z',
+      }))
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/character-cards/:id/edit', component: CharacterCardEditor }],
+    })
+    await router.push('/character-cards/12/edit')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia(), router, i18n],
+        stubs: {
+          TiptapEditor: editorStub,
+          PostQuickJump: true,
+          ImageCropperDialog: true,
+          RModal: true,
+          CharacterCardPortrait: true,
+        },
+      },
+    })
+    await flushPromises()
+    vi.useFakeTimers()
+
+    const nameFields = wrapper.findAll<HTMLInputElement>('#character-panel-basic input')
+    await nameFields[0].setValue('第一次提交的名字')
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(mocks.updateCharacterCard).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('.save-sync').text()).toContain('正在同步到云端')
+
+    await nameFields[1].setValue('请求期间新增的姓氏')
+    resolveFirstSave?.({
+      ...card,
+      ...firstPayload,
+      updated_at: '2026-08-10T09:00:00Z',
+    } as CharacterCard)
+    await flushPromises()
+
+    expect(mocks.updateCharacterCard).toHaveBeenCalledTimes(2)
+    expect(mocks.updateCharacterCard.mock.calls[1][1]).toEqual(expect.objectContaining({
+      first_name: '第一次提交的名字',
+      last_name: '请求期间新增的姓氏',
+    }))
+    expect(nameFields[0].element.value).toBe('第一次提交的名字')
+    expect(nameFields[1].element.value).toBe('请求期间新增的姓氏')
+    expect(wrapper.get('.save-sync').text()).toContain('已自动保存到云端')
+    wrapper.unmount()
+  })
+
   it('does not render editing controls for a public card owned by another user', async () => {
     localStorage.setItem('user', JSON.stringify({ id: 99, username: '访客' }))
     mocks.getCharacterCard.mockResolvedValue(card)
