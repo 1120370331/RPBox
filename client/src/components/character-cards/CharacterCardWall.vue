@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   listMyCharacterCards,
   listUserCharacterCards,
@@ -13,6 +14,7 @@ const props = defineProps<{
   userId: number
   isOwnProfile: boolean
 }>()
+const { t } = useI18n()
 
 const cards = ref<CharacterCardSummary[]>([])
 const loading = ref(false)
@@ -42,7 +44,7 @@ async function loadCards() {
   } catch (error: unknown) {
     if (token !== requestToken) return
     cards.value = []
-    errorMessage.value = error instanceof Error ? error.message : '人物卡展示墙加载失败'
+    errorMessage.value = error instanceof Error ? error.message : t('characterCards.wall.loadFailed')
   } finally {
     if (token === requestToken) loading.value = false
   }
@@ -53,7 +55,7 @@ function displayName(card: CharacterCardSummary) {
 }
 
 function secondaryLine(card: CharacterCardSummary) {
-  return card.title || card.full_title || [card.race, card.class].filter(Boolean).join(' · ') || '身份尚待记录'
+  return card.title || card.full_title || [card.race, card.class].filter(Boolean).join(' · ') || t('characterCards.wall.noIdentity')
 }
 
 function displayNameColor(card: CharacterCardSummary) {
@@ -61,10 +63,10 @@ function displayNameColor(card: CharacterCardSummary) {
 }
 
 function statusLabel(card: CharacterCardSummary) {
-  if (card.status === 'draft') return '草稿'
-  if (card.visibility === 'private') return '仅自己可见'
-  if (card.review_status === 'pending') return '审核中'
-  if (card.review_status === 'rejected') return '未通过审核'
+  if (card.status === 'draft') return t('characterCards.common.status.draft')
+  if (card.visibility === 'private') return t('characterCards.common.status.private')
+  if (card.review_status === 'pending') return t('characterCards.common.status.pending')
+  if (card.review_status === 'rejected') return t('characterCards.common.status.rejected')
   return ''
 }
 
@@ -83,28 +85,28 @@ function statusIcon(card: CharacterCardSummary) {
 
     <header class="character-wall__header">
       <div>
-        <span class="character-wall__kicker">Adventurer archive</span>
-        <h2 id="character-wall-title">人物卡展示墙</h2>
-        <p>{{ isOwnProfile ? '整理你的角色设定，并选择哪些档案向社区公开。' : '这位冒险者公开陈列的角色档案。' }}</p>
+        <span class="character-wall__kicker">{{ t('characterCards.wall.kicker') }}</span>
+        <h2 id="character-wall-title">{{ t('characterCards.wall.title') }}</h2>
+        <p>{{ t(isOwnProfile ? 'characterCards.wall.ownDescription' : 'characterCards.wall.visitorDescription') }}</p>
       </div>
       <RouterLink v-if="isOwnProfile && cards.length" class="character-wall__new" to="/character-cards/new">
         <i class="ri-add-line" aria-hidden="true"></i>
-        新建人物卡
+        {{ t('characterCards.wall.create') }}
       </RouterLink>
     </header>
 
     <div v-if="loading" class="character-wall__state" role="status">
       <i class="ri-loader-4-line character-wall__spinner" aria-hidden="true"></i>
-      <span>正在查阅人物档案…</span>
+      <span>{{ t('characterCards.common.loading') }}</span>
     </div>
 
     <div v-else-if="errorMessage" class="character-wall__state character-wall__state--error" role="alert">
       <i class="ri-file-warning-line" aria-hidden="true"></i>
       <div>
-        <strong>暂时无法打开展示墙</strong>
+        <strong>{{ t('characterCards.wall.errorTitle') }}</strong>
         <span>{{ errorMessage }}</span>
       </div>
-      <button type="button" @click="loadCards">重新加载</button>
+      <button type="button" @click="loadCards">{{ t('characterCards.common.reload') }}</button>
     </div>
 
     <div v-else-if="isOwnProfile && cards.length === 0" class="character-wall__empty">
@@ -113,12 +115,12 @@ function statusIcon(card: CharacterCardSummary) {
         <span class="character-wall__empty-plus"><i class="ri-add-line"></i></span>
       </div>
       <div class="character-wall__empty-copy">
-        <span>档案架仍是空的</span>
-        <h3>为你的第一个角色留下正式档案</h3>
-        <p>可以从已有 TRP3 云备份带入基础身份信息，也可以从一张空白人物卡开始创作。</p>
+        <span>{{ t('characterCards.wall.emptyKicker') }}</span>
+        <h3>{{ t('characterCards.wall.emptyTitle') }}</h3>
+        <p>{{ t('characterCards.wall.emptyBody') }}</p>
       </div>
       <RouterLink class="character-wall__primary" to="/character-cards/new">
-        新建人物卡
+        {{ t('characterCards.wall.create') }}
         <i class="ri-arrow-right-line" aria-hidden="true"></i>
       </RouterLink>
     </div>
@@ -129,7 +131,7 @@ function statusIcon(card: CharacterCardSummary) {
         :key="card.id"
         class="portrait-card"
         :to="`/character-cards/${card.id}`"
-        :aria-label="`查看人物卡：${displayName(card)}`"
+        :aria-label="t('characterCards.wall.viewAria', { name: displayName(card) })"
       >
         <span class="portrait-card__folio" aria-hidden="true">CC · {{ String(index + 1).padStart(2, '0') }}</span>
         <span class="portrait-card__frame">
@@ -137,13 +139,13 @@ function statusIcon(card: CharacterCardSummary) {
             v-if="card.portrait_image_url"
             class="portrait-card__image"
             :card="card"
-            :alt="`${displayName(card)}的角色肖像`"
+            :alt="t('characterCards.common.portraitAlt', { name: displayName(card) })"
             :width="560"
             :quality="86"
           />
           <span v-else class="portrait-card__placeholder" aria-hidden="true">
             <i class="ri-user-star-line"></i>
-            <small>肖像待归档</small>
+            <small>{{ t('characterCards.wall.portraitPending') }}</small>
           </span>
           <span class="portrait-card__shade"></span>
           <span v-if="isOwnProfile && statusLabel(card)" class="portrait-card__status">
@@ -151,8 +153,8 @@ function statusIcon(card: CharacterCardSummary) {
             {{ statusLabel(card) }}
           </span>
           <span class="portrait-card__reveal">
-            <span>{{ card.summary || '这份人物档案还没有写下摘要。' }}</span>
-            <b>查阅完整档案 <i class="ri-arrow-right-line" aria-hidden="true"></i></b>
+            <span>{{ card.summary || t('characterCards.wall.summaryEmpty') }}</span>
+            <b>{{ t('characterCards.wall.readFull') }} <i class="ri-arrow-right-line" aria-hidden="true"></i></b>
           </span>
         </span>
         <span class="portrait-card__plaque">
@@ -163,8 +165,8 @@ function statusIcon(card: CharacterCardSummary) {
 
       <RouterLink v-if="isOwnProfile" class="portrait-card portrait-card--add" to="/character-cards/new">
         <span class="portrait-card__add-mark" aria-hidden="true"><i class="ri-add-line"></i></span>
-        <strong>登记新人物</strong>
-        <span>从备份或空白档案开始</span>
+        <strong>{{ t('characterCards.wall.addTitle') }}</strong>
+        <span>{{ t('characterCards.wall.addBody') }}</span>
       </RouterLink>
     </div>
   </section>
@@ -177,12 +179,12 @@ function statusIcon(card: CharacterCardSummary) {
   min-width: 0;
   overflow: hidden;
   padding: 28px;
-  border: 1px solid #E2D2C2;
+  border: 1px solid var(--color-border);
   border-radius: 18px;
   background:
-    linear-gradient(90deg, rgba(184, 115, 51, 0.035) 1px, transparent 1px) 0 0 / 42px 42px,
-    linear-gradient(#FDFBF9, #FAF5EF);
-  box-shadow: 0 10px 26px rgba(75, 54, 33, 0.07);
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 5%, transparent) 1px, transparent 1px) 0 0 / 42px 42px,
+    linear-gradient(var(--color-panel-bg), var(--color-card-bg));
+  box-shadow: var(--shadow-md);
 }
 
 .character-wall__rail {
@@ -195,15 +197,15 @@ function statusIcon(card: CharacterCardSummary) {
   align-items: center;
   justify-content: space-around;
   border-radius: 0 0 8px 8px;
-  background: linear-gradient(90deg, #804030, #C88B51 45%, #804030);
-  box-shadow: 0 3px 8px rgba(75, 54, 33, 0.18);
+  background: linear-gradient(90deg, var(--gradient-start), var(--color-accent) 45%, var(--gradient-start));
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 .character-wall__rail span {
   width: 3px;
   height: 12px;
   border-radius: 2px;
-  background: #EED9C4;
+  background: var(--color-main-bg);
   transform: translateY(4px);
 }
 
@@ -217,7 +219,7 @@ function statusIcon(card: CharacterCardSummary) {
 
 .character-wall__kicker,
 .portrait-card__folio {
-  color: #9B6B43;
+  color: var(--color-accent);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 10px;
   font-weight: 700;
@@ -227,7 +229,7 @@ function statusIcon(card: CharacterCardSummary) {
 
 .character-wall h2 {
   margin: 4px 0 5px;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-family: Georgia, 'Noto Serif SC', serif;
   font-size: clamp(24px, 3vw, 34px);
   font-weight: 600;
@@ -236,7 +238,7 @@ function statusIcon(card: CharacterCardSummary) {
 
 .character-wall__header p {
   margin: 0;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -248,10 +250,10 @@ function statusIcon(card: CharacterCardSummary) {
   justify-content: center;
   gap: 8px;
   padding: 0 16px;
-  border: 1px solid #804030;
+  border: 1px solid var(--btn-primary-bg);
   border-radius: 8px;
-  background: #804030;
-  color: #FFF8F1;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
@@ -260,8 +262,8 @@ function statusIcon(card: CharacterCardSummary) {
 
 .character-wall__new:hover,
 .character-wall__primary:hover {
-  background: #6E3427;
-  box-shadow: 0 7px 16px rgba(75, 54, 33, 0.18);
+  background: var(--btn-primary-hover);
+  box-shadow: 0 7px 16px color-mix(in srgb, var(--color-primary) 22%, transparent);
   transform: translateY(-1px);
 }
 
@@ -269,7 +271,7 @@ function statusIcon(card: CharacterCardSummary) {
 .character-wall__primary:focus-visible,
 .portrait-card:focus-visible,
 .character-wall__state button:focus-visible {
-  outline: 3px solid rgba(184, 115, 51, 0.38);
+  outline: 3px solid color-mix(in srgb, var(--color-accent) 38%, transparent);
   outline-offset: 3px;
 }
 
@@ -279,7 +281,7 @@ function statusIcon(card: CharacterCardSummary) {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .character-wall__spinner {
@@ -292,7 +294,7 @@ function statusIcon(card: CharacterCardSummary) {
 }
 
 .character-wall__state--error > i {
-  color: #9A4D3C;
+  color: var(--btn-danger-bg);
   font-size: 28px;
 }
 
@@ -302,7 +304,7 @@ function statusIcon(card: CharacterCardSummary) {
 }
 
 .character-wall__state--error strong {
-  color: #4B3621;
+  color: var(--color-primary);
 }
 
 .character-wall__state--error span {
@@ -311,10 +313,10 @@ function statusIcon(card: CharacterCardSummary) {
 
 .character-wall__state button {
   padding: 8px 12px;
-  border: 1px solid #B87333;
+  border: 1px solid var(--color-accent);
   border-radius: 7px;
   background: transparent;
-  color: #804030;
+  color: var(--btn-outline-text);
   cursor: pointer;
 }
 
@@ -325,9 +327,9 @@ function statusIcon(card: CharacterCardSummary) {
   align-items: center;
   gap: 28px;
   padding: 28px clamp(24px, 5vw, 56px);
-  border: 1px dashed #CDB49C;
+  border: 1px dashed var(--color-border-hover);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.58);
+  background: color-mix(in srgb, var(--color-card-bg) 82%, transparent);
 }
 
 .character-wall__empty-mark {
@@ -336,9 +338,9 @@ function statusIcon(card: CharacterCardSummary) {
   width: 96px;
   height: 96px;
   place-items: center;
-  border: 1px solid #D5C0AB;
+  border: 1px solid var(--color-border);
   border-radius: 50%;
-  color: #B87333;
+  color: var(--color-accent);
   font-size: 48px;
 }
 
@@ -347,7 +349,7 @@ function statusIcon(card: CharacterCardSummary) {
   position: absolute;
   width: 118px;
   height: 1px;
-  background: #DDCBB9;
+  background: var(--color-border);
   content: '';
 }
 
@@ -361,15 +363,15 @@ function statusIcon(card: CharacterCardSummary) {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 3px solid #FDFBF9;
+  border: 3px solid var(--color-panel-bg);
   border-radius: 50%;
-  background: #804030;
-  color: white;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 16px;
 }
 
 .character-wall__empty-copy > span {
-  color: #B87333;
+  color: var(--color-accent);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -377,7 +379,7 @@ function statusIcon(card: CharacterCardSummary) {
 
 .character-wall__empty-copy h3 {
   margin: 5px 0 8px;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-family: Georgia, 'Noto Serif SC', serif;
   font-size: 22px;
 }
@@ -385,7 +387,7 @@ function statusIcon(card: CharacterCardSummary) {
 .character-wall__empty-copy p {
   max-width: 580px;
   margin: 0;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-size: 13px;
   line-height: 1.75;
 }
@@ -402,10 +404,10 @@ function statusIcon(card: CharacterCardSummary) {
   min-width: 0;
   flex-direction: column;
   padding: 7px;
-  border: 1px solid #BFA58B;
+  border: 1px solid var(--gradient-border);
   border-radius: 7px;
-  background: #37231A;
-  box-shadow: 0 7px 17px rgba(44, 24, 16, 0.17);
+  background: var(--gradient-end);
+  box-shadow: 0 7px 17px color-mix(in srgb, var(--color-primary) 24%, transparent);
   color: inherit;
   text-decoration: none;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -413,8 +415,8 @@ function statusIcon(card: CharacterCardSummary) {
 
 .portrait-card:hover,
 .portrait-card:focus-visible {
-  border-color: #D3975D;
-  box-shadow: 0 13px 27px rgba(44, 24, 16, 0.24), 0 0 0 2px rgba(184, 115, 51, 0.14);
+  border-color: var(--color-accent);
+  box-shadow: 0 13px 27px color-mix(in srgb, var(--color-primary) 30%, transparent), 0 0 0 2px color-mix(in srgb, var(--color-accent) 18%, transparent);
   transform: translateY(-4px);
 }
 
@@ -423,7 +425,7 @@ function statusIcon(card: CharacterCardSummary) {
   z-index: 4;
   top: 15px;
   left: 15px;
-  color: rgba(255, 244, 231, 0.74);
+  color: var(--gradient-text-muted);
 }
 
 .portrait-card__frame {
@@ -431,9 +433,9 @@ function statusIcon(card: CharacterCardSummary) {
   display: block;
   overflow: hidden;
   aspect-ratio: 3 / 4;
-  border: 1px solid rgba(238, 217, 196, 0.25);
+  border: 1px solid var(--gradient-border);
   border-radius: 3px 3px 0 0;
-  background: #231711;
+  background: var(--gradient-end);
 }
 
 .portrait-card__image {
@@ -457,19 +459,19 @@ function statusIcon(card: CharacterCardSummary) {
   place-content: center;
   gap: 10px;
   background:
-    radial-gradient(circle, rgba(184, 115, 51, 0.17), transparent 48%),
-    linear-gradient(145deg, #3D2A20, #1E1511);
-  color: #C58D5D;
+    radial-gradient(circle, color-mix(in srgb, var(--color-accent) 20%, transparent), transparent 48%),
+    linear-gradient(145deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   text-align: center;
 }
 
 .portrait-card__placeholder i { font-size: 48px; }
-.portrait-card__placeholder small { color: #CDB7A3; font-size: 11px; }
+.portrait-card__placeholder small { color: var(--gradient-text-muted); font-size: 11px; }
 
 .portrait-card__shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(25, 13, 8, 0.92), transparent 52%);
+  background: linear-gradient(to top, color-mix(in srgb, var(--gradient-end) 92%, transparent), transparent 52%);
   pointer-events: none;
 }
 
@@ -482,10 +484,10 @@ function statusIcon(card: CharacterCardSummary) {
   align-items: center;
   gap: 4px;
   padding: 4px 7px;
-  border: 1px solid rgba(255, 246, 235, 0.22);
+  border: 1px solid var(--gradient-border);
   border-radius: 999px;
-  background: rgba(35, 22, 15, 0.78);
-  color: #F2DFC9;
+  background: color-mix(in srgb, var(--gradient-end) 78%, transparent);
+  color: var(--gradient-text);
   font-size: 10px;
   backdrop-filter: blur(6px);
 }
@@ -498,7 +500,7 @@ function statusIcon(card: CharacterCardSummary) {
   left: 14px;
   display: grid;
   gap: 10px;
-  color: rgba(255, 246, 235, 0.88);
+  color: var(--gradient-text);
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 180ms ease, transform 180ms ease;
@@ -514,7 +516,7 @@ function statusIcon(card: CharacterCardSummary) {
 }
 
 .portrait-card__reveal b {
-  color: #F0BE86;
+  color: var(--color-accent);
   font-size: 11px;
 }
 
@@ -530,14 +532,14 @@ function statusIcon(card: CharacterCardSummary) {
   place-content: center;
   gap: 3px;
   padding: 10px 12px;
-  border-top: 1px solid #A56738;
-  background: linear-gradient(90deg, #271812, #3B251A 50%, #271812);
+  border-top: 1px solid var(--color-accent);
+  background: linear-gradient(90deg, var(--gradient-end), var(--gradient-start) 50%, var(--gradient-end));
   text-align: center;
 }
 
 .portrait-card__plaque strong {
   overflow: hidden;
-  color: #F1D5B7;
+  color: var(--gradient-text);
   font-family: Georgia, 'Noto Serif SC', serif;
   font-size: 18px;
   font-weight: 600;
@@ -547,7 +549,7 @@ function statusIcon(card: CharacterCardSummary) {
 
 .portrait-card__plaque span {
   overflow: hidden;
-  color: #BCA895;
+  color: var(--gradient-text-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -559,13 +561,13 @@ function statusIcon(card: CharacterCardSummary) {
   justify-content: center;
   gap: 8px;
   border-style: dashed;
-  background: rgba(75, 54, 33, 0.035);
+  background: var(--color-card-bg-hover);
   box-shadow: none;
-  color: #804030;
+  color: var(--color-secondary);
   text-align: center;
 }
 
-.portrait-card--add > span:last-child { color: #8C7B70; font-size: 11px; }
+.portrait-card--add > span:last-child { color: var(--color-text-secondary); font-size: 11px; }
 
 .portrait-card__add-mark {
   display: grid;
@@ -573,7 +575,7 @@ function statusIcon(card: CharacterCardSummary) {
   height: 58px;
   margin-bottom: 6px;
   place-items: center;
-  border: 1px solid #B87333;
+  border: 1px solid var(--color-accent);
   border-radius: 50%;
   font-size: 26px;
 }

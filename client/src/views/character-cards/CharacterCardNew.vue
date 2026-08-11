@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   createCharacterCard,
   getCharacterCardSources,
@@ -11,6 +12,7 @@ import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const toast = useToastStore()
 const userStore = useUserStore()
 
@@ -23,7 +25,7 @@ const creatingType = ref<CharacterCardSourceType | null>(null)
 const sourceGroups = computed(() => {
   const groups = new Map<string, CharacterCardSource[]>()
   for (const source of sources.value) {
-    const key = source.account_id || '未知账号'
+    const key = source.account_id || t('characterCards.newPage.unknownAccount')
     const group = groups.get(key) || []
     group.push(source)
     groups.set(key, group)
@@ -44,18 +46,18 @@ function sourceKey(source: CharacterCardSource) {
 function sourceName(source: CharacterCardSource) {
   if (source.display_name?.trim()) return source.display_name
   const name = [source.first_name, source.last_name].map((part) => part?.trim()).filter(Boolean).join(' ')
-  return name || source.profile_name || '未命名人物'
+  return name || source.profile_name || t('characterCards.newPage.unnamed')
 }
 
 function sourceMeta(source: CharacterCardSource) {
-  return [source.race, source.class, source.title].map((part) => part?.trim()).filter(Boolean).join(' · ') || '基础身份信息待补充'
+  return [source.race, source.class, source.title].map((part) => part?.trim()).filter(Boolean).join(' · ') || t('characterCards.newPage.identityPending')
 }
 
 function formatDate(value?: string) {
-  if (!value) return '时间未知'
+  if (!value) return t('characterCards.newPage.unknownTime')
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '时间未知'
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  if (Number.isNaN(date.getTime())) return t('characterCards.newPage.unknownTime')
+  return date.toLocaleDateString(locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 async function loadSources() {
@@ -66,7 +68,7 @@ async function loadSources() {
     sources.value = response.sources || []
   } catch (error: unknown) {
     sources.value = []
-    loadError.value = error instanceof Error ? error.message : '无法读取云备份来源'
+    loadError.value = error instanceof Error ? error.message : t('characterCards.newPage.loadFailed')
   } finally {
     loading.value = false
   }
@@ -78,7 +80,7 @@ async function createFromBlank() {
 
 async function createFromBackup() {
   if (!selectedSource.value) {
-    toast.warning('请先选择一份备份人物资料')
+    toast.warning(t('characterCards.newPage.selectBackup'))
     return
   }
   await createDraft('backup')
@@ -96,10 +98,10 @@ async function createDraft(sourceType: CharacterCardSourceType) {
           source_profile_id: source.profile_id,
         }
       : { source_type: 'blank' })
-    toast.success(sourceType === 'backup' ? '已从备份创建人物卡草稿' : '空白人物卡草稿已建立')
+    toast.success(t(sourceType === 'backup' ? 'characterCards.newPage.createdFromBackup' : 'characterCards.newPage.createdBlank'))
     await router.replace(`/character-cards/${card.id}/edit`)
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '人物卡创建失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.newPage.createFailed'))
   } finally {
     creatingType.value = null
   }
@@ -119,13 +121,13 @@ function goBack() {
     <header class="source-page__header">
       <button type="button" class="source-page__back" @click="goBack">
         <i class="ri-arrow-left-line" aria-hidden="true"></i>
-        返回个人中心
+        {{ t('characterCards.newPage.backProfile') }}
       </button>
       <div class="source-page__title-row">
         <div>
-          <span class="source-page__kicker">New character record</span>
-          <h1>选择人物卡的起点</h1>
-          <p>导入只会复制可以共用的基础身份字段，不会修改原始备份，也不会建立自动覆盖关系。</p>
+          <span class="source-page__kicker">{{ t('characterCards.newPage.kicker') }}</span>
+          <h1>{{ t('characterCards.newPage.title') }}</h1>
+          <p>{{ t('characterCards.newPage.subtitle') }}</p>
         </div>
         <div class="source-page__seal" aria-hidden="true"><i class="ri-quill-pen-line"></i></div>
       </div>
@@ -134,8 +136,8 @@ function goBack() {
     <aside class="sync-note">
       <i class="ri-git-merge-line" aria-hidden="true"></i>
       <div>
-        <strong>TRP3 与 RPBox 只显式交换基础信息</strong>
-        <p>背景故事、第一印象、其他富文本和角色大图始终属于 RPBox 人物卡，不会写入或被备份导入覆盖。</p>
+        <strong>{{ t('characterCards.newPage.syncTitle') }}</strong>
+        <p>{{ t('characterCards.newPage.syncBody') }}</p>
       </div>
     </aside>
 
@@ -144,27 +146,27 @@ function goBack() {
         <header class="source-panel__header">
           <span class="source-panel__number">A</span>
           <div>
-            <h2 id="backup-source-title">从已备份的人物卡开始</h2>
-            <p>选择当前账号拥有的云备份 profile，复制基础身份信息。</p>
+            <h2 id="backup-source-title">{{ t('characterCards.newPage.backupTitle') }}</h2>
+            <p>{{ t('characterCards.newPage.backupBody') }}</p>
           </div>
         </header>
 
         <div v-if="loading" class="source-state" role="status">
           <i class="ri-loader-4-line spin" aria-hidden="true"></i>
-          正在整理备份档案…
+          {{ t('characterCards.newPage.loading') }}
         </div>
 
         <div v-else-if="loadError" class="source-state source-state--error" role="alert">
           <i class="ri-file-warning-line" aria-hidden="true"></i>
-          <div><strong>无法读取备份来源</strong><span>{{ loadError }}</span></div>
-          <button type="button" @click="loadSources">重新加载</button>
+          <div><strong>{{ t('characterCards.newPage.loadErrorTitle') }}</strong><span>{{ loadError }}</span></div>
+          <button type="button" @click="loadSources">{{ t('characterCards.common.reload') }}</button>
         </div>
 
         <div v-else-if="sourceGroups.length === 0" class="source-state source-state--empty">
           <i class="ri-archive-drawer-line" aria-hidden="true"></i>
           <div>
-            <strong>还没有可导入的云备份</strong>
-            <span>可以先从零创建；之后仍可独立编辑 RPBox 人物卡。</span>
+            <strong>{{ t('characterCards.newPage.emptyTitle') }}</strong>
+            <span>{{ t('characterCards.newPage.emptyBody') }}</span>
           </div>
         </div>
 
@@ -172,9 +174,9 @@ function goBack() {
           <section v-for="group in sourceGroups" :key="group.accountId" class="account-group">
             <header>
               <span><i class="ri-folder-user-line" aria-hidden="true"></i>{{ group.accountId }}</span>
-              <small>{{ group.profiles.length }} 份人物资料</small>
+              <small>{{ t('characterCards.newPage.profileCount', { count: group.profiles.length }) }}</small>
             </header>
-            <div class="profile-sources" role="radiogroup" :aria-label="`${group.accountId} 的备份人物`">
+            <div class="profile-sources" role="radiogroup" :aria-label="t('characterCards.newPage.groupAria', { account: group.accountId })">
               <button
                 v-for="source in group.profiles"
                 :key="sourceKey(source)"
@@ -191,7 +193,7 @@ function goBack() {
                 <span class="profile-source__copy">
                   <strong>{{ sourceName(source) }}</strong>
                   <span>{{ sourceMeta(source) }}</span>
-                  <small>备份更新：{{ formatDate(source.backup_updated_at) }}</small>
+                  <small>{{ t('characterCards.newPage.backupUpdated', { date: formatDate(source.backup_updated_at) }) }}</small>
                 </span>
                 <span class="profile-source__check" aria-hidden="true">
                   <i :class="selectedSourceKey === sourceKey(source) ? 'ri-check-line' : 'ri-arrow-right-s-line'"></i>
@@ -209,7 +211,7 @@ function goBack() {
             @click="createFromBackup"
           >
             <i :class="creatingType === 'backup' ? 'ri-loader-4-line spin' : 'ri-file-copy-2-line'" aria-hidden="true"></i>
-            {{ creatingType === 'backup' ? '正在建立草稿…' : '从所选备份创建' }}
+            {{ creatingType === 'backup' ? t('characterCards.newPage.creating') : t('characterCards.newPage.createFromSelected') }}
           </button>
         </footer>
       </section>
@@ -218,8 +220,8 @@ function goBack() {
         <header class="source-panel__header">
           <span class="source-panel__number">B</span>
           <div>
-            <h2 id="blank-source-title">从零创建 RPBox 人物卡</h2>
-            <p>不依赖 TRP3，直接开启一份独立的角色档案。</p>
+            <h2 id="blank-source-title">{{ t('characterCards.newPage.blankTitle') }}</h2>
+            <p>{{ t('characterCards.newPage.blankBody') }}</p>
           </div>
         </header>
 
@@ -232,12 +234,12 @@ function goBack() {
         </div>
 
         <div class="blank-copy">
-          <strong>一张干净的档案页</strong>
-          <p>适合原创角色、未使用 TRP3 的设定，或希望与游戏内资料完全分开维护的人物。</p>
+          <strong>{{ t('characterCards.newPage.blankSheetTitle') }}</strong>
+          <p>{{ t('characterCards.newPage.blankSheetBody') }}</p>
           <ul>
-            <li><i class="ri-check-line" aria-hidden="true"></i>独立的大图与展示摘要</li>
-            <li><i class="ri-check-line" aria-hidden="true"></i>四个分栏整体保存</li>
-            <li><i class="ri-check-line" aria-hidden="true"></i>默认保存为私密草稿</li>
+            <li><i class="ri-check-line" aria-hidden="true"></i>{{ t('characterCards.newPage.blankFeaturePortrait') }}</li>
+            <li><i class="ri-check-line" aria-hidden="true"></i>{{ t('characterCards.newPage.blankFeatureTabs') }}</li>
+            <li><i class="ri-check-line" aria-hidden="true"></i>{{ t('characterCards.newPage.blankFeaturePrivate') }}</li>
           </ul>
         </div>
 
@@ -249,7 +251,7 @@ function goBack() {
             @click="createFromBlank"
           >
             <i :class="creatingType === 'blank' ? 'ri-loader-4-line spin' : 'ri-add-line'" aria-hidden="true"></i>
-            {{ creatingType === 'blank' ? '正在建立草稿…' : '从零创建' }}
+            {{ creatingType === 'blank' ? t('characterCards.newPage.creating') : t('characterCards.newPage.createBlank') }}
           </button>
         </footer>
       </section>
@@ -259,11 +261,11 @@ function goBack() {
 
 <style scoped>
 .source-page {
-  --ink: #2C1810;
-  --walnut: #4B3621;
-  --copper: #B87333;
-  --rust: #804030;
-  --muted: #8C7B70;
+  --ink: var(--color-text-main);
+  --walnut: var(--color-primary);
+  --copper: var(--color-accent);
+  --rust: var(--color-secondary);
+  --muted: var(--color-text-secondary);
   width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
   padding: 30px 0 54px;
@@ -328,11 +330,11 @@ function goBack() {
   height: 76px;
   flex: 0 0 76px;
   place-items: center;
-  border: 1px solid #CDA57C;
+  border: 1px solid var(--color-border-hover);
   border-radius: 50%;
   color: var(--rust);
   font-size: 30px;
-  outline: 1px dashed #DCC7B1;
+  outline: 1px dashed var(--color-border);
   outline-offset: 7px;
 }
 
@@ -342,9 +344,9 @@ function goBack() {
   gap: 13px;
   margin-bottom: 20px;
   padding: 14px 16px;
-  border: 1px solid #E0CDB9;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: #FBF6F0;
+  background: var(--color-card-bg);
 }
 
 .sync-note > i { color: var(--copper); font-size: 21px; }
@@ -364,10 +366,10 @@ function goBack() {
   min-height: 560px;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #E0D0C0;
+  border: 1px solid var(--color-border);
   border-radius: 14px;
-  background: #FDFBF9;
-  box-shadow: 0 10px 28px rgba(75, 54, 33, 0.07);
+  background: var(--color-panel-bg);
+  box-shadow: var(--shadow-md);
 }
 
 .source-panel--backup { border-top: 4px solid var(--copper); }
@@ -378,7 +380,7 @@ function goBack() {
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 11px;
   padding: 22px 24px 18px;
-  border-bottom: 1px solid #EEE3D8;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .source-panel__number {
@@ -466,9 +468,9 @@ function goBack() {
   align-items: center;
   gap: 12px;
   padding: 10px 11px;
-  border: 1px solid #E9DDD1;
+  border: 1px solid var(--color-border);
   border-radius: 9px;
-  background: #FFF;
+  background: var(--color-card-bg);
   color: inherit;
   cursor: pointer;
   text-align: left;
@@ -477,8 +479,8 @@ function goBack() {
 
 .profile-source:hover,
 .profile-source.selected {
-  border-color: #BF7E45;
-  background: #FFF9F3;
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
   transform: translateX(2px);
 }
 
@@ -486,7 +488,7 @@ function goBack() {
 .source-action:focus-visible,
 .source-page__back:focus-visible,
 .source-state button:focus-visible {
-  outline: 3px solid rgba(184, 115, 51, 0.3);
+  outline: 3px solid color-mix(in srgb, var(--color-accent) 34%, transparent);
   outline-offset: 2px;
 }
 
@@ -496,22 +498,22 @@ function goBack() {
   height: 48px;
   place-items: center;
   border-radius: 5px;
-  background: linear-gradient(145deg, #4B3621, #2C1810);
-  color: #E9C7A4;
+  background: linear-gradient(145deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   font-size: 19px;
 }
 
 .profile-source__copy { display: grid; min-width: 0; gap: 2px; }
 .profile-source__copy strong { overflow: hidden; color: var(--ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .profile-source__copy > span { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.profile-source__copy small { color: #AD927A; font-size: 9px; }
+.profile-source__copy small { color: var(--color-text-muted); font-size: 9px; }
 .profile-source__check { color: var(--copper); font-size: 17px; }
 
 .source-panel__footer {
   margin-top: auto;
   padding: 16px 20px;
-  border-top: 1px solid #EEE3D8;
-  background: rgba(250, 245, 239, 0.74);
+  border-top: 1px solid var(--color-border-light);
+  background: color-mix(in srgb, var(--color-card-bg) 82%, transparent);
 }
 
 .source-action {
@@ -521,17 +523,17 @@ function goBack() {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid var(--rust);
+  border: 1px solid var(--btn-primary-bg);
   border-radius: 8px;
-  background: var(--rust);
-  color: #FFF8F1;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
 }
 
-.source-action--blank { background: var(--walnut); border-color: var(--walnut); }
+.source-action--blank { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-text-light); }
 .source-action:disabled { cursor: not-allowed; opacity: 0.48; }
 
 .blank-ledger {
@@ -543,11 +545,11 @@ function goBack() {
   justify-content: center;
   gap: 16px;
   margin: 24px 24px 16px;
-  border: 1px solid #DCC9B6;
+  border: 1px solid var(--color-border);
   background:
-    linear-gradient(90deg, transparent 28px, rgba(184, 115, 51, 0.15) 29px, transparent 30px),
-    repeating-linear-gradient(#FFFDFB, #FFFDFB 28px, #EDE2D8 29px);
-  box-shadow: inset 0 0 30px rgba(75, 54, 33, 0.035);
+    linear-gradient(90deg, transparent 28px, color-mix(in srgb, var(--color-accent) 18%, transparent) 29px, transparent 30px),
+    repeating-linear-gradient(var(--color-card-bg), var(--color-card-bg) 28px, var(--color-border-light) 29px);
+  box-shadow: inset 0 0 30px color-mix(in srgb, var(--color-primary) 5%, transparent);
 }
 
 .blank-ledger__compass {
@@ -555,13 +557,13 @@ function goBack() {
   width: 70px;
   height: 70px;
   place-items: center;
-  border: 1px solid #CEAE8F;
+  border: 1px solid var(--color-border-hover);
   border-radius: 50%;
-  color: #B87333;
+  color: var(--color-accent);
   font-size: 36px;
 }
 
-.blank-ledger__line { width: 52%; height: 1px; background: #DCCBBC; }
+.blank-ledger__line { width: 52%; height: 1px; background: var(--color-border); }
 .blank-ledger__line.short { width: 34%; }
 .blank-ledger__stamp { position: absolute; right: 14px; bottom: 12px; transform: rotate(-4deg); }
 

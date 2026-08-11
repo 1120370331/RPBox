@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { resolveApiUrl } from '@/api/item'
 import AuthenticatedImage from '@/components/AuthenticatedImage.vue'
 import WowIcon from '@/components/WowIcon.vue'
@@ -16,20 +17,22 @@ const props = withDefaults(defineProps<Props>(), {
   iconImageUrl: '',
   trp3Icon: '',
   previewUrl: '',
-  fallbackLabel: '印',
+  fallbackLabel: '',
   size: 68,
 })
+const { t } = useI18n()
 
 const customIconFailed = ref(false)
 const customIconUrl = computed(() => resolveApiUrl(props.previewUrl || props.iconImageUrl))
+const resolvedFallbackLabel = computed(() => props.fallbackLabel || t('characterCards.impressionMark.fallback'))
 const sizeStyle = computed(() => {
   const size = typeof props.size === 'number' ? `${props.size}px` : props.size
   return { width: size, height: size }
 })
 const accessibleLabel = computed(() => {
-  if (customIconUrl.value && !customIconFailed.value) return '自定义印象图标'
-  if (props.trp3Icon.trim()) return `TRP3 图标：${props.trp3Icon.trim()}`
-  return '默认观察印记'
+  if (customIconUrl.value && !customIconFailed.value) return t('characterCards.impressionMark.custom')
+  if (props.trp3Icon.trim()) return t('characterCards.impressionMark.trp3', { icon: props.trp3Icon.trim() })
+  return t('characterCards.impressionMark.default')
 })
 
 watch(customIconUrl, () => {
@@ -47,14 +50,14 @@ watch(customIconUrl, () => {
       @error="customIconFailed = true"
     >
       <template #loading><i class="ri-loader-4-line impression-mark__spin" aria-hidden="true"></i></template>
-      <template #error><span>{{ fallbackLabel }}</span></template>
+      <template #error><span>{{ resolvedFallbackLabel }}</span></template>
     </AuthenticatedImage>
     <WowIcon
       v-else
       class="impression-mark__wow"
       :icon="trp3Icon"
       size="100%"
-      :fallback="fallbackLabel"
+      :fallback="resolvedFallbackLabel"
       aria-hidden="true"
     />
   </span>
@@ -68,14 +71,14 @@ watch(customIconUrl, () => {
   justify-content: center;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid #9c673d;
+  border: 1px solid var(--color-border-hover);
   border-radius: 9px;
   background:
-    linear-gradient(145deg, rgba(255, 250, 242, 0.12), transparent 42%),
-    #38241a;
+    linear-gradient(145deg, var(--gradient-surface), transparent 42%),
+    var(--gradient-end);
   box-shadow:
-    inset 0 0 0 3px #241710,
-    0 5px 12px rgba(44, 24, 16, 0.2);
+    inset 0 0 0 3px color-mix(in srgb, var(--gradient-end) 84%, black),
+    0 5px 12px color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 .impression-mark__custom {
@@ -84,7 +87,7 @@ watch(customIconUrl, () => {
   object-fit: cover;
 }
 
-.impression-mark__custom :deep(.authenticated-image__state) { color: #e4c19d; }
+.impression-mark__custom :deep(.authenticated-image__state) { color: var(--gradient-text); }
 .impression-mark__custom :deep(.authenticated-image__state span) { font-family: Georgia, 'Noto Serif SC', serif; }
 
 .impression-mark__wow {
@@ -96,12 +99,12 @@ watch(customIconUrl, () => {
 .impression-mark :deep(.wow-icon) {
   border-radius: 0;
   background:
-    radial-gradient(circle, rgba(184, 115, 51, 0.28), transparent 58%),
-    #2b1b14;
+    radial-gradient(circle, color-mix(in srgb, var(--color-accent) 30%, transparent), transparent 58%),
+    var(--gradient-end);
 }
 
 .impression-mark :deep(.fallback) {
-  color: #e4c19d;
+  color: var(--gradient-text);
   font-family: Georgia, 'Noto Serif SC', serif;
   font-size: clamp(14px, 35%, 25px);
   font-weight: 600;

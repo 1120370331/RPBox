@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import i18n from '@/i18n'
 import ModeratorMain from './ModeratorMain.vue'
 
 const api = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ vi.mock('@/api/moderator', async () => {
 
 describe('ModeratorMain RPDB review integration', () => {
   beforeEach(() => {
+    i18n.global.locale.value = 'zh-CN'
     api.getModeratorStats.mockResolvedValue({
       pending_posts: 0,
       pending_items: 0,
@@ -92,7 +94,7 @@ describe('ModeratorMain RPDB review integration', () => {
     await router.push('/moderator')
     const wrapper = mount(ModeratorMain, {
       global: {
-        plugins: [router],
+        plugins: [router, i18n],
         stubs: {
           ImageViewer: true,
           RModal: true,
@@ -129,7 +131,7 @@ describe('ModeratorMain RPDB review integration', () => {
     })
     await router.push('/moderator')
     const wrapper = mount(ModeratorMain, {
-      global: { plugins: [router], stubs: { ImageViewer: true, RModal: true } },
+      global: { plugins: [router, i18n], stubs: { ImageViewer: true, RModal: true } },
     })
     await flushPromises()
 

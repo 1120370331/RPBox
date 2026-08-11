@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ModeratorMain from './ModeratorMain.vue'
+import i18n from '@/i18n'
 
 const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
@@ -82,7 +83,7 @@ async function mountModerator() {
   await router.isReady()
   const wrapper = mount(ModeratorMain, {
     global: {
-      plugins: [router],
+      plugins: [router, i18n],
       stubs: {
         CharacterCardPortrait: true,
         ImageViewer: true,
@@ -96,6 +97,7 @@ async function mountModerator() {
 
 describe('ModeratorMain character-card review queue', () => {
   beforeEach(() => {
+    i18n.global.locale.value = 'zh-CN'
     vi.clearAllMocks()
     mocks.confirm.mockResolvedValue(true)
     mocks.getModeratorStats.mockResolvedValue({

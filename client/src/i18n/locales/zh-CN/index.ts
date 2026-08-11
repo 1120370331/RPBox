@@ -11,6 +11,7 @@ import home from './home'
 import collection from './collection'
 import library from './library'
 import rpdb from './rpdb'
+import characterCards from './characterCards'
 
 export default {
   common,
@@ -26,4 +27,5 @@ export default {
   collection,
   library,
   rpdb,
+  characterCards,
 }

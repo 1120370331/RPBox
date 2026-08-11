@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getCharacterCardPortraitUrl, type CharacterCard } from '@/api/characterCard'
 
 const props = withDefaults(defineProps<{
@@ -11,6 +12,7 @@ const props = withDefaults(defineProps<{
   width: 900,
   quality: 88,
 })
+const { t } = useI18n()
 
 const objectUrl = ref('')
 const loading = ref(false)
@@ -77,7 +79,7 @@ onBeforeUnmount(() => {
   <span v-else class="character-portrait-state" role="img" :aria-label="alt" :data-loading="loading || undefined" :data-failed="failed || undefined">
     <slot name="fallback" :loading="loading" :failed="failed">
       <i :class="loading ? 'ri-loader-4-line character-portrait-state__spin' : failed ? 'ri-image-close-line' : 'ri-user-star-line'" aria-hidden="true"></i>
-      <small>{{ loading ? '肖像加载中' : failed ? '肖像暂不可用' : '肖像待归档' }}</small>
+      <small>{{ loading ? t('characterCards.image.portraitLoading') : failed ? t('characterCards.image.portraitUnavailable') : t('characterCards.image.portraitPending') }}</small>
     </slot>
   </span>
 </template>

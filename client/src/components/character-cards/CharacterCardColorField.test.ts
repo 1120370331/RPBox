@@ -1,11 +1,15 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import i18n from '@/i18n'
 import CharacterCardColorField from './CharacterCardColorField.vue'
+
+i18n.global.locale.value = 'zh-CN'
 
 describe('CharacterCardColorField', () => {
   it('keeps the keyboard color input and exact HEX value synchronized', async () => {
     const wrapper = mount(CharacterCardColorField, {
       props: { modelValue: '80C9D5E7', label: '名字颜色' },
+      global: { plugins: [i18n] },
     })
 
     expect(wrapper.get<HTMLInputElement>('.character-dye__hex').element.value).toBe('#C9D5E780')

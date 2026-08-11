@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import CharacterCardEditor from './CharacterCardEditor.vue'
 import type { CharacterCard } from '@/api/characterCard'
 
@@ -170,6 +171,7 @@ const card: CharacterCard = {
 }
 
 beforeEach(() => {
+  i18n.global.locale.value = 'zh-CN'
   localStorage.setItem('user', JSON.stringify({ id: 3, username: '人物卡所有者' }))
 })
 
@@ -196,7 +198,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,
@@ -229,7 +231,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,
@@ -294,7 +296,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,
@@ -369,7 +371,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,
@@ -439,7 +441,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,
@@ -525,7 +527,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,
@@ -609,7 +611,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,
@@ -677,7 +679,7 @@ describe('CharacterCardEditor tabs', () => {
     const wrapper = mount(CharacterCardEditor, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: {
           TiptapEditor: editorStub,
           PostQuickJump: true,

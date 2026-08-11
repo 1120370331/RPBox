@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { dialog } from '@/composables/useDialog'
 import { useToast } from '@/composables/useToast'
@@ -107,6 +108,7 @@ interface VisibleReportReason {
 }
 
 const router = useRouter()
+const { t, locale } = useI18n()
 const userStore = useUserStore()
 const toast = useToast()
 const mounted = ref(false)
@@ -598,6 +600,7 @@ async function loadPendingCharacterCards() {
     total.value = res.total
   } catch (error) {
     console.error('加载待审核人物卡失败:', error)
+    toast.error(t('characterCards.moderation.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -1819,15 +1822,18 @@ function moderatorCharacterCardName(card: CharacterCardReviewItem) {
 }
 
 async function quickReviewCharacterCard(card: CharacterCardReviewItem, action: 'approve' | 'reject') {
-  const actionText = action === 'approve' ? '通过' : '拒绝'
+  const actionText = t(action === 'approve' ? 'characterCards.moderation.approve' : 'characterCards.moderation.reject')
   const comment = characterCardReviewComments.value[card.id]?.trim() || ''
   const confirmed = await dialog.confirm({
-    title: `${actionText}人物卡公开版本`,
+    title: t('characterCards.moderation.actionTitle', { action: actionText }),
     message: action === 'approve'
-      ? `确认公开“${moderatorCharacterCardName(card)}”的当前审核快照吗？`
-      : `确认拒绝“${moderatorCharacterCardName(card)}”的当前公开申请吗？${comment ? '版主说明会展示给作者。' : '建议先填写版主说明。'}`,
+      ? t('characterCards.moderation.approveMessage', { name: moderatorCharacterCardName(card) })
+      : t('characterCards.moderation.rejectMessage', {
+          name: moderatorCharacterCardName(card),
+          hint: t(comment ? 'characterCards.moderation.commentVisible' : 'characterCards.moderation.commentSuggested'),
+        }),
     type: action === 'approve' ? 'success' : 'warning',
-    confirmText: `${actionText}人物卡`,
+    confirmText: t('characterCards.moderation.confirmAction', { action: actionText }),
   })
   if (!confirmed) return
   try {
@@ -1836,9 +1842,9 @@ async function quickReviewCharacterCard(card: CharacterCardReviewItem, action: '
     delete nextComments[card.id]
     characterCardReviewComments.value = nextComments
     await Promise.all([loadPendingCharacterCards(), loadStats()])
-    toast.success(`人物卡审核已${actionText}`)
+    toast.success(t('characterCards.moderation.reviewed', { action: actionText }))
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '人物卡审核失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.moderation.reviewFailed'))
   }
 }
 
@@ -2370,7 +2376,7 @@ async function applyUserPointsDelta(user: SafeUser) {
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  return new Date(dateStr).toLocaleString(locale.value)
 }
 
 function formatBytes(bytes?: number) {
@@ -2609,7 +2615,7 @@ function formatBanTime(dateStr: string | null) {
           <div class="stat-icon"><i class="ri-id-card-line"></i></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats?.pending_character_cards || 0 }}</div>
-            <div class="stat-label">人物卡审核</div>
+            <div class="stat-label">{{ t('characterCards.moderation.stat') }}</div>
           </div>
         </div>
         <div class="stat-card pending">
@@ -2764,7 +2770,7 @@ function formatBanTime(dateStr: string | null) {
           @click="switchSubTab('characterCards')"
         >
           <i class="ri-id-card-line"></i>
-          人物卡
+          {{ t('characterCards.moderation.tab') }}
           <span v-if="(stats?.pending_character_cards || 0) > 0" class="review-badge">
             {{ stats?.pending_character_cards }}
           </span>
@@ -3009,11 +3015,11 @@ function formatBanTime(dateStr: string | null) {
       <div v-if="activeTab === 'review' && activeSubTab === 'characterCards'" class="content-list anim-item" style="--delay: 4" data-testid="character-card-review-queue">
         <div v-if="loading" class="loading">
           <i class="ri-loader-4-line loading-spinner"></i>
-          <span>加载中...</span>
+          <span>{{ t('characterCards.moderation.loading') }}</span>
         </div>
         <div v-else-if="pendingCharacterCards.length === 0" class="empty-state">
           <i class="ri-id-card-line"></i>
-          <p>暂无待审核人物卡</p>
+          <p>{{ t('characterCards.moderation.empty') }}</p>
         </div>
         <div v-else class="item-list character-review-list">
           <article v-for="characterCard in pendingCharacterCards" :key="characterCard.id" class="item-card character-review-card">
@@ -3021,7 +3027,7 @@ function formatBanTime(dateStr: string | null) {
               <CharacterCardPortrait
                 v-if="characterCard.portrait_image_url"
                 :card="characterCard"
-                :alt="`${moderatorCharacterCardName(characterCard)}的封面`"
+                :alt="t('characterCards.moderation.coverAlt', { name: moderatorCharacterCardName(characterCard) })"
                 :width="360"
                 :quality="76"
               />
@@ -3031,23 +3037,23 @@ function formatBanTime(dateStr: string | null) {
               <div class="item-header">
                 <div class="title-with-tags">
                   <span class="item-title" :style="getCharacterCardDisplayColor(characterCard) ? { color: getCharacterCardDisplayColor(characterCard) } : undefined">{{ moderatorCharacterCardName(characterCard) }}</span>
-                  <span class="permission-warning-tag">{{ [characterCard.race, characterCard.class].filter(Boolean).join(' · ') || '身份未填写' }}</span>
+                  <span class="permission-warning-tag">{{ [characterCard.race, characterCard.class].filter(Boolean).join(' · ') || t('characterCards.moderation.identityMissing') }}</span>
                 </div>
-                <span class="status-badge pending">公开审核</span>
+                <span class="status-badge pending">{{ t('characterCards.moderation.pending') }}</span>
               </div>
               <div class="item-meta">
-                <span><i class="ri-user-line"></i>{{ characterCard.author_name || characterCard.author_username || `用户 #${characterCard.user_id}` }}</span>
+                <span><i class="ri-user-line"></i>{{ characterCard.author_name || characterCard.author_username || t('characterCards.moderation.authorFallback', { id: characterCard.user_id }) }}</span>
                 <span><i class="ri-time-line"></i>{{ formatDate(characterCard.updated_at) }}</span>
               </div>
-              <p class="character-review-card__summary">{{ characterCard.summary || '作者尚未填写人物摘要。' }}</p>
+              <p class="character-review-card__summary">{{ characterCard.summary || t('characterCards.moderation.summaryMissing') }}</p>
               <label class="character-review-card__comment">
-                <span>版主说明（拒绝时建议填写）</span>
-                <textarea v-model="characterCardReviewComments[characterCard.id]" rows="2" maxlength="500" placeholder="向作者说明需要调整的内容"></textarea>
+                <span>{{ t('characterCards.moderation.commentLabel') }}</span>
+                <textarea v-model="characterCardReviewComments[characterCard.id]" rows="2" maxlength="500" :placeholder="t('characterCards.moderation.commentPlaceholder')"></textarea>
               </label>
               <div class="item-actions">
-                <button class="btn-approve" @click="quickReviewCharacterCard(characterCard, 'approve')"><i class="ri-checkbox-circle-line"></i>通过公开</button>
-                <button class="btn-reject" @click="quickReviewCharacterCard(characterCard, 'reject')"><i class="ri-close-circle-line"></i>拒绝</button>
-                <RouterLink class="btn-preview" :to="`/character-cards/${characterCard.id}`" target="_blank"><i class="ri-eye-line"></i>查看完整人物卡</RouterLink>
+                <button class="btn-approve" @click="quickReviewCharacterCard(characterCard, 'approve')"><i class="ri-checkbox-circle-line"></i>{{ t('characterCards.moderation.approvePublic') }}</button>
+                <button class="btn-reject" @click="quickReviewCharacterCard(characterCard, 'reject')"><i class="ri-close-circle-line"></i>{{ t('characterCards.moderation.reject') }}</button>
+                <RouterLink class="btn-preview" :to="`/character-cards/${characterCard.id}`" target="_blank"><i class="ri-eye-line"></i>{{ t('characterCards.moderation.viewFull') }}</RouterLink>
               </div>
             </div>
           </article>
@@ -5519,19 +5525,19 @@ function formatBanTime(dateStr: string | null) {
   grid-template-columns: 132px minmax(0, 1fr);
   gap: 18px;
   overflow: hidden;
-  border: 1px solid #DCC4AA;
+  border: 1px solid var(--color-border);
   background:
-    linear-gradient(90deg, rgba(184,115,51,.05) 1px, transparent 1px) 0 0 / 28px 28px,
-    var(--color-panel-bg, #fff);
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 5%, transparent) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--color-panel-bg);
 }
-.character-review-card__portrait { display: grid; min-height: 176px; place-items: center; overflow: hidden; border: 6px solid #352219; border-radius: 5px; background: #241710; color: #C99B70; }
+.character-review-card__portrait { display: grid; min-height: 176px; place-items: center; overflow: hidden; border: 6px solid var(--gradient-end); border-radius: 5px; background: var(--gradient-start); color: var(--gradient-text-muted); }
 .character-review-card__portrait :deep(img), .character-review-card__portrait :deep(.character-portrait-state) { width: 100%; height: 100%; object-fit: cover; }
 .character-review-card__portrait > i { font-size: 40px; }
 .character-review-card__body { min-width: 0; }
 .character-review-card__summary { margin: 0 0 12px; color: var(--color-text-secondary, #8D7B68); font-size: 13px; line-height: 1.6; }
 .character-review-card__comment { display: grid; gap: 5px; margin-bottom: 12px; color: var(--color-text-secondary, #8D7B68); font-size: 11px; font-weight: 700; }
-.character-review-card__comment textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 10px; border: 1px solid var(--color-border, #E5D4C1); border-radius: 7px; outline: none; background: rgba(255,255,255,.88); color: var(--color-text-main, #2C1810); font: inherit; font-size: 12px; line-height: 1.5; }
-.character-review-card__comment textarea:focus { border-color: #B87333; box-shadow: 0 0 0 3px rgba(184,115,51,.12); }
+.character-review-card__comment textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 9px 10px; border: 1px solid var(--input-border); border-radius: 7px; outline: none; background: var(--input-bg); color: var(--color-text-main); font: inherit; font-size: 12px; line-height: 1.5; }
+.character-review-card__comment textarea:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 12%, transparent); }
 .character-review-card .btn-preview { text-decoration: none; }
 
 .edit-review-card {

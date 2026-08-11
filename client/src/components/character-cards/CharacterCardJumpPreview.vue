@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   getCharacterCard,
   type CharacterCard,
@@ -10,6 +11,7 @@ import CharacterCardPortrait from './CharacterCardPortrait.vue'
 
 const CARD_SELECTOR = '[data-jump-type="character_card"]'
 const route = useRoute()
+const { t } = useI18n()
 const previewRef = ref<HTMLElement | null>(null)
 const visible = ref(false)
 const loading = ref(false)
@@ -29,15 +31,15 @@ let positionFrame = 0
 
 const name = computed(() => {
   const card = characterCard.value
-  if (!card) return loading.value ? '正在查阅人物档案…' : '人物卡暂不可用'
+  if (!card) return t(loading.value ? 'characterCards.jumpPreview.loading' : 'characterCards.jumpPreview.unavailable')
   return card.display_name?.trim()
     || [card.first_name, card.last_name].map((part) => part?.trim()).filter(Boolean).join(' ')
-    || '未命名人物'
+    || t('characterCards.jumpPreview.unnamed')
 })
-const title = computed(() => characterCard.value?.title || characterCard.value?.full_title || '人物档案')
+const title = computed(() => characterCard.value?.title || characterCard.value?.full_title || t('characterCards.jumpPreview.title'))
 const summary = computed(() => characterCard.value?.summary
   || [characterCard.value?.race, characterCard.value?.class].filter(Boolean).join(' · ')
-  || '角色摘要尚未填写。')
+  || t('characterCards.jumpPreview.summaryMissing'))
 const identity = computed(() => [characterCard.value?.race, characterCard.value?.class].filter(Boolean).join(' · '))
 const nameColor = computed(() => getCharacterCardDisplayColor(characterCard.value))
 
@@ -120,7 +122,7 @@ function redactUnavailableCard(card: HTMLElement) {
   card.setAttribute('data-jump-unavailable', 'true')
   card.setAttribute('aria-disabled', 'true')
   card.setAttribute('tabindex', '-1')
-  card.setAttribute('data-jump-title', '人物卡暂不可用')
+  card.setAttribute('data-jump-title', t('characterCards.jumpPreview.unavailable'))
   for (const attr of ['data-jump-image', 'data-jump-summary', 'data-jump-author', 'data-jump-status', 'data-jump-visibility']) {
     card.removeAttribute(attr)
   }
@@ -251,7 +253,7 @@ onBeforeUnmount(() => {
             v-if="characterCard?.portrait_image_url && !unavailable"
             class="character-preview__image"
             :card="characterCard"
-            :alt="`${name}的角色肖像`"
+            :alt="t('characterCards.common.portraitAlt', { name })"
             :width="420"
             :quality="86"
           />
@@ -261,19 +263,19 @@ onBeforeUnmount(() => {
 
         <div v-if="unavailable" class="character-preview__state">
           <span>Character file</span>
-          <h3>人物卡暂不可用</h3>
-          <p>这份档案可能已删除、设为私密或尚未发布。</p>
+          <h3>{{ t('characterCards.jumpPreview.unavailable') }}</h3>
+          <p>{{ t('characterCards.jumpPreview.unavailableBody') }}</p>
         </div>
 
         <div v-else class="character-preview__body" :class="{ loading }">
           <div class="character-preview__meta">
-            <span><i class="ri-id-card-line" aria-hidden="true"></i>人物卡</span>
-            <small>{{ loading ? '查阅中' : '公开档案' }}</small>
+            <span><i class="ri-id-card-line" aria-hidden="true"></i>{{ t('characterCards.jumpPreview.card') }}</span>
+            <small>{{ t(loading ? 'characterCards.jumpPreview.reading' : 'characterCards.jumpPreview.public') }}</small>
           </div>
           <h3 :style="nameColor ? { color: nameColor } : undefined">{{ name }}</h3>
-          <strong>{{ loading ? '正在读取最新资料…' : title }}</strong>
+          <strong>{{ loading ? t('characterCards.jumpPreview.readingLatest') : title }}</strong>
           <span v-if="!loading && identity" class="character-preview__identity">{{ identity }}</span>
-          <p>{{ loading ? '请稍候，正在确认这份档案仍可访问。' : summary }}</p>
+          <p>{{ loading ? t('characterCards.jumpPreview.checking') : summary }}</p>
         </div>
       </aside>
     </Transition>
@@ -289,11 +291,11 @@ onBeforeUnmount(() => {
   min-height: 184px;
   grid-template-columns: 116px minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid #C89669;
+  border: 1px solid var(--color-border-hover);
   border-radius: 8px;
-  background: #FDFBF9;
-  color: #2C1810;
-  box-shadow: 0 18px 42px rgba(44, 24, 16, 0.27);
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
+  box-shadow: var(--shadow-lg);
   pointer-events: auto;
 }
 
@@ -303,11 +305,11 @@ onBeforeUnmount(() => {
   min-width: 0;
   place-items: center;
   overflow: hidden;
-  border-right: 1px solid #CFA57E;
+  border-right: 1px solid var(--color-border-hover);
   background:
-    radial-gradient(circle, rgba(184, 115, 51, 0.2), transparent 48%),
-    #302019;
-  color: #C99462;
+    radial-gradient(circle, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent 48%),
+    var(--gradient-end);
+  color: var(--gradient-text);
   font-size: 34px;
 }
 
@@ -327,7 +329,7 @@ onBeforeUnmount(() => {
   bottom: 0;
   left: 0;
   width: 5px;
-  background: linear-gradient(#804030, #D09660 50%, #804030);
+  background: linear-gradient(var(--gradient-start), var(--color-accent) 50%, var(--gradient-start));
 }
 
 .character-preview__body,
@@ -346,7 +348,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #9A5A2D;
+  color: var(--color-accent);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -354,12 +356,12 @@ onBeforeUnmount(() => {
 }
 
 .character-preview__meta span { display: inline-flex; align-items: center; gap: 4px; }
-.character-preview__meta small { color: #9B8879; font-size: 8px; letter-spacing: .08em; }
+.character-preview__meta small { color: var(--color-text-secondary); font-size: 8px; letter-spacing: .08em; }
 
 .character-preview h3 {
   overflow: hidden;
   margin: 7px 0 2px;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-family: Georgia, 'Noto Serif SC', serif;
   font-size: 21px;
   font-weight: 600;
@@ -368,11 +370,11 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.character-preview__body > strong { overflow: hidden; color: #804030; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.character-preview__identity { margin-top: 3px; color: #8C7B70; font-size: 9px; }
-.character-preview p { display: -webkit-box; overflow: hidden; margin: 9px 0 0; color: #8C7B70; font-size: 10px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.character-preview__body > strong { overflow: hidden; color: var(--color-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.character-preview__identity { margin-top: 3px; color: var(--color-text-secondary); font-size: 9px; }
+.character-preview p { display: -webkit-box; overflow: hidden; margin: 9px 0 0; color: var(--color-text-secondary); font-size: 10px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 
-.character-preview__state > span { color: #B87333; font: 800 9px/1.2 ui-monospace, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.character-preview__state > span { color: var(--color-accent); font: 800 9px/1.2 ui-monospace, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
 .character-preview__state h3 { font-size: 18px; }
 
 .character-preview-enter-active,

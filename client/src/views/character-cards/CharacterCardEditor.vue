@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   addCharacterCardPortrait,
   deleteCharacterCardPortrait,
@@ -58,6 +59,7 @@ type RichTextTab = Exclude<CharacterCardEditorTab, 'basic'>
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const toast = useToastStore()
 const dialog = useDialog()
 const userStore = useUserStore()
@@ -107,12 +109,12 @@ const backgroundEditor = ref<EditorHandle | null>(null)
 const impressionEditor = ref<EditorHandle | null>(null)
 const otherEditor = ref<EditorHandle | null>(null)
 
-const tabs: Array<{ id: CharacterCardEditorTab; label: string; icon: string }> = [
-  { id: 'basic', label: '基础信息', icon: 'ri-id-card-line' },
-  { id: 'background', label: '背景故事', icon: 'ri-book-open-line' },
-  { id: 'impression', label: '第一印象', icon: 'ri-eye-2-line' },
-  { id: 'other', label: '其他', icon: 'ri-archive-stack-line' },
-]
+const tabs = computed<Array<{ id: CharacterCardEditorTab; label: string; icon: string }>>(() => [
+  { id: 'basic', label: t('characterCards.tabs.basic'), icon: 'ri-id-card-line' },
+  { id: 'background', label: t('characterCards.tabs.background'), icon: 'ri-book-open-line' },
+  { id: 'impression', label: t('characterCards.tabs.impression'), icon: 'ri-eye-2-line' },
+  { id: 'other', label: t('characterCards.tabs.other'), icon: 'ri-archive-stack-line' },
+])
 
 const displayName = computed(() => getCharacterCardDisplayName(form))
 const displayNameColor = computed(() => getCharacterCardDisplayColor(form))
@@ -136,8 +138,8 @@ const imageUploadInProgress = computed(() => (
 const isTauriRuntime = computed(() => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window)
 const wowPath = computed(() => localStorage.getItem('wow_path')?.trim() || '')
 const writeBackDisabledReason = computed(() => {
-  if (!isTauriRuntime.value) return '仅 RPBox 桌面客户端可以写入本地 TRP3 文件。'
-  if (!wowPath.value) return '请先在设置中选择有效的魔兽世界 WTF 路径。'
+  if (!isTauriRuntime.value) return t('characterCards.editor.desktopOnly')
+  if (!wowPath.value) return t('characterCards.editor.wowPathRequired')
   return ''
 })
 const canSyncFromBackup = computed(() => Boolean(card.value?.source_backup_id && card.value?.source_profile_id))
@@ -159,7 +161,7 @@ onBeforeUnmount(() => {
 
 async function loadCard() {
   if (!Number.isFinite(cardId.value) || cardId.value <= 0) {
-    loadError.value = '人物卡地址无效'
+    loadError.value = t('characterCards.editor.invalidAddress')
     loading.value = false
     return
   }
@@ -169,12 +171,12 @@ async function loadCard() {
     const result = await getCharacterCard(cardId.value)
     if (!userStore.user?.id || userStore.user.id !== result.user_id) {
       card.value = null
-      loadError.value = '这张人物卡不存在，或你没有编辑权限。'
+      loadError.value = t('characterCards.editor.noPermission')
       return
     }
     applyCard(result)
   } catch (error: unknown) {
-    loadError.value = error instanceof Error ? error.message : '人物卡暂不可用'
+    loadError.value = error instanceof Error ? error.message : t('characterCards.editor.unavailable')
   } finally {
     loading.value = false
   }
@@ -226,31 +228,32 @@ function selectTab(tab: CharacterCardEditorTab) {
 }
 
 function handleTabKeydown(event: KeyboardEvent, currentTab: CharacterCardEditorTab) {
-  const currentIndex = tabs.findIndex((tab) => tab.id === currentTab)
+  const tabItems = tabs.value
+  const currentIndex = tabItems.findIndex((tab) => tab.id === currentTab)
   if (currentIndex < 0) return
 
   let nextIndex: number | null = null
   switch (event.key) {
     case 'ArrowRight':
     case 'ArrowDown':
-      nextIndex = (currentIndex + 1) % tabs.length
+      nextIndex = (currentIndex + 1) % tabItems.length
       break
     case 'ArrowLeft':
     case 'ArrowUp':
-      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+      nextIndex = (currentIndex - 1 + tabItems.length) % tabItems.length
       break
     case 'Home':
       nextIndex = 0
       break
     case 'End':
-      nextIndex = tabs.length - 1
+      nextIndex = tabItems.length - 1
       break
     default:
       return
   }
 
   event.preventDefault()
-  const nextTab = tabs[nextIndex]
+  const nextTab = tabItems[nextIndex]
   activeTab.value = nextTab.id
   void nextTick(() => {
     document.getElementById(`character-tab-${nextTab.id}`)?.focus()
@@ -291,11 +294,11 @@ async function handlePortraitFile(event: Event) {
 
 function validatePortraitFile(file: File) {
   if (!file.type.startsWith('image/')) {
-    toast.warning(`${file.name} 不是支持的图片格式`)
+    toast.warning(t('characterCards.editor.invalidImage', { name: file.name }))
     return false
   }
   if (file.size > 20 * 1024 * 1024) {
-    toast.warning(`${file.name} 超过 20MB`)
+    toast.warning(t('characterCards.editor.imageTooLarge', { name: file.name }))
     return false
   }
   return true
@@ -320,9 +323,9 @@ async function uploadPortraitFiles(files: File[]) {
         if (uploadedPortraitPreview.value === nextPreview) uploadedPortraitPreview.value = ''
       }
     }
-    if (uploaded) toast.success(`已收入 ${uploaded} 张角色大图，可在胶片栏调整封面与顺序`)
+    if (uploaded) toast.success(t('characterCards.editor.portraitsUploaded', { count: uploaded }))
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '角色大图上传失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.portraitUploadFailed'))
   } finally {
     portraitUploading.value = false
   }
@@ -337,7 +340,7 @@ async function handlePortraitCropped(file: File) {
 }
 
 function handleCropperError(error: Error) {
-  toast.error(error.message || '图片处理失败')
+  toast.error(error.message || t('characterCards.editor.imageProcessFailed'))
 }
 
 function patchOriginalPortraitSnapshot(value: string) {
@@ -364,9 +367,9 @@ async function setPortraitCover(portrait: CharacterCardPortraitImage) {
   portraitUploading.value = true
   try {
     applyPortraitMutationCard(await setCharacterCardPortraitCover(card.value.id, portrait.id))
-    toast.success('角色大图封面已更新')
+    toast.success(t('characterCards.editor.coverUpdated'))
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '封面切换失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.coverUpdateFailed'))
   } finally {
     portraitUploading.value = false
   }
@@ -385,7 +388,7 @@ async function movePortrait(index: number, delta: -1 | 1) {
     applyPortraitMutationCard(await reorderCharacterCardPortraits(card.value.id, next.map((portrait) => portrait.id)))
   } catch (error: unknown) {
     portraits.value = previous
-    toast.error(error instanceof Error ? error.message : '角色大图排序失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.reorderFailed'))
   } finally {
     portraitUploading.value = false
   }
@@ -394,12 +397,12 @@ async function movePortrait(index: number, delta: -1 | 1) {
 async function removePortrait(portrait: CharacterCardPortraitImage) {
   if (!card.value || portraitUploading.value) return
   const confirmed = await dialog.confirm({
-    title: '移除角色大图',
+    title: t('characterCards.editor.removePortraitTitle'),
     message: portrait.is_cover
-      ? '这张图片目前是封面。移除后会自动选择下一张作为封面；此操作无法撤销。'
-      : '确定从角色画廊移除这张图片吗？此操作无法撤销。',
+      ? t('characterCards.editor.removeCoverMessage')
+      : t('characterCards.editor.removePortraitMessage'),
     type: 'error',
-    confirmText: '移除图片',
+    confirmText: t('characterCards.editor.removePortraitConfirm'),
   })
   if (!confirmed) return
 
@@ -415,9 +418,9 @@ async function removePortrait(portrait: CharacterCardPortraitImage) {
   try {
     applyPortraitMutationCard(await deleteCharacterCardPortrait(card.value.id, portrait.id))
     portraitPreviewOpen.value = false
-    toast.success('角色大图已移除')
+    toast.success(t('characterCards.editor.portraitRemoved'))
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '角色大图移除失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.portraitRemoveFailed'))
   } finally {
     portraitUploading.value = false
   }
@@ -476,12 +479,12 @@ async function handleImpressionImageFile(event: Event) {
   impressionUploadTarget.value = null
   if (!file || !target || !form.impressions[target.index]) return
   if (!file.type.startsWith('image/')) {
-    toast.warning('请选择 PNG、JPG、WebP 或 GIF 图片')
+    toast.warning(t('characterCards.editor.impressionImageType'))
     return
   }
 
   if (file.size > 20 * 1024 * 1024) {
-    toast.warning(target.kind === 'icon' ? '自定义图标不能超过 20MB' : '印象配图不能超过 20MB')
+    toast.warning(t(target.kind === 'icon' ? 'characterCards.editor.impressionIconTooLarge' : 'characterCards.editor.impressionImageTooLarge'))
     return
   }
 
@@ -503,12 +506,12 @@ async function handleImpressionImageFile(event: Event) {
       impression.image_url = imageRef
     }
     revokeImpressionPreviewUrl(previousPreview)
-    toast.success(target.kind === 'icon' ? '自定义图标已上传，保存人物卡后生效' : '印象配图已上传，保存人物卡后生效')
+    toast.success(t(target.kind === 'icon' ? 'characterCards.editor.impressionIconUploaded' : 'characterCards.editor.impressionImageUploaded'))
   } catch (error: unknown) {
     revokeImpressionPreviewUrl(nextPreview)
     if (previousPreview) impressionImagePreviews[key] = previousPreview
     else delete impressionImagePreviews[key]
-    toast.error(error instanceof Error ? error.message : '印象图片上传失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.impressionUploadFailed'))
   } finally {
     impressionUploading[key] = false
   }
@@ -562,14 +565,14 @@ async function saveCard(returnToDetail = false): Promise<CharacterCard | null> {
     applyCard(result)
     toast.success(
       result.status === 'published' && result.visibility === 'public' && result.review_status === 'pending'
-        ? '人物卡已保存，公开版本正在等待版主审核'
-        : '人物卡全部分栏已保存',
+        ? t('characterCards.editor.savedPending')
+        : t('characterCards.editor.saved'),
       result.review_status === 'pending' ? 6000 : 3000,
     )
     if (returnToDetail) await router.push(`/character-cards/${result.id}`)
     return result
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '人物卡保存失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.saveFailed'))
     return null
   } finally {
     saving.value = false
@@ -579,10 +582,10 @@ async function saveCard(returnToDetail = false): Promise<CharacterCard | null> {
 async function syncFromBackup() {
   if (!card.value || !canSyncFromBackup.value || syncing.value) return
   const confirmed = await dialog.confirm({
-    title: '从云备份刷新基础信息',
-    message: '这会用记录的 TRP3 备份来源覆盖名姓、称号、种族、职业等基础字段。角色大图、摘要、五条第一印象和富文本分栏不会被覆盖。',
+    title: t('characterCards.editor.refreshTitle'),
+    message: t('characterCards.editor.refreshMessage'),
     type: 'warning',
-    confirmText: '刷新基础信息',
+    confirmText: t('characterCards.editor.refreshConfirm'),
   })
   if (!confirmed) return
 
@@ -590,9 +593,9 @@ async function syncFromBackup() {
   try {
     const result = await syncCharacterCardFromTRP3(card.value.id)
     applySyncedCard(result)
-    toast.success('已从云备份刷新基础信息')
+    toast.success(t('characterCards.editor.refreshed'))
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '备份来源同步失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.refreshFailed'))
   } finally {
     syncing.value = false
   }
@@ -621,10 +624,10 @@ async function openWriteBackSetup() {
       (backup) => backup.account_id === writeBackAccountId.value,
     )
     writeBackProfileId.value = card.value.source_profile_id || createDefaultProfileId()
-    writeBackSnapshotName.value = `RPBox 写回 · ${displayName.value}`
+    writeBackSnapshotName.value = t('characterCards.editor.snapshotDefault', { name: displayName.value })
     writeBackSetupOpen.value = true
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '无法读取本地 TRP3 账号')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.accountsFailed'))
   } finally {
     writingBack.value = false
   }
@@ -640,7 +643,7 @@ async function previewTRP3Lua() {
     luaPreview.value = result.lua
   } catch (error: unknown) {
     luaPreviewOpen.value = false
-    toast.error(error instanceof Error ? error.message : 'Lua 预览生成失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.luaFailed'))
   } finally {
     luaPreviewLoading.value = false
   }
@@ -649,14 +652,20 @@ async function previewTRP3Lua() {
 async function writeBackToLocalTRP3() {
   if (!card.value || writeBackDisabledReason.value || writingBack.value) return
   if (!writeBackAccountId.value || !writeBackProfileId.value.trim()) {
-    toast.warning('请选择本地账号并填写 profile ID')
+    toast.warning(t('characterCards.editor.writeTargetRequired'))
     return
   }
   const confirmed = await dialog.confirm({
-    title: '保存并写回本地 TRP3',
-    message: `即将依次保存 RPBox 人物卡、导出 TRP3 基础字段，再预检账号「${writeBackAccountId.value}」并写入 profile「${writeBackProfileId.value.trim()}」。已有 totalRP3.lua 会先强制生成独立快照。${writeBackBackup.value && syncCloudAfterWriteBack.value ? '本地成功后，才会继续同步云端账号备份。' : '本次不会修改云端账号备份。'}请确认魔兽世界已经关闭。`,
+    title: t('characterCards.editor.writeConfirmTitle'),
+    message: t('characterCards.editor.writeConfirmMessage', {
+      account: writeBackAccountId.value,
+      profile: writeBackProfileId.value.trim(),
+      cloudAction: t(writeBackBackup.value && syncCloudAfterWriteBack.value
+        ? 'characterCards.editor.cloudWillSync'
+        : 'characterCards.editor.cloudWillNotSync'),
+    }),
     type: 'error',
-    confirmText: '确认保存并写回',
+    confirmText: t('characterCards.editor.writeConfirm'),
   })
   if (!confirmed) return
 
@@ -692,17 +701,17 @@ async function writeBackToLocalTRP3() {
             source_profile_id: targetProfileId,
           }
         }
-        toast.success('本地写回完成，云端账号备份也已同步；本地写入前快照可随时回退', 7000)
+        toast.success(t('characterCards.editor.writeCloudSuccess'), 7000)
       } catch (error: unknown) {
-        const reason = error instanceof Error ? error.message : '云端同步失败'
-        toast.warning(`本地已成功、云端未更新：${reason}`, 8000)
+        const reason = error instanceof Error ? error.message : t('characterCards.editor.cloudSyncFailed')
+        toast.warning(t('characterCards.editor.localSuccessCloudFailed', { reason }), 8000)
       }
       return
     }
 
-    toast.success('本地写回完成；本次未修改云端账号备份，本地写入前快照可随时回退', 7000)
+    toast.success(t('characterCards.editor.localSuccess'), 7000)
   } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : '本地 TRP3 写入失败')
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.localFailed'))
   } finally {
     writingBack.value = false
   }
@@ -711,10 +720,10 @@ async function writeBackToLocalTRP3() {
 async function goBack() {
   if (isDirty.value) {
     const confirmed = await dialog.confirm({
-      title: '离开人物卡编辑器',
-      message: '尚有未保存的更改。离开后，这些更改不会保留。',
+      title: t('characterCards.editor.leaveTitle'),
+      message: t('characterCards.editor.leaveMessage'),
       type: 'warning',
-      confirmText: '放弃更改',
+      confirmText: t('characterCards.editor.discard'),
     })
     if (!confirmed) return
   }
@@ -730,77 +739,77 @@ async function goBack() {
   <main class="editor-page">
     <div v-if="loading" class="editor-state" role="status">
       <i class="ri-loader-4-line spin" aria-hidden="true"></i>
-      <span>正在展开人物档案…</span>
+      <span>{{ t('characterCards.editor.loading') }}</span>
     </div>
 
     <div v-else-if="loadError" class="editor-state editor-state--error" role="alert">
       <i class="ri-file-warning-line" aria-hidden="true"></i>
-      <h1>无法编辑这张人物卡</h1>
+      <h1>{{ t('characterCards.editor.unavailableTitle') }}</h1>
       <p>{{ loadError }}</p>
-      <button type="button" @click="goBack">返回</button>
+      <button type="button" @click="goBack">{{ t('characterCards.common.back') }}</button>
     </div>
 
     <template v-else-if="card">
       <header class="editor-header">
         <button type="button" class="editor-header__back" @click="goBack">
           <i class="ri-arrow-left-line" aria-hidden="true"></i>
-          返回人物卡
+          {{ t('characterCards.editor.backCard') }}
         </button>
         <div class="editor-header__identity">
-          <span>Character file · {{ card.id }}</span>
+          <span>{{ t('characterCards.editor.fileKicker', { id: card.id }) }}</span>
           <h1 :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</h1>
         </div>
         <div class="editor-header__actions">
-          <span v-if="isDirty" class="unsaved-mark"><i class="ri-circle-fill" aria-hidden="true"></i>未保存</span>
+          <span v-if="isDirty" class="unsaved-mark"><i class="ri-circle-fill" aria-hidden="true"></i>{{ t('characterCards.editor.unsaved') }}</span>
           <button type="button" class="button button--quiet" :disabled="saving || imageUploadInProgress" @click="saveCard(false)">
-            {{ saving ? '保存中…' : '保存' }}
+            {{ saving ? t('characterCards.common.saving') : t('characterCards.common.save') }}
           </button>
           <button type="button" class="button button--primary" :disabled="saving || imageUploadInProgress" @click="saveCard(true)">
-            保存并查看
+            {{ t('characterCards.editor.saveAndView') }}
           </button>
         </div>
       </header>
 
       <div class="editor-layout">
-        <aside class="portrait-editor" aria-label="角色肖像与身份预览">
+        <aside class="portrait-editor" :aria-label="t('characterCards.editor.portraitEditorAria')">
           <div class="portrait-editor__rail" aria-hidden="true"></div>
           <div class="portrait-editor__frame">
             <img
               v-if="uploadedPortraitPreview"
               class="portrait-editor__image"
               :src="uploadedPortraitPreview"
-              :alt="`${displayName}的角色肖像预览`"
+              :alt="t('characterCards.common.portraitPreviewAlt', { name: displayName })"
             />
             <CharacterCardGalleryImage
               v-else-if="selectedPortrait"
               class="portrait-editor__image"
               :card="card"
               :portrait="selectedPortrait"
-              :alt="`${displayName}的角色肖像预览`"
+              :alt="t('characterCards.common.portraitPreviewAlt', { name: displayName })"
               :width="900"
               :quality="90"
             />
             <div v-else class="portrait-editor__empty">
               <i class="ri-user-star-line" aria-hidden="true"></i>
-              <strong>角色大图</strong>
-              <span>建议使用 3:4 竖幅构图</span>
+              <strong>{{ t('characterCards.editor.portraitTitle') }}</strong>
+              <span>{{ t('characterCards.editor.portraitHint') }}</span>
             </div>
             <div class="portrait-editor__tools">
               <button type="button" :disabled="portraitUploading" @click="triggerPortraitUpload">
                 <i :class="portraitUploading ? 'ri-loader-4-line spin' : 'ri-camera-line'" aria-hidden="true"></i>
-                {{ hasPortrait ? '添加' : '上传' }}
+                {{ hasPortrait ? t('characterCards.editor.add') : t('characterCards.editor.upload') }}
               </button>
               <button v-if="selectedPortrait" type="button" @click="openPortraitPreview(selectedPortrait)">
-                <i class="ri-focus-mode" aria-hidden="true"></i>预览
+                <i class="ri-focus-mode" aria-hidden="true"></i>{{ t('characterCards.editor.preview') }}
               </button>
               <button v-if="selectedPortrait" type="button" class="danger" @click="removePortrait(selectedPortrait)">
-                <i class="ri-delete-bin-line" aria-hidden="true"></i>移除
+                <i class="ri-delete-bin-line" aria-hidden="true"></i>{{ t('characterCards.common.remove') }}
               </button>
             </div>
           </div>
           <input ref="portraitInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden @change="handlePortraitFile" />
 
-          <div v-if="portraits.length" class="portrait-film" aria-label="角色大图胶片栏">
+          <div v-if="portraits.length" class="portrait-film" :aria-label="t('characterCards.editor.portraitFilmAria')">
             <article
               v-for="(portrait, index) in portraits"
               :key="portrait.id"
@@ -810,54 +819,54 @@ async function goBack() {
               <button
                 type="button"
                 class="portrait-film__thumb"
-                :aria-label="`查看第 ${index + 1} 张角色大图${portrait.is_cover ? '，当前封面' : ''}`"
+                :aria-label="t('characterCards.editor.portraitItemAria', { index: index + 1, cover: portrait.is_cover ? t('characterCards.editor.currentCoverSuffix') : '' })"
                 :aria-pressed="selectedPortrait?.id === portrait.id"
                 @click="selectedPortraitId = portrait.id"
               >
                 <CharacterCardGalleryImage :card="card" :portrait="portrait" alt="" :width="220" :quality="72" />
-                <span v-if="portrait.is_cover">封面</span>
+                <span v-if="portrait.is_cover">{{ t('characterCards.editor.cover') }}</span>
               </button>
               <div class="portrait-film__actions">
-                <button type="button" :disabled="index === 0 || portraitUploading" aria-label="向前移动" @click="movePortrait(index, -1)"><i class="ri-arrow-left-line"></i></button>
-                <button type="button" :disabled="index === portraits.length - 1 || portraitUploading" aria-label="向后移动" @click="movePortrait(index, 1)"><i class="ri-arrow-right-line"></i></button>
-                <button type="button" :disabled="portrait.is_cover || portrait.id <= 0 || portraitUploading" aria-label="设为封面" @click="setPortraitCover(portrait)"><i class="ri-bookmark-line"></i></button>
-                <button type="button" :disabled="portraitUploading" aria-label="删除图片" @click="removePortrait(portrait)"><i class="ri-delete-bin-line"></i></button>
+                <button type="button" :disabled="index === 0 || portraitUploading" :aria-label="t('characterCards.editor.movePrevious')" @click="movePortrait(index, -1)"><i class="ri-arrow-left-line"></i></button>
+                <button type="button" :disabled="index === portraits.length - 1 || portraitUploading" :aria-label="t('characterCards.editor.moveNext')" @click="movePortrait(index, 1)"><i class="ri-arrow-right-line"></i></button>
+                <button type="button" :disabled="portrait.is_cover || portrait.id <= 0 || portraitUploading" :aria-label="t('characterCards.editor.setCover')" @click="setPortraitCover(portrait)"><i class="ri-bookmark-line"></i></button>
+                <button type="button" :disabled="portraitUploading" :aria-label="t('characterCards.editor.deleteImage')" @click="removePortrait(portrait)"><i class="ri-delete-bin-line"></i></button>
               </div>
             </article>
           </div>
-          <p class="portrait-film__hint">可一次选择多张图片；用胶片栏调整顺序、查看原图或指定封面。</p>
+          <p class="portrait-film__hint">{{ t('characterCards.editor.filmHint') }}</p>
 
           <div class="portrait-editor__plaque">
             <strong :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</strong>
-            <span>{{ form.title || form.full_title || '称号待补充' }}</span>
-            <small>{{ [form.race, form.class].filter(Boolean).join(' · ') || '身份待补充' }}</small>
+            <span>{{ form.title || form.full_title || t('characterCards.editor.titlePending') }}</span>
+            <small>{{ [form.race, form.class].filter(Boolean).join(' · ') || t('characterCards.editor.identityPending') }}</small>
           </div>
 
           <div class="source-info">
-            <span><i class="ri-link-m" aria-hidden="true"></i>来源</span>
-            <strong v-if="card.source_profile_id">{{ card.source_account_id || '云备份' }} · {{ card.source_profile_id }}</strong>
-            <strong v-else>RPBox 独立人物卡</strong>
+            <span><i class="ri-link-m" aria-hidden="true"></i>{{ t('characterCards.editor.source') }}</span>
+            <strong v-if="card.source_profile_id">{{ card.source_account_id || t('characterCards.common.sourceCloud') }} · {{ card.source_profile_id }}</strong>
+            <strong v-else>{{ t('characterCards.editor.standalone') }}</strong>
             <button v-if="canSyncFromBackup" type="button" :disabled="syncing" @click="syncFromBackup">
               <i :class="syncing ? 'ri-loader-4-line spin' : 'ri-refresh-line'" aria-hidden="true"></i>
-              {{ syncing ? '正在刷新基础信息…' : '从备份刷新基础信息' }}
+              {{ syncing ? t('characterCards.editor.refreshing') : t('characterCards.editor.refreshAction') }}
             </button>
           </div>
 
           <div class="local-writeback" :class="{ disabled: Boolean(writeBackDisabledReason) }">
-            <span><i class="ri-hard-drive-3-line" aria-hidden="true"></i>桌面端本地互通</span>
-            <p>{{ writeBackDisabledReason || '写入前自动建立独立版本；新人物卡也可选择账号并生成 profile ID。' }}</p>
+            <span><i class="ri-hard-drive-3-line" aria-hidden="true"></i>{{ t('characterCards.editor.desktopInterop') }}</span>
+            <p>{{ writeBackDisabledReason || t('characterCards.editor.writeSafetyHint') }}</p>
             <div class="local-writeback__actions">
-              <button type="button" :disabled="luaPreviewLoading" @click="previewTRP3Lua">预览 Lua</button>
+              <button type="button" :disabled="luaPreviewLoading" @click="previewTRP3Lua">{{ t('characterCards.editor.previewLua') }}</button>
               <button type="button" :disabled="Boolean(writeBackDisabledReason) || writingBack" @click="openWriteBackSetup">
-                {{ writingBack ? '正在读取账号…' : '写回本地 TRP3' }}
+                {{ writingBack ? t('characterCards.editor.readingAccount') : t('characterCards.editor.writeLocal') }}
               </button>
-              <button type="button" :disabled="Boolean(writeBackDisabledReason)" @click="writeBackHistoryOpen = true">本地版本</button>
+              <button type="button" :disabled="Boolean(writeBackDisabledReason)" @click="writeBackHistoryOpen = true">{{ t('characterCards.editor.localVersions') }}</button>
             </div>
           </div>
         </aside>
 
         <section class="editor-ledger">
-          <nav class="editor-tabs" role="tablist" aria-label="人物卡编辑分栏">
+          <nav class="editor-tabs" role="tablist" :aria-label="t('characterCards.tabs.editorAria')">
             <button
               v-for="tab in tabs"
               :id="`character-tab-${tab.id}`"
@@ -884,93 +893,93 @@ async function goBack() {
             aria-labelledby="character-tab-basic"
           >
             <header class="panel-heading">
-              <div><span>Identity registry</span><h2>基础身份与展示方式</h2></div>
-              <p>此处的共用字段可以由你主动从 TRP3 导入或写回；摘要和展示状态只属于 RPBox。</p>
+              <div><span>{{ t('characterCards.editor.basicKicker') }}</span><h2>{{ t('characterCards.editor.basicTitle') }}</h2></div>
+              <p>{{ t('characterCards.editor.basicBody') }}</p>
             </header>
 
             <div class="form-section">
-              <h3>姓名与称号</h3>
+              <h3>{{ t('characterCards.editor.nameTitle') }}</h3>
               <div class="form-grid form-grid--three">
-                <label><span>名</span><input v-model="form.first_name" maxlength="128" autocomplete="off" /></label>
-                <label><span>姓</span><input v-model="form.last_name" maxlength="128" autocomplete="off" /></label>
-                <label><span>展示名</span><input v-model="form.display_name" maxlength="256" placeholder="留空时自动组合名与姓" /></label>
-                <label><span>称号</span><input v-model="form.title" maxlength="128" /></label>
-                <label class="form-span-two"><span>完整头衔</span><input v-model="form.full_title" maxlength="256" /></label>
+                <label><span>{{ t('characterCards.editor.fields.firstName') }}</span><input v-model="form.first_name" maxlength="128" autocomplete="off" /></label>
+                <label><span>{{ t('characterCards.editor.fields.lastName') }}</span><input v-model="form.last_name" maxlength="128" autocomplete="off" /></label>
+                <label><span>{{ t('characterCards.editor.fields.displayName') }}</span><input v-model="form.display_name" maxlength="256" :placeholder="t('characterCards.editor.fields.displayNamePlaceholder')" /></label>
+                <label><span>{{ t('characterCards.editor.fields.title') }}</span><input v-model="form.title" maxlength="128" /></label>
+                <label class="form-span-two"><span>{{ t('characterCards.editor.fields.fullTitle') }}</span><input v-model="form.full_title" maxlength="256" /></label>
               </div>
             </div>
 
             <div class="form-section">
-              <h3>身份特征</h3>
+              <h3>{{ t('characterCards.editor.identityTitle') }}</h3>
               <div class="form-grid form-grid--three">
-                <label><span>种族</span><input v-model="form.race" maxlength="64" /></label>
-                <label><span>职业</span><input v-model="form.class" maxlength="64" /></label>
-                <label><span>年龄</span><input v-model="form.age" maxlength="64" /></label>
-                <label><span>身高</span><input v-model="form.height" maxlength="64" /></label>
-                <label><span>体重</span><input v-model="form.weight" maxlength="64" /></label>
-                <label><span>关系状态</span><input v-model="form.relationship_status" maxlength="64" placeholder="保留 TRP3 原值" /></label>
-                <label><span>出生地</span><input v-model="form.birthplace" maxlength="256" /></label>
-                <label><span>居所</span><input v-model="form.residence" maxlength="256" /></label>
-                <label><span>TRP3 图标</span><input v-model="form.icon" maxlength="128" /></label>
+                <label><span>{{ t('characterCards.editor.fields.race') }}</span><input v-model="form.race" maxlength="64" /></label>
+                <label><span>{{ t('characterCards.editor.fields.class') }}</span><input v-model="form.class" maxlength="64" /></label>
+                <label><span>{{ t('characterCards.editor.fields.age') }}</span><input v-model="form.age" maxlength="64" /></label>
+                <label><span>{{ t('characterCards.editor.fields.height') }}</span><input v-model="form.height" maxlength="64" /></label>
+                <label><span>{{ t('characterCards.editor.fields.weight') }}</span><input v-model="form.weight" maxlength="64" /></label>
+                <label><span>{{ t('characterCards.editor.fields.relationship') }}</span><input v-model="form.relationship_status" maxlength="64" :placeholder="t('characterCards.editor.fields.relationshipPlaceholder')" /></label>
+                <label><span>{{ t('characterCards.editor.fields.birthplace') }}</span><input v-model="form.birthplace" maxlength="256" /></label>
+                <label><span>{{ t('characterCards.editor.fields.residence') }}</span><input v-model="form.residence" maxlength="256" /></label>
+                <label><span>{{ t('characterCards.editor.fields.trp3Icon') }}</span><input v-model="form.icon" maxlength="128" /></label>
               </div>
             </div>
 
             <div class="form-section">
-              <h3>颜色记录</h3>
+              <h3>{{ t('characterCards.editor.colorsTitle') }}</h3>
               <div class="form-grid form-grid--three">
-                <label><span>眼睛颜色</span><input v-model="form.eye_color" maxlength="64" /></label>
+                <label><span>{{ t('characterCards.editor.fields.eyeColor') }}</span><input v-model="form.eye_color" maxlength="64" /></label>
                 <CharacterCardColorField
                   v-model="form.eye_color_hex"
                   field-id="character-eye-color"
-                  label="眼睛颜色值"
-                  hint="取色器与精确 HEX 输入双向同步。"
+                  :label="t('characterCards.editor.eyeColorValue')"
+                  :hint="t('characterCards.editor.eyeColorHint')"
                 />
                 <CharacterCardColorField
                   v-model="form.class_color"
                   field-id="character-class-color"
-                  label="职业颜色"
-                  hint="承接 TRP3 的 CH 染料槽。"
+                  :label="t('characterCards.editor.classColor')"
+                  :hint="t('characterCards.editor.classColorHint')"
                 />
                 <CharacterCardColorField
                   v-model="form.name_color"
                   field-id="character-name-color"
-                  label="名字颜色"
-                  hint="TRP3 与职业颜色共用同一染料值，修改任一项会同步。"
+                  :label="t('characterCards.editor.nameColor')"
+                  :hint="t('characterCards.editor.nameColorHint')"
                 />
               </div>
             </div>
 
             <div class="form-section form-section--rpbox">
-              <h3>RPBox 展示</h3>
+              <h3>{{ t('characterCards.editor.displayTitle') }}</h3>
               <label class="summary-field">
-                <span>人物摘要</span>
-                <textarea v-model="form.summary" rows="4" maxlength="1000" placeholder="用几句话介绍这位角色；它会显示在展示墙和帖子预览中。"></textarea>
+                <span>{{ t('characterCards.editor.summary') }}</span>
+                <textarea v-model="form.summary" rows="4" maxlength="1000" :placeholder="t('characterCards.editor.summaryPlaceholder')"></textarea>
                 <small>{{ form.summary.length }} / 1000</small>
               </label>
               <div class="visibility-grid">
                 <label>
-                  <span>制作状态</span>
+                  <span>{{ t('characterCards.editor.productionStatus') }}</span>
                   <select v-model="form.status">
-                    <option value="draft">草稿</option>
-                    <option value="published">已发布</option>
+                    <option value="draft">{{ t('characterCards.common.status.draft') }}</option>
+                    <option value="published">{{ t('characterCards.common.status.published') }}</option>
                   </select>
-                  <small>草稿不会出现在访客展示墙或帖子选择器中。</small>
+                  <small>{{ t('characterCards.editor.draftHint') }}</small>
                 </label>
                 <label>
-                  <span>可见范围</span>
+                  <span>{{ t('characterCards.editor.visibility') }}</span>
                   <select v-model="form.visibility">
-                    <option value="private">仅自己可见</option>
-                    <option value="public">公开可见</option>
+                    <option value="private">{{ t('characterCards.common.status.private') }}</option>
+                    <option value="public">{{ t('characterCards.common.status.public') }}</option>
                   </select>
-                  <small>只有“已发布 + 公开可见”才会向其他用户展示。</small>
+                  <small>{{ t('characterCards.editor.publicHint') }}</small>
                 </label>
               </div>
               <div v-if="form.status === 'published' && form.visibility === 'public'" class="review-notice" :class="`review-notice--${card.review_status || 'pending'}`">
                 <i :class="card.review_status === 'rejected' ? 'ri-close-circle-line' : card.review_status === 'approved' ? 'ri-checkbox-circle-line' : 'ri-time-line'" aria-hidden="true"></i>
                 <div>
-                  <strong>{{ card.review_status === 'rejected' ? '公开版本未通过审核' : card.review_status === 'approved' ? '公开版本已通过审核' : '保存后将进入公开审核' }}</strong>
-                  <span v-if="card.review_status === 'rejected' && card.review_comment">版主说明：{{ card.review_comment }}</span>
-                  <span v-else-if="publicReviewPending">审核期间只有你能看到最新工作副本，访客继续看到上一次通过的版本。</span>
-                  <span v-else>公开内容会由版主确认后展示；保存不会绕过审核。</span>
+                  <strong>{{ card.review_status === 'rejected' ? t('characterCards.editor.reviewRejected') : card.review_status === 'approved' ? t('characterCards.editor.reviewApproved') : t('characterCards.editor.reviewOnSave') }}</strong>
+                  <span v-if="card.review_status === 'rejected' && card.review_comment">{{ t('characterCards.editor.moderatorComment', { comment: card.review_comment }) }}</span>
+                  <span v-else-if="publicReviewPending">{{ t('characterCards.editor.pendingBody') }}</span>
+                  <span v-else>{{ t('characterCards.editor.reviewBody') }}</span>
                 </div>
               </div>
             </div>
@@ -984,13 +993,13 @@ async function goBack() {
             aria-labelledby="character-tab-background"
           >
             <header class="panel-heading">
-              <div><span>Chronicle</span><h2>背景故事</h2></div>
-              <p>记录角色的经历、转折与仍未揭开的线索。</p>
+              <div><span>{{ t('characterCards.editor.backgroundKicker') }}</span><h2>{{ t('characterCards.editor.backgroundTitle') }}</h2></div>
+              <p>{{ t('characterCards.editor.backgroundBody') }}</p>
             </header>
-            <TiptapEditor ref="backgroundEditor" v-model="form.background_story" placeholder="从角色最重要的一段过去开始…">
+            <TiptapEditor ref="backgroundEditor" v-model="form.background_story" :placeholder="t('characterCards.editor.backgroundPlaceholder')">
               <template #toolbar>
-                <button type="button" class="internal-link-button" title="插入站内内容" @mousedown.prevent @click="openQuickJump('background')">
-                  <i class="ri-links-line"></i><span>站内链接</span>
+                <button type="button" class="internal-link-button" :title="t('characterCards.editor.insertInternal')" @mousedown.prevent @click="openQuickJump('background')">
+                  <i class="ri-links-line"></i><span>{{ t('characterCards.editor.internalLink') }}</span>
                 </button>
               </template>
             </TiptapEditor>
@@ -1004,11 +1013,11 @@ async function goBack() {
             aria-labelledby="character-tab-impression"
           >
             <header class="panel-heading">
-              <div><span>At first sight</span><h2>第一印象</h2></div>
-              <p>把五条“一眼可见”的信息写得快速、精准、合理；它们会按 TRP3 的固定槽位展示。</p>
+              <div><span>{{ t('characterCards.editor.impressionKicker') }}</span><h2>{{ t('characterCards.editor.impressionTitle') }}</h2></div>
+              <p>{{ t('characterCards.editor.impressionBody') }}</p>
             </header>
 
-            <div class="observation-register" aria-label="五条第一印象观察记录">
+            <div class="observation-register" :aria-label="t('characterCards.editor.impressionAria')">
               <article
                 v-for="(impression, index) in form.impressions"
                 :key="impression.slot"
@@ -1017,18 +1026,18 @@ async function goBack() {
               >
                 <header class="observation-record__header">
                   <div class="observation-record__index" aria-hidden="true">
-                    <span>Observation</span>
+                    <span>{{ t('characterCards.editor.observationLabel') }}</span>
                     <strong>{{ String(impression.slot).padStart(2, '0') }}</strong>
                   </div>
                   <label class="observation-toggle">
                     <input v-model="impression.active" type="checkbox" />
                     <span class="observation-toggle__track" aria-hidden="true"><i></i></span>
-                    <span>{{ impression.active ? '已启用展示' : '暂不展示' }}</span>
+                    <span>{{ impression.active ? t('characterCards.editor.impressionEnabled') : t('characterCards.editor.impressionDisabled') }}</span>
                   </label>
                 </header>
 
                 <div class="observation-record__body">
-                  <section class="observation-icon-station" :aria-label="`第 ${impression.slot} 槽图标`">
+                  <section class="observation-icon-station" :aria-label="t('characterCards.editor.iconSlotAria', { slot: impression.slot })">
                     <CharacterCardImpressionMark
                       :icon-image-url="impression.icon_image_url"
                       :preview-url="getImpressionPreview(index, 'icon')"
@@ -1043,7 +1052,7 @@ async function goBack() {
                         @click="triggerImpressionUpload(index, 'icon')"
                       >
                         <i :class="isImpressionUploading(index, 'icon') ? 'ri-loader-4-line spin' : 'ri-upload-2-line'" aria-hidden="true"></i>
-                        {{ isImpressionUploading(index, 'icon') ? '上传中…' : (impression.icon_image_url ? '替换图标' : '自定义图标') }}
+                        {{ isImpressionUploading(index, 'icon') ? t('characterCards.common.uploading') : (impression.icon_image_url ? t('characterCards.editor.replaceIcon') : t('characterCards.editor.customIcon')) }}
                       </button>
                       <button
                         v-if="impression.icon_image_url || getImpressionPreview(index, 'icon')"
@@ -1051,42 +1060,42 @@ async function goBack() {
                         class="observation-media-actions__remove"
                         :disabled="isImpressionUploading(index, 'icon')"
                         @click="removeImpressionImage(index, 'icon')"
-                      >移除</button>
+                      >{{ t('characterCards.common.remove') }}</button>
                     </div>
                   </section>
 
                   <div class="observation-fields">
                     <label>
-                      <span>属性名</span>
-                      <input v-model="impression.title" maxlength="80" placeholder="例如：总是带着淡淡的草药香" />
+                      <span>{{ t('characterCards.editor.attributeName') }}</span>
+                      <input v-model="impression.title" maxlength="80" :placeholder="t('characterCards.editor.attributePlaceholder')" />
                     </label>
                     <label>
-                      <span>简短描述</span>
+                      <span>{{ t('characterCards.editor.shortDescription') }}</span>
                       <textarea
                         v-model="impression.text"
                         rows="3"
                         maxlength="500"
-                        placeholder="用一两句话写下别人能立即观察到的细节。"
+                        :placeholder="t('characterCards.editor.descriptionPlaceholder')"
                       ></textarea>
                       <small>{{ impression.text.length }} / 500</small>
                     </label>
                     <label>
-                      <span>TRP3 图标名 · 自定义图标缺失时回退</span>
-                      <input v-model="impression.trp3_icon" maxlength="128" placeholder="例如 INV_Misc_Herb_19" />
+                      <span>{{ t('characterCards.editor.trp3IconFallback') }}</span>
+                      <input v-model="impression.trp3_icon" maxlength="128" :placeholder="t('characterCards.editor.trp3IconPlaceholder')" />
                     </label>
                   </div>
 
-                  <section class="observation-image-station" :aria-label="`第 ${impression.slot} 槽印象配图`">
+                  <section class="observation-image-station" :aria-label="t('characterCards.editor.impressionImageSlotAria', { slot: impression.slot })">
                     <div class="observation-image-station__frame">
                       <AuthenticatedImage
                         v-if="getImpressionImageUrl(index)"
                         class="observation-image-station__media"
                         :src="getImpressionImageUrl(index)"
-                        :alt="`${impression.title || `第 ${impression.slot} 条印象`}的配图`"
+                        :alt="t('characterCards.common.impressionImageAlt', { title: impression.title || t('characterCards.common.impressionFallbackTitle', { slot: impression.slot }) })"
                       />
                       <div v-else class="observation-image-station__empty">
                         <i class="ri-landscape-line" aria-hidden="true"></i>
-                        <span>可选印象配图</span>
+                        <span>{{ t('characterCards.editor.optionalImage') }}</span>
                       </div>
                     </div>
                     <div class="observation-media-actions">
@@ -1096,7 +1105,7 @@ async function goBack() {
                         @click="triggerImpressionUpload(index, 'image')"
                       >
                         <i :class="isImpressionUploading(index, 'image') ? 'ri-loader-4-line spin' : 'ri-image-add-line'" aria-hidden="true"></i>
-                        {{ isImpressionUploading(index, 'image') ? '上传中…' : (impression.image_url ? '替换配图' : '上传配图') }}
+                        {{ isImpressionUploading(index, 'image') ? t('characterCards.common.uploading') : (impression.image_url ? t('characterCards.editor.replaceImage') : t('characterCards.editor.uploadImage')) }}
                       </button>
                       <button
                         v-if="impression.image_url || getImpressionPreview(index, 'image')"
@@ -1104,7 +1113,7 @@ async function goBack() {
                         class="observation-media-actions__remove"
                         :disabled="isImpressionUploading(index, 'image')"
                         @click="removeImpressionImage(index, 'image')"
-                      >移除</button>
+                      >{{ t('characterCards.common.remove') }}</button>
                     </div>
                   </section>
                 </div>
@@ -1121,13 +1130,13 @@ async function goBack() {
 
             <section class="impression-notes">
               <header>
-                <div><span>Supplement</span><h3>其他备注</h3></div>
-                <p>旧版第一印象内容保留在这里，也可以继续插入站内链接。</p>
+                <div><span>{{ t('characterCards.editor.supplementKicker') }}</span><h3>{{ t('characterCards.editor.otherNotes') }}</h3></div>
+                <p>{{ t('characterCards.editor.supplementBody') }}</p>
               </header>
-              <TiptapEditor ref="impressionEditor" v-model="form.first_impression" placeholder="补充不适合放进五条观察记录的印象或说明…">
+              <TiptapEditor ref="impressionEditor" v-model="form.first_impression" :placeholder="t('characterCards.editor.supplementPlaceholder')">
                 <template #toolbar>
-                  <button type="button" class="internal-link-button" title="插入站内内容" @mousedown.prevent @click="openQuickJump('impression')">
-                    <i class="ri-links-line"></i><span>站内链接</span>
+                  <button type="button" class="internal-link-button" :title="t('characterCards.editor.insertInternal')" @mousedown.prevent @click="openQuickJump('impression')">
+                    <i class="ri-links-line"></i><span>{{ t('characterCards.editor.internalLink') }}</span>
                   </button>
                 </template>
               </TiptapEditor>
@@ -1142,13 +1151,13 @@ async function goBack() {
             aria-labelledby="character-tab-other"
           >
             <header class="panel-heading">
-              <div><span>Filed notes</span><h2>其他资料</h2></div>
-              <p>收纳关系、传闻、创作约定或任何不适合放进前述分栏的内容。</p>
+              <div><span>{{ t('characterCards.editor.otherKicker') }}</span><h2>{{ t('characterCards.editor.otherTitle') }}</h2></div>
+              <p>{{ t('characterCards.editor.otherBody') }}</p>
             </header>
-            <TiptapEditor ref="otherEditor" v-model="form.other_content" placeholder="补充关系、传闻或创作约定…">
+            <TiptapEditor ref="otherEditor" v-model="form.other_content" :placeholder="t('characterCards.editor.otherPlaceholder')">
               <template #toolbar>
-                <button type="button" class="internal-link-button" title="插入站内内容" @mousedown.prevent @click="openQuickJump('other')">
-                  <i class="ri-links-line"></i><span>站内链接</span>
+                <button type="button" class="internal-link-button" :title="t('characterCards.editor.insertInternal')" @mousedown.prevent @click="openQuickJump('other')">
+                  <i class="ri-links-line"></i><span>{{ t('characterCards.editor.internalLink') }}</span>
                 </button>
               </template>
             </TiptapEditor>
@@ -1158,11 +1167,11 @@ async function goBack() {
 
       <footer class="save-dock">
         <div>
-          <strong>{{ imageUploadInProgress ? '正在上传图片，请稍候' : (isDirty ? '有尚未保存的更改' : '所有分栏均已保存') }}</strong>
-          <span>{{ imageUploadInProgress ? '上传完成后即可保存整张人物卡。' : '保存操作会整体提交基础信息、五条观察记录和全部备注。' }}</span>
+          <strong>{{ imageUploadInProgress ? t('characterCards.editor.uploadPending') : (isDirty ? t('characterCards.editor.unsavedChanges') : t('characterCards.editor.allSaved')) }}</strong>
+          <span>{{ imageUploadInProgress ? t('characterCards.editor.uploadPendingBody') : t('characterCards.editor.saveBody') }}</span>
         </div>
         <button type="button" class="button button--primary" :disabled="saving || imageUploadInProgress || !isDirty" @click="saveCard(false)">
-          <i class="ri-save-3-line" aria-hidden="true"></i>{{ saving ? '保存中…' : '保存整张人物卡' }}
+          <i class="ri-save-3-line" aria-hidden="true"></i>{{ saving ? t('characterCards.common.saving') : t('characterCards.editor.saveWhole') }}
         </button>
       </footer>
 
@@ -1173,83 +1182,83 @@ async function goBack() {
         :output-width="1200"
         :output-height="1600"
         :max-size-k-b="2048"
-        title="调整角色大图"
+        :title="t('characterCards.editor.adjustPortrait')"
         @cropped="handlePortraitCropped"
         @error="handleCropperError"
       />
 
-      <RModal v-model="portraitPreviewOpen" :title="`${displayName} · 角色大图`" width="680px">
+      <RModal v-model="portraitPreviewOpen" :title="t('characterCards.editor.portraitModalTitle', { name: displayName })" width="680px">
         <div class="portrait-lightbox">
-          <img v-if="uploadedPortraitPreview" :src="uploadedPortraitPreview" :alt="`${displayName}的角色大图`" />
+          <img v-if="uploadedPortraitPreview" :src="uploadedPortraitPreview" :alt="t('characterCards.common.portraitLargeAlt', { name: displayName })" />
           <CharacterCardGalleryImage
             v-else-if="selectedPortrait"
             :card="card"
             :portrait="selectedPortrait"
-            :alt="`${displayName}的角色大图`"
+            :alt="t('characterCards.common.portraitLargeAlt', { name: displayName })"
             :width="1200"
             :quality="92"
           />
         </div>
       </RModal>
 
-      <RModal v-model="writeBackSetupOpen" title="RPBox → 本地 TRP3" width="620px">
+      <RModal v-model="writeBackSetupOpen" :title="t('characterCards.editor.writeSetupTitle')" width="620px">
         <div class="writeback-sheet">
           <header>
-            <span>Safe Lua handoff</span>
-            <h3>选择写入位置</h3>
-            <p>先保存并导出基础字段，再由桌面端预检、强制快照并写入本地。云端同步只会在本地成功后作为可选附加步骤执行。</p>
+            <span>{{ t('characterCards.editor.writeKicker') }}</span>
+            <h3>{{ t('characterCards.editor.writeLocation') }}</h3>
+            <p>{{ t('characterCards.editor.writeLocationBody') }}</p>
           </header>
           <label>
-            <span>本地账号</span>
+            <span>{{ t('characterCards.editor.localAccount') }}</span>
             <select v-model="writeBackAccountId">
-              <option value="" disabled>请选择账号</option>
+              <option value="" disabled>{{ t('characterCards.editor.selectAccount') }}</option>
               <option v-for="account in localAccounts" :key="account.account_id" :value="account.account_id">{{ account.account_id }}</option>
             </select>
           </label>
           <label>
             <span>TRP3 profile ID</span>
             <input v-model.trim="writeBackProfileId" maxlength="128" autocomplete="off" />
-            <small>{{ card.source_profile_id ? '默认沿用人物卡来源 ID；可以改为新 ID 以另存。' : '已为独立人物卡生成安全默认 ID，也可自行修改。' }}</small>
+            <small>{{ card.source_profile_id ? t('characterCards.editor.sourceIdHint') : t('characterCards.editor.generatedIdHint') }}</small>
           </label>
           <label>
-            <span>写入前快照名称</span>
+            <span>{{ t('characterCards.editor.snapshotName') }}</span>
             <input v-model.trim="writeBackSnapshotName" maxlength="120" autocomplete="off" />
-            <small>留空时使用“时间 + 内容 hash”；任何写入都会先自动备份。</small>
+            <small>{{ t('characterCards.editor.snapshotHint') }}</small>
           </label>
           <div class="writeback-sheet__account-note">
             <i :class="writeBackBackup ? 'ri-cloud-line' : 'ri-hard-drive-2-line'" aria-hidden="true"></i>
-            {{ writeBackBackup ? `已找到云端账号备份 v${writeBackBackup.version}；本地成功后可选择同步。` : '此账号暂无云端备份；仍会完整执行本地预检、快照与写入，不会调用云端写回。' }}
+            {{ writeBackBackup ? t('characterCards.editor.cloudBackupFound', { version: writeBackBackup.version }) : t('characterCards.editor.cloudBackupMissing') }}
           </div>
           <label v-if="writeBackBackup" class="writeback-sheet__cloud-option">
             <input v-model="syncCloudAfterWriteBack" type="checkbox" />
-            <span>本地写入成功后，同步更新云端账号备份（可选）</span>
-            <small>若附加同步失败，本地结果与本地安全快照仍会保留。</small>
+            <span>{{ t('characterCards.editor.syncCloud') }}</span>
+            <small>{{ t('characterCards.editor.syncCloudHint') }}</small>
           </label>
           <footer>
-            <button type="button" class="button button--quiet" @click="writeBackSetupOpen = false">取消</button>
+            <button type="button" class="button button--quiet" @click="writeBackSetupOpen = false">{{ t('characterCards.common.cancel') }}</button>
             <button type="button" class="button button--primary" :disabled="writingBack || !writeBackAccountId || !writeBackProfileId.trim()" @click="writeBackToLocalTRP3">
               <i :class="writingBack ? 'ri-loader-4-line spin' : 'ri-file-transfer-line'" aria-hidden="true"></i>
-              {{ writingBack ? '正在安全写入…' : '继续写回' }}
+              {{ writingBack ? t('characterCards.editor.writing') : t('characterCards.editor.continueWrite') }}
             </button>
           </footer>
         </div>
       </RModal>
 
-      <RModal v-model="luaPreviewOpen" title="TRP3 Lua 预览" width="760px">
+      <RModal v-model="luaPreviewOpen" :title="t('characterCards.editor.luaPreviewTitle')" width="760px">
         <div class="lua-preview">
-          <p v-if="isDirty"><i class="ri-information-line"></i> 当前还有未保存修改；预览内容来自最近一次已保存的人物卡。</p>
-          <div v-if="luaPreviewLoading" class="lua-preview__loading"><i class="ri-loader-4-line spin"></i>正在生成 Lua…</div>
+          <p v-if="isDirty"><i class="ri-information-line"></i> {{ t('characterCards.editor.unsavedPreviewHint') }}</p>
+          <div v-if="luaPreviewLoading" class="lua-preview__loading"><i class="ri-loader-4-line spin"></i>{{ t('characterCards.editor.generatingLua') }}</div>
           <pre v-else>{{ luaPreview }}</pre>
         </div>
       </RModal>
 
-      <RModal v-model="writeBackHistoryOpen" title="本地 Lua 版本历史" width="820px">
+      <RModal v-model="writeBackHistoryOpen" :title="t('characterCards.editor.localHistoryTitle')" width="820px">
         <LocalTRP3VersionHistory
           v-if="historyAccountId && wowPath"
           :wow-path="wowPath"
           :account-id="historyAccountId"
         />
-        <div v-else class="lua-preview__loading">先打开“写回本地 TRP3”并选择账号，即可查看对应版本。</div>
+        <div v-else class="lua-preview__loading">{{ t('characterCards.editor.historySelectHint') }}</div>
       </RModal>
 
       <PostQuickJump v-model="quickJumpOpen" :on-insert="insertQuickJump" />
@@ -1259,17 +1268,18 @@ async function goBack() {
 
 <style scoped>
 .editor-page {
-  --ink: #2C1810;
-  --walnut: #4B3621;
-  --copper: #B87333;
-  --rust: #804030;
-  --paper: #FDFBF9;
-  --line: #E3D4C5;
-  --muted: #8C7B70;
+  --ink: var(--color-text-main);
+  --walnut: var(--color-primary);
+  --copper: var(--color-accent);
+  --rust: var(--color-secondary);
+  --paper: var(--color-panel-bg);
+  --line: var(--color-border);
+  --muted: var(--color-text-secondary);
   width: min(1320px, calc(100% - 36px));
   margin: 0 auto;
   padding: 20px 0 86px;
   color: var(--ink);
+  container-type: inline-size;
 }
 
 .editor-state {
@@ -1283,7 +1293,7 @@ async function goBack() {
 .editor-state > i { color: var(--copper); font-size: 36px; }
 .editor-state h1 { margin: 0; color: var(--ink); font-family: Georgia, 'Noto Serif SC', serif; }
 .editor-state p { margin: 0; }
-.editor-state button { justify-self: center; padding: 9px 18px; border: 1px solid var(--rust); border-radius: 7px; background: var(--rust); color: #fff; cursor: pointer; }
+.editor-state button { justify-self: center; padding: 9px 18px; border: 1px solid var(--btn-primary-bg); border-radius: 7px; background: var(--btn-primary-bg); color: var(--btn-primary-text); cursor: pointer; }
 
 .editor-header {
   display: grid;
@@ -1294,8 +1304,8 @@ async function goBack() {
   padding: 12px 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(253, 251, 249, 0.92);
-  box-shadow: 0 5px 16px rgba(75, 54, 33, 0.06);
+  background: color-mix(in srgb, var(--color-panel-bg) 92%, transparent);
+  box-shadow: var(--shadow-sm);
   backdrop-filter: blur(12px);
 }
 
@@ -1316,7 +1326,7 @@ async function goBack() {
 .editor-header__identity h1 { overflow: hidden; margin: 3px 0 0; font-family: Georgia, 'Noto Serif SC', serif; font-size: 21px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .editor-header__actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 
-.unsaved-mark { display: inline-flex; align-items: center; gap: 5px; color: #9A5A2D; font-size: 10px; }
+.unsaved-mark { display: inline-flex; align-items: center; gap: 5px; color: var(--color-warning-dark); font-size: 10px; }
 .unsaved-mark i { font-size: 6px; }
 
 .button {
@@ -1328,19 +1338,19 @@ async function goBack() {
   padding: 0 15px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #FFF;
+  background: var(--btn-outline-hover);
   color: var(--walnut);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
   font-weight: 700;
 }
-.button--primary { border-color: var(--rust); background: var(--rust); color: #FFF9F2; }
+.button--primary { border-color: var(--btn-primary-bg); background: var(--btn-primary-bg); color: var(--btn-primary-text); }
 .button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -1350,7 +1360,7 @@ async function goBack() {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--paper);
-  box-shadow: 0 9px 28px rgba(75, 54, 33, 0.07);
+  box-shadow: var(--shadow-md);
 }
 
 .portrait-editor {
@@ -1367,23 +1377,23 @@ async function goBack() {
   right: 18px;
   height: 5px;
   border-radius: 0 0 5px 5px;
-  background: linear-gradient(90deg, var(--rust), #C58D59, var(--rust));
+  background: linear-gradient(90deg, var(--gradient-start), var(--color-accent), var(--gradient-end));
 }
 
 .portrait-editor__frame {
   position: relative;
   overflow: hidden;
   aspect-ratio: 3 / 4;
-  border: 6px solid #352219;
+  border: 6px solid var(--gradient-end);
   border-radius: 6px 6px 0 0;
-  background: #271A14;
-  box-shadow: 0 9px 20px rgba(44, 24, 16, 0.22);
+  background: var(--gradient-end);
+  box-shadow: var(--shadow-lg);
 }
 .portrait-editor__image { width: 100%; height: 100%; display: block; object-fit: cover; }
-.portrait-editor__empty { display: grid; width: 100%; height: 100%; place-content: center; gap: 7px; background: radial-gradient(circle at center, rgba(184, 115, 51, 0.18), transparent 48%), #2C1D16; color: #D4AF8A; text-align: center; }
+.portrait-editor__empty { display: grid; width: 100%; height: 100%; place-content: center; gap: 7px; background: radial-gradient(circle at center, color-mix(in srgb, var(--color-accent) 28%, transparent), transparent 48%), var(--gradient-end); color: var(--gradient-text); text-align: center; }
 .portrait-editor__empty i { font-size: 50px; }
 .portrait-editor__empty strong { font-family: Georgia, 'Noto Serif SC', serif; }
-.portrait-editor__empty span { color: #BCA997; font-size: 10px; }
+.portrait-editor__empty span { color: var(--gradient-text-muted); font-size: 10px; }
 
 .portrait-editor__tools {
   position: absolute;
@@ -1394,13 +1404,13 @@ async function goBack() {
   justify-content: center;
   gap: 5px;
   padding: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--gradient-border);
   border-radius: 7px;
-  background: rgba(31, 19, 13, 0.78);
+  background: color-mix(in srgb, var(--gradient-end) 82%, transparent);
   backdrop-filter: blur(8px);
 }
-.portrait-editor__tools button { display: inline-flex; align-items: center; gap: 4px; padding: 6px 7px; border: 0; border-radius: 5px; background: rgba(255, 255, 255, 0.09); color: #F5E6D7; cursor: pointer; font-size: 10px; }
-.portrait-editor__tools button.danger { color: #F0B4A7; }
+.portrait-editor__tools button { display: inline-flex; align-items: center; gap: 4px; padding: 6px 7px; border: 0; border-radius: 5px; background: var(--gradient-surface); color: var(--gradient-text); cursor: pointer; font-size: 10px; }
+.portrait-editor__tools button.danger { color: color-mix(in srgb, var(--btn-danger-bg) 45%, var(--gradient-text)); }
 
 .portrait-film {
   display: flex;
@@ -1408,11 +1418,11 @@ async function goBack() {
   margin-top: 10px;
   padding: 9px 8px;
   overflow-x: auto;
-  border: 1px solid #D7BEA5;
+  border: 1px solid var(--gradient-border);
   border-radius: 8px;
   background:
-    linear-gradient(90deg, transparent 6px, rgba(255,255,255,.16) 7px, transparent 8px) 0 0 / 18px 100%,
-    #3A261C;
+    linear-gradient(90deg, transparent 6px, var(--gradient-border) 7px, transparent 8px) 0 0 / 18px 100%,
+    var(--gradient-end);
   scrollbar-width: thin;
 }
 .portrait-film__cell { flex: 0 0 78px; min-width: 0; }
@@ -1423,19 +1433,19 @@ async function goBack() {
   height: 98px;
   overflow: hidden;
   padding: 0;
-  border: 2px solid #6E4A35;
+  border: 2px solid var(--gradient-border);
   border-radius: 4px;
-  background: #231710;
-  color: #FFF;
+  background: var(--gradient-start);
+  color: var(--gradient-text);
   cursor: pointer;
 }
 .portrait-film__thumb :deep(img),
 .portrait-film__thumb :deep(.authenticated-image) { width: 100%; height: 100%; object-fit: cover; }
-.portrait-film__thumb > span { position: absolute; right: 3px; bottom: 3px; padding: 2px 4px; border-radius: 3px; background: #B87333; font-size: 8px; font-weight: 800; }
-.portrait-film__cell.active .portrait-film__thumb { border-color: #E5B47F; box-shadow: 0 0 0 2px rgba(229, 180, 127, 0.22); }
+.portrait-film__thumb > span { position: absolute; right: 3px; bottom: 3px; padding: 2px 4px; border-radius: 3px; background: var(--color-accent); color: var(--color-accent-contrast); font-size: 8px; font-weight: 800; }
+.portrait-film__cell.active .portrait-film__thumb { border-color: var(--color-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 24%, transparent); }
 .portrait-film__actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-top: 4px; }
-.portrait-film__actions button { display: grid; min-height: 22px; place-items: center; padding: 0; border: 0; border-radius: 3px; background: rgba(255,255,255,.1); color: #E9D1BA; cursor: pointer; }
-.portrait-film__actions button:last-child { color: #F0B4A7; }
+.portrait-film__actions button { display: grid; min-height: 22px; place-items: center; padding: 0; border: 0; border-radius: 3px; background: var(--gradient-surface); color: var(--gradient-text-muted); cursor: pointer; }
+.portrait-film__actions button:last-child { color: color-mix(in srgb, var(--btn-danger-bg) 45%, var(--gradient-text)); }
 .portrait-film__actions button:disabled { cursor: not-allowed; opacity: .3; }
 .portrait-film__hint { margin: 5px 2px 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
 
@@ -1443,25 +1453,25 @@ async function goBack() {
   display: grid;
   gap: 3px;
   padding: 13px 12px;
-  border-top: 1px solid #B87333;
+  border-top: 1px solid var(--color-accent);
   border-radius: 0 0 6px 6px;
-  background: linear-gradient(90deg, #281912, #40271B 50%, #281912);
-  color: #F1D7BB;
+  background: linear-gradient(90deg, var(--gradient-end), var(--gradient-start) 50%, var(--gradient-end));
+  color: var(--gradient-text);
   text-align: center;
 }
 .portrait-editor__plaque strong { font-family: Georgia, 'Noto Serif SC', serif; font-size: 19px; font-weight: 600; }
-.portrait-editor__plaque span { color: #D4B697; font-size: 11px; }
-.portrait-editor__plaque small { color: #AFA093; font-size: 9px; }
+.portrait-editor__plaque span { color: var(--gradient-text); font-size: 11px; }
+.portrait-editor__plaque small { color: var(--gradient-text-muted); font-size: 9px; }
 
 .source-info,
-.local-writeback { display: grid; gap: 6px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #FBF6F0; }
+.local-writeback { display: grid; gap: 6px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--color-card-bg); }
 .source-info > span,
 .local-writeback > span { display: inline-flex; align-items: center; gap: 5px; color: var(--copper); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
 .source-info strong { overflow: hidden; color: var(--walnut); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .source-info button,
-.local-writeback button { padding: 7px 9px; border: 1px solid #C99769; border-radius: 6px; background: #FFF; color: var(--rust); cursor: pointer; font-size: 10px; font-weight: 700; }
+.local-writeback button { padding: 7px 9px; border: 1px solid var(--btn-outline-border); border-radius: 6px; background: var(--btn-outline-hover); color: var(--btn-outline-text); cursor: pointer; font-size: 10px; font-weight: 700; }
 .local-writeback p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
-.local-writeback.disabled { background: #F5F1ED; }
+.local-writeback.disabled { background: color-mix(in srgb, var(--color-card-bg) 72%, var(--color-main-bg)); }
 .local-writeback button:disabled { cursor: not-allowed; opacity: 0.45; }
 .local-writeback__actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
 
@@ -1472,7 +1482,7 @@ async function goBack() {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 0 18px;
   border-bottom: 1px solid var(--line);
-  background: #F9F4EE;
+  background: var(--color-card-bg);
 }
 .editor-tabs button { position: relative; display: inline-flex; min-height: 58px; align-items: center; justify-content: center; gap: 7px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .editor-tabs button::after { position: absolute; right: 18%; bottom: -1px; left: 18%; height: 3px; border-radius: 3px 3px 0 0; background: var(--copper); content: ''; opacity: 0; transform: scaleX(0.4); transition: opacity 150ms ease, transform 150ms ease; }
@@ -1490,7 +1500,7 @@ async function goBack() {
 
 .form-section { margin-bottom: 26px; }
 .form-section h3 { margin: 0 0 12px; color: var(--walnut); font-size: 12px; letter-spacing: 0.06em; }
-.form-section--rpbox { margin-bottom: 0; padding: 18px; border: 1px solid #DEC7AF; border-radius: 10px; background: #FCF7F2; }
+.form-section--rpbox { margin-bottom: 0; padding: 18px; border: 1px solid var(--color-border-hover); border-radius: 10px; background: var(--color-card-bg); }
 .form-grid { display: grid; gap: 12px; }
 .form-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .form-span-two { grid-column: span 2; }
@@ -1499,22 +1509,22 @@ async function goBack() {
 .visibility-grid label { display: grid; min-width: 0; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .form-grid input,
 .summary-field textarea,
-.visibility-grid select { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; outline: none; background: #FFF; color: var(--ink); font: inherit; font-size: 12px; }
+.visibility-grid select { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--input-border); border-radius: 7px; outline: none; background: var(--input-bg); color: var(--ink); font: inherit; font-size: 12px; }
 .form-grid input:focus,
 .summary-field textarea:focus,
-.visibility-grid select:focus { border-color: var(--copper); box-shadow: 0 0 0 3px rgba(184, 115, 51, 0.1); }
+.visibility-grid select:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent); }
 .summary-field { position: relative; }
 .summary-field textarea { resize: vertical; line-height: 1.65; }
-.summary-field small { position: absolute; right: 9px; bottom: 8px; color: #AA9481; font-weight: 400; }
+.summary-field small { position: absolute; right: 9px; bottom: 8px; color: var(--color-text-muted); font-weight: 400; }
 .visibility-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
 .visibility-grid small { color: var(--muted); font-weight: 400; line-height: 1.45; }
-.review-notice { display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; padding: 11px 12px; border: 1px solid #D5B07E; border-radius: 8px; background: #FFF7E8; color: #785326; }
+.review-notice { display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; padding: 11px 12px; border: 1px solid var(--color-warning-border); border-radius: 8px; background: var(--color-warning-light); color: var(--color-warning-dark); }
 .review-notice > i { margin-top: 1px; font-size: 18px; }
 .review-notice > div { display: grid; gap: 3px; }
 .review-notice strong { font-size: 11px; }
 .review-notice span { font-size: 9px; line-height: 1.5; }
-.review-notice--approved { border-color: #A9C8A5; background: #F1F8EF; color: #3F6A3B; }
-.review-notice--rejected { border-color: #D9A49B; background: #FFF1EE; color: #8A3E34; }
+.review-notice--approved { border-color: color-mix(in srgb, var(--color-success) 42%, var(--color-border)); background: var(--color-success-light); color: var(--color-success); }
+.review-notice--rejected { border-color: color-mix(in srgb, var(--btn-danger-bg) 42%, var(--color-border)); background: color-mix(in srgb, var(--btn-danger-bg) 10%, var(--color-panel-bg)); color: var(--btn-danger-bg); }
 
 .observation-register {
   position: relative;
@@ -1529,7 +1539,7 @@ async function goBack() {
   bottom: 28px;
   left: 22px;
   width: 1px;
-  background: linear-gradient(var(--copper), #d7b38f 50%, var(--copper));
+  background: linear-gradient(var(--copper), var(--color-border-hover) 50%, var(--copper));
   content: '';
 }
 
@@ -1537,17 +1547,17 @@ async function goBack() {
   position: relative;
   z-index: 1;
   overflow: hidden;
-  border: 1px solid #dccdbc;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: #f7f2ec;
-  box-shadow: 0 3px 10px rgba(75, 54, 33, 0.04);
+  background: var(--color-card-bg);
+  box-shadow: var(--shadow-sm);
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .observation-record--active {
-  border-color: #c79668;
-  background: #fffdf9;
-  box-shadow: 0 7px 18px rgba(91, 53, 29, 0.08);
+  border-color: var(--color-border-hover);
+  background: var(--color-panel-bg);
+  box-shadow: var(--shadow-md);
 }
 
 .observation-record__header {
@@ -1557,17 +1567,17 @@ async function goBack() {
   justify-content: space-between;
   gap: 14px;
   padding: 0 14px 0 12px;
-  border-bottom: 1px solid #e6d8ca;
+  border-bottom: 1px solid var(--color-border);
   background:
-    linear-gradient(90deg, rgba(184, 115, 51, 0.11), transparent 38%),
-    #fbf7f1;
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 38%),
+    var(--color-card-bg);
 }
 
 .observation-record__index {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  color: #a2734d;
+  color: var(--color-accent);
   font: 800 8px/1 ui-monospace, Consolas, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1578,13 +1588,13 @@ async function goBack() {
   width: 24px;
   height: 24px;
   place-items: center;
-  border: 1px solid #9e6840;
+  border: 1px solid var(--gradient-border);
   border-radius: 50%;
-  background: #3a251a;
-  color: #f1d5b7;
+  background: var(--gradient-start);
+  color: var(--gradient-text);
   font-size: 9px;
   letter-spacing: 0;
-  box-shadow: 0 0 0 3px #f7ecdf;
+  box-shadow: 0 0 0 3px var(--color-card-bg);
 }
 
 .observation-toggle {
@@ -1609,9 +1619,9 @@ async function goBack() {
   position: relative;
   width: 31px;
   height: 17px;
-  border: 1px solid #bca997;
+  border: 1px solid var(--color-border-hover);
   border-radius: 999px;
-  background: #ded5cc;
+  background: var(--switch-inactive);
   transition: background-color 150ms ease, border-color 150ms ease;
 }
 
@@ -1622,8 +1632,8 @@ async function goBack() {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(44, 24, 16, 0.25);
+  background: var(--input-bg);
+  box-shadow: var(--shadow-sm);
   transition: transform 150ms ease;
 }
 
@@ -1633,11 +1643,11 @@ async function goBack() {
 }
 
 .observation-toggle input:checked + .observation-toggle__track i { transform: translateX(14px); }
-.observation-toggle input:focus-visible + .observation-toggle__track { outline: 3px solid rgba(184, 115, 51, 0.3); outline-offset: 2px; }
+.observation-toggle input:focus-visible + .observation-toggle__track { outline: 3px solid color-mix(in srgb, var(--input-focus) 30%, transparent); outline-offset: 2px; }
 
 .observation-record__body {
   display: grid;
-  grid-template-columns: 104px minmax(240px, 1fr) 174px;
+  grid-template-columns: 104px minmax(0, 1fr) minmax(140px, 174px);
   gap: 16px;
   align-items: start;
   padding: 16px;
@@ -1673,10 +1683,10 @@ async function goBack() {
   width: 100%;
   box-sizing: border-box;
   padding: 9px 10px;
-  border: 1px solid #ded0c1;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   outline: none;
-  background: #fff;
+  background: var(--input-bg);
   color: var(--ink);
   font: inherit;
   font-size: 11px;
@@ -1691,15 +1701,15 @@ async function goBack() {
 
 .observation-fields input:focus,
 .observation-fields textarea:focus {
-  border-color: var(--copper);
-  box-shadow: 0 0 0 3px rgba(184, 115, 51, 0.1);
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent);
 }
 
 .observation-fields small {
   position: absolute;
   right: 8px;
   bottom: 6px;
-  color: #ad9986;
+  color: var(--color-text-muted);
   font-size: 8px;
   font-weight: 400;
 }
@@ -1711,10 +1721,10 @@ async function goBack() {
   place-items: center;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid #cbb39a;
+  border: 1px solid var(--gradient-border);
   border-radius: 7px;
-  background: #2e1e16;
-  box-shadow: inset 0 0 0 3px #20140f;
+  background: var(--gradient-end);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--gradient-end) 82%, var(--color-text-main));
 }
 
 .observation-image-station__media {
@@ -1722,21 +1732,21 @@ async function goBack() {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  color: #c9a682;
+  color: var(--gradient-text-muted);
 }
 
-.observation-image-station__media :deep(.authenticated-image__state) { background: #2e1e16; }
+.observation-image-station__media :deep(.authenticated-image__state) { background: var(--gradient-end); }
 
 .observation-image-station__empty {
   display: grid;
   justify-items: center;
   gap: 5px;
-  color: #c9a682;
+  color: var(--gradient-text-muted);
   text-align: center;
 }
 
 .observation-image-station__empty i { font-size: 24px; }
-.observation-image-station__empty span { color: #b9a491; font-size: 8px; }
+.observation-image-station__empty span { color: var(--gradient-text-muted); font-size: 8px; }
 
 .observation-media-actions {
   display: flex;
@@ -1754,10 +1764,10 @@ async function goBack() {
   justify-content: center;
   gap: 4px;
   padding: 4px 7px;
-  border: 1px solid #cfb499;
+  border: 1px solid var(--btn-outline-border);
   border-radius: 5px;
-  background: #fff;
-  color: var(--rust);
+  background: var(--btn-outline-hover);
+  color: var(--btn-outline-text);
   cursor: pointer;
   font: inherit;
   font-size: 8px;
@@ -1765,12 +1775,12 @@ async function goBack() {
 }
 
 .observation-media-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
-.observation-media-actions .observation-media-actions__remove { flex: 0 0 auto; color: #9e4f3f; }
+.observation-media-actions .observation-media-actions__remove { flex: 0 0 auto; color: var(--btn-danger-bg); }
 
 .impression-notes {
   margin-top: 30px;
   padding-top: 24px;
-  border-top: 1px dashed #cdb59d;
+  border-top: 1px dashed var(--color-border-hover);
 }
 
 .impression-notes > header {
@@ -1812,17 +1822,17 @@ async function goBack() {
   align-items: center;
   gap: 22px;
   padding: 11px 12px 11px 16px;
-  border: 1px solid #D2B99F;
+  border: 1px solid var(--color-border-hover);
   border-radius: 12px;
-  background: rgba(253, 251, 249, 0.94);
-  box-shadow: 0 14px 35px rgba(44, 24, 16, 0.2);
+  background: color-mix(in srgb, var(--color-panel-bg) 94%, transparent);
+  box-shadow: var(--shadow-lg);
   backdrop-filter: blur(14px);
 }
 .save-dock > div { display: grid; gap: 2px; }
 .save-dock strong { color: var(--walnut); font-size: 11px; }
 .save-dock span { color: var(--muted); font-size: 9px; }
 
-.portrait-lightbox { display: grid; max-height: 72vh; place-items: center; overflow: hidden; border-radius: 8px; background: #21150F; }
+.portrait-lightbox { display: grid; max-height: 72vh; place-items: center; overflow: hidden; border-radius: 8px; background: var(--gradient-end); }
 .portrait-lightbox :deep(img) { max-width: 100%; max-height: 72vh; object-fit: contain; }
 .portrait-lightbox :deep(.authenticated-image) { display: grid; max-height: 72vh; place-items: center; }
 
@@ -1832,27 +1842,38 @@ async function goBack() {
 .writeback-sheet header h3 { margin: 0; font-family: Georgia, 'Noto Serif SC', serif; }
 .writeback-sheet header p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
 .writeback-sheet label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
-.writeback-sheet input, .writeback-sheet select { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; outline: none; background: #FFF; color: var(--ink); font: inherit; }
-.writeback-sheet input:focus, .writeback-sheet select:focus { border-color: var(--copper); box-shadow: 0 0 0 3px rgba(184,115,51,.11); }
+.writeback-sheet input, .writeback-sheet select { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--input-border); border-radius: 7px; outline: none; background: var(--input-bg); color: var(--ink); font: inherit; }
+.writeback-sheet input:focus, .writeback-sheet select:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent); }
 .writeback-sheet label small { font-weight: 400; line-height: 1.45; }
-.writeback-sheet__account-note { display: flex; gap: 7px; align-items: center; padding: 9px 10px; border-radius: 7px; background: #F7EFE6; color: var(--rust); font-size: 10px; }
-.writeback-sheet .writeback-sheet__cloud-option { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: 10px; border: 1px solid #DFC7AE; border-radius: 7px; background: #FCF8F3; }
+.writeback-sheet__account-note { display: flex; gap: 7px; align-items: center; padding: 9px 10px; border-radius: 7px; background: var(--btn-secondary-bg); color: var(--btn-secondary-text); font-size: 10px; }
+.writeback-sheet .writeback-sheet__cloud-option { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: 10px; border: 1px solid var(--color-border-hover); border-radius: 7px; background: var(--color-card-bg); }
 .writeback-sheet .writeback-sheet__cloud-option input { width: 16px; height: 16px; padding: 0; accent-color: var(--rust); }
 .writeback-sheet__cloud-option small { grid-column: 2; }
 .writeback-sheet footer { display: flex; justify-content: flex-end; gap: 8px; }
 .lua-preview { display: grid; gap: 10px; }
-.lua-preview > p { margin: 0; padding: 8px 10px; border-radius: 6px; background: #FFF7E8; color: #785326; font-size: 10px; }
-.lua-preview pre { max-height: 60vh; margin: 0; padding: 14px; overflow: auto; border-radius: 7px; background: #231710; color: #EEDBC7; font: 10px/1.65 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+.lua-preview > p { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--color-warning-light); color: var(--color-warning-dark); font-size: 10px; }
+.lua-preview pre { max-height: 60vh; margin: 0; padding: 14px; overflow: auto; border-radius: 7px; background: var(--gradient-end); color: var(--gradient-text); font: 10px/1.65 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
 .lua-preview__loading { display: flex; min-height: 180px; align-items: center; justify-content: center; gap: 7px; color: var(--muted); }
 
 .editor-header__back:focus-visible,
 .button:focus-visible,
 .editor-tabs button:focus-visible,
 .portrait-editor button:focus-visible,
-.observation-media-actions button:focus-visible { outline: 3px solid rgba(184, 115, 51, 0.3); outline-offset: 2px; }
+.observation-media-actions button:focus-visible { outline: 3px solid color-mix(in srgb, var(--input-focus) 30%, transparent); outline-offset: 2px; }
 
 .spin { animation: editor-spin 900ms linear infinite; }
 @keyframes editor-spin { to { transform: rotate(360deg); } }
+
+@container (max-width: 1180px) {
+  .editor-layout { grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); }
+  .observation-record__body { grid-template-columns: 92px minmax(0, 1fr); }
+  .observation-image-station {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(180px, 260px) minmax(120px, auto);
+    align-items: center;
+    justify-content: start;
+  }
+}
 
 @media (max-width: 980px) {
   .editor-header { grid-template-columns: 1fr auto; }

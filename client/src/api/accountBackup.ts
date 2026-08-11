@@ -51,6 +51,10 @@ interface DataEnvelope<T> {
   data?: T
 }
 
+interface VersionEnvelope {
+  version?: AccountBackupVersion
+}
+
 function unwrapData<T>(response: T | DataEnvelope<T>): T {
   if (response && typeof response === 'object' && 'data' in response) {
     const data = (response as DataEnvelope<T>).data
@@ -85,6 +89,7 @@ export async function upsertAccountBackup(data: {
   raw_trp3_data_lua?: string
   raw_trp3_extended_lua?: string
   checksum: string
+  snapshot_reason?: 'before_manual_backup' | 'restore_sync' | 'sync'
 }): Promise<AccountBackup> {
   return request.post<AccountBackup>('/account-backups', data)
 }
@@ -106,10 +111,14 @@ export async function getAccountBackupVersion(
   accountId: string,
   versionId: number,
 ): Promise<AccountBackupVersion> {
-  const response = await request.get<AccountBackupVersion | DataEnvelope<AccountBackupVersion>>(
+  const response = await request.get<AccountBackupVersion | VersionEnvelope | DataEnvelope<AccountBackupVersion | VersionEnvelope>>(
     `/account-backups/${encodeURIComponent(accountId)}/versions/${versionId}`,
   )
-  return unwrapData(response)
+  const unwrapped = unwrapData(response)
+  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && unwrapped.version) {
+    return unwrapped.version
+  }
+  return unwrapped as AccountBackupVersion
 }
 
 export async function renameAccountBackupVersion(
@@ -117,11 +126,15 @@ export async function renameAccountBackupVersion(
   versionId: number,
   name: string,
 ): Promise<AccountBackupVersion> {
-  const response = await request.put<AccountBackupVersion | DataEnvelope<AccountBackupVersion>>(
+  const response = await request.put<AccountBackupVersion | VersionEnvelope | DataEnvelope<AccountBackupVersion | VersionEnvelope>>(
     `/account-backups/${encodeURIComponent(accountId)}/versions/${versionId}`,
     { name },
   )
-  return unwrapData(response)
+  const unwrapped = unwrapData(response)
+  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && unwrapped.version) {
+    return unwrapped.version
+  }
+  return unwrapped as AccountBackupVersion
 }
 
 export async function restoreAccountBackupVersion(

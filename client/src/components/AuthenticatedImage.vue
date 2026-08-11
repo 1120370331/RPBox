@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/v1'
 
@@ -77,7 +80,7 @@ async function loadSource() {
     objectUrl.value = URL.createObjectURL(blob)
   } catch (error: unknown) {
     if (controller.signal.aborted || version !== requestVersion) return
-    const normalizedError = error instanceof Error ? error : new Error('图片加载失败')
+    const normalizedError = error instanceof Error ? error : new Error(t('characterCards.image.loadFailed'))
     failed.value = true
     emit('error', normalizedError)
     console.error('加载受保护图片失败:', normalizedError)
@@ -91,7 +94,7 @@ function handleImageLoad() {
 }
 
 function handleImageError() {
-  const error = new Error('图片内容无法显示')
+  const error = new Error(t('characterCards.image.displayFailed'))
   failed.value = true
   if (!directSource.value) revokeObjectUrl()
   emit('error', error)
@@ -125,15 +128,15 @@ onBeforeUnmount(() => {
     >
       <slot v-if="loading" name="loading">
         <i class="ri-loader-4-line authenticated-image__spin" aria-hidden="true"></i>
-        <small>图片加载中</small>
+        <small>{{ t('characterCards.image.loading') }}</small>
       </slot>
       <slot v-else-if="failed" name="error">
         <i class="ri-image-close-line" aria-hidden="true"></i>
-        <small>图片暂不可用</small>
+        <small>{{ t('characterCards.image.unavailable') }}</small>
       </slot>
       <slot v-else name="empty">
         <i class="ri-image-line" aria-hidden="true"></i>
-        <small>图片待提供</small>
+        <small>{{ t('characterCards.image.missing') }}</small>
       </slot>
     </span>
   </span>

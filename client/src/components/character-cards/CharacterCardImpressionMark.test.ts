@@ -1,6 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import CharacterCardImpressionMark from './CharacterCardImpressionMark.vue'
+
+i18n.global.locale.value = 'zh-CN'
 
 describe('CharacterCardImpressionMark', () => {
   afterEach(() => {
@@ -23,6 +26,7 @@ describe('CharacterCardImpressionMark', () => {
         trp3Icon: 'Interface\\Icons\\INV_Misc_Herb_19.blp',
         fallbackLabel: '3',
       },
+      global: { plugins: [i18n] },
     })
     await flushPromises()
 

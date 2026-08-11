@@ -2,8 +2,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n'
 import CharacterCardDetail from './CharacterCardDetail.vue'
 import type { CharacterCard } from '@/api/characterCard'
+
+i18n.global.locale.value = 'zh-CN'
 
 const mocks = vi.hoisted(() => ({
   getCharacterCard: vi.fn(),
@@ -117,7 +120,7 @@ describe('CharacterCardDetail tabs', () => {
     const wrapper = mount(CharacterCardDetail, {
       attachTo: document.body,
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: { CharacterCardPortrait: true },
       },
     })
@@ -171,7 +174,7 @@ describe('CharacterCardDetail tabs', () => {
 
     const wrapper = mount(CharacterCardDetail, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [createPinia(), router, i18n],
         stubs: { CharacterCardPortrait: true },
       },
     })
