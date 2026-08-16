@@ -219,10 +219,12 @@ local function ShouldRecord(unitID, isFromSelf, channelShort)
     end
 
     if ns.IsBlacklisted(unitID) then return false end
-    local profileID = GetTRP3InfoAndCache(unitID)
-    if profileID then return true end
     if ns.IsWhitelisted(unitID) then return true end
-    return false
+
+    -- 默认记录所有未拉黑玩家；开启此选项后，才要求发言者有 RP 人物卡。
+    if RPBox_Config.ignoreNonRPPlayers ~= true then return true end
+    local profileID = GetTRP3InfoAndCache(unitID)
+    return profileID ~= nil
 end
 
 -- 检查记录上限

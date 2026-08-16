@@ -398,6 +398,240 @@ local function ApplyExactTimeFilter()
     RefreshLogContent()
 end
 
+local DATE_PICKER_WEEKDAYS = { "一", "二", "三", "四", "五", "六", "日" }
+
+local function GetDaysInMonth(year, month)
+    local days = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+    if month == 2 then
+        local leap = (year % 400 == 0) or (year % 4 == 0 and year % 100 ~= 0)
+        return leap and 29 or 28
+    end
+    return days[month] or 30
+end
+
+local function RenderDateTimePicker(picker)
+    if not picker then return end
+    local daysInMonth = GetDaysInMonth(picker.selectedYear, picker.selectedMonth)
+    picker.selectedDay = max(1, min(picker.selectedDay or 1, daysInMonth))
+    picker.monthText:SetText(format("%04d 年 %02d 月", picker.selectedYear, picker.selectedMonth))
+
+    local firstTimestamp = time({
+        year = picker.selectedYear,
+        month = picker.selectedMonth,
+        day = 1,
+        hour = 12,
+        min = 0,
+        sec = 0,
+    })
+    local firstWeekday = date("*t", firstTimestamp).wday
+    local mondayOffset = (firstWeekday + 5) % 7
+
+    for index, button in ipairs(picker.dayButtons) do
+        local day = index - mondayOffset
+        if day >= 1 and day <= daysInMonth then
+            button.day = day
+            button:SetText(tostring(day))
+            UI.SetButtonSelected(button, day == picker.selectedDay)
+            button:Show()
+        else
+            button.day = nil
+            button:Hide()
+        end
+    end
+end
+
+local function ShiftDatePickerMonth(picker, delta)
+    local month = picker.selectedMonth + delta
+    local year = picker.selectedYear
+    if month < 1 then
+        month = 12
+        year = year - 1
+    elseif month > 12 then
+        month = 1
+        year = year + 1
+    end
+    picker.selectedYear = max(1970, min(year, 2099))
+    picker.selectedMonth = month
+    picker.selectedDay = min(picker.selectedDay, GetDaysInMonth(picker.selectedYear, picker.selectedMonth))
+    RenderDateTimePicker(picker)
+end
+
+local function CreateDateTimePicker()
+    if not MainFrame then return nil end
+    if MainFrame.dateTimePicker then return MainFrame.dateTimePicker end
+
+    local picker = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
+    picker:SetSize(326, 330)
+    picker:SetFrameStrata("DIALOG")
+    picker:EnableMouse(true)
+    picker:Hide()
+    UI.RegisterPanel(picker, {
+        background = UI.COLORS.surface,
+        border = UI.COLORS.accent,
+        classicBackground = { 0.035, 0.045, 0.06, 0.98 },
+        classicBorder = { 0.76, 0.43, 0.20, 1 },
+    })
+
+    local title = picker:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 12, -12)
+    UI.RegisterText(title, "heading")
+    picker.title = title
+
+    local previousMonthBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    previousMonthBtn:SetSize(28, 22)
+    previousMonthBtn:SetPoint("TOPLEFT", 38, -40)
+    previousMonthBtn:SetText("‹")
+    previousMonthBtn:SetScript("OnClick", function() ShiftDatePickerMonth(picker, -1) end)
+    UI.RegisterButton(previousMonthBtn)
+
+    local nextMonthBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    nextMonthBtn:SetSize(28, 22)
+    nextMonthBtn:SetPoint("TOPRIGHT", -38, -40)
+    nextMonthBtn:SetText("›")
+    nextMonthBtn:SetScript("OnClick", function() ShiftDatePickerMonth(picker, 1) end)
+    UI.RegisterButton(nextMonthBtn)
+
+    local monthText = picker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    monthText:SetPoint("TOP", 0, -44)
+    monthText:SetWidth(180)
+    monthText:SetJustifyH("CENTER")
+    UI.RegisterText(monthText, "primary")
+    picker.monthText = monthText
+
+    for column, weekday in ipairs(DATE_PICKER_WEEKDAYS) do
+        local label = picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        label:SetWidth(32)
+        label:SetPoint("TOPLEFT", 39 + ((column - 1) * 36), -72)
+        label:SetJustifyH("CENTER")
+        label:SetText(weekday)
+        UI.RegisterText(label, "muted")
+    end
+
+    picker.dayButtons = {}
+    for index = 1, 42 do
+        local row = floor((index - 1) / 7)
+        local column = (index - 1) % 7
+        local button = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+        button:SetSize(32, 23)
+        button:SetPoint("TOPLEFT", 39 + (column * 36), -84 - (row * 26))
+        button:SetScript("OnClick", function(self)
+            if not self.day then return end
+            picker.selectedDay = self.day
+            RenderDateTimePicker(picker)
+        end)
+        UI.RegisterButton(button)
+        picker.dayButtons[index] = button
+    end
+
+    local timeLabel = picker:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    timeLabel:SetPoint("TOPLEFT", 76, -246)
+    timeLabel:SetText("时间")
+    UI.RegisterText(timeLabel, "primary")
+
+    local hourBox = CreateFrame("EditBox", nil, picker, "InputBoxTemplate,BackdropTemplate")
+    hourBox:SetSize(42, 22)
+    hourBox:SetPoint("LEFT", timeLabel, "RIGHT", 10, 0)
+    hourBox:SetAutoFocus(false)
+    hourBox:SetNumeric(true)
+    UI.RegisterEditBox(hourBox)
+    picker.hourBox = hourBox
+
+    local timeSeparator = picker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    timeSeparator:SetPoint("LEFT", hourBox, "RIGHT", 6, 0)
+    timeSeparator:SetText(":")
+    UI.RegisterText(timeSeparator, "primary")
+
+    local minuteBox = CreateFrame("EditBox", nil, picker, "InputBoxTemplate,BackdropTemplate")
+    minuteBox:SetSize(42, 22)
+    minuteBox:SetPoint("LEFT", timeSeparator, "RIGHT", 6, 0)
+    minuteBox:SetAutoFocus(false)
+    minuteBox:SetNumeric(true)
+    UI.RegisterEditBox(minuteBox)
+    picker.minuteBox = minuteBox
+
+    local clearBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    clearBtn:SetSize(58, 22)
+    clearBtn:SetPoint("BOTTOMLEFT", 12, 12)
+    clearBtn:SetText("清除")
+    clearBtn:SetScript("OnClick", function()
+        if picker.targetBox then picker.targetBox:SetText("") end
+        picker:Hide()
+        ApplyExactTimeFilter()
+    end)
+    UI.RegisterButton(clearBtn)
+
+    local nowBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    nowBtn:SetSize(58, 22)
+    nowBtn:SetPoint("LEFT", clearBtn, "RIGHT", 6, 0)
+    nowBtn:SetText("现在")
+    nowBtn:SetScript("OnClick", function()
+        local now = date("*t")
+        picker.selectedYear = now.year
+        picker.selectedMonth = now.month
+        picker.selectedDay = now.day
+        picker.hourBox:SetText(format("%02d", now.hour))
+        picker.minuteBox:SetText(format("%02d", now.min))
+        RenderDateTimePicker(picker)
+    end)
+    UI.RegisterButton(nowBtn)
+
+    local applyBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    applyBtn:SetSize(58, 22)
+    applyBtn:SetPoint("BOTTOMRIGHT", -12, 12)
+    applyBtn:SetText("确定")
+    applyBtn:SetScript("OnClick", function()
+        local hour = max(0, min(tonumber(picker.hourBox:GetText()) or 0, 23))
+        local minute = max(0, min(tonumber(picker.minuteBox:GetText()) or 0, 59))
+        if picker.targetBox then
+            picker.targetBox:SetText(format(
+                "%04d-%02d-%02d %02d:%02d",
+                picker.selectedYear,
+                picker.selectedMonth,
+                picker.selectedDay,
+                hour,
+                minute
+            ))
+        end
+        picker:Hide()
+        ApplyExactTimeFilter()
+    end)
+    UI.RegisterButton(applyBtn)
+    picker.applyBtn = applyBtn
+
+    local cancelBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    cancelBtn:SetSize(58, 22)
+    cancelBtn:SetPoint("RIGHT", applyBtn, "LEFT", -6, 0)
+    cancelBtn:SetText("取消")
+    cancelBtn:SetScript("OnClick", function() picker:Hide() end)
+    UI.RegisterButton(cancelBtn)
+    picker.cancelBtn = cancelBtn
+
+    MainFrame.dateTimePicker = picker
+    return picker
+end
+
+local function OpenDateTimePicker(targetBox, isEnd)
+    local picker = CreateDateTimePicker()
+    if not picker then return end
+    if MainFrame.speakerPicker then MainFrame.speakerPicker:Hide() end
+    local inputText = targetBox and strtrim(targetBox:GetText() or "") or ""
+    local timestamp = ParseExactTimeInput(inputText, isEnd)
+    local selected = timestamp and date("*t", timestamp) or date("*t")
+
+    picker.targetBox = targetBox
+    picker.isEnd = isEnd == true
+    picker.selectedYear = selected.year
+    picker.selectedMonth = selected.month
+    picker.selectedDay = selected.day
+    picker.hourBox:SetText(format("%02d", timestamp and selected.hour or (isEnd and 23 or 0)))
+    picker.minuteBox:SetText(format("%02d", timestamp and selected.min or (isEnd and 59 or 0)))
+    picker.title:SetText(isEnd and "选择结束时间" or "选择开始时间")
+    picker:ClearAllPoints()
+    picker:SetPoint("TOPLEFT", MainFrame.filterFrame, "TOPRIGHT", 8, -54)
+    RenderDateTimePicker(picker)
+    picker:Show()
+end
+
 local function GetIdentitySelectorKey(profileID, gameID)
     if profileID and profileID ~= "" then return "p:" .. tostring(profileID) end
     if gameID and gameID ~= "" then return "g:" .. tostring(gameID) end
@@ -419,7 +653,7 @@ local function GetEndpointDisplayName(endpoint)
     return BuildIdentityName(snapshot)
 end
 
-local function AddParticipantOption(optionsByKey, profileID, gameID, identity, endpoint)
+local function AddParticipantOption(optionsByKey, profileID, gameID, identity, endpoint, classFilename)
     local key = GetIdentitySelectorKey(profileID, gameID)
     if not key then return end
 
@@ -434,14 +668,22 @@ local function AddParticipantOption(optionsByKey, profileID, gameID, identity, e
         label = label .. "  [" .. tostring(literalID) .. "]"
     end
     if not optionsByKey[key] then
-        optionsByKey[key] = { value = key, text = label }
+        optionsByKey[key] = {
+            value = key,
+            text = label,
+            icon = identity and identity.IC or nil,
+            classFilename = classFilename,
+        }
         return optionsByKey[key]
     end
+    local existing = optionsByKey[key]
+    if not existing.icon and identity and identity.IC then existing.icon = identity.IC end
+    if not existing.classFilename and classFilename then existing.classFilename = classFilename end
     return nil
 end
 
-local function IndexParticipantOption(catalog, profileID, gameID, identity, endpoint)
-    local option = AddParticipantOption(catalog.byKey, profileID, gameID, identity, endpoint)
+local function IndexParticipantOption(catalog, profileID, gameID, identity, endpoint, classFilename)
+    local option = AddParticipantOption(catalog.byKey, profileID, gameID, identity, endpoint, classFilename)
     if option then catalog.list[#catalog.list + 1] = option end
 end
 
@@ -449,7 +691,7 @@ local function IndexRecordParticipants(speakerOptions, listenerOptions, record)
     local senderID = record.s or (record.sender and record.sender.gameID)
     local identity = ResolveRecordIdentity(record)
     local profileID = record.ref or (identity and identity.ref)
-    IndexParticipantOption(speakerOptions, profileID, senderID, identity)
+    IndexParticipantOption(speakerOptions, profileID, senderID, identity, nil, record.cls)
 
     if record.mk == "S" and record.ev then
         local from = record.ev.from
@@ -468,6 +710,282 @@ end
 local function BuildParticipantOptions(mode)
     if not MainFrame or not MainFrame.participantOptions then return {} end
     return MainFrame.participantOptions[mode] or {}
+end
+
+local PARTICIPANT_PICKER_PAGE_SIZE = 8
+
+local function CopySelection(values)
+    local copied = {}
+    for key, selected in pairs(values or {}) do
+        if selected then copied[key] = true end
+    end
+    return copied
+end
+
+local function UpdateParticipantPickerButton(button, emptyText, selectedValues)
+    if not button then return end
+    local count = CountSelected(selectedValues)
+    button:SetText(count == 0 and (emptyText .. "  ▾") or ("已选 " .. tostring(count) .. " 人  ▾"))
+end
+
+local function SetParticipantAvatar(texture, option)
+    if not texture then return end
+    texture:SetTexCoord(0, 1, 0, 1)
+    if option and option.icon and option.icon ~= "" then
+        texture:SetTexture("Interface\\Icons\\" .. option.icon)
+        return
+    end
+
+    local coords = option and option.classFilename and CLASS_ICON_TCOORDS
+        and CLASS_ICON_TCOORDS[option.classFilename]
+    if coords then
+        texture:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+        texture:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        return
+    end
+    texture:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+end
+
+local function RefreshParticipantPicker(picker)
+    if not picker then return end
+    local query = strtrim(picker.query or ""):lower()
+    local matches = {}
+    for _, option in ipairs(BuildParticipantOptions("speaker")) do
+        if query == "" or tostring(option.text or ""):lower():find(query, 1, true) then
+            matches[#matches + 1] = option
+        end
+    end
+
+    picker.filteredOptions = matches
+    picker.totalPages = max(1, math.ceil(#matches / PARTICIPANT_PICKER_PAGE_SIZE))
+    picker.page = max(1, min(picker.page or 1, picker.totalPages))
+    local selectedCount = CountSelected(picker.draftSelected)
+    picker.resultText:SetText(format("%d 位发言者 · 已选 %d", #matches, selectedCount))
+    picker.pageText:SetText(format("第 %d / %d 页", picker.page, picker.totalPages))
+    picker.prevPageBtn:SetEnabled(picker.page > 1)
+    picker.nextPageBtn:SetEnabled(picker.page < picker.totalPages)
+    picker.clearSelectionBtn:SetEnabled(selectedCount > 0)
+
+    local startIndex = (picker.page - 1) * PARTICIPANT_PICKER_PAGE_SIZE + 1
+    for rowIndex, row in ipairs(picker.rows) do
+        local option = matches[startIndex + rowIndex - 1]
+        row.option = option
+        if option then
+            SetParticipantAvatar(row.avatar, option)
+            row.label:SetText(option.text or "未知发言者")
+            local selected = picker.draftSelected[option.value] == true
+            row.check:SetText(selected and "✓" or "")
+            UI.SetButtonSelected(row, selected)
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    if #matches == 0 then picker.emptyText:Show() else picker.emptyText:Hide() end
+end
+
+local function CreateParticipantPicker()
+    if not MainFrame then return nil end
+    if MainFrame.speakerPicker then return MainFrame.speakerPicker end
+
+    local picker = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
+    picker:SetSize(400, 420)
+    picker:SetFrameStrata("DIALOG")
+    picker:EnableMouse(true)
+    picker:Hide()
+    UI.RegisterPanel(picker, {
+        background = UI.COLORS.surface,
+        border = UI.COLORS.accent,
+        classicBackground = { 0.035, 0.045, 0.06, 0.98 },
+        classicBorder = { 0.76, 0.43, 0.20, 1 },
+    })
+
+    local title = picker:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 12, -12)
+    title:SetText("选择发言者")
+    UI.RegisterText(title, "heading")
+
+    local searchLabel = picker:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    searchLabel:SetPoint("TOPLEFT", 12, -44)
+    searchLabel:SetText("搜索")
+    UI.RegisterText(searchLabel, "primary")
+
+    local searchBox = CreateFrame("EditBox", nil, picker, "InputBoxTemplate,BackdropTemplate")
+    searchBox:SetSize(262, 24)
+    searchBox:SetPoint("TOPLEFT", 52, -38)
+    searchBox:SetAutoFocus(false)
+    UI.RegisterEditBox(searchBox)
+    picker.searchBox = searchBox
+
+    local clearSearchBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    clearSearchBtn:SetSize(62, 24)
+    clearSearchBtn:SetPoint("LEFT", searchBox, "RIGHT", 8, 0)
+    clearSearchBtn:SetText("清空搜索")
+    clearSearchBtn:SetScript("OnClick", function()
+        picker.query = ""
+        picker.page = 1
+        searchBox:SetText("")
+        RefreshParticipantPicker(picker)
+    end)
+    UI.RegisterButton(clearSearchBtn)
+
+    searchBox:SetScript("OnTextChanged", function(self, userInput)
+        if not userInput then return end
+        picker.query = self:GetText() or ""
+        picker.page = 1
+        RefreshParticipantPicker(picker)
+    end)
+    searchBox:SetScript("OnEnterPressed", function(self)
+        picker.query = self:GetText() or ""
+        picker.page = 1
+        RefreshParticipantPicker(picker)
+        self:ClearFocus()
+    end)
+    searchBox:SetScript("OnEscapePressed", function(self)
+        if self:GetText() ~= "" then
+            picker.query = ""
+            self:SetText("")
+            picker.page = 1
+            RefreshParticipantPicker(picker)
+        else
+            self:ClearFocus()
+            picker:Hide()
+        end
+    end)
+
+    local resultText = picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    resultText:SetPoint("TOPLEFT", 12, -72)
+    UI.RegisterText(resultText, "muted")
+    picker.resultText = resultText
+
+    local clearSelectionBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    clearSelectionBtn:SetSize(72, 20)
+    clearSelectionBtn:SetPoint("TOPRIGHT", -12, -67)
+    clearSelectionBtn:SetText("清除选择")
+    clearSelectionBtn:SetScript("OnClick", function()
+        wipe(picker.draftSelected)
+        RefreshParticipantPicker(picker)
+    end)
+    UI.RegisterButton(clearSelectionBtn)
+    picker.clearSelectionBtn = clearSelectionBtn
+
+    picker.rows = {}
+    for rowIndex = 1, PARTICIPANT_PICKER_PAGE_SIZE do
+        local row = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+        row:SetSize(376, 32)
+        row:SetPoint("TOPLEFT", 12, -88 - ((rowIndex - 1) * 35))
+        UI.RegisterButton(row)
+
+        local avatar = row:CreateTexture(nil, "ARTWORK")
+        avatar:SetSize(24, 24)
+        avatar:SetPoint("LEFT", 5, 0)
+        row.avatar = avatar
+
+        local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetPoint("LEFT", avatar, "RIGHT", 8, 0)
+        label:SetWidth(304)
+        label:SetJustifyH("LEFT")
+        label:SetWordWrap(false)
+        label:SetNonSpaceWrap(false)
+        UI.RegisterText(label, "primary")
+        row.label = label
+
+        local check = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        check:SetPoint("RIGHT", -10, 0)
+        UI.RegisterText(check, "heading")
+        row.check = check
+
+        row:SetScript("OnClick", function(self)
+            local option = self.option
+            if not option then return end
+            picker.draftSelected[option.value] = not picker.draftSelected[option.value] or nil
+            RefreshParticipantPicker(picker)
+        end)
+        picker.rows[rowIndex] = row
+    end
+
+    local emptyText = picker:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+    emptyText:SetPoint("CENTER", 0, -4)
+    emptyText:SetText("没有找到发言者")
+    UI.RegisterText(emptyText, "muted")
+    emptyText:Hide()
+    picker.emptyText = emptyText
+
+    local prevPageBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    prevPageBtn:SetSize(62, 22)
+    prevPageBtn:SetPoint("BOTTOMLEFT", 12, 12)
+    prevPageBtn:SetText("上一页")
+    prevPageBtn:SetScript("OnClick", function()
+        picker.page = max(1, picker.page - 1)
+        RefreshParticipantPicker(picker)
+    end)
+    UI.RegisterButton(prevPageBtn)
+    picker.prevPageBtn = prevPageBtn
+
+    local pageText = picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    pageText:SetWidth(88)
+    pageText:SetPoint("LEFT", prevPageBtn, "RIGHT", 4, 0)
+    pageText:SetJustifyH("CENTER")
+    UI.RegisterText(pageText, "muted")
+    picker.pageText = pageText
+
+    local nextPageBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    nextPageBtn:SetSize(62, 22)
+    nextPageBtn:SetPoint("LEFT", pageText, "RIGHT", 4, 0)
+    nextPageBtn:SetText("下一页")
+    nextPageBtn:SetScript("OnClick", function()
+        picker.page = min(picker.totalPages, picker.page + 1)
+        RefreshParticipantPicker(picker)
+    end)
+    UI.RegisterButton(nextPageBtn)
+    picker.nextPageBtn = nextPageBtn
+
+    local applyBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    applyBtn:SetSize(62, 22)
+    applyBtn:SetPoint("BOTTOMRIGHT", -12, 12)
+    applyBtn:SetText("应用")
+    applyBtn:SetScript("OnClick", function()
+        wipe(currentFilter.speakers)
+        for key, selected in pairs(picker.draftSelected or {}) do
+            if selected then currentFilter.speakers[key] = true end
+        end
+        UpdateParticipantPickerButton(MainFrame.speakerDropdown, "全部发言者", currentFilter.speakers)
+        UpdateFilterSummary()
+        picker:Hide()
+        RefreshLogContent()
+    end)
+    UI.RegisterButton(applyBtn)
+    picker.applyBtn = applyBtn
+
+    local cancelBtn = CreateFrame("Button", nil, picker, "UIPanelButtonTemplate,BackdropTemplate")
+    cancelBtn:SetSize(62, 22)
+    cancelBtn:SetPoint("RIGHT", applyBtn, "LEFT", -6, 0)
+    cancelBtn:SetText("取消")
+    cancelBtn:SetScript("OnClick", function() picker:Hide() end)
+    UI.RegisterButton(cancelBtn)
+    picker.cancelBtn = cancelBtn
+
+    MainFrame.speakerPicker = picker
+    return picker
+end
+
+local function ToggleParticipantPicker()
+    local picker = CreateParticipantPicker()
+    if not picker then return end
+    if picker:IsShown() then
+        picker:Hide()
+        return
+    end
+    if MainFrame.dateTimePicker then MainFrame.dateTimePicker:Hide() end
+    picker.draftSelected = CopySelection(currentFilter.speakers)
+    picker.query = ""
+    picker.page = 1
+    picker.searchBox:SetText("")
+    picker:ClearAllPoints()
+    picker:SetPoint("TOPLEFT", MainFrame.filterFrame, "TOPRIGHT", 8, -80)
+    RefreshParticipantPicker(picker)
+    picker:Show()
+    picker.searchBox:SetFocus()
 end
 
 UpdateFilterSummary = function()
@@ -578,6 +1096,14 @@ local function InitParticipantDropdown(dropdown, mode, selectedValues)
     if not dropdown then return end
     local options = BuildParticipantOptions(mode)
     local emptyText = mode == "speaker" and "全部发言者" or "全部视角"
+
+    if mode == "speaker" and dropdown._rpboxParticipantPicker then
+        UpdateParticipantPickerButton(dropdown, emptyText, selectedValues)
+        if MainFrame and MainFrame.speakerPicker and MainFrame.speakerPicker:IsShown() then
+            RefreshParticipantPicker(MainFrame.speakerPicker)
+        end
+        return
+    end
 
     UIDropDownMenu_Initialize(dropdown, function(self, level)
         local allInfo = UIDropDownMenu_CreateInfo()
@@ -713,11 +1239,15 @@ local function GetFilterTimeRange()
 end
 
 local function RecordMatchesCurrentFilter(record, minTime, maxTime, searchLower)
+    local channel = NormalizeRecordChannel(record.c or record.channel)
+    if (channel == "SYSTEM" or record.mk == "S") and RPBox_Config.showSystemMessages ~= true then
+        return false
+    end
+
     local timestamp = record.t or record.timestamp or 0
     if minTime and timestamp < minTime then return false end
     if maxTime and timestamp > maxTime then return false end
 
-    local channel = NormalizeRecordChannel(record.c or record.channel)
     if HasSelections(currentFilter.channels)
         and (not channel or currentFilter.channels[channel] ~= true) then
         return false
@@ -1059,9 +1589,9 @@ local function SetLogNavigationState(state, scanning)
         if scanning then
             MainFrame.pageProgress:SetText("筛选中…")
         elseif state then
-            MainFrame.pageProgress:SetText(format("%d / %d 页", state.page, state.totalPages))
+            MainFrame.pageProgress:SetText(format("第 %d / %d 页", state.page, state.totalPages))
         else
-            MainFrame.pageProgress:SetText("0 / 0 页")
+            MainFrame.pageProgress:SetText("第 0 / 0 页")
         end
     end
 end
@@ -1216,6 +1746,12 @@ end
 local function CompleteLogScan(scan)
     if not MainFrame or scan.renderToken ~= MainFrame.logRenderToken then return end
     MainFrame.logScan = nil
+    table.sort(scan.speakerOptions.list, function(a, b)
+        return tostring(a.text or ""):lower() < tostring(b.text or ""):lower()
+    end)
+    table.sort(scan.listenerOptions.list, function(a, b)
+        return tostring(a.text or ""):lower() < tostring(b.text or ""):lower()
+    end)
     MainFrame.participantOptions = {
         speaker = scan.speakerOptions.list,
         listener = scan.listenerOptions.list,
@@ -1630,6 +2166,34 @@ local function RefreshSettingsContent()
     content.ignoreSelfCb:Show()
     yOffset = yOffset + 26
 
+    -- 屏蔽非 RP 玩家复选框（默认关闭）
+    if not content.ignoreNonRPCb then
+        content.ignoreNonRPCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
+        content.ignoreNonRPCb.text = content.ignoreNonRPCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.ignoreNonRPCb.text:SetPoint("LEFT", content.ignoreNonRPCb, "RIGHT", 2, 0)
+        UI.RegisterCheckButton(content.ignoreNonRPCb)
+        UI.RegisterText(content.ignoreNonRPCb.text, "primary")
+    end
+    content.ignoreNonRPCb:SetPoint("TOPLEFT", 10, -yOffset)
+    content.ignoreNonRPCb.text:SetText("屏蔽非 RP 玩家消息")
+    content.ignoreNonRPCb:SetChecked(RPBox_Config.ignoreNonRPPlayers == true)
+    content.ignoreNonRPCb:SetScript("OnClick", function(self)
+        RPBox_Config.ignoreNonRPPlayers = self:GetChecked()
+        UI.RefreshCheckButton(self)
+    end)
+    UI.RefreshCheckButton(content.ignoreNonRPCb)
+    content.ignoreNonRPCb:Show()
+    yOffset = yOffset + 24
+
+    if not content.ignoreNonRPHint then
+        content.ignoreNonRPHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        UI.RegisterText(content.ignoreNonRPHint, "muted")
+    end
+    content.ignoreNonRPHint:SetPoint("TOPLEFT", 36, -yOffset)
+    content.ignoreNonRPHint:SetText("开启后，仅记录有 RP 人物卡或已加入白名单的玩家")
+    content.ignoreNonRPHint:Show()
+    yOffset = yOffset + 22
+
     -- 只接受公会成员复选框
     if not content.guildOnlyCb then
         content.guildOnlyCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
@@ -1728,6 +2292,34 @@ local function RefreshSettingsContent()
     content.showIconCb:Show()
     yOffset = yOffset + 26
 
+    -- 系统信息默认只保留在档案中，不参与日志展示。
+    if not content.showSystemMessagesCb then
+        content.showSystemMessagesCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
+        content.showSystemMessagesCb.text = content.showSystemMessagesCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.showSystemMessagesCb.text:SetPoint("LEFT", content.showSystemMessagesCb, "RIGHT", 2, 0)
+        UI.RegisterCheckButton(content.showSystemMessagesCb)
+        UI.RegisterText(content.showSystemMessagesCb.text, "primary")
+    end
+    content.showSystemMessagesCb:SetPoint("TOPLEFT", 10, -yOffset)
+    content.showSystemMessagesCb.text:SetText("显示人物卡更新等系统信息")
+    content.showSystemMessagesCb:SetChecked(RPBox_Config.showSystemMessages == true)
+    content.showSystemMessagesCb:SetScript("OnClick", function(self)
+        RPBox_Config.showSystemMessages = self:GetChecked()
+        UI.RefreshCheckButton(self)
+    end)
+    UI.RefreshCheckButton(content.showSystemMessagesCb)
+    content.showSystemMessagesCb:Show()
+    yOffset = yOffset + 24
+
+    if not content.showSystemMessagesHint then
+        content.showSystemMessagesHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        UI.RegisterText(content.showSystemMessagesHint, "muted")
+    end
+    content.showSystemMessagesHint:SetPoint("TOPLEFT", 36, -yOffset)
+    content.showSystemMessagesHint:SetText("关闭时仍保留数据，仅在聊天记录中隐藏")
+    content.showSystemMessagesHint:Show()
+    yOffset = yOffset + 22
+
     -- 有界分页设置（同时存活的日志行永不超过硬上限）
     yOffset = yOffset + 15
     if not content.viewWindowSizeTitle then
@@ -1786,6 +2378,8 @@ end
 -- 切换标签页
 local function SwitchTab(tabName)
     if not MainFrame then return end
+    if MainFrame.dateTimePicker then MainFrame.dateTimePicker:Hide() end
+    if MainFrame.speakerPicker then MainFrame.speakerPicker:Hide() end
     if currentTab == "log" and tabName ~= "log" then
         InvalidateLogRender()
     end
@@ -1847,6 +2441,8 @@ local function CreateMainFrame()
     MainFrame:Hide()
     MainFrame:HookScript("OnHide", function()
         InvalidateLogRender()
+        if MainFrame.dateTimePicker then MainFrame.dateTimePicker:Hide() end
+        if MainFrame.speakerPicker then MainFrame.speakerPicker:Hide() end
     end)
     MainFrame:SetScript("OnSizeChanged", function()
         UpdateLogLayoutWidth()
@@ -1940,7 +2536,7 @@ local function CreateMainFrame()
     local filterFrame = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
     filterFrame:SetPoint("TOPLEFT", 12, -58)
     filterFrame:SetPoint("BOTTOMLEFT", 12, 40)
-    filterFrame:SetWidth(178)
+    filterFrame:SetWidth(206)
     UI.RegisterPanel(filterFrame, {
         background = UI.COLORS.raised,
         border = UI.COLORS.border,
@@ -1964,7 +2560,7 @@ local function CreateMainFrame()
     UI.RegisterText(dateLabel, "primary")
     local dateDropdown = CreateFrame("Frame", "RPBoxDateDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
     dateDropdown:SetPoint("TOPLEFT", -4, -62)
-    UIDropDownMenu_SetWidth(dateDropdown, 142)
+    UIDropDownMenu_SetWidth(dateDropdown, 154)
     UI.RegisterDropdown(dateDropdown)
 
     local exactStartLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1972,7 +2568,7 @@ local function CreateMainFrame()
     exactStartLabel:SetText("起")
     UI.RegisterText(exactStartLabel, "primary")
     local exactStartBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate,BackdropTemplate")
-    exactStartBox:SetSize(132, 22)
+    exactStartBox:SetSize(122, 22)
     exactStartBox:SetPoint("TOPLEFT", 34, -98)
     exactStartBox:SetAutoFocus(false)
     exactStartBox:SetText(currentFilter.startTimeText or "")
@@ -1986,12 +2582,19 @@ local function CreateMainFrame()
     end)
     UI.RegisterEditBox(exactStartBox)
 
+    local exactStartPickerBtn = CreateFrame("Button", nil, filterFrame, "UIPanelButtonTemplate,BackdropTemplate")
+    exactStartPickerBtn:SetSize(34, 22)
+    exactStartPickerBtn:SetPoint("LEFT", exactStartBox, "RIGHT", 4, 0)
+    exactStartPickerBtn:SetText("选择")
+    exactStartPickerBtn:SetScript("OnClick", function() OpenDateTimePicker(exactStartBox, false) end)
+    UI.RegisterButton(exactStartPickerBtn)
+
     local exactEndLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     exactEndLabel:SetPoint("TOPLEFT", 12, -128)
     exactEndLabel:SetText("止")
     UI.RegisterText(exactEndLabel, "primary")
     local exactEndBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate,BackdropTemplate")
-    exactEndBox:SetSize(132, 22)
+    exactEndBox:SetSize(122, 22)
     exactEndBox:SetPoint("TOPLEFT", 34, -124)
     exactEndBox:SetAutoFocus(false)
     exactEndBox:SetText(currentFilter.endTimeText or "")
@@ -2005,19 +2608,30 @@ local function CreateMainFrame()
     end)
     UI.RegisterEditBox(exactEndBox)
 
+    local exactEndPickerBtn = CreateFrame("Button", nil, filterFrame, "UIPanelButtonTemplate,BackdropTemplate")
+    exactEndPickerBtn:SetSize(34, 22)
+    exactEndPickerBtn:SetPoint("LEFT", exactEndBox, "RIGHT", 4, 0)
+    exactEndPickerBtn:SetText("选择")
+    exactEndPickerBtn:SetScript("OnClick", function() OpenDateTimePicker(exactEndBox, true) end)
+    UI.RegisterButton(exactEndPickerBtn)
+
     local exactTimeHint = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     exactTimeHint:SetPoint("TOPLEFT", 34, -150)
-    exactTimeHint:SetText("YYYY-MM-DD HH:MM")
+    exactTimeHint:SetWidth(160)
+    exactTimeHint:SetText("可输入，或点击选择")
     UI.RegisterText(exactTimeHint, "muted")
 
     local speakerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     speakerLabel:SetPoint("TOPLEFT", 12, -178)
     speakerLabel:SetText("发言者 / 人物卡")
     UI.RegisterText(speakerLabel, "primary")
-    local speakerDropdown = CreateFrame("Frame", "RPBoxSpeakerDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
-    speakerDropdown:SetPoint("TOPLEFT", -4, -190)
-    UIDropDownMenu_SetWidth(speakerDropdown, 142)
-    UI.RegisterDropdown(speakerDropdown)
+    local speakerDropdown = CreateFrame("Button", "RPBoxSpeakerDropdown", filterFrame, "UIPanelButtonTemplate,BackdropTemplate")
+    speakerDropdown:SetSize(182, 24)
+    speakerDropdown:SetPoint("TOPLEFT", 12, -194)
+    speakerDropdown:SetText("全部发言者  ▾")
+    speakerDropdown._rpboxParticipantPicker = true
+    speakerDropdown:SetScript("OnClick", ToggleParticipantPicker)
+    UI.RegisterButton(speakerDropdown)
 
     local listenerLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     listenerLabel:SetPoint("TOPLEFT", 12, -232)
@@ -2025,7 +2639,7 @@ local function CreateMainFrame()
     UI.RegisterText(listenerLabel, "primary")
     local listenerDropdown = CreateFrame("Frame", "RPBoxListenerDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
     listenerDropdown:SetPoint("TOPLEFT", -4, -244)
-    UIDropDownMenu_SetWidth(listenerDropdown, 142)
+    UIDropDownMenu_SetWidth(listenerDropdown, 154)
     UI.RegisterDropdown(listenerDropdown)
 
     local channelLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -2034,7 +2648,7 @@ local function CreateMainFrame()
     UI.RegisterText(channelLabel, "primary")
     local channelDropdown = CreateFrame("Frame", "RPBoxChannelDropdown", filterFrame, "UIDropDownMenuTemplate,BackdropTemplate")
     channelDropdown:SetPoint("TOPLEFT", -4, -298)
-    UIDropDownMenu_SetWidth(channelDropdown, 142)
+    UIDropDownMenu_SetWidth(channelDropdown, 154)
     UI.RegisterDropdown(channelDropdown)
 
     local searchLabel = filterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -2042,7 +2656,7 @@ local function CreateMainFrame()
     searchLabel:SetText("全文与历史姓名")
     UI.RegisterText(searchLabel, "primary")
     local searchBox = CreateFrame("EditBox", nil, filterFrame, "InputBoxTemplate,BackdropTemplate")
-    searchBox:SetSize(150, 22)
+    searchBox:SetSize(182, 22)
     searchBox:SetPoint("TOPLEFT", 12, -356)
     searchBox:SetAutoFocus(false)
     searchBox:SetText(currentFilter.search)
@@ -2072,7 +2686,7 @@ local function CreateMainFrame()
     UI.RegisterText(filterSummary, "muted")
 
     local clearFilterBtn = CreateFrame("Button", nil, filterFrame, "UIPanelButtonTemplate,BackdropTemplate")
-    clearFilterBtn:SetSize(150, 22)
+    clearFilterBtn:SetSize(182, 22)
     clearFilterBtn:SetPoint("BOTTOM", 0, 10)
     clearFilterBtn:SetText("清除全部筛选")
     clearFilterBtn:SetScript("OnClick", function()
@@ -2096,6 +2710,8 @@ local function CreateMainFrame()
     MainFrame.dateDropdown = dateDropdown
     MainFrame.exactStartBox = exactStartBox
     MainFrame.exactEndBox = exactEndBox
+    MainFrame.exactStartPickerBtn = exactStartPickerBtn
+    MainFrame.exactEndPickerBtn = exactEndPickerBtn
     MainFrame.speakerDropdown = speakerDropdown
     MainFrame.listenerDropdown = listenerDropdown
     MainFrame.channelDropdown = channelDropdown
@@ -2103,9 +2719,9 @@ local function CreateMainFrame()
     MainFrame.filterSummary = filterSummary
     MainFrame.clearFilterBtn = clearFilterBtn
 
-    -- 日志区域使用独立的扁平底板，形成“侧栏 + 时间账本”的双栏结构。
+    -- 日志区域使用独立的扁平底板，与筛选侧栏形成清晰的双栏结构。
     local logSurface = CreateFrame("Frame", nil, MainFrame, "BackdropTemplate")
-    logSurface:SetPoint("TOPLEFT", 198, -56)
+    logSurface:SetPoint("TOPLEFT", 226, -56)
     logSurface:SetPoint("BOTTOMRIGHT", -28, 38)
     logSurface:EnableMouse(false)
     UI.RegisterPanel(logSurface, {
@@ -2116,47 +2732,44 @@ local function CreateMainFrame()
     MainFrame.logSurface = logSurface
 
     local ledgerHeader = CreateFrame("Frame", nil, MainFrame)
-    ledgerHeader:SetPoint("TOPLEFT", 205, -58)
+    ledgerHeader:SetPoint("TOPLEFT", 233, -58)
     ledgerHeader:SetPoint("TOPRIGHT", -30, -58)
     ledgerHeader:SetHeight(24)
-    local ledgerTitle = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    ledgerTitle:SetPoint("LEFT", 0, 0)
-    ledgerTitle:SetText("时间账本 · 最新优先")
-    UI.RegisterText(ledgerTitle, "heading")
 
     local latestPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate,BackdropTemplate")
-    latestPageBtn:SetSize(48, 20)
-    latestPageBtn:SetPoint("RIGHT", 0, 0)
-    latestPageBtn:SetText("最新")
+    latestPageBtn:SetSize(52, 20)
+    latestPageBtn:SetText("首页")
     latestPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(1) end
     end)
     UI.RegisterButton(latestPageBtn)
 
     local nextPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate,BackdropTemplate")
-    nextPageBtn:SetSize(66, 20)
-    nextPageBtn:SetPoint("RIGHT", latestPageBtn, "LEFT", -4, 0)
-    nextPageBtn:SetText("较早 →")
+    nextPageBtn:SetSize(64, 20)
+    nextPageBtn:SetPoint("RIGHT", 0, 0)
+    nextPageBtn:SetText("下一页")
     nextPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(MainFrame.logState.page + 1) end
     end)
     UI.RegisterButton(nextPageBtn)
 
     local pageProgress = ledgerHeader:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    pageProgress:SetWidth(72)
+    pageProgress:SetWidth(94)
     pageProgress:SetPoint("RIGHT", nextPageBtn, "LEFT", -4, 0)
     pageProgress:SetJustifyH("CENTER")
-    pageProgress:SetText("0 / 0 页")
+    pageProgress:SetText("第 0 / 0 页")
     UI.RegisterText(pageProgress, "muted")
 
     local prevPageBtn = CreateFrame("Button", nil, ledgerHeader, "UIPanelButtonTemplate,BackdropTemplate")
-    prevPageBtn:SetSize(62, 20)
+    prevPageBtn:SetSize(64, 20)
     prevPageBtn:SetPoint("RIGHT", pageProgress, "LEFT", -4, 0)
-    prevPageBtn:SetText("← 较新")
+    prevPageBtn:SetText("上一页")
     prevPageBtn:SetScript("OnClick", function()
         if MainFrame.logState then RenderLogPage(MainFrame.logState.page - 1) end
     end)
     UI.RegisterButton(prevPageBtn)
+
+    latestPageBtn:SetPoint("RIGHT", prevPageBtn, "LEFT", -4, 0)
 
     MainFrame.ledgerHeader = ledgerHeader
     MainFrame.prevPageBtn = prevPageBtn
@@ -2167,7 +2780,7 @@ local function CreateMainFrame()
 
     -- 日志滚动框架
     local logScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
-    logScroll:SetPoint("TOPLEFT", 205, -84)
+    logScroll:SetPoint("TOPLEFT", 233, -84)
     logScroll:SetPoint("BOTTOMRIGHT", -30, 40)
     logScroll:SetScript("OnVerticalScroll", function(self, offset)
         if self._rpboxAdjustingScroll then return end
@@ -2191,6 +2804,7 @@ local function CreateMainFrame()
     local logContent = CreateFrame("Frame", nil, logScroll)
     logContent:SetSize(480, 1)
     logScroll:SetScrollChild(logContent)
+    UI.RegisterScrollFrame(logScroll)
 
     MainFrame.logScroll = logScroll
     MainFrame.logContent = logContent
@@ -2205,6 +2819,7 @@ local function CreateMainFrame()
     local listContent = CreateFrame("Frame", nil, listScroll)
     listContent:SetSize(480, 1)
     listScroll:SetScrollChild(listContent)
+    UI.RegisterScrollFrame(listScroll)
 
     MainFrame.listScroll = listScroll
     MainFrame.listContent = listContent
@@ -2215,7 +2830,7 @@ local function CreateMainFrame()
     debugScroll:SetPoint("BOTTOMRIGHT", -30, 40)
     debugScroll:Hide()
 
-    local debugEdit = CreateFrame("EditBox", nil, debugScroll)
+    local debugEdit = CreateFrame("EditBox", nil, debugScroll, "BackdropTemplate")
     debugEdit:SetMultiLine(true)
     debugEdit:SetFontObject(GameFontHighlightSmall)
     debugEdit:SetWidth(480)
@@ -2223,6 +2838,8 @@ local function CreateMainFrame()
     debugEdit:EnableMouse(true)
     debugEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     debugScroll:SetScrollChild(debugEdit)
+    UI.RegisterEditBox(debugEdit)
+    UI.RegisterScrollFrame(debugScroll)
 
     MainFrame.debugScroll = debugScroll
     MainFrame.debugEdit = debugEdit
@@ -2236,6 +2853,7 @@ local function CreateMainFrame()
     local settingsContent = CreateFrame("Frame", nil, settingsScroll)
     settingsContent:SetSize(480, 300)
     settingsScroll:SetScrollChild(settingsContent)
+    UI.RegisterScrollFrame(settingsScroll)
 
     MainFrame.settingsScroll = settingsScroll
     MainFrame.settingsContent = settingsContent
@@ -2315,6 +2933,7 @@ local function CreateMainFrame()
             end)
             UI.RegisterEditBox(editBox)
             scroll:SetScrollChild(editBox)
+            UI.RegisterScrollFrame(scroll)
 
             dialog.editBox = editBox
             MainFrame.copyDialog = dialog

@@ -36,8 +36,10 @@ local DEFAULT_CONFIG = {
     },
     -- 显示设置
     showIcon = true,  -- 是否显示头像图标
+    showSystemMessages = false,  -- 是否在日志中显示人物卡更新等系统信息
     uiTheme = "modern",  -- modern: 简约档案；classic: 暴雪原生
     ignoreSelf = false,  -- 是否屏蔽自己的消息
+    ignoreNonRPPlayers = false,  -- 是否屏蔽未检测到 RP 人物卡的玩家
     guildOnly = false,  -- 是否只接受公会成员的消息
 }
 

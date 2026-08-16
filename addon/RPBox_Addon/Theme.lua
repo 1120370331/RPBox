@@ -41,6 +41,7 @@ local registries = {
     editBoxes = {},
     dropdowns = {},
     checkButtons = {},
+    scrollFrames = {},
     text = {},
 }
 
@@ -72,20 +73,35 @@ local function IsTexture(region)
     return false
 end
 
-local function CaptureTemplateTextures(widget)
+local function CaptureTemplateTextures(widget, excludedRegion)
     if not widget or widget._rpboxTemplateTextures then return end
     widget._rpboxTemplateTextures = {}
-    if not widget.GetRegions then return end
 
-    local regions = { widget:GetRegions() }
-    for _, region in ipairs(regions) do
-        if IsTexture(region) then
-            widget._rpboxTemplateTextures[#widget._rpboxTemplateTextures + 1] = {
-                region = region,
-                alpha = region.GetAlpha and region:GetAlpha() or 1,
-            }
+    local visited = {}
+    local function CaptureTree(node)
+        if not node or visited[node] then return end
+        visited[node] = true
+
+        if node.GetRegions then
+            local regions = { node:GetRegions() }
+            for _, region in ipairs(regions) do
+                if IsTexture(region) and region ~= excludedRegion then
+                    widget._rpboxTemplateTextures[#widget._rpboxTemplateTextures + 1] = {
+                        region = region,
+                        alpha = region.GetAlpha and region:GetAlpha() or 1,
+                    }
+                end
+            end
+        end
+
+        if node.GetChildren then
+            local children = { node:GetChildren() }
+            for _, child in ipairs(children) do
+                CaptureTree(child)
+            end
         end
     end
+    CaptureTree(widget)
 end
 
 local function SetTemplateTexturesShown(widget, shown)
@@ -101,6 +117,16 @@ end
 
 local function GetFontString(widget)
     if widget and widget.GetFontString then return widget:GetFontString() end
+    return nil
+end
+
+local function GetNamedWidget(widget, key, suffix)
+    if not widget then return nil end
+    if widget[key] then return widget[key] end
+    if widget.GetName then
+        local name = widget:GetName()
+        if name and _G then return _G[name .. suffix] end
+    end
     return nil
 end
 
@@ -383,15 +409,22 @@ function UI.RegisterEditBox(editBox)
 end
 
 local function ApplyDropdown(dropdown)
+    local dropdownText = GetNamedWidget(dropdown, "Text", "Text")
     if not UI.IsModern() then
         SetTemplateTexturesShown(dropdown, true)
         ClearBackdrop(dropdown)
+        RestoreTextColor(dropdownText)
         SetShown(dropdown._rpboxDropdownArrow, false)
         return
     end
 
     SetTemplateTexturesShown(dropdown, false)
-    SetBackdrop(dropdown, UI.COLORS.input, UI.COLORS.border)
+    SetBackdrop(
+        dropdown,
+        dropdown._rpboxHovered and UI.COLORS.hover or UI.COLORS.input,
+        dropdown._rpboxHovered and UI.COLORS.accent or UI.COLORS.border
+    )
+    ApplyTextColor(dropdownText, UI.COLORS.text)
     ApplyTextColor(dropdown._rpboxDropdownArrow, UI.COLORS.accent)
     SetShown(dropdown._rpboxDropdownArrow, true)
 end
@@ -404,6 +437,18 @@ function UI.RegisterDropdown(dropdown)
         arrow:SetPoint("RIGHT", -10, 1)
         arrow:SetText("▼")
         dropdown._rpboxDropdownArrow = arrow
+    end
+    if not dropdown._rpboxThemeHooks then
+        local clickTarget = GetNamedWidget(dropdown, "Button", "Button") or dropdown
+        clickTarget:HookScript("OnEnter", function()
+            dropdown._rpboxHovered = true
+            ApplyDropdown(dropdown)
+        end)
+        clickTarget:HookScript("OnLeave", function()
+            dropdown._rpboxHovered = false
+            ApplyDropdown(dropdown)
+        end)
+        dropdown._rpboxThemeHooks = true
     end
     registries.dropdowns[dropdown] = true
     ApplyDropdown(dropdown)
@@ -451,6 +496,147 @@ function UI.RefreshCheckButton(checkButton)
     if checkButton then ApplyCheckButton(checkButton) end
 end
 
+local function GetScrollBar(scrollFrame)
+    return GetNamedWidget(scrollFrame, "ScrollBar", "ScrollBar")
+end
+
+local function GetScrollButton(scrollBar, key, suffix)
+    return GetNamedWidget(scrollBar, key, suffix)
+end
+
+local function CaptureThumbState(thumb)
+    if not thumb or thumb._rpboxOriginalThumbState then return end
+    local state = {}
+    if thumb.GetAtlas then state.atlas = thumb:GetAtlas() end
+    if thumb.GetTexture then state.texture = thumb:GetTexture() end
+    if thumb.GetVertexColor then
+        state.r, state.g, state.b, state.a = thumb:GetVertexColor()
+    end
+    if thumb.GetAlpha then state.alpha = thumb:GetAlpha() end
+    if thumb.GetWidth then state.width = thumb:GetWidth() end
+    if thumb.GetHeight then state.height = thumb:GetHeight() end
+    thumb._rpboxOriginalThumbState = state
+end
+
+local function RestoreThumb(thumb)
+    local state = thumb and thumb._rpboxOriginalThumbState
+    if not state then return end
+    if state.atlas and thumb.SetAtlas then
+        thumb:SetAtlas(state.atlas, false)
+    elseif state.texture and thumb.SetTexture then
+        thumb:SetTexture(state.texture)
+    end
+    if thumb.SetVertexColor and state.r then
+        thumb:SetVertexColor(state.r, state.g, state.b, state.a or 1)
+    end
+    if thumb.SetAlpha and state.alpha then thumb:SetAlpha(state.alpha) end
+    if thumb.SetSize and state.width and state.height then thumb:SetSize(state.width, state.height) end
+end
+
+local function ApplyScrollButton(button)
+    if not button or not button._rpboxScrollSurface then return end
+    local modern = UI.IsModern()
+    SetShown(button._rpboxScrollSurface, modern)
+    SetShown(button._rpboxScrollGlyph, modern)
+    if not modern then return end
+
+    local enabled = not button.IsEnabled or button:IsEnabled()
+    local hovered = button._rpboxHovered == true and enabled
+    SetBackdrop(
+        button._rpboxScrollSurface,
+        hovered and UI.COLORS.hover or UI.COLORS.raised,
+        hovered and UI.COLORS.accent or UI.COLORS.borderDim
+    )
+    ApplyTextColor(button._rpboxScrollGlyph, enabled and UI.COLORS.accent or UI.COLORS.muted)
+end
+
+local function EnsureScrollButton(button, glyph)
+    if not button or button._rpboxScrollSurface then return end
+
+    local surface = CreateFrame("Frame", nil, button, "BackdropTemplate")
+    surface:SetAllPoints(button)
+    surface:EnableMouse(false)
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("CENTER", 0, 0)
+    label:SetText(glyph)
+    button._rpboxScrollSurface = surface
+    button._rpboxScrollGlyph = label
+
+    button:HookScript("OnEnter", function(self)
+        self._rpboxHovered = true
+        ApplyScrollButton(self)
+    end)
+    button:HookScript("OnLeave", function(self)
+        self._rpboxHovered = false
+        ApplyScrollButton(self)
+    end)
+    button:HookScript("OnEnable", ApplyScrollButton)
+    button:HookScript("OnDisable", ApplyScrollButton)
+end
+
+local function EnsureScrollFrameChrome(scrollFrame)
+    local scrollBar = GetScrollBar(scrollFrame)
+    if not scrollBar then return nil end
+    if scrollFrame._rpboxScrollBar then return scrollBar end
+
+    local thumb = scrollBar.GetThumbTexture and scrollBar:GetThumbTexture()
+        or GetNamedWidget(scrollBar, "ThumbTexture", "ThumbTexture")
+    CaptureThumbState(thumb)
+    CaptureTemplateTextures(scrollBar, thumb)
+
+    local track = scrollBar:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("TOP", 0, -18)
+    track:SetPoint("BOTTOM", 0, 18)
+    track:SetWidth(6)
+
+    local upButton = GetScrollButton(scrollBar, "ScrollUpButton", "ScrollUpButton")
+    local downButton = GetScrollButton(scrollBar, "ScrollDownButton", "ScrollDownButton")
+    EnsureScrollButton(upButton, "▲")
+    EnsureScrollButton(downButton, "▼")
+
+    scrollFrame._rpboxScrollBar = scrollBar
+    scrollFrame._rpboxScrollThumb = thumb
+    scrollFrame._rpboxScrollTrack = track
+    scrollFrame._rpboxScrollUpButton = upButton
+    scrollFrame._rpboxScrollDownButton = downButton
+    return scrollBar
+end
+
+local function ApplyScrollFrame(scrollFrame)
+    local scrollBar = EnsureScrollFrameChrome(scrollFrame)
+    if not scrollBar then return end
+    local modern = UI.IsModern()
+    SetTemplateTexturesShown(scrollBar, not modern)
+    SetShown(scrollFrame._rpboxScrollTrack, modern)
+    ApplyScrollButton(scrollFrame._rpboxScrollUpButton)
+    ApplyScrollButton(scrollFrame._rpboxScrollDownButton)
+
+    local thumb = scrollFrame._rpboxScrollThumb
+    if modern then
+        if scrollFrame._rpboxScrollTrack and scrollFrame._rpboxScrollTrack.SetColorTexture then
+            local color = UI.COLORS.input
+            scrollFrame._rpboxScrollTrack:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+        end
+        if thumb then
+            if thumb.SetTexture then thumb:SetTexture(WHITE_TEXTURE) end
+            if thumb.SetVertexColor then
+                local color = UI.COLORS.accent
+                thumb:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
+            end
+            if thumb.SetAlpha then thumb:SetAlpha(1) end
+            if thumb.SetWidth then thumb:SetWidth(8) end
+        end
+    else
+        RestoreThumb(thumb)
+    end
+end
+
+function UI.RegisterScrollFrame(scrollFrame)
+    if not scrollFrame then return end
+    registries.scrollFrames[scrollFrame] = true
+    ApplyScrollFrame(scrollFrame)
+end
+
 local TEXT_ROLE_COLORS = {
     heading = UI.COLORS.accent,
     primary = UI.COLORS.text,
@@ -479,6 +665,7 @@ function UI.ApplyAll()
     for editBox in pairs(registries.editBoxes) do ApplyEditBox(editBox) end
     for dropdown in pairs(registries.dropdowns) do ApplyDropdown(dropdown) end
     for checkButton in pairs(registries.checkButtons) do ApplyCheckButton(checkButton) end
+    for scrollFrame in pairs(registries.scrollFrames) do ApplyScrollFrame(scrollFrame) end
     for fontString in pairs(registries.text) do ApplyStyledText(fontString) end
 end
 
