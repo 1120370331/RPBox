@@ -1508,6 +1508,34 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   color: var(--color-secondary);
 }
 
+.article-content :deep(a:not(.jump-link):not(.jump-card):not(.attachment-card)) {
+  color: var(--link-hover, #D2691E);
+  font-weight: 600;
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+.article-content :deep(a:not(.jump-link):not(.jump-card):not(.attachment-card) strong) {
+  color: inherit;
+}
+
+.article-content :deep(a:not(.jump-link):not(.jump-card):not(.attachment-card):hover) {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--link-color, #B87333) 14%, transparent);
+  color: var(--color-text-light, #FFF8E7);
+  text-decoration-thickness: 2px;
+}
+
+.article-content :deep(a:not(.jump-link):not(.jump-card):not(.attachment-card):focus-visible) {
+  border-radius: 2px;
+  outline: 2px solid var(--link-color, #B87333);
+  outline-offset: 3px;
+}
+
 .article-content :deep(.mention) {
   display: inline-flex;
   align-items: center;

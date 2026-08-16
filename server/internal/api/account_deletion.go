@@ -522,6 +522,9 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		if err := tx.Where("character_card_id IN ?", characterCardIDs(cleanupPlan.characterCards)).Delete(&model.CharacterCardPublication{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("character_card_id IN ?", characterCardIDs(cleanupPlan.characterCards)).Delete(&model.CharacterCardSubmission{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("character_card_id IN ?", characterCardIDs(cleanupPlan.characterCards)).Delete(&model.CharacterCardPortrait{}).Error; err != nil {
 			return err
 		}

@@ -3053,7 +3053,7 @@ function formatBanTime(dateStr: string | null) {
               <div class="item-actions">
                 <button class="btn-approve" @click="quickReviewCharacterCard(characterCard, 'approve')"><i class="ri-checkbox-circle-line"></i>{{ t('characterCards.moderation.approvePublic') }}</button>
                 <button class="btn-reject" @click="quickReviewCharacterCard(characterCard, 'reject')"><i class="ri-close-circle-line"></i>{{ t('characterCards.moderation.reject') }}</button>
-                <RouterLink class="btn-preview" :to="`/character-cards/${characterCard.id}`" target="_blank"><i class="ri-eye-line"></i>{{ t('characterCards.moderation.viewFull') }}</RouterLink>
+                <RouterLink class="btn-preview" :to="`/character-cards/${characterCard.id}?review=submission`" target="_blank"><i class="ri-eye-line"></i>{{ t('characterCards.moderation.viewFull') }}</RouterLink>
               </div>
             </div>
           </article>

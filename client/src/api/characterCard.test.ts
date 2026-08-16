@@ -3,6 +3,7 @@ import {
   createCharacterCard,
   getCharacterCardSources,
   listMyCharacterCards,
+  publishCharacterCard,
   uploadCharacterCardImpressionImage,
   uploadCharacterCardPortrait,
 } from './characterCard'
@@ -63,6 +64,15 @@ describe('character card API contract', () => {
     const response = await listMyCharacterCards()
 
     expect(response.character_cards).toEqual([{ id: 9 }])
+  })
+
+  it('submits the explicitly published character-card snapshot through its own endpoint', async () => {
+    requestMock.post.mockResolvedValue({ data: { character_card: { id: 42, review_status: 'pending' } } })
+
+    const published = await publishCharacterCard(42)
+
+    expect(requestMock.post).toHaveBeenCalledWith('/character-cards/42/publish')
+    expect(published).toMatchObject({ id: 42, review_status: 'pending' })
   })
 
   it('uploads portraits through the protected character-card endpoint', async () => {

@@ -102,6 +102,20 @@ type CharacterCardPublication struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+// CharacterCardSubmission is the single latest owner-submitted snapshot that
+// moderators review. The editable CharacterCard aggregate may continue to
+// auto-save after submission without mutating this frozen candidate. A later
+// publish action replaces this row instead of creating another queue item.
+type CharacterCardSubmission struct {
+	CharacterCardID uint   `gorm:"primarykey" json:"character_card_id"`
+	UserID          uint   `gorm:"not null;index" json:"user_id"`
+	Payload         string `gorm:"type:text;not null" json:"-"`
+
+	SubmittedAt time.Time `gorm:"not null;index" json:"submitted_at"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // CharacterCardImpression is one of the five fixed "at first glance" slots
 // attached to a character card. Image fields are private storage references;
 // API responses expose them only through permission-aware image endpoints.

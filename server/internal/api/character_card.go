@@ -412,7 +412,22 @@ func (s *Server) getCharacterCard(c *gin.Context) {
 		}
 		return
 	}
-	ownerOrModerator := viewerID != 0 && (viewerID == card.UserID || isCharacterCardModerator(viewerID))
+	isModerator := isCharacterCardModerator(viewerID)
+	if isModerator && c.Query("review") == "submission" && normalizedCharacterCardReviewStatus(card.ReviewStatus) == model.CharacterCardReviewPending {
+		if snapshot, _, submissionErr := loadCharacterCardSubmission(database.DB, card.ID); submissionErr == nil {
+			submittedCard, submittedImpressions, submittedPortraits := snapshot.models()
+			submittedCard.ReviewStatus = card.ReviewStatus
+			submittedCard.ReviewerID = card.ReviewerID
+			submittedCard.ReviewComment = card.ReviewComment
+			submittedCard.ReviewedAt = card.ReviewedAt
+			c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(submittedCard, submittedImpressions, submittedPortraits, true, true)})
+			return
+		} else if !errors.Is(submissionErr, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡审核版本失败"})
+			return
+		}
+	}
+	ownerOrModerator := viewerID != 0 && (viewerID == card.UserID || isModerator)
 	if !ownerOrModerator {
 		dto, visible, err := s.loadPublicCharacterCardDTO(card, true)
 		if err != nil {
@@ -650,12 +665,16 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionPlan.Rows, portraitsByCard[card.ID], true, true)})
 		return
 	}
-	reviewNow := time.Now().UTC()
-	applyCharacterCardReviewMutation(&candidate, updates, true, reviewNow)
+	resetCharacterCardReviewWhenWithdrawn(&candidate, updates)
 	publicationAssetsToCheck := map[string]struct{}{}
 	if candidate.Status != model.CharacterCardStatusPublished || candidate.Visibility != model.CharacterCardVisibilityPublic {
 		if snapshot, _, loadErr := loadCharacterCardPublication(database.DB, card.ID); loadErr == nil {
 			publicationAssetsToCheck = characterCardSnapshotAssetPaths(snapshot)
+		}
+		if snapshot, _, loadErr := loadCharacterCardSubmission(database.DB, card.ID); loadErr == nil {
+			for asset := range characterCardSnapshotAssetPaths(snapshot) {
+				publicationAssetsToCheck[asset] = struct{}{}
+			}
 		}
 	}
 
@@ -699,6 +718,9 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 			}
 		}
 		if candidate.Status != model.CharacterCardStatusPublished || candidate.Visibility != model.CharacterCardVisibilityPublic {
+			if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardSubmission{}).Error; err != nil {
+				return err
+			}
 			if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPublication{}).Error; err != nil {
 				return err
 			}
@@ -794,6 +816,11 @@ func (s *Server) deleteCharacterCard(c *gin.Context) {
 			addAsset(asset)
 		}
 	}
+	if snapshot, _, loadErr := loadCharacterCardSubmission(database.DB, card.ID); loadErr == nil {
+		for asset := range characterCardSnapshotAssetPaths(snapshot) {
+			addAsset(asset)
+		}
+	}
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if tx.Migrator().HasTable(&model.StoryEntry{}) {
 			if err := tx.Model(&model.StoryEntry{}).
@@ -803,6 +830,9 @@ func (s *Server) deleteCharacterCard(c *gin.Context) {
 			}
 		}
 		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPublication{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardSubmission{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPortrait{}).Error; err != nil {
@@ -858,7 +888,6 @@ func (s *Server) syncCharacterCardFromTRP3(c *gin.Context) {
 		if err := ensureCharacterCardApprovedSnapshotBeforeMutation(tx, card); err != nil {
 			return err
 		}
-		applyCharacterCardReviewMutation(&candidate, updates, true, time.Now().UTC())
 		if err := tx.Model(&model.CharacterCard{}).
 			Where("id = ? AND user_id = ?", card.ID, userID).
 			Updates(updates).Error; err != nil {
@@ -1024,7 +1053,7 @@ func canViewCharacterCard(card model.CharacterCard, viewerID uint) bool {
 	}
 	status := normalizedCharacterCardReviewStatus(card.ReviewStatus)
 	return card.Status == model.CharacterCardStatusPublished && card.Visibility == model.CharacterCardVisibilityPublic &&
-		(status == model.CharacterCardReviewNone || status == model.CharacterCardReviewApproved)
+		status == model.CharacterCardReviewApproved
 }
 
 func optionalActiveUserID(c *gin.Context) uint {

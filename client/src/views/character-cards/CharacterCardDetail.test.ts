@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n'
+import { useUserStore } from '@/stores/user'
 import CharacterCardDetail from './CharacterCardDetail.vue'
 import type { CharacterCard } from '@/api/characterCard'
 
@@ -10,6 +11,7 @@ i18n.global.locale.value = 'zh-CN'
 
 const mocks = vi.hoisted(() => ({
   getCharacterCard: vi.fn(),
+  publishCharacterCard: vi.fn(),
   updateCharacterCard: vi.fn(),
   deleteCharacterCard: vi.fn(),
   getCharacterCardSharePath: vi.fn(),
@@ -17,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/api/characterCard', () => ({
   getCharacterCard: mocks.getCharacterCard,
+  publishCharacterCard: mocks.publishCharacterCard,
   updateCharacterCard: mocks.updateCharacterCard,
   deleteCharacterCard: mocks.deleteCharacterCard,
   getCharacterCardSharePath: mocks.getCharacterCardSharePath,
@@ -104,6 +107,51 @@ afterEach(() => {
 })
 
 describe('CharacterCardDetail tabs', () => {
+  it('makes a draft public before explicitly submitting its frozen review version', async () => {
+    const draftCard: CharacterCard = { ...card, impressions: [], status: 'draft', visibility: 'private' }
+    const publicWorkingCopy: CharacterCard = { ...card, impressions: [], review_status: undefined }
+    const pendingCard: CharacterCard = { ...card, impressions: [], review_status: 'pending' }
+    mocks.getCharacterCard.mockResolvedValue(draftCard)
+    mocks.updateCharacterCard.mockResolvedValue(publicWorkingCopy)
+    mocks.publishCharacterCard.mockResolvedValue(pendingCard)
+
+    const pinia = createPinia()
+    useUserStore(pinia).mergeUser({ id: 3, username: 'owner' })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/character-cards/:id', component: CharacterCardDetail },
+        { path: '/character-cards/:id/edit', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/character-cards/12')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardDetail, {
+      global: {
+        plugins: [pinia, router, i18n],
+        stubs: { CharacterCardPortrait: true },
+      },
+    })
+    await flushPromises()
+
+    const publishButton = wrapper.findAll('button')
+      .find((button) => button.text().includes('发布并公开'))
+    expect(publishButton).toBeTruthy()
+    await publishButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateCharacterCard).toHaveBeenCalledWith(12, {
+      status: 'published',
+      visibility: 'public',
+    })
+    expect(mocks.publishCharacterCard).toHaveBeenCalledWith(12)
+    expect(mocks.updateCharacterCard.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.publishCharacterCard.mock.invocationCallOrder[0])
+    expect(wrapper.text()).toContain('更新审核版本')
+    wrapper.unmount()
+  })
+
   it('shares only an approved public character card through its public route', async () => {
     const approvedCard: CharacterCard = { ...card, review_status: 'approved' }
     mocks.getCharacterCard.mockResolvedValue(approvedCard)

@@ -156,6 +156,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/character-cards", s.listMyCharacterCards)
 			auth.POST("/character-cards", s.createCharacterCard)
 			auth.PUT("/character-cards/:id", s.updateCharacterCard)
+			auth.POST("/character-cards/:id/publish", s.publishCharacterCard)
 			auth.DELETE("/character-cards/:id", s.deleteCharacterCard)
 			auth.POST("/character-cards/:id/sync-from-trp3", s.syncCharacterCardFromTRP3)
 			auth.GET("/character-cards/:id/trp3-lua", s.exportCharacterCardTRP3Lua)

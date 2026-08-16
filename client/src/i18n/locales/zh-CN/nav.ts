@@ -18,6 +18,13 @@ export default {
     notifications: '消息中心',
     avatar: '头像',
   },
+  badges: {
+    newContent: '{count} 条新发布内容',
+    newEvents: '{count} 个新活动',
+    addonUpdates: '{count} 个插件可更新',
+    systemUpdate: 'RPBox {version} 可更新',
+    update: '更新',
+  },
   action: {
     returnToPost: '返回帖子',
   },

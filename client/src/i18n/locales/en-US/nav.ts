@@ -18,6 +18,13 @@ export default {
     notifications: 'Notifications',
     avatar: 'Avatar',
   },
+  badges: {
+    newContent: '{count} new publications',
+    newEvents: '{count} new events',
+    addonUpdates: '{count} add-ons can be updated',
+    systemUpdate: 'RPBox {version} is available',
+    update: 'Update',
+  },
   action: {
     returnToPost: 'Return to Post',
   },

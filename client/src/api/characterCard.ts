@@ -197,6 +197,11 @@ export async function updateCharacterCard(
   return unwrapCharacterCard(response)
 }
 
+export async function publishCharacterCard(id: number): Promise<CharacterCard> {
+  const response = await request.post<unknown>(`/character-cards/${id}/publish`)
+  return unwrapCharacterCard(response)
+}
+
 export async function deleteCharacterCard(id: number): Promise<void> {
   await request.delete(`/character-cards/${id}`)
 }

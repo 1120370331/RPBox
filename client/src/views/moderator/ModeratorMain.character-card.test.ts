@@ -134,6 +134,7 @@ describe('ModeratorMain character-card review queue', () => {
     expect(queue.text()).toContain('萨维娅·暮羽')
     expect(queue.text()).toContain('星海旅人')
     expect(queue.text()).toContain('在苏拉玛与远洋航路之间往返的星象师。')
+    expect(queue.get('.btn-preview').attributes('href')).toBe('/character-cards/27?review=submission')
 
     await queue.get('textarea').setValue('请保留这条版主审核说明。')
     await queue.get(selector).trigger('click')

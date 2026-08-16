@@ -34,7 +34,10 @@ describe('UserAvatarPopover', () => {
       post_count: 8,
       item_count: 3,
       guild_count: 1,
+      forum_level: 6,
       forum_level_name: '资深旅人',
+      forum_level_color: '#7E6896',
+      forum_level_bold: true,
     })
     mocks.listUserCharacterCards.mockResolvedValue({
       character_cards: [{
@@ -94,6 +97,10 @@ describe('UserAvatarPopover', () => {
     expect(popover!.textContent).toContain('月桂旅人')
     expect(popover!.textContent).toContain('在艾泽拉斯记录旅途与角色故事。')
     expect(popover!.textContent).toContain('莱拉')
+    expect(popover!.textContent).toContain('Lv6 资深旅人')
+    expect(popover!.textContent).not.toContain('月光林地')
+    expect(popover!.querySelector('.user-level-badge')).not.toBeNull()
+    expect(popover!.querySelector('.user-avatar-popover__location')).toBeNull()
     expect(mocks.getUserProfile).toHaveBeenCalledWith(5)
     expect(mocks.listUserCharacterCards).toHaveBeenCalledWith(5)
 

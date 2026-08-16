@@ -202,6 +202,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.CharacterCardPortrait{},
 		&model.CharacterCardImpression{},
 		&model.CharacterCardPublication{},
+		&model.CharacterCardSubmission{},
 		&model.Tag{},
 		&model.StoryTag{},
 		&model.Guild{},

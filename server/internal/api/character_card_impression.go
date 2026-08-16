@@ -556,12 +556,35 @@ func (s *Server) loadProtectedCharacterCardImpressionImage(imageType, id string,
 		return "", time.Time{}, err
 	}
 	var card model.CharacterCard
-	if err := database.DB.Select("id", "user_id", "status", "visibility", "updated_at").First(&card, impression.CharacterCardID).Error; err != nil {
+	if err := database.DB.Select("id", "user_id", "status", "visibility", "review_status", "updated_at").First(&card, impression.CharacterCardID).Error; err != nil {
 		return "", time.Time{}, err
 	}
-	ownerOrModerator := viewerID != 0 && (viewerID == card.UserID || isCharacterCardModerator(viewerID))
 	selected := impression
-	if !ownerOrModerator {
+	owner := viewerID != 0 && viewerID == card.UserID
+	moderator := isCharacterCardModerator(viewerID)
+	if moderator && normalizedCharacterCardReviewStatus(card.ReviewStatus) == model.CharacterCardReviewPending {
+		if snapshot, _, submissionErr := loadCharacterCardSubmission(database.DB, card.ID); submissionErr == nil {
+			found := false
+			for _, row := range snapshot.Impressions {
+				if row.ID == impression.ID {
+					selected = model.CharacterCardImpression{
+						ID: row.ID, CharacterCardID: card.ID, Slot: row.Slot, Active: row.Active,
+						IconImage: row.IconImage, IconImageUpdatedAt: row.IconImageUpdatedAt,
+						Image: row.Image, ImageUpdatedAt: row.ImageUpdatedAt,
+						UpdatedAt: row.UpdatedAt,
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return "", time.Time{}, gorm.ErrRecordNotFound
+			}
+			card.UpdatedAt = snapshot.Card.UpdatedAt
+		} else if !errors.Is(submissionErr, gorm.ErrRecordNotFound) {
+			return "", time.Time{}, submissionErr
+		}
+	} else if !owner && !moderator {
 		if snapshot, _, publicationErr := loadCharacterCardPublication(database.DB, card.ID); publicationErr == nil {
 			found := false
 			for _, row := range snapshot.Impressions {

@@ -189,7 +189,6 @@ func (s *Server) addCharacterCardPortrait(c *gin.Context) {
 			updates["portrait_image"] = newRow.Image
 			updates["portrait_image_updated_at"] = now
 		}
-		applyCharacterCardReviewMutation(&card, updates, true, now)
 		return tx.Model(&model.CharacterCard{}).Where("id = ? AND user_id = ?", card.ID, userID).Updates(updates).Error
 	})
 	if err != nil {
@@ -357,7 +356,6 @@ func (s *Server) deleteCharacterCardPortrait(c *gin.Context) {
 			updates["portrait_image"] = remaining[0].Image
 			updates["portrait_image_updated_at"] = now
 		}
-		applyCharacterCardReviewMutation(&card, updates, true, now)
 		return tx.Model(&model.CharacterCard{}).Where("id = ? AND user_id = ?", card.ID, userID).Updates(updates).Error
 	})
 	if err != nil {
@@ -411,7 +409,6 @@ func (s *Server) persistCharacterCardPortraitOrder(card model.CharacterCard, row
 			updates["portrait_image"] = rows[0].Image
 			updates["portrait_image_updated_at"] = now
 		}
-		applyCharacterCardReviewMutation(&card, updates, true, now)
 		return tx.Model(&model.CharacterCard{}).Where("id = ? AND user_id = ?", card.ID, userID).Updates(updates).Error
 	})
 }
