@@ -155,7 +155,10 @@ function ObjectMethods:SetHeight(height) self._height = height end
 function ObjectMethods:GetWidth() return self._width end
 function ObjectMethods:GetHeight() return self._height end
 function ObjectMethods:SetPoint(...) self._point = {...} end
+function ObjectMethods:SetAllPoints(target) self._allPoints = target end
 function ObjectMethods:ClearAllPoints() self._point = nil end
+function ObjectMethods:GetName() return self._name end
+function ObjectMethods:SetClipsChildren(value) self._clipsChildren = value end
 function ObjectMethods:SetMovable(value) self._movable = value end
 function ObjectMethods:SetResizable(value) self._resizable = value end
 function ObjectMethods:SetResizeBounds(...) self._resizeBounds = {...} end
@@ -171,6 +174,14 @@ function ObjectMethods:SetBackdropColor(...) self._backdropColor = {...} end
 function ObjectMethods:SetBackdropBorderColor(...) self._backdropBorderColor = {...} end
 function ObjectMethods:SetAlpha(value) self._alpha = value end
 function ObjectMethods:GetAlpha() return self._alpha end
+function ObjectMethods:SetTexture(value) self._texture = value; self._atlas = nil end
+function ObjectMethods:GetTexture() return self._texture end
+function ObjectMethods:SetAtlas(value) self._atlas = value; self._texture = nil end
+function ObjectMethods:GetAtlas() return self._atlas end
+function ObjectMethods:SetVertexColor(r, g, b, a) self._vertexColor = { r, g, b, a or 1 } end
+function ObjectMethods:GetVertexColor() return table.unpack(self._vertexColor or { 1, 1, 1, 1 }) end
+function ObjectMethods:SetColorTexture(r, g, b, a) self._colorTexture = { r, g, b, a or 1 } end
+function ObjectMethods:SetTexCoord(...) self._texCoord = {...} end
 function ObjectMethods:SetAutoFocus(value) self._autoFocus = value end
 function ObjectMethods:SetNumeric(value) self._numeric = value end
 function ObjectMethods:SetMultiLine(value) self._multiLine = value end
@@ -231,12 +242,19 @@ function ObjectMethods:GetChildren() return table.unpack(self._children) end
 function ObjectMethods:GetRegions() return table.unpack(self._regions) end
 function ObjectMethods:GetObjectType() return self._kind end
 function ObjectMethods:IsObjectType(kind) return self._kind == kind end
+function ObjectMethods:CreateTexture(name, layer)
+    local texture = new_object("Texture", name, nil, nil)
+    texture._layer = layer
+    self._regions[#self._regions + 1] = texture
+    return texture
+end
 function ObjectMethods:CreateFontString(name, layer, template)
     local fontString = new_object("FontString", name, nil, template)
     self._regions[#self._regions + 1] = fontString
     return fontString
 end
 function ObjectMethods:GetFontString() return self._fontString end
+function ObjectMethods:GetThumbTexture() return self.ThumbTexture end
 function ObjectMethods:ClearFocus() self._focused = false end
 function ObjectMethods:SetFocus() self._focused = true end
 function ObjectMethods:HighlightText() self._highlighted = true end
@@ -274,6 +292,18 @@ function CreateFrame(kind, name, parent, template)
     elseif template and template:find("UIDropDownMenuTemplate", 1, true) then
         local dropdownTexture = new_object("Texture", nil, nil, nil)
         frame._regions[#frame._regions + 1] = dropdownTexture
+        frame.Button = new_object("Button", nil, frame, nil)
+        frame.Button._nativeTexture = frame.Button:CreateTexture(nil, "ARTWORK")
+        frame.Text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    elseif kind == "ScrollFrame" and template and template:find("UIPanelScrollFrameTemplate", 1, true) then
+        frame.ScrollBar = new_object("Slider", nil, frame, "UIPanelScrollBarTemplate")
+        frame.ScrollBar.ScrollUpButton = new_object("Button", nil, frame.ScrollBar, nil)
+        frame.ScrollBar.ScrollDownButton = new_object("Button", nil, frame.ScrollBar, nil)
+        frame.ScrollBar.ScrollUpButton._nativeTexture = frame.ScrollBar.ScrollUpButton:CreateTexture(nil, "ARTWORK")
+        frame.ScrollBar.ScrollDownButton._nativeTexture = frame.ScrollBar.ScrollDownButton:CreateTexture(nil, "ARTWORK")
+        frame.ScrollBar.ThumbTexture = frame.ScrollBar:CreateTexture(nil, "ARTWORK")
+        frame.ScrollBar.ThumbTexture:SetTexture("native-thumb")
+        frame.ScrollBar.ThumbTexture:SetSize(16, 24)
     elseif kind == "CheckButton" and template and template:find("UICheckButtonTemplate", 1, true) then
         local checkTexture = new_object("Texture", nil, nil, nil)
         frame._regions[#frame._regions + 1] = checkTexture
@@ -368,6 +398,7 @@ local function trigger_new_message(times)
 end
 
 local TOTAL_INITIAL_RECORDS = 3205
+local DEFAULT_VISIBLE_RECORDS = TOTAL_INITIAL_RECORDS - 1 -- system timeline nodes are hidden by default
 local BASE_TIMESTAMP = 1700000000
 local buckets = {
     [1] = {},
@@ -392,6 +423,7 @@ local function regular_record(index, marker)
             ref = "profile-" .. tostring(profileNumber),
             gameID = "Speaker" .. tostring(profileNumber) .. "-SmokeRealm",
             FN = "Speaker " .. tostring(profileNumber),
+            IC = "INV_Misc_Book_09",
         },
         listeners = {
             { gameID = "Tester-SmokeRealm", ref = "listener-profile" },
@@ -502,6 +534,14 @@ local function count_text_lines(text)
     return newlineCount + 1
 end
 
+local function count_selected(values)
+    local count = 0
+    for _, selected in pairs(values or {}) do
+        if selected then count = count + 1 end
+    end
+    return count
+end
+
 local function assert_settled(frame, message)
     assert_equal(#Timer.queue, 0, (message or "playback") .. " left pending timers")
     assert_true(frame.logScan == nil, (message or "playback") .. " left a scan active")
@@ -516,9 +556,15 @@ assert_equal(frame._rpboxTheme, "modern", "new installs should use the modern ad
 assert_true(frame._rpboxModernChrome and frame._rpboxModernChrome:IsShown(), "modern title chrome was not shown")
 assert_true(not frame.TitleText:IsShown(), "native title chrome should be hidden by the modern theme")
 assert_true(frame._backdrop ~= nil, "modern frame backdrop was not applied")
+assert_equal(frame.latestPageBtn:GetText(), "首页", "first-page button should use standard pagination wording")
+assert_equal(frame.prevPageBtn:GetText(), "上一页", "previous-page button should use standard pagination wording")
+assert_equal(frame.nextPageBtn:GetText(), "下一页", "next-page button should use standard pagination wording")
+assert_equal(frame.dateDropdown.Button._nativeTexture:GetAlpha(), 0, "modern dropdown should hide native arrow artwork")
+assert_true(frame.logScroll._rpboxScrollTrack:IsShown(), "modern scroll track was not shown")
+assert_equal(frame.logScroll.ScrollBar.ScrollUpButton._nativeTexture:GetAlpha(), 0, "modern scrollbar should hide native artwork")
 Timer.drain()
 assert_settled(frame, "initial playback")
-assert_equal(frame.logState.totalMatched, TOTAL_INITIAL_RECORDS, "the full long archive was not reachable")
+assert_equal(frame.logState.totalMatched, DEFAULT_VISIBLE_RECORDS, "system timeline nodes should be hidden by default")
 assert_equal(frame.logState.pageSize, 80, "default playback page size")
 assert_equal(frame.logState.page, 1, "first open should show the latest page")
 assert_equal(frame.logState.startIndex, 1, "first page should start at the newest display position")
@@ -531,6 +577,46 @@ assert_contains(latestRowText, "[海兽之血宝石]", "TRP3 text link label was
 assert_not_contains(latestRowText, "|Hitem", "native item link source leaked into display")
 assert_not_contains(latestRowText, "|Hspell", "native spell link source leaked into display")
 assert_not_contains(latestRowText, "[TRP3:海兽之血宝石:1]", "TRP3 link source leaked into display")
+
+-- Compact sidebar controls must stay inside the filter rail and open purpose-built pickers.
+assert_equal(frame.filterFrame:GetWidth(), 206, "filter rail width should contain all controls")
+assert_true(frame.filterFrame._clipsChildren ~= true, "filter rail should not clip or dim its controls")
+assert_equal(frame.dateDropdown:GetWidth(), 154, "date dropdown should fit inside the filter rail")
+assert_equal(frame.speakerDropdown:GetWidth(), 182, "speaker picker trigger should fit inside the filter rail")
+click(frame.exactStartPickerBtn)
+assert_true(frame.dateTimePicker and frame.dateTimePicker:IsShown(), "start-time picker did not open")
+assert_equal(#frame.dateTimePicker.dayButtons, 42, "date picker should render a complete calendar grid")
+click(frame.dateTimePicker.cancelBtn)
+assert_true(not frame.dateTimePicker:IsShown(), "date picker cancel should close the picker")
+click(frame.exactEndPickerBtn)
+assert_equal(frame.dateTimePicker.hourBox:GetText(), "23", "empty end-time picker should default to end of day")
+assert_equal(frame.dateTimePicker.minuteBox:GetText(), "59", "empty end-time picker should default to end of day")
+click(frame.dateTimePicker.cancelBtn)
+
+click(frame.speakerDropdown)
+local speakerPicker = frame.speakerPicker
+assert_true(speakerPicker and speakerPicker:IsShown(), "speaker picker did not open")
+assert_true(speakerPicker.totalPages >= 2, "speaker picker fixture should exercise pagination")
+assert_true(speakerPicker.rows[1].avatar._texture ~= nil, "speaker picker row should render an avatar")
+local sawProfileIcon = false
+for _, row in ipairs(speakerPicker.rows) do
+    if tostring(row.avatar._texture or ""):find("INV_Misc_Book_09", 1, true) then sawProfileIcon = true end
+end
+assert_true(sawProfileIcon, "speaker picker should use the participant profile icon when available")
+click(speakerPicker.rows[1])
+click(speakerPicker.rows[2])
+assert_true(speakerPicker:IsShown(), "speaker picker should remain open during multi-selection")
+assert_equal(count_selected(speakerPicker.draftSelected), 2, "speaker picker should retain multiple draft selections")
+click(speakerPicker.nextPageBtn)
+assert_equal(speakerPicker.page, 2, "speaker picker next-page control did not advance")
+speakerPicker.searchBox:SetText("Speaker 1")
+speakerPicker.searchBox._scripts.OnTextChanged(speakerPicker.searchBox, true)
+assert_true(#speakerPicker.filteredOptions >= 1, "speaker picker search did not find the expected participant")
+assert_equal(speakerPicker.page, 1, "speaker picker search should reset pagination")
+click(speakerPicker.cancelBtn)
+assert_true(not speakerPicker:IsShown(), "speaker picker cancel should close without applying")
+assert_contains(frame.speakerDropdown:GetText(), "全部发言者", "cancelled speaker draft should not change the active filter")
+
 click(frame.copyBtn)
 local latestCopiedText = frame.copyDialog.editBox:GetText()
 assert_contains(latestCopiedText, "[炉石]", "copy should include rendered item label")
@@ -555,31 +641,31 @@ assert_contains(frame.logContent.rows[1].text:GetText(), "[炉石]", "exact time
 assert_contains(frame.logContent.rows[frame.logState.displayCount].text:GetText(), "record-03190", "exact time range should include the oldest bounded record")
 click(frame.clearFilterBtn)
 Timer.drain()
-assert_equal(frame.logState.totalMatched, TOTAL_INITIAL_RECORDS, "clearing filters should restore the full archive")
+assert_equal(frame.logState.totalMatched, DEFAULT_VISIBLE_RECORDS, "clearing filters should preserve the default system-message visibility")
 assert_equal(frame.exactStartBox:GetText(), "", "clearing filters should reset exact start time")
 assert_equal(frame.exactEndBox:GetText(), "", "clearing filters should reset exact end time")
 
 -- Page buttons must traverse the entire archive and clamp at both ends.
 click(frame.nextPageBtn)
 Timer.drain()
-assert_equal(frame.logState.page, 2, "older button should move to the next page")
+assert_equal(frame.logState.page, 2, "next-page button should move to the next page")
 click(frame.prevPageBtn)
 Timer.drain()
-assert_equal(frame.logState.page, 1, "newer button should move to the previous page")
-assert_equal(click(frame.prevPageBtn), false, "newer button should be disabled on the latest page")
-assert_equal(click(frame.latestPageBtn), false, "latest button should be disabled on the latest page")
-assert_equal(frame.logState.page, 1, "latest-page boundary should not underflow")
+assert_equal(frame.logState.page, 1, "previous-page button should move to the previous page")
+assert_equal(click(frame.prevPageBtn), false, "previous-page button should be disabled on the first page")
+assert_equal(click(frame.latestPageBtn), false, "first-page button should be disabled on the first page")
+assert_equal(frame.logState.page, 1, "first-page boundary should not underflow")
 click(frame.nextPageBtn)
 Timer.drain()
-assert_equal(frame.logState.page, 2, "older navigation setup")
+assert_equal(frame.logState.page, 2, "next-page navigation setup")
 click(frame.latestPageBtn)
 Timer.drain()
-assert_equal(frame.logState.page, 1, "latest button should return to the newest page")
+assert_equal(frame.logState.page, 1, "first-page button should return to page one")
 while frame.logState.page < frame.logState.totalPages do
     click(frame.nextPageBtn)
     Timer.drain()
 end
-assert_equal(click(frame.nextPageBtn), false, "older button should be disabled on the oldest page")
+assert_equal(click(frame.nextPageBtn), false, "next-page button should be disabled on the last page")
 assert_contains(frame.logContent.rows[frame.logState.displayCount].text:GetText(), "legacy-marker", "oldest record was not reachable")
 
 -- Drive the production settings UI: values are clamped to 40..120 and only
@@ -587,6 +673,19 @@ assert_contains(frame.logContent.rows[frame.logState.displayCount].text:GetText(
 click(find_tab(frame, "settings"))
 local settingsContent = frame.settingsContent
 assert_true(settingsContent.themeClassicBtn ~= nil and settingsContent.themeModernBtn ~= nil, "theme controls were not created")
+assert_true(settingsContent.ignoreNonRPCb ~= nil, "non-RP player filter setting was not created")
+assert_true(settingsContent.ignoreNonRPCb:GetChecked() == false, "non-RP player filter should default to off")
+settingsContent.ignoreNonRPCb:SetChecked(true)
+click(settingsContent.ignoreNonRPCb)
+assert_true(RPBox_Config.ignoreNonRPPlayers == true, "non-RP player filter setting was not persisted")
+settingsContent.ignoreNonRPCb:SetChecked(false)
+click(settingsContent.ignoreNonRPCb)
+assert_true(RPBox_Config.ignoreNonRPPlayers == false, "non-RP player filter setting could not be disabled")
+assert_true(settingsContent.showSystemMessagesCb ~= nil, "system-message visibility setting was not created")
+assert_true(settingsContent.showSystemMessagesCb:GetChecked() == false, "system messages should default to hidden")
+settingsContent.showSystemMessagesCb:SetChecked(true)
+click(settingsContent.showSystemMessagesCb)
+assert_true(RPBox_Config.showSystemMessages == true, "system-message visibility setting was not persisted")
 assert_true(settingsContent.themeModernBtn:IsEnabled() == false, "active modern theme should be selected")
 click(settingsContent.themeClassicBtn)
 assert_equal(RPBox_Config.uiTheme, "classic", "classic theme selection was not persisted")
@@ -594,11 +693,16 @@ assert_equal(frame._rpboxTheme, "classic", "classic theme was not applied immedi
 assert_true(frame.TitleText:IsShown(), "classic theme should restore native title chrome")
 assert_true(not frame._rpboxModernChrome:IsShown(), "classic theme should hide modern title chrome")
 assert_true(frame.contentSurface:IsShown() == false, "classic theme should hide the modern content surface")
+assert_equal(frame.dateDropdown.Button._nativeTexture:GetAlpha(), 1, "classic dropdown should restore native arrow artwork")
+assert_true(not frame.logScroll._rpboxScrollTrack:IsShown(), "classic theme should hide the modern scroll track")
+assert_equal(frame.logScroll.ScrollBar.ScrollUpButton._nativeTexture:GetAlpha(), 1, "classic scrollbar should restore native artwork")
 click(settingsContent.themeModernBtn)
 assert_equal(RPBox_Config.uiTheme, "modern", "modern theme selection was not persisted")
 assert_equal(frame._rpboxTheme, "modern", "modern theme was not restored immediately")
 assert_true(frame._rpboxModernChrome:IsShown(), "modern title chrome should be restored")
 assert_true(settingsContent.themeModernBtn:IsEnabled() == false, "restored modern theme should be selected")
+assert_equal(frame.dateDropdown.Button._nativeTexture:GetAlpha(), 0, "restored modern dropdown should hide native arrow artwork")
+assert_true(frame.logScroll._rpboxScrollTrack:IsShown(), "restored modern theme should show the modern scroll track")
 local pageSizeBox = frame.settingsContent.viewWindowSizeBox
 assert_true(pageSizeBox ~= nil, "playback page-size setting was not created")
 press_enter(pageSizeBox, "1")
@@ -607,6 +711,7 @@ assert_equal(pageSizeBox:GetText(), "40", "lower clamp should be reflected in th
 click(find_tab(frame, "log"))
 Timer.drain()
 assert_equal(frame.logState.pageSize, 40, "lower-clamped page size was not applied")
+assert_equal(frame.logState.totalMatched, TOTAL_INITIAL_RECORDS, "enabling system messages should restore timeline nodes")
 assert_equal(frame.logShownRowCount, 40, "lower-clamped page should render 40 rows")
 
 click(find_tab(frame, "settings"))
