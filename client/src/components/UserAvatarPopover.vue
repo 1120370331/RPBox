@@ -8,6 +8,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
 import { loadUserPopoverData, type UserPopoverData } from '@/utils/userPopoverData'
+import UserLevelBadge from './UserLevelBadge.vue'
 
 defineOptions({ inheritAttrs: false })
 
@@ -228,13 +229,13 @@ onBeforeUnmount(() => {
           </div>
           <div class="user-avatar-popover__identity">
             <strong :style="displayNameStyle">{{ displayName }}</strong>
-            <span v-if="profile?.forum_level_name" class="user-avatar-popover__level">
-              {{ profile.forum_level_name }}
-            </span>
-            <span v-if="profile?.location" class="user-avatar-popover__location">
-              <i class="ri-map-pin-2-line" aria-hidden="true"></i>
-              {{ profile.location }}
-            </span>
+            <UserLevelBadge
+              :level="profile?.forum_level"
+              :name="profile?.forum_level_name"
+              :color="profile?.forum_level_color"
+              :bold="profile?.forum_level_bold"
+              size="xs"
+            />
           </div>
         </div>
 
@@ -405,18 +406,6 @@ onBeforeUnmount(() => {
   font-size: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.user-avatar-popover__level,
-.user-avatar-popover__location {
-  color: var(--gradient-text-muted);
-  font-size: 10px;
-}
-
-.user-avatar-popover__location {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
 }
 
 .user-avatar-popover__state {

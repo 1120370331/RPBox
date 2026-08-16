@@ -6,6 +6,7 @@ import {
   deleteCharacterCard,
   getCharacterCard,
   getCharacterCardSharePath,
+  publishCharacterCard,
   updateCharacterCard,
   type CharacterCard,
   type CharacterCardPortraitImage,
@@ -62,7 +63,26 @@ const tabs = computed<Array<{ id: CharacterCardEditorTab; label: string }>>(() =
 
 const isOwner = computed(() => Boolean(card.value && userStore.user?.id === card.value.user_id))
 const wantsPublic = computed(() => card.value?.status === 'published' && card.value?.visibility === 'public')
-const isPublic = computed(() => wantsPublic.value && (!card.value?.review_status || card.value.review_status === 'approved'))
+const isPublic = computed(() => wantsPublic.value && card.value?.review_status === 'approved')
+const ownerVisibilityStatus = computed(() => {
+  if (!card.value) return null
+  if (card.value.status === 'draft') {
+    return { icon: 'ri-draft-line', key: 'characterCards.common.status.draft', pending: false }
+  }
+  if (card.value.visibility !== 'public') {
+    return { icon: 'ri-lock-line', key: 'characterCards.common.status.private', pending: false }
+  }
+  if (card.value.review_status === 'pending') {
+    return { icon: 'ri-time-line', key: 'characterCards.common.status.pending', pending: true }
+  }
+  if (card.value.review_status === 'rejected') {
+    return { icon: 'ri-close-circle-line', key: 'characterCards.common.status.rejected', pending: false }
+  }
+  if (card.value.review_status !== 'approved') {
+    return { icon: 'ri-upload-cloud-2-line', key: 'characterCards.common.status.unsubmitted', pending: false }
+  }
+  return null
+})
 const canShare = computed(() => Boolean(
   card.value?.status === 'published'
   && card.value?.visibility === 'public'
@@ -75,6 +95,12 @@ const shareUnavailableReason = computed(() => {
   if (card.value.review_status === 'pending') return t('characterCards.detail.sharePendingUnavailable')
   if (card.value.review_status === 'rejected') return t('characterCards.detail.shareRejectedUnavailable')
   return t('characterCards.detail.shareReviewUnavailable')
+})
+const publishLabelKey = computed(() => {
+  if (card.value?.review_status === 'pending') return 'characterCards.detail.updateSubmission'
+  if (card.value?.review_status === 'rejected') return 'characterCards.detail.resubmit'
+  if (card.value?.review_status === 'approved') return 'characterCards.detail.publishUpdate'
+  return 'characterCards.detail.publishPublic'
 })
 const displayName = computed(() => card.value ? getCharacterCardDisplayName(card.value) : t('characterCards.detail.displayFallback'))
 const displayNameColor = computed(() => getCharacterCardDisplayColor(card.value))
@@ -204,16 +230,30 @@ function openImageFromEvent(event: Event) {
 }
 
 async function togglePublicAccess() {
+  if (!card.value || actionLoading.value || !wantsPublic.value) return
+  actionLoading.value = true
+  try {
+    card.value = await updateCharacterCard(card.value.id, { visibility: 'private' })
+    toast.success(t('characterCards.detail.madePrivate'))
+  } catch (error: unknown) {
+    toast.error(error instanceof Error ? error.message : t('characterCards.detail.statusFailed'))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function submitPublicVersion() {
   if (!card.value || actionLoading.value) return
   actionLoading.value = true
   try {
-    const next = wantsPublic.value
-      ? { visibility: 'private' as const }
-      : { status: 'published' as const, visibility: 'public' as const }
-    card.value = await updateCharacterCard(card.value.id, next)
-    toast.success(t(wantsPublic.value
-      ? (card.value.review_status === 'pending' ? 'characterCards.detail.submittedReview' : 'characterCards.detail.publishedPublic')
-      : 'characterCards.detail.madePrivate'))
+    if (!wantsPublic.value) {
+      card.value = await updateCharacterCard(card.value.id, {
+        status: 'published',
+        visibility: 'public',
+      })
+    }
+    card.value = await publishCharacterCard(card.value.id)
+    toast.success(t('characterCards.detail.submittedReview'))
   } catch (error: unknown) {
     toast.error(error instanceof Error ? error.message : t('characterCards.detail.statusFailed'))
   } finally {
@@ -320,9 +360,13 @@ function goBack() {
             <i class="ri-information-line" aria-hidden="true"></i>{{ shareUnavailableReason }}
           </span>
           <template v-if="isOwner">
-            <button type="button" class="toolbar-button" :disabled="actionLoading" @click="togglePublicAccess">
-              <i :class="wantsPublic ? 'ri-lock-line' : 'ri-global-line'" aria-hidden="true"></i>
-              {{ t(wantsPublic ? 'characterCards.detail.makePrivate' : 'characterCards.detail.publishPublic') }}
+            <button v-if="wantsPublic" type="button" class="toolbar-button" :disabled="actionLoading" @click="togglePublicAccess">
+              <i class="ri-lock-line" aria-hidden="true"></i>
+              {{ t('characterCards.detail.makePrivate') }}
+            </button>
+            <button type="button" class="toolbar-button" :disabled="actionLoading" @click="submitPublicVersion">
+              <i :class="actionLoading ? 'ri-loader-4-line spin' : 'ri-upload-cloud-2-line'" aria-hidden="true"></i>
+              {{ t(publishLabelKey) }}
             </button>
             <RouterLink class="toolbar-button toolbar-button--primary" :to="`/character-cards/${card.id}/edit`">
               <i class="ri-edit-line" aria-hidden="true"></i>{{ t('characterCards.detail.edit') }}
@@ -366,9 +410,9 @@ function goBack() {
               <i class="ri-zoom-in-line"></i>
               {{ t('characterCards.detail.viewImage') }}
             </span>
-            <span v-if="isOwner && (!isPublic || card.review_status === 'pending')" class="character-portrait__privacy" :class="{ pending: card.review_status === 'pending' && wantsPublic }">
-              <i :class="card.review_status === 'pending' && wantsPublic ? 'ri-time-line' : card.status === 'draft' ? 'ri-draft-line' : 'ri-lock-line'" aria-hidden="true"></i>
-              {{ t(card.review_status === 'pending' && wantsPublic ? 'characterCards.common.status.pending' : card.status === 'draft' ? 'characterCards.common.status.draft' : 'characterCards.common.status.private') }}
+            <span v-if="isOwner && ownerVisibilityStatus" class="character-portrait__privacy" :class="{ pending: ownerVisibilityStatus.pending }">
+              <i :class="ownerVisibilityStatus.icon" aria-hidden="true"></i>
+              {{ t(ownerVisibilityStatus.key) }}
             </span>
           </div>
           <div v-if="portraits.length > 1" ref="portraitFilmRef" class="character-portrait__film" :aria-label="t('characterCards.detail.galleryAria')">
@@ -407,7 +451,7 @@ function goBack() {
             <div>
               <strong>{{ t(card.review_status === 'rejected' ? 'characterCards.detail.reviewRejected' : 'characterCards.detail.reviewPending') }}</strong>
               <span v-if="card.review_status === 'rejected' && card.review_comment">{{ t('characterCards.detail.moderatorComment', { comment: card.review_comment }) }}</span>
-              <span v-else>{{ t('characterCards.detail.reviewBody') }}</span>
+              <span v-else>{{ t('characterCards.detail.reviewFrozenBody') }}</span>
             </div>
           </section>
 

@@ -23,6 +23,8 @@ type characterCardSnapshot struct {
 	Portraits   []characterCardSnapshotPortrait   `json:"portraits"`
 }
 
+var errCharacterCardPublishRequiresPublic = errors.New("character card publish requires public status")
+
 type characterCardSnapshotCard struct {
 	ID     uint `json:"id"`
 	UserID uint `json:"user_id"`
@@ -223,6 +225,40 @@ func loadCharacterCardPublication(tx *gorm.DB, cardID uint) (characterCardSnapsh
 	return snapshot, publication, nil
 }
 
+func saveCharacterCardSubmission(tx *gorm.DB, snapshot characterCardSnapshot, submittedAt time.Time) error {
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	submission := model.CharacterCardSubmission{
+		CharacterCardID: snapshot.Card.ID,
+		UserID:          snapshot.Card.UserID,
+		Payload:         string(payload),
+		SubmittedAt:     submittedAt.UTC(),
+	}
+	return tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "character_card_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"user_id", "payload", "submitted_at", "updated_at",
+		}),
+	}).Create(&submission).Error
+}
+
+func loadCharacterCardSubmission(tx *gorm.DB, cardID uint) (characterCardSnapshot, model.CharacterCardSubmission, error) {
+	var submission model.CharacterCardSubmission
+	if err := tx.Where("character_card_id = ?", cardID).First(&submission).Error; err != nil {
+		return characterCardSnapshot{}, submission, err
+	}
+	var snapshot characterCardSnapshot
+	if err := json.Unmarshal([]byte(submission.Payload), &snapshot); err != nil || snapshot.Card.ID != cardID || snapshot.Card.UserID != submission.UserID {
+		if err == nil {
+			err = errors.New("submission identity mismatch")
+		}
+		return characterCardSnapshot{}, submission, err
+	}
+	return snapshot, submission, nil
+}
+
 // ensureCharacterCardApprovedSnapshotBeforeMutation upgrades a legacy public
 // card to the approved-snapshot model before its live working copy changes.
 func ensureCharacterCardApprovedSnapshotBeforeMutation(tx *gorm.DB, card model.CharacterCard) error {
@@ -230,7 +266,7 @@ func ensureCharacterCardApprovedSnapshotBeforeMutation(tx *gorm.DB, card model.C
 		return nil
 	}
 	status := normalizedCharacterCardReviewStatus(card.ReviewStatus)
-	if status == model.CharacterCardReviewPending || status == model.CharacterCardReviewRejected {
+	if status != model.CharacterCardReviewApproved {
 		return nil
 	}
 	var count int64
@@ -244,19 +280,8 @@ func ensureCharacterCardApprovedSnapshotBeforeMutation(tx *gorm.DB, card model.C
 	return saveCharacterCardPublication(tx, snapshot, 0, card.UpdatedAt)
 }
 
-func applyCharacterCardReviewMutation(card *model.CharacterCard, updates map[string]interface{}, changed bool, now time.Time) {
-	if !changed {
-		return
-	}
+func resetCharacterCardReviewWhenWithdrawn(card *model.CharacterCard, updates map[string]interface{}) {
 	if card.Status == model.CharacterCardStatusPublished && card.Visibility == model.CharacterCardVisibilityPublic {
-		card.ReviewStatus = model.CharacterCardReviewPending
-		card.ReviewerID = nil
-		card.ReviewComment = ""
-		card.ReviewedAt = nil
-		updates["review_status"] = model.CharacterCardReviewPending
-		updates["reviewer_id"] = nil
-		updates["review_comment"] = ""
-		updates["reviewed_at"] = nil
 		return
 	}
 	card.ReviewStatus = model.CharacterCardReviewNone
@@ -267,7 +292,6 @@ func applyCharacterCardReviewMutation(card *model.CharacterCard, updates map[str
 	updates["reviewer_id"] = nil
 	updates["review_comment"] = ""
 	updates["reviewed_at"] = nil
-	_ = now
 }
 
 func isCharacterCardModerator(viewerID uint) bool {
@@ -306,12 +330,11 @@ func (s *Server) loadPublicCharacterCardDTO(card model.CharacterCard, includeRic
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return characterCardDTO{}, false, err
 	}
-	// Legacy cards created before review snapshots remain public until their
-	// first edit, at which point ensureCharacterCardApprovedSnapshotBeforeMutation
-	// freezes this exact aggregate before changing the live working copy.
+	// Approved legacy cards created before immutable publications remain visible
+	// until their first edit freezes the working aggregate into a publication.
 	status := normalizedCharacterCardReviewStatus(card.ReviewStatus)
 	if card.Status != model.CharacterCardStatusPublished || card.Visibility != model.CharacterCardVisibilityPublic ||
-		(status != model.CharacterCardReviewNone && status != model.CharacterCardReviewApproved) {
+		status != model.CharacterCardReviewApproved {
 		return characterCardDTO{}, false, nil
 	}
 	impressionsByCard, loadErr := loadCharacterCardImpressions(database.DB, []uint{card.ID})
@@ -330,7 +353,31 @@ func (s *Server) loadProtectedCharacterCardPortrait(cardID, viewerID uint) (stri
 	if err := database.DB.First(&card, cardID).Error; err != nil {
 		return "", time.Time{}, err
 	}
-	if viewerID != 0 && (viewerID == card.UserID || isCharacterCardModerator(viewerID)) {
+	if viewerID != 0 && viewerID == card.UserID {
+		if strings.TrimSpace(card.PortraitImage) == "" {
+			return "", time.Time{}, gorm.ErrRecordNotFound
+		}
+		version := card.UpdatedAt
+		if card.PortraitImageUpdatedAt != nil {
+			version = *card.PortraitImageUpdatedAt
+		}
+		return card.PortraitImage, version, nil
+	}
+	if isCharacterCardModerator(viewerID) {
+		if normalizedCharacterCardReviewStatus(card.ReviewStatus) == model.CharacterCardReviewPending {
+			if snapshot, _, submissionErr := loadCharacterCardSubmission(database.DB, card.ID); submissionErr == nil {
+				if strings.TrimSpace(snapshot.Card.PortraitImage) == "" {
+					return "", time.Time{}, gorm.ErrRecordNotFound
+				}
+				version := snapshot.Card.UpdatedAt
+				if snapshot.Card.PortraitImageUpdatedAt != nil {
+					version = *snapshot.Card.PortraitImageUpdatedAt
+				}
+				return snapshot.Card.PortraitImage, version, nil
+			} else if !errors.Is(submissionErr, gorm.ErrRecordNotFound) {
+				return "", time.Time{}, submissionErr
+			}
+		}
 		if strings.TrimSpace(card.PortraitImage) == "" {
 			return "", time.Time{}, gorm.ErrRecordNotFound
 		}
@@ -369,7 +416,35 @@ func (s *Server) loadProtectedCharacterCardGalleryPortrait(cardID, portraitID, v
 	if err := database.DB.First(&card, cardID).Error; err != nil {
 		return "", time.Time{}, err
 	}
-	if viewerID != 0 && (viewerID == card.UserID || isCharacterCardModerator(viewerID)) {
+	if viewerID != 0 && viewerID == card.UserID {
+		var portrait model.CharacterCardPortrait
+		if err := database.DB.Where("id = ? AND character_card_id = ?", portraitID, card.ID).First(&portrait).Error; err != nil {
+			return "", time.Time{}, err
+		}
+		version := portrait.UpdatedAt
+		if portrait.ImageUpdatedAt != nil {
+			version = *portrait.ImageUpdatedAt
+		}
+		return portrait.Image, version, nil
+	}
+	if isCharacterCardModerator(viewerID) {
+		if normalizedCharacterCardReviewStatus(card.ReviewStatus) == model.CharacterCardReviewPending {
+			if snapshot, _, submissionErr := loadCharacterCardSubmission(database.DB, card.ID); submissionErr == nil {
+				for _, portrait := range snapshot.Portraits {
+					if portrait.ID != portraitID || strings.TrimSpace(portrait.Image) == "" {
+						continue
+					}
+					version := portrait.UpdatedAt
+					if portrait.ImageUpdatedAt != nil {
+						version = *portrait.ImageUpdatedAt
+					}
+					return portrait.Image, version, nil
+				}
+				return "", time.Time{}, gorm.ErrRecordNotFound
+			} else if !errors.Is(submissionErr, gorm.ErrRecordNotFound) {
+				return "", time.Time{}, submissionErr
+			}
+		}
 		var portrait model.CharacterCardPortrait
 		if err := database.DB.Where("id = ? AND character_card_id = ?", portraitID, card.ID).First(&portrait).Error; err != nil {
 			return "", time.Time{}, err
@@ -429,6 +504,79 @@ func characterCardSnapshotAssetPaths(snapshot characterCardSnapshot) map[string]
 	return paths
 }
 
+// publishCharacterCard freezes the owner's current cloud working copy as the
+// one review candidate. Repeated calls replace that candidate, while ordinary
+// auto-saves continue changing only the editable aggregate.
+func (s *Server) publishCharacterCard(c *gin.Context) {
+	cardID, ok := parseCharacterCardID(c)
+	if !ok {
+		return
+	}
+	userID := c.GetUint("userID")
+	now := time.Now().UTC()
+	var card model.CharacterCard
+	var replacedSubmission *characterCardSnapshot
+
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND user_id = ?", cardID, userID).
+			First(&card).Error; err != nil {
+			return err
+		}
+		if card.Status != model.CharacterCardStatusPublished || card.Visibility != model.CharacterCardVisibilityPublic {
+			return errCharacterCardPublishRequiresPublic
+		}
+		if err := ensureCharacterCardApprovedSnapshotBeforeMutation(tx, card); err != nil {
+			return err
+		}
+		if existing, _, err := loadCharacterCardSubmission(tx, card.ID); err == nil {
+			copy := existing
+			replacedSubmission = &copy
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		snapshot, err := captureCharacterCardSnapshot(tx, card.ID)
+		if err != nil {
+			return err
+		}
+		if err := saveCharacterCardSubmission(tx, snapshot, now); err != nil {
+			return err
+		}
+		updates := map[string]interface{}{
+			"review_status":  model.CharacterCardReviewPending,
+			"reviewer_id":    nil,
+			"review_comment": "",
+			"reviewed_at":    nil,
+		}
+		return tx.Model(&model.CharacterCard{}).
+			Where("id = ? AND user_id = ?", card.ID, userID).
+			Updates(updates).Error
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
+		case errors.Is(err, errCharacterCardPublishRequiresPublic):
+			c.JSON(http.StatusConflict, gin.H{"error": "请先将人物卡设置为已发布且公开可见"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "提交人物卡审核失败"})
+		}
+		return
+	}
+
+	if replacedSubmission != nil {
+		for asset := range characterCardSnapshotAssetPaths(*replacedSubmission) {
+			s.cleanupCharacterCardAssetIfUnreferenced(c, userID, card.ID, asset)
+		}
+	}
+	dto, err := s.loadOwnerCharacterCardDTO(card.ID, userID, true)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "已提交最新人物卡版本审核", "character_card": dto})
+}
+
 func (s *Server) cleanupCharacterCardAssetIfUnreferenced(c *gin.Context, userID, cardID uint, raw string) {
 	canonical, ok := s.characterCardInternalUploadPath(c, raw)
 	if !ok {
@@ -454,6 +602,11 @@ func (s *Server) cleanupCharacterCardAssetIfUnreferenced(c *gin.Context, userID,
 		}
 	}
 	if snapshot, _, err := loadCharacterCardPublication(database.DB, cardID); err == nil {
+		if _, exists := characterCardSnapshotAssetPaths(snapshot)[canonical]; exists {
+			return
+		}
+	}
+	if snapshot, _, err := loadCharacterCardSubmission(database.DB, cardID); err == nil {
 		if _, exists := characterCardSnapshotAssetPaths(snapshot)[canonical]; exists {
 			return
 		}
@@ -524,8 +677,19 @@ func (s *Server) listPendingCharacterCards(c *gin.Context) {
 	for _, card := range cards {
 		owner := userByID[card.UserID]
 		color, bold := userDisplayStyle(owner)
+		dto := s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, true)
+		if snapshot, _, submissionErr := loadCharacterCardSubmission(database.DB, card.ID); submissionErr == nil {
+			submittedCard, submittedImpressions, submittedPortraits := snapshot.models()
+			submittedCard.ReviewStatus = card.ReviewStatus
+			submittedCard.ReviewComment = card.ReviewComment
+			submittedCard.ReviewedAt = card.ReviewedAt
+			dto = s.buildCharacterCardDTO(submittedCard, submittedImpressions, submittedPortraits, true, true)
+		} else if !errors.Is(submissionErr, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡审核版本失败"})
+			return
+		}
 		result = append(result, reviewDTO{
-			characterCardDTO: s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, true),
+			characterCardDTO: dto,
 			OwnerName:        owner.Username, OwnerNameColor: color, OwnerNameBold: bold,
 		})
 	}
@@ -551,6 +715,8 @@ func (s *Server) reviewCharacterCard(c *gin.Context) {
 	now := time.Now().UTC()
 	var card model.CharacterCard
 	var oldSnapshot *characterCardSnapshot
+	var reviewedSnapshot *characterCardSnapshot
+	reviewedName := ""
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&card, cardID).Error; err != nil {
 			return err
@@ -564,6 +730,21 @@ func (s *Server) reviewCharacterCard(c *gin.Context) {
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		snapshot, _, submissionErr := loadCharacterCardSubmission(tx, card.ID)
+		if errors.Is(submissionErr, gorm.ErrRecordNotFound) {
+			// Compatibility for review requests created before frozen submission
+			// snapshots were introduced.
+			var err error
+			snapshot, err = captureCharacterCardSnapshot(tx, card.ID)
+			if err != nil {
+				return err
+			}
+		} else if submissionErr != nil {
+			return submissionErr
+		}
+		copy := snapshot
+		reviewedSnapshot = &copy
+		reviewedName = snapshot.Card.DisplayName
 		updates := map[string]interface{}{
 			"reviewer_id": reviewerID, "review_comment": comment, "reviewed_at": now,
 		}
@@ -571,16 +752,15 @@ func (s *Server) reviewCharacterCard(c *gin.Context) {
 			if card.Status != model.CharacterCardStatusPublished || card.Visibility != model.CharacterCardVisibilityPublic {
 				return errors.New("character card is no longer public")
 			}
-			snapshot, err := captureCharacterCardSnapshot(tx, card.ID)
-			if err != nil {
-				return err
-			}
 			if err := saveCharacterCardPublication(tx, snapshot, reviewerID, now); err != nil {
 				return err
 			}
 			updates["review_status"] = model.CharacterCardReviewApproved
 		} else {
 			updates["review_status"] = model.CharacterCardReviewRejected
+		}
+		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardSubmission{}).Error; err != nil {
+			return err
 		}
 		return tx.Model(&model.CharacterCard{}).Where("id = ? AND review_status = ?", card.ID, model.CharacterCardReviewPending).Updates(updates).Error
 	})
@@ -599,10 +779,18 @@ func (s *Server) reviewCharacterCard(c *gin.Context) {
 			s.cleanupCharacterCardAssetIfUnreferenced(c, card.UserID, card.ID, asset)
 		}
 	}
-	logAdminAction(c, "review_character_card", "character_card", card.ID, card.DisplayName, map[string]interface{}{
+	if req.Action == "reject" && reviewedSnapshot != nil {
+		for asset := range characterCardSnapshotAssetPaths(*reviewedSnapshot) {
+			s.cleanupCharacterCardAssetIfUnreferenced(c, card.UserID, card.ID, asset)
+		}
+	}
+	if reviewedName == "" {
+		reviewedName = card.DisplayName
+	}
+	logAdminAction(c, "review_character_card", "character_card", card.ID, reviewedName, map[string]interface{}{
 		"action": req.Action, "comment": comment,
 	})
-	notifyModerationResult(card.UserID, "character_card", card.ID, "人物卡《"+card.DisplayName+"》", req.Action, comment)
+	notifyModerationResult(card.UserID, "character_card", card.ID, "人物卡《"+reviewedName+"》", req.Action, comment)
 	dto, loadErr := s.loadOwnerCharacterCardDTO(card.ID, card.UserID, true)
 	if loadErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})

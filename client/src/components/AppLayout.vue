@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../stores/user'
 import { useNotificationStore } from '../stores/notification'
+import { useSidebarBadgesStore } from '../stores/sidebarBadges'
 import { useRouter, useRoute } from 'vue-router'
 import RDialog from './RDialog.vue'
 import RToast from './RToast.vue'
@@ -17,6 +18,7 @@ import { getModeratorStats } from '@/api/moderator'
 const { t } = useI18n()
 const userStore = useUserStore()
 const notificationStore = useNotificationStore()
+const sidebarBadgesStore = useSidebarBadgesStore()
 const router = useRouter()
 const route = useRoute()
 const mounted = ref(false)
@@ -24,6 +26,7 @@ const jumpReturn = ref<JumpReturnInfo | null>(null)
 const mainContentRef = ref<HTMLElement | null>(null)
 const pendingRestoreMenu = ref<string | null>(null)
 const moderatorPendingCount = ref(0)
+let sidebarBadgeRefreshTimer: ReturnType<typeof setInterval> | null = null
 
 interface MenuCacheState {
   path: string
@@ -38,6 +41,7 @@ onMounted(() => {
   if (userStore.token) {
     void refreshCurrentUser()
     void notificationStore.loadUnreadCount()
+    void sidebarBadgesStore.initialize(userStore.user?.id)
     notificationStore.connectWebSocket()
     if (userStore.isModerator) {
       void loadModeratorPendingCount()
@@ -46,13 +50,28 @@ onMounted(() => {
   document.addEventListener('click', handleGlobalJumpLink, true)
   document.addEventListener('keydown', handleGlobalJumpLinkKeydown, true)
   refreshJumpReturn()
+  startSidebarBadgeRefresh()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleGlobalJumpLink, true)
   document.removeEventListener('keydown', handleGlobalJumpLinkKeydown, true)
   notificationStore.disconnectWebSocket()
+  stopSidebarBadgeRefresh()
 })
+
+function startSidebarBadgeRefresh() {
+  stopSidebarBadgeRefresh()
+  sidebarBadgeRefreshTimer = setInterval(() => {
+    if (userStore.token) void sidebarBadgesStore.refreshContent()
+  }, 2 * 60 * 1000)
+}
+
+function stopSidebarBadgeRefresh() {
+  if (!sidebarBadgeRefreshTimer) return
+  clearInterval(sidebarBadgeRefreshTimer)
+  sidebarBadgeRefreshTimer = null
+}
 
 // 侧边栏菜单点击时刷新未读消息数量
 function handleMenuClick() {
@@ -68,11 +87,17 @@ watch(() => userStore.token, (token) => {
   if (token) {
     notificationStore.connectWebSocket()
     void notificationStore.loadUnreadCount()
+    void sidebarBadgesStore.initialize(userStore.user?.id)
     return
   }
 
   notificationStore.disconnectWebSocket()
   notificationStore.resetUnreadCount()
+  sidebarBadgesStore.reset()
+})
+
+watch(() => userStore.user?.id, (id) => {
+  if (userStore.token && id) void sidebarBadgesStore.initialize(id)
 })
 
 watch(() => userStore.isModerator, (isModerator) => {
@@ -270,6 +295,7 @@ function handleMainContentScroll() {
 
 async function handleMenuNavigate(menuId: string, fallbackRoute: string) {
   handleMenuClick()
+  sidebarBadgesStore.markMenuRead(menuId)
   if (activeMenu.value === menuId && route.path === fallbackRoute) return
 
   saveMenuState(activeMenu.value)
@@ -336,7 +362,80 @@ onBeforeUnmount(() => {
           @click="handleMenuNavigate(item.id, item.route)"
         >
           <i :class="item.icon"></i>
-          <span>{{ item.label }}</span>
+          <span class="menu-item__label">{{ item.label }}</span>
+          <span v-if="item.id === 'community'" class="menu-badges" aria-live="polite">
+            <span
+              v-if="sidebarBadgesStore.unreadCounts.community > 0"
+              class="sidebar-badge sidebar-badge--count"
+              :aria-label="t('nav.badges.newContent', { count: sidebarBadgesStore.unreadCounts.community })"
+              :title="t('nav.badges.newContent', { count: sidebarBadgesStore.unreadCounts.community })"
+            >
+              {{ sidebarBadgesStore.unreadCounts.community > 99 ? '99+' : sidebarBadgesStore.unreadCounts.community }}
+            </span>
+            <span
+              v-if="sidebarBadgesStore.unreadCounts.events > 0"
+              class="sidebar-badge sidebar-badge--event"
+              :aria-label="t('nav.badges.newEvents', { count: sidebarBadgesStore.unreadCounts.events })"
+              :title="t('nav.badges.newEvents', { count: sidebarBadgesStore.unreadCounts.events })"
+            >
+              <i class="ri-calendar-event-fill" aria-hidden="true"></i>
+              {{ sidebarBadgesStore.unreadCounts.events > 99 ? '99+' : sidebarBadgesStore.unreadCounts.events }}
+            </span>
+          </span>
+          <span
+            v-else-if="item.id === 'market' && sidebarBadgesStore.unreadCounts.market > 0"
+            class="menu-badges"
+            aria-live="polite"
+          >
+            <span
+              class="sidebar-badge sidebar-badge--count"
+              :aria-label="t('nav.badges.newContent', { count: sidebarBadgesStore.unreadCounts.market })"
+              :title="t('nav.badges.newContent', { count: sidebarBadgesStore.unreadCounts.market })"
+            >
+              {{ sidebarBadgesStore.unreadCounts.market > 99 ? '99+' : sidebarBadgesStore.unreadCounts.market }}
+            </span>
+          </span>
+          <span
+            v-else-if="item.id === 'rpdb' && sidebarBadgesStore.unreadCounts.rpdb > 0"
+            class="menu-badges"
+            aria-live="polite"
+          >
+            <span
+              class="sidebar-badge sidebar-badge--count"
+              :aria-label="t('nav.badges.newContent', { count: sidebarBadgesStore.unreadCounts.rpdb })"
+              :title="t('nav.badges.newContent', { count: sidebarBadgesStore.unreadCounts.rpdb })"
+            >
+              {{ sidebarBadgesStore.unreadCounts.rpdb > 99 ? '99+' : sidebarBadgesStore.unreadCounts.rpdb }}
+            </span>
+          </span>
+          <span
+            v-else-if="item.id === 'warcraft' && sidebarBadgesStore.addonUpdateCount > 0"
+            class="menu-badges"
+            aria-live="polite"
+          >
+            <span
+              class="sidebar-badge sidebar-badge--addon"
+              :aria-label="t('nav.badges.addonUpdates', { count: sidebarBadgesStore.addonUpdateCount })"
+              :title="t('nav.badges.addonUpdates', { count: sidebarBadgesStore.addonUpdateCount })"
+            >
+              <i class="ri-download-cloud-2-fill" aria-hidden="true"></i>
+              {{ t('nav.badges.update') }}
+            </span>
+          </span>
+          <span
+            v-else-if="item.id === 'settings' && sidebarBadgesStore.systemUpdateAvailable"
+            class="menu-badges"
+            aria-live="polite"
+          >
+            <span
+              class="sidebar-badge sidebar-badge--system"
+              :aria-label="t('nav.badges.systemUpdate', { version: sidebarBadgesStore.systemUpdateVersion })"
+              :title="t('nav.badges.systemUpdate', { version: sidebarBadgesStore.systemUpdateVersion })"
+            >
+              <i class="ri-rocket-2-fill" aria-hidden="true"></i>
+              {{ t('nav.badges.update') }}
+            </span>
+          </span>
         </button>
 
         <!-- 版主中心（仅版主可见） -->
@@ -484,7 +583,7 @@ onBeforeUnmount(() => {
   text-align: left;
   color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.7));
   text-decoration: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .menu-item::before {
@@ -504,6 +603,86 @@ onBeforeUnmount(() => {
 .menu-item i {
   font-size: 20px;
   margin-right: 12px;
+}
+
+.menu-item__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-badges {
+  position: absolute;
+  z-index: 2;
+  top: -5px;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.sidebar-badge {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 6px;
+  border: 2px solid var(--color-sidebar-bg, #4B3621);
+  border-radius: 999px;
+  color: #fff;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.34);
+  animation: sidebar-badge-arrive 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.sidebar-badge i {
+  margin: 0;
+  font-size: 10px;
+}
+
+.sidebar-badge--count {
+  background: linear-gradient(145deg, #E15B56, #A92E32);
+  box-shadow: 0 3px 8px rgba(92, 16, 22, 0.42);
+}
+
+.sidebar-badge--event {
+  background: linear-gradient(145deg, #3B9992, #216962);
+  box-shadow: 0 3px 8px rgba(15, 74, 70, 0.42);
+}
+
+.sidebar-badge--addon,
+.sidebar-badge--system {
+  min-width: auto;
+  background: linear-gradient(145deg, #F1B24E, #C8741D);
+  color: #241507;
+  box-shadow: 0 3px 8px rgba(106, 55, 8, 0.45);
+}
+
+@keyframes sidebar-badge-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-badge {
+    animation: none;
+  }
 }
 
 .menu-item:hover {

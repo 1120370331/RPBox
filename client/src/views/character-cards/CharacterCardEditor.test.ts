@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getCharacterCard: vi.fn(),
   getCharacterCardTRP3Lua: vi.fn(),
   listAccountBackups: vi.fn(),
+  publishCharacterCard: vi.fn(),
   reorderCharacterCardPortraits: vi.fn(),
   setCharacterCardPortraitCover: vi.fn(),
   updateCharacterCard: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@/api/characterCard', () => ({
   deleteCharacterCardPortrait: mocks.deleteCharacterCardPortrait,
   getCharacterCard: mocks.getCharacterCard,
   getCharacterCardTRP3Lua: mocks.getCharacterCardTRP3Lua,
+  publishCharacterCard: mocks.publishCharacterCard,
   reorderCharacterCardPortraits: mocks.reorderCharacterCardPortraits,
   setCharacterCardPortraitCover: mocks.setCharacterCardPortraitCover,
   updateCharacterCard: mocks.updateCharacterCard,
@@ -263,7 +265,65 @@ describe('CharacterCardEditor tabs', () => {
       impressions: expect.arrayContaining([expect.objectContaining({ slot: 1 })]),
     }))
     expect(wrapper.get('.save-sync').text()).toContain('已自动保存到云端')
+    expect(mocks.publishCharacterCard).not.toHaveBeenCalled()
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('submits only after the explicit publish button saves the latest working copy', async () => {
+    mocks.getCharacterCard.mockResolvedValue(card)
+    mocks.updateCharacterCard.mockImplementation(async (_id: number, payload: Partial<CharacterCard>) => ({
+      ...card,
+      ...payload,
+      updated_at: '2026-08-10T09:00:00Z',
+    }))
+    mocks.publishCharacterCard.mockResolvedValue({
+      ...card,
+      status: 'published',
+      visibility: 'public',
+      review_status: 'pending',
+      updated_at: '2026-08-10T09:00:00Z',
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/character-cards/:id/edit', component: CharacterCardEditor },
+        { path: '/character-cards/:id', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/character-cards/12/edit')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardEditor, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia(), router, i18n],
+        stubs: {
+          TiptapEditor: editorStub,
+          PostQuickJump: true,
+          ImageCropperDialog: true,
+          RModal: true,
+          CharacterCardPortrait: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.findAll<HTMLInputElement>('#character-panel-basic input')[0].setValue('点击发布的伊莉娅')
+    const publishButton = wrapper.findAll('button').find((button) => button.text().includes('发布并提交审核'))
+    expect(publishButton).toBeTruthy()
+    await publishButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateCharacterCard).toHaveBeenCalledWith(12, expect.objectContaining({
+      first_name: '点击发布的伊莉娅',
+      status: 'published',
+      visibility: 'public',
+    }))
+    expect(mocks.publishCharacterCard).toHaveBeenCalledWith(12)
+    expect(mocks.updateCharacterCard.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.publishCharacterCard.mock.invocationCallOrder[0])
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(expect.stringContaining('最后一次点击发布'), 6000)
     wrapper.unmount()
   })
 

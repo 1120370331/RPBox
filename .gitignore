@@ -293,3 +293,7 @@ server/data/icons/
 .tmp-rpdb/
 .worktrees/
 /output/
+
+# Local code retrieval and language-server state
+/.search-index/
+/.serena/

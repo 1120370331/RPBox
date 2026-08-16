@@ -1862,8 +1862,8 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   min-width: 64px;
   padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--color-text-main, #2C1810);
+  background: rgba(255, 255, 255, 0.97);
+  color: #2C1810;
   text-align: center;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
@@ -1873,7 +1873,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--event-color, #B87333);
+  color: color-mix(in srgb, var(--event-color, #B87333) 58%, #2C1810);
 }
 
 .event-date-badge .day {
@@ -1882,6 +1882,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   font-size: 28px;
   font-weight: 700;
   line-height: 1;
+  color: #2C1810;
 }
 
 .event-card-body {

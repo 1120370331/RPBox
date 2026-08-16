@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useUpdater } from '@/composables/useUpdater'
+import { useSidebarBadgesStore } from '@/stores/sidebarBadges'
 import RButton from './RButton.vue'
 
 const {
@@ -15,6 +16,13 @@ const {
 
 const showModal = ref(false)
 const installError = ref<string | null>(null)
+const sidebarBadgesStore = useSidebarBadgesStore()
+
+watch(
+  [updateAvailable, () => updateInfo.value?.version],
+  ([available, version]) => sidebarBadgesStore.syncSystemUpdate(available ? version : null),
+  { immediate: true },
+)
 
 onMounted(async () => {
   try {

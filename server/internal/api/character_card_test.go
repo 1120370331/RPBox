@@ -244,7 +244,7 @@ func TestCharacterCardOwnershipVisibilityAndPublicWall(t *testing.T) {
 	db, server, owner, other := newCharacterCardTestServer(t)
 	backupID := uint(77)
 	cards := []model.CharacterCard{
-		{UserID: owner.ID, DisplayName: "公开卡", Status: model.CharacterCardStatusPublished, Visibility: model.CharacterCardVisibilityPublic, SortOrder: 2, SourceBackupID: &backupID, SourceAccountID: "private-account", SourceProfileID: "private-profile", BackgroundStory: `<p>公开卡完整背景</p>`, FirstImpression: `<p>公开卡第一印象</p>`, OtherContent: `<p>公开卡其他资料</p>`},
+		{UserID: owner.ID, DisplayName: "公开卡", Status: model.CharacterCardStatusPublished, Visibility: model.CharacterCardVisibilityPublic, ReviewStatus: model.CharacterCardReviewApproved, SortOrder: 2, SourceBackupID: &backupID, SourceAccountID: "private-account", SourceProfileID: "private-profile", BackgroundStory: `<p>公开卡完整背景</p>`, FirstImpression: `<p>公开卡第一印象</p>`, OtherContent: `<p>公开卡其他资料</p>`},
 		{UserID: owner.ID, DisplayName: "私密卡", Status: model.CharacterCardStatusPublished, Visibility: model.CharacterCardVisibilityPrivate, SortOrder: 1, BackgroundStory: `<p>私密卡完整背景</p>`},
 		{UserID: owner.ID, DisplayName: "公开草稿", Status: model.CharacterCardStatusDraft, Visibility: model.CharacterCardVisibilityPublic, SortOrder: 0, OtherContent: `<p>草稿完整资料</p>`},
 	}
@@ -450,11 +450,15 @@ func TestCharacterCardImpressionsImportVisibilityAndSyncBoundary(t *testing.T) {
 	if updated.FirstImpression != "<p>其他备注（兼容旧数据）</p>" {
 		t.Fatalf("legacy first_impression was not retained as other notes: %+v", updated)
 	}
-	if updated.ReviewStatus != model.CharacterCardReviewPending {
-		t.Fatalf("public save must enter moderation: %+v", updated)
+	if updated.ReviewStatus != model.CharacterCardReviewNone {
+		t.Fatalf("public settings auto-save must remain unsubmitted: %+v", updated)
 	}
 	if hidden := performRequest(server.router, http.MethodGet, cardPath, nil, ""); hidden.Code != http.StatusNotFound {
 		t.Fatalf("unapproved public card expected 404, got %d body=%s", hidden.Code, hidden.Body.String())
+	}
+	submitResp := performRequest(server.router, http.MethodPost, cardPath+"/publish", nil, token)
+	if submitResp.Code != http.StatusAccepted || decodeCharacterCardResponse(t, submitResp).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("explicit publication expected pending: code=%d body=%s", submitResp.Code, submitResp.Body.String())
 	}
 	moderatorToken := newTestToken(t, moderator)
 	reviewResp := performRequest(server.router, http.MethodPost, "/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(created.ID), 10), map[string]interface{}{
@@ -579,7 +583,7 @@ func TestCharacterCardPortraitPermissionsCachingAndRemovalVersion(t *testing.T) 
 	oldTime := time.Now().UTC().Add(-2 * time.Hour)
 	publicCard := model.CharacterCard{
 		UserID: owner.ID, DisplayName: "公开肖像", PortraitImage: publicPortraitPath, PortraitImageUpdatedAt: &oldTime,
-		Status: model.CharacterCardStatusPublished, Visibility: model.CharacterCardVisibilityPublic,
+		Status: model.CharacterCardStatusPublished, Visibility: model.CharacterCardVisibilityPublic, ReviewStatus: model.CharacterCardReviewApproved,
 	}
 	privateCard := model.CharacterCard{
 		UserID: owner.ID, DisplayName: "私密肖像", PortraitImage: privatePortraitPath, PortraitImageUpdatedAt: &oldTime,
@@ -854,8 +858,12 @@ func TestCharacterCardPortraitGalleryModerationKeepsApprovedSnapshotAssets(t *te
 	publish := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{
 		"display_name": "已审版本", "status": model.CharacterCardStatusPublished, "visibility": model.CharacterCardVisibilityPublic,
 	}, ownerToken)
-	if publish.Code != http.StatusOK || decodeCharacterCardResponse(t, publish).ReviewStatus != model.CharacterCardReviewPending {
-		t.Fatalf("public save expected pending: code=%d body=%s", publish.Code, publish.Body.String())
+	if publish.Code != http.StatusOK || decodeCharacterCardResponse(t, publish).ReviewStatus != model.CharacterCardReviewNone {
+		t.Fatalf("public settings auto-save expected unsubmitted state: code=%d body=%s", publish.Code, publish.Body.String())
+	}
+	submit := performRequest(server.router, http.MethodPost, cardPath+"/publish", nil, ownerToken)
+	if submit.Code != http.StatusAccepted || decodeCharacterCardResponse(t, submit).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("explicit public submission expected pending: code=%d body=%s", submit.Code, submit.Body.String())
 	}
 	if visitor := performCharacterCardRequest(server, http.MethodGet, firstPortrait.ImageURL, "", ""); visitor.Code != http.StatusNotFound {
 		t.Fatalf("pending gallery image leaked to visitor: %d", visitor.Code)
@@ -880,8 +888,8 @@ func TestCharacterCardPortraitGalleryModerationKeepsApprovedSnapshotAssets(t *te
 	}
 
 	card = addPortrait("pending.png", 7)
-	if len(card.Portraits) != 2 || card.ReviewStatus != model.CharacterCardReviewPending {
-		t.Fatalf("editing approved gallery should retain working copy and enter pending: %+v", card)
+	if len(card.Portraits) != 2 || card.ReviewStatus != model.CharacterCardReviewApproved {
+		t.Fatalf("editing approved gallery should auto-save without submitting: %+v", card)
 	}
 	secondPortrait := card.Portraits[1]
 	coverResp := performRequest(server.router, http.MethodPut, cardPath+"/portraits/"+strconv.FormatUint(uint64(secondPortrait.ID), 10)+"/cover", nil, ownerToken)
@@ -907,6 +915,10 @@ func TestCharacterCardPortraitGalleryModerationKeepsApprovedSnapshotAssets(t *te
 	}
 	if _, err := os.Stat(firstFile); err != nil {
 		t.Fatalf("working-copy deletion destroyed asset still referenced by approved snapshot: %v", err)
+	}
+	submit = performRequest(server.router, http.MethodPost, cardPath+"/publish", nil, ownerToken)
+	if submit.Code != http.StatusAccepted || decodeCharacterCardResponse(t, submit).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("gallery update submission expected pending: code=%d body=%s", submit.Code, submit.Body.String())
 	}
 	publicDuringReview := performRequest(server.router, http.MethodGet, cardPath, nil, "")
 	if publicDuringReview.Code != http.StatusOK {
@@ -937,8 +949,12 @@ func TestCharacterCardPortraitGalleryModerationKeepsApprovedSnapshotAssets(t *te
 	}
 
 	resubmit := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{"summary": "已修正"}, ownerToken)
-	if resubmit.Code != http.StatusOK || decodeCharacterCardResponse(t, resubmit).ReviewStatus != model.CharacterCardReviewPending {
-		t.Fatalf("edit after rejection should resubmit: code=%d body=%s", resubmit.Code, resubmit.Body.String())
+	if resubmit.Code != http.StatusOK || decodeCharacterCardResponse(t, resubmit).ReviewStatus != model.CharacterCardReviewRejected {
+		t.Fatalf("edit after rejection should remain an unsubmitted working copy: code=%d body=%s", resubmit.Code, resubmit.Body.String())
+	}
+	resubmit = performRequest(server.router, http.MethodPost, cardPath+"/publish", nil, ownerToken)
+	if resubmit.Code != http.StatusAccepted || decodeCharacterCardResponse(t, resubmit).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("explicit resubmission expected pending: code=%d body=%s", resubmit.Code, resubmit.Body.String())
 	}
 	approve = performRequest(server.router, http.MethodPost, "/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(card.ID), 10), map[string]interface{}{"action": "approve"}, moderatorToken)
 	if approve.Code != http.StatusOK {
@@ -957,10 +973,119 @@ func TestCharacterCardPortraitGalleryModerationKeepsApprovedSnapshotAssets(t *te
 	}
 }
 
+func TestCharacterCardApprovedAutoSaveDoesNotSubmitReview(t *testing.T) {
+	db, server, owner, moderator := newCharacterCardTestServer(t)
+	if err := db.Model(&model.User{}).Where("id = ?", moderator.ID).Update("role", "moderator").Error; err != nil {
+		t.Fatalf("promote moderator: %v", err)
+	}
+	ownerToken := newTestToken(t, owner)
+	moderatorToken := newTestToken(t, moderator)
+
+	created := performRequest(server.router, http.MethodPost, "/api/v1/character-cards", map[string]interface{}{
+		"source_type": "blank",
+	}, ownerToken)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create card expected 201, got %d body=%s", created.Code, created.Body.String())
+	}
+	card := decodeCharacterCardResponse(t, created)
+	cardPath := "/api/v1/character-cards/" + strconv.FormatUint(uint64(card.ID), 10)
+
+	publicSettings := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{
+		"display_name": "已公开版本",
+		"status":       model.CharacterCardStatusPublished,
+		"visibility":   model.CharacterCardVisibilityPublic,
+	}, ownerToken)
+	if publicSettings.Code != http.StatusOK || decodeCharacterCardResponse(t, publicSettings).ReviewStatus != model.CharacterCardReviewNone {
+		t.Fatalf("public settings auto-save must remain unsubmitted, got %d body=%s", publicSettings.Code, publicSettings.Body.String())
+	}
+	if hidden := performRequest(server.router, http.MethodGet, cardPath, nil, ""); hidden.Code != http.StatusNotFound {
+		t.Fatalf("unsubmitted public settings leaked to visitors: code=%d body=%s", hidden.Code, hidden.Body.String())
+	}
+	initialPublish := performRequest(server.router, http.MethodPost, cardPath+"/publish", nil, ownerToken)
+	if initialPublish.Code != http.StatusAccepted || decodeCharacterCardResponse(t, initialPublish).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("explicit initial publication expected pending, got %d body=%s", initialPublish.Code, initialPublish.Body.String())
+	}
+	approved := performRequest(server.router, http.MethodPost,
+		"/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(card.ID), 10),
+		map[string]interface{}{"action": "approve"}, moderatorToken)
+	if approved.Code != http.StatusOK {
+		t.Fatalf("initial approval expected 200, got %d body=%s", approved.Code, approved.Body.String())
+	}
+
+	autoSaved := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{
+		"display_name": "仅云端自动保存",
+	}, ownerToken)
+	if autoSaved.Code != http.StatusOK {
+		t.Fatalf("auto-save expected 200, got %d body=%s", autoSaved.Code, autoSaved.Body.String())
+	}
+	autoSavedCard := decodeCharacterCardResponse(t, autoSaved)
+	if autoSavedCard.ReviewStatus != model.CharacterCardReviewApproved {
+		t.Fatalf("auto-save must not submit review, got review_status=%q body=%s", autoSavedCard.ReviewStatus, autoSaved.Body.String())
+	}
+
+	queue := performRequest(server.router, http.MethodGet, "/api/v1/moderator/review/character-cards", nil, moderatorToken)
+	if queue.Code != http.StatusOK || strings.Contains(queue.Body.String(), "仅云端自动保存") {
+		t.Fatalf("auto-saved working copy leaked into review queue: code=%d body=%s", queue.Code, queue.Body.String())
+	}
+	publicView := performRequest(server.router, http.MethodGet, cardPath, nil, "")
+	if publicView.Code != http.StatusOK || decodeCharacterCardResponse(t, publicView).DisplayName != "已公开版本" {
+		t.Fatalf("auto-save changed approved public view: code=%d body=%s", publicView.Code, publicView.Body.String())
+	}
+
+	firstSubmission := performRequest(server.router, http.MethodPost, cardPath+"/publish", nil, ownerToken)
+	if firstSubmission.Code != http.StatusAccepted || decodeCharacterCardResponse(t, firstSubmission).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("explicit update publication expected pending, got %d body=%s", firstSubmission.Code, firstSubmission.Body.String())
+	}
+	postSubmitSave := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{
+		"display_name": "提交后继续编辑",
+	}, ownerToken)
+	if postSubmitSave.Code != http.StatusOK || decodeCharacterCardResponse(t, postSubmitSave).ReviewStatus != model.CharacterCardReviewPending {
+		t.Fatalf("post-submit auto-save should preserve pending candidate: code=%d body=%s", postSubmitSave.Code, postSubmitSave.Body.String())
+	}
+	queue = performRequest(server.router, http.MethodGet, "/api/v1/moderator/review/character-cards", nil, moderatorToken)
+	if queue.Code != http.StatusOK || !strings.Contains(queue.Body.String(), "仅云端自动保存") || strings.Contains(queue.Body.String(), "提交后继续编辑") {
+		t.Fatalf("review queue did not preserve the clicked publication snapshot: code=%d body=%s", queue.Code, queue.Body.String())
+	}
+	reviewPreview := performRequest(server.router, http.MethodGet, cardPath+"?review=submission", nil, moderatorToken)
+	if reviewPreview.Code != http.StatusOK || decodeCharacterCardResponse(t, reviewPreview).DisplayName != "仅云端自动保存" {
+		t.Fatalf("moderator full preview did not preserve the clicked publication snapshot: code=%d body=%s", reviewPreview.Code, reviewPreview.Body.String())
+	}
+
+	latestSubmission := performRequest(server.router, http.MethodPost, cardPath+"/publish", nil, ownerToken)
+	if latestSubmission.Code != http.StatusAccepted {
+		t.Fatalf("re-submit latest working copy expected 202, got %d body=%s", latestSubmission.Code, latestSubmission.Body.String())
+	}
+	var submissionCount int64
+	if err := db.Model(&model.CharacterCardSubmission{}).Where("character_card_id = ?", card.ID).Count(&submissionCount).Error; err != nil {
+		t.Fatalf("count review submissions: %v", err)
+	}
+	if submissionCount != 1 {
+		t.Fatalf("multiple publish clicks must retain one latest submission, got %d", submissionCount)
+	}
+	queue = performRequest(server.router, http.MethodGet, "/api/v1/moderator/review/character-cards", nil, moderatorToken)
+	if queue.Code != http.StatusOK || !strings.Contains(queue.Body.String(), "提交后继续编辑") || strings.Contains(queue.Body.String(), "仅云端自动保存") {
+		t.Fatalf("review queue did not replace the candidate with the latest click: code=%d body=%s", queue.Code, queue.Body.String())
+	}
+	latestApproval := performRequest(server.router, http.MethodPost,
+		"/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(card.ID), 10),
+		map[string]interface{}{"action": "approve"}, moderatorToken)
+	if latestApproval.Code != http.StatusOK {
+		t.Fatalf("latest submission approval expected 200, got %d body=%s", latestApproval.Code, latestApproval.Body.String())
+	}
+	publicView = performRequest(server.router, http.MethodGet, cardPath, nil, "")
+	if publicView.Code != http.StatusOK || decodeCharacterCardResponse(t, publicView).DisplayName != "提交后继续编辑" {
+		t.Fatalf("approval did not publish the latest submitted snapshot: code=%d body=%s", publicView.Code, publicView.Body.String())
+	}
+}
+
 func TestCharacterCardImpressionImagesUsePrivateArchiveProxyAndCleanup(t *testing.T) {
 	db, server, owner, other := newCharacterCardTestServer(t)
+	if err := db.Model(&model.User{}).Where("id = ?", other.ID).Update("role", "moderator").Error; err != nil {
+		t.Fatalf("promote moderator: %v", err)
+	}
 	ownerToken := newTestToken(t, owner)
 	otherToken := newTestToken(t, other)
+	moderatorToken := newTestToken(t, other)
 	createCard := func(token string) characterCardDTO {
 		t.Helper()
 		resp := performRequest(server.router, http.MethodPost, "/api/v1/character-cards", map[string]interface{}{"source_type": "blank"}, token)
@@ -1087,7 +1212,17 @@ func TestCharacterCardImpressionImagesUsePrivateArchiveProxyAndCleanup(t *testin
 	if publishResp.Code != http.StatusOK {
 		t.Fatalf("publish image card expected 200, got %d body=%s", publishResp.Code, publishResp.Body.String())
 	}
-	published := decodeCharacterCardResponse(t, publishResp)
+	submitResp := performRequest(server.router, http.MethodPost, ownerPath+"/publish", nil, ownerToken)
+	if submitResp.Code != http.StatusAccepted {
+		t.Fatalf("submit image card expected 202, got %d body=%s", submitResp.Code, submitResp.Body.String())
+	}
+	approveResp := performRequest(server.router, http.MethodPost,
+		"/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(ownerCard.ID), 10),
+		map[string]interface{}{"action": "approve"}, moderatorToken)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("approve image card expected 200, got %d body=%s", approveResp.Code, approveResp.Body.String())
+	}
+	published := decodeCharacterCardResponse(t, approveResp)
 	publicImageURL := published.Impressions[0].ImageURL
 	if visitor := performCharacterCardRequest(server, http.MethodGet, publicImageURL, "", ""); visitor.Code != http.StatusOK || strings.Contains(visitor.Header().Get("Cache-Control"), "public") {
 		t.Fatalf("active public impression image should be readable only through private cache: code=%d cache=%q", visitor.Code, visitor.Header().Get("Cache-Control"))
@@ -1103,8 +1238,21 @@ func TestCharacterCardImpressionImagesUsePrivateArchiveProxyAndCleanup(t *testin
 	if inactive.Impressions[0].ImageUpdatedAt == nil || published.Impressions[0].ImageUpdatedAt == nil || !inactive.Impressions[0].ImageUpdatedAt.After(*published.Impressions[0].ImageUpdatedAt) {
 		t.Fatalf("active transition did not rotate image cache version: before=%v after=%v", published.Impressions[0].ImageUpdatedAt, inactive.Impressions[0].ImageUpdatedAt)
 	}
+	if visitor := performCharacterCardRequest(server, http.MethodGet, publicImageURL, "", ""); visitor.Code != http.StatusOK {
+		t.Fatalf("auto-saved inactive working copy changed approved public image: %d", visitor.Code)
+	}
+	submitResp = performRequest(server.router, http.MethodPost, ownerPath+"/publish", nil, ownerToken)
+	if submitResp.Code != http.StatusAccepted {
+		t.Fatalf("submit inactive impression expected 202, got %d body=%s", submitResp.Code, submitResp.Body.String())
+	}
+	approveResp = performRequest(server.router, http.MethodPost,
+		"/api/v1/moderator/review/character-cards/"+strconv.FormatUint(uint64(ownerCard.ID), 10),
+		map[string]interface{}{"action": "approve"}, moderatorToken)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("approve inactive impression expected 200, got %d body=%s", approveResp.Code, approveResp.Body.String())
+	}
 	if visitor := performCharacterCardRequest(server, http.MethodGet, publicImageURL, "", ""); visitor.Code != http.StatusNotFound {
-		t.Fatalf("disabled impression image remained publicly readable: %d", visitor.Code)
+		t.Fatalf("approved inactive impression remained publicly readable: %d", visitor.Code)
 	}
 	if ownerView := performCharacterCardRequest(server, http.MethodGet, inactive.Impressions[0].ImageURL, ownerToken, ""); ownerView.Code != http.StatusOK {
 		t.Fatalf("owner should retain access to inactive impression image: %d", ownerView.Code)
@@ -1231,6 +1379,7 @@ func newCharacterCardTestServer(t *testing.T) (*gorm.DB, *Server, model.User, mo
 	db := testutil.NewTestDB(t,
 		&model.User{}, &model.AccountBackup{}, &model.AccountBackupVersion{}, &model.Character{},
 		&model.CharacterCard{}, &model.CharacterCardPortrait{}, &model.CharacterCardImpression{}, &model.CharacterCardPublication{},
+		&model.CharacterCardSubmission{},
 	)
 	sqlDB, err := db.DB()
 	if err != nil {

@@ -8,6 +8,7 @@ import {
   deleteCharacterCardPortrait,
   getCharacterCard,
   getCharacterCardTRP3Lua,
+  publishCharacterCard,
   reorderCharacterCardPortraits,
   setCharacterCardPortraitCover,
   syncCharacterCardFromTRP3,
@@ -73,6 +74,7 @@ const card = ref<CharacterCard | null>(null)
 const form = reactive(createEmptyCharacterCardDraft())
 const loading = ref(true)
 const saving = ref(false)
+const publishing = ref(false)
 const saveStatus = ref<SaveStatus>('saved')
 const saveErrorMessage = ref('')
 const loadError = ref('')
@@ -138,6 +140,13 @@ const publicReviewPending = computed(() => (
   && form.visibility === 'public'
   && card.value?.review_status === 'pending'
 ))
+const publishActionText = computed(() => {
+  if (publishing.value) return t('characterCards.editor.publishing')
+  if (card.value?.review_status === 'pending') return t('characterCards.editor.updateSubmission')
+  if (card.value?.review_status === 'rejected') return t('characterCards.editor.resubmit')
+  if (card.value?.review_status === 'approved') return t('characterCards.editor.publishUpdate')
+  return t('characterCards.editor.publish')
+})
 const imageUploadInProgress = computed(() => (
   portraitUploading.value || Object.values(impressionUploading).some(Boolean)
 ))
@@ -697,14 +706,7 @@ async function drainSaveQueue(): Promise<CharacterCard | null> {
   saveStatus.value = 'saved'
   saveErrorMessage.value = ''
   if (shouldNotify && lastSavedCard) {
-    toast.success(
-      lastSavedCard.status === 'published'
-        && lastSavedCard.visibility === 'public'
-        && lastSavedCard.review_status === 'pending'
-        ? t('characterCards.editor.savedPending')
-        : t('characterCards.editor.saved'),
-      lastSavedCard.review_status === 'pending' ? 6000 : 3000,
-    )
+    toast.success(t('characterCards.editor.saved'))
   }
   if (shouldNavigate && lastSavedCard) {
     await router.push(`/character-cards/${lastSavedCard.id}`)
@@ -720,6 +722,25 @@ function saveCard(returnToDetail = false): Promise<CharacterCard | null> {
 function flushCardChanges(): Promise<CharacterCard | null> {
   if (imageUploadInProgress.value || !card.value) return Promise.resolve(null)
   return enqueueSave(false, false)
+}
+
+async function publishCard(returnToDetail = false) {
+  if (!card.value || publishing.value || imageUploadInProgress.value) return
+  publishing.value = true
+  try {
+    if (form.status !== 'published') form.status = 'published'
+    if (form.visibility !== 'public') form.visibility = 'public'
+    const savedCard = await flushCardChanges()
+    if (!savedCard) return
+    const result = await publishCharacterCard(savedCard.id)
+    applyCard(result)
+    toast.success(t('characterCards.editor.submittedReview'), 6000)
+    if (returnToDetail) await router.push(`/character-cards/${result.id}`)
+  } catch (error: unknown) {
+    toast.error(error instanceof Error ? error.message : t('characterCards.editor.publishFailed'))
+  } finally {
+    publishing.value = false
+  }
 }
 
 async function syncFromBackup() {
@@ -914,11 +935,14 @@ async function goBack() {
           <span class="save-sync" :class="`save-sync--${saveStatus}`" role="status">
             <i :class="saveStatusIcon" aria-hidden="true"></i>{{ saveStatusText }}
           </span>
-          <button type="button" class="button button--quiet" :disabled="saving || imageUploadInProgress" @click="saveCard(false)">
+          <button type="button" class="button button--quiet" :disabled="saving || publishing || imageUploadInProgress" @click="saveCard(false)">
             {{ saving ? t('characterCards.common.saving') : t('characterCards.common.save') }}
           </button>
-          <button type="button" class="button button--primary" :disabled="saving || imageUploadInProgress" @click="saveCard(true)">
+          <button type="button" class="button button--quiet" :disabled="saving || publishing || imageUploadInProgress" @click="saveCard(true)">
             {{ t('characterCards.editor.saveAndView') }}
+          </button>
+          <button type="button" class="button button--primary" :disabled="publishing || imageUploadInProgress" @click="publishCard(true)">
+            <i :class="publishing ? 'ri-loader-4-line spin' : 'ri-upload-cloud-2-line'" aria-hidden="true"></i>{{ publishActionText }}
           </button>
         </div>
       </header>
@@ -1120,16 +1144,16 @@ async function goBack() {
                     <option value="private">{{ t('characterCards.common.status.private') }}</option>
                     <option value="public">{{ t('characterCards.common.status.public') }}</option>
                   </select>
-                  <small>{{ t('characterCards.editor.publicHint') }}</small>
+                  <small>{{ t('characterCards.editor.publicPublishHint') }}</small>
                 </label>
               </div>
-              <div v-if="form.status === 'published' && form.visibility === 'public'" class="review-notice" :class="`review-notice--${card.review_status || 'pending'}`">
-                <i :class="card.review_status === 'rejected' ? 'ri-close-circle-line' : card.review_status === 'approved' ? 'ri-checkbox-circle-line' : 'ri-time-line'" aria-hidden="true"></i>
+              <div v-if="form.status === 'published' && form.visibility === 'public'" class="review-notice" :class="`review-notice--${card.review_status || 'none'}`">
+                <i :class="card.review_status === 'rejected' ? 'ri-close-circle-line' : card.review_status === 'approved' ? 'ri-checkbox-circle-line' : card.review_status === 'pending' ? 'ri-time-line' : 'ri-upload-cloud-2-line'" aria-hidden="true"></i>
                 <div>
-                  <strong>{{ card.review_status === 'rejected' ? t('characterCards.editor.reviewRejected') : card.review_status === 'approved' ? t('characterCards.editor.reviewApproved') : t('characterCards.editor.reviewOnSave') }}</strong>
+                  <strong>{{ card.review_status === 'rejected' ? t('characterCards.editor.reviewRejected') : card.review_status === 'approved' ? t('characterCards.editor.reviewApproved') : card.review_status === 'pending' ? t('characterCards.editor.reviewPending') : t('characterCards.editor.reviewOnPublish') }}</strong>
                   <span v-if="card.review_status === 'rejected' && card.review_comment">{{ t('characterCards.editor.moderatorComment', { comment: card.review_comment }) }}</span>
-                  <span v-else-if="publicReviewPending">{{ t('characterCards.editor.pendingBody') }}</span>
-                  <span v-else>{{ t('characterCards.editor.reviewBody') }}</span>
+                  <span v-else-if="publicReviewPending">{{ t('characterCards.editor.pendingSubmissionBody') }}</span>
+                  <span v-else>{{ t('characterCards.editor.workingCopyReviewBody') }}</span>
                 </div>
               </div>
             </div>
@@ -1316,13 +1340,18 @@ async function goBack() {
       </div>
 
       <footer class="save-dock">
-        <div>
+        <div class="save-dock__copy">
           <strong>{{ saveStatusText }}</strong>
           <span>{{ saveStatus === 'failed' && saveErrorMessage ? saveErrorMessage : t('characterCards.editor.autoSave.body') }}</span>
         </div>
-        <button type="button" class="button button--primary" :disabled="saving || imageUploadInProgress || !isDirty" @click="saveCard(false)">
-          <i class="ri-save-3-line" aria-hidden="true"></i>{{ saving ? t('characterCards.common.saving') : t('characterCards.editor.saveWhole') }}
-        </button>
+        <div class="save-dock__actions">
+          <button type="button" class="button button--quiet" :disabled="saving || publishing || imageUploadInProgress || !isDirty" @click="saveCard(false)">
+            <i class="ri-save-3-line" aria-hidden="true"></i>{{ saving ? t('characterCards.common.saving') : t('characterCards.editor.saveWhole') }}
+          </button>
+          <button type="button" class="button button--primary" :disabled="publishing || imageUploadInProgress" @click="publishCard(false)">
+            <i :class="publishing ? 'ri-loader-4-line spin' : 'ri-upload-cloud-2-line'" aria-hidden="true"></i>{{ publishActionText }}
+          </button>
+        </div>
       </footer>
 
       <ImageCropperDialog
@@ -1985,7 +2014,8 @@ async function goBack() {
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(14px);
 }
-.save-dock > div { display: grid; gap: 2px; }
+.save-dock__copy { display: grid; gap: 2px; }
+.save-dock__actions { display: flex; align-items: center; gap: 8px; }
 .save-dock strong { color: var(--walnut); font-size: 11px; }
 .save-dock span { color: var(--muted); font-size: 9px; }
 
@@ -2070,7 +2100,8 @@ async function goBack() {
   .observation-record__header { align-items: flex-start; flex-direction: column; gap: 8px; padding-top: 10px; padding-bottom: 10px; }
   .observation-record__body { padding: 12px; }
   .observation-icon-station { grid-template-columns: 1fr; }
-  .save-dock > div { display: none; }
+  .save-dock__copy { display: none; }
+  .save-dock__actions { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .save-dock .button { width: 100%; }
 }
 
