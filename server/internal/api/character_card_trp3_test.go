@@ -11,6 +11,31 @@ import (
 	"github.com/rpbox/server/internal/model"
 )
 
+func TestValidateTRP3ProfileIDAcceptsDefaultProfileMarker(t *testing.T) {
+	valid := []string{
+		"0111210250fhJ7*",
+		"profile-exact",
+		"RPBOX_12_ABC123",
+	}
+	for _, profileID := range valid {
+		if err := validateTRP3ProfileID(profileID); err != nil {
+			t.Errorf("expected profile ID %q to be valid: %v", profileID, err)
+		}
+	}
+
+	invalid := []string{
+		"*",
+		"profile*internal",
+		"profile**",
+		"../escape",
+	}
+	for _, profileID := range invalid {
+		if err := validateTRP3ProfileID(profileID); err == nil {
+			t.Errorf("expected profile ID %q to be rejected", profileID)
+		}
+	}
+}
+
 func TestCharacterCardTRP3LuaWriteBackAlwaysSnapshotsAndPreservesRawFile(t *testing.T) {
 	db, server, owner, other := newCharacterCardTestServer(t)
 	originalProfiles := characterCardProfilesData(`{

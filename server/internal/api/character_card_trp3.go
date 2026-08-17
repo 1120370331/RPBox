@@ -183,7 +183,14 @@ func validateTRP3ProfileID(raw string) error {
 	if err := validatePlainCharacterCardField("profile_id", raw, 128); err != nil {
 		return err
 	}
-	for _, char := range raw {
+	// TRP3 replaces the final generated ID character with "*" for its default
+	// profile. Keep the marker scoped to that official trailing position so an
+	// imported default profile can be synced without broadening the ID grammar.
+	idBody := strings.TrimSuffix(raw, "*")
+	if idBody == "" {
+		return errors.New("profile_id 不是安全的档案标识")
+	}
+	for _, char := range idBody {
 		if unicode.IsLetter(char) || unicode.IsDigit(char) || char == '-' || char == '_' || char == '.' || char == '#' {
 			continue
 		}
