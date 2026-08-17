@@ -46,6 +46,12 @@ type CharacterCard struct {
 	ClassColor         string `gorm:"size:16" json:"class_color"`
 	NameColor          string `gorm:"size:16" json:"name_color"`
 
+	// TRP3AdditionalInfoJSON and TRP3PersonalityJSON retain the ordered
+	// characteristics.MI and characteristics.PS structures. They are exposed
+	// through typed API fields instead of leaking storage JSON to clients.
+	TRP3AdditionalInfoJSON string `gorm:"type:text;not null;default:'[]'" json:"-"`
+	TRP3PersonalityJSON    string `gorm:"type:text;not null;default:'[]'" json:"-"`
+
 	Summary         string `gorm:"size:1000" json:"summary"`
 	BackgroundStory string `gorm:"type:text" json:"background_story"`
 	// FirstImpression is the legacy rich-text field retained as free-form

@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import {
   deleteCharacterCard,
   getCharacterCard,
-  getCharacterCardSharePath,
   publishCharacterCard,
   updateCharacterCard,
   type CharacterCard,
@@ -16,6 +15,7 @@ import AuthenticatedImage from '@/components/AuthenticatedImage.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import CharacterCardImpressionMark from '@/components/character-cards/CharacterCardImpressionMark.vue'
 import CharacterCardGalleryImage from '@/components/character-cards/CharacterCardGalleryImage.vue'
+import CharacterCardShareDialog from '@/components/character-cards/CharacterCardShareDialog.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
@@ -28,7 +28,6 @@ import {
 } from '@/utils/characterCardDraft'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardCoverPortrait, normalizeCharacterCardPortraits } from '@/utils/characterCardPortraits'
-import { buildPublicSitePathUrl } from '@/utils/desktopDeepLink'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,7 +40,7 @@ const cardId = computed(() => Number(route.params.id))
 const card = ref<CharacterCard | null>(null)
 const loading = ref(true)
 const actionLoading = ref(false)
-const shareLoading = ref(false)
+const showShareDialog = ref(false)
 const errorMessage = ref('')
 const activeTab = ref<CharacterCardEditorTab>('basic')
 const backgroundRef = ref<HTMLElement | null>(null)
@@ -283,44 +282,9 @@ async function removeCard() {
   }
 }
 
-async function shareCard() {
-  if (!card.value || !canShare.value || shareLoading.value) return
-  shareLoading.value = true
-  try {
-    const sharePath = await getCharacterCardSharePath(card.value.id)
-    const url = buildPublicSitePathUrl(sharePath)
-    if (navigator.share) {
-      await navigator.share({
-        title: displayName.value,
-        text: t('characterCards.detail.shareText', { name: displayName.value }),
-        url,
-      })
-      toast.success(t('characterCards.detail.shareSuccess'))
-      return
-    }
-
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url)
-    } else {
-      const textarea = document.createElement('textarea')
-      textarea.value = url
-      textarea.setAttribute('readonly', 'true')
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      const copied = document.execCommand('copy')
-      document.body.removeChild(textarea)
-      if (!copied) throw new Error('Clipboard copy failed')
-    }
-    toast.success(t('characterCards.detail.shareCopied'))
-  } catch (error: any) {
-    if (error?.name === 'AbortError') return
-    console.error('分享人物卡失败:', error)
-    toast.error(t('characterCards.detail.shareFailed'))
-  } finally {
-    shareLoading.value = false
-  }
+function shareCard() {
+  if (!card.value || (!isOwner.value && !canShare.value)) return
+  showShareDialog.value = true
 }
 
 function goBack() {
@@ -352,13 +316,10 @@ function goBack() {
           <i class="ri-arrow-left-line" aria-hidden="true"></i>{{ t('characterCards.detail.backWall') }}
         </button>
         <div v-if="isOwner || canShare" class="detail-toolbar__actions">
-          <button v-if="canShare" type="button" class="toolbar-button toolbar-button--share" :disabled="shareLoading" @click="shareCard">
-            <i :class="shareLoading ? 'ri-loader-4-line spin' : 'ri-share-forward-line'" aria-hidden="true"></i>
+          <button v-if="isOwner || canShare" type="button" class="toolbar-button toolbar-button--share" @click="shareCard">
+            <i class="ri-share-forward-line" aria-hidden="true"></i>
             {{ t('characterCards.detail.share') }}
           </button>
-          <span v-else-if="isOwner" class="share-unavailable" :title="shareUnavailableReason">
-            <i class="ri-information-line" aria-hidden="true"></i>{{ shareUnavailableReason }}
-          </span>
           <template v-if="isOwner">
             <button v-if="wantsPublic" type="button" class="toolbar-button" :disabled="actionLoading" @click="togglePublicAccess">
               <i class="ri-lock-line" aria-hidden="true"></i>
@@ -602,6 +563,13 @@ function goBack() {
       :images="viewerImages"
       :start-index="viewerStartIndex"
     />
+    <CharacterCardShareDialog
+      v-if="card"
+      v-model="showShareDialog"
+      :card="card"
+      :can-share-link="canShare"
+      :link-unavailable-reason="shareUnavailableReason"
+    />
   </main>
 </template>
 
@@ -633,8 +601,6 @@ function goBack() {
 .toolbar-button--primary { border-color: var(--btn-primary-bg); background: var(--btn-primary-bg); color: var(--btn-primary-text); }
 .toolbar-button--share { border-color: var(--color-border-hover); background: var(--tag-bg); color: var(--tag-text); }
 .toolbar-button--danger { width: 38px; padding: 0; color: var(--btn-danger-bg); }
-.share-unavailable { display: inline-flex; max-width: 270px; min-height: 38px; align-items: center; gap: 6px; padding: 0 10px; border: 1px dashed var(--color-border); border-radius: 7px; color: var(--color-text-secondary); font-size: 10px; line-height: 1.35; }
-.share-unavailable i { flex: 0 0 auto; color: var(--color-warning-dark); font-size: 14px; }
 
 .detail-shell { display: grid; grid-template-columns: minmax(280px, 350px) minmax(0, 1fr); gap: 22px; align-items: start; }
 

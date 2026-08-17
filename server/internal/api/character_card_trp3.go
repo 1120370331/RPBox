@@ -50,7 +50,12 @@ func (s *Server) exportCharacterCardTRP3Lua(c *gin.Context) {
 			}
 		}
 	}
-	profile, err := buildTRP3ProfileFromCharacterCard(card, existing)
+	impressionsByCard, err := loadCharacterCardImpressions(database.DB, []uint{card.ID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡第一印象失败"})
+		return
+	}
+	profile, err := buildTRP3ProfileFromCharacterCard(card, impressionsByCard[card.ID], existing)
 	if err != nil {
 		if errors.Is(err, errInvalidCharacterCardTRP3RelationshipStatus) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -121,7 +126,11 @@ func (s *Server) writeBackCharacterCardTRP3(c *gin.Context) {
 		if err != nil {
 			return errors.New("目标账号备份的人物卡数据损坏")
 		}
-		profile, err = buildTRP3ProfileFromCharacterCard(card, profiles[profileID])
+		impressionsByCard, loadErr := loadCharacterCardImpressions(tx, []uint{card.ID})
+		if loadErr != nil {
+			return loadErr
+		}
+		profile, err = buildTRP3ProfileFromCharacterCard(card, impressionsByCard[card.ID], profiles[profileID])
 		if err != nil {
 			return err
 		}
@@ -221,7 +230,7 @@ func decodeTRP3ProfilesObject(raw string) (map[string]interface{}, error) {
 	return profiles, nil
 }
 
-func buildTRP3ProfileFromCharacterCard(card model.CharacterCard, existing interface{}) (map[string]interface{}, error) {
+func buildTRP3ProfileFromCharacterCard(card model.CharacterCard, impressions []model.CharacterCardImpression, existing interface{}) (map[string]interface{}, error) {
 	profile, err := normalizeTRP3ProfileObject(existing)
 	if err != nil {
 		return nil, err
@@ -263,13 +272,83 @@ func buildTRP3ProfileFromCharacterCard(card model.CharacterCard, existing interf
 	} else {
 		delete(characteristics, "RS")
 	}
+	additionalInfo := characterCardTRP3AdditionalInfoFromCard(card)
+	characteristics["MI"] = characterCardTRP3AdditionalInfoForWrite(additionalInfo)
+	personalityTraits := characterCardTRP3PersonalityTraitsFromCard(card)
+	characteristics["PS"] = characterCardTRP3PersonalityTraitsForWrite(personalityTraits)
+	characteristics["v"] = nextCharacterCardTRP3Version(characteristics["v"])
 	player["characteristics"] = characteristics
 
-	// RPBox rich text, custom images and structured impressions are RPBox-only.
-	// Do not synthesize or overwrite player.misc; an imported target's misc and
-	// every other unknown section stays semantically intact through write-back.
+	misc, _ := player["misc"].(map[string]interface{})
+	if misc == nil {
+		misc = make(map[string]interface{})
+	}
+	pe := make(map[string]interface{}, characterCardImpressionSlotCount)
+	for _, row := range fixedCharacterCardImpressions(card.ID, impressions) {
+		pe[strconv.Itoa(int(row.Slot))] = map[string]interface{}{
+			"AC": row.Active,
+			"IC": strings.TrimSpace(row.TRP3Icon),
+			"TI": row.Title,
+			"TX": row.Text,
+		}
+	}
+	misc["PE"] = pe
+	misc["v"] = nextCharacterCardTRP3Version(misc["v"])
+	player["misc"] = misc
 	profile["player"] = player
 	return profile, nil
+}
+
+func characterCardTRP3AdditionalInfoForWrite(items []characterCardTRP3AdditionalInfo) []interface{} {
+	result := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		result = append(result, map[string]interface{}{
+			"ID": item.ID, "NA": item.Name, "VA": item.Value, "IC": item.Icon,
+		})
+	}
+	return result
+}
+
+func characterCardTRP3PersonalityTraitsForWrite(items []characterCardTRP3PersonalityTrait) []interface{} {
+	result := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		trait := map[string]interface{}{"V2": item.Value}
+		if item.PresetID != nil {
+			trait["ID"] = *item.PresetID
+		} else {
+			trait["LT"] = item.LeftText
+			trait["RT"] = item.RightText
+			trait["LI"] = item.LeftIcon
+			trait["RI"] = item.RightIcon
+			if item.LeftColor != nil {
+				trait["LC"] = map[string]interface{}{"r": item.LeftColor.R, "g": item.LeftColor.G, "b": item.LeftColor.B}
+			}
+			if item.RightColor != nil {
+				trait["RC"] = map[string]interface{}{"r": item.RightColor.R, "g": item.RightColor.G, "b": item.RightColor.B}
+			}
+		}
+		result = append(result, trait)
+	}
+	return result
+}
+
+func nextCharacterCardTRP3Version(raw interface{}) json.Number {
+	current := int64(0)
+	switch value := raw.(type) {
+	case json.Number:
+		current, _ = value.Int64()
+	case float64:
+		current = int64(value)
+	case int:
+		current = int64(value)
+	case int64:
+		current = value
+	}
+	next := current + 1
+	if next <= 0 || next >= 100 {
+		next = 1
+	}
+	return json.Number(strconv.FormatInt(next, 10))
 }
 
 func normalizeTRP3ProfileObject(value interface{}) (map[string]interface{}, error) {

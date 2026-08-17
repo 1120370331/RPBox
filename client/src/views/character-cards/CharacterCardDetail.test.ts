@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   publishCharacterCard: vi.fn(),
   updateCharacterCard: vi.fn(),
   deleteCharacterCard: vi.fn(),
-  getCharacterCardSharePath: vi.fn(),
+  getCharacterCardShare: vi.fn(),
 }))
 
 vi.mock('@/api/characterCard', () => ({
@@ -22,7 +22,7 @@ vi.mock('@/api/characterCard', () => ({
   publishCharacterCard: mocks.publishCharacterCard,
   updateCharacterCard: mocks.updateCharacterCard,
   deleteCharacterCard: mocks.deleteCharacterCard,
-  getCharacterCardSharePath: mocks.getCharacterCardSharePath,
+  getCharacterCardShare: mocks.getCharacterCardShare,
   getCharacterCardPortraitUrl: vi.fn(() => ''),
 }))
 
@@ -152,10 +152,15 @@ describe('CharacterCardDetail tabs', () => {
     wrapper.unmount()
   })
 
-  it('shares only an approved public character card through its public route', async () => {
+  it('opens the share chooser before copying an approved public route', async () => {
     const approvedCard: CharacterCard = { ...card, review_status: 'approved' }
     mocks.getCharacterCard.mockResolvedValue(approvedCard)
-    mocks.getCharacterCardSharePath.mockResolvedValue('/character-cards/12')
+    mocks.getCharacterCardShare.mockResolvedValue({
+      path: '/character-cards/12',
+      title: '伊莉娅·星语',
+      summary: '月光下的远行者',
+      updated_at: '2026-08-10T08:00:00Z',
+    })
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -169,6 +174,7 @@ describe('CharacterCardDetail tabs', () => {
     await router.isReady()
 
     const wrapper = mount(CharacterCardDetail, {
+      attachTo: document.body,
       global: {
         plugins: [createPinia(), router, i18n],
         stubs: { CharacterCardPortrait: true },
@@ -181,8 +187,49 @@ describe('CharacterCardDetail tabs', () => {
     await shareButton!.trigger('click')
     await flushPromises()
 
-    expect(mocks.getCharacterCardSharePath).toHaveBeenCalledWith(12)
+    expect(document.querySelector('[data-testid="character-share-dialog"]')).toBeTruthy()
+    expect(mocks.getCharacterCardShare).not.toHaveBeenCalled()
+
+    document.querySelector<HTMLButtonElement>('[data-testid="share-choice-link"]')?.click()
+    await flushPromises()
+    expect(mocks.getCharacterCardShare).toHaveBeenCalledWith(12)
+
+    document.querySelector<HTMLButtonElement>('[data-testid="copy-share-link"]')?.click()
+    await flushPromises()
     expect(writeText).toHaveBeenCalledWith('https://totalrpbox.com/character-cards/12')
+    wrapper.unmount()
+  })
+
+  it('lets an owner export a private draft while keeping public-link sharing disabled', async () => {
+    mocks.getCharacterCard.mockResolvedValue({ ...card, status: 'draft', visibility: 'private', review_status: undefined })
+    const pinia = createPinia()
+    useUserStore(pinia).mergeUser({ id: 3, username: 'owner' })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/character-cards/:id', component: CharacterCardDetail },
+        { path: '/character-cards/:id/edit', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/character-cards/12')
+    await router.isReady()
+
+    const wrapper = mount(CharacterCardDetail, {
+      attachTo: document.body,
+      global: {
+        plugins: [pinia, router, i18n],
+        stubs: { CharacterCardPortrait: true },
+      },
+    })
+    await flushPromises()
+
+    const shareButton = wrapper.findAll('button').find((button) => button.text().includes('分享人物卡'))
+    await shareButton!.trigger('click')
+    await flushPromises()
+
+    expect(document.querySelector<HTMLButtonElement>('[data-testid="share-choice-link"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-testid="share-choice-poster"]')?.disabled).toBe(false)
+    expect(document.body.textContent).toContain('草稿无法分享')
     wrapper.unmount()
   })
 

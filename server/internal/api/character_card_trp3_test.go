@@ -78,6 +78,11 @@ TRP3_Characters = { ["角色-服务器"] = { profileID = "profile-exact" } }
 	impressions[0] = characterCardImpressionRequest{Slot: 1, Active: true, Title: "第一眼", Text: "来自 RPBox", TRP3Icon: "spell_arcane"}
 	update := performRequest(server.router, http.MethodPut, cardPath, map[string]interface{}{
 		"first_name": "写回名", "class": "德鲁伊", "class_color": "#aabbcc", "impressions": impressions,
+		"additional_info": []map[string]interface{}{{"id": 4, "name": "格言", "value": "愿星光指引", "icon": "INV_Misc_Note_01"}},
+		"personality_traits": []map[string]interface{}{
+			{"preset_id": 1, "value": 14},
+			{"preset_id": nil, "left_text": "沉静", "right_text": "热烈", "left_icon": "left_icon", "right_icon": "right_icon", "left_color": map[string]float64{"r": 0.1, "g": 0.2, "b": 0.3}, "value": 9},
+		},
 		"summary": "RPBox 摘要", "background_story": "RPBox 富文本", "other_content": "RPBox 扩展内容",
 	}, ownerToken)
 	if update.Code != http.StatusOK {
@@ -104,11 +109,15 @@ TRP3_Characters = { ["角色-服务器"] = { profileID = "profile-exact" } }
 	if _, exists := exportPayload.Profile["unknown"]; !exists || exportedPlayer["unknownPlayer"] == nil || exportedCharacteristics["CUSTOM"] == nil {
 		t.Fatalf("pure export discarded imported unknown sections: %+v", exportPayload.Profile)
 	}
-	if exportedMisc["ST"] == nil || exportedMisc["PE"].(map[string]interface{})["1"].(map[string]interface{})["TI"] != "来源印象" {
-		t.Fatalf("pure export changed imported player.misc: %+v", exportedMisc)
+	if exportedCharacteristics["MI"].([]interface{})[0].(map[string]interface{})["VA"] != "愿星光指引" ||
+		exportedCharacteristics["PS"].([]interface{})[0].(map[string]interface{})["V2"] != float64(14) {
+		t.Fatalf("pure export omitted TRP3 MI/PS details: %+v", exportedCharacteristics)
 	}
-	if strings.Contains(exportResp.Body.String(), "来自 RPBox") || strings.Contains(exportResp.Body.String(), "RPBox 富文本") {
-		t.Fatalf("pure export leaked RPBox-only rich content or structured impressions: %s", exportResp.Body.String())
+	if exportedMisc["ST"] == nil || exportedMisc["PE"].(map[string]interface{})["1"].(map[string]interface{})["TI"] != "第一眼" {
+		t.Fatalf("pure export did not update PE while preserving player.misc: %+v", exportedMisc)
+	}
+	if !strings.Contains(exportResp.Body.String(), "来自 RPBox") || strings.Contains(exportResp.Body.String(), "RPBox 富文本") {
+		t.Fatalf("pure export did not isolate TRP3 impressions from RPBox-only rich content: %s", exportResp.Body.String())
 	}
 	if foreign := performRequest(server.router, http.MethodGet, cardPath+"/trp3-lua", nil, otherToken); foreign.Code != http.StatusNotFound {
 		t.Fatalf("foreign export expected 404, got %d body=%s", foreign.Code, foreign.Body.String())
@@ -145,8 +154,8 @@ TRP3_Characters = { ["角色-服务器"] = { profileID = "profile-exact" } }
 	}
 	misc := player["misc"].(map[string]interface{})
 	pe := misc["PE"].(map[string]interface{})
-	if pe["1"].(map[string]interface{})["TI"] != "来源印象" || misc["ST"] == nil {
-		t.Fatalf("write-back overwrote imported misc with RPBox impressions: %+v", misc)
+	if pe["1"].(map[string]interface{})["TI"] != "第一眼" || misc["ST"] == nil {
+		t.Fatalf("write-back did not update impressions while preserving misc.ST: %+v", misc)
 	}
 	if _, exists := profile["unknown"]; !exists || player["unknownPlayer"] == nil || characteristics["CUSTOM"] == nil {
 		t.Fatalf("write-back discarded unknown profile sections: %+v", profile)
@@ -346,10 +355,11 @@ func TestCharacterCardTRP3PureExportSupportsBlankCardWithoutSource(t *testing.T)
 		t.Fatalf("blank-card export did not synthesize a safe standalone profile: %+v", payload)
 	}
 	player := payload.Profile["player"].(map[string]interface{})
-	if _, hasMisc := player["misc"]; hasMisc {
-		t.Fatalf("blank export synthesized RPBox impressions into player.misc: %+v", player)
+	misc := player["misc"].(map[string]interface{})
+	if misc["PE"].(map[string]interface{})["1"].(map[string]interface{})["TI"] != "结构化印象" {
+		t.Fatalf("blank export did not synthesize structured TRP3 impressions: %+v", player)
 	}
-	for _, rpboxOnly := range []string{"RPBox 摘要", "RPBox 富文本", "旧自由文本", "RPBox 扩展内容", "结构化印象", "custom.webp"} {
+	for _, rpboxOnly := range []string{"RPBox 摘要", "RPBox 富文本", "旧自由文本", "RPBox 扩展内容", "custom.webp"} {
 		if strings.Contains(exportResp.Body.String(), rpboxOnly) {
 			t.Fatalf("blank export leaked RPBox-only content %q: %s", rpboxOnly, exportResp.Body.String())
 		}

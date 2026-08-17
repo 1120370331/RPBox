@@ -500,7 +500,7 @@ func TestCharacterCardImpressionsImportVisibilityAndSyncBoundary(t *testing.T) {
 	updatedProfiles := characterCardProfilesData(`{
 		"profileName":"变更后的档案",
 		"player":{
-			"characteristics":{"FN":"同步新名","LN":"星影","RA":"暗夜精灵"},
+			"characteristics":{"FN":"同步新名","LN":"星影","RA":"暗夜精灵","MI":[{"ID":7,"NA":"代词","VA":"她 / 她","IC":"pronoun_icon"}],"PS":[{"ID":6,"V2":17}]},
 			"misc":{"PE":{"1":{"AC":true,"IC":"different_icon","TI":"TRP3 新印象","TX":"不得覆盖 RPBox 编辑。"}}}
 		}
 	}`)
@@ -516,8 +516,11 @@ func TestCharacterCardImpressionsImportVisibilityAndSyncBoundary(t *testing.T) {
 	if synced.FirstName != "同步新名" || synced.Race != "暗夜精灵" {
 		t.Fatalf("sync did not update basic fields: %+v", synced)
 	}
-	if synced.Impressions[0].Title != "RPBox 自定义印象" || synced.Impressions[0].TRP3Icon != "ability_stealth" || synced.FirstImpression != "<p>其他备注（兼容旧数据）</p>" {
-		t.Fatalf("sync crossed the RPBox impression boundary: %+v", synced)
+	if synced.Impressions[0].Title != "TRP3 新印象" || synced.Impressions[0].TRP3Icon != "different_icon" || synced.FirstImpression != "<p>其他备注（兼容旧数据）</p>" {
+		t.Fatalf("sync did not refresh TRP3 impressions while preserving RPBox rich text: %+v", synced)
+	}
+	if len(synced.AdditionalInfo) != 1 || synced.AdditionalInfo[0].Value != "她 / 她" || len(synced.PersonalityTraits) != 1 || synced.PersonalityTraits[0].Value != 17 {
+		t.Fatalf("sync did not refresh TRP3 MI/PS details: %+v", synced)
 	}
 }
 
@@ -1335,6 +1338,7 @@ func TestCharacterCardShareRequiresApprovedPublicVersion(t *testing.T) {
 		{
 			UserID: owner.ID, DisplayName: "Approved", Status: model.CharacterCardStatusPublished,
 			Visibility: model.CharacterCardVisibilityPublic, ReviewStatus: model.CharacterCardReviewApproved,
+			Summary: "Approved public summary",
 		},
 		{
 			UserID: owner.ID, DisplayName: "Pending", Status: model.CharacterCardStatusPublished,
@@ -1355,7 +1359,9 @@ func TestCharacterCardShareRequiresApprovedPublicVersion(t *testing.T) {
 		t.Fatalf("approved public share expected 200, got %d body=%s", approved.Code, approved.Body.String())
 	}
 	var payload struct {
-		Path string `json:"path"`
+		Path    string `json:"path"`
+		Title   string `json:"title"`
+		Summary string `json:"summary"`
 	}
 	if err := json.Unmarshal(approved.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode share response: %v", err)
@@ -1363,6 +1369,9 @@ func TestCharacterCardShareRequiresApprovedPublicVersion(t *testing.T) {
 	wantPath := "/character-cards/" + strconv.FormatUint(uint64(cards[0].ID), 10)
 	if payload.Path != wantPath {
 		t.Fatalf("expected share path %q, got %q", wantPath, payload.Path)
+	}
+	if payload.Title != "Approved" || payload.Summary != "Approved public summary" {
+		t.Fatalf("expected approved public share metadata, got title=%q summary=%q", payload.Title, payload.Summary)
 	}
 
 	for _, card := range cards[1:] {

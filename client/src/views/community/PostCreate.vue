@@ -862,6 +862,8 @@ function toggleQuickJump() {
 
 /* ========== Page Header ========== */
 .page-header {
+  position: relative;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
