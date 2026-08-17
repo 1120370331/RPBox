@@ -451,18 +451,18 @@ describe('CharacterCardEditor tabs', () => {
 
     const tabs = wrapper.findAll<HTMLButtonElement>('.editor-tabs [role="tab"]')
     const basic = tabs[0]
-    const background = tabs[1]
-    const impression = tabs[2]
-    const other = tabs[3]
+    const traits = tabs[1]
+    const impression = tabs[3]
+    const other = tabs[4]
 
     basic.element.focus()
     await basic.trigger('keydown', { key: 'ArrowRight' })
     await wrapper.vm.$nextTick()
-    expect(background.attributes('aria-selected')).toBe('true')
-    expect(background.attributes('tabindex')).toBe('0')
-    expect(document.activeElement).toBe(background.element)
+    expect(traits.attributes('aria-selected')).toBe('true')
+    expect(traits.attributes('tabindex')).toBe('0')
+    expect(document.activeElement).toBe(traits.element)
 
-    await background.trigger('keydown', { key: 'End' })
+    await traits.trigger('keydown', { key: 'End' })
     await wrapper.vm.$nextTick()
     expect(other.attributes('aria-selected')).toBe('true')
     expect(document.activeElement).toBe(other.element)
@@ -542,7 +542,7 @@ describe('CharacterCardEditor tabs', () => {
     wrapper.unmount()
   })
 
-  it('preserves unsaved RPBox-only content when refreshing TRP3 basic fields', async () => {
+  it('preserves RPBox-only content while refreshing TRP3 fields and impressions', async () => {
     const importedCard: CharacterCard = {
       ...card,
       source_backup_id: 7,
@@ -597,13 +597,13 @@ describe('CharacterCardEditor tabs', () => {
     const impressionTitle = wrapper.get<HTMLInputElement>('input[placeholder^="例如：总是带着"]')
     await impressionTitle.setValue('尚未保存的观察')
     const refreshButton = wrapper.findAll<HTMLButtonElement>('button')
-      .find((button) => button.text().includes('从备份刷新基础信息'))!
+      .find((button) => button.text().includes('从备份刷新 TRP3 资料'))!
     await refreshButton.trigger('click')
     await flushPromises()
 
     expect(mocks.syncCharacterCardFromTRP3).toHaveBeenCalledWith(12)
     expect(summary.element.value).toBe('尚未保存的新摘要')
-    expect(impressionTitle.element.value).toBe('尚未保存的观察')
+    expect(impressionTitle.element.value).toBe('服务端刷新值')
     expect(wrapper.findAll<HTMLInputElement>('.form-grid input')[0].element.value).toBe('刷新后的名字')
 
     const saveButton = wrapper.findAll<HTMLButtonElement>('button')
@@ -613,7 +613,7 @@ describe('CharacterCardEditor tabs', () => {
     expect(mocks.updateCharacterCard).toHaveBeenCalledWith(12, expect.objectContaining({
       first_name: '刷新后的名字',
       summary: '尚未保存的新摘要',
-      impressions: expect.arrayContaining([expect.objectContaining({ slot: 1, title: '尚未保存的观察' })]),
+      impressions: expect.arrayContaining([expect.objectContaining({ slot: 1, title: '服务端刷新值' })]),
     }))
     wrapper.unmount()
   })

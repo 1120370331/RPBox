@@ -17,8 +17,11 @@ import {
   uploadCharacterCardPortrait,
   writeBackCharacterCardToTRP3,
   type CharacterCard,
+  type CharacterCardAdditionalInfo,
   type CharacterCardImpressionImageKind,
+  type CharacterCardPersonalityTrait,
   type CharacterCardPortraitImage,
+  type CharacterCardTRP3Color,
 } from '@/api/characterCard'
 import { listAccountBackups, type AccountBackup } from '@/api/accountBackup'
 import { resolveApiUrl } from '@/api/item'
@@ -57,7 +60,7 @@ interface LocalAccountOption {
   account_id: string
 }
 
-type RichTextTab = Exclude<CharacterCardEditorTab, 'basic'>
+type RichTextTab = Exclude<CharacterCardEditorTab, 'basic' | 'traits'>
 type SaveStatus = 'saved' | 'waiting' | 'saving' | 'failed'
 
 const AUTO_SAVE_DELAY_MS = 1200
@@ -119,10 +122,19 @@ const otherEditor = ref<EditorHandle | null>(null)
 
 const tabs = computed<Array<{ id: CharacterCardEditorTab; label: string; icon: string }>>(() => [
   { id: 'basic', label: t('characterCards.tabs.basic'), icon: 'ri-id-card-line' },
+  { id: 'traits', label: t('characterCards.tabs.traits'), icon: 'ri-scales-3-line' },
   { id: 'background', label: t('characterCards.tabs.background'), icon: 'ri-book-open-line' },
   { id: 'impression', label: t('characterCards.tabs.impression'), icon: 'ri-eye-2-line' },
   { id: 'other', label: t('characterCards.tabs.other'), icon: 'ri-archive-stack-line' },
 ])
+const additionalInfoTypes = computed(() => Array.from({ length: 11 }, (_, index) => ({
+  id: index + 1,
+  label: t(`characterCards.editor.additionalInfoTypes.${index + 1}`),
+})))
+const personalityPresets = computed(() => Array.from({ length: 11 }, (_, index) => ({
+  id: index + 1,
+  label: t(`characterCards.editor.personalityPresets.${index + 1}`),
+})))
 
 const displayName = computed(() => getCharacterCardDisplayName(form))
 const displayNameColor = computed(() => getCharacterCardDisplayColor(form))
@@ -269,7 +281,6 @@ function applySyncedCard(nextCard: CharacterCard) {
     summary: form.summary,
     background_story: form.background_story,
     first_impression: form.first_impression,
-    impressions: form.impressions.map((impression) => ({ ...impression })),
     other_content: form.other_content,
     portrait_image_url: form.portrait_image_url,
     status: form.status,
@@ -292,6 +303,50 @@ function applySyncedCard(nextCard: CharacterCard) {
   portraits.value = preservedPortraits
   selectedPortraitId.value = preservedSelectedPortraitId
   uploadedPortraitPreview.value = preservedPortraitPreview
+}
+
+function addAdditionalInfo() {
+  const item: CharacterCardAdditionalInfo = { id: 1, name: '', value: '', icon: '' }
+  form.additional_info.push(item)
+}
+
+function removeAdditionalInfo(index: number) {
+  form.additional_info.splice(index, 1)
+}
+
+function fillAdditionalInfoName(item: CharacterCardAdditionalInfo) {
+  if (item.name.trim()) return
+  item.name = additionalInfoTypes.value.find((type) => type.id === item.id)?.label || ''
+}
+
+function addPersonalityTrait() {
+  const trait: CharacterCardPersonalityTrait = {
+    preset_id: 1,
+    left_text: '', right_text: '', left_icon: '', right_icon: '',
+    left_color: null, right_color: null, value: 10,
+  }
+  form.personality_traits.push(trait)
+}
+
+function removePersonalityTrait(index: number) {
+  form.personality_traits.splice(index, 1)
+}
+
+function trp3ColorToHex(color: CharacterCardTRP3Color | null): string {
+  if (!color) return '#8b6f47'
+  const component = (value: number) => Math.round(Math.min(1, Math.max(0, value)) * 255).toString(16).padStart(2, '0')
+  return `#${component(color.r)}${component(color.g)}${component(color.b)}`
+}
+
+function setPersonalityColor(trait: CharacterCardPersonalityTrait, side: 'left' | 'right', event: Event) {
+  const hex = (event.target as HTMLInputElement).value.replace('#', '')
+  const color = {
+    r: Number.parseInt(hex.slice(0, 2), 16) / 255,
+    g: Number.parseInt(hex.slice(2, 4), 16) / 255,
+    b: Number.parseInt(hex.slice(4, 6), 16) / 255,
+  }
+  if (side === 'left') trait.left_color = color
+  else trait.right_color = color
 }
 
 function selectTab(tab: CharacterCardEditorTab) {
@@ -1093,7 +1148,7 @@ async function goBack() {
                 <label><span>{{ t('characterCards.editor.fields.age') }}</span><input v-model="form.age" maxlength="64" /></label>
                 <label><span>{{ t('characterCards.editor.fields.height') }}</span><input v-model="form.height" maxlength="64" /></label>
                 <label><span>{{ t('characterCards.editor.fields.weight') }}</span><input v-model="form.weight" maxlength="64" /></label>
-                <label><span>{{ t('characterCards.editor.fields.relationship') }}</span><input v-model="form.relationship_status" maxlength="64" :placeholder="t('characterCards.editor.fields.relationshipPlaceholder')" /></label>
+                <label><span>{{ t('characterCards.editor.fields.relationship') }}</span><select v-model="form.relationship_status"><option value="">{{ t('characterCards.editor.relationshipStatuses.0') }}</option><option v-for="status in [1, 2, 3, 4, 5]" :key="status" :value="String(status)">{{ t(`characterCards.editor.relationshipStatuses.${status}`) }}</option></select></label>
                 <label><span>{{ t('characterCards.editor.fields.birthplace') }}</span><input v-model="form.birthplace" maxlength="256" /></label>
                 <label><span>{{ t('characterCards.editor.fields.residence') }}</span><input v-model="form.residence" maxlength="256" /></label>
                 <label><span>{{ t('characterCards.editor.fields.trp3Icon') }}</span><input v-model="form.icon" maxlength="128" /></label>
@@ -1157,6 +1212,63 @@ async function goBack() {
                 </div>
               </div>
             </div>
+          </section>
+
+          <section
+            v-show="activeTab === 'traits'"
+            id="character-panel-traits"
+            class="editor-panel editor-panel--traits"
+            role="tabpanel"
+            aria-labelledby="character-tab-traits"
+          >
+            <header class="panel-heading">
+              <div><span>{{ t('characterCards.editor.traitsKicker') }}</span><h2>{{ t('characterCards.editor.traitsTitle') }}</h2></div>
+              <p>{{ t('characterCards.editor.traitsBody') }}</p>
+            </header>
+
+            <section class="trp3-trait-section">
+              <header class="trp3-trait-section__heading">
+                <div><h3>{{ t('characterCards.editor.additionalInfoTitle') }}</h3><p>{{ t('characterCards.editor.additionalInfoBody') }}</p></div>
+                <button type="button" @click="addAdditionalInfo"><i class="ri-add-line" aria-hidden="true"></i>{{ t('characterCards.editor.addAdditionalInfo') }}</button>
+              </header>
+              <div v-if="form.additional_info.length" class="trp3-entry-list">
+                <article v-for="(item, index) in form.additional_info" :key="`additional-${index}`" class="trp3-entry-card">
+                  <div class="trp3-entry-card__handle"><span>{{ String(index + 1).padStart(2, '0') }}</span><button type="button" :aria-label="t('characterCards.editor.removeAdditionalInfo')" @click="removeAdditionalInfo(index)"><i class="ri-delete-bin-line" aria-hidden="true"></i></button></div>
+                  <div class="trp3-entry-grid trp3-entry-grid--additional">
+                    <label><span>{{ t('characterCards.editor.additionalInfoType') }}</span><select v-model.number="item.id" @change="fillAdditionalInfoName(item)"><option v-for="type in additionalInfoTypes" :key="type.id" :value="type.id">{{ type.label }}</option></select></label>
+                    <label><span>{{ t('characterCards.editor.additionalInfoName') }}</span><input v-model="item.name" maxlength="80" /></label>
+                    <label><span>{{ t('characterCards.editor.additionalInfoIcon') }}</span><input v-model="item.icon" maxlength="128" :placeholder="t('characterCards.editor.trp3IconPlaceholder')" /></label>
+                    <label class="trp3-entry-grid__wide"><span>{{ t('characterCards.editor.additionalInfoValue') }}</span><textarea v-model="item.value" rows="2" maxlength="500"></textarea></label>
+                  </div>
+                </article>
+              </div>
+              <p v-else class="trp3-trait-empty">{{ t('characterCards.editor.additionalInfoEmpty') }}</p>
+            </section>
+
+            <section class="trp3-trait-section">
+              <header class="trp3-trait-section__heading">
+                <div><h3>{{ t('characterCards.editor.personalityTitle') }}</h3><p>{{ t('characterCards.editor.personalityBody') }}</p></div>
+                <button type="button" @click="addPersonalityTrait"><i class="ri-add-line" aria-hidden="true"></i>{{ t('characterCards.editor.addPersonality') }}</button>
+              </header>
+              <div v-if="form.personality_traits.length" class="trp3-entry-list">
+                <article v-for="(trait, index) in form.personality_traits" :key="`personality-${index}`" class="trp3-entry-card trp3-personality-card">
+                  <div class="trp3-entry-card__handle"><span>{{ String(index + 1).padStart(2, '0') }}</span><button type="button" :aria-label="t('characterCards.editor.removePersonality')" @click="removePersonalityTrait(index)"><i class="ri-delete-bin-line" aria-hidden="true"></i></button></div>
+                  <div class="trp3-entry-grid">
+                    <label><span>{{ t('characterCards.editor.personalityType') }}</span><select v-model="trait.preset_id"><option :value="null">{{ t('characterCards.editor.customPersonality') }}</option><option v-for="preset in personalityPresets" :key="preset.id" :value="preset.id">{{ preset.label }}</option></select></label>
+                    <label class="personality-range"><span>{{ t('characterCards.editor.personalityValue') }} · {{ trait.value }} / 20</span><input v-model.number="trait.value" type="range" min="0" max="20" step="1" /></label>
+                    <template v-if="trait.preset_id === null">
+                      <label><span>{{ t('characterCards.editor.leftTrait') }}</span><input v-model="trait.left_text" maxlength="80" /></label>
+                      <label><span>{{ t('characterCards.editor.rightTrait') }}</span><input v-model="trait.right_text" maxlength="80" /></label>
+                      <label><span>{{ t('characterCards.editor.leftIcon') }}</span><input v-model="trait.left_icon" maxlength="128" /></label>
+                      <label><span>{{ t('characterCards.editor.rightIcon') }}</span><input v-model="trait.right_icon" maxlength="128" /></label>
+                      <label class="personality-color"><span>{{ t('characterCards.editor.leftColor') }}</span><input type="color" :value="trp3ColorToHex(trait.left_color)" @input="setPersonalityColor(trait, 'left', $event)" /><button v-if="trait.left_color" type="button" @click="trait.left_color = null">{{ t('characterCards.common.clear') }}</button></label>
+                      <label class="personality-color"><span>{{ t('characterCards.editor.rightColor') }}</span><input type="color" :value="trp3ColorToHex(trait.right_color)" @input="setPersonalityColor(trait, 'right', $event)" /><button v-if="trait.right_color" type="button" @click="trait.right_color = null">{{ t('characterCards.common.clear') }}</button></label>
+                    </template>
+                  </div>
+                </article>
+              </div>
+              <p v-else class="trp3-trait-empty">{{ t('characterCards.editor.personalityEmpty') }}</p>
+            </section>
           </section>
 
           <section
@@ -1689,9 +1801,11 @@ async function goBack() {
 .summary-field,
 .visibility-grid label { display: grid; min-width: 0; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .form-grid input,
+.form-grid select,
 .summary-field textarea,
 .visibility-grid select { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--input-border); border-radius: 7px; outline: none; background: var(--input-bg); color: var(--ink); font: inherit; font-size: 12px; }
 .form-grid input:focus,
+.form-grid select:focus,
 .summary-field textarea:focus,
 .visibility-grid select:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent); }
 .character-color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
@@ -1711,6 +1825,38 @@ async function goBack() {
 .review-notice span { font-size: 9px; line-height: 1.5; }
 .review-notice--approved { border-color: color-mix(in srgb, var(--color-success) 42%, var(--color-border)); background: var(--color-success-light); color: var(--color-success); }
 .review-notice--rejected { border-color: color-mix(in srgb, var(--btn-danger-bg) 42%, var(--color-border)); background: color-mix(in srgb, var(--btn-danger-bg) 10%, var(--color-panel-bg)); color: var(--btn-danger-bg); }
+
+.editor-panel--traits { display: grid; gap: 28px; }
+.editor-panel--traits .panel-heading { margin-bottom: 0; }
+.trp3-trait-section { display: grid; gap: 13px; }
+.trp3-trait-section__heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.trp3-trait-section__heading h3 { margin: 0; color: var(--walnut); font: 600 18px/1.3 Georgia, 'Noto Serif SC', serif; }
+.trp3-trait-section__heading p { max-width: 560px; margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.trp3-trait-section__heading button { display: inline-flex; flex: 0 0 auto; min-height: 34px; align-items: center; gap: 5px; padding: 0 11px; border: 1px solid var(--color-border-hover); border-radius: 7px; background: var(--btn-outline-hover); color: var(--rust); cursor: pointer; font-size: 10px; font-weight: 800; }
+.trp3-entry-list { display: grid; gap: 10px; }
+.trp3-entry-card { display: grid; grid-template-columns: 42px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-card-bg); box-shadow: var(--shadow-sm); }
+.trp3-entry-card__handle { display: flex; align-items: center; flex-direction: column; justify-content: space-between; gap: 10px; padding: 13px 8px; border-right: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel-bg)); }
+.trp3-entry-card__handle span { color: var(--copper); font: 800 9px/1 ui-monospace, Consolas, monospace; }
+.trp3-entry-card__handle button { display: grid; width: 25px; height: 25px; place-items: center; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.trp3-entry-card__handle button:hover { background: var(--color-danger-light); color: var(--btn-danger-bg); }
+.trp3-entry-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; padding: 14px; }
+.trp3-entry-grid--additional { grid-template-columns: minmax(130px, .7fr) minmax(150px, 1fr) minmax(170px, 1fr); }
+.trp3-entry-grid__wide { grid-column: 1 / -1; }
+.trp3-entry-grid label { display: grid; min-width: 0; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.trp3-entry-grid input:not([type='range']):not([type='color']),
+.trp3-entry-grid select,
+.trp3-entry-grid textarea { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--input-border); border-radius: 7px; outline: none; background: var(--input-bg); color: var(--ink); font: inherit; font-size: 11px; }
+.trp3-entry-grid textarea { resize: vertical; line-height: 1.55; }
+.trp3-entry-grid input:focus,
+.trp3-entry-grid select:focus,
+.trp3-entry-grid textarea:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 14%, transparent); }
+.personality-range { align-content: center; }
+.personality-range input { width: 100%; accent-color: var(--copper); }
+.personality-color { grid-template-columns: auto 42px auto; align-items: center; }
+.personality-color span { grid-column: 1 / -1; }
+.personality-color input[type='color'] { width: 42px; height: 32px; padding: 3px; border: 1px solid var(--input-border); border-radius: 7px; background: var(--input-bg); }
+.personality-color button { justify-self: start; padding: 5px 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 9px; }
+.trp3-trait-empty { margin: 0; padding: 22px; border: 1px dashed var(--color-border-hover); border-radius: 10px; color: var(--muted); font-size: 11px; text-align: center; }
 
 .observation-register {
   position: relative;
@@ -2067,6 +2213,7 @@ async function goBack() {
   .editor-header__identity { grid-row: 2; grid-column: 1 / -1; text-align: left; }
   .editor-layout { grid-template-columns: 240px minmax(0, 1fr); }
   .form-grid--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trp3-entry-grid--additional { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .observation-record__body { grid-template-columns: 92px minmax(0, 1fr); }
   .observation-image-station { grid-column: 1 / -1; grid-template-columns: minmax(180px, 280px) minmax(120px, auto); align-items: center; justify-content: start; }
 }
@@ -2093,6 +2240,10 @@ async function goBack() {
   .character-color-grid,
   .visibility-grid { grid-template-columns: 1fr; }
   .form-span-two { grid-column: auto; }
+  .trp3-trait-section__heading { align-items: flex-start; flex-direction: column; }
+  .trp3-entry-grid,
+  .trp3-entry-grid--additional { grid-template-columns: 1fr; }
+  .trp3-entry-grid__wide { grid-column: auto; }
   .save-dock { right: 10px; bottom: 10px; left: 10px; max-width: none; justify-content: space-between; }
 }
 

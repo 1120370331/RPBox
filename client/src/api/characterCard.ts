@@ -7,6 +7,30 @@ export type CharacterCardReviewStatus = 'pending' | 'approved' | 'rejected'
 export type CharacterCardSourceType = 'blank' | 'backup'
 export type CharacterCardImpressionImageKind = 'icon' | 'image'
 
+export interface CharacterCardTRP3Color {
+  r: number
+  g: number
+  b: number
+}
+
+export interface CharacterCardAdditionalInfo {
+  id: number
+  name: string
+  value: string
+  icon: string
+}
+
+export interface CharacterCardPersonalityTrait {
+  preset_id: number | null
+  left_text: string
+  right_text: string
+  left_icon: string
+  right_icon: string
+  left_color: CharacterCardTRP3Color | null
+  right_color: CharacterCardTRP3Color | null
+  value: number
+}
+
 export interface CharacterCardPortraitImage {
   id: number
   image_url: string
@@ -70,6 +94,8 @@ export interface CharacterCardSummary {
   icon: string
   class_color: string
   name_color: string
+  additional_info?: CharacterCardAdditionalInfo[]
+  personality_traits?: CharacterCardPersonalityTrait[]
   summary: string
   portrait_image_url?: string | null
   portrait_image_updated_at?: string | null
@@ -90,6 +116,13 @@ export interface CharacterCard extends CharacterCardSummary {
   first_impression: string
   impressions: CharacterCardImpression[]
   other_content: string
+}
+
+export interface CharacterCardShare {
+  path: string
+  title: string
+  summary: string
+  updated_at: string
 }
 
 export interface CreateCharacterCardRequest {
@@ -117,6 +150,8 @@ export interface UpdateCharacterCardRequest {
   icon: string
   class_color: string
   name_color: string
+  additional_info: CharacterCardAdditionalInfo[]
+  personality_traits: CharacterCardPersonalityTrait[]
   summary: string
   background_story: string
   first_impression: string
@@ -182,11 +217,15 @@ export async function getCharacterCard(id: number): Promise<CharacterCard> {
   return unwrapCharacterCard(response)
 }
 
-export async function getCharacterCardSharePath(id: number): Promise<string> {
-  const response = await request.get<{ path: string } | DataEnvelope<{ path: string }>>(`/character-cards/${id}/share`)
+export async function getCharacterCardShare(id: number): Promise<CharacterCardShare> {
+  const response = await request.get<CharacterCardShare | DataEnvelope<CharacterCardShare>>(`/character-cards/${id}/share`)
   const body = unwrapData(response)
   if (!body?.path) throw new Error('Missing character card share path')
-  return body.path
+  return body
+}
+
+export async function getCharacterCardSharePath(id: number): Promise<string> {
+  return (await getCharacterCardShare(id)).path
 }
 
 export async function updateCharacterCard(

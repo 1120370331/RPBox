@@ -29,24 +29,26 @@ type characterCardSnapshotCard struct {
 	ID     uint `json:"id"`
 	UserID uint `json:"user_id"`
 
-	FirstName          string `json:"first_name"`
-	LastName           string `json:"last_name"`
-	DisplayName        string `json:"display_name"`
-	Title              string `json:"title"`
-	FullTitle          string `json:"full_title"`
-	Race               string `json:"race"`
-	Class              string `json:"class"`
-	EyeColor           string `json:"eye_color"`
-	EyeColorHex        string `json:"eye_color_hex"`
-	Age                string `json:"age"`
-	Height             string `json:"height"`
-	Weight             string `json:"weight"`
-	Birthplace         string `json:"birthplace"`
-	Residence          string `json:"residence"`
-	RelationshipStatus string `json:"relationship_status"`
-	Icon               string `json:"icon"`
-	ClassColor         string `json:"class_color"`
-	NameColor          string `json:"name_color"`
+	FirstName              string `json:"first_name"`
+	LastName               string `json:"last_name"`
+	DisplayName            string `json:"display_name"`
+	Title                  string `json:"title"`
+	FullTitle              string `json:"full_title"`
+	Race                   string `json:"race"`
+	Class                  string `json:"class"`
+	EyeColor               string `json:"eye_color"`
+	EyeColorHex            string `json:"eye_color_hex"`
+	Age                    string `json:"age"`
+	Height                 string `json:"height"`
+	Weight                 string `json:"weight"`
+	Birthplace             string `json:"birthplace"`
+	Residence              string `json:"residence"`
+	RelationshipStatus     string `json:"relationship_status"`
+	Icon                   string `json:"icon"`
+	ClassColor             string `json:"class_color"`
+	NameColor              string `json:"name_color"`
+	TRP3AdditionalInfoJSON string `json:"trp3_additional_info_json"`
+	TRP3PersonalityJSON    string `json:"trp3_personality_json"`
 
 	Summary         string `json:"summary"`
 	BackgroundStory string `json:"background_story"`
@@ -106,6 +108,7 @@ func characterCardSnapshotFromModels(card model.CharacterCard, impressions []mod
 			Height: card.Height, Weight: card.Weight, Birthplace: card.Birthplace,
 			Residence: card.Residence, RelationshipStatus: card.RelationshipStatus,
 			Icon: card.Icon, ClassColor: color, NameColor: color,
+			TRP3AdditionalInfoJSON: card.TRP3AdditionalInfoJSON, TRP3PersonalityJSON: card.TRP3PersonalityJSON,
 			Summary: card.Summary, BackgroundStory: card.BackgroundStory,
 			FirstImpression: card.FirstImpression, OtherContent: card.OtherContent,
 			PortraitImage: card.PortraitImage, PortraitImageUpdatedAt: card.PortraitImageUpdatedAt,
@@ -146,6 +149,7 @@ func (snapshot characterCardSnapshot) models() (model.CharacterCard, []model.Cha
 		Height: data.Height, Weight: data.Weight, Birthplace: data.Birthplace,
 		Residence: data.Residence, RelationshipStatus: data.RelationshipStatus,
 		Icon: data.Icon, ClassColor: data.ClassColor, NameColor: data.NameColor,
+		TRP3AdditionalInfoJSON: data.TRP3AdditionalInfoJSON, TRP3PersonalityJSON: data.TRP3PersonalityJSON,
 		Summary: data.Summary, BackgroundStory: data.BackgroundStory,
 		FirstImpression: data.FirstImpression, OtherContent: data.OtherContent,
 		PortraitImage: data.PortraitImage, PortraitImageUpdatedAt: data.PortraitImageUpdatedAt,

@@ -10,6 +10,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -51,24 +52,26 @@ type characterCardDTO struct {
 	SourceAccountID string `json:"source_account_id,omitempty"`
 	SourceProfileID string `json:"source_profile_id,omitempty"`
 
-	FirstName          string `json:"first_name"`
-	LastName           string `json:"last_name"`
-	DisplayName        string `json:"display_name"`
-	Title              string `json:"title"`
-	FullTitle          string `json:"full_title"`
-	Race               string `json:"race"`
-	Class              string `json:"class"`
-	EyeColor           string `json:"eye_color"`
-	EyeColorHex        string `json:"eye_color_hex"`
-	Age                string `json:"age"`
-	Height             string `json:"height"`
-	Weight             string `json:"weight"`
-	Birthplace         string `json:"birthplace"`
-	Residence          string `json:"residence"`
-	RelationshipStatus string `json:"relationship_status"`
-	Icon               string `json:"icon"`
-	ClassColor         string `json:"class_color"`
-	NameColor          string `json:"name_color"`
+	FirstName          string                              `json:"first_name"`
+	LastName           string                              `json:"last_name"`
+	DisplayName        string                              `json:"display_name"`
+	Title              string                              `json:"title"`
+	FullTitle          string                              `json:"full_title"`
+	Race               string                              `json:"race"`
+	Class              string                              `json:"class"`
+	EyeColor           string                              `json:"eye_color"`
+	EyeColorHex        string                              `json:"eye_color_hex"`
+	Age                string                              `json:"age"`
+	Height             string                              `json:"height"`
+	Weight             string                              `json:"weight"`
+	Birthplace         string                              `json:"birthplace"`
+	Residence          string                              `json:"residence"`
+	RelationshipStatus string                              `json:"relationship_status"`
+	Icon               string                              `json:"icon"`
+	ClassColor         string                              `json:"class_color"`
+	NameColor          string                              `json:"name_color"`
+	AdditionalInfo     []characterCardTRP3AdditionalInfo   `json:"additional_info"`
+	PersonalityTraits  []characterCardTRP3PersonalityTrait `json:"personality_traits"`
 
 	Summary         string                       `json:"summary"`
 	BackgroundStory string                       `json:"background_story,omitempty"`
@@ -115,24 +118,26 @@ type createCharacterCardRequest struct {
 type updateCharacterCardRequest struct {
 	CharacterID optionalCharacterCardUint `json:"character_id"`
 
-	FirstName          *string `json:"first_name"`
-	LastName           *string `json:"last_name"`
-	DisplayName        *string `json:"display_name"`
-	Title              *string `json:"title"`
-	FullTitle          *string `json:"full_title"`
-	Race               *string `json:"race"`
-	Class              *string `json:"class"`
-	EyeColor           *string `json:"eye_color"`
-	EyeColorHex        *string `json:"eye_color_hex"`
-	Age                *string `json:"age"`
-	Height             *string `json:"height"`
-	Weight             *string `json:"weight"`
-	Birthplace         *string `json:"birthplace"`
-	Residence          *string `json:"residence"`
-	RelationshipStatus *string `json:"relationship_status"`
-	Icon               *string `json:"icon"`
-	ClassColor         *string `json:"class_color"`
-	NameColor          *string `json:"name_color"`
+	FirstName          *string                              `json:"first_name"`
+	LastName           *string                              `json:"last_name"`
+	DisplayName        *string                              `json:"display_name"`
+	Title              *string                              `json:"title"`
+	FullTitle          *string                              `json:"full_title"`
+	Race               *string                              `json:"race"`
+	Class              *string                              `json:"class"`
+	EyeColor           *string                              `json:"eye_color"`
+	EyeColorHex        *string                              `json:"eye_color_hex"`
+	Age                *string                              `json:"age"`
+	Height             *string                              `json:"height"`
+	Weight             *string                              `json:"weight"`
+	Birthplace         *string                              `json:"birthplace"`
+	Residence          *string                              `json:"residence"`
+	RelationshipStatus *string                              `json:"relationship_status"`
+	Icon               *string                              `json:"icon"`
+	ClassColor         *string                              `json:"class_color"`
+	NameColor          *string                              `json:"name_color"`
+	AdditionalInfo     *[]characterCardTRP3AdditionalInfo   `json:"additional_info"`
+	PersonalityTraits  *[]characterCardTRP3PersonalityTrait `json:"personality_traits"`
 
 	Summary         *string                           `json:"summary"`
 	BackgroundStory *string                           `json:"background_story"`
@@ -203,10 +208,36 @@ type trp3CharacterCardFields struct {
 	NameColor          string
 }
 
+type characterCardTRP3Color struct {
+	R float64 `json:"r"`
+	G float64 `json:"g"`
+	B float64 `json:"b"`
+}
+
+type characterCardTRP3AdditionalInfo struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Icon  string `json:"icon"`
+}
+
+type characterCardTRP3PersonalityTrait struct {
+	PresetID   *int                    `json:"preset_id"`
+	LeftText   string                  `json:"left_text"`
+	RightText  string                  `json:"right_text"`
+	LeftIcon   string                  `json:"left_icon"`
+	RightIcon  string                  `json:"right_icon"`
+	LeftColor  *characterCardTRP3Color `json:"left_color"`
+	RightColor *characterCardTRP3Color `json:"right_color"`
+	Value      int                     `json:"value"`
+}
+
 type parsedTRP3CharacterCardProfile struct {
-	ProfileName string
-	Fields      trp3CharacterCardFields
-	Impressions []characterCardImpressionRequest
+	ProfileName       string
+	Fields            trp3CharacterCardFields
+	Impressions       []characterCardImpressionRequest
+	AdditionalInfo    []characterCardTRP3AdditionalInfo
+	PersonalityTraits []characterCardTRP3PersonalityTrait
 }
 
 func (s *Server) listCharacterCardSources(c *gin.Context) {
@@ -366,6 +397,9 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 			card.SourceAccountID = backup.AccountID
 			card.SourceProfileID = req.SourceProfileID
 			applyTRP3CharacterCardFields(&card, profile.Fields)
+			if err := setCharacterCardTRP3Details(&card, profile.AdditionalInfo, profile.PersonalityTraits); err != nil {
+				return fmt.Errorf("%w: %v", errCharacterCardSourceCorrupt, err)
+			}
 			card.DisplayName = importedCharacterCardDisplayName(profile)
 			if err := validateCharacterCard(card); err != nil {
 				return fmt.Errorf("%w: %v", errCharacterCardSourceCorrupt, err)
@@ -455,7 +489,7 @@ func (s *Server) getCharacterCard(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionsByCard[card.ID], portraitsByCard[card.ID], true, true)})
 }
 
-// getCharacterCardShare returns a share path only for approved public cards.
+// getCharacterCardShare returns link metadata from the approved public version.
 func (s *Server) getCharacterCardShare(c *gin.Context) {
 	id, ok := parseCharacterCardID(c)
 	if !ok {
@@ -463,7 +497,7 @@ func (s *Server) getCharacterCardShare(c *gin.Context) {
 	}
 
 	var card model.CharacterCard
-	if err := database.DB.Select("id", "status", "visibility", "review_status").First(&card, id).Error; err != nil {
+	if err := database.DB.First(&card, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
 		} else {
@@ -472,14 +506,22 @@ func (s *Server) getCharacterCardShare(c *gin.Context) {
 		return
 	}
 
-	if card.Status != model.CharacterCardStatusPublished ||
-		card.Visibility != model.CharacterCardVisibilityPublic ||
-		normalizedCharacterCardReviewStatus(card.ReviewStatus) != model.CharacterCardReviewApproved {
+	publicCard, visible, err := s.loadPublicCharacterCardDTO(card, false)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡公开版本失败"})
+		return
+	}
+	if !visible {
 		c.JSON(http.StatusConflict, gin.H{"error": "人物卡公开版本尚未通过审核，暂不可分享"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"path": fmt.Sprintf("/character-cards/%d", card.ID)})
+	c.JSON(http.StatusOK, gin.H{
+		"path":       fmt.Sprintf("/character-cards/%d", card.ID),
+		"title":      publicCard.DisplayName,
+		"summary":    publicCard.Summary,
+		"updated_at": publicCard.UpdatedAt,
+	})
 }
 
 func (s *Server) updateCharacterCard(c *gin.Context) {
@@ -531,6 +573,32 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 	applyCharacterCardStringUpdate(req.BackgroundStory, &candidate.BackgroundStory, "background_story", updates, false)
 	applyCharacterCardStringUpdate(req.FirstImpression, &candidate.FirstImpression, "first_impression", updates, false)
 	applyCharacterCardStringUpdate(req.OtherContent, &candidate.OtherContent, "other_content", updates, false)
+	if req.AdditionalInfo != nil {
+		if err := validateCharacterCardTRP3AdditionalInfo(*req.AdditionalInfo); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		encoded, err := json.Marshal(*req.AdditionalInfo)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "附加说明格式无效"})
+			return
+		}
+		candidate.TRP3AdditionalInfoJSON = string(encoded)
+		updates["trp3_additional_info_json"] = candidate.TRP3AdditionalInfoJSON
+	}
+	if req.PersonalityTraits != nil {
+		if err := validateCharacterCardTRP3PersonalityTraits(*req.PersonalityTraits); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		encoded, err := json.Marshal(*req.PersonalityTraits)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "个性格式无效"})
+			return
+		}
+		candidate.TRP3PersonalityJSON = string(encoded)
+		updates["trp3_personality_json"] = candidate.TRP3PersonalityJSON
+	}
 	applyCharacterCardStringUpdate(req.Status, &candidate.Status, "status", updates, true)
 	applyCharacterCardStringUpdate(req.Visibility, &candidate.Visibility, "visibility", updates, true)
 	if req.SortOrder != nil {
@@ -880,17 +948,37 @@ func (s *Server) syncCharacterCardFromTRP3(c *gin.Context) {
 		}
 		candidate := card
 		applyTRP3CharacterCardFields(&candidate, profile.Fields)
+		if err := setCharacterCardTRP3Details(&candidate, profile.AdditionalInfo, profile.PersonalityTraits); err != nil {
+			return fmt.Errorf("%w: %v", errCharacterCardSourceCorrupt, err)
+		}
 		if err := validateCharacterCard(candidate); err != nil {
 			return fmt.Errorf("%w: %v", errCharacterCardSourceCorrupt, err)
 		}
 
 		updates := trp3CharacterCardUpdateMap(profile.Fields)
+		updates["trp3_additional_info_json"] = candidate.TRP3AdditionalInfoJSON
+		updates["trp3_personality_json"] = candidate.TRP3PersonalityJSON
+		updates["updated_at"] = time.Now().UTC()
 		if err := ensureCharacterCardApprovedSnapshotBeforeMutation(tx, card); err != nil {
 			return err
 		}
 		if err := tx.Model(&model.CharacterCard{}).
 			Where("id = ? AND user_id = ?", card.ID, userID).
 			Updates(updates).Error; err != nil {
+			return err
+		}
+		existingImpressions, err := loadCharacterCardImpressions(tx, []uint{card.ID})
+		if err != nil {
+			return err
+		}
+		rows := fixedCharacterCardImpressions(card.ID, existingImpressions[card.ID])
+		for index, request := range profile.Impressions {
+			rows[index].Active = request.Active
+			rows[index].Title = request.Title
+			rows[index].Text = request.Text
+			rows[index].TRP3Icon = request.TRP3Icon
+		}
+		if err := saveCharacterCardImpressions(tx, rows); err != nil {
 			return err
 		}
 		return tx.First(&card, card.ID).Error
@@ -998,6 +1086,8 @@ func (s *Server) buildCharacterCardDTO(card model.CharacterCard, impressions []m
 		Icon:                   card.Icon,
 		ClassColor:             canonicalCharacterCardTRP3Color(card.ClassColor, card.NameColor),
 		NameColor:              canonicalCharacterCardTRP3Color(card.ClassColor, card.NameColor),
+		AdditionalInfo:         characterCardTRP3AdditionalInfoFromCard(card),
+		PersonalityTraits:      characterCardTRP3PersonalityTraitsFromCard(card),
 		Summary:                card.Summary,
 		Impressions:            s.buildCharacterCardImpressionDTOs(card, impressions, ownerView),
 		Portraits:              s.buildCharacterCardPortraitDTOs(card, portraits),
@@ -1181,6 +1271,14 @@ func parseTRP3CharacterCardProfile(raw json.RawMessage) (parsedTRP3CharacterCard
 	if err != nil {
 		impressions, _ = parseTRP3CharacterCardImpressions(nil)
 	}
+	additionalInfo, err := parseTRP3CharacterCardAdditionalInfo(characteristics["MI"])
+	if err != nil {
+		return parsedTRP3CharacterCardProfile{}, err
+	}
+	personalityTraits, err := parseTRP3CharacterCardPersonalityTraits(characteristics["PS"])
+	if err != nil {
+		return parsedTRP3CharacterCardProfile{}, err
+	}
 
 	return parsedTRP3CharacterCardProfile{
 		ProfileName: strings.TrimSpace(profileEnvelope.ProfileName),
@@ -1203,8 +1301,71 @@ func parseTRP3CharacterCardProfile(raw json.RawMessage) (parsedTRP3CharacterCard
 			ClassColor:         values["CH"],
 			NameColor:          values["CH"],
 		},
-		Impressions: impressions,
+		Impressions:       impressions,
+		AdditionalInfo:    additionalInfo,
+		PersonalityTraits: personalityTraits,
 	}, nil
+}
+
+func parseTRP3CharacterCardAdditionalInfo(raw json.RawMessage) ([]characterCardTRP3AdditionalInfo, error) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return []characterCardTRP3AdditionalInfo{}, nil
+	}
+	var source []struct {
+		ID int    `json:"ID"`
+		NA string `json:"NA"`
+		VA string `json:"VA"`
+		IC string `json:"IC"`
+	}
+	if err := json.Unmarshal(raw, &source); err != nil {
+		return nil, errors.New("player.characteristics.MI is not an array")
+	}
+	result := make([]characterCardTRP3AdditionalInfo, 0, len(source))
+	for _, item := range source {
+		id := item.ID
+		if id < 1 || id > 11 {
+			id = 1
+		}
+		result = append(result, characterCardTRP3AdditionalInfo{ID: id, Name: item.NA, Value: item.VA, Icon: item.IC})
+	}
+	if err := validateCharacterCardTRP3AdditionalInfo(result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func parseTRP3CharacterCardPersonalityTraits(raw json.RawMessage) ([]characterCardTRP3PersonalityTrait, error) {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return []characterCardTRP3PersonalityTrait{}, nil
+	}
+	var source []struct {
+		ID *int                    `json:"ID"`
+		LT string                  `json:"LT"`
+		RT string                  `json:"RT"`
+		LI string                  `json:"LI"`
+		RI string                  `json:"RI"`
+		LC *characterCardTRP3Color `json:"LC"`
+		RC *characterCardTRP3Color `json:"RC"`
+		V2 *int                    `json:"V2"`
+	}
+	if err := json.Unmarshal(raw, &source); err != nil {
+		return nil, errors.New("player.characteristics.PS is not an array")
+	}
+	result := make([]characterCardTRP3PersonalityTrait, 0, len(source))
+	for _, item := range source {
+		value := 10
+		if item.V2 != nil {
+			value = *item.V2
+		}
+		result = append(result, characterCardTRP3PersonalityTrait{
+			PresetID: item.ID, LeftText: item.LT, RightText: item.RT,
+			LeftIcon: item.LI, RightIcon: item.RI, LeftColor: item.LC, RightColor: item.RC, Value: value,
+		})
+	}
+	if err := validateCharacterCardTRP3PersonalityTraits(result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func parseTRP3CharacterCardImpressions(rawMisc json.RawMessage) ([]characterCardImpressionRequest, error) {
@@ -1323,6 +1484,106 @@ func applyTRP3CharacterCardFields(card *model.CharacterCard, fields trp3Characte
 	card.Icon = fields.Icon
 	card.ClassColor = fields.ClassColor
 	card.NameColor = fields.NameColor
+}
+
+func setCharacterCardTRP3Details(card *model.CharacterCard, additionalInfo []characterCardTRP3AdditionalInfo, personality []characterCardTRP3PersonalityTrait) error {
+	if err := validateCharacterCardTRP3AdditionalInfo(additionalInfo); err != nil {
+		return err
+	}
+	if err := validateCharacterCardTRP3PersonalityTraits(personality); err != nil {
+		return err
+	}
+	additionalJSON, err := json.Marshal(additionalInfo)
+	if err != nil {
+		return err
+	}
+	personalityJSON, err := json.Marshal(personality)
+	if err != nil {
+		return err
+	}
+	card.TRP3AdditionalInfoJSON = string(additionalJSON)
+	card.TRP3PersonalityJSON = string(personalityJSON)
+	return nil
+}
+
+func characterCardTRP3AdditionalInfoFromCard(card model.CharacterCard) []characterCardTRP3AdditionalInfo {
+	result := []characterCardTRP3AdditionalInfo{}
+	if strings.TrimSpace(card.TRP3AdditionalInfoJSON) == "" {
+		return result
+	}
+	if err := json.Unmarshal([]byte(card.TRP3AdditionalInfoJSON), &result); err != nil || result == nil {
+		return []characterCardTRP3AdditionalInfo{}
+	}
+	return result
+}
+
+func characterCardTRP3PersonalityTraitsFromCard(card model.CharacterCard) []characterCardTRP3PersonalityTrait {
+	result := []characterCardTRP3PersonalityTrait{}
+	if strings.TrimSpace(card.TRP3PersonalityJSON) == "" {
+		return result
+	}
+	if err := json.Unmarshal([]byte(card.TRP3PersonalityJSON), &result); err != nil || result == nil {
+		return []characterCardTRP3PersonalityTrait{}
+	}
+	return result
+}
+
+func validateCharacterCardTRP3AdditionalInfo(items []characterCardTRP3AdditionalInfo) error {
+	if len(items) > 50 {
+		return errors.New("附加说明不能超过 50 项")
+	}
+	for _, item := range items {
+		if item.ID < 1 || item.ID > 11 {
+			return errors.New("附加说明类型必须是 1 到 11")
+		}
+		for _, field := range []struct {
+			name  string
+			value string
+			max   int
+		}{{"附加说明名称", item.Name, 80}, {"附加说明内容", item.Value, 500}, {"附加说明图标", item.Icon, 128}} {
+			if err := validatePlainCharacterCardField(field.name, field.value, field.max); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateCharacterCardTRP3PersonalityTraits(items []characterCardTRP3PersonalityTrait) error {
+	if len(items) > 50 {
+		return errors.New("个性不能超过 50 项")
+	}
+	for _, item := range items {
+		if item.Value < 0 || item.Value > 20 {
+			return errors.New("个性倾向值必须是 0 到 20")
+		}
+		if item.PresetID != nil && (*item.PresetID < 1 || *item.PresetID > 11) {
+			return errors.New("个性预设必须是 1 到 11")
+		}
+		for _, field := range []struct {
+			name  string
+			value string
+			max   int
+		}{{"个性左侧名称", item.LeftText, 80}, {"个性右侧名称", item.RightText, 80}, {"个性左侧图标", item.LeftIcon, 128}, {"个性右侧图标", item.RightIcon, 128}} {
+			if err := validatePlainCharacterCardField(field.name, field.value, field.max); err != nil {
+				return err
+			}
+		}
+		for _, color := range []*characterCardTRP3Color{item.LeftColor, item.RightColor} {
+			if color == nil {
+				continue
+			}
+			if math.IsNaN(color.R) || math.IsNaN(color.G) || math.IsNaN(color.B) ||
+				math.IsInf(color.R, 0) || math.IsInf(color.G, 0) || math.IsInf(color.B, 0) ||
+				color.R < 0 || color.R > 1 || color.G < 0 || color.G > 1 || color.B < 0 || color.B > 1 {
+				return errors.New("个性颜色分量必须在 0 到 1 之间")
+			}
+		}
+		if item.PresetID == nil && strings.TrimSpace(item.LeftText) == "" && strings.TrimSpace(item.RightText) == "" {
+			return errors.New("自定义个性必须填写至少一个倾向名称")
+		}
+	}
+	return nil
 }
 
 func trp3CharacterCardUpdateMap(fields trp3CharacterCardFields) map[string]interface{} {
@@ -1476,6 +1737,12 @@ func validateCharacterCard(card model.CharacterCard) error {
 	}
 	if card.SortOrder < -100000 || card.SortOrder > 100000 {
 		return errors.New("sort_order 超出允许范围")
+	}
+	if err := validateCharacterCardTRP3AdditionalInfo(characterCardTRP3AdditionalInfoFromCard(card)); err != nil {
+		return err
+	}
+	if err := validateCharacterCardTRP3PersonalityTraits(characterCardTRP3PersonalityTraitsFromCard(card)); err != nil {
+		return err
 	}
 
 	richContents := []struct {

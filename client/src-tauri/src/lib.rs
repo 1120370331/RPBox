@@ -87,7 +87,18 @@ struct CharacterCardProfileWriteResult {
 
 const CHARACTER_CARD_SHARED_CHARACTERISTICS: &[&str] = &[
     "FN", "LN", "TI", "FT", "RA", "CL", "EC", "EH", "AG", "HE", "WE", "BP", "RE", "RS", "IC", "CH",
+    "MI", "PS",
 ];
+
+fn next_trp3_data_version(value: Option<&Value>) -> Value {
+    let current = value.and_then(Value::as_i64).unwrap_or(0);
+    let next = if current + 1 >= 100 || current < 0 {
+        1
+    } else {
+        current + 1
+    };
+    Value::Number(next.into())
+}
 
 fn merge_character_card_profile(
     existing: Option<&Value>,
@@ -148,11 +159,35 @@ fn merge_character_card_profile(
             }
         }
     }
+    let next_characteristics_version = next_trp3_data_version(target_characteristics.get("v"));
+    target_characteristics.insert("v".to_string(), next_characteristics_version);
 
     target_player.insert(
         "characteristics".to_string(),
         Value::Object(target_characteristics),
     );
+
+    let exported_misc = exported_profile
+        .get("player")
+        .and_then(Value::as_object)
+        .and_then(|player| player.get("misc"))
+        .and_then(Value::as_object)
+        .ok_or_else(|| "导出的人物卡缺少 player.misc".to_string())?;
+    let exported_impressions = exported_misc
+        .get("PE")
+        .ok_or_else(|| "导出的人物卡缺少 player.misc.PE".to_string())?;
+    if !exported_impressions.is_object() {
+        return Err("导出的人物卡 player.misc.PE 结构错误".to_string());
+    }
+    let mut target_misc = match target_player.remove("misc") {
+        Some(Value::Object(misc)) => misc,
+        Some(_) => return Err("本地目标 profile.player.misc 结构错误".to_string()),
+        None => Default::default(),
+    };
+    target_misc.insert("PE".to_string(), exported_impressions.clone());
+    let next_misc_version = next_trp3_data_version(target_misc.get("v"));
+    target_misc.insert("v".to_string(), next_misc_version);
+    target_player.insert("misc".to_string(), Value::Object(target_misc));
     target_profile.insert("player".to_string(), Value::Object(target_player));
     Ok(Value::Object(target_profile))
 }
@@ -756,7 +791,7 @@ mod profile_lookup_tests {
     }
 
     #[test]
-    fn character_card_writeback_preserves_unknown_local_sections_and_ignores_rpbox_only_data() {
+    fn character_card_writeback_syncs_trp3_details_and_preserves_unknown_local_sections() {
         let existing = serde_json::json!({
             "profileName": "旧档案名",
             "unknownTopLevel": { "keep": true },
@@ -764,17 +799,22 @@ mod profile_lookup_tests {
                 "characteristics": {
                     "FN": "旧名字",
                     "LN": "应被空值删除",
+                    "v": 8,
                     "customCharacteristic": "保留"
                 },
                 "about": { "T1": { "TX": "本地长传记" } },
-                "misc": { "PE": { "1": { "TX": "本地第一印象" } }, "custom": 7 }
+                "misc": { "PE": { "1": { "TX": "本地第一印象" } }, "ST": { "1": 2 }, "v": 99, "custom": 7 }
             }
         });
         let exported = serde_json::json!({
             "profileName": "新档案名",
             "rpboxOnly": { "summary": "不得写入" },
             "player": {
-                "characteristics": { "FN": "新名字", "LN": "", "RS": 3 },
+                "characteristics": {
+                    "FN": "新名字", "LN": "", "RS": 3,
+                    "MI": [{ "ID": 4, "NA": "箴言", "VA": "愿星光指引", "IC": "INV_Misc_Note_01" }],
+                    "PS": [{ "ID": 1, "V2": 14 }]
+                },
                 "misc": { "PE": { "1": { "TX": "RPBox 第一印象" } } },
                 "about": { "T1": { "TX": "RPBox 内容" } }
             }
@@ -787,13 +827,18 @@ mod profile_lookup_tests {
         assert_eq!(merged["unknownTopLevel"]["keep"], true);
         assert_eq!(merged["player"]["characteristics"]["FN"], "新名字");
         assert_eq!(merged["player"]["characteristics"]["RS"], 3);
+        assert_eq!(merged["player"]["characteristics"]["v"], 9);
+        assert_eq!(merged["player"]["characteristics"]["MI"][0]["ID"], 4);
+        assert_eq!(merged["player"]["characteristics"]["PS"][0]["V2"], 14);
         assert!(merged["player"]["characteristics"].get("LN").is_none());
         assert_eq!(
             merged["player"]["characteristics"]["customCharacteristic"],
             "保留"
         );
         assert_eq!(merged["player"]["about"]["T1"]["TX"], "本地长传记");
-        assert_eq!(merged["player"]["misc"]["PE"]["1"]["TX"], "本地第一印象");
+        assert_eq!(merged["player"]["misc"]["PE"]["1"]["TX"], "RPBox 第一印象");
+        assert_eq!(merged["player"]["misc"]["ST"]["1"], 2);
+        assert_eq!(merged["player"]["misc"]["v"], 1);
         assert_eq!(merged["player"]["misc"]["custom"], 7);
         assert!(merged.get("rpboxOnly").is_none());
     }
@@ -804,7 +849,7 @@ mod profile_lookup_tests {
             "profileName": "新人物",
             "player": {
                 "characteristics": { "FN": "新", "LN": "人物", "CH": "AABBCC" },
-                "misc": { "PE": { "1": { "TX": "不得写入" } } }
+                "misc": { "PE": { "1": { "TX": "写入的第一印象" } } }
             }
         });
 
@@ -814,7 +859,9 @@ mod profile_lookup_tests {
         assert_eq!(merged["profileName"], "新人物");
         assert_eq!(merged["player"]["characteristics"]["FN"], "新");
         assert_eq!(merged["player"]["characteristics"]["CH"], "AABBCC");
-        assert!(merged["player"].get("misc").is_none());
+        assert_eq!(merged["player"]["characteristics"]["v"], 1);
+        assert_eq!(merged["player"]["misc"]["PE"]["1"]["TX"], "写入的第一印象");
+        assert_eq!(merged["player"]["misc"]["v"], 1);
         assert_eq!(
             merged
                 .as_object()

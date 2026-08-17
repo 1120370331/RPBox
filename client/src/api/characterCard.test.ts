@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createCharacterCard,
+  getCharacterCardShare,
   getCharacterCardSources,
   listMyCharacterCards,
   publishCharacterCard,
@@ -73,6 +74,22 @@ describe('character card API contract', () => {
 
     expect(requestMock.post).toHaveBeenCalledWith('/character-cards/42/publish')
     expect(published).toMatchObject({ id: 42, review_status: 'pending' })
+  })
+
+  it('reads server-owned public link metadata for sharing', async () => {
+    requestMock.get.mockResolvedValue({
+      data: {
+        path: '/character-cards/42',
+        title: '伊莉娅·星语',
+        summary: '月光下的远行者',
+        updated_at: '2026-08-10T08:00:00Z',
+      },
+    })
+
+    const share = await getCharacterCardShare(42)
+
+    expect(requestMock.get).toHaveBeenCalledWith('/character-cards/42/share')
+    expect(share).toMatchObject({ path: '/character-cards/42', title: '伊莉娅·星语' })
   })
 
   it('uploads portraits through the protected character-card endpoint', async () => {
