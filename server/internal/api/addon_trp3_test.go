@@ -117,6 +117,44 @@ func TestTRP3MirrorOverlayPrefersManualManifest(t *testing.T) {
 	}
 }
 
+func TestTRP3MirrorOverlayDoesNotReplaceNewerUpstreamRelease(t *testing.T) {
+	storageRoot := t.TempDir()
+	server := &Server{
+		cfg: &config.Config{
+			Storage: config.StorageConfig{Path: storageRoot},
+			TRP3Addons: config.TRP3AddonsConfig{
+				CacheSubdir: "cache/addons/trp3",
+			},
+		},
+	}
+
+	err := server.upsertTRP3MirrorAddon(TRP3MirrorAddonInfo{
+		ID:            "total-rp-3",
+		Name:          "Total RP 3",
+		ProjectID:     75973,
+		Repository:    "Total-RP/Total-RP-3",
+		LatestVersion: "3.3.6",
+		FileName:      "totalRP3-3.3.6.zip",
+	})
+	if err != nil {
+		t.Fatalf("upsert mirror addon: %v", err)
+	}
+
+	latest := server.fallbackTRP3Latest("github", "github metadata")
+	server.overlayTRP3MirrorLatest(latest)
+
+	var trp TRP3AddonLatestInfo
+	for _, addon := range latest.Addons {
+		if addon.ID == "total-rp-3" {
+			trp = addon
+			break
+		}
+	}
+	if trp.LatestVersion != "3.4.1" {
+		t.Fatalf("expected newer upstream version to remain selected, got %q", trp.LatestVersion)
+	}
+}
+
 func TestValidateTRP3AddonZipPackageRequiresExpectedTOC(t *testing.T) {
 	zipPath := filepath.Join(t.TempDir(), "totalRP3-3.3.6.zip")
 	createTestZip(t, zipPath, map[string]string{

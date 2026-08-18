@@ -5,6 +5,7 @@ import { getAddonLatest, getTRP3Latest } from '@/api/addon'
 import { listItems } from '@/api/item'
 import { listEvents, listPosts } from '@/api/post'
 import { listRPDBWorks } from '@/api/rpdb'
+import { isAddonVersionNewer } from '@/utils/addonVersion'
 
 export type SidebarContentBadge = 'community' | 'events' | 'market' | 'rpdb'
 export type SidebarMenuBadge = SidebarContentBadge | 'warcraft' | 'settings'
@@ -43,10 +44,6 @@ const EMPTY_TOTALS: SidebarContentTotals = {
   events: 0,
   market: 0,
   rpdb: 0,
-}
-
-function normalizeVersion(version: string | null | undefined) {
-  return (version || '').trim().replace(/^v/i, '')
 }
 
 function safeCount(value: unknown) {
@@ -177,18 +174,18 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
         const latestById = new Map(trp3Latest.value.addons.map(addon => [addon.id, addon]))
         for (const addon of trp3Local.value.addons || []) {
           const latest = latestById.get(addon.id)
-          const localVersion = normalizeVersion(addon.version)
-          const latestVersion = normalizeVersion(latest?.latestVersion)
-          if (addon.installed && localVersion && latestVersion && localVersion !== latestVersion) {
+          const localVersion = addon.version?.trim() || ''
+          const latestVersion = latest?.latestVersion?.trim() || ''
+          if (addon.installed && localVersion && latestVersion && isAddonVersionNewer(latestVersion, localVersion)) {
             updates.push(`${addon.id}:${localVersion}>${latestVersion}`)
           }
         }
       }
 
       if (rpboxLocal.status === 'fulfilled' && rpboxLatest.status === 'fulfilled') {
-        const localVersion = normalizeVersion(rpboxLocal.value.version)
-        const latestVersion = normalizeVersion(rpboxLatest.value.version)
-        if (rpboxLocal.value.installed && localVersion && latestVersion && localVersion !== latestVersion) {
+        const localVersion = rpboxLocal.value.version?.trim() || ''
+        const latestVersion = rpboxLatest.value.version?.trim() || ''
+        if (rpboxLocal.value.installed && localVersion && latestVersion && isAddonVersionNewer(latestVersion, localVersion)) {
           updates.push(`rpbox:${localVersion}>${latestVersion}`)
         }
       }
@@ -247,7 +244,7 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
   }
 
   function syncSystemUpdate(version?: string | null) {
-    const normalized = normalizeVersion(version)
+    const normalized = (version || '').trim().replace(/^v/i, '')
     systemUpdateVersion.value = normalized
     systemUpdateAvailable.value = Boolean(
       normalized && localStorage.getItem(SYSTEM_UPDATE_READ_KEY) !== normalized,
