@@ -91,24 +91,52 @@ func TestRedisCacheVersioning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("expected version 1, got %d", version)
+	if version <= 0 {
+		t.Fatalf("expected a positive version, got %d", version)
 	}
+	initialVersion := version
 
 	version, err = cache.BumpVersion(ctx, "post:list")
 	if err != nil {
 		t.Fatalf("bump version: %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("expected version 2, got %d", version)
+	if version != initialVersion+1 {
+		t.Fatalf("expected version %d, got %d", initialVersion+1, version)
 	}
 
 	version, err = cache.Version(ctx, "post:list")
 	if err != nil {
 		t.Fatalf("version after bump: %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("expected version 2, got %d", version)
+	if version != initialVersion+1 {
+		t.Fatalf("expected version %d, got %d", initialVersion+1, version)
+	}
+}
+
+func TestRedisCacheVersionDoesNotReuseGenerationAfterCounterEviction(t *testing.T) {
+	cache, server := newTestCache(t)
+	defer server.Close()
+	defer cache.Close()
+
+	ctx := context.Background()
+	oldVersion, err := cache.Version(ctx, "post:list")
+	if err != nil {
+		t.Fatalf("version: %v", err)
+	}
+	if _, err := cache.BumpVersion(ctx, "post:list"); err != nil {
+		t.Fatalf("bump version: %v", err)
+	}
+	if err := cache.Set(ctx, VersionedKey("post:list", oldVersion, "viewer"), map[string]string{"state": "stale"}, time.Minute); err != nil {
+		t.Fatalf("set stale generation: %v", err)
+	}
+
+	server.Del(VersionKey("post:list"))
+	newVersion, err := cache.Version(ctx, "post:list")
+	if err != nil {
+		t.Fatalf("version after counter eviction: %v", err)
+	}
+	if newVersion <= oldVersion {
+		t.Fatalf("expected a new generation after counter eviction, old=%d new=%d", oldVersion, newVersion)
 	}
 }
 

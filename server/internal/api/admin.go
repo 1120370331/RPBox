@@ -635,6 +635,13 @@ func (s *Server) disableUserPosts(c *gin.Context) {
 			"status":        "removed",
 			"review_status": "rejected",
 		})
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "禁用用户帖子失败"})
+		return
+	}
+	if result.RowsAffected > 0 {
+		s.bumpPostListCache(c.Request.Context())
+	}
 
 	// 记录日志
 	logAdminAction(c, "disable_posts", "user", uint(id), user.Username, map[string]interface{}{
@@ -700,6 +707,7 @@ func (s *Server) deleteUserPosts(c *gin.Context) {
 		return
 	}
 	s.cleanupCommentImageURLs(c, commentImageURLs...)
+	s.bumpPostListCache(c.Request.Context())
 
 	// 更新用户帖子计数
 	database.DB.Model(&user).Update("post_count", 0)

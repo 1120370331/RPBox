@@ -5,10 +5,22 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
+)
+
+var (
+	versionClock      atomic.Int64
+	bumpVersionScript = redis.NewScript(`
+if redis.call("EXISTS", KEYS[1]) == 1 then
+  return redis.call("INCR", KEYS[1])
+end
+redis.call("SET", KEYS[1], ARGV[1])
+return tonumber(ARGV[1])
+`)
 )
 
 // Options configures RedisCache behavior.
@@ -149,18 +161,20 @@ func (c *RedisCache) Version(ctx context.Context, name string) (int64, error) {
 	key := VersionKey(name)
 	version, err := c.client.Get(ctx, key).Int64()
 	if err == redis.Nil {
-		ok, setErr := c.client.SetNX(ctx, key, 1, 0).Result()
+		seed := nextVersionSeed()
+		ok, setErr := c.client.SetNX(ctx, key, seed, 0).Result()
 		if setErr != nil {
 			return 0, setErr
 		}
 		if ok {
-			return 1, nil
+			return seed, nil
 		}
-		return c.client.Get(ctx, key).Int64()
+		version, err = c.client.Get(ctx, key).Int64()
 	}
 	if err != nil {
 		return 0, err
 	}
+	observeVersion(version)
 	return version, nil
 }
 
@@ -169,7 +183,14 @@ func (c *RedisCache) BumpVersion(ctx context.Context, name string) (int64, error
 	if c == nil || c.client == nil {
 		return 0, ErrCacheMiss
 	}
-	return c.client.Incr(ctx, VersionKey(name)).Result()
+	key := VersionKey(name)
+	seed := nextVersionSeed()
+	version, err := bumpVersionScript.Run(ctx, c.client, []string{key}, seed).Int64()
+	if err != nil {
+		return 0, err
+	}
+	observeVersion(version)
+	return version, nil
 }
 
 // Close releases the underlying Redis client.
@@ -193,4 +214,29 @@ func addJitter(ttl, jitter time.Duration) time.Duration {
 	}
 	delta := rand.Int63n(int64(jitter))
 	return ttl + time.Duration(delta)
+}
+
+// nextVersionSeed avoids reusing an old generation when Redis evicts only the
+// namespace counter while versioned values are still alive. A wall-clock seed
+// also prevents a process restart from resetting the namespace to version 1.
+func nextVersionSeed() int64 {
+	candidate := time.Now().UnixMicro()
+	for {
+		current := versionClock.Load()
+		if candidate <= current {
+			candidate = current + 1
+		}
+		if versionClock.CompareAndSwap(current, candidate) {
+			return candidate
+		}
+	}
+}
+
+func observeVersion(version int64) {
+	for {
+		current := versionClock.Load()
+		if version <= current || versionClock.CompareAndSwap(current, version) {
+			return
+		}
+	}
 }

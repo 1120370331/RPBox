@@ -217,6 +217,7 @@ func (s *Server) reviewPost(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "审核失败"})
 		return
 	}
+	s.bumpPostListCache(c.Request.Context())
 
 	// 记录日志
 	logAdminAction(c, "review_post", "post", uint(id), post.Title, map[string]interface{}{
@@ -1301,6 +1302,7 @@ func (s *Server) deletePostByMod(c *gin.Context) {
 		return
 	}
 	s.cleanupCommentImageURLs(c, commentImageURLs...)
+	s.bumpPostListCache(c.Request.Context())
 
 	// 记录日志
 	logAdminAction(c, "delete_post", "post", uint(id), postTitle, nil)
@@ -1320,7 +1322,11 @@ func (s *Server) hidePostByMod(c *gin.Context) {
 
 	post.ReviewStatus = "pending"
 	post.Status = "pending"
-	database.DB.Save(&post)
+	if err := database.DB.Save(&post).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "屏蔽帖子失败"})
+		return
+	}
+	s.bumpPostListCache(c.Request.Context())
 
 	// 记录日志
 	logAdminAction(c, "hide_post", "post", uint(id), post.Title, nil)
@@ -1339,7 +1345,11 @@ func (s *Server) pinPost(c *gin.Context) {
 	}
 
 	post.IsPinned = !post.IsPinned
-	database.DB.Save(&post)
+	if err := database.DB.Save(&post).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新置顶状态失败"})
+		return
+	}
+	s.bumpPostListCache(c.Request.Context())
 
 	// 记录日志
 	logAdminAction(c, "pin_post", "post", uint(id), post.Title, map[string]interface{}{
@@ -1364,7 +1374,11 @@ func (s *Server) featurePost(c *gin.Context) {
 	}
 
 	post.IsFeatured = !post.IsFeatured
-	database.DB.Save(&post)
+	if err := database.DB.Save(&post).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新精华状态失败"})
+		return
+	}
+	s.bumpPostListCache(c.Request.Context())
 
 	// 记录日志
 	logAdminAction(c, "feature_post", "post", uint(id), post.Title, map[string]interface{}{
