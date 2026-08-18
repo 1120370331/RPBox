@@ -2,6 +2,7 @@ package api
 
 import (
 	"archive/zip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,38 @@ import (
 
 	"github.com/rpbox/server/internal/config"
 )
+
+func TestGitHubReleasePageLatestBuildsDownloadFromPublicReleaseRedirect(t *testing.T) {
+	releaseURL, err := url.Parse("https://github.com/Total-RP/Total-RP-3/releases/tag/3.4.1")
+	if err != nil {
+		t.Fatalf("parse release URL: %v", err)
+	}
+
+	latest, err := gitHubReleasePageLatest(trp3GitHubProjects[0], releaseURL)
+	if err != nil {
+		t.Fatalf("build latest info: %v", err)
+	}
+	if latest.LatestVersion != "3.4.1" {
+		t.Fatalf("expected version 3.4.1, got %q", latest.LatestVersion)
+	}
+	if latest.FileName != "totalRP3-3.4.1.zip" {
+		t.Fatalf("unexpected filename %q", latest.FileName)
+	}
+	if latest.DownloadURL != "https://github.com/Total-RP/Total-RP-3/releases/download/3.4.1/totalRP3-3.4.1.zip" {
+		t.Fatalf("unexpected download URL %q", latest.DownloadURL)
+	}
+}
+
+func TestGitHubReleasePageLatestRejectsUnexpectedRedirect(t *testing.T) {
+	releaseURL, err := url.Parse("https://example.com/Total-RP/Total-RP-3/releases/tag/3.4.1")
+	if err != nil {
+		t.Fatalf("parse release URL: %v", err)
+	}
+
+	if _, err := gitHubReleasePageLatest(trp3GitHubProjects[0], releaseURL); err == nil {
+		t.Fatal("expected an unexpected redirect to be rejected")
+	}
+}
 
 func TestParseTRP3ProxyURLSupportsRoxyColonFormat(t *testing.T) {
 	proxyURL, err := parseTRP3ProxyURL("192.0.2.10:5782:user:pass")
