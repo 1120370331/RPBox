@@ -100,6 +100,25 @@ describe('sidebar badge store', () => {
     expect(store.addonUpdateCount).toBe(2)
   })
 
+  it('does not create an update badge when server metadata is older than the installed add-on', async () => {
+    localStorage.setItem('wow_path', 'C:\\Games\\World of Warcraft')
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === 'check_trp3_addons') {
+        return Promise.resolve({ addons: [{ id: 'total-rp-3', installed: true, version: '3.4.1' }] })
+      }
+      return Promise.resolve({ installed: true, version: '1.0.14' })
+    })
+    mocks.getTRP3Latest.mockResolvedValue({
+      addons: [{ id: 'total-rp-3', latestVersion: '3.3.6' }],
+    })
+    mocks.getAddonLatest.mockResolvedValue({ version: '1.0.14' })
+
+    const store = useSidebarBadgesStore()
+    await store.initialize(42)
+
+    expect(store.addonUpdateCount).toBe(0)
+  })
+
   it('shows each RPBox system update once until a newer version is available', () => {
     const store = useSidebarBadgesStore()
 

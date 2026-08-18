@@ -112,11 +112,11 @@ var trp3GitHubProjects = []trp3GitHubProject{
 			Name:          "Total RP 3",
 			ProjectID:     75973,
 			Repository:    "Total-RP/Total-RP-3",
-			LatestVersion: "3.3.6",
-			DownloadURL:   "https://github.com/Total-RP/Total-RP-3/releases/download/3.3.6/totalRP3-3.3.6.zip",
-			FileName:      "totalRP3-3.3.6.zip",
-			FileDate:      "2026-04-22T00:34:19Z",
-			SourceURL:     "https://github.com/Total-RP/Total-RP-3/releases/tag/3.3.6",
+			LatestVersion: "3.4.1",
+			DownloadURL:   "https://github.com/Total-RP/Total-RP-3/releases/download/3.4.1/totalRP3-3.4.1.zip",
+			FileName:      "totalRP3-3.4.1.zip",
+			FileDate:      "2026-08-11T23:44:47Z",
+			SourceURL:     "https://github.com/Total-RP/Total-RP-3/releases/tag/3.4.1",
 			CurseForgeURL: "https://www.curseforge.com/wow/addons/total-rp-3/files",
 			License:       "Apache-2.0",
 		},
@@ -134,11 +134,11 @@ var trp3GitHubProjects = []trp3GitHubProject{
 			Name:          "Total RP 3: Extended",
 			ProjectID:     100707,
 			Repository:    "Total-RP/Total-RP-3-Extended",
-			LatestVersion: "2.3.3",
-			DownloadURL:   "https://github.com/Total-RP/Total-RP-3-Extended/releases/download/2.3.3/totalRP3_Extended-2.3.3.zip",
-			FileName:      "totalRP3_Extended-2.3.3.zip",
-			FileDate:      "2026-04-21T21:12:58Z",
-			SourceURL:     "https://github.com/Total-RP/Total-RP-3-Extended/releases/tag/2.3.3",
+			LatestVersion: "2.3.5",
+			DownloadURL:   "https://github.com/Total-RP/Total-RP-3-Extended/releases/download/2.3.5/totalRP3_Extended-2.3.5.zip",
+			FileName:      "totalRP3_Extended-2.3.5.zip",
+			FileDate:      "2026-08-11T22:54:57Z",
+			SourceURL:     "https://github.com/Total-RP/Total-RP-3-Extended/releases/tag/2.3.5",
 			CurseForgeURL: "https://www.curseforge.com/wow/addons/total-rp-3-extended/files",
 			License:       "Apache-2.0",
 		},
@@ -519,6 +519,9 @@ func (s *Server) overlayTRP3MirrorLatest(latest *TRP3LatestResponse) {
 		if !ok || mirror.LatestVersion == "" || mirror.FileName == "" {
 			continue
 		}
+		if !shouldUseTRP3MirrorVersion(mirror.LatestVersion, latest.Addons[i].LatestVersion) {
+			continue
+		}
 		project, projectOK := findTRP3GitHubProject(mirror.ID)
 		if !projectOK {
 			continue
@@ -541,6 +544,23 @@ func (s *Server) overlayTRP3MirrorLatest(latest *TRP3LatestResponse) {
 	} else if !strings.Contains(latest.Note, "RPBox 自有镜像") {
 		latest.Note = mirrorNote + latest.Note
 	}
+}
+
+// shouldUseTRP3MirrorVersion keeps an outdated manual mirror from downgrading
+// the version advertised by the upstream release metadata.
+func shouldUseTRP3MirrorVersion(mirrorVersion, upstreamVersion string) bool {
+	mirrorVersion = normalizeReleaseVersion(mirrorVersion)
+	upstreamVersion = normalizeReleaseVersion(upstreamVersion)
+	if mirrorVersion == "" {
+		return false
+	}
+	if upstreamVersion == "" {
+		return true
+	}
+	if comparison, ok := compareVersions(mirrorVersion, upstreamVersion); ok {
+		return comparison >= 0
+	}
+	return mirrorVersion == upstreamVersion
 }
 
 func (m TRP3MirrorAddonInfo) toLatestInfo(project trp3GitHubProject) TRP3AddonLatestInfo {

@@ -12,6 +12,7 @@ import {
 } from '@/api/addon'
 import { dialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
+import { isAddonVersionNewer } from '@/utils/addonVersion'
 
 interface WowInstallation {
   path: string
@@ -130,7 +131,7 @@ const trp3AddonsById = computed(() => {
 
 const rpboxNeedsUpdate = computed(() => {
   if (!rpboxInstalledInfo.value?.installed || !rpboxLatestVersion.value) return false
-  return normalizeVersion(rpboxInstalledInfo.value.version) !== normalizeVersion(rpboxLatestVersion.value)
+  return isAddonVersionNewer(rpboxLatestVersion.value, rpboxInstalledInfo.value.version)
 })
 
 const pluginCards = computed<PluginCard[]>(() => [
@@ -195,10 +196,6 @@ async function bindProgressEvents() {
   }
 }
 
-function normalizeVersion(version: string | null | undefined) {
-  return (version || '').trim().replace(/^v/i, '')
-}
-
 function isKnownPluginId(pluginId: string): pluginId is PluginCardId {
   return pluginId === 'total-rp-3' || pluginId === 'total-rp-3-extended' || pluginId === 'rpbox'
 }
@@ -228,9 +225,6 @@ function mergeTrp3Latest(
     addons: localStatus.addons.map(addon => {
       const latestAddon = latestById.get(addon.id)
       const latestVersion = latestAddon?.latestVersion || addon.latestVersion
-      const localVersion = normalizeVersion(addon.version)
-      const normalizedLatest = normalizeVersion(latestVersion)
-
       return {
         ...addon,
         name: latestAddon?.name || addon.name,
@@ -238,7 +232,7 @@ function mergeTrp3Latest(
         curseforgeUrl: latestAddon?.curseforgeUrl || addon.curseforgeUrl,
         sourceUrl: latestAddon?.sourceUrl || addon.sourceUrl,
         downloadUrl: latestAddon?.downloadUrl || addon.downloadUrl,
-        requiresUpdate: !addon.installed || (!!normalizedLatest && localVersion !== normalizedLatest),
+        requiresUpdate: !addon.installed || isAddonVersionNewer(latestVersion, addon.version),
       }
     }),
   }
