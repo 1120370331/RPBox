@@ -29,6 +29,7 @@ const betaUpdateHeader = 'X-RPBox-Update-Channel'
 
 export function canAccessBetaUpdates(user?: UserData | null): boolean {
   if (!user) return false
+  if (user.role === 'admin') return true
 
   const sponsorLevel = typeof user.sponsor_level === 'number'
     ? user.sponsor_level

@@ -2083,17 +2083,20 @@ func (s *Server) getMetricsBasic(c *gin.Context) {
 	var storyArchives int64
 	var storyEntries int64
 	var profileBackups int64
+	var customCharacterCards int64
 
 	database.DB.Model(&model.Story{}).Count(&storyArchives)
 	database.DB.Model(&model.StoryEntry{}).Count(&storyEntries)
 	database.DB.Model(&model.AccountBackup{}).
 		Select("COALESCE(SUM(profiles_count), 0)").
 		Scan(&profileBackups)
+	database.DB.Model(&model.CharacterCard{}).Count(&customCharacterCards)
 
 	c.JSON(http.StatusOK, gin.H{
-		"story_archives":  storyArchives,
-		"story_entries":   storyEntries,
-		"profile_backups": profileBackups,
+		"story_archives":         storyArchives,
+		"story_entries":          storyEntries,
+		"profile_backups":        profileBackups,
+		"custom_character_cards": customCharacterCards,
 	})
 }
 

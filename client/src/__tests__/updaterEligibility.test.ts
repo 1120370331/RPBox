@@ -46,9 +46,9 @@ describe('desktop beta update eligibility', () => {
     expect(canAccessBetaUpdates(user({ is_sponsor: true }))).toBe(true)
   })
 
-  it('does not grant beta access from moderator or admin role alone', () => {
+  it('grants beta access to admins but not moderators', () => {
     expect(canAccessBetaUpdates(user({ role: 'moderator' }))).toBe(false)
-    expect(canAccessBetaUpdates(user({ role: 'admin' }))).toBe(false)
+    expect(canAccessBetaUpdates(user({ role: 'admin' }))).toBe(true)
   })
 
   it('sends beta update headers only after an eligible sponsor enables testing participation', async () => {
@@ -62,6 +62,22 @@ describe('desktop beta update eligibility', () => {
     expect(mockedCheck).toHaveBeenCalledWith({
       headers: {
         Authorization: 'Bearer sponsor-token',
+        'X-RPBox-Update-Channel': 'beta',
+      },
+    })
+  })
+
+  it('sends beta update headers after an admin enables testing participation', async () => {
+    const userStore = useUserStore()
+    userStore.setAuth('admin-token', user({ role: 'admin' }))
+
+    const updater = useUpdater()
+    updater.setParticipateTesting(true)
+    await updater.checkForUpdate()
+
+    expect(mockedCheck).toHaveBeenCalledWith({
+      headers: {
+        Authorization: 'Bearer admin-token',
         'X-RPBox-Update-Channel': 'beta',
       },
     })

@@ -88,7 +88,7 @@ func TestIsBetaReleasePath(t *testing.T) {
 	}
 }
 
-func TestDesktopBetaUpdateRequiresSponsorAndSwitch(t *testing.T) {
+func TestDesktopBetaUpdateRequiresEligibleUserAndSwitch(t *testing.T) {
 	releaseRoot := t.TempDir()
 	t.Chdir(releaseRoot)
 	writeDesktopLatest(t, "latest.json", LatestRelease{
@@ -108,16 +108,21 @@ func TestDesktopBetaUpdateRequiresSponsorAndSwitch(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.User{})
 	normal := model.User{Username: "normal", Email: "normal@example.com", PassHash: "hash"}
 	sponsor := model.User{Username: "sponsor", Email: "sponsor@example.com", PassHash: "hash", IsSponsor: true, SponsorLevel: 1}
+	admin := model.User{Username: "admin", Email: "admin@example.com", PassHash: "hash", Role: "admin"}
 	if err := db.Create(&normal).Error; err != nil {
 		t.Fatalf("create normal user: %v", err)
 	}
 	if err := db.Create(&sponsor).Error; err != nil {
 		t.Fatalf("create sponsor user: %v", err)
 	}
+	if err := db.Create(&admin).Error; err != nil {
+		t.Fatalf("create admin user: %v", err)
+	}
 
 	server := newTestServer(t, db)
 	normalToken := newTestToken(t, normal)
 	sponsorToken := newTestToken(t, sponsor)
+	adminToken := newTestToken(t, admin)
 
 	resp := performUpdaterRequest(server.router, "/api/v1/updater/windows/x86_64/0.2.36", normalToken, true)
 	if resp.Code != http.StatusNoContent {
@@ -147,6 +152,11 @@ func TestDesktopBetaUpdateRequiresSponsorAndSwitch(t *testing.T) {
 	if update.Signature != "beta-signature" {
 		t.Fatalf("expected beta signature to be returned, got %q", update.Signature)
 	}
+
+	resp = performUpdaterRequest(server.router, "/api/v1/updater/windows/x86_64/0.2.36", adminToken, true)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("admin with beta channel: expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
 }
 
 func TestDesktopBetaReleaseFilesAreProtected(t *testing.T) {
@@ -159,7 +169,8 @@ func TestDesktopBetaReleaseFilesAreProtected(t *testing.T) {
 	normal := model.User{Username: "normal", Email: "normal@example.com", PassHash: "hash"}
 	sponsor := model.User{Username: "sponsor", Email: "sponsor@example.com", PassHash: "hash", IsSponsor: true, SponsorLevel: 1}
 	moderator := model.User{Username: "moderator", Email: "moderator@example.com", PassHash: "hash", Role: "moderator"}
-	if err := db.Create(&[]model.User{normal, sponsor, moderator}).Error; err != nil {
+	admin := model.User{Username: "admin", Email: "admin@example.com", PassHash: "hash", Role: "admin"}
+	if err := db.Create(&[]model.User{normal, sponsor, moderator, admin}).Error; err != nil {
 		t.Fatalf("create users: %v", err)
 	}
 	if err := db.Where("username = ?", "normal").First(&normal).Error; err != nil {
@@ -170,6 +181,9 @@ func TestDesktopBetaReleaseFilesAreProtected(t *testing.T) {
 	}
 	if err := db.Where("username = ?", "moderator").First(&moderator).Error; err != nil {
 		t.Fatalf("reload moderator user: %v", err)
+	}
+	if err := db.Where("username = ?", "admin").First(&admin).Error; err != nil {
+		t.Fatalf("reload admin user: %v", err)
 	}
 
 	server := newTestServer(t, db)
@@ -198,6 +212,11 @@ func TestDesktopBetaReleaseFilesAreProtected(t *testing.T) {
 	}
 	if resp.Body.String() != "beta-installer" {
 		t.Fatalf("unexpected beta installer body %q", resp.Body.String())
+	}
+
+	resp = performRequest(server.router, http.MethodGet, betaPath, nil, newTestToken(t, admin))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("admin beta download: expected 200, got %d body=%s", resp.Code, resp.Body.String())
 	}
 }
 
