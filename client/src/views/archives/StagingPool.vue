@@ -127,13 +127,22 @@ function normalizeAccounts(logs: AccountChatLogs[]): AccountChatLogs[] {
 }
 
 const allRecords = computed(() => accounts.value.flatMap(account => account.records))
+// Profile-change records keep the local profile cache current, but are not story material.
+function isStoryArchiveRecord(record: ChatRecord): boolean {
+  return !record.event && record.mark !== 'S'
+}
+
 const unarchivedRecords = computed(() => allRecords.value
+  .filter(isStoryArchiveRecord)
   .filter(record => !archivedRecordKeys.value.has(record.record_key)))
 
 const availableAccounts = computed(() => accounts.value
   .map(account => ({
     id: account.account_id,
-    count: account.records.filter(record => !archivedRecordKeys.value.has(record.record_key)).length,
+    count: account.records.filter(record => (
+      isStoryArchiveRecord(record)
+      && !archivedRecordKeys.value.has(record.record_key)
+    )).length,
   }))
   .filter(account => account.count > 0)
   .sort((a, b) => a.id.localeCompare(b.id)))
@@ -419,8 +428,7 @@ const groupedRecords = computed(() => {
   const groups: Record<string, Record<string, ChatRecord[]>> = {}
   const query = filterSearch.value.trim().toLocaleLowerCase()
 
-  for (const record of allRecords.value) {
-    if (archivedRecordKeys.value.has(record.record_key)) continue
+  for (const record of unarchivedRecords.value) {
     if (dateRangeInvalid.value) continue
     const dateStr = localDateKey(record.timestamp)
     if (filterStartDate.value && dateStr < filterStartDate.value) continue

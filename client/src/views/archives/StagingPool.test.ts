@@ -278,25 +278,42 @@ describe('StagingPool', () => {
     expect(wrapper.text()).not.toContain('legacy without listener metadata')
   })
 
-  it('renders profile switches as a dedicated identity timeline node', async () => {
+  it('excludes automatic profile events from the story archive workflow', async () => {
     const wrapper = await mountPool([
+      makeRecord({ record_key: 'rpbox-dialogue', content: 'player action' }),
       makeRecord({
-        record_key: 'rpbox-switch',
+        record_key: 'rpbox-profile-update',
+        mark: 'S',
+        channel: 'SYSTEM',
+        event: {
+          kind: 'profile_update',
+          certainty: 'observed',
+          from: { snapshot_id: 'before', display_name: 'Before Name' },
+          to: { snapshot_id: 'after', display_name: 'After Name' },
+        },
+      }),
+      makeRecord({
+        record_key: 'rpbox-profile-switch',
         mark: 'S',
         channel: 'SYSTEM',
         event: {
           kind: 'profile_switch',
           certainty: 'exact',
-          from: { snapshot_id: 'before', display_name: 'Before Name' },
-          to: { snapshot_id: 'after', display_name: 'After Name' },
+          from: { snapshot_id: 'first', display_name: 'First Name' },
+          to: { snapshot_id: 'second', display_name: 'Second Name' },
         },
       }),
     ])
 
-    const node = wrapper.get('.record-item.identity-event')
-    expect(node.text()).toContain('Before Name')
-    expect(node.text()).toContain('After Name')
-    expect(node.text()).toContain('Profile switched')
+    expect(wrapper.findAll('.record-item')).toHaveLength(1)
+    expect(wrapper.text()).toContain('player action')
+    expect(wrapper.text()).not.toContain('Before Name')
+    expect(wrapper.text()).not.toContain('First Name')
+
+    await wrapper.get('.bulk-actions button').trigger('click')
+    await wrapper.get('.staging-footer .r-button').trigger('click')
+    const archived = wrapper.emitted<[ChatRecord[]]>('archive')?.[0]?.[0]
+    expect(archived).toEqual([expect.objectContaining({ record_key: 'rpbox-dialogue' })])
   })
 
   it('normalizes inbound and outbound whispers and exposes the guild channel', async () => {
