@@ -454,6 +454,7 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 			return "", 0, false, err
 		}
 		s.cleanupCommentImageURLs(c, commentImageURLs...)
+		s.bumpPostListCache(c.Request.Context())
 		return targetName, post.AuthorID, false, nil
 	case reportTargetItem:
 		var item model.Item

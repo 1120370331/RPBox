@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -95,6 +96,52 @@ type postListParams struct {
 	Category        string
 	ExcludeCategory string
 	IsPinned        *bool
+}
+
+type postListCacheIdentity struct {
+	Schema          int    `json:"schema"`
+	ViewerID        uint   `json:"viewer_id"`
+	Page            int    `json:"page"`
+	PageSize        int    `json:"page_size"`
+	SortBy          string `json:"sort_by"`
+	Order           string `json:"order"`
+	Search          string `json:"search"`
+	AuthorName      string `json:"author_name"`
+	Region          string `json:"region"`
+	Address         string `json:"address"`
+	GuildID         string `json:"guild_id"`
+	TagID           string `json:"tag_id"`
+	AuthorID        string `json:"author_id"`
+	Status          string `json:"status"`
+	Category        string `json:"category"`
+	ExcludeCategory string `json:"exclude_category"`
+	IsPinned        *bool  `json:"is_pinned"`
+}
+
+func postListCacheSuffix(params postListParams) (string, error) {
+	identity, err := json.Marshal(postListCacheIdentity{
+		Schema:          1,
+		ViewerID:        params.UserID,
+		Page:            params.Page,
+		PageSize:        params.PageSize,
+		SortBy:          params.SortBy,
+		Order:           params.Order,
+		Search:          params.Search,
+		AuthorName:      params.AuthorName,
+		Region:          params.Region,
+		Address:         params.Address,
+		GuildID:         params.GuildID,
+		TagID:           params.TagID,
+		AuthorID:        params.AuthorID,
+		Status:          params.Status,
+		Category:        params.Category,
+		ExcludeCategory: params.ExcludeCategory,
+		IsPinned:        params.IsPinned,
+	})
+	if err != nil {
+		return "", err
+	}
+	return cache.HashKey(string(identity)), nil
 }
 
 type postListResponse struct {
@@ -210,28 +257,27 @@ func (s *Server) listPosts(c *gin.Context) {
 	isSelfView := authorID != "" && authorID == strconv.Itoa(int(userID))
 	if s.cache != nil && params.GuildID == "" && !isSelfView {
 		startTime := time.Now()
-		pinnedValue := "any"
-		if params.IsPinned != nil {
-			pinnedValue = strconv.FormatBool(*params.IsPinned)
-		}
-		filterKey := fmt.Sprintf("search_scope=global_v4_content|viewer=%d|page=%d|size=%d|sort=%s|order=%s|search=%s|author_name=%s|region=%s|address=%s|tag=%s|author=%s|category=%s|exclude_category=%s|pinned=%s|status=%s",
-			params.UserID, params.Page, params.PageSize, params.SortBy, params.Order, params.Search, params.AuthorName, params.Region, params.Address, params.TagID, params.AuthorID, params.Category, params.ExcludeCategory, pinnedValue, params.Status)
-		version, err := s.cache.Version(c.Request.Context(), postListCacheName)
+		cacheSuffix, err := postListCacheSuffix(params)
 		if err != nil {
-			log.Printf("[Cache] Version error: %v", err)
+			log.Printf("[Cache] Post list identity error: %v", err)
 		} else {
-			cacheKey := cache.VersionedKey(postListCacheName, version, cache.HashKey(filterKey))
-			var cached postListResponse
-			cacheHit := true
-			if err := s.cache.Fetch(c.Request.Context(), cacheKey, cache.TTL["post:list"], &cached, func(ctx context.Context) (interface{}, error) {
-				cacheHit = false
-				return s.loadPostList(ctx, params)
-			}); err != nil {
-				log.Printf("[Cache] Fetch error for key %s: %v", cacheKey, err)
+			version, versionErr := s.cache.Version(c.Request.Context(), postListCacheName)
+			if versionErr != nil {
+				log.Printf("[Cache] Version error: %v", versionErr)
 			} else {
-				log.Printf("[Cache] %s posts=%d time=%v", map[bool]string{true: "HIT", false: "MISS"}[cacheHit], len(cached.Posts), time.Since(startTime))
-				c.JSON(http.StatusOK, cached)
-				return
+				cacheKey := cache.VersionedKey(postListCacheName, version, cacheSuffix)
+				var cached postListResponse
+				cacheHit := true
+				if err := s.cache.Fetch(c.Request.Context(), cacheKey, cache.TTL["post:list"], &cached, func(ctx context.Context) (interface{}, error) {
+					cacheHit = false
+					return s.loadPostList(ctx, params)
+				}); err != nil {
+					log.Printf("[Cache] Fetch error for key %s: %v", cacheKey, err)
+				} else {
+					log.Printf("[Cache] %s posts=%d time=%v", map[bool]string{true: "HIT", false: "MISS"}[cacheHit], len(cached.Posts), time.Since(startTime))
+					c.JSON(http.StatusOK, cached)
+					return
+				}
 			}
 		}
 	}
@@ -1567,6 +1613,7 @@ func (s *Server) addPostTag(c *gin.Context) {
 
 	// 更新标签使用次数
 	database.DB.Model(&tag).Update("usage_count", tag.UsageCount+1)
+	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "添加成功"})
 }
@@ -1597,6 +1644,7 @@ func (s *Server) removePostTag(c *gin.Context) {
 
 	// 更新标签使用次数
 	database.DB.Model(&model.Tag{}).Where("id = ?", tagID).Update("usage_count", database.DB.Raw("usage_count - 1"))
+	s.bumpPostListCache(c.Request.Context())
 
 	c.JSON(http.StatusOK, gin.H{"message": "移除成功"})
 }
