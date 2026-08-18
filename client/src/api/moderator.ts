@@ -686,6 +686,7 @@ export interface BasicMetrics {
   story_archives: number
   story_entries: number
   profile_backups: number
+  custom_character_cards: number
 }
 
 export interface BasicDailyMetrics {

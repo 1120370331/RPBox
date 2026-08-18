@@ -4782,6 +4782,13 @@ function formatBanTime(dateStr: string | null) {
                   <div class="basic-metric-label">人物卡备份数</div>
                 </div>
               </div>
+              <div class="basic-metric-card">
+                <div class="basic-metric-icon"><i class="ri-id-card-line"></i></div>
+                <div class="basic-metric-info">
+                  <div class="basic-metric-value">{{ basicMetrics.custom_character_cards || 0 }}</div>
+                  <div class="basic-metric-label">自定义人物卡数</div>
+                </div>
+              </div>
             </div>
             <div v-else class="empty-state">
               <i class="ri-bar-chart-2-line"></i>

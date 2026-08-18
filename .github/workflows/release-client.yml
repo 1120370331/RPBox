@@ -266,7 +266,25 @@ jobs:
             return 1
           }
 
-          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mkdir -p '$REMOTE_DIR' '$REMOTE_BASE'"
+          run_ssh_with_retry() {
+            local command="$1"
+            local attempt
+            for attempt in 1 2 3; do
+              if ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$command"; then
+                return 0
+              fi
+
+              if [ "$attempt" -lt 3 ]; then
+                echo "Remote command failed (attempt $attempt), retrying..."
+                sleep $((attempt * 15))
+              fi
+            done
+
+            echo "ERROR: remote command failed after 3 attempts"
+            return 1
+          }
+
+          run_ssh_with_retry "mkdir -p '$REMOTE_DIR' '$REMOTE_BASE'"
 
           REMOTE_EXE_FINAL="$REMOTE_DIR/$(basename "$EXE_PATH")"
           REMOTE_EXE_TMP="$REMOTE_EXE_FINAL.part"
@@ -278,16 +296,16 @@ jobs:
           REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
 
           upload_with_retry "$EXE_PATH" "$REMOTE_EXE_TMP"
-          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_EXE_TMP' '$REMOTE_EXE_FINAL'"
+          run_ssh_with_retry "mv -f '$REMOTE_EXE_TMP' '$REMOTE_EXE_FINAL'"
 
           upload_with_retry "$SIG_PATH" "$REMOTE_SIG_TMP"
-          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_SIG_TMP' '$REMOTE_SIG_FINAL'"
+          run_ssh_with_retry "mv -f '$REMOTE_SIG_TMP' '$REMOTE_SIG_FINAL'"
 
           upload_with_retry latest.json "$REMOTE_META_VER_TMP"
-          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
+          run_ssh_with_retry "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
 
           upload_with_retry latest.json "$REMOTE_META_LATEST_TMP"
-          ssh "${SSH_OPTS[@]}" "$SSH_HOST" "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
+          run_ssh_with_retry "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
 
           echo "Uploaded $CHANNEL client release metadata to $REMOTE_META_LATEST_FINAL"
 

@@ -520,14 +520,14 @@ func (s *Server) isDesktopBetaEligible(c *gin.Context) bool {
 
 	var user model.User
 	if err := database.DB.
-		Select("id", "is_sponsor", "sponsor_level", "sponsor_expires_at", "account_deleted_at").
+		Select("id", "role", "is_sponsor", "sponsor_level", "sponsor_expires_at", "account_deleted_at").
 		First(&user, claims.UserID).Error; err != nil {
 		return false
 	}
 	if user.AccountDeletedAt != nil {
 		return false
 	}
-	return resolveSponsorLevel(user) >= 1
+	return user.Role == "admin" || resolveSponsorLevel(user) >= 1
 }
 
 func bearerTokenFromHeader(authHeader string) string {
