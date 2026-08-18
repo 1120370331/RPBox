@@ -490,9 +490,11 @@ function toggleArchiveTag(id: number) {
 }
 
 async function handleArchive(records: ChatRecord[]) {
+  const archivableRecords = records.filter(record => !record.event && record.mark !== 'S')
+  if (archivableRecords.length === 0) return
   resetCreateDialog()
-  pendingRecords.value = records
-  newStoryTitle.value = suggestedArchiveTitle(records)
+  pendingRecords.value = archivableRecords
+  newStoryTitle.value = suggestedArchiveTitle(archivableRecords)
   showCreateModal.value = true
   // 加载用户剧情列表供追加选择
   loadUserStories()
