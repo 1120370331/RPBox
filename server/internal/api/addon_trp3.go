@@ -896,17 +896,19 @@ func (s *Server) fetchGitHubAddonLatest(ctx context.Context, project trp3GitHubP
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return TRP3AddonLatestInfo{}, err
+		return s.fetchGitHubAddonLatestFromReleasePage(ctx, project, timeout, err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		statusErr := fmt.Errorf("GitHub HTTP %d", resp.StatusCode)
+		resp.Body.Close()
+		return s.fetchGitHubAddonLatestFromReleasePage(ctx, project, timeout, statusErr)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return TRP3AddonLatestInfo{}, fmt.Errorf("GitHub HTTP %d", resp.StatusCode)
-	}
-
 	var release gitHubReleaseResponse
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return TRP3AddonLatestInfo{}, err
+		return s.fetchGitHubAddonLatestFromReleasePage(ctx, project, timeout, err)
 	}
 
 	downloadURL, fileName := selectGitHubReleaseDownload(release, project)
@@ -940,6 +942,81 @@ func (s *Server) fetchGitHubAddonLatest(ctx context.Context, project trp3GitHubP
 		FileName:      fileName,
 		FileDate:      firstNonEmpty(release.PublishedAt, releaseAssetDate(release, fileName)),
 		SourceURL:     sourceURL,
+		CurseForgeURL: project.curseForgeURL,
+		License:       "Apache-2.0",
+	}, nil
+}
+
+// fetchGitHubAddonLatestFromReleasePage avoids GitHub API quota or authorization
+// failures by following the public /releases/latest redirect when necessary.
+func (s *Server) fetchGitHubAddonLatestFromReleasePage(
+	ctx context.Context,
+	project trp3GitHubProject,
+	timeout time.Duration,
+	primaryErr error,
+) (TRP3AddonLatestInfo, error) {
+	requestURL := fmt.Sprintf("https://github.com/%s/%s/releases/latest", project.owner, project.repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return TRP3AddonLatestInfo{}, primaryErr
+	}
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	req.Header.Set("User-Agent", "RPBox/0.2 TRP3 addon metadata")
+
+	client, err := s.trp3HTTPClient(timeout)
+	if err != nil {
+		return TRP3AddonLatestInfo{}, primaryErr
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return TRP3AddonLatestInfo{}, fmt.Errorf("%w; GitHub Releases 页面兜底失败: %v", primaryErr, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return TRP3AddonLatestInfo{}, fmt.Errorf("%w; GitHub Releases 页面 HTTP %d", primaryErr, resp.StatusCode)
+	}
+
+	latest, err := gitHubReleasePageLatest(project, resp.Request.URL)
+	if err != nil {
+		return TRP3AddonLatestInfo{}, fmt.Errorf("%w; GitHub Releases 页面兜底失败: %v", primaryErr, err)
+	}
+	latest.DownloadURL = s.rewriteGitHubDownloadURL(latest.DownloadURL)
+	return latest, nil
+}
+
+func gitHubReleasePageLatest(project trp3GitHubProject, releaseURL *url.URL) (TRP3AddonLatestInfo, error) {
+	if releaseURL == nil || !strings.EqualFold(releaseURL.Hostname(), "github.com") {
+		return TRP3AddonLatestInfo{}, errors.New("GitHub Releases 页面未跳转到可信地址")
+	}
+
+	parts := strings.Split(strings.Trim(releaseURL.EscapedPath(), "/"), "/")
+	if len(parts) != 5 ||
+		!strings.EqualFold(parts[0], project.owner) ||
+		!strings.EqualFold(parts[1], project.repo) ||
+		parts[2] != "releases" ||
+		parts[3] != "tag" {
+		return TRP3AddonLatestInfo{}, errors.New("GitHub Releases 页面未返回发布标签")
+	}
+
+	tag, err := url.PathUnescape(parts[4])
+	if err != nil {
+		return TRP3AddonLatestInfo{}, errors.New("GitHub Releases 页面返回的标签无效")
+	}
+	version := normalizeReleaseVersion(tag)
+	if version == "" {
+		return TRP3AddonLatestInfo{}, errors.New("GitHub Releases 页面返回的版本为空")
+	}
+	fileName := project.filePrefix + version + ".zip"
+
+	return TRP3AddonLatestInfo{
+		ID:            project.id,
+		Name:          project.name,
+		ProjectID:     project.projectID,
+		Repository:    project.owner + "/" + project.repo,
+		LatestVersion: version,
+		DownloadURL:   fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", project.owner, project.repo, url.PathEscape(tag), fileName),
+		FileName:      fileName,
+		SourceURL:     releaseURL.String(),
 		CurseForgeURL: project.curseForgeURL,
 		License:       "Apache-2.0",
 	}, nil
