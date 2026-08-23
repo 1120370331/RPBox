@@ -794,6 +794,7 @@ describe('RPDBDetail', () => {
     const copyButton = wrapper.find('[data-testid="copy-home-share-code"]')
 
     expect(copyButton.exists()).toBe(true)
+    expect(copyButton.element.closest('.hero-action-area')).not.toBeNull()
     expect(wrapper.find('[data-testid="floating-like-button"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="floating-favorite-button"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="floating-list-button"]').exists()).toBe(true)

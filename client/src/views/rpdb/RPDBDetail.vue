@@ -682,22 +682,35 @@ onBeforeUnmount(() => {
           <div><dt><i class="ri-bookmark-3-line"></i>收藏</dt><dd>{{ formatCount(work.favorite_count) }}</dd></div>
           <div><dt><i class="ri-list-check-3"></i>清单</dt><dd>{{ formatCount(work.list_count) }}</dd></div>
         </dl>
-        <div class="hero-actions">
-          <button type="button" :class="{ active: work.is_liked }" @click="toggleLike">
-            <i class="ri-heart-3-line"></i>
-            {{ work.is_liked ? '已点赞' : '点赞' }}
-          </button>
-          <button type="button" :class="{ active: work.is_favorited }" @click="toggleFavorite">
-            <i class="ri-bookmark-3-line"></i>
-            {{ work.is_favorited ? '已收藏' : '收藏' }}
-          </button>
-          <button type="button" class="primary" @click="addList">
-            <i class="ri-add-circle-line"></i>
-            {{ work.in_collection_list ? '已在清单' : '加入清单' }}
-          </button>
-          <button v-if="canReportWork" type="button" class="report-action" data-testid="rpdb-report-button" @click="openWorkReport">
-            <i class="ri-flag-line"></i>
-            举报
+        <div class="hero-action-area">
+          <div class="hero-actions">
+            <button type="button" :class="{ active: work.is_liked }" @click="toggleLike">
+              <i class="ri-heart-3-line"></i>
+              {{ work.is_liked ? '已点赞' : '点赞' }}
+            </button>
+            <button type="button" :class="{ active: work.is_favorited }" @click="toggleFavorite">
+              <i class="ri-bookmark-3-line"></i>
+              {{ work.is_favorited ? '已收藏' : '收藏' }}
+            </button>
+            <button type="button" class="primary" @click="addList">
+              <i class="ri-add-circle-line"></i>
+              {{ work.in_collection_list ? '已在清单' : '加入清单' }}
+            </button>
+            <button v-if="canReportWork" type="button" class="report-action" data-testid="rpdb-report-button" @click="openWorkReport">
+              <i class="ri-flag-line"></i>
+              举报
+            </button>
+          </div>
+          <button
+            v-if="work.type === 'home_showcase'"
+            type="button"
+            class="home-copy-code hero-copy-code"
+            data-testid="copy-home-share-code"
+            :disabled="!homeShareCode"
+            @click="copyHomeShareCode"
+          >
+            <i class="ri-file-copy-line"></i>
+            {{ copiedHomeShareCode ? '已复制住宅分享代码' : '复制住宅分享代码' }}
           </button>
         </div>
       </div>
@@ -794,19 +807,6 @@ onBeforeUnmount(() => {
           </component>
         </section>
 
-        <section v-if="work.type === 'home_showcase'">
-          <h3>参观资料</h3>
-          <button
-            type="button"
-            class="home-copy-code"
-            data-testid="copy-home-share-code"
-            :disabled="!homeShareCode"
-            @click="copyHomeShareCode"
-          >
-            <i class="ri-file-copy-line"></i>
-            {{ copiedHomeShareCode ? '已复制住宅分享代码' : '复制住宅分享代码' }}
-          </button>
-        </section>
       </div>
     </aside>
 
@@ -1137,10 +1137,12 @@ onBeforeUnmount(() => {
 .hero-metadata dt{color:var(--color-text-secondary)}
 .hero-metadata dd{margin:0;text-align:right}
 .hero-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:14px 0 0;padding:11px 0;border-top:1px solid var(--rpdb-line);border-bottom:1px solid var(--rpdb-line)}.hero-stats div{display:grid;justify-items:center;gap:4px;border-right:1px solid var(--rpdb-line)}.hero-stats div:last-child{border-right:0}.hero-stats dt{display:inline-flex;align-items:center;gap:4px;color:var(--color-text-secondary);font-size:10px}.hero-stats dt i{color:var(--color-accent);font-size:13px}.hero-stats dd{margin:0;color:var(--color-text-main);font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
-.hero-actions{display:flex;gap:8px;margin-top:auto;padding-top:20px}
+.hero-action-area{display:grid;gap:10px;margin-top:auto;padding-top:20px}
+.hero-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .hero-actions button,.assistant-actions button,.verify-actions button,.home-copy-code,.transmog-copy-code,.floating-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main)}
+.hero-actions button{min-width:0;padding:0 8px;font-size:12px;font-weight:800;white-space:nowrap}
 .hero-actions button.active,.hero-actions .primary,.floating-actions button.active,.floating-actions button.primary{border-color:var(--color-accent);background:var(--color-accent);color:#fff}
-.hero-actions .report-action{margin-left:auto;color:var(--color-text-secondary)}
+.hero-actions .report-action{color:var(--color-text-secondary)}
 .hero-actions .report-action:hover{border-color:var(--color-danger,#b83232);color:var(--color-danger,#b83232)}
 .detail-lower{display:block;margin-top:14px}
 .article-sheet,.floating-toc-content{overflow:hidden;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
@@ -1221,6 +1223,7 @@ onBeforeUnmount(() => {
 .floating-actions button{width:100%;justify-content:flex-start;font-weight:800}
 .floating-actions button b{margin-left:auto;font-size:11px}
 .home-copy-code,.transmog-copy-code{width:100%;min-height:44px;margin-top:12px;border-color:var(--color-accent);background:var(--color-accent);color:#fff;font-weight:800}
+.home-copy-code.hero-copy-code{min-height:48px;margin-top:0;font-size:14px;letter-spacing:.02em}
 .home-copy-code:disabled,.transmog-copy-code:disabled{cursor:not-allowed;opacity:.45}
 .floating-toc-panel a{display:flex;gap:8px;padding:9px 0;border-bottom:1px solid var(--rpdb-line);color:var(--color-text-main);text-decoration:none}
 .floating-toc-panel a:last-child{border-bottom:0}
@@ -1277,5 +1280,5 @@ onBeforeUnmount(() => {
 @media(max-width:1180px){.floating-toc-panel{right:12px;width:226px}}
 @media(max-width:1050px){.detail-hero{grid-template-columns:1fr}.hero-gallery{border-right:0;border-bottom:1px solid var(--rpdb-line)}}
 @media(max-width:980px){.recommendations-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:680px){.hero-summary{padding:22px}.hero-summary h1{font-size:29px}.hero-metadata{grid-template-columns:1fr}.hero-actions{flex-wrap:wrap}.hero-actions button{flex:1}.recommendations-section,.comments-section{padding:22px 18px}.recommendations-grid{grid-template-columns:1fr}.work-edit-footer{padding:16px 18px}.work-edit-footer a{width:100%}.comment-meta,.reply-meta{align-items:flex-start;flex-direction:column;gap:4px}.comment-actions{gap:8px}.floating-toc-panel{top:auto;right:12px;bottom:12px;left:12px;width:auto}.floating-toc-panel.is-collapsed{left:auto;width:0}.floating-toc-content{max-height:42vh}.toc-collapse{top:-48px;right:0;left:auto;border-radius:12px}.floating-toc-panel section{border-right:0}}
+@media(max-width:680px){.hero-summary{padding:22px}.hero-summary h1{font-size:29px}.hero-metadata{grid-template-columns:1fr}.hero-actions{gap:4px}.hero-actions button{padding:0 4px;font-size:11px}.recommendations-section,.comments-section{padding:22px 18px}.recommendations-grid{grid-template-columns:1fr}.work-edit-footer{padding:16px 18px}.work-edit-footer a{width:100%}.comment-meta,.reply-meta{align-items:flex-start;flex-direction:column;gap:4px}.comment-actions{gap:8px}.floating-toc-panel{top:auto;right:12px;bottom:12px;left:12px;width:auto}.floating-toc-panel.is-collapsed{left:auto;width:0}.floating-toc-content{max-height:42vh}.toc-collapse{top:-48px;right:0;left:auto;border-radius:12px}.floating-toc-panel section{border-right:0}}
 </style>
