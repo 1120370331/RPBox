@@ -96,6 +96,10 @@ export function leaveGuild(guildId: number) {
   return request.post<void>(`/guilds/${guildId}/leave`)
 }
 
+export function deleteGuild(guildId: number) {
+  return request.delete<void>(`/guilds/${guildId}`)
+}
+
 export function listMyApplications() {
   return request.get<{ applications: GuildApplication[] }>('/user/guild-applications')
 }

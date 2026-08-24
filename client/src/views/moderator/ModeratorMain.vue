@@ -1154,6 +1154,8 @@ function getReportTargetLabel(type: string) {
   if (type === 'item_comment') return '作品评论'
   if (type === 'rpdb_comment') return 'RP 数据库评论'
   if (type === 'story') return '剧情'
+  if (type === 'character_card') return '人物卡'
+  if (type === 'guild') return '公会'
   return type
 }
 
@@ -1168,7 +1170,7 @@ function getReportScopeLabel(scope: ReportScope) {
   if (scope === 'user') return '举报用户'
   if (scope === 'comment') return '举报评论'
   if (scope === 'story') return '剧情举报'
-  return '举报帖子/道具/RP 数据库作品'
+  return '举报帖子/道具/人物卡/公会/RP 数据库作品'
 }
 
 function getReportEmptyText() {
@@ -1369,6 +1371,14 @@ function openReportActionModal(action: ReportReviewAction, report?: ReportReview
 }
 
 function openReportTarget(report: ReportReviewItem) {
+  if (report.target_type === 'character_card') {
+    router.push(report.target_url || `/character-cards/${report.target_id}`)
+    return
+  }
+  if (report.target_type === 'guild') {
+    router.push(report.target_url || `/guild/${report.target_id}`)
+    return
+  }
   if (report.target_type === 'rpdb_work') {
     router.push(report.target_url || `/rpdb/${report.target_id}`)
     return

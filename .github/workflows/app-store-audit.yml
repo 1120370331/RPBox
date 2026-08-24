@@ -1,0 +1,671 @@
+name: App Store Connect Read-only Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-store-connect-read-only-audit
+  cancel-in-progress: false
+
+env:
+  ASC_API_BASE: https://api.appstoreconnect.apple.com
+  ASC_APP_ID: '6761112311'
+  ASC_BUNDLE_ID: app.rpbox.mobile
+
+jobs:
+  audit:
+    name: Export sanitized App Store Connect state
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Install JWT signing dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install \
+            --disable-pip-version-check \
+            --no-cache-dir \
+            'cryptography>=42,<47'
+
+      - name: Read and sanitize App Store Connect metadata
+        id: audit
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+          AUDIT_DIR: ${{ runner.temp }}/app-store-audit
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import datetime as dt
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+
+          API_BASE = os.environ.get("ASC_API_BASE", "").rstrip("/")
+          APP_ID = os.environ.get("ASC_APP_ID", "").strip()
+          BUNDLE_ID = os.environ.get("ASC_BUNDLE_ID", "").strip()
+          AUDIT_DIR = Path(os.environ.get("AUDIT_DIR", "app-store-audit"))
+          AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+
+          generated_at = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+          audit = {
+              "schemaVersion": 1,
+              "generatedAt": generated_at,
+              "mode": "read-only",
+              "requestContext": {
+                  "appleNumericAppId": APP_ID,
+                  "bundleId": BUNDLE_ID,
+                  "apiBase": API_BASE,
+                  "repository": os.environ.get("GITHUB_REPOSITORY"),
+                  "gitSha": os.environ.get("GITHUB_SHA"),
+                  "gitRef": os.environ.get("GITHUB_REF"),
+                  "workflowRunId": os.environ.get("GITHUB_RUN_ID"),
+              },
+              "summary": {},
+              "reads": [],
+              "warnings": [],
+              "failures": [],
+          }
+
+          sensitive_exact = {
+              "contactfirstname",
+              "contactlastname",
+              "contactphone",
+              "contactemail",
+              "demoaccountname",
+              "demoaccountpassword",
+              "submittedbyactor",
+              "lastupdatedbyactor",
+              "notes",
+              "templateurl",
+          }
+          sensitive_fragments = (
+              "password",
+              "secret",
+              "privatekey",
+              "authorization",
+              "accesstoken",
+              "assettoken",
+          )
+
+
+          def redact_value(value):
+              if value is None or value == "" or value == [] or value == {}:
+                  return None
+              return "[REDACTED:present]"
+
+
+          def sanitize(value):
+              if isinstance(value, dict):
+                  clean = {}
+                  for key, item in value.items():
+                      normalized = "".join(ch for ch in str(key).lower() if ch.isalnum())
+                      if normalized in sensitive_exact or any(fragment in normalized for fragment in sensitive_fragments):
+                          clean[key] = redact_value(item)
+                      else:
+                          clean[key] = sanitize(item)
+                  return clean
+              if isinstance(value, list):
+                  return [sanitize(item) for item in value]
+              return value
+
+
+          def b64url(value: bytes) -> str:
+              return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+          def make_token() -> str:
+              issuer_id = os.environ.get("ASC_ISSUER_ID", "").strip()
+              key_id = os.environ.get("ASC_KEY_ID", "").strip()
+              encoded_key = "".join(os.environ.get("ASC_API_KEY_BASE64", "").split())
+              missing = [
+                  name
+                  for name, value in (
+                      ("ASC_ISSUER_ID", issuer_id),
+                      ("ASC_KEY_ID", key_id),
+                      ("ASC_API_KEY_BASE64", encoded_key),
+                  )
+                  if not value
+              ]
+              if missing:
+                  raise RuntimeError("Missing required GitHub secrets: " + ", ".join(missing))
+
+              try:
+                  key_bytes = base64.b64decode(encoded_key, validate=True)
+                  private_key = serialization.load_pem_private_key(key_bytes, password=None)
+              except Exception as exc:
+                  raise RuntimeError("ASC_API_KEY_BASE64 is not a valid unencrypted PKCS#8 .p8 key") from exc
+              if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+                  raise RuntimeError("App Store Connect API key is not an EC private key")
+
+              now = int(time.time())
+              header = {"alg": "ES256", "kid": key_id, "typ": "JWT"}
+              payload = {
+                  "iss": issuer_id,
+                  "iat": now - 5,
+                  "exp": now + 19 * 60,
+                  "aud": "appstoreconnect-v1",
+              }
+              signing_input = (
+                  b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+                  + "."
+                  + b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+              )
+              der_signature = private_key.sign(signing_input.encode("ascii"), ec.ECDSA(hashes.SHA256()))
+              r_value, s_value = decode_dss_signature(der_signature)
+              raw_signature = r_value.to_bytes(32, "big") + s_value.to_bytes(32, "big")
+              return signing_input + "." + b64url(raw_signature)
+
+
+          def as_list(data):
+              if data is None:
+                  return []
+              return data if isinstance(data, list) else [data]
+
+
+          def resource_attributes(resource):
+              if not isinstance(resource, dict):
+                  return {}
+              attributes = resource.get("attributes")
+              return attributes if isinstance(attributes, dict) else {}
+
+
+          def present(value) -> bool:
+              return value is not None and (not isinstance(value, str) or bool(value.strip()))
+
+
+          class ReadOnlyClient:
+              def __init__(self, token: str):
+                  self.token = token
+
+              def fetch(
+                  self,
+                  label: str,
+                  path: str,
+                  params: dict | None = None,
+                  *,
+                  required: bool = True,
+                  allow_not_found: bool = False,
+              ) -> tuple[list, list]:
+                  query = urllib.parse.urlencode(params or {}, doseq=True)
+                  next_url = API_BASE + path + (("?" + query) if query else "")
+                  data_items = []
+                  included_items = []
+                  status = None
+                  page_count = 0
+                  seen_urls = set()
+                  error = None
+
+                  try:
+                      while next_url:
+                          if next_url in seen_urls:
+                              raise RuntimeError(f"Pagination loop detected for {label}")
+                          if not next_url.startswith(API_BASE + "/"):
+                              raise RuntimeError(f"Refused non-App-Store-Connect pagination URL for {label}")
+                          if page_count >= 50:
+                              raise RuntimeError(f"Pagination exceeded 50 pages for {label}")
+                          seen_urls.add(next_url)
+
+                          request = urllib.request.Request(
+                              next_url,
+                              method="GET",
+                              headers={
+                                  "Accept": "application/json",
+                                  "Authorization": "Bearer " + self.token,
+                                  "User-Agent": "RPBox-AppStore-Audit/1.0",
+                              },
+                          )
+                          with urllib.request.urlopen(request, timeout=45) as response:
+                              status = response.status
+                              document = json.loads(response.read().decode("utf-8"))
+                          data_items.extend(as_list(document.get("data")))
+                          included_items.extend(as_list(document.get("included")))
+                          page_count += 1
+                          links = document.get("links") if isinstance(document.get("links"), dict) else {}
+                          next_url = links.get("next")
+                  except urllib.error.HTTPError as exc:
+                      status = exc.code
+                      try:
+                          body = json.loads(exc.read().decode("utf-8"))
+                      except Exception:
+                          body = {}
+                      first_error = as_list(body.get("errors"))[:1]
+                      if first_error:
+                          first_error = first_error[0]
+                          error = {
+                              "status": str(first_error.get("status", status)),
+                              "code": first_error.get("code"),
+                              "title": first_error.get("title"),
+                          }
+                      else:
+                          error = {"status": str(status), "title": "HTTP request failed"}
+                  except Exception as exc:
+                      error = {"title": type(exc).__name__, "message": str(exc)}
+
+                  record = {
+                      "label": label,
+                      "method": "GET",
+                      "path": path,
+                      "query": params or {},
+                      "httpStatus": status,
+                      "pages": page_count,
+                      "recordCount": len(data_items),
+                      "includedRecordCount": len(included_items),
+                      "data": sanitize(data_items),
+                      "included": sanitize(included_items),
+                  }
+                  if error:
+                      record["error"] = sanitize(error)
+                  audit["reads"].append(record)
+
+                  if error:
+                      message = {
+                          "label": label,
+                          "path": path,
+                          "httpStatus": status,
+                          "error": sanitize(error),
+                      }
+                      if status == 404 and allow_not_found:
+                          audit["warnings"].append({**message, "meaning": "resource is not configured"})
+                      elif required:
+                          audit["failures"].append(message)
+                      else:
+                          audit["warnings"].append(message)
+                      return [], []
+
+                  return data_items, included_items
+
+
+          def write_artifacts() -> None:
+              sanitized_audit = sanitize(audit)
+              (AUDIT_DIR / "app-store-connect-audit.json").write_text(
+                  json.dumps(sanitized_audit, ensure_ascii=False, indent=2) + "\n",
+                  encoding="utf-8",
+              )
+
+              summary = sanitized_audit.get("summary", {})
+              lines = [
+                  "# RPBox App Store Connect read-only audit",
+                  "",
+                  f"Generated: `{generated_at}`",
+                  "",
+                  "> This workflow only issued authenticated HTTP GET requests. It did not create, update, submit, publish, or delete App Store Connect data.",
+                  "",
+                  "## App",
+                  "",
+                  f"- Apple numeric app ID: `{APP_ID}`",
+                  f"- Bundle ID: `{BUNDLE_ID}`",
+                  f"- Identity verified: `{str(summary.get('appIdentityVerified', False)).lower()}`",
+                  f"- App information records: `{summary.get('appInfoCount', 0)}`",
+                  f"- Age-rating records: `{summary.get('ageRatingCount', 0)}`",
+                  f"- Privacy declaration records: `{summary.get('privacyUsageCount', 0)}`",
+                  f"- Privacy declaration published: `{summary.get('privacyPublished')}`",
+                  f"- iOS builds visible to this API key: `{summary.get('buildCount', 0)}`",
+                  "",
+                  "## iOS App Store versions",
+                  "",
+                  "| Version | State | Build | Locales | Screenshots | Review contact | Demo credentials | Submission record |",
+                  "|---|---|---:|---:|---:|---|---|---|",
+              ]
+              versions = summary.get("versions", [])
+              if versions:
+                  for version in versions:
+                      lines.append(
+                          "| {version} | {state} | {build} | {locales} | {screenshots} | {contact} | {demo} | {submission} |".format(
+                              version=version.get("versionString") or "-",
+                              state=version.get("appVersionState") or "-",
+                              build=version.get("selectedBuildNumber") or "-",
+                              locales=version.get("localizationCount", 0),
+                              screenshots=version.get("screenshotCount", 0),
+                              contact="complete" if version.get("reviewContactComplete") else "missing/incomplete",
+                              demo=(
+                                  "not required"
+                                  if version.get("demoAccountRequired") is False
+                                  else ("present" if version.get("demoCredentialsPresent") else "missing")
+                              ),
+                              submission="present" if version.get("submissionPresent") else "missing",
+                          )
+                      )
+              else:
+                  lines.append("| - | No iOS App Store version returned | - | 0 | 0 | - | - | - |")
+
+              lines.extend([
+                  "",
+                  "## Review submissions",
+                  "",
+              ])
+              review_submissions = summary.get("reviewSubmissions", [])
+              if review_submissions:
+                  lines.extend([
+                      "| Platform | State | Submitted date | Items |",
+                      "|---|---|---|---:|",
+                  ])
+                  for submission in review_submissions:
+                      lines.append(
+                          f"| {submission.get('platform') or '-'} | {submission.get('state') or '-'} | "
+                          f"{submission.get('submittedDate') or '-'} | {submission.get('itemCount', 0)} |"
+                      )
+              else:
+                  lines.append("No review-submission record was returned.")
+
+              lines.extend([
+                  "",
+                  "## API coverage",
+                  "",
+                  f"- Successful/attempted read operations: `{len(sanitized_audit.get('reads', []))}`",
+                  f"- Missing optional resources or warnings: `{len(sanitized_audit.get('warnings', []))}`",
+                  f"- Required read failures: `{len(sanitized_audit.get('failures', []))}`",
+              ])
+              if sanitized_audit.get("failures"):
+                  lines.extend(["", "Required reads that failed:"])
+                  for failure in sanitized_audit["failures"]:
+                      title = (failure.get("error") or {}).get("title") or "request failed"
+                      lines.append(
+                          f"- `{failure.get('label')}`: HTTP `{failure.get('httpStatus')}` ({title})"
+                      )
+              lines.extend([
+                  "",
+                  "The JSON artifact contains the sanitized response data and per-request status. Review-contact values, demo credentials, review notes, authorization data, asset tokens, and screenshot delivery URLs are redacted.",
+                  "",
+              ])
+              (AUDIT_DIR / "app-store-connect-audit.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+          try:
+              if not API_BASE.startswith("https://api.appstoreconnect.apple.com"):
+                  raise RuntimeError("ASC_API_BASE must use Apple's App Store Connect API host")
+              if not APP_ID.isdigit():
+                  raise RuntimeError("ASC_APP_ID must be numeric")
+              if not BUNDLE_ID:
+                  raise RuntimeError("ASC_BUNDLE_ID is required")
+
+              client = ReadOnlyClient(make_token())
+
+              apps, _ = client.fetch("app", f"/v1/apps/{APP_ID}")
+              if not apps:
+                  raise RuntimeError("The configured app was not returned by App Store Connect")
+              app = apps[0]
+              returned_id = str(app.get("id", ""))
+              returned_bundle_id = str(resource_attributes(app).get("bundleId", ""))
+              identity_verified = returned_id == APP_ID and returned_bundle_id == BUNDLE_ID
+              audit["summary"]["appIdentityVerified"] = identity_verified
+              if not identity_verified:
+                  raise RuntimeError(
+                      "App identity mismatch: the numeric app ID does not resolve to the configured bundle ID"
+                  )
+
+              app_infos, _ = client.fetch(
+                  "app information",
+                  f"/v1/apps/{APP_ID}/appInfos",
+                  {"limit": 50},
+              )
+              info_summaries = []
+              age_rating_count = 0
+              for app_info in app_infos:
+                  app_info_id = app_info.get("id")
+                  if not app_info_id:
+                      continue
+                  info_localizations, _ = client.fetch(
+                      f"app information localizations ({app_info_id})",
+                      f"/v1/appInfos/{app_info_id}/appInfoLocalizations",
+                      {"limit": 50},
+                  )
+                  age_ratings, _ = client.fetch(
+                      f"age rating declaration ({app_info_id})",
+                      f"/v1/appInfos/{app_info_id}/ageRatingDeclaration",
+                      allow_not_found=True,
+                  )
+                  age_rating_count += len(age_ratings)
+                  info_summaries.append({
+                      "id": app_info_id,
+                      "appStoreState": resource_attributes(app_info).get("appStoreState"),
+                      "localizations": [
+                          {
+                              "locale": resource_attributes(item).get("locale"),
+                              "namePresent": present(resource_attributes(item).get("name")),
+                              "subtitlePresent": present(resource_attributes(item).get("subtitle")),
+                              "privacyPolicyUrlPresent": present(resource_attributes(item).get("privacyPolicyUrl")),
+                              "privacyChoicesUrlPresent": present(resource_attributes(item).get("privacyChoicesUrl")),
+                          }
+                          for item in info_localizations
+                      ],
+                      "ageRatingPresent": bool(age_ratings),
+                  })
+
+              privacy_usages, _ = client.fetch(
+                  "app privacy declarations",
+                  f"/v1/apps/{APP_ID}/dataUsages",
+                  {
+                      "include": "category,grouping,purpose,dataProtection",
+                      "limit": 50,
+                  },
+                  allow_not_found=True,
+              )
+              privacy_states, _ = client.fetch(
+                  "app privacy publish state",
+                  f"/v1/apps/{APP_ID}/dataUsagePublishState",
+                  allow_not_found=True,
+              )
+              privacy_published = None
+              if privacy_states:
+                  privacy_published = resource_attributes(privacy_states[0]).get("published")
+
+              versions, _ = client.fetch(
+                  "iOS App Store versions",
+                  f"/v1/apps/{APP_ID}/appStoreVersions",
+                  {"filter[platform]": "IOS", "limit": 50},
+              )
+              version_summaries = []
+              for version in versions:
+                  version_id = version.get("id")
+                  if not version_id:
+                      continue
+                  version_localizations, _ = client.fetch(
+                      f"version localizations ({version_id})",
+                      f"/v1/appStoreVersions/{version_id}/appStoreVersionLocalizations",
+                      {"limit": 50},
+                  )
+                  screenshot_count = 0
+                  localization_summaries = []
+                  for localization in version_localizations:
+                      localization_id = localization.get("id")
+                      screenshot_sets = []
+                      screenshot_included = []
+                      if localization_id:
+                          screenshot_sets, screenshot_included = client.fetch(
+                              f"screenshot inventory ({localization_id})",
+                              f"/v1/appStoreVersionLocalizations/{localization_id}/appScreenshotSets",
+                              {"include": "appScreenshots", "limit": 50},
+                          )
+                      locale_screenshot_count = sum(
+                          1 for item in screenshot_included if item.get("type") == "appScreenshots"
+                      )
+                      screenshot_count += locale_screenshot_count
+                      loc_attributes = resource_attributes(localization)
+                      localization_summaries.append({
+                          "locale": loc_attributes.get("locale"),
+                          "descriptionPresent": present(loc_attributes.get("description")),
+                          "keywordsPresent": present(loc_attributes.get("keywords")),
+                          "supportUrlPresent": present(loc_attributes.get("supportUrl")),
+                          "marketingUrlPresent": present(loc_attributes.get("marketingUrl")),
+                          "promotionalTextPresent": present(loc_attributes.get("promotionalText")),
+                          "whatsNewPresent": present(loc_attributes.get("whatsNew")),
+                          "screenshotSetCount": len(screenshot_sets),
+                          "screenshotCount": locale_screenshot_count,
+                      })
+
+                  review_details, _ = client.fetch(
+                      f"App Review details ({version_id})",
+                      f"/v1/appStoreVersions/{version_id}/appStoreReviewDetail",
+                      {"include": "appStoreReviewAttachments"},
+                      allow_not_found=True,
+                  )
+                  submissions, _ = client.fetch(
+                      f"legacy version submission ({version_id})",
+                      f"/v1/appStoreVersions/{version_id}/appStoreVersionSubmission",
+                      required=False,
+                      allow_not_found=True,
+                  )
+                  selected_builds, _ = client.fetch(
+                      f"selected build ({version_id})",
+                      f"/v1/appStoreVersions/{version_id}/build",
+                      allow_not_found=True,
+                  )
+
+                  review_attributes = resource_attributes(review_details[0]) if review_details else {}
+                  contact_complete = all(
+                      present(review_attributes.get(key))
+                      for key in ("contactFirstName", "contactLastName", "contactPhone", "contactEmail")
+                  )
+                  demo_credentials_present = all(
+                      present(review_attributes.get(key))
+                      for key in ("demoAccountName", "demoAccountPassword")
+                  )
+                  version_attributes = resource_attributes(version)
+                  selected_build_number = None
+                  if selected_builds:
+                      selected_build_number = resource_attributes(selected_builds[0]).get("version")
+                  version_summaries.append({
+                      "id": version_id,
+                      "versionString": version_attributes.get("versionString"),
+                      "appVersionState": version_attributes.get("appVersionState"),
+                      "platform": version_attributes.get("platform"),
+                      "createdDate": version_attributes.get("createdDate"),
+                      "releaseType": version_attributes.get("releaseType"),
+                      "selectedBuildNumber": selected_build_number,
+                      "localizationCount": len(version_localizations),
+                      "localizations": localization_summaries,
+                      "screenshotCount": screenshot_count,
+                      "reviewDetailPresent": bool(review_details),
+                      "reviewContactComplete": contact_complete,
+                      "demoAccountRequired": review_attributes.get("demoAccountRequired"),
+                      "demoCredentialsPresent": demo_credentials_present,
+                      "reviewNotesPresent": present(review_attributes.get("notes")),
+                      "submissionPresent": bool(submissions),
+                  })
+
+              builds, build_included = client.fetch(
+                  "iOS builds",
+                  "/v1/builds",
+                  {
+                      "filter[app]": APP_ID,
+                      "include": "preReleaseVersion,buildBetaDetail,betaAppReviewSubmission",
+                      "sort": "-uploadedDate",
+                      "limit": 50,
+                  },
+              )
+              pre_release_versions, _ = client.fetch(
+                  "iOS pre-release versions",
+                  "/v1/preReleaseVersions",
+                  {
+                      "filter[app]": APP_ID,
+                      "filter[platform]": "IOS",
+                      "limit": 50,
+                  },
+              )
+              beta_localizations, _ = client.fetch(
+                  "TestFlight app localizations",
+                  "/v1/betaAppLocalizations",
+                  {"filter[app]": APP_ID, "limit": 50},
+                  required=False,
+              )
+
+              review_submissions, _ = client.fetch(
+                  "review submissions",
+                  f"/v1/apps/{APP_ID}/reviewSubmissions",
+                  {"filter[platform]": "IOS", "limit": 50},
+              )
+              review_submission_summaries = []
+              for review_submission in review_submissions:
+                  submission_id = review_submission.get("id")
+                  items = []
+                  if submission_id:
+                      items, _ = client.fetch(
+                          f"review submission items ({submission_id})",
+                          f"/v1/reviewSubmissions/{submission_id}/items",
+                          {"limit": 50},
+                      )
+                  attributes = resource_attributes(review_submission)
+                  review_submission_summaries.append({
+                      "id": submission_id,
+                      "platform": attributes.get("platform"),
+                      "state": attributes.get("state"),
+                      "submittedDate": attributes.get("submittedDate"),
+                      "itemCount": len(items),
+                  })
+
+              version_summaries.sort(key=lambda item: item.get("createdDate") or "", reverse=True)
+              audit["summary"].update({
+                  "appInfoCount": len(app_infos),
+                  "appInfos": info_summaries,
+                  "ageRatingCount": age_rating_count,
+                  "privacyUsageCount": len(privacy_usages),
+                  "privacyPublished": privacy_published,
+                  "versionCount": len(versions),
+                  "versions": version_summaries,
+                  "buildCount": len(builds),
+                  "buildIncludedRecordCount": len(build_included),
+                  "preReleaseVersionCount": len(pre_release_versions),
+                  "betaAppLocalizationCount": len(beta_localizations),
+                  "reviewSubmissions": review_submission_summaries,
+              })
+          except Exception as exc:
+              audit["failures"].append({
+                  "label": "audit setup or identity verification",
+                  "httpStatus": None,
+                  "error": {"title": type(exc).__name__, "message": str(exc)},
+              })
+
+          write_artifacts()
+          if audit["failures"]:
+              print(
+                  f"App Store Connect audit completed with {len(audit['failures'])} required read failure(s). "
+                  "Download the sanitized audit artifact for details.",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+
+          print("Sanitized App Store Connect audit artifact created successfully.")
+          PY
+
+      - name: Add sanitized summary to workflow run
+        if: always()
+        shell: bash
+        env:
+          AUDIT_DIR: ${{ runner.temp }}/app-store-audit
+        run: |
+          set -euo pipefail
+          if [ -f "$AUDIT_DIR/app-store-connect-audit.md" ]; then
+            cat "$AUDIT_DIR/app-store-connect-audit.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "App Store Connect audit did not produce a summary artifact." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Upload sanitized audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-connect-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/app-store-audit
+          if-no-files-found: error
+          retention-days: 14

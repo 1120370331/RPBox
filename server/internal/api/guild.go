@@ -408,6 +408,15 @@ func (s *Server) getGuild(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
 		return
 	}
+	exclusions, err := loadViewerSafetyExclusions(userID, reportTargetGuild)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取公会安全设置失败"})
+		return
+	}
+	if exclusions.excludes(reportTargetGuild, guild.ID, guild.OwnerID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
+		return
+	}
 
 	hasBanner := false
 	if err := database.DB.Model(&model.Guild{}).
@@ -1202,19 +1211,35 @@ func (s *Server) getStoryGuilds(c *gin.Context) {
 	if len(guildIDs) > 0 {
 		database.DB.Where("id IN ?", guildIDs).Find(&guilds)
 	}
+	exclusions, err := loadViewerSafetyExclusions(c.GetUint("userID"), reportTargetGuild)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取公会安全设置失败"})
+		return
+	}
+	visibleGuilds := make([]model.Guild, 0, len(guilds))
 	for i := range guilds {
+		if exclusions.excludes(reportTargetGuild, guilds[i].ID, guilds[i].OwnerID) {
+			continue
+		}
 		ensureGuildBannerUpdatedAt(&guilds[i])
 		ensureGuildAvatarUpdatedAt(&guilds[i])
 		guilds[i].Banner = guildBannerURL(guilds[i])
 		guilds[i].Avatar = guildAvatarURL(guilds[i])
+		visibleGuilds = append(visibleGuilds, guilds[i])
 	}
 
-	c.JSON(http.StatusOK, gin.H{"guilds": guilds})
+	c.JSON(http.StatusOK, gin.H{"guilds": visibleGuilds})
 }
 
 // listPublicGuilds 获取公开公会列表（社区广场）
 func (s *Server) listPublicGuilds(c *gin.Context) {
 	var guilds []model.Guild
+	viewerID := optionalActiveUserID(c)
+	exclusions, err := loadViewerSafetyExclusions(viewerID, reportTargetGuild)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取公会安全设置失败"})
+		return
+	}
 	// 只显示已审核通过的公开公会
 	query := database.DB.Where("status = ? AND is_public = ?", "approved", true)
 
@@ -1231,6 +1256,13 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 	// 列表查询排除大字段（banner）以提高性能
 	// banner 通过独立的图片 API 访问
 	query.Select("id, name, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+	visibleGuilds := make([]model.Guild, 0, len(guilds))
+	for _, guild := range guilds {
+		if !exclusions.excludes(reportTargetGuild, guild.ID, guild.OwnerID) {
+			visibleGuilds = append(visibleGuilds, guild)
+		}
+	}
+	guilds = visibleGuilds
 
 	// 获取有 banner 的公会 ID 列表
 	guildIDs := make([]uint, len(guilds))

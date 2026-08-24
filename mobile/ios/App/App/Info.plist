@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -57,10 +59,10 @@
 		</dict>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>RPBox 需要访问相机，以便拍摄并上传帖子、道具和评论图片。</string>
+	<string>RPBox 仅在您拍照时访问相机，用于上传帖子、道具或评论图片。RPBox accesses the camera only when you take a photo to upload to a post, item, or comment.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>RPBox 需要访问照片，以便选择并上传帖子、道具和评论图片。</string>
+	<string>RPBox 仅访问您主动选择的照片，用于上传帖子、道具或评论图片。RPBox accesses only photos you select to upload to a post, item, or comment.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>RPBox 需要访问照片，以便保存和处理中转图片。</string>
+	<string>RPBox 不会自动保存图片；仅在您主动保存时写入照片库。RPBox never saves automatically and writes to Photos only when you choose to save.</string>
 </dict>
 </plist>

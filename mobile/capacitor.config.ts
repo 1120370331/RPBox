@@ -8,9 +8,6 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
   plugins: {
-    PushNotifications: {
-      presentationOptions: ['badge', 'sound', 'alert'],
-    },
     Keyboard: {
       resize: 'body',
       resizeOnFullScreen: true,

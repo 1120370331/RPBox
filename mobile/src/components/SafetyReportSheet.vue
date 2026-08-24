@@ -1,14 +1,30 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+type SafetyTargetType =
+  | 'post'
+  | 'item'
+  | 'user'
+  | 'comment'
+  | 'item_comment'
+  | 'rpdb_comment'
+  | 'story'
+  | 'rpdb_work'
+  | 'character_card'
+  | 'guild'
 
 const props = defineProps<{
   open: boolean
   title?: string
   targetLabel?: string
-  targetType?: 'post' | 'item' | 'comment' | 'item_comment' | 'rpdb_comment' | 'rpdb_work' | 'user' | 'story'
+  targetType?: SafetyTargetType
   initialAction?: 'default' | 'report' | 'block'
   submitting?: boolean
 }>()
+
+const { t } = useI18n()
+const titleId = `safety-report-sheet-title-${getCurrentInstance()?.uid ?? 0}`
 
 const emit = defineEmits<{
   close: []
@@ -20,48 +36,35 @@ const detail = ref('')
 const hideTarget = ref(true)
 const blockAuthor = ref(false)
 const submitReport = ref(false)
+const submitGuard = ref(false)
 const canSubmit = computed(() => {
   if (submitReport.value) return detail.value.trim().length > 0
   return hideTarget.value || blockAuthor.value
 })
-const hideTargetLabel = computed(() => {
-  if (props.targetType === 'comment' || props.targetType === 'item_comment' || props.targetType === 'rpdb_comment') {
-    return '隐藏这条评论'
-  }
-  if (props.targetType === 'item') {
-    return '隐藏这个道具'
-  }
-  if (props.targetType === 'user') {
-    return '隐藏该用户相关内容'
-  }
-  if (props.targetType === 'story') {
-    return '隐藏这条剧情'
-  }
-  if (props.targetType === 'rpdb_work') {
-    return '隐藏这份 RP 数据库作品'
-  }
-  return '隐藏这条内容'
-})
+const targetTypeKey = computed(() => props.targetType ?? 'content')
+const dialogTitle = computed(() => props.title || t(`common.safetyReport.title.${targetTypeKey.value}`))
+const hideTargetLabel = computed(() => t(`common.safetyReport.hide.${targetTypeKey.value}`))
 const blockAuthorLabel = computed(() => {
-  if (props.targetType === 'user') return '屏蔽该用户'
-  return '同时屏蔽该作者'
+  const key = props.targetType === 'user' ? 'user' : 'author'
+  return t(`common.safetyReport.block.${key}`)
 })
 const hintText = computed(() => {
-  if (submitReport.value) return '同时举报需要选择原因并填写备注说明。'
-  if (!canSubmit.value) return '请选择至少一个本地处理动作。'
-  return '默认只对你隐藏或屏蔽，不进入版主审核队列。'
+  if (submitReport.value) return t('common.safetyReport.hint.report')
+  if (!canSubmit.value) return t('common.safetyReport.hint.selectLocalAction')
+  return t('common.safetyReport.hint.localOnly')
 })
 
-const reasonOptions = [
-  { value: 'spam', label: '垃圾信息或刷屏' },
-  { value: 'abuse', label: '辱骂、人身攻击' },
-  { value: 'fraud', label: '诈骗或恶意引流' },
-  { value: 'sexual', label: '色情或不适内容' },
-  { value: 'illegal', label: '违法违规内容' },
-  { value: 'other', label: '其他问题' },
-]
+const reasonOptions = computed(() => [
+  { value: 'spam', label: t('common.safetyReport.reason.spam') },
+  { value: 'abuse', label: t('common.safetyReport.reason.abuse') },
+  { value: 'fraud', label: t('common.safetyReport.reason.fraud') },
+  { value: 'sexual', label: t('common.safetyReport.reason.sexual') },
+  { value: 'illegal', label: t('common.safetyReport.reason.illegal') },
+  { value: 'other', label: t('common.safetyReport.reason.other') },
+])
 
 function resetForm() {
+  submitGuard.value = false
   reason.value = 'spam'
   detail.value = ''
   if (props.initialAction === 'report') {
@@ -83,6 +86,10 @@ function resetForm() {
 
 watch(() => props.open, (open) => {
   if (open) resetForm()
+}, { immediate: true })
+
+watch(() => props.submitting, (submitting) => {
+  if (!submitting) submitGuard.value = false
 })
 
 function close() {
@@ -90,13 +97,17 @@ function close() {
 }
 
 function submit() {
-  if (!canSubmit.value) return
+  if (props.submitting || submitGuard.value || !canSubmit.value) return
+  submitGuard.value = true
   emit('submit', {
     reason: reason.value,
     detail: detail.value.trim(),
     hideTarget: hideTarget.value,
     blockAuthor: blockAuthor.value,
     submitReport: submitReport.value,
+  })
+  void nextTick(() => {
+    if (!props.submitting) submitGuard.value = false
   })
 }
 </script>
@@ -106,15 +117,25 @@ function submit() {
     <Transition name="sheet-fade">
       <div v-if="open" class="sheet-mask" @click.self="close">
         <Transition name="sheet-slide">
-          <div class="sheet-panel">
+          <div
+            class="sheet-panel"
+            role="dialog"
+            aria-modal="true"
+            :aria-labelledby="titleId"
+          >
             <div class="sheet-handle"></div>
             <div class="sheet-header">
               <div>
-                <h3>{{ title || '举报内容' }}</h3>
+                <h3 :id="titleId">{{ dialogTitle }}</h3>
                 <p v-if="targetLabel">{{ targetLabel }}</p>
               </div>
-              <button type="button" class="sheet-close" @click="close">
-                <i class="ri-close-line" />
+              <button
+                type="button"
+                class="sheet-close"
+                :aria-label="t('common.safetyReport.close')"
+                @click="close"
+              >
+                <i class="ri-close-line" aria-hidden="true" />
               </button>
             </div>
             <div class="sheet-local-actions">
@@ -129,10 +150,10 @@ function submit() {
             </div>
             <label class="sheet-check report-check">
               <input v-model="submitReport" type="checkbox">
-              <span>同时提交给版主审核</span>
+              <span>{{ t('common.safetyReport.submitToModerator') }}</span>
             </label>
             <label v-if="submitReport" class="sheet-field">
-              <span>举报原因</span>
+              <span>{{ t('common.safetyReport.reasonLabel') }}</span>
               <select v-model="reason">
                 <option v-for="option in reasonOptions" :key="option.value" :value="option.value">
                   {{ option.label }}
@@ -140,19 +161,28 @@ function submit() {
               </select>
             </label>
             <label v-if="submitReport" class="sheet-field">
-              <span>补充说明</span>
+              <span>{{ t('common.safetyReport.detailLabel') }}</span>
               <textarea
                 v-model="detail"
                 rows="4"
                 maxlength="500"
-                placeholder="请填写备注说明"
+                :placeholder="t('common.safetyReport.detailPlaceholder')"
               />
             </label>
             <p class="sheet-hint" :class="{ error: !canSubmit }">{{ hintText }}</p>
             <div class="sheet-actions">
-              <button type="button" class="sheet-btn ghost" @click="close">取消</button>
-              <button type="button" class="sheet-btn primary" :disabled="submitting || !canSubmit" @click="submit">
-                {{ submitting ? '提交中...' : (submitReport ? '提交举报' : '确认处理') }}
+              <button type="button" class="sheet-btn ghost" @click="close">
+                {{ t('common.safetyReport.cancel') }}
+              </button>
+              <button
+                type="button"
+                class="sheet-btn primary"
+                :disabled="submitting || submitGuard || !canSubmit"
+                @click="submit"
+              >
+                {{ submitting
+                  ? t('common.safetyReport.submitting')
+                  : (submitReport ? t('common.safetyReport.submitReport') : t('common.safetyReport.confirm')) }}
               </button>
             </div>
           </div>

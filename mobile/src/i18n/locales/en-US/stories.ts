@@ -77,5 +77,7 @@ export default {
     grouping: 'Groups',
     ungrouped: 'Ungrouped',
     clickToJump: 'Tap to jump',
+    openCharacterCard: 'View {name}\'s character card',
+    characterCardPortraitAlt: '{name}\'s character-card portrait',
   },
 }

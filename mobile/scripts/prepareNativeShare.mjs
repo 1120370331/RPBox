@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { IOS_USAGE_DESCRIPTIONS } from './iosCompliance.mjs'
+
 const platform = (process.argv[2] || 'all').toLowerCase()
 const cwd = process.cwd()
 const mobileRoot = path.basename(cwd) === 'mobile' ? cwd : path.join(cwd, 'mobile')
@@ -587,14 +589,14 @@ function patchIos() {
 
   let plist = fs.readFileSync(infoPlistPath, 'utf8')
   plist = upsertIosUrlType(plist)
-  plist = upsertPlistString(plist, 'NSCameraUsageDescription', 'RPBox 需要访问相机，以便拍摄并上传帖子、道具和评论图片。')
-  plist = upsertPlistString(plist, 'NSPhotoLibraryUsageDescription', 'RPBox 需要访问照片，以便选择并上传帖子、道具和评论图片。')
-  plist = upsertPlistString(plist, 'NSPhotoLibraryAddUsageDescription', 'RPBox 需要访问照片，以便保存和处理中转图片。')
+  for (const [key, description] of Object.entries(IOS_USAGE_DESCRIPTIONS)) {
+    plist = upsertPlistString(plist, key, description)
+  }
   fs.writeFileSync(infoPlistPath, plist, 'utf8')
 
-  for (const key of ['NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription', 'NSPhotoLibraryAddUsageDescription']) {
-    if (!plist.includes(`<key>${key}</key>`)) {
-      throw new Error(`Failed to inject ${key} into ${infoPlistPath}`)
+  for (const [key, description] of Object.entries(IOS_USAGE_DESCRIPTIONS)) {
+    if (!plist.includes(`<key>${key}</key>`) || !plist.includes(`<string>${description}</string>`)) {
+      throw new Error(`Failed to inject final ${key} value into ${infoPlistPath}`)
     }
   }
 
@@ -650,6 +652,10 @@ ${associatedDomains.map((domain) => `\t\t<string>${domain}</string>`).join('\n')
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
     <key>NSPrivacyAccessedAPITypes</key>
     <array>
       <dict>

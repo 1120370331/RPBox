@@ -4,6 +4,12 @@ import { useI18n } from 'vue-i18n'
 import { listGuilds, listGuildStories, type Guild, type GuildStoryWithUploader } from '@/api/guild'
 import { listPosts, POST_CATEGORIES, type PostWithAuthor } from '@/api/post'
 import { getImageUrl, resolveApiUrl } from '@/api/image'
+import {
+  isApprovedPublicCharacterCard,
+  listMyCharacterCards,
+  type CharacterCard,
+} from '@/api/characterCard'
+import { buildCharacterCardJumpPlaceholder } from '@/utils/jumpLink'
 
 const props = defineProps<{
   modelValue: boolean
@@ -15,7 +21,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-type JumpTab = 'guild' | 'post' | 'guildHome'
+type JumpTab = 'guild' | 'post' | 'characterCard' | 'guildHome'
 type GuildStoryCard = {
   guild: Guild
   story: GuildStoryWithUploader
@@ -47,7 +53,9 @@ const hasLoaded = ref(false)
 const guilds = ref<Guild[]>([])
 const guildStories = ref<GuildStoryCard[]>([])
 const publicPosts = ref<PostWithAuthor[]>([])
+const publicCharacterCards = ref<CharacterCard[]>([])
 const postSearch = ref('')
+const characterCardSearch = ref('')
 
 const filteredPosts = computed(() => {
   const keyword = postSearch.value.trim().toLowerCase()
@@ -57,6 +65,22 @@ const filteredPosts = computed(() => {
     const author = resolveAuthorName(post).toLowerCase()
     const category = getPostLabel(post).toLowerCase()
     return post.title.toLowerCase().includes(keyword) || author.includes(keyword) || category.includes(keyword)
+  })
+})
+
+const filteredCharacterCards = computed(() => {
+  const keyword = characterCardSearch.value.trim().toLowerCase()
+  return publicCharacterCards.value.filter((characterCard) => {
+    if (!isApprovedPublicCharacterCard(characterCard)) return false
+    if (!keyword) return true
+    return [
+      getCharacterCardName(characterCard),
+      characterCard.title,
+      characterCard.full_title,
+      characterCard.race,
+      characterCard.class,
+      characterCard.summary,
+    ].some(value => String(value || '').toLowerCase().includes(keyword))
   })
 })
 
@@ -83,19 +107,27 @@ async function loadAll() {
     )
     guildStories.value = storyResults.flat()
 
-    const posts = await listPosts({
-      page: 1,
-      page_size: 100,
-      sort: 'created_at',
-      order: 'desc',
-      status: 'published',
-    })
+    const [posts, characterCards] = await Promise.all([
+      listPosts({
+        page: 1,
+        page_size: 100,
+        sort: 'created_at',
+        order: 'desc',
+        status: 'published',
+      }),
+      listMyCharacterCards().catch((error) => {
+        console.error('Failed to load character cards for quick jump', error)
+        return { character_cards: [] }
+      }),
+    ])
     publicPosts.value = posts.posts || []
+    publicCharacterCards.value = characterCards.character_cards || []
   } catch (error) {
     console.error('Failed to load quick jump data', error)
     guilds.value = []
     guildStories.value = []
     publicPosts.value = []
+    publicCharacterCards.value = []
   } finally {
     loading.value = false
   }
@@ -177,6 +209,18 @@ function formatShortDate(value: string) {
   })
 }
 
+function getCharacterCardName(characterCard: CharacterCard) {
+  return characterCard.display_name?.trim()
+    || [characterCard.first_name, characterCard.last_name].filter(Boolean).join(' ')
+    || t('community.editor.quickJumpSheet.unnamedCharacterCard')
+}
+
+function getCharacterCardSummary(characterCard: CharacterCard) {
+  return characterCard.summary?.trim()
+    || [characterCard.race, characterCard.class].filter(Boolean).join(' · ')
+    || t('community.editor.quickJumpSheet.characterCardSummaryMissing')
+}
+
 function insertGuildStory(item: GuildStoryCard) {
   props.onInsert(buildJumpCard({
     href: `/archives/story/${item.story.id}`,
@@ -221,6 +265,12 @@ function insertGuild(guild: Guild) {
   open.value = false
 }
 
+function insertCharacterCard(characterCard: CharacterCard) {
+  if (!isApprovedPublicCharacterCard(characterCard)) return
+  props.onInsert(buildCharacterCardJumpPlaceholder(characterCard.id))
+  open.value = false
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -249,14 +299,19 @@ function escapeHtml(value: string) {
             </header>
 
             <div class="tab-row">
-              <button :class="{ active: activeTab === 'guild' }" @click="activeTab = 'guild'">{{ $t('community.editor.quickJumpSheet.guildStory') }}</button>
-              <button :class="{ active: activeTab === 'post' }" @click="activeTab = 'post'">{{ $t('community.editor.quickJumpSheet.publicPost') }}</button>
-              <button :class="{ active: activeTab === 'guildHome' }" @click="activeTab = 'guildHome'">{{ $t('community.editor.quickJumpSheet.guildHome') }}</button>
+              <button type="button" :class="{ active: activeTab === 'guild' }" @click="activeTab = 'guild'">{{ $t('community.editor.quickJumpSheet.guildStory') }}</button>
+              <button type="button" :class="{ active: activeTab === 'post' }" @click="activeTab = 'post'">{{ $t('community.editor.quickJumpSheet.publicPost') }}</button>
+              <button type="button" :class="{ active: activeTab === 'characterCard' }" @click="activeTab = 'characterCard'">{{ $t('community.editor.quickJumpSheet.characterCards') }}</button>
+              <button type="button" :class="{ active: activeTab === 'guildHome' }" @click="activeTab = 'guildHome'">{{ $t('community.editor.quickJumpSheet.guildHome') }}</button>
             </div>
 
             <div v-if="activeTab === 'post'" class="jump-search">
               <i class="ri-search-line" />
               <input v-model="postSearch" type="text" :placeholder="$t('community.editor.quickJumpSheet.searchPosts')">
+            </div>
+            <div v-else-if="activeTab === 'characterCard'" class="jump-search">
+              <i class="ri-search-line" />
+              <input v-model="characterCardSearch" type="search" :placeholder="$t('community.editor.quickJumpSheet.searchCharacterCards')">
             </div>
 
             <div class="sheet-body">
@@ -288,6 +343,27 @@ function escapeHtml(value: string) {
                 >
                   <strong>{{ post.title || $t('community.editor.quickJumpSheet.untitledPost') }}</strong>
                   <span>{{ resolveAuthorName(post) }} · {{ getPostLabel(post) }} · {{ formatShortDate(post.created_at) }}</span>
+                </button>
+              </template>
+
+              <template v-else-if="activeTab === 'characterCard'">
+                <div v-if="filteredCharacterCards.length === 0" class="jump-empty">
+                  {{ $t('community.editor.quickJumpSheet.emptyCharacterCards') }}
+                </div>
+                <button
+                  v-for="characterCard in filteredCharacterCards"
+                  v-else
+                  :key="characterCard.id"
+                  type="button"
+                  class="jump-item jump-item--character-card"
+                  @click="insertCharacterCard(characterCard)"
+                >
+                  <i class="ri-id-card-line" aria-hidden="true" />
+                  <span>
+                    <strong>{{ getCharacterCardName(characterCard) }}</strong>
+                    <small>{{ getCharacterCardSummary(characterCard) }}</small>
+                  </span>
+                  <i class="ri-add-circle-line" aria-hidden="true" />
                 </button>
               </template>
 
@@ -370,14 +446,21 @@ function escapeHtml(value: string) {
 }
 
 .tab-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 8px;
   margin-bottom: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-row::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-row button {
-  min-height: 34px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
   border: 1px solid var(--color-border);
   border-radius: 999px;
   background: var(--color-panel-bg);
@@ -400,6 +483,7 @@ function escapeHtml(value: string) {
   border-radius: 14px;
   padding: 9px 12px;
   background: var(--input-bg);
+  min-height: 44px;
 }
 
 .jump-search input {
@@ -431,6 +515,7 @@ function escapeHtml(value: string) {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-height: 56px;
 }
 
 .jump-item strong {
@@ -442,6 +527,48 @@ function escapeHtml(value: string) {
   font-size: 12px;
   color: var(--color-text-secondary);
   line-height: 1.4;
+}
+
+.jump-item--character-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 10px;
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border-light));
+}
+
+.jump-item--character-card > i:first-child {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-size: 18px;
+}
+
+.jump-item--character-card > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.jump-item--character-card strong,
+.jump-item--character-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jump-item--character-card small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.jump-item--character-card > i:last-child {
+  color: var(--color-accent);
+  font-size: 20px;
 }
 
 .jump-empty {

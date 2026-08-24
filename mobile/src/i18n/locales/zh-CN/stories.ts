@@ -77,5 +77,7 @@ export default {
     grouping: '分组',
     ungrouped: '未分组',
     clickToJump: '点击跳转',
+    openCharacterCard: '查看{name}的人物卡',
+    characterCardPortraitAlt: '{name}的人物卡头像',
   },
 }

@@ -25,6 +25,7 @@ export interface StoryEntry {
   source_id?: string
   type: 'dialogue' | 'narration' | 'image'
   character_id?: number | null
+  character_card_id?: number | null
   speaker: string
   content: string
   channel: string
@@ -35,12 +36,26 @@ export interface StoryEntry {
   created_at?: string
 }
 
+export interface CharacterCardSummary {
+  id: number
+  first_name: string
+  last_name: string
+  display_name: string
+  icon?: string
+  class_color?: string
+  name_color?: string
+  portrait_image_url?: string | null
+  portrait_image_updated_at?: string | null
+  updated_at?: string
+}
+
 export interface UpdateStoryEntryRequest {
   content?: string
   speaker?: string
   channel?: string
   type?: StoryEntry['type']
   character_id?: number | null
+  character_card_id?: number | null
   timestamp?: string
 }
 
@@ -64,7 +79,11 @@ export function listStories(params?: Record<string, string>) {
 }
 
 export function getStory(id: number) {
-  return request.get<{ story: Story; entries: StoryEntry[] }>(`/stories/${id}`)
+  return request.get<{
+    story: Story
+    entries: StoryEntry[]
+    character_cards?: Record<number, CharacterCardSummary>
+  }>(`/stories/${id}`)
 }
 
 export function updateStoryEntry(storyId: number, entryId: number, data: UpdateStoryEntryRequest) {

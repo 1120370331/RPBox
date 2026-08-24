@@ -172,7 +172,7 @@ export interface ReportReviewQueryParams {
   page_size?: number
   status?: 'pending' | 'resolved' | 'rejected' | 'archived' | 'all'
   target_scope?: 'user' | 'content' | 'comment' | 'story'
-  target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'rpdb_comment' | 'story' | 'rpdb_work'
+  target_type?: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'rpdb_comment' | 'story' | 'rpdb_work' | 'character_card' | 'guild'
   sort?: 'report_count' | 'latest_reported_at'
   order?: 'asc' | 'desc'
 }
@@ -189,7 +189,7 @@ export interface ReportReasonItem {
 
 export interface ReportReviewItem {
   id: number
-  target_type: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'rpdb_comment' | 'story' | 'rpdb_work'
+  target_type: 'post' | 'item' | 'user' | 'comment' | 'item_comment' | 'rpdb_comment' | 'story' | 'rpdb_work' | 'character_card' | 'guild'
   target_id: number
   target_user_id: number
   target_title: string

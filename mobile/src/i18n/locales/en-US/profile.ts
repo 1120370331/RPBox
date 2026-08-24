@@ -203,7 +203,14 @@ export default {
     },
     legal: {
       title: 'Terms & Privacy',
-      desc: 'You can review the latest Terms of Service and Privacy Policy at any time.',
+      desc: 'Review the in-app Terms, Privacy Policy, and the public privacy-policy page at any time.',
+      publicPrivacy: 'Public Privacy Policy',
+    },
+    support: {
+      title: 'Website & Support',
+      desc: 'Use the public support page for feature issues, safety reports, or account help. Do not post passwords or access tokens in a public issue.',
+      website: 'Official Website',
+      issues: 'Support & Feedback',
     },
     sponsors: {
       title: 'Sponsors',

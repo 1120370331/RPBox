@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -25,6 +26,14 @@ type accountDeletionCleanupPlan struct {
 	comments            []model.Comment
 	itemComments        []model.ItemComment
 	rpdbComments        []model.RPDBComment
+	rpdbWorks           []model.RPDBWork
+	rpdbDrafts          []model.RPDBDraft
+	rpdbReferences      []model.RPDBReference
+	rpdbMedia           []model.RPDBMedia
+	rpdbTransmogSlots   []model.RPDBTransmogSlot
+	rpdbGuideSteps      []model.RPDBGuideStep
+	rpdbRevisions       []model.RPDBRevision
+	rpdbSets            []model.RPDBSet
 	storyEntries        []model.StoryEntry
 	storyMusicTracks    []model.StoryMusicTrack
 	storyMusicPlaylists []model.StoryMusicPlaylist
@@ -217,9 +226,6 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	if err := itemCommentCleanupQuery.Find(&cleanupPlan.itemComments).Error; err != nil {
 		return err
 	}
-	if err := tx.Where("author_id = ?", userID).Find(&cleanupPlan.rpdbComments).Error; err != nil {
-		return err
-	}
 	if len(ownedStoryIDs) > 0 {
 		if err := tx.Where("story_id IN ?", ownedStoryIDs).Find(&cleanupPlan.storyEntries).Error; err != nil {
 			return err
@@ -286,6 +292,9 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 			return err
 		}
 		if err := tx.Where("tag_id IN ?", createdTagIDs).Delete(&model.PostTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tag_id IN ?", createdTagIDs).Delete(&model.RPDBTag{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("id IN ?", createdTagIDs).Delete(&model.Tag{}).Error; err != nil {
@@ -434,6 +443,10 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	}
 
 	if len(ownedGuildIDs) > 0 {
+		if err := tx.Where("target_type = ? AND target_id IN ?", "guild", ownedGuildIDs).
+			Delete(&model.ContentReport{}).Error; err != nil {
+			return fmt.Errorf("delete reports for removed guilds: %w", err)
+		}
 		if err := deleteGuildRecords(tx, ownedGuildIDs); err != nil {
 			return err
 		}
@@ -457,10 +470,8 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		}
 	}
 
-	for _, comment := range cleanupPlan.rpdbComments {
-		if err := deleteRPDBCommentRecord(tx, comment); err != nil {
-			return err
-		}
+	if err := deleteAccountRPDBData(tx, userID, cleanupPlan); err != nil {
+		return err
 	}
 
 	if err := tx.Where("user_id = ?", userID).Delete(&model.PostLike{}).Error; err != nil {
@@ -519,6 +530,10 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		return err
 	}
 	if len(cleanupPlan.characterCards) > 0 {
+		if err := tx.Where("target_type = ? AND target_id IN ?", "character_card", cardIDs).
+			Delete(&model.ContentReport{}).Error; err != nil {
+			return fmt.Errorf("delete reports for removed character cards: %w", err)
+		}
 		if err := tx.Where("character_card_id IN ?", characterCardIDs(cleanupPlan.characterCards)).Delete(&model.CharacterCardPublication{}).Error; err != nil {
 			return err
 		}
@@ -544,6 +559,15 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	if err := tx.Where("user_id = ?", userID).Delete(&model.ContentModerationViolation{}).Error; err != nil {
 		return err
 	}
+	if err := tx.Where("blocker_id = ? OR blocked_user_id = ?", userID, userID).Delete(&model.UserBlock{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("user_id = ?", userID).Delete(&model.UserHiddenContent{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("reporter_id = ?", userID).Delete(&model.ContentReport{}).Error; err != nil {
+		return err
+	}
 	if err := tx.Where("user_id = ? OR actor_id = ?", userID, userID).Delete(&model.Notification{}).Error; err != nil {
 		return err
 	}
@@ -562,6 +586,507 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	}
 
 	return anonymizeDeletedUser(tx, user)
+}
+
+// deleteAccountRPDBData removes private/account-specific RPDB data while
+// retaining only authored works that are already approved public knowledge.
+// The retained works continue to point at the anonymized user shell.
+func deleteAccountRPDBData(tx *gorm.DB, userID uint, cleanupPlan *accountDeletionCleanupPlan) error {
+	var ownedWorks []model.RPDBWork
+	if err := tx.Where("author_id = ?", userID).Find(&ownedWorks).Error; err != nil {
+		return fmt.Errorf("collect authored RPDB works: %w", err)
+	}
+
+	deletedWorkIDs := make([]uint, 0, len(ownedWorks))
+	retainedWorkIDs := make([]uint, 0, len(ownedWorks))
+	for _, work := range ownedWorks {
+		if isRetainableDeletedAccountRPDBWork(work) {
+			retainedWorkIDs = append(retainedWorkIDs, work.ID)
+			continue
+		}
+		deletedWorkIDs = append(deletedWorkIDs, work.ID)
+		cleanupPlan.rpdbWorks = append(cleanupPlan.rpdbWorks, work)
+	}
+
+	ownedListIDs, err := pluckUintIDs(tx, &model.RPDBList{}, "id", "user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB lists: %w", err)
+	}
+	ownedSetIDs, err := pluckUintIDs(tx, &model.RPDBSet{}, "id", "author_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB sets: %w", err)
+	}
+	if len(ownedSetIDs) > 0 {
+		if err := tx.Where("id IN ?", ownedSetIDs).Find(&cleanupPlan.rpdbSets).Error; err != nil {
+			return fmt.Errorf("collect authored RPDB sets for cleanup: %w", err)
+		}
+	}
+
+	if err := tx.Where("author_id = ?", userID).Find(&cleanupPlan.rpdbDrafts).Error; err != nil {
+		return fmt.Errorf("collect RPDB drafts for cleanup: %w", err)
+	}
+
+	if len(deletedWorkIDs) > 0 {
+		if err := tx.Where("work_id IN ?", deletedWorkIDs).Find(&cleanupPlan.rpdbReferences).Error; err != nil {
+			return fmt.Errorf("collect RPDB references for cleanup: %w", err)
+		}
+		if err := tx.Where("work_id IN ?", deletedWorkIDs).Find(&cleanupPlan.rpdbMedia).Error; err != nil {
+			return fmt.Errorf("collect RPDB media for cleanup: %w", err)
+		}
+		if err := tx.Where("work_id IN ?", deletedWorkIDs).Find(&cleanupPlan.rpdbTransmogSlots).Error; err != nil {
+			return fmt.Errorf("collect RPDB transmog slots for cleanup: %w", err)
+		}
+		if err := tx.Where("work_id IN ?", deletedWorkIDs).Find(&cleanupPlan.rpdbGuideSteps).Error; err != nil {
+			return fmt.Errorf("collect RPDB guide steps for cleanup: %w", err)
+		}
+	}
+
+	revisionQuery := tx.Where("proposer_id = ?", userID)
+	if len(deletedWorkIDs) > 0 {
+		revisionQuery = tx.Where("proposer_id = ? OR work_id IN ?", userID, deletedWorkIDs)
+	}
+	if err := revisionQuery.Find(&cleanupPlan.rpdbRevisions).Error; err != nil {
+		return fmt.Errorf("collect RPDB revisions for cleanup: %w", err)
+	}
+
+	var contributedMedia []model.RPDBMedia
+	contributedMediaQuery := tx.Where("author_id = ?", userID)
+	if len(deletedWorkIDs) > 0 {
+		contributedMediaQuery = contributedMediaQuery.Where("work_id NOT IN ?", deletedWorkIDs)
+	}
+	if err := contributedMediaQuery.Find(&contributedMedia).Error; err != nil {
+		return fmt.Errorf("collect contributed RPDB media: %w", err)
+	}
+	contributedWorkIDs := make([]uint, 0, len(contributedMedia))
+	for _, media := range contributedMedia {
+		contributedWorkIDs = append(contributedWorkIDs, media.WorkID)
+	}
+	var contributedWorks []model.RPDBWork
+	if len(contributedWorkIDs) > 0 {
+		if err := tx.Where("id IN ?", uniqueUintValues(contributedWorkIDs)).Find(&contributedWorks).Error; err != nil {
+			return fmt.Errorf("collect contributed-media RPDB works: %w", err)
+		}
+	}
+	contributedWorkByID := make(map[uint]model.RPDBWork, len(contributedWorks))
+	for _, work := range contributedWorks {
+		contributedWorkByID[work.ID] = work
+	}
+	retainedContributedMediaIDs := make([]uint, 0, len(contributedMedia))
+	deletedContributedMediaIDs := make([]uint, 0, len(contributedMedia))
+	deletedContributedMediaWorkIDs := make([]uint, 0, len(contributedMedia))
+	for _, media := range contributedMedia {
+		work, exists := contributedWorkByID[media.WorkID]
+		if exists && isRetainableDeletedAccountRPDBWork(work) {
+			retainedContributedMediaIDs = append(retainedContributedMediaIDs, media.ID)
+			continue
+		}
+		deletedContributedMediaIDs = append(deletedContributedMediaIDs, media.ID)
+		deletedContributedMediaWorkIDs = append(deletedContributedMediaWorkIDs, media.WorkID)
+		cleanupPlan.rpdbMedia = append(cleanupPlan.rpdbMedia, media)
+	}
+
+	commentQuery := tx.Where("author_id = ?", userID)
+	if len(deletedWorkIDs) > 0 {
+		commentQuery = tx.Where("author_id = ? OR work_id IN ?", userID, deletedWorkIDs)
+	}
+	if err := commentQuery.Find(&cleanupPlan.rpdbComments).Error; err != nil {
+		return fmt.Errorf("collect RPDB comments for cleanup: %w", err)
+	}
+	removedCommentIDs := rpdbCommentIDs(cleanupPlan.rpdbComments)
+	removedCommentWorkIDs := rpdbCommentWorkIDs(cleanupPlan.rpdbComments)
+
+	rpdbLikeWorkIDs, err := pluckUintIDs(tx, &model.RPDBLike{}, "work_id", "user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB likes: %w", err)
+	}
+	rpdbFavoriteWorkIDs, err := pluckUintIDs(tx, &model.RPDBFavorite{}, "work_id", "user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB favorites: %w", err)
+	}
+	rpdbViewWorkIDs, err := pluckUintIDs(tx, &model.RPDBView{}, "work_id", "user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB views: %w", err)
+	}
+	rpdbViewEventWorkIDs, err := pluckUintIDs(tx, &model.RPDBViewEvent{}, "work_id", "user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB view events: %w", err)
+	}
+	rpdbVerificationWorkIDs, err := pluckUintIDs(tx, &model.RPDBVerification{}, "work_id", "user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB verifications: %w", err)
+	}
+	rpdbCommentLikeIDs, err := pluckUintIDs(tx, &model.RPDBCommentLike{}, "comment_id", "user_id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("collect RPDB comment likes: %w", err)
+	}
+
+	var ownedListWorkIDs []uint
+	if len(ownedListIDs) > 0 {
+		ownedListWorkIDs, err = pluckUintIDs(tx, &model.RPDBListEntry{}, "work_id", "list_id IN ?", ownedListIDs)
+		if err != nil {
+			return fmt.Errorf("collect deleted-list RPDB works: %w", err)
+		}
+	}
+	var affectedListIDs []uint
+	if len(deletedWorkIDs) > 0 {
+		affectedListIDs, err = pluckUintIDs(tx, &model.RPDBListEntry{}, "list_id", "work_id IN ?", deletedWorkIDs)
+		if err != nil {
+			return fmt.Errorf("collect RPDB lists affected by deleted works: %w", err)
+		}
+	}
+	var affectedSetIDs []uint
+	if len(deletedWorkIDs) > 0 {
+		affectedSetIDs, err = pluckUintIDs(tx, &model.RPDBSetWork{}, "set_id", "work_id IN ?", deletedWorkIDs)
+		if err != nil {
+			return fmt.Errorf("collect RPDB sets affected by deleted works: %w", err)
+		}
+	}
+
+	affectedWorkIDs := uniqueUintValues(
+		retainedWorkIDs,
+		removedCommentWorkIDs,
+		rpdbLikeWorkIDs,
+		rpdbFavoriteWorkIDs,
+		rpdbViewWorkIDs,
+		rpdbViewEventWorkIDs,
+		rpdbVerificationWorkIDs,
+		ownedListWorkIDs,
+		deletedContributedMediaWorkIDs,
+	)
+
+	if len(removedCommentIDs) > 0 {
+		if err := deleteNotificationsByTarget(tx, "rpdb_comment", removedCommentIDs); err != nil {
+			return fmt.Errorf("delete RPDB comment notifications: %w", err)
+		}
+		if err := tx.Where("target_type = ? AND target_id IN ?", "rpdb_comment", removedCommentIDs).
+			Delete(&model.UserHiddenContent{}).Error; err != nil {
+			return fmt.Errorf("delete hidden RPDB comment references: %w", err)
+		}
+		if err := tx.Where("target_type = ? AND target_id IN ?", "rpdb_comment", removedCommentIDs).
+			Delete(&model.ContentReport{}).Error; err != nil {
+			return fmt.Errorf("delete reports for removed RPDB comments: %w", err)
+		}
+	}
+	if err := deleteAccountRPDBComments(tx, cleanupPlan.rpdbComments); err != nil {
+		return err
+	}
+	if err := tx.Where("user_id = ?", userID).Delete(&model.RPDBCommentLike{}).Error; err != nil {
+		return fmt.Errorf("delete RPDB comment likes: %w", err)
+	}
+
+	if len(cleanupPlan.rpdbDrafts) > 0 {
+		if err := tx.Where("id IN ?", rpdbDraftIDs(cleanupPlan.rpdbDrafts)).Delete(&model.RPDBDraft{}).Error; err != nil {
+			return fmt.Errorf("delete RPDB drafts: %w", err)
+		}
+	}
+	if len(deletedWorkIDs) > 0 {
+		if err := tx.Model(&model.RPDBDraft{}).
+			Where("work_id IN ?", deletedWorkIDs).
+			Updates(map[string]interface{}{"work_id": nil, "base_version": 0}).Error; err != nil {
+			return fmt.Errorf("detach other users' RPDB drafts from deleted works: %w", err)
+		}
+	}
+	if len(cleanupPlan.rpdbRevisions) > 0 {
+		if err := tx.Where("id IN ?", rpdbRevisionIDs(cleanupPlan.rpdbRevisions)).Delete(&model.RPDBRevision{}).Error; err != nil {
+			return fmt.Errorf("delete RPDB revisions: %w", err)
+		}
+	}
+	if len(deletedContributedMediaIDs) > 0 {
+		if err := tx.Where("id IN ?", deletedContributedMediaIDs).Delete(&model.RPDBMedia{}).Error; err != nil {
+			return fmt.Errorf("delete non-public contributed RPDB media: %w", err)
+		}
+	}
+
+	if len(deletedWorkIDs) > 0 {
+		if err := deleteNotificationsByTarget(tx, "rpdb_work", deletedWorkIDs); err != nil {
+			return fmt.Errorf("delete RPDB work notifications: %w", err)
+		}
+		if err := tx.Where("target_type = ? AND target_id IN ?", "rpdb_work", deletedWorkIDs).
+			Delete(&model.UserHiddenContent{}).Error; err != nil {
+			return fmt.Errorf("delete hidden RPDB work references: %w", err)
+		}
+		if err := tx.Where("target_type = ? AND target_id IN ?", "rpdb_work", deletedWorkIDs).
+			Delete(&model.ContentReport{}).Error; err != nil {
+			return fmt.Errorf("delete reports for removed RPDB works: %w", err)
+		}
+		if err := tx.Where("work_id IN ?", deletedWorkIDs).Delete(&model.RPDBListEntry{}).Error; err != nil {
+			return fmt.Errorf("delete RPDB list entries for deleted works: %w", err)
+		}
+		if err := tx.Where("work_id IN ?", deletedWorkIDs).Delete(&model.RPDBSetWork{}).Error; err != nil {
+			return fmt.Errorf("delete RPDB set entries for deleted works: %w", err)
+		}
+		for _, target := range []interface{}{
+			&model.RPDBReference{},
+			&model.RPDBMedia{},
+			&model.RPDBTransmogSlot{},
+			&model.RPDBGuideStep{},
+			&model.RPDBTag{},
+			&model.RPDBLike{},
+			&model.RPDBFavorite{},
+			&model.RPDBView{},
+			&model.RPDBViewEvent{},
+			&model.RPDBVerification{},
+		} {
+			if err := tx.Where("work_id IN ?", deletedWorkIDs).Delete(target).Error; err != nil {
+				return fmt.Errorf("delete RPDB work dependency: %w", err)
+			}
+		}
+		if err := tx.Where("id IN ?", deletedWorkIDs).Delete(&model.RPDBWork{}).Error; err != nil {
+			return fmt.Errorf("delete private RPDB works: %w", err)
+		}
+	}
+
+	if len(ownedListIDs) > 0 {
+		if err := tx.Where("list_id IN ?", ownedListIDs).Delete(&model.RPDBListEntry{}).Error; err != nil {
+			return fmt.Errorf("delete account RPDB list entries: %w", err)
+		}
+		if err := tx.Where("id IN ?", ownedListIDs).Delete(&model.RPDBList{}).Error; err != nil {
+			return fmt.Errorf("delete account RPDB lists: %w", err)
+		}
+	}
+	if len(ownedSetIDs) > 0 {
+		if err := tx.Where("set_id IN ?", ownedSetIDs).Delete(&model.RPDBSetWork{}).Error; err != nil {
+			return fmt.Errorf("delete account RPDB set entries: %w", err)
+		}
+		if err := tx.Where("id IN ?", ownedSetIDs).Delete(&model.RPDBSet{}).Error; err != nil {
+			return fmt.Errorf("delete account RPDB sets: %w", err)
+		}
+	}
+
+	for _, target := range []interface{}{
+		&model.RPDBLike{},
+		&model.RPDBFavorite{},
+		&model.RPDBView{},
+		&model.RPDBViewEvent{},
+		&model.RPDBVerification{},
+	} {
+		if err := tx.Where("user_id = ?", userID).Delete(target).Error; err != nil {
+			return fmt.Errorf("delete account RPDB interaction: %w", err)
+		}
+	}
+	if len(retainedContributedMediaIDs) > 0 {
+		if err := tx.Model(&model.RPDBMedia{}).Where("id IN ?", retainedContributedMediaIDs).Update("author_id", nil).Error; err != nil {
+			return fmt.Errorf("anonymize retained RPDB media: %w", err)
+		}
+	}
+
+	if err := recalculateRPDBCommentLikeCounts(tx, rpdbCommentLikeIDs); err != nil {
+		return err
+	}
+	if err := recalculateRPDBListItemCounts(tx, affectedListIDs); err != nil {
+		return err
+	}
+	if err := recalculateRPDBSetItemCounts(tx, affectedSetIDs); err != nil {
+		return err
+	}
+	if err := recalculateRPDBWorkMetrics(tx, affectedWorkIDs); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isRetainableDeletedAccountRPDBWork(work model.RPDBWork) bool {
+	return work.Status == model.RPDBStatusPublished &&
+		work.ReviewStatus == model.RPDBReviewApproved &&
+		work.IsPublic &&
+		work.Visibility == model.RPDBVisibilityPublic
+}
+
+func deleteAccountRPDBComments(tx *gorm.DB, comments []model.RPDBComment) error {
+	commentIDs := rpdbCommentIDs(comments)
+	if len(commentIDs) == 0 {
+		return nil
+	}
+
+	deletedParents := make(map[uint]*uint, len(comments))
+	for _, comment := range comments {
+		deletedParents[comment.ID] = comment.ParentID
+	}
+	resolveSurvivingParent := func(parentID *uint) *uint {
+		seen := make(map[uint]struct{}, len(deletedParents))
+		for parentID != nil {
+			if _, repeated := seen[*parentID]; repeated {
+				return nil
+			}
+			seen[*parentID] = struct{}{}
+			next, deleted := deletedParents[*parentID]
+			if !deleted {
+				resolved := *parentID
+				return &resolved
+			}
+			parentID = next
+		}
+		return nil
+	}
+
+	var survivingChildren []model.RPDBComment
+	if err := tx.Where("parent_id IN ? AND id NOT IN ?", commentIDs, commentIDs).Find(&survivingChildren).Error; err != nil {
+		return fmt.Errorf("collect surviving RPDB comment replies: %w", err)
+	}
+	for _, child := range survivingChildren {
+		if err := tx.Model(&model.RPDBComment{}).Where("id = ?", child.ID).
+			Update("parent_id", resolveSurvivingParent(child.ParentID)).Error; err != nil {
+			return fmt.Errorf("reparent surviving RPDB comment %d: %w", child.ID, err)
+		}
+	}
+	if err := tx.Where("comment_id IN ?", commentIDs).Delete(&model.RPDBCommentLike{}).Error; err != nil {
+		return fmt.Errorf("delete likes on removed RPDB comments: %w", err)
+	}
+	if err := tx.Where("id IN ?", commentIDs).Delete(&model.RPDBComment{}).Error; err != nil {
+		return fmt.Errorf("delete RPDB comments: %w", err)
+	}
+	return nil
+}
+
+func recalculateRPDBCommentLikeCounts(tx *gorm.DB, commentIDs []uint) error {
+	for _, commentID := range uniqueUintValues(commentIDs) {
+		var count int64
+		if err := tx.Model(&model.RPDBCommentLike{}).Where("comment_id = ?", commentID).Count(&count).Error; err != nil {
+			return fmt.Errorf("count RPDB comment likes for %d: %w", commentID, err)
+		}
+		if err := tx.Model(&model.RPDBComment{}).Where("id = ?", commentID).Update("like_count", count).Error; err != nil {
+			return fmt.Errorf("update RPDB comment likes for %d: %w", commentID, err)
+		}
+	}
+	return nil
+}
+
+func recalculateRPDBListItemCounts(tx *gorm.DB, listIDs []uint) error {
+	for _, listID := range uniqueUintValues(listIDs) {
+		var count int64
+		if err := tx.Model(&model.RPDBListEntry{}).Where("list_id = ?", listID).Count(&count).Error; err != nil {
+			return fmt.Errorf("count RPDB list entries for %d: %w", listID, err)
+		}
+		if err := tx.Model(&model.RPDBList{}).Where("id = ?", listID).Update("item_count", count).Error; err != nil {
+			return fmt.Errorf("update RPDB list item count for %d: %w", listID, err)
+		}
+	}
+	return nil
+}
+
+func recalculateRPDBSetItemCounts(tx *gorm.DB, setIDs []uint) error {
+	for _, setID := range uniqueUintValues(setIDs) {
+		var count int64
+		if err := tx.Model(&model.RPDBSetWork{}).Where("set_id = ?", setID).Count(&count).Error; err != nil {
+			return fmt.Errorf("count RPDB set entries for %d: %w", setID, err)
+		}
+		if err := tx.Model(&model.RPDBSet{}).Where("id = ?", setID).Update("item_count", count).Error; err != nil {
+			return fmt.Errorf("update RPDB set item count for %d: %w", setID, err)
+		}
+	}
+	return nil
+}
+
+func recalculateRPDBWorkMetrics(tx *gorm.DB, workIDs []uint) error {
+	for _, workID := range uniqueUintValues(workIDs) {
+		count := func(target interface{}, query string, args ...interface{}) (int64, error) {
+			var value int64
+			err := tx.Model(target).Where(query, args...).Count(&value).Error
+			return value, err
+		}
+
+		likeCount, err := count(&model.RPDBLike{}, "work_id = ?", workID)
+		if err != nil {
+			return fmt.Errorf("count RPDB likes for work %d: %w", workID, err)
+		}
+		favoriteCount, err := count(&model.RPDBFavorite{}, "work_id = ?", workID)
+		if err != nil {
+			return fmt.Errorf("count RPDB favorites for work %d: %w", workID, err)
+		}
+		viewCount, err := count(&model.RPDBViewEvent{}, "work_id = ?", workID)
+		if err != nil {
+			return fmt.Errorf("count RPDB view events for work %d: %w", workID, err)
+		}
+		var commentCount int64
+		if err := visibleCommentImages(tx.Model(&model.RPDBComment{})).
+			Where("work_id = ? AND status = ?", workID, model.RPDBStatusPublished).
+			Count(&commentCount).Error; err != nil {
+			return fmt.Errorf("count RPDB comments for work %d: %w", workID, err)
+		}
+		listCount, err := count(&model.RPDBListEntry{}, "work_id = ?", workID)
+		if err != nil {
+			return fmt.Errorf("count RPDB list entries for work %d: %w", workID, err)
+		}
+		mediaCount, err := count(&model.RPDBMedia{}, "work_id = ?", workID)
+		if err != nil {
+			return fmt.Errorf("count RPDB media for work %d: %w", workID, err)
+		}
+		verifiedCount, err := count(&model.RPDBVerification{}, "work_id = ? AND result = ?", workID, "valid")
+		if err != nil {
+			return fmt.Errorf("count valid RPDB verifications for work %d: %w", workID, err)
+		}
+		outdatedCount, err := count(&model.RPDBVerification{}, "work_id = ? AND result = ?", workID, "outdated")
+		if err != nil {
+			return fmt.Errorf("count outdated RPDB verifications for work %d: %w", workID, err)
+		}
+
+		verificationStatus := model.RPDBVerificationUnverified
+		if verifiedCount >= 2 && verifiedCount > outdatedCount {
+			verificationStatus = model.RPDBVerificationVerified
+		} else if outdatedCount > verifiedCount && outdatedCount >= 1 {
+			verificationStatus = model.RPDBVerificationStale
+		} else if verifiedCount > 0 && outdatedCount > 0 {
+			verificationStatus = model.RPDBVerificationDisputed
+		}
+		updates := map[string]interface{}{
+			"like_count":          likeCount,
+			"favorite_count":      favoriteCount,
+			"view_count":          viewCount,
+			"comment_count":       commentCount,
+			"list_count":          listCount,
+			"media_count":         mediaCount,
+			"verified_count":      verifiedCount,
+			"outdated_count":      outdatedCount,
+			"verification_status": verificationStatus,
+			"last_verified_at":    nil,
+		}
+		if verifiedCount > 0 {
+			var latest model.RPDBVerification
+			if err := tx.Select("updated_at").
+				Where("work_id = ? AND result = ?", workID, "valid").
+				Order("updated_at DESC").First(&latest).Error; err != nil {
+				return fmt.Errorf("load latest RPDB verification for work %d: %w", workID, err)
+			}
+			updates["last_verified_at"] = latest.UpdatedAt
+		}
+		if err := tx.Model(&model.RPDBWork{}).Where("id = ?", workID).Updates(updates).Error; err != nil {
+			return fmt.Errorf("update RPDB metrics for work %d: %w", workID, err)
+		}
+	}
+	return nil
+}
+
+func rpdbCommentIDs(comments []model.RPDBComment) []uint {
+	ids := make([]uint, 0, len(comments))
+	for _, comment := range comments {
+		ids = append(ids, comment.ID)
+	}
+	return ids
+}
+
+func rpdbCommentWorkIDs(comments []model.RPDBComment) []uint {
+	ids := make([]uint, 0, len(comments))
+	for _, comment := range comments {
+		ids = append(ids, comment.WorkID)
+	}
+	return ids
+}
+
+func rpdbDraftIDs(drafts []model.RPDBDraft) []uint {
+	ids := make([]uint, 0, len(drafts))
+	for _, draft := range drafts {
+		ids = append(ids, draft.ID)
+	}
+	return ids
+}
+
+func rpdbRevisionIDs(revisions []model.RPDBRevision) []uint {
+	ids := make([]uint, 0, len(revisions))
+	for _, revision := range revisions {
+		ids = append(ids, revision.ID)
+	}
+	return ids
 }
 
 func anonymizeDeletedUser(tx *gorm.DB, user model.User) error {
@@ -619,6 +1144,7 @@ func anonymizeDeletedUser(tx *gorm.DB, user model.User) error {
 
 func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeletionCleanupPlan) {
 	keys := make(map[string]struct{})
+	rpdbKeys := make(map[string]struct{})
 	commentImageURLs := make([]string, 0, len(plan.comments)+len(plan.itemComments)+len(plan.rpdbComments))
 
 	collectUploadKeysFromValue(c, plan.user.Avatar, keys)
@@ -661,6 +1187,50 @@ func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeleti
 		}
 	}
 
+	for _, work := range plan.rpdbWorks {
+		collectUploadKeysFromValue(c, work.CoverImage, rpdbKeys)
+		collectUploadKeysFromContent(c, work.Content, rpdbKeys)
+		collectUploadKeysFromContent(c, work.RPUseCases, rpdbKeys)
+		collectUploadKeysFromContent(c, work.EffectDescription, rpdbKeys)
+		collectRPDBStructuredUploadKeys(c, work.Restrictions, rpdbKeys)
+		collectRPDBStructuredUploadKeys(c, work.Extra, rpdbKeys)
+	}
+	for _, draft := range plan.rpdbDrafts {
+		collectUploadKeysFromValue(c, draft.CoverImage, rpdbKeys)
+		collectRPDBStructuredUploadKeys(c, draft.Payload, rpdbKeys)
+	}
+	for _, reference := range plan.rpdbReferences {
+		collectUploadKeysFromValue(c, reference.Icon, rpdbKeys)
+		collectUploadKeysFromValue(c, reference.URL, rpdbKeys)
+		collectUploadKeysFromContent(c, reference.Description, rpdbKeys)
+		collectUploadKeysFromContent(c, reference.AcquisitionMethod, rpdbKeys)
+	}
+	for _, media := range plan.rpdbMedia {
+		collectUploadKeysFromValue(c, media.URL, rpdbKeys)
+		collectUploadKeysFromValue(c, media.ThumbnailURL, rpdbKeys)
+		collectRPDBStructuredUploadKeys(c, media.Meta, rpdbKeys)
+	}
+	for _, slot := range plan.rpdbTransmogSlots {
+		collectUploadKeysFromValue(c, slot.WowheadURL, rpdbKeys)
+		collectUploadKeysFromContent(c, slot.Description, rpdbKeys)
+		collectUploadKeysFromContent(c, slot.Note, rpdbKeys)
+	}
+	for _, step := range plan.rpdbGuideSteps {
+		collectUploadKeysFromContent(c, step.Body, rpdbKeys)
+		collectRPDBStructuredUploadKeys(c, step.Meta, rpdbKeys)
+	}
+	for _, revision := range plan.rpdbRevisions {
+		collectRPDBStructuredUploadKeys(c, revision.Payload, rpdbKeys)
+		collectUploadKeysFromValue(c, revision.ChangeSummary, rpdbKeys)
+		collectUploadKeysFromContent(c, revision.ChangeSummary, rpdbKeys)
+		collectUploadKeysFromValue(c, revision.ReviewComment, rpdbKeys)
+		collectUploadKeysFromContent(c, revision.ReviewComment, rpdbKeys)
+	}
+	for _, set := range plan.rpdbSets {
+		collectUploadKeysFromValue(c, set.CoverImage, rpdbKeys)
+		collectUploadKeysFromContent(c, set.Description, rpdbKeys)
+	}
+
 	for _, entry := range plan.storyEntries {
 		collectUploadKeysFromValue(c, entry.Content, keys)
 		collectUploadKeysFromContent(c, entry.Content, keys)
@@ -693,8 +1263,92 @@ func (s *Server) cleanupDeletedAccountUploads(c *gin.Context, plan accountDeleti
 	}
 
 	s.deleteUploadKeys(keys)
+	s.deleteUnreferencedRPDBUploadKeys(rpdbKeys)
 	_ = s.cleanupCharacterCardUserStorage(plan.user.ID)
 	s.cleanupCommentImageURLs(nil, commentImageURLs...)
+}
+
+func collectRPDBStructuredUploadKeys(c *gin.Context, raw string, keys map[string]struct{}) {
+	if strings.TrimSpace(raw) == "" {
+		return
+	}
+	var value interface{}
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		collectUploadKeysFromContent(c, raw, keys)
+		collectUploadKeysFromValue(c, raw, keys)
+		return
+	}
+	collectRPDBStructuredUploadValue(c, value, keys)
+}
+
+func collectRPDBStructuredUploadValue(c *gin.Context, value interface{}, keys map[string]struct{}) {
+	switch typed := value.(type) {
+	case string:
+		collectUploadKeysFromValue(c, typed, keys)
+		collectUploadKeysFromContent(c, typed, keys)
+	case []interface{}:
+		for _, entry := range typed {
+			collectRPDBStructuredUploadValue(c, entry, keys)
+		}
+	case map[string]interface{}:
+		for _, entry := range typed {
+			collectRPDBStructuredUploadValue(c, entry, keys)
+		}
+	}
+}
+
+func (s *Server) deleteUnreferencedRPDBUploadKeys(keys map[string]struct{}) {
+	for key := range keys {
+		if isRPDBUploadKeyReferenced(key) {
+			continue
+		}
+		s.deleteUploadKey(key)
+	}
+}
+
+func isRPDBUploadKeyReferenced(key string) bool {
+	if key == "" || database.DB == nil {
+		return true
+	}
+	patterns := uploadKeyMatchPatterns(key)
+	if len(patterns) == 0 {
+		return true
+	}
+
+	targets := []struct {
+		model   interface{}
+		columns []string
+	}{
+		{&model.RPDBWork{}, []string{"cover_image", "content", "rp_use_cases", "effect_description", "restrictions", "extra"}},
+		{&model.RPDBDraft{}, []string{"cover_image", "payload"}},
+		{&model.RPDBReference{}, []string{"icon", "url", "description", "acquisition_method"}},
+		{&model.RPDBMedia{}, []string{"url", "thumbnail_url", "meta"}},
+		{&model.RPDBTransmogSlot{}, []string{"wowhead_url", "description", "note"}},
+		{&model.RPDBGuideStep{}, []string{"body", "meta"}},
+		{&model.RPDBRevision{}, []string{"payload", "change_summary", "review_comment"}},
+		{&model.RPDBSet{}, []string{"cover_image", "description"}},
+		{&model.RPDBComment{}, []string{"image_url"}},
+	}
+	for _, target := range targets {
+		clauses := make([]string, 0, len(target.columns)*len(patterns))
+		args := make([]interface{}, 0, len(target.columns)*len(patterns))
+		for _, pattern := range patterns {
+			for _, column := range target.columns {
+				clauses = append(clauses, "CAST("+column+" AS TEXT) LIKE ?")
+				args = append(args, pattern)
+			}
+		}
+		var count int64
+		if err := database.DB.Model(target.model).
+			Where("("+strings.Join(clauses, " OR ")+")", args...).
+			Limit(1).Count(&count).Error; err != nil {
+			return true
+		}
+		if count > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func deleteNotificationsByTarget(tx *gorm.DB, targetType string, ids []uint) error {
