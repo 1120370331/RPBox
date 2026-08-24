@@ -19,17 +19,26 @@ on:
       groups:
         description: 'Comma separated TestFlight groups (optional)'
         required: false
+      deploy_public_metadata:
+        description: 'Deploy latest-ios.json only after this version is already public on the App Store'
+        type: boolean
+        required: false
+        default: false
 
 env:
   NODE_VERSION: '20'
   XCODE_WORKSPACE: 'mobile/ios/App/App.xcworkspace'
   XCODE_SCHEME: 'App'
+  IOS_DEFAULT_API_BASE: 'https://ksxvodevhonx.sealosbja.site/api/v1'
+  IOS_APP_STORE_ID: '6761112311'
   IOS_DEFAULT_PUBLIC_URL: 'https://apps.apple.com/cn/app/rpbox/id6761112311'
 
 jobs:
   build-and-upload:
     name: Build and Upload to TestFlight
     runs-on: macos-latest
+    timeout-minutes: 90
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.deploy_public_metadata }}
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
 
@@ -71,10 +80,12 @@ jobs:
       - name: Resolve version
         id: version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
         run: |
           set -euo pipefail
 
-          INPUT_VERSION="${{ github.event.inputs.version }}"
           if [ -n "${INPUT_VERSION:-}" ]; then
             VERSION="$INPUT_VERSION"
           elif [[ "${GITHUB_REF:-}" == refs/tags/ios-v* ]]; then
@@ -85,12 +96,16 @@ jobs:
             VERSION="$(node -p "require('./mobile/package.json').version")"
           fi
 
+          TRACKED_VERSION="$(node -p "require('./mobile/package.json').version")"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid version: $VERSION"
             exit 1
           fi
+          if [ "$VERSION" != "$TRACKED_VERSION" ]; then
+            echo "Requested iOS version must exactly match mobile/package.json"
+            exit 1
+          fi
 
-          INPUT_BUILD_NUMBER="${{ github.event.inputs.build_number }}"
           if [ -n "${INPUT_BUILD_NUMBER:-}" ]; then
             BUILD_NUMBER="$INPUT_BUILD_NUMBER"
           else
@@ -109,24 +124,37 @@ jobs:
       - name: Resolve release notes
         id: notes
         shell: bash
+        env:
+          INPUT_NOTES: ${{ inputs.release_notes }}
         run: |
           set -euo pipefail
-          INPUT_NOTES="${{ github.event.inputs.release_notes }}"
           VERSION="${{ steps.version.outputs.VERSION }}"
           NOTES_FILE="mobile/release-notes/${VERSION}.txt"
 
-          if [ -n "${INPUT_NOTES:-}" ]; then
-            NOTES="$INPUT_NOTES"
-          elif [ -f "$NOTES_FILE" ]; then
-            NOTES="$(cat "$NOTES_FILE")"
-          else
-            NOTES="iOS build ${VERSION}"
+          if [ ! -f "$NOTES_FILE" ] || ! grep -q '[^[:space:]]' "$NOTES_FILE"; then
+            echo "Release notes file is missing or empty: $NOTES_FILE"
+            exit 1
           fi
 
+          if [ -n "${INPUT_NOTES:-}" ]; then
+            NOTES="$INPUT_NOTES"
+          else
+            NOTES="$(cat "$NOTES_FILE")"
+          fi
+          if ! grep -q '[^[:space:]]' <<< "$NOTES"; then
+            echo "Resolved release notes must not be empty"
+            exit 1
+          fi
+
+          NOTES_DELIMITER="RPBOX_NOTES_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if grep -Fxq "$NOTES_DELIMITER" <<< "$NOTES"; then
+            echo "Resolved release notes contain the reserved output delimiter"
+            exit 1
+          fi
           {
-            echo "NOTES<<EOF"
+            echo "NOTES<<$NOTES_DELIMITER"
             echo "$NOTES"
-            echo "EOF"
+            echo "$NOTES_DELIMITER"
           } >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
@@ -134,19 +162,61 @@ jobs:
 
       - name: Test mobile application
         run: |
+          node --test mobile/scripts/iosCompliance.test.mjs
           pnpm --filter rpbox-mobile test
           pnpm --filter rpbox-mobile type-check
 
-      - name: Build mobile web assets
+      - name: Resolve mobile API
         shell: bash
         env:
           VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
         run: |
           set -euo pipefail
           if [ -z "${VITE_API_BASE:-}" ]; then
-            VITE_API_BASE="https://ksxvodevhonx.sealosbja.site/api/v1"
+            VITE_API_BASE="${{ env.IOS_DEFAULT_API_BASE }}"
           fi
+          VITE_API_BASE="$(IOS_API_BASE="$VITE_API_BASE" node ./mobile/scripts/iosCompliance.mjs validate-api-base)"
           export VITE_API_BASE
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+
+          const apiBase = new URL(process.env.VITE_API_BASE)
+          const apiPrefix = apiBase.pathname.replace(/\/+$/, '')
+          const healthUrl = new URL('/health', apiBase.origin)
+          const databaseUrl = new URL(`${apiPrefix}/rpdb/works`, apiBase.origin)
+          databaseUrl.searchParams.set('page', '1')
+          databaseUrl.searchParams.set('page_size', '1')
+
+          fs.appendFileSync(
+            process.env.GITHUB_ENV,
+            `VITE_API_BASE=${apiBase.href}\nIOS_EXPECTED_API_BASE=${apiBase.href}\nIOS_API_HEALTH_URL=${healthUrl.href}\nIOS_API_DATABASE_URL=${databaseUrl.href}\n`,
+          )
+          NODE
+
+      - name: Preflight production API
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEALTH_RESPONSE="$RUNNER_TEMP/ios-api-health.json"
+          DATABASE_RESPONSE="$RUNNER_TEMP/ios-api-database.json"
+          CURL_OPTIONS=(--fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 30 --retry 2)
+
+          curl "${CURL_OPTIONS[@]}" "$IOS_API_HEALTH_URL" --output "$HEALTH_RESPONSE"
+          curl "${CURL_OPTIONS[@]}" -H 'Accept: application/json' "$IOS_API_DATABASE_URL" --output "$DATABASE_RESPONSE"
+
+          HEALTH_RESPONSE="$HEALTH_RESPONSE" DATABASE_RESPONSE="$DATABASE_RESPONSE" node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+
+          const health = JSON.parse(fs.readFileSync(process.env.HEALTH_RESPONSE, 'utf8'))
+          const database = JSON.parse(fs.readFileSync(process.env.DATABASE_RESPONSE, 'utf8'))
+          if (health?.status !== 'ok') throw new Error('Production API health response is not healthy')
+          if (!Array.isArray(database?.works)) throw new Error('Production API RPDB response is not DB-backed work data')
+          NODE
+
+      - name: Build mobile web assets
+        shell: bash
+        run: |
+          set -euo pipefail
           pnpm --filter rpbox-mobile build
 
       - name: Prepare iOS project
@@ -166,16 +236,21 @@ jobs:
           test -f ios/App/Podfile.lock
           test -f ios/App/Pods/Manifest.lock
 
-      - name: Verify iOS camera setup
+      - name: Verify iOS privacy and camera setup
         shell: bash
         run: |
           set -euo pipefail
           INFO_PLIST="mobile/ios/App/App/Info.plist"
+          PRIVACY_MANIFEST="mobile/ios/App/App/PrivacyInfo.xcprivacy"
           CAP_CONFIG="mobile/ios/App/App/capacitor.config.json"
 
+          plutil -lint "$INFO_PLIST" "$PRIVACY_MANIFEST"
           grep -q "<key>NSCameraUsageDescription</key>" "$INFO_PLIST"
           grep -q "<key>NSPhotoLibraryUsageDescription</key>" "$INFO_PLIST"
           grep -q "<key>NSPhotoLibraryAddUsageDescription</key>" "$INFO_PLIST"
+          grep -q "<key>ITSAppUsesNonExemptEncryption</key>" "$INFO_PLIST"
+          grep -q "<key>NSPrivacyTracking</key>" "$PRIVACY_MANIFEST"
+          grep -q "<key>NSPrivacyTrackingDomains</key>" "$PRIVACY_MANIFEST"
           grep -q "\"CAPCameraPlugin\"" "$CAP_CONFIG"
 
       - name: Resolve iOS scheme
@@ -341,6 +416,71 @@ jobs:
             -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
 
+      - name: Verify exported IPA
+        shell: bash
+        env:
+          IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          EXPECTED_VERSION: ${{ steps.version.outputs.VERSION }}
+          EXPECTED_BUILD_NUMBER: ${{ steps.version.outputs.BUILD_NUMBER }}
+        run: |
+          set -euo pipefail
+
+          IPA_COUNT="$(find "$RUNNER_TEMP/export" -type f -name '*.ipa' | wc -l | tr -d '[:space:]')"
+          if [ "$IPA_COUNT" != "1" ]; then
+            echo "Expected exactly one exported IPA, found $IPA_COUNT"
+            exit 1
+          fi
+          IPA_PATH="$(find "$RUNNER_TEMP/export" -type f -name '*.ipa' -print -quit)"
+          VERIFY_DIR="$RUNNER_TEMP/ipa-verification"
+          mkdir -p "$VERIFY_DIR"
+          ditto -x -k "$IPA_PATH" "$VERIFY_DIR"
+
+          APP_COUNT="$(find "$VERIFY_DIR/Payload" -mindepth 1 -maxdepth 1 -type d -name '*.app' | wc -l | tr -d '[:space:]')"
+          if [ "$APP_COUNT" != "1" ]; then
+            echo "Expected exactly one application in the IPA payload, found $APP_COUNT"
+            exit 1
+          fi
+          APP_PATH="$(find "$VERIFY_DIR/Payload" -mindepth 1 -maxdepth 1 -type d -name '*.app' -print -quit)"
+          APP_INFO="$APP_PATH/Info.plist"
+          APP_PRIVACY_MANIFEST="$APP_PATH/PrivacyInfo.xcprivacy"
+          EMBEDDED_PROFILE="$APP_PATH/embedded.mobileprovision"
+          DECODED_PROFILE="$VERIFY_DIR/embedded-profile.plist"
+          SIGNED_ENTITLEMENTS="$VERIFY_DIR/signed-entitlements.plist"
+
+          test -f "$APP_INFO"
+          test -f "$APP_PRIVACY_MANIFEST"
+          test -f "$EMBEDDED_PROFILE"
+          plutil -lint "$APP_INFO" "$APP_PRIVACY_MANIFEST"
+
+          ACTUAL_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_INFO")"
+          ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_INFO")"
+          ACTUAL_BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_INFO")"
+          USES_NON_EXEMPT_ENCRYPTION="$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$APP_INFO")"
+
+          [ "$ACTUAL_BUNDLE_ID" = "$IOS_BUNDLE_ID" ] || { echo "Exported IPA bundle identifier mismatch"; exit 1; }
+          [ "$ACTUAL_VERSION" = "$EXPECTED_VERSION" ] || { echo "Exported IPA version mismatch"; exit 1; }
+          [ "$ACTUAL_BUILD_NUMBER" = "$EXPECTED_BUILD_NUMBER" ] || { echo "Exported IPA build number mismatch"; exit 1; }
+          [ "$USES_NON_EXEMPT_ENCRYPTION" = "false" ] || { echo "Exported IPA encryption declaration must be false"; exit 1; }
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -d --entitlements :- "$APP_PATH" > "$SIGNED_ENTITLEMENTS" 2> "$VERIFY_DIR/codesign-entitlements.log"
+          test -s "$SIGNED_ENTITLEMENTS"
+          plutil -lint "$SIGNED_ENTITLEMENTS"
+          security cms -D -i "$EMBEDDED_PROFILE" > "$DECODED_PROFILE"
+          plutil -lint "$DECODED_PROFILE"
+
+          APPLICATION_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$SIGNED_ENTITLEMENTS")"
+          TEAM_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$SIGNED_ENTITLEMENTS")"
+          PROFILE_APPLICATION_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$DECODED_PROFILE")"
+          [ "$APPLICATION_IDENTIFIER" = "$PROFILE_APPLICATION_IDENTIFIER" ] || { echo "Signed application identifier does not match the embedded profile"; exit 1; }
+          [[ "$APPLICATION_IDENTIFIER" == *."$IOS_BUNDLE_ID" ]] || { echo "Signed application identifier bundle suffix mismatch"; exit 1; }
+          [ "$TEAM_IDENTIFIER" = "$IOS_TEAM_ID" ] || { echo "Signed team identifier mismatch"; exit 1; }
+          grep -Fq '<string>applinks:totalrpbox.com</string>' "$SIGNED_ENTITLEMENTS"
+          grep -Fq '<string>applinks:www.totalrpbox.com</string>' "$SIGNED_ENTITLEMENTS"
+
+          echo "IOS_IPA_PATH=$IPA_PATH" >> "$GITHUB_ENV"
+
       - name: Install fastlane
         run: gem install fastlane -NV
 
@@ -351,6 +491,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
           IOS_TESTFLIGHT_GROUPS: ${{ github.event.inputs.groups || secrets.IOS_TESTFLIGHT_GROUPS }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.NOTES }}
           KEY_P8_PATH: ${{ runner.temp }}/AuthKey.p8
           API_KEY_JSON: ${{ runner.temp }}/asc-api-key.json
         run: |
@@ -361,8 +502,8 @@ jobs:
             exit 1
           fi
 
-          IPA_PATH="$(find "$RUNNER_TEMP/export" -name "*.ipa" | head -n 1)"
-          if [ -z "$IPA_PATH" ]; then
+          IPA_PATH="${IOS_IPA_PATH:-}"
+          if [ -z "$IPA_PATH" ] || [ ! -f "$IPA_PATH" ]; then
             echo "IPA not found."
             exit 1
           fi
@@ -370,6 +511,7 @@ jobs:
           KEY_P8_PATH="$RUNNER_TEMP/AuthKey.p8"
           API_KEY_JSON="$RUNNER_TEMP/asc-api-key.json"
           echo "$ASC_API_KEY_BASE64" | base64 --decode > "$KEY_P8_PATH"
+          chmod 600 "$KEY_P8_PATH"
 
           python3 - <<'PY'
           import json
@@ -385,19 +527,24 @@ jobs:
           }
           Path(os.environ["API_KEY_JSON"]).write_text(json.dumps(payload), encoding="utf-8")
           PY
+          chmod 600 "$API_KEY_JSON"
 
           if [ -n "${IOS_TESTFLIGHT_GROUPS:-}" ]; then
             fastlane pilot upload \
               --ipa "$IPA_PATH" \
               --api_key_path "$API_KEY_JSON" \
-              --skip_waiting_for_build_processing true \
+              --skip_waiting_for_build_processing false \
+              --wait_processing_interval 30 \
+              --changelog "$RELEASE_NOTES" \
               --distribute_external false \
               --groups "$IOS_TESTFLIGHT_GROUPS"
           else
             fastlane pilot upload \
               --ipa "$IPA_PATH" \
               --api_key_path "$API_KEY_JSON" \
-              --skip_waiting_for_build_processing true \
+              --skip_waiting_for_build_processing false \
+              --wait_processing_interval 30 \
+              --changelog "$RELEASE_NOTES" \
               --distribute_external false
           fi
       - name: Upload artifacts
@@ -408,12 +555,13 @@ jobs:
             ${{ runner.temp }}/RPBox.xcarchive
             ${{ runner.temp }}/export
             ${{ runner.temp }}/ExportOptions.plist
+            ${{ runner.temp }}/ipa-verification/signed-entitlements.plist
           if-no-files-found: warn
 
   deploy-ios-metadata:
     name: Deploy iOS Metadata
     runs-on: ubuntu-latest
-    needs: build-and-upload
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_public_metadata }}
 
     steps:
       - name: Checkout code
@@ -422,21 +570,20 @@ jobs:
       - name: Resolve version
         id: version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
 
-          INPUT_VERSION="${{ github.event.inputs.version }}"
-          if [ -n "${INPUT_VERSION:-}" ]; then
-            VERSION="$INPUT_VERSION"
-          elif [[ "${GITHUB_REF:-}" == refs/tags/ios-v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/ios-v}"
-          elif [[ "${GITHUB_REF:-}" == refs/tags/mobile-ios-v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/mobile-ios-v}"
-          else
-            VERSION="${{ needs.build-and-upload.outputs.version }}"
-            if [ -z "$VERSION" ]; then
-              VERSION="$(node -p "require('./mobile/package.json').version")"
-            fi
+          TRACKED_VERSION="$(node -p "require('./mobile/package.json').version")"
+          VERSION="${INPUT_VERSION:-$TRACKED_VERSION}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid metadata version"
+            exit 1
+          fi
+          if [ "$VERSION" != "$TRACKED_VERSION" ]; then
+            echo "Metadata version must exactly match mobile/package.json"
+            exit 1
           fi
 
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
@@ -444,25 +591,72 @@ jobs:
       - name: Resolve release notes
         id: notes
         shell: bash
+        env:
+          INPUT_NOTES: ${{ inputs.release_notes }}
         run: |
           set -euo pipefail
-          INPUT_NOTES="${{ github.event.inputs.release_notes }}"
           VERSION="${{ steps.version.outputs.VERSION }}"
           NOTES_FILE="mobile/release-notes/${VERSION}.txt"
 
-          if [ -n "${INPUT_NOTES:-}" ]; then
-            NOTES="$INPUT_NOTES"
-          elif [ -f "$NOTES_FILE" ]; then
-            NOTES="$(cat "$NOTES_FILE")"
-          else
-            NOTES="iOS build ${VERSION}"
+          if [ ! -f "$NOTES_FILE" ] || ! grep -q '[^[:space:]]' "$NOTES_FILE"; then
+            echo "Release notes file is missing or empty: $NOTES_FILE"
+            exit 1
           fi
 
+          if [ -n "${INPUT_NOTES:-}" ]; then
+            NOTES="$INPUT_NOTES"
+          else
+            NOTES="$(cat "$NOTES_FILE")"
+          fi
+          if ! grep -q '[^[:space:]]' <<< "$NOTES"; then
+            echo "Resolved release notes must not be empty"
+            exit 1
+          fi
+
+          NOTES_DELIMITER="RPBOX_NOTES_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          if grep -Fxq "$NOTES_DELIMITER" <<< "$NOTES"; then
+            echo "Resolved release notes contain the reserved output delimiter"
+            exit 1
+          fi
           {
-            echo "NOTES<<EOF"
+            echo "NOTES<<$NOTES_DELIMITER"
             echo "$NOTES"
-            echo "EOF"
+            echo "$NOTES_DELIMITER"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Verify version is already public on the App Store
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          LOOKUP_RESPONSE="$RUNNER_TEMP/app-store-lookup.json"
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --location \
+            --proto '=https' \
+            --proto-redir '=https' \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --retry 2 \
+            "https://itunes.apple.com/lookup?id=${IOS_APP_STORE_ID}&country=cn" \
+            --output "$LOOKUP_RESPONSE"
+
+          LOOKUP_RESPONSE="$LOOKUP_RESPONSE" node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+
+          const payload = JSON.parse(fs.readFileSync(process.env.LOOKUP_RESPONSE, 'utf8'))
+          const appId = Number(process.env.IOS_APP_STORE_ID)
+          const result = Array.isArray(payload?.results)
+            ? payload.results.find((entry) => Number(entry?.trackId) === appId)
+            : undefined
+          if (!result) throw new Error('Apple public lookup did not return the configured RPBox app')
+          if (result.version !== process.env.VERSION) {
+            throw new Error(`Apple public version ${result.version || 'unknown'} does not match ${process.env.VERSION}`)
+          }
+          NODE
 
       - name: Resolve public iOS URL
         id: public_url
@@ -481,7 +675,8 @@ jobs:
             URL="${{ env.IOS_DEFAULT_PUBLIC_URL }}"
           fi
 
-          echo "URL=$URL" >> "$GITHUB_OUTPUT"
+          VALIDATED_URL="$(IOS_PUBLIC_UPDATE_URL="$URL" node ./mobile/scripts/iosCompliance.mjs validate-public-update-url)"
+          printf 'URL=%s\n' "$VALIDATED_URL" >> "$GITHUB_OUTPUT"
 
       - name: Prepare iOS metadata
         shell: bash
@@ -523,30 +718,63 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      - name: Resolve SSH port
+        shell: bash
+        env:
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SERVER_HOST:-}" ] || [ -z "${SERVER_USER:-}" ]; then
+            echo "Missing server deployment host or user"
+            exit 1
+          fi
+          PORT="${SERVER_PORT:-2233}"
+          if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+            echo "SERVER_PORT must be an integer between 1 and 65535"
+            exit 1
+          fi
+          echo "RESOLVED_SERVER_PORT=$PORT" >> "$GITHUB_ENV"
+
       - name: Add server to known_hosts
-        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          set -euo pipefail
+          ssh-keyscan -H -p "$RESOLVED_SERVER_PORT" "$SERVER_HOST" >> ~/.ssh/known_hosts
 
       - name: Upload iOS metadata
         shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          MOBILE_RELEASE_PATH: ${{ secrets.MOBILE_RELEASE_PATH }}
+          RELEASE_PATH: ${{ secrets.RELEASE_PATH }}
         run: |
           set -euo pipefail
 
           VERSION="${{ steps.version.outputs.VERSION }}"
-          REMOTE_BASE="${{ secrets.MOBILE_RELEASE_PATH }}"
+          REMOTE_BASE="${MOBILE_RELEASE_PATH:-}"
           if [ -z "$REMOTE_BASE" ]; then
-            REMOTE_BASE="${{ secrets.RELEASE_PATH }}/mobile"
+            REMOTE_BASE="${RELEASE_PATH:-}/mobile"
+          fi
+          if [ -z "${SERVER_HOST:-}" ] || [ -z "${SERVER_USER:-}" ] || [ -z "${RELEASE_PATH:-}${MOBILE_RELEASE_PATH:-}" ]; then
+            echo "Missing server deployment configuration"
+            exit 1
           fi
           REMOTE_DIR="$REMOTE_BASE/$VERSION"
 
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mkdir -p $REMOTE_DIR $REMOTE_BASE"
+          ssh -p "$RESOLVED_SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "mkdir -p '$REMOTE_DIR' '$REMOTE_BASE'"
 
           REMOTE_META_VER_FINAL="$REMOTE_DIR/latest-ios.json"
           REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
           REMOTE_META_LATEST_FINAL="$REMOTE_BASE/latest-ios.json"
           REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
 
-          scp -P 2233 -C latest-ios.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:"$REMOTE_META_VER_TMP"
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
+          scp -P "$RESOLVED_SERVER_PORT" -C latest-ios.json "$SERVER_USER@$SERVER_HOST:$REMOTE_META_VER_TMP"
+          ssh -p "$RESOLVED_SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
 
-          scp -P 2233 -C latest-ios.json ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:"$REMOTE_META_LATEST_TMP"
-          ssh -p 2233 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
+          scp -P "$RESOLVED_SERVER_PORT" -C latest-ios.json "$SERVER_USER@$SERVER_HOST:$REMOTE_META_LATEST_TMP"
+          ssh -p "$RESOLVED_SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"

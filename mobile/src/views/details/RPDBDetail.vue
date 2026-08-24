@@ -56,6 +56,8 @@ const activeMediaIndex = ref(0)
 const previewOpen = ref(false)
 const previewSrc = ref('')
 const actionBusy = ref('')
+const shareCodeCopying = ref(false)
+const shareCodeCopied = ref(false)
 const commentText = ref('')
 const commentImageURL = ref('')
 const commentImageUploading = ref(false)
@@ -271,6 +273,8 @@ function openPreview(src: string) {
 
 async function load() {
   loading.value = true
+  shareCodeCopying.value = false
+  shareCodeCopied.value = false
   try {
     const [detail, discussion, related] = await Promise.all([
       getRPDBWork(workId.value),
@@ -495,12 +499,17 @@ function insertEmoji(token: string) {
 }
 
 async function copyShareCode() {
-  if (!shareCode.value) return
+  if (!shareCode.value || shareCodeCopying.value) return
+  shareCodeCopying.value = true
+  shareCodeCopied.value = false
   try {
     await copyTextToClipboard(shareCode.value, work.value?.title)
+    shareCodeCopied.value = true
     toast.success(work.value?.type === 'home_showcase' ? '住宅分享代码已复制' : '幻化分享代码已复制')
   } catch {
     toast.error('复制失败')
+  } finally {
+    shareCodeCopying.value = false
   }
 }
 
@@ -625,6 +634,25 @@ onMounted(load)
               <small>版本 {{ work.version }} · {{ new Date(work.updated_at).toLocaleDateString('zh-CN') }}</small>
             </span>
           </div>
+          <div v-if="work.type === 'transmog' || work.type === 'home_showcase'" class="hero-action-area">
+            <button
+              type="button"
+              class="hero-copy-code"
+              data-testid="copy-share-code"
+              :disabled="!shareCode || shareCodeCopying"
+              @click="copyShareCode"
+            >
+              <i :class="work.type === 'home_showcase' ? 'ri-home-heart-line' : 'ri-shirt-line'" />
+              <span>
+                <b>{{ work.type === 'home_showcase' ? '复制住宅分享代码' : '复制幻化分享代码' }}</b>
+                <small>{{ shareCode ? '复制后可在游戏内直接使用' : '作者暂未提供分享代码' }}</small>
+              </span>
+              <strong aria-live="polite">
+                <i :class="shareCodeCopied ? 'ri-check-line' : 'ri-file-copy-line'" />
+                {{ shareCodeCopying ? '复制中' : shareCodeCopied ? '已复制' : shareCode ? '复制' : '暂无代码' }}
+              </strong>
+            </button>
+          </div>
           <button v-if="canEdit" type="button" class="edit-work" @click="router.push({ name: 'rpdb-edit', params: { id: work.id } })">
             <i class="ri-edit-line" />编辑这份作品
           </button>
@@ -668,17 +696,6 @@ onMounted(load)
           <p v-if="work.rp_use_cases" class="use-case"><b>适用场景</b>{{ work.rp_use_cases }}</p>
           <div v-if="normalizedContent" class="rich-content" @click="handleContentClick" v-html="normalizedContent" />
           <p v-else class="empty-copy">作者尚未补充完整正文。</p>
-        </section>
-
-        <section v-if="shareCode && (work.type === 'transmog' || work.type === 'home_showcase')" class="share-code-section">
-          <div>
-            <i :class="work.type === 'home_showcase' ? 'ri-home-heart-line' : 'ri-shirt-line'" />
-            <span>
-              <b>{{ work.type === 'home_showcase' ? '住宅分享代码' : '幻化分享代码' }}</b>
-              <small>复制后可在游戏内使用</small>
-            </span>
-          </div>
-          <button type="button" @click="copyShareCode"><i class="ri-file-copy-line" />复制</button>
         </section>
 
         <section v-if="orderedSlots.length" class="content-section">
@@ -1090,8 +1107,7 @@ onMounted(load)
 }
 
 .hero-copy,
-.content-section,
-.share-code-section {
+.content-section {
   padding: 20px var(--page-gutter);
   border-bottom: 1px solid var(--detail-line);
   background: var(--color-panel-bg);
@@ -1390,54 +1406,69 @@ onMounted(load)
   font-size: 13px;
 }
 
-.share-code-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: #f8efe5;
+.hero-action-area {
+  margin-top: 16px;
 }
 
-.share-code-section > div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 9px;
-}
-
-.share-code-section > div > i {
+.hero-copy-code {
   display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
+  width: 100%;
+  min-height: 56px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--color-accent);
+  border-radius: 8px;
+  background: var(--color-accent);
+  color: #fff;
+  text-align: left;
+}
+
+.hero-copy-code > i {
+  display: grid;
+  width: 36px;
+  height: 36px;
   place-items: center;
   border-radius: 7px;
-  background: var(--color-primary);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
   font-size: 19px;
 }
 
-.share-code-section span {
+.hero-copy-code > span {
   display: flex;
   min-width: 0;
   flex-direction: column;
 }
 
-.share-code-section small {
+.hero-copy-code small {
   margin-top: 3px;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 10px;
 }
 
-.share-code-section button {
-  min-height: 38px;
-  flex: 0 0 auto;
-  padding: 0 12px;
-  border: 0;
+.hero-copy-code strong {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 9px;
   border-radius: 6px;
-  background: var(--color-secondary);
-  color: #fff;
-  font-weight: 800;
+  background: rgba(44, 27, 17, 0.22);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.hero-copy-code:disabled {
+  border-color: var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
+  opacity: 0.72;
+}
+
+.hero-copy-code:disabled small {
+  color: var(--color-text-secondary);
 }
 
 .slot-list,

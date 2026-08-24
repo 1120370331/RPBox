@@ -2,20 +2,36 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { getCharacterCard, type CharacterCard } from '@/api/characterCard'
+import {
+  getCharacterCard,
+  getCharacterCardShare,
+  type CharacterCard,
+  type CharacterCardPersonalityTrait,
+  type CharacterCardTRP3Color,
+} from '@/api/characterCard'
 import { resolveApiUrl } from '@/api/image'
+import { createContentReport } from '@/api/safety'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
+import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import { handleJumpLinkClick, sanitizeJumpLinks } from '@/utils/jumpLink'
+import { shareRouteLink } from '@/utils/mobileShare'
+import { useToastStore } from '@shared/stores/toast'
+import { useUserStore } from '@shared/stores/user'
 
 type DetailTab = 'basic' | 'background' | 'impression' | 'other'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const toast = useToastStore()
+const userStore = useUserStore()
 
 const card = ref<CharacterCard | null>(null)
 const loading = ref(true)
 const loadFailed = ref(false)
+const sharing = ref(false)
+const safetySheetOpen = ref(false)
+const safetySubmitting = ref(false)
 const activeTab = ref<DetailTab>('basic')
 const selectedPortraitIndex = ref(0)
 const previewOpen = ref(false)
@@ -26,12 +42,23 @@ const impressionRef = ref<HTMLElement | null>(null)
 const otherRef = ref<HTMLElement | null>(null)
 
 const cardId = computed(() => Number(route.params.id))
+const canShare = computed(() => card.value?.status === 'published'
+  && card.value.visibility === 'public'
+  && card.value.review_status === 'approved')
+const canUseSafetyAction = computed(() => {
+  const currentUserId = userStore.user?.id
+  const ownerId = card.value?.user_id
+  return Boolean(currentUserId && ownerId && currentUserId !== ownerId)
+})
 const displayName = computed(() => {
   if (!card.value) return ''
   return card.value.display_name.trim()
     || [card.value.first_name, card.value.last_name].filter(Boolean).join(' ')
     || `#${card.value.id}`
 })
+const safetyTargetLabel = computed(() => card.value
+  ? t('characterCards.detail.safety.targetLabel', { id: card.value.id, name: displayName.value })
+  : '')
 const displayColor = computed(() => normalizeColor(card.value?.name_color || card.value?.class_color || ''))
 const identityLine = computed(() => [card.value?.race, card.value?.class].filter(Boolean).join(' · '))
 const tabs = computed<Array<{ id: DetailTab; label: string }>>(() => [
@@ -77,6 +104,27 @@ const basicFields = computed(() => {
     [t('characterCards.detail.fields.relationship'), card.value.relationship_status],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]))
 })
+const additionalInfoEntries = computed(() => {
+  if (!Array.isArray(card.value?.additional_info)) return []
+  return card.value.additional_info.flatMap((item, index) => {
+    const name = normalizePlainText(item?.name)
+    const value = normalizePlainText(item?.value)
+    if (!name || !value) return []
+    return [{
+      key: `${Number.isInteger(item.id) ? item.id : 0}-${index}`,
+      name,
+      value,
+      iconUrl: resolveTRP3IconUrl(item.icon),
+    }]
+  })
+})
+const personalityTraitEntries = computed(() => {
+  if (!Array.isArray(card.value?.personality_traits)) return []
+  return card.value.personality_traits.flatMap((trait, index) => {
+    const normalized = normalizePersonalityTrait(trait, index)
+    return normalized ? [normalized] : []
+  })
+})
 const backgroundHtml = computed(() => normalizeRichContent(card.value?.background_story || ''))
 const impressionHtml = computed(() => normalizeRichContent(card.value?.first_impression || ''))
 const otherHtml = computed(() => normalizeRichContent(card.value?.other_content || ''))
@@ -84,6 +132,91 @@ const otherHtml = computed(() => normalizeRichContent(card.value?.other_content 
 function normalizeColor(value: string) {
   const normalized = value.trim().replace(/^#/, '')
   return /^(?:[\da-f]{6}|[\da-f]{8})$/i.test(normalized) ? `#${normalized}` : ''
+}
+
+function normalizePlainText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeTRP3IconName(value: unknown) {
+  const trimmed = normalizePlainText(value)
+  if (!trimmed || trimmed.length > 256 || /^(?:https?|data|blob|file|javascript):/i.test(trimmed)) return ''
+  const textureMatch = trimmed.match(/\|T([^|]+)\|t/i)
+  const source = textureMatch ? textureMatch[1].split(':')[0] : trimmed
+  if (/^(?:https?|data|blob|file|javascript):/i.test(source)) return ''
+  let name = source.replace(/\\/g, '/')
+  if (name.toLowerCase().startsWith('interface/icons/')) name = name.slice('interface/icons/'.length)
+  name = (name.split('/').pop() || name).replace(/\.(?:blp|tga|png|jpe?g)$/i, '').toLowerCase().trim()
+  return name.length <= 128 && /^[a-z0-9_-]+$/.test(name) ? name : ''
+}
+
+function resolveTRP3IconUrl(value: unknown) {
+  const iconName = normalizeTRP3IconName(value)
+  return iconName ? resolveApiUrl(`/api/v1/icons/${iconName}`) : ''
+}
+
+function normalizeTraitColor(color: CharacterCardTRP3Color | null | undefined) {
+  if (!color) return ''
+  const components = [Number(color.r), Number(color.g), Number(color.b)]
+  if (components.some(component => !Number.isFinite(component))) return ''
+  const [r, g, b] = components.map(component => Math.round(Math.min(1, Math.max(0, component)) * 255))
+  return `rgb(${r}, ${g}, ${b})`
+}
+
+function normalizeTraitValue(value: unknown) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 10
+  return Math.min(20, Math.max(0, numeric))
+}
+
+function normalizePersonalityTrait(trait: CharacterCardPersonalityTrait | null | undefined, index: number) {
+  if (!trait) return null
+  const presetId = Number.isInteger(trait.preset_id) && Number(trait.preset_id) >= 1 && Number(trait.preset_id) <= 11
+    ? Number(trait.preset_id)
+    : null
+  const explicitLeft = normalizePlainText(trait.left_text)
+  const explicitRight = normalizePlainText(trait.right_text)
+  if (!presetId && !explicitLeft && !explicitRight) return null
+
+  const presetPath = presetId
+    ? `characterCards.detail.personalityPresets.${presetId}`
+    : ''
+  const left = explicitLeft
+    || (presetPath ? t(`${presetPath}.left`) : t('characterCards.detail.personalityLeftFallback'))
+  const right = explicitRight
+    || (presetPath ? t(`${presetPath}.right`) : t('characterCards.detail.personalityRightFallback'))
+  const value = normalizeTraitValue(trait.value)
+
+  return {
+    key: `${presetId || 'custom'}-${index}`,
+    left,
+    right,
+    leftIconUrl: resolveTRP3IconUrl(trait.left_icon),
+    rightIconUrl: resolveTRP3IconUrl(trait.right_icon),
+    leftColor: normalizeTraitColor(trait.left_color),
+    rightColor: normalizeTraitColor(trait.right_color),
+    value,
+  }
+}
+
+function getTraitTrackStyle(trait: { leftColor: string; rightColor: string }) {
+  return {
+    '--trait-left-color': trait.leftColor || 'var(--color-primary-light)',
+    '--trait-right-color': trait.rightColor || 'var(--color-accent)',
+  }
+}
+
+function getTraitMarkerStyle(value: number) {
+  const percent = value * 5
+  const transform = percent <= 0
+    ? 'translateX(0)'
+    : (percent >= 100 ? 'translateX(-100%)' : 'translateX(-50%)')
+  return { left: `${percent}%`, transform }
+}
+
+function handleTRP3IconError(event: Event) {
+  const image = event.currentTarget
+  if (image instanceof HTMLImageElement) image.hidden = true
 }
 
 function normalizeRichContent(input: string) {
@@ -128,6 +261,7 @@ async function hydrateRichLinks() {
 }
 
 async function loadCard() {
+  card.value = null
   if (!Number.isInteger(cardId.value) || cardId.value <= 0) {
     loading.value = false
     loadFailed.value = true
@@ -146,6 +280,85 @@ async function loadCard() {
     loadFailed.value = true
   } finally {
     loading.value = false
+  }
+}
+
+async function shareCard() {
+  const loadedCard = card.value
+  if (!loadedCard || !canShare.value || sharing.value) return
+
+  sharing.value = true
+  try {
+    const share = await getCharacterCardShare(loadedCard.id)
+    if (card.value?.id !== loadedCard.id) return
+    await shareRouteLink({
+      path: share.path,
+      title: share.title,
+      text: share.summary,
+      dialogTitle: t('characterCards.detail.shareDialogTitle'),
+    })
+    toast.success(t('characterCards.detail.shareSuccess'))
+  } catch (error) {
+    console.error('Failed to share public character card', error)
+    toast.error(t('characterCards.detail.shareFailed'))
+  } finally {
+    sharing.value = false
+  }
+}
+
+function openSafetySheet() {
+  if (!canUseSafetyAction.value || safetySubmitting.value) return
+  safetySheetOpen.value = true
+}
+
+function closeSafetySheet() {
+  if (safetySubmitting.value) return
+  safetySheetOpen.value = false
+}
+
+async function submitCharacterCardSafety(payload: {
+  reason: string
+  detail: string
+  hideTarget: boolean
+  blockAuthor: boolean
+  submitReport: boolean
+}) {
+  if (!card.value || !canUseSafetyAction.value || safetySubmitting.value) return
+
+  const currentCard = card.value
+  const currentUserId = userStore.user?.id
+  if (!currentUserId || currentCard.user_id === currentUserId) return
+
+  const leavesDetail = payload.hideTarget || payload.blockAuthor
+  safetySubmitting.value = true
+  try {
+    await createContentReport({
+      target_type: 'character_card',
+      target_id: currentCard.id,
+      reason: payload.reason,
+      detail: payload.detail,
+      hide_target: payload.hideTarget,
+      block_author: payload.blockAuthor,
+      submit_report: payload.submitReport,
+    })
+  } catch (error) {
+    toast.error((error as Error)?.message || t('characterCards.detail.safety.failed'))
+    return
+  } finally {
+    safetySubmitting.value = false
+  }
+
+  safetySheetOpen.value = false
+  const successKey = payload.blockAuthor
+    ? 'characterCards.detail.safety.blockedSuccess'
+    : (payload.hideTarget
+      ? 'characterCards.detail.safety.hiddenSuccess'
+      : 'characterCards.detail.safety.reportSuccess')
+  toast.success(t(successKey))
+  if (leavesDetail) {
+    card.value = null
+    loadFailed.value = true
+    void router.replace({ name: 'community' })
   }
 }
 
@@ -187,6 +400,17 @@ watch(activeTab, hydrateRichLinks)
         <span>RPBOX · CHARACTER</span>
         <h1>{{ t('characterCards.detail.title') }}</h1>
       </div>
+      <button
+        v-if="canShare"
+        type="button"
+        class="character-share-btn"
+        :disabled="sharing"
+        :aria-label="sharing ? t('characterCards.detail.sharing') : t('characterCards.detail.share')"
+        :aria-busy="sharing"
+        @click="shareCard"
+      >
+        <i :class="sharing ? 'ri-loader-4-line spin' : 'ri-share-forward-line'" aria-hidden="true" />
+      </button>
     </header>
 
     <main class="sub-body character-card-body">
@@ -241,6 +465,22 @@ watch(activeTab, hydrateRichLinks)
 
         <p class="character-summary">{{ card.summary || t('characterCards.detail.summaryMissing') }}</p>
 
+        <button
+          v-if="canUseSafetyAction"
+          type="button"
+          class="character-safety-action"
+          data-testid="character-card-safety-open"
+          :disabled="safetySubmitting"
+          @click="openSafetySheet"
+        >
+          <i class="ri-alarm-warning-line" aria-hidden="true" />
+          <span>
+            <strong>{{ t('characterCards.detail.safety.action') }}</strong>
+            <small>{{ t('characterCards.detail.safety.description') }}</small>
+          </span>
+          <i class="ri-arrow-right-s-line" aria-hidden="true" />
+        </button>
+
         <nav class="detail-tabs" role="tablist">
           <button
             v-for="tab in tabs"
@@ -261,6 +501,66 @@ watch(activeTab, hydrateRichLinks)
             </div>
           </dl>
           <p v-else class="empty-section">{{ t('characterCards.detail.emptySection') }}</p>
+
+          <section v-if="additionalInfoEntries.length" class="basic-supplement additional-info-section">
+            <h3>{{ t('characterCards.detail.additionalInfoTitle') }}</h3>
+            <div class="additional-info-list">
+              <div v-for="entry in additionalInfoEntries" :key="entry.key" class="additional-info-row">
+                <span class="trp3-field-icon" aria-hidden="true">
+                  <i class="ri-information-line" />
+                  <img v-if="entry.iconUrl" :src="entry.iconUrl" alt="" loading="lazy" @error="handleTRP3IconError" />
+                </span>
+                <div>
+                  <small>{{ entry.name }}</small>
+                  <strong>{{ entry.value }}</strong>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="personalityTraitEntries.length" class="basic-supplement personality-section">
+            <h3>{{ t('characterCards.detail.personalityTitle') }}</h3>
+            <div class="personality-list">
+              <article v-for="trait in personalityTraitEntries" :key="trait.key" class="personality-trait">
+                <div class="personality-endpoints">
+                  <span :style="trait.leftColor ? { color: trait.leftColor } : undefined">
+                    <span class="trait-endpoint-icon" aria-hidden="true">
+                      <i class="ri-circle-line" />
+                      <img v-if="trait.leftIconUrl" :src="trait.leftIconUrl" alt="" loading="lazy" @error="handleTRP3IconError" />
+                    </span>
+                    <b>{{ trait.left }}</b>
+                  </span>
+                  <small>{{ t('characterCards.detail.personalityValueShort', { value: trait.value }) }}</small>
+                  <span :style="trait.rightColor ? { color: trait.rightColor } : undefined">
+                    <b>{{ trait.right }}</b>
+                    <span class="trait-endpoint-icon" aria-hidden="true">
+                      <i class="ri-circle-line" />
+                      <img v-if="trait.rightIconUrl" :src="trait.rightIconUrl" alt="" loading="lazy" @error="handleTRP3IconError" />
+                    </span>
+                  </span>
+                </div>
+                <div
+                  class="personality-track"
+                  role="meter"
+                  aria-valuemin="0"
+                  aria-valuemax="20"
+                  :aria-valuenow="trait.value"
+                  :aria-label="t('characterCards.detail.personalityAria', { left: trait.left, right: trait.right })"
+                  :aria-valuetext="t('characterCards.detail.personalityValue', { value: trait.value, left: trait.left, right: trait.right })"
+                  :style="getTraitTrackStyle(trait)"
+                >
+                  <span class="personality-track__center" aria-hidden="true" />
+                  <span
+                    class="personality-track__marker"
+                    data-testid="personality-trait-marker"
+                    :data-trait-value="trait.value"
+                    :style="getTraitMarkerStyle(trait.value)"
+                    aria-hidden="true"
+                  />
+                </div>
+              </article>
+            </div>
+          </section>
         </section>
 
         <section v-show="activeTab === 'background'" class="detail-sheet" role="tabpanel">
@@ -320,6 +620,16 @@ watch(activeTab, hydrateRichLinks)
       :alt="previewAlt"
       @close="previewOpen = false"
     />
+    <SafetyReportSheet
+      :open="safetySheetOpen"
+      :submitting="safetySubmitting"
+      :title="t('characterCards.detail.safety.sheetTitle')"
+      :target-label="safetyTargetLabel"
+      target-type="character_card"
+      initial-action="report"
+      @close="closeSafetySheet"
+      @submit="submitCharacterCardSafety"
+    />
   </div>
 </template>
 
@@ -329,6 +639,7 @@ watch(activeTab, hydrateRichLinks)
 }
 
 .character-card-header > div {
+  flex: 1;
   min-width: 0;
 }
 
@@ -342,6 +653,27 @@ watch(activeTab, hydrateRichLinks)
 .character-card-header h1 {
   margin-top: 4px;
   color: var(--color-text-main);
+}
+
+.character-share-btn {
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-card-bg);
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 20px;
+  touch-action: manipulation;
+}
+
+.character-share-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .character-card-body {
@@ -399,13 +731,9 @@ watch(activeTab, hydrateRichLinks)
   background: var(--color-primary-light);
 }
 
-.portrait-stage img,
-.portrait-empty {
+.portrait-stage img {
   width: 100%;
   height: 100%;
-}
-
-.portrait-stage img {
   display: block;
   object-fit: cover;
 }
@@ -437,6 +765,7 @@ watch(activeTab, hydrateRichLinks)
 
 .portrait-empty {
   display: grid;
+  width: 100%;
   min-height: 320px;
   place-content: center;
   justify-items: center;
@@ -531,6 +860,64 @@ watch(activeTab, hydrateRichLinks)
   line-height: 1.75;
 }
 
+.character-safety-action {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 38%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-warning-light) 72%, var(--color-card-bg));
+  color: var(--color-text-main);
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.character-safety-action > i:first-child {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+  font-size: 19px;
+}
+
+.character-safety-action > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.character-safety-action strong,
+.character-safety-action small {
+  overflow-wrap: anywhere;
+}
+
+.character-safety-action strong {
+  font-size: 13px;
+}
+
+.character-safety-action small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.character-safety-action > i:last-child {
+  color: var(--color-text-secondary);
+  font-size: 20px;
+}
+
+.character-safety-action:disabled {
+  opacity: 0.6;
+}
+
 .detail-tabs {
   display: flex;
   gap: 7px;
@@ -596,6 +983,161 @@ watch(activeTab, hydrateRichLinks)
   color: var(--color-text-main);
   font-size: 14px;
   font-weight: 700;
+}
+
+.basic-supplement {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.basic-supplement > h3 {
+  margin: 0 0 11px;
+  color: var(--color-text-main);
+  font-size: 14px;
+}
+
+.additional-info-list,
+.personality-list {
+  display: grid;
+  gap: 9px;
+}
+
+.additional-info-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+}
+
+.trp3-field-icon,
+.trait-endpoint-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.trp3-field-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 18px;
+}
+
+.trp3-field-icon img,
+.trait-endpoint-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.additional-info-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.additional-info-row small {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.additional-info-row strong {
+  overflow-wrap: anywhere;
+  color: var(--color-text-main);
+  font-size: 13px;
+}
+
+.personality-trait {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+}
+
+.personality-endpoints {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.personality-endpoints > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.personality-endpoints > span:last-child {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.personality-endpoints b {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.personality-endpoints > small {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.trait-endpoint-icon {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.personality-track {
+  position: relative;
+  height: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--trait-left-color), var(--trait-right-color));
+}
+
+.personality-track__center {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 50%;
+  width: 1px;
+  background: color-mix(in srgb, var(--color-text-main) 28%, transparent);
+}
+
+.personality-track__marker {
+  position: absolute;
+  top: 1px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-card-bg);
+  border-radius: 50%;
+  background: var(--color-text-main);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-text-main) 28%, transparent);
 }
 
 .empty-section {

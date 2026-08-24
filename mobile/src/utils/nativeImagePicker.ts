@@ -11,10 +11,21 @@ export async function pickSingleNativeImageFile(source: NativeImageSource = 'pho
   if (!canUseNativeImagePicker()) return null
 
   try {
-    await ensureNativeImagePermission(source)
+    if (source === 'photos') {
+      const selection = await Camera.pickImages({
+        quality: 90,
+        limit: 1,
+        presentationStyle: shouldUsePopoverPresentation() ? 'popover' : 'fullscreen',
+      })
+      const [photo] = selection.photos
+
+      return photo ? await photoToFile(photo.webPath, photo.format) : null
+    }
+
+    await ensureNativeCameraPermission()
 
     const photo = await Camera.getPhoto({
-      source: resolveCameraSource(source),
+      source: CameraSource.Camera,
       resultType: CameraResultType.Uri,
       quality: 90,
       saveToGallery: false,
@@ -35,34 +46,29 @@ export async function pickNativeEditorImages() {
   return file ? [file] : []
 }
 
-function resolveCameraSource(source: NativeImageSource) {
-  return source === 'camera' ? CameraSource.Camera : CameraSource.Photos
-}
+async function ensureNativeCameraPermission() {
+  const permission = await getCameraPermissionState()
 
-async function ensureNativeImagePermission(source: NativeImageSource) {
-  const permissionKey = source === 'camera' ? 'camera' : 'photos'
-  const permission = await getPermissionState(permissionKey)
-
-  if (isPermissionGranted(permission)) {
+  if (isCameraPermissionGranted(permission)) {
     return
   }
 
   const requested = await Camera.requestPermissions({
-    permissions: [permissionKey],
+    permissions: ['camera'],
   })
 
-  if (!isPermissionGranted(requested[permissionKey])) {
-    throw new Error(source === 'camera' ? '需要相机权限才能拍照' : '需要照片权限才能选择图片')
+  if (!isCameraPermissionGranted(requested.camera)) {
+    throw new Error('需要相机权限才能拍照')
   }
 }
 
-async function getPermissionState(permissionKey: 'camera' | 'photos') {
+async function getCameraPermissionState() {
   const permissions = await Camera.checkPermissions()
-  return permissions[permissionKey]
+  return permissions.camera
 }
 
-function isPermissionGranted(state: CameraPermissionState) {
-  return state === 'granted' || state === 'limited'
+function isCameraPermissionGranted(state: CameraPermissionState) {
+  return state === 'granted'
 }
 
 function shouldUsePopoverPresentation() {

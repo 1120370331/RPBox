@@ -3,9 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@shared/stores/toast'
+import { useUserStore } from '@shared/stores/user'
+import { createContentReport } from '@/api/safety'
+import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import {
   applyGuild,
   cancelApplication,
+  deleteGuild,
   getGuild,
   leaveGuild,
   listGuildMembers,
@@ -20,13 +24,18 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToastStore()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const membersLoading = ref(false)
 const applying = ref(false)
 const cancelingApplication = ref(false)
 const leaving = ref(false)
+const disbanding = ref(false)
+const safetySubmitting = ref(false)
 const showLeaveConfirm = ref(false)
+const showDisbandConfirm = ref(false)
+const showSafetySheet = ref(false)
 const guild = ref<Guild | null>(null)
 const myRole = ref<'' | 'owner' | 'admin' | 'member'>('')
 const members = ref<GuildMember[]>([])
@@ -37,6 +46,15 @@ const guildAvatar = computed(() => resolveApiUrl(guild.value?.avatar_url || guil
 const guildBanner = computed(() => resolveApiUrl(guild.value?.banner_url || guild.value?.banner || ''))
 const canLeave = computed(() => myRole.value === 'admin' || myRole.value === 'member')
 const isAdmin = computed(() => myRole.value === 'owner' || myRole.value === 'admin')
+const isOwner = computed(() => myRole.value === 'owner')
+const canUseGuildSafetyAction = computed(() => {
+  const currentUserId = userStore.user?.id
+  const ownerId = guild.value?.owner_id
+  return Boolean(currentUserId && ownerId && currentUserId !== ownerId && !isOwner.value)
+})
+const guildSafetyLabel = computed(() => guild.value
+  ? t('guild.safety.targetLabel', { id: guild.value.id, name: guild.value.name })
+  : '')
 const relationshipLabel = computed(() => {
   if (myRole.value) return roleLabel(myRole.value)
   if (pendingApplication.value) return t('guild.apply.pending')
@@ -174,6 +192,85 @@ async function confirmLeave() {
   }
 }
 
+function openDisbandConfirm() {
+  if (!guild.value || !isOwner.value || disbanding.value) return
+  showDisbandConfirm.value = true
+}
+
+function closeDisbandConfirm() {
+  if (disbanding.value) return
+  showDisbandConfirm.value = false
+}
+
+async function confirmDisband() {
+  if (!guild.value || !isOwner.value || disbanding.value) return
+  disbanding.value = true
+  try {
+    await deleteGuild(guild.value.id)
+    showDisbandConfirm.value = false
+    toast.success(t('guild.disband.success'))
+    await router.replace({ name: 'guild' })
+  } catch (error) {
+    toast.error((error as Error)?.message || t('guild.disband.failed'))
+  } finally {
+    disbanding.value = false
+  }
+}
+
+function openSafetySheet() {
+  if (!canUseGuildSafetyAction.value || safetySubmitting.value) return
+  showSafetySheet.value = true
+}
+
+function closeSafetySheet() {
+  if (safetySubmitting.value) return
+  showSafetySheet.value = false
+}
+
+async function submitGuildSafety(payload: {
+  reason: string
+  detail: string
+  hideTarget: boolean
+  blockAuthor: boolean
+  submitReport: boolean
+}) {
+  if (!guild.value || !canUseGuildSafetyAction.value || safetySubmitting.value) return
+
+  const currentGuild = guild.value
+  const currentUserId = userStore.user?.id
+  if (!currentUserId || currentGuild.owner_id === currentUserId) return
+
+  const hasLocalSafetyAction = payload.hideTarget || payload.blockAuthor
+  safetySubmitting.value = true
+  try {
+    await createContentReport({
+      target_type: 'guild',
+      target_id: currentGuild.id,
+      reason: payload.reason,
+      detail: payload.detail,
+      hide_target: payload.hideTarget,
+      block_author: payload.blockAuthor,
+      submit_report: payload.submitReport,
+    })
+    showSafetySheet.value = false
+    const successKey = payload.hideTarget && payload.blockAuthor
+      ? 'guild.safety.hiddenAndBlockedSuccess'
+      : payload.hideTarget
+        ? 'guild.safety.hiddenSuccess'
+        : payload.blockAuthor
+          ? 'guild.safety.blockedSuccess'
+          : 'guild.safety.reportSuccess'
+    toast.success(t(successKey))
+    if (hasLocalSafetyAction) {
+      await router.replace({ name: 'guild' })
+    }
+  } catch (error) {
+    toast.error((error as Error)?.message || t('guild.safety.failed'))
+  } finally {
+    safetySubmitting.value = false
+  }
+}
+
 function goGuildHome() {
   router.push({ name: 'guild' })
 }
@@ -255,6 +352,23 @@ onMounted(loadDetail)
           </button>
         </section>
 
+        <section v-if="canUseGuildSafetyAction" class="safety-card">
+          <div>
+            <h3>{{ $t('guild.safety.title') }}</h3>
+            <p>{{ $t('guild.safety.description') }}</p>
+          </div>
+          <button
+            type="button"
+            class="safety-action"
+            data-testid="guild-safety-open"
+            :disabled="safetySubmitting"
+            @click="openSafetySheet"
+          >
+            <i class="ri-alarm-warning-line" aria-hidden="true" />
+            {{ $t('guild.safety.action') }}
+          </button>
+        </section>
+
         <section v-if="membersLoading || members.length" class="members-card">
           <h3>{{ $t('guild.info.members') }}</h3>
           <div v-if="membersLoading" class="hint">{{ $t('common.status.loading') }}</div>
@@ -272,6 +386,24 @@ onMounted(loadDetail)
             </li>
           </ul>
         </section>
+
+        <section v-if="isOwner" class="danger-zone" aria-labelledby="guild-danger-title">
+          <div class="danger-zone__heading">
+            <span class="danger-zone__eyebrow">{{ $t('guild.disband.eyebrow') }}</span>
+            <h3 id="guild-danger-title">{{ $t('guild.disband.title') }}</h3>
+          </div>
+          <p>{{ $t('guild.disband.description') }}</p>
+          <button
+            type="button"
+            class="action-btn danger danger-zone__action"
+            data-testid="guild-disband-open"
+            :disabled="disbanding"
+            @click="openDisbandConfirm"
+          >
+            <i class="ri-delete-bin-6-line" aria-hidden="true" />
+            {{ $t('guild.disband.action') }}
+          </button>
+        </section>
       </template>
     </div>
 
@@ -285,6 +417,44 @@ onMounted(loadDetail)
         </div>
       </div>
     </div>
+
+    <div v-if="showDisbandConfirm" class="dialog-mask" @click.self="closeDisbandConfirm">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="guild-disband-dialog-title">
+        <h3 id="guild-disband-dialog-title">{{ $t('guild.disband.confirmTitle') }}</h3>
+        <p>{{ $t('guild.disband.confirmMessage', { name: guild?.name || '' }) }}</p>
+        <div class="dialog-actions">
+          <button
+            type="button"
+            class="action-btn"
+            data-testid="guild-disband-cancel"
+            :disabled="disbanding"
+            @click="closeDisbandConfirm"
+          >
+            {{ $t('guild.actions.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="action-btn danger"
+            data-testid="guild-disband-confirm"
+            :disabled="disbanding"
+            @click="confirmDisband"
+          >
+            {{ $t('guild.disband.confirmAction') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <SafetyReportSheet
+      :open="showSafetySheet"
+      :submitting="safetySubmitting"
+      :title="$t('guild.safety.sheetTitle')"
+      :target-label="guildSafetyLabel"
+      target-type="guild"
+      initial-action="report"
+      @close="closeSafetySheet"
+      @submit="submitGuildSafety"
+    />
   </div>
 </template>
 
@@ -433,6 +603,92 @@ onMounted(loadDetail)
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   padding: 12px;
+}
+
+.safety-card {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.safety-card h3 {
+  font-size: 13px;
+}
+
+.safety-card p {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.safety-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  border: 1px solid color-mix(in srgb, var(--btn-danger-bg) 45%, var(--color-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--btn-danger-bg) 7%, var(--color-panel-bg));
+  color: var(--btn-danger-bg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.safety-action:disabled {
+  opacity: 0.6;
+}
+
+.danger-zone {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--btn-danger-bg) 42%, var(--color-border));
+  border-left: 4px solid var(--btn-danger-bg);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--btn-danger-bg) 7%, var(--color-card-bg));
+  box-shadow: var(--shadow-sm);
+}
+
+.danger-zone__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.danger-zone__eyebrow {
+  color: var(--btn-danger-bg);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.danger-zone h3 {
+  flex: 1;
+  font-size: 14px;
+}
+
+.danger-zone p {
+  margin-top: 7px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.danger-zone__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 12px;
 }
 
 .nav-card {

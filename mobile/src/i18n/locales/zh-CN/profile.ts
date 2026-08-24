@@ -203,7 +203,14 @@ export default {
     },
     legal: {
       title: '协议与隐私',
-      desc: '你可以随时查看最新服务条款与隐私政策。',
+      desc: '你可以随时查看应用内服务条款、隐私政策和公开隐私政策页面。',
+      publicPrivacy: '公开隐私政策',
+    },
+    support: {
+      title: '官方网站与支持',
+      desc: '功能问题、内容安全反馈或账号协助可通过公开支持页面提交。请勿在公开 Issue 中填写密码或访问令牌。',
+      website: '访问官方网站',
+      issues: '打开支持与反馈',
     },
     sponsors: {
       title: '赞助者名单',

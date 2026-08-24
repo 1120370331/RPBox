@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
-import { resolveApiUrl } from '@/api/image'
+import { getImageUrl, resolveApiUrl } from '@/api/image'
 import { getCharacter, type Character } from '@/api/character'
 import { createContentReport } from '@/api/safety'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
@@ -20,6 +20,7 @@ import {
   updateStoryEntry,
   type Story,
   type StoryBookmark,
+  type CharacterCardSummary,
   type StoryEntry,
 } from '@/api/story'
 
@@ -33,6 +34,7 @@ const loading = ref(false)
 const story = ref<Story | null>(null)
 const entries = ref<StoryEntry[]>([])
 const charactersMap = ref<Map<number, Character>>(new Map())
+const characterCardsMap = ref<Map<number, CharacterCardSummary>>(new Map())
 const bookmarks = ref<StoryBookmark[]>([])
 const failedAvatarEntryIds = ref<Set<number>>(new Set())
 
@@ -128,12 +130,13 @@ const usedColorGroups = computed(() => {
 
 const normalizedEntries = computed(() => entries.value.map((entry) => {
   const imageEntry = parseImageEntry(entry)
-  const c = getEntryCharacter(entry)
+  const characterCard = getEntryCharacterCard(entry)
   return {
     ...entry,
     speakerName: getEntrySpeakerName(entry),
     avatar: getEntryAvatar(entry),
-    nameColor: c?.custom_color || c?.color || '',
+    nameColor: getEntryNameColor(entry),
+    characterCardId: characterCard?.id || null,
     channelLabel: getChannelLabel(entry.channel || ''),
     channelTextColor: getChannelTextColor(entry.channel || ''),
     imageUrl: imageEntry?.image || '',
@@ -172,6 +175,9 @@ async function loadDetail() {
     const res = await getStory(storyId.value)
     story.value = res.story
     entries.value = (res.entries || []).sort((a, b) => a.sort_order - b.sort_order)
+    characterCardsMap.value = new Map(
+      Object.values(res.character_cards || {}).map((card) => [card.id, card]),
+    )
     failedAvatarEntryIds.value = new Set()
     await Promise.all([loadCharacters(entries.value), loadBookmarks()])
   } catch (error) {
@@ -189,13 +195,25 @@ async function loadCharacters(list: StoryEntry[]) {
 }
 
 function getEntryCharacter(entry: StoryEntry) { return entry.character_id ? charactersMap.value.get(entry.character_id) : undefined }
+function getEntryCharacterCard(entry: StoryEntry) {
+  return entry.character_card_id ? characterCardsMap.value.get(entry.character_card_id) : undefined
+}
+function getCharacterCardDisplayName(card: CharacterCardSummary) {
+  return card.display_name?.trim()
+    || [card.first_name, card.last_name].map((part) => part?.trim()).filter(Boolean).join(' ')
+    || ''
+}
 function getEntrySpeakerName(entry: StoryEntry) {
   if (entry.type === 'narration') return t('stories.narrator')
+  if (entry.speaker) return entry.speaker
+  const card = getEntryCharacterCard(entry)
+  const cardName = card ? getCharacterCardDisplayName(card) : ''
+  if (cardName) return cardName
   const c = getEntryCharacter(entry)
-  if (!c) return entry.speaker || t('stories.narrator')
+  if (!c) return t('stories.narrator')
   if (c.custom_name) return c.custom_name
   if (c.first_name) return c.last_name ? `${c.first_name} ${c.last_name}` : c.first_name
-  return c.game_id?.split('-')[0] || entry.speaker || t('stories.narrator')
+  return c.game_id?.split('-')[0] || t('stories.narrator')
 }
 function normalizeIconName(value: string) {
   const trimmed = value.trim(); if (!trimmed) return ''
@@ -207,6 +225,17 @@ function normalizeIconName(value: string) {
   return /^[a-z0-9_-]+$/.test(name) ? name : ''
 }
 function getEntryAvatar(entry: StoryEntry) {
+  const card = getEntryCharacterCard(entry)
+  if (card?.portrait_image_url) {
+    return getImageUrl('character-card-portrait', card.id, {
+      w: 96,
+      q: 82,
+      v: card.portrait_image_updated_at || card.updated_at,
+    })
+  }
+  const cardIcon = normalizeIconName(card?.icon || '')
+  if (cardIcon) return resolveApiUrl(`/api/v1/icons/${cardIcon}`)
+
   const c = getEntryCharacter(entry)
   if (c?.custom_avatar) {
     const custom = c.custom_avatar.trim()
@@ -223,6 +252,26 @@ function getEntryAvatar(entry: StoryEntry) {
   }
   const iconName = normalizeIconName(c?.icon || '')
   return iconName ? resolveApiUrl(`/api/v1/icons/${iconName}`) : ''
+}
+
+function normalizeNameColor(value: string | undefined) {
+  const color = value?.trim() || ''
+  if (/^[\da-f]{6}$/i.test(color)) return `#${color}`
+  if (/^[\da-f]{8}$/i.test(color)) return `#${color.slice(2)}${color.slice(0, 2)}`
+  if (/^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(color)) return color
+  return ''
+}
+
+function getEntryNameColor(entry: StoryEntry) {
+  const card = getEntryCharacterCard(entry)
+  if (card) return normalizeNameColor(card.name_color || card.class_color)
+  const character = getEntryCharacter(entry)
+  return normalizeNameColor(character?.custom_color || character?.color)
+}
+
+function openCharacterCard(cardId: number) {
+  if (!Number.isInteger(cardId) || cardId <= 0) return
+  void router.push({ name: 'character-card-detail', params: { id: cardId } })
 }
 
 function handleEntryAvatarError(entryId: number) {
@@ -620,7 +669,22 @@ onBeforeUnmount(() => {
               :style="entry.background_color ? { backgroundColor: entry.background_color } : undefined"
               @click="manageMode ? toggleEntrySelection(entry.id) : null"
             >
-              <div class="entry-avatar">
+              <button
+                v-if="entry.characterCardId && !manageMode"
+                type="button"
+                class="entry-avatar character-card-link"
+                :aria-label="$t('stories.detail.openCharacterCard', { name: entry.speakerName })"
+                @click.stop="openCharacterCard(entry.characterCardId)"
+              >
+                <img
+                  v-if="entry.avatar && !failedAvatarEntryIds.has(entry.id)"
+                  :src="entry.avatar"
+                  :alt="$t('stories.detail.characterCardPortraitAlt', { name: entry.speakerName })"
+                  @error="handleEntryAvatarError(entry.id)"
+                />
+                <span v-else>{{ entry.speakerName.slice(0, 1) }}</span>
+              </button>
+              <div v-else class="entry-avatar">
                 <img
                   v-if="entry.avatar && !failedAvatarEntryIds.has(entry.id)"
                   :src="entry.avatar"
@@ -632,7 +696,17 @@ onBeforeUnmount(() => {
               <div class="entry-main">
                 <header class="entry-head">
                   <div class="name-row">
-                    <strong :style="entry.nameColor ? { color: '#' + entry.nameColor.replace('#', '') } : {}">{{ entry.speakerName }}</strong>
+                    <button
+                      v-if="entry.characterCardId && !manageMode"
+                      type="button"
+                      class="character-card-name-link"
+                      :aria-label="$t('stories.detail.openCharacterCard', { name: entry.speakerName })"
+                      @click.stop="openCharacterCard(entry.characterCardId)"
+                    >
+                      <strong :style="entry.nameColor ? { color: entry.nameColor } : {}">{{ entry.speakerName }}</strong>
+                      <i class="ri-profile-line" aria-hidden="true" />
+                    </button>
+                    <strong v-else :style="entry.nameColor ? { color: entry.nameColor } : {}">{{ entry.speakerName }}</strong>
                     <span v-if="entry.channel && entry.type !== 'narration' && entry.type !== 'image'" class="channel-tag">[{{ entry.channelLabel }}]</span>
                   </div>
                   <time>{{ formatTime(entry.timestamp || entry.created_at || '') }}</time>
@@ -957,13 +1031,18 @@ onBeforeUnmount(() => {
 .color-group-btn { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(0,0,0,0.08); color: #fff; font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .group-title { font-size: 12px; color: var(--color-text-secondary); border-left: 3px solid var(--color-border); padding-left: 8px; margin-bottom: 10px; }
 .entry-list { display: flex; flex-direction: column; gap: 10px; }
-.entry-item { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: start; background: rgba(255,255,255,0.65); border-radius: var(--radius-md); padding: 10px; }
+.entry-item { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: start; background: rgba(255,255,255,0.65); border-radius: var(--radius-md); padding: 10px; }
 .entry-item.selected { outline: 1px solid var(--color-primary); }
-.entry-avatar { width: 38px; height: 38px; border-radius: 50%; overflow: hidden; background: var(--icon-bg); display: flex; align-items: center; justify-content: center; color: var(--icon-color); font-size: 12px; font-weight: 700; }
+.entry-avatar { width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; overflow: hidden; background: var(--icon-bg); display: flex; align-items: center; justify-content: center; color: var(--icon-color); font-size: 12px; font-weight: 700; }
 .entry-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.character-card-link { cursor: pointer; box-shadow: 0 0 0 2px var(--color-primary-light); }
+.character-card-link:focus-visible, .character-card-name-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .entry-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .name-row strong { font-size: 13px; }
+.character-card-name-link { min-width: 0; min-height: 32px; margin: -5px 0; padding: 5px 4px 5px 0; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; gap: 4px; text-align: left; }
+.character-card-name-link strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.character-card-name-link i { flex-shrink: 0; color: var(--color-primary); font-size: 14px; }
 .channel-tag { font-size: 11px; color: var(--color-text-secondary); }
 .entry-head time { font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; }
 .entry-text { margin-top: 6px; font-size: 14px; line-height: 1.65; color: var(--text-dark); white-space: pre-wrap; word-break: break-word; }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(
   defineProps<{
@@ -17,9 +18,15 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
+const { t } = useI18n()
+
 const scale = ref(1)
 const translateX = ref(0)
 const translateY = ref(0)
+const closeButtonRef = ref<HTMLButtonElement | null>(null)
+
+let previouslyFocusedElement: HTMLElement | null = null
+let isListeningForKeydown = false
 
 const startScale = ref(1)
 const startTranslateX = ref(0)
@@ -32,6 +39,11 @@ const panTouchId = ref<number | null>(null)
 const imageStyle = computed(() => ({
   transform: `translate3d(${translateX.value}px, ${translateY.value}px, 0) scale(${scale.value})`,
 }))
+const dialogLabel = computed(() => {
+  const imageDescription = props.alt.trim()
+  const label = t('common.imagePreview.label')
+  return imageDescription ? `${label}: ${imageDescription}` : label
+})
 
 function clampScale(value: number) {
   return Math.min(4, Math.max(1, value))
@@ -116,18 +128,92 @@ function onDoubleClick() {
   scale.value = 2
 }
 
+function handleKeydown(event: KeyboardEvent) {
+  if (!props.open) return
+
+  if (event.key === 'Tab') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeButtonRef.value?.focus({ preventScroll: true })
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('close')
+  }
+}
+
+function startListeningForKeydown() {
+  if (isListeningForKeydown) return
+  window.addEventListener('keydown', handleKeydown, true)
+  isListeningForKeydown = true
+}
+
+function stopListeningForKeydown() {
+  if (!isListeningForKeydown) return
+  window.removeEventListener('keydown', handleKeydown, true)
+  isListeningForKeydown = false
+}
+
+function restorePreviousFocus() {
+  const focusTarget = previouslyFocusedElement
+  previouslyFocusedElement = null
+  if (focusTarget?.isConnected) {
+    focusTarget.focus({ preventScroll: true })
+  }
+}
+
 watch(
   () => props.open,
   (open) => {
-    if (open) resetTransform()
+    if (open) {
+      resetTransform()
+      previouslyFocusedElement = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+      startListeningForKeydown()
+      void nextTick(() => {
+        if (props.open) {
+          closeButtonRef.value?.focus({ preventScroll: true })
+        }
+      })
+      return
+    }
+
+    stopListeningForKeydown()
+    restorePreviousFocus()
   },
+  { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  stopListeningForKeydown()
+  restorePreviousFocus()
+})
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="preview-mask" @click="emit('close')">
-      <button class="preview-close" @click.stop="emit('close')"><i class="ri-close-line" /></button>
+    <div
+      v-if="open"
+      class="preview-mask"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="dialogLabel"
+      @click.self="emit('close')"
+    >
+      <button
+        ref="closeButtonRef"
+        type="button"
+        class="preview-close"
+        :aria-label="t('common.imagePreview.close')"
+        :title="t('common.imagePreview.close')"
+        @click.stop="emit('close')"
+      >
+        <i class="ri-close-line" aria-hidden="true" />
+      </button>
       <div
         class="preview-viewport"
         @touchstart="onTouchStart"
@@ -196,6 +282,12 @@ watch(
   user-select: none;
   transform-origin: center center;
   transition: transform 0.08s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-image {
+    transition: none;
+  }
 }
 </style>
 

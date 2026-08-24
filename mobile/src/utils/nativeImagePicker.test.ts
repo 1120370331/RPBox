@@ -4,12 +4,14 @@ const {
   checkPermissionsMock,
   requestPermissionsMock,
   getPhotoMock,
+  pickImagesMock,
   isNativePlatformMock,
   isPluginAvailableMock,
 } = vi.hoisted(() => ({
   checkPermissionsMock: vi.fn(),
   requestPermissionsMock: vi.fn(),
   getPhotoMock: vi.fn(),
+  pickImagesMock: vi.fn(),
   isNativePlatformMock: vi.fn(),
   isPluginAvailableMock: vi.fn(),
 }))
@@ -19,6 +21,7 @@ vi.mock('@capacitor/camera', () => ({
     checkPermissions: checkPermissionsMock,
     requestPermissions: requestPermissionsMock,
     getPhoto: getPhotoMock,
+    pickImages: pickImagesMock,
   },
   CameraResultType: {
     Uri: 'uri',
@@ -59,6 +62,12 @@ describe('nativeImagePicker', () => {
     getPhotoMock.mockResolvedValue({
       webPath: 'https://example.com/rpbox.jpg',
       format: 'jpeg',
+    })
+    pickImagesMock.mockResolvedValue({
+      photos: [{
+        webPath: 'https://example.com/rpbox.jpg',
+        format: 'jpeg',
+      }],
     })
 
     Object.defineProperty(window.navigator, 'userAgent', {
@@ -103,25 +112,47 @@ describe('nativeImagePicker', () => {
       resultType: CameraResultType.Uri,
       presentationStyle: 'popover',
     }))
+    expect(pickImagesMock).not.toHaveBeenCalled()
     expect(file).toBeInstanceOf(File)
   })
 
-  it('accepts limited photo permission without requesting again', async () => {
+  it('uses the single-selection system picker without checking broad photo permission', async () => {
     checkPermissionsMock.mockResolvedValue({
       camera: 'granted',
-      photos: 'limited',
+      photos: 'prompt',
     })
 
-    await pickSingleNativeImageFile('photos')
+    const file = await pickSingleNativeImageFile('photos')
 
+    expect(checkPermissionsMock).not.toHaveBeenCalled()
     expect(requestPermissionsMock).not.toHaveBeenCalled()
-    expect(getPhotoMock).toHaveBeenCalledWith(expect.objectContaining({
-      source: CameraSource.Photos,
-    }))
+    expect(getPhotoMock).not.toHaveBeenCalled()
+    expect(pickImagesMock).toHaveBeenCalledWith({
+      quality: 90,
+      limit: 1,
+      presentationStyle: 'popover',
+    })
+    expect(file).toBeInstanceOf(File)
+  })
+
+  it('does not open the camera after camera permission is denied', async () => {
+    checkPermissionsMock.mockResolvedValue({
+      camera: 'prompt',
+      photos: 'granted',
+    })
+    requestPermissionsMock.mockResolvedValue({
+      camera: 'denied',
+      photos: 'granted',
+    })
+
+    await expect(pickSingleNativeImageFile('camera')).rejects.toThrow('需要相机权限才能拍照')
+
+    expect(getPhotoMock).not.toHaveBeenCalled()
+    expect(pickImagesMock).not.toHaveBeenCalled()
   })
 
   it('returns null when the user cancels the native picker', async () => {
-    getPhotoMock.mockRejectedValue(new Error('User cancelled photos app'))
+    pickImagesMock.mockRejectedValue(new Error('User cancelled photos app'))
 
     await expect(pickSingleNativeImageFile('photos')).resolves.toBeNull()
   })

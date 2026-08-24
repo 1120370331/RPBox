@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,14 +19,16 @@ import (
 )
 
 const (
-	reportTargetPost        = "post"
-	reportTargetItem        = "item"
-	reportTargetUser        = "user"
-	reportTargetComment     = "comment"
-	reportTargetItemComment = "item_comment"
-	reportTargetRPDBComment = "rpdb_comment"
-	reportTargetStory       = "story"
-	reportTargetRPDBWork    = "rpdb_work"
+	reportTargetPost          = "post"
+	reportTargetItem          = "item"
+	reportTargetUser          = "user"
+	reportTargetComment       = "comment"
+	reportTargetItemComment   = "item_comment"
+	reportTargetRPDBComment   = "rpdb_comment"
+	reportTargetStory         = "story"
+	reportTargetRPDBWork      = "rpdb_work"
+	reportTargetCharacterCard = "character_card"
+	reportTargetGuild         = "guild"
 )
 
 type createUserBlockRequest struct {
@@ -60,6 +63,53 @@ type contentReportGroupRow struct {
 }
 
 var reportHTMLTagPattern = regexp.MustCompile(`<[^>]+>`)
+
+type viewerSafetyExclusions struct {
+	viewerID uint
+	enforce  bool
+	blocked  map[uint]struct{}
+	hidden   map[string]map[uint]struct{}
+}
+
+func loadViewerSafetyExclusions(viewerID uint, targetTypes ...string) (viewerSafetyExclusions, error) {
+	exclusions := viewerSafetyExclusions{viewerID: viewerID}
+	if viewerID == 0 || checkModerator(viewerID) {
+		return exclusions, nil
+	}
+	// Some focused handlers/tests run against a deliberately partial schema.
+	// Absence of the optional safety tables means there cannot be persisted
+	// exclusions in that schema.
+	if !database.DB.Migrator().HasTable(&model.UserBlock{}) || !database.DB.Migrator().HasTable(&model.UserHiddenContent{}) {
+		return exclusions, nil
+	}
+
+	blockedIDs, err := getBlockedUserIDs(viewerID)
+	if err != nil {
+		return exclusions, err
+	}
+	hidden, err := getHiddenContentIDMap(viewerID, targetTypes...)
+	if err != nil {
+		return exclusions, err
+	}
+	exclusions.enforce = true
+	exclusions.blocked = make(map[uint]struct{}, len(blockedIDs))
+	for _, blockedID := range blockedIDs {
+		exclusions.blocked[blockedID] = struct{}{}
+	}
+	exclusions.hidden = hidden
+	return exclusions, nil
+}
+
+func (exclusions viewerSafetyExclusions) excludes(targetType string, targetID, targetUserID uint) bool {
+	if !exclusions.enforce || targetUserID == exclusions.viewerID {
+		return false
+	}
+	if _, blocked := exclusions.blocked[targetUserID]; blocked {
+		return true
+	}
+	_, hidden := exclusions.hidden[targetType][targetID]
+	return hidden
+}
 
 func getBlockedUserIDs(userID uint) ([]uint, error) {
 	if userID == 0 {
@@ -200,9 +250,28 @@ func resolveReportTarget(targetType string, targetID uint) (string, uint, error)
 			return "", 0, err
 		}
 		return work.Title, work.AuthorID, nil
+	case reportTargetCharacterCard:
+		var card model.CharacterCard
+		if err := database.DB.Select("id", "user_id", "display_name", "first_name", "last_name").First(&card, targetID).Error; err != nil {
+			return "", 0, err
+		}
+		return characterCardReportTitle(card), card.UserID, nil
+	case reportTargetGuild:
+		var guild model.Guild
+		if err := database.DB.Select("id", "owner_id", "name").First(&guild, targetID).Error; err != nil {
+			return "", 0, err
+		}
+		return guild.Name, guild.OwnerID, nil
 	default:
 		return "", 0, errors.New("unsupported report target")
 	}
+}
+
+func characterCardReportTitle(card model.CharacterCard) string {
+	if title := strings.TrimSpace(card.DisplayName); title != "" {
+		return title
+	}
+	return joinedCharacterCardName(card.FirstName, card.LastName)
 }
 
 func buildCommentReportTitle(content string) string {
@@ -382,7 +451,7 @@ func validateReportReviewAction(targetType, action string) error {
 		default:
 			return errors.New("该举报目标不支持此处理动作")
 		}
-	case reportTargetPost, reportTargetItem, reportTargetComment, reportTargetItemComment, reportTargetRPDBComment, reportTargetStory, reportTargetRPDBWork:
+	case reportTargetPost, reportTargetItem, reportTargetComment, reportTargetItemComment, reportTargetRPDBComment, reportTargetStory, reportTargetRPDBWork, reportTargetCharacterCard, reportTargetGuild:
 		switch action {
 		case "delete_content", "delete_and_mute_user", "delete_and_ban_user", "reject", "archive":
 			return nil
@@ -610,6 +679,38 @@ func (s *Server) deleteReportedTarget(c *gin.Context, targetType string, targetI
 		}
 		s.cleanupCommentImageURLs(c, commentImageURLs...)
 		return targetName, work.AuthorID, false, nil
+	case reportTargetCharacterCard:
+		var card model.CharacterCard
+		if err := database.DB.First(&card, targetID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return buildMissingReportTitle(targetType, targetID), 0, true, nil
+			}
+			return "", 0, false, err
+		}
+		targetName := characterCardReportTitle(card)
+		if targetName == "" {
+			targetName = buildMissingReportTitle(targetType, targetID)
+		}
+		if err := s.deleteCharacterCardAggregate(c, card); err != nil {
+			return "", 0, false, err
+		}
+		return targetName, card.UserID, false, nil
+	case reportTargetGuild:
+		var guild model.Guild
+		if err := database.DB.First(&guild, targetID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return buildMissingReportTitle(targetType, targetID), 0, true, nil
+			}
+			return "", 0, false, err
+		}
+		targetName := strings.TrimSpace(guild.Name)
+		if targetName == "" {
+			targetName = buildMissingReportTitle(targetType, targetID)
+		}
+		if err := s.deleteGuildAggregate(c, guild); err != nil {
+			return "", 0, false, err
+		}
+		return targetName, guild.OwnerID, false, nil
 	default:
 		return "", 0, false, errors.New("unsupported report target")
 	}
@@ -701,6 +802,10 @@ func buildMissingReportTitle(targetType string, targetID uint) string {
 		return fmt.Sprintf("剧情 #%d", targetID)
 	case reportTargetRPDBWork:
 		return fmt.Sprintf("RP 数据库作品 #%d", targetID)
+	case reportTargetCharacterCard:
+		return fmt.Sprintf("人物卡 #%d", targetID)
+	case reportTargetGuild:
+		return fmt.Sprintf("公会 #%d", targetID)
 	default:
 		return fmt.Sprintf("目标 #%d", targetID)
 	}
@@ -760,7 +865,7 @@ func upsertHiddenContentRecord(db *gorm.DB, userID uint, targetType string, targ
 	if userID == 0 || targetID == 0 {
 		return nil
 	}
-	if targetType != reportTargetPost && targetType != reportTargetItem && targetType != reportTargetComment && targetType != reportTargetItemComment && targetType != reportTargetRPDBComment && targetType != reportTargetRPDBWork {
+	if targetType != reportTargetPost && targetType != reportTargetItem && targetType != reportTargetComment && targetType != reportTargetItemComment && targetType != reportTargetRPDBComment && targetType != reportTargetRPDBWork && targetType != reportTargetCharacterCard && targetType != reportTargetGuild {
 		return nil
 	}
 
@@ -1026,7 +1131,7 @@ func (s *Server) listContentReports(c *gin.Context) {
 	case "user":
 		baseQuery = baseQuery.Where("target_type = ?", reportTargetUser)
 	case "content":
-		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetPost, reportTargetItem, reportTargetRPDBWork})
+		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetPost, reportTargetItem, reportTargetRPDBWork, reportTargetCharacterCard, reportTargetGuild})
 	case "comment":
 		baseQuery = baseQuery.Where("target_type IN ?", []string{reportTargetComment, reportTargetItemComment, reportTargetRPDBComment})
 	case "story":
@@ -1061,6 +1166,8 @@ func (s *Server) listContentReports(c *gin.Context) {
 	rpdbCommentIDs := make([]uint, 0)
 	storyIDs := make([]uint, 0)
 	rpdbWorkIDs := make([]uint, 0)
+	characterCardIDs := make([]uint, 0)
+	guildIDs := make([]uint, 0)
 	userIDs := make([]uint, 0)
 	for _, row := range rows {
 		var reports []model.ContentReport
@@ -1090,6 +1197,10 @@ func (s *Server) listContentReports(c *gin.Context) {
 			storyIDs = append(storyIDs, row.TargetID)
 		case reportTargetRPDBWork:
 			rpdbWorkIDs = append(rpdbWorkIDs, row.TargetID)
+		case reportTargetCharacterCard:
+			characterCardIDs = append(characterCardIDs, row.TargetID)
+		case reportTargetGuild:
+			guildIDs = append(guildIDs, row.TargetID)
 		}
 
 		for _, report := range reports {
@@ -1169,6 +1280,48 @@ func (s *Server) listContentReports(c *gin.Context) {
 	for _, work := range rpdbWorks {
 		rpdbWorkMap[work.ID] = work
 		userIDs = append(userIDs, work.AuthorID)
+	}
+
+	var characterCards []model.CharacterCard
+	if len(characterCardIDs) > 0 {
+		_ = database.DB.Select(
+			"id", "user_id", "display_name", "first_name", "last_name", "summary", "background_story",
+			"first_impression", "other_content", "portrait_image", "portrait_image_updated_at", "updated_at",
+		).Where("id IN ?", characterCardIDs).Find(&characterCards).Error
+	}
+	characterCardMap := make(map[uint]model.CharacterCard, len(characterCards))
+	characterCardPreviewMap := make(map[uint]model.CharacterCard, len(characterCards))
+	for _, card := range characterCards {
+		characterCardMap[card.ID] = card
+		characterCardPreviewMap[card.ID] = card
+		userIDs = append(userIDs, card.UserID)
+	}
+	if len(characterCardIDs) > 0 && database.DB.Migrator().HasTable(&model.CharacterCardPublication{}) {
+		var publications []model.CharacterCardPublication
+		if err := database.DB.Where("character_card_id IN ?", characterCardIDs).Find(&publications).Error; err == nil {
+			for _, publication := range publications {
+				var snapshot characterCardSnapshot
+				if err := json.Unmarshal([]byte(publication.Payload), &snapshot); err != nil ||
+					snapshot.Card.ID != publication.CharacterCardID || snapshot.Card.UserID != publication.UserID {
+					continue
+				}
+				publishedCard, _, _ := snapshot.models()
+				characterCardPreviewMap[publication.CharacterCardID] = publishedCard
+			}
+		}
+	}
+
+	var guilds []model.Guild
+	if len(guildIDs) > 0 {
+		_ = database.DB.Select(
+			"id", "name", "owner_id", "description", "slogan", "lore", "banner", "banner_updated_at",
+			"avatar", "avatar_updated_at", "updated_at",
+		).Where("id IN ?", guildIDs).Find(&guilds).Error
+	}
+	guildMap := make(map[uint]model.Guild, len(guilds))
+	for _, guild := range guilds {
+		guildMap[guild.ID] = guild
+		userIDs = append(userIDs, guild.OwnerID)
 	}
 
 	if len(postIDs) > 0 {
@@ -1310,6 +1463,36 @@ func (s *Server) listContentReports(c *gin.Context) {
 			if targetUserID == 0 {
 				targetUserID = work.AuthorID
 			}
+		case reportTargetCharacterCard:
+			card := characterCardMap[row.TargetID]
+			previewCard := characterCardPreviewMap[row.TargetID]
+			if title := characterCardReportTitle(previewCard); title != "" {
+				targetTitle = title
+			}
+			targetPreviewText = normalizeReportPreviewText(strings.TrimSpace(
+				previewCard.Summary+"\n"+previewCard.BackgroundStory+"\n"+previewCard.FirstImpression+"\n"+previewCard.OtherContent,
+			), 220)
+			targetPreviewImage = s.characterCardPortraitURL(previewCard)
+			targetURL = fmt.Sprintf("/character-cards/%d", row.TargetID)
+			if card.UserID != 0 {
+				targetUserID = card.UserID
+			}
+		case reportTargetGuild:
+			guild := guildMap[row.TargetID]
+			if strings.TrimSpace(guild.Name) != "" {
+				targetTitle = guild.Name
+			}
+			targetPreviewText = normalizeReportPreviewText(strings.TrimSpace(
+				guild.Slogan+"\n"+guild.Description+"\n"+guild.Lore,
+			), 220)
+			targetPreviewImage = guildBannerURL(guild)
+			if targetPreviewImage == "" {
+				targetPreviewImage = guildAvatarURL(guild)
+			}
+			targetURL = fmt.Sprintf("/guild/%d", row.TargetID)
+			if guild.OwnerID != 0 {
+				targetUserID = guild.OwnerID
+			}
 		}
 		if targetUserID != 0 {
 			targetAuthorName = userMap[targetUserID].Username
@@ -1420,7 +1603,7 @@ func (s *Server) reviewContentReport(c *gin.Context) {
 		if strings.TrimSpace(resolvedName) != "" {
 			targetName = resolvedName
 		}
-		if targetUserID == 0 {
+		if resolvedUserID != 0 {
 			targetUserID = resolvedUserID
 		}
 	}

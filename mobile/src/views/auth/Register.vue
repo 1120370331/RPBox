@@ -17,7 +17,7 @@ const sendingCode = ref(false)
 const codeSent = ref(false)
 const countdown = ref(0)
 const agreedToPolicies = ref(false)
-const AGREEMENT_VERSION = '2026-03-25'
+const AGREEMENT_VERSION = '2026-08-24'
 
 const canSendCode = computed(() => {
   return email.value.includes('@') && !sendingCode.value && countdown.value === 0

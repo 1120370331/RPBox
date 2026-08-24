@@ -2,22 +2,24 @@
 
 本文档说明 RPBox 手机端（Capacitor）发布流水线、iOS TestFlight 流程、服务端 updater 元数据，以及客户端自动检测更新流程。
 
+Apple App Store 提交不是流水线成功后的自动步骤。每次 iOS 提交前必须完成 [Apple App Store 审核清单](./app-store-review.md)，关闭其中全部 `BLOCKED` 项，并在 App Store Connect 安全填写审核账号；不要把真实审核凭据写入仓库。
+
 ## 1. 流水线总览
 
 - Android 触发方式：推送 `mobile-v*` tag（例如 `mobile-v2.0.2`）
 - 工作流文件：`.github/workflows/release-mobile.yml`
 - 主要动作：
-  1. 构建 Android Release APK
-  2. 使用 keystore 签名 APK
+  1. 构建 Android Release APK 与 Google Play AAB
+  2. 使用同一 upload keystore 签名并验证 APK/AAB
   3. 生成 `latest-android.json` 元数据
-  4. 上传 APK 与元数据到服务器 `releases/mobile`
+  4. 将 APK/AAB 作为 Actions artifact 保存，并只把 APK 与元数据部署到服务器 `releases/mobile`
 - iOS 触发方式：推送 `mobile-ios-v*` tag（例如 `mobile-ios-v2.0.2`）
 - iOS 工作流文件：`.github/workflows/release-ios-testflight.yml`
 - iOS 主要动作：
   1. 生成并校验 Capacitor iOS 工程
   2. 使用 Distribution 证书和 App Store provisioning profile 创建 archive
-  3. 导出 IPA 并上传到 TestFlight
-  4. 生成并上传 `latest-ios.json`（指向 App Store）
+  3. 导出 IPA、上传到 TestFlight，并等待 App Store Connect 完成 build processing
+  4. TestFlight 阶段不更新生产 `latest-ios.json`；只有 Apple 公共页面已经显示同版本 Ready for Sale 时，才可显式执行受保护的公开元数据发布
 
 ## 2. 发布命令
 
@@ -25,9 +27,9 @@
 git tag mobile-v2.0.2
 git push origin mobile-v2.0.2
 
-# iOS TestFlight
-git tag mobile-ios-v2.0.2
-git push origin mobile-ios-v2.0.2
+# iOS TestFlight（`mobile-ios-v*` 也兼容）
+git tag ios-v2.0.2
+git push origin ios-v2.0.2
 ```
 
 可选：在发版前新增更新说明文件 `mobile/release-notes/<version>.txt`，例如：
@@ -59,7 +61,7 @@ Android (`latest-android.json`)：
   "latest_version": "0.1.0",
   "notes": "更新说明",
   "pub_date": "2026-03-22T12:00:00Z",
-  "url": "https://api.rpbox.app/releases/mobile/0.1.0/RPBox_0.1.0_android.apk",
+  "url": "https://ksxvodevhonx.sealosbja.site/releases/mobile/0.1.0/RPBox_0.1.0_android.apk",
   "mandatory": false
 }
 ```
@@ -71,10 +73,12 @@ iOS (`latest-ios.json`)：
   "latest_version": "0.1.0",
   "notes": "更新说明",
   "pub_date": "2026-03-22T12:00:00Z",
-  "url": "https://apps.apple.com/app/rpbox/id1234567890",
+  "url": "https://apps.apple.com/cn/app/rpbox/id6761112311",
   "mandatory": false
 }
 ```
+
+公开更新 URL 采用 fail-closed 校验：只接受 `https://apps.apple.com` 的规范 App 路径和 9–12 位数字 App ID，拒绝 TestFlight、凭据、占位 ID、非 HTTPS、其他主机或非规范路径。workflow 按 `IOS_PUBLIC_UPDATE_URL`、兼容变量 `IOS_APP_STORE_URL`、内置正式 URL 的顺序取值，任一候选必须通过 `mobile/scripts/iosCompliance.mjs` 后才生成元数据；仍须在真机确认打开正确商店页面。
 
 ## 5. GitHub Secrets
 
@@ -88,12 +92,13 @@ iOS (`latest-ios.json`)：
 移动端新增：
 
 - `MOBILE_RELEASE_PATH`（可选，不配则用 `${RELEASE_PATH}/mobile`）
-- `MOBILE_RELEASE_BASE_URL`（可选，不配则默认 `https://api.rpbox.app/releases/mobile`）
+- `MOBILE_RELEASE_BASE_URL`（可选，不配则默认当前生产地址 `https://ksxvodevhonx.sealosbja.site/releases/mobile`；迁移自有域名前必须先完成入口绑定、DNS 和 TLS）
 - `ANDROID_SIGNING_KEYSTORE_BASE64`
 - `ANDROID_SIGNING_STORE_PASSWORD`
 - `ANDROID_SIGNING_KEY_ALIAS`
 - `ANDROID_SIGNING_KEY_PASSWORD`
-- `IOS_APP_STORE_URL`（用于生成 iOS updater 元数据）
+- `IOS_PUBLIC_UPDATE_URL`（可选，iOS updater 的首选公开 App Store URL；必须通过规范 URL 校验）
+- `IOS_APP_STORE_URL`（可选，兼容旧配置；同样必须通过规范 URL 校验）
 - `IOS_TEAM_ID`
 - `IOS_BUNDLE_ID`
 - `IOS_PROVISION_PROFILE_NAME`
@@ -107,9 +112,11 @@ iOS (`latest-ios.json`)：
 - `IOS_TESTFLIGHT_GROUPS`（可选）
 
 说明：
-- Android workflow 构建并上传签名的 Release APK。
-- iOS workflow 会在 macOS runner 上完成 Xcode archive、IPA 导出和 TestFlight 上传；Windows 本机不能替代这一步。
-- iOS workflow 在归档前会校验 Bundle ID、版本号、build number、签名方式、provisioning profile、相机权限、深链和隐私清单。
+- Android workflow 构建并验证签名的 Release APK 与 AAB；APK 用于官网分发，AAB 作为 Google Play 待上传产物保留。
+- iOS workflow 会在 macOS runner 上完成 Xcode archive、IPA 导出、TestFlight 上传和 processing 等待；Windows 本机不能替代这一步。
+- iOS 相机/照片权限说明以 `mobile/scripts/iosCompliance.mjs` 为单一来源，由 `prepareNativeShare.mjs` 写入并由 `verifyIosProject.mjs` 逐项校验。
+- iOS workflow 在归档前会校验 Bundle ID、版本号、build number、签名方式、provisioning profile、相机/照片权限、深链、隐私清单和公开更新 URL。
+- iOS TestFlight 成功不等于 App Store 已发布，禁止在审核通过前提升生产 iOS updater 版本。
 
 ## 6. 服务端 updater 行为
 

@@ -3,9 +3,39 @@ package api
 import (
 	"fmt"
 
+	"github.com/gin-gonic/gin"
+	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"gorm.io/gorm"
 )
+
+// deleteGuildAggregate applies the same relationship, upload, cache, and
+// profile cleanup used by the guild deletion handlers to an already loaded
+// guild. Storage cleanup happens only after the database transaction commits.
+func (s *Server) deleteGuildAggregate(c *gin.Context, guild model.Guild) error {
+	var memberUserIDs []uint
+	if err := database.DB.Model(&model.GuildMember{}).
+		Where("guild_id = ?", guild.ID).
+		Pluck("user_id", &memberUserIDs).Error; err != nil {
+		return fmt.Errorf("failed to collect guild members: %w", err)
+	}
+
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		return deleteGuildRecords(tx, []uint{guild.ID})
+	}); err != nil {
+		return err
+	}
+
+	uploadKeys := make(map[string]struct{})
+	collectUploadKeysFromValue(c, guild.Avatar, uploadKeys)
+	collectUploadKeysFromValue(c, guild.Banner, uploadKeys)
+	s.deleteUploadKeys(uploadKeys)
+	s.bumpPostListCache(c.Request.Context())
+	for _, memberUserID := range memberUserIDs {
+		s.invalidateUserProfileCache(c.Request.Context(), memberUserID)
+	}
+	return nil
+}
 
 // deleteGuildRecords removes guild-owned relationships while preserving user content.
 func deleteGuildRecords(tx *gorm.DB, guildIDs []uint) error {

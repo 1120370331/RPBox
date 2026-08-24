@@ -463,6 +463,15 @@ func (s *Server) getCharacterCard(c *gin.Context) {
 	}
 	ownerOrModerator := viewerID != 0 && (viewerID == card.UserID || isModerator)
 	if !ownerOrModerator {
+		exclusions, err := loadViewerSafetyExclusions(viewerID, reportTargetCharacterCard)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡安全设置失败"})
+			return
+		}
+		if exclusions.excludes(reportTargetCharacterCard, card.ID, card.UserID) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
+			return
+		}
 		dto, visible, err := s.loadPublicCharacterCardDTO(card, true)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
@@ -503,6 +512,16 @@ func (s *Server) getCharacterCardShare(c *gin.Context) {
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
 		}
+		return
+	}
+	viewerID := optionalActiveUserID(c)
+	exclusions, err := loadViewerSafetyExclusions(viewerID, reportTargetCharacterCard)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡安全设置失败"})
+		return
+	}
+	if exclusions.excludes(reportTargetCharacterCard, card.ID, card.UserID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
 		return
 	}
 
@@ -854,16 +873,27 @@ func (s *Server) deleteCharacterCard(c *gin.Context) {
 		}
 		return
 	}
+	if err := s.deleteCharacterCardAggregate(c, card); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除人物卡失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+// deleteCharacterCardAggregate removes the complete character-card aggregate
+// and then cleans storage objects that are no longer referenced. Callers must
+// load the authoritative card first so the owner and asset references remain
+// available after the database transaction commits.
+func (s *Server) deleteCharacterCardAggregate(c *gin.Context, card model.CharacterCard) error {
 	impressionsByCard, err := loadCharacterCardImpressions(database.DB, []uint{card.ID})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡第一印象失败"})
-		return
+		return err
 	}
 	impressions := impressionsByCard[card.ID]
 	portraits, err := loadCharacterCardPortraitRows(database.DB, card.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡角色大图失败"})
-		return
+		return err
 	}
 	assets := map[string]struct{}{}
 	addAsset := func(value string) {
@@ -890,37 +920,40 @@ func (s *Server) deleteCharacterCard(c *gin.Context) {
 		}
 	}
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if tx.Migrator().HasTable(&model.StoryEntry{}) {
-			if err := tx.Model(&model.StoryEntry{}).
-				Where("character_card_id = ?", card.ID).
-				Update("character_card_id", nil).Error; err != nil {
-				return err
-			}
-		}
-		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPublication{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardSubmission{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPortrait{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardImpression{}).Error; err != nil {
-			return err
-		}
-		return tx.Where("id = ? AND user_id = ?", card.ID, userID).Delete(&model.CharacterCard{}).Error
+		return deleteCharacterCardRecords(tx, card)
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除人物卡失败"})
-		return
+		return err
 	}
 
 	// Posts contain stable IDs in their rich text and are intentionally not
 	// rewritten or deleted when a card disappears.
 	for asset := range assets {
-		s.cleanupCharacterCardAssetIfUnreferenced(c, userID, card.ID, asset)
+		s.cleanupCharacterCardAssetIfUnreferenced(c, card.UserID, card.ID, asset)
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	return nil
+}
+
+func deleteCharacterCardRecords(tx *gorm.DB, card model.CharacterCard) error {
+	if tx.Migrator().HasTable(&model.StoryEntry{}) {
+		if err := tx.Model(&model.StoryEntry{}).
+			Where("character_card_id = ?", card.ID).
+			Update("character_card_id", nil).Error; err != nil {
+			return err
+		}
+	}
+	if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPublication{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardSubmission{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardPortrait{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardImpression{}).Error; err != nil {
+		return err
+	}
+	return tx.Where("id = ? AND user_id = ?", card.ID, card.UserID).Delete(&model.CharacterCard{}).Error
 }
 
 func (s *Server) syncCharacterCardFromTRP3(c *gin.Context) {
@@ -1029,6 +1062,12 @@ func (s *Server) listPublicUserCharacterCards(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
+	viewerID := optionalActiveUserID(c)
+	exclusions, err := loadViewerSafetyExclusions(viewerID, reportTargetCharacterCard)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡安全设置失败"})
+		return
+	}
 
 	var cards []model.CharacterCard
 	if err := database.DB.Where("user_id = ?", userID).
@@ -1039,6 +1078,9 @@ func (s *Server) listPublicUserCharacterCards(c *gin.Context) {
 	}
 	result := make([]characterCardDTO, 0, len(cards))
 	for _, card := range cards {
+		if exclusions.excludes(reportTargetCharacterCard, card.ID, card.UserID) {
+			continue
+		}
 		dto, visible, err := s.loadPublicCharacterCardDTO(card, false)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询人物卡失败"})

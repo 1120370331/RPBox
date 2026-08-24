@@ -9,6 +9,9 @@ import { clearImageCache } from '@/utils/imageCache'
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToastStore()
+const websiteUrl = 'https://totalrpbox.com'
+const supportUrl = 'https://github.com/1120370331/RPBox/issues'
+const publicPrivacyUrl = 'https://totalrpbox.com/privacy.html'
 const {
   currentVersion,
   currentTarget,
@@ -243,6 +246,37 @@ onMounted(async () => {
           <button class="action-btn secondary" @click="router.push('/legal/privacy')">
             {{ $t('auth.register.privacy') }}
           </button>
+          <a
+            class="action-btn secondary"
+            :href="publicPrivacyUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ $t('profile.about.legal.publicPrivacy') }}
+          </a>
+        </div>
+      </div>
+
+      <div class="about-card">
+        <h3 class="section-title">{{ $t('profile.about.support.title') }}</h3>
+        <p class="update-hint">{{ $t('profile.about.support.desc') }}</p>
+        <div class="update-actions">
+          <a
+            class="action-btn secondary"
+            :href="websiteUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ $t('profile.about.support.website') }}
+          </a>
+          <a
+            class="action-btn secondary"
+            :href="supportUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ $t('profile.about.support.issues') }}
+          </a>
         </div>
       </div>
 
@@ -328,11 +362,15 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 .action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 10px;
   padding: 8px 14px;
   font-size: 13px;
   cursor: pointer;
+  text-decoration: none;
 }
 .action-btn:disabled {
   opacity: 0.6;
