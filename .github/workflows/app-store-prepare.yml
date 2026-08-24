@@ -43,7 +43,7 @@ jobs:
   prepare:
     name: Validate and prepare App Store Connect
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
 
     steps:
       - name: Checkout exact repository candidate
@@ -128,6 +128,7 @@ jobs:
               os.environ["PUBLIC_PRIVACY_WWW_URL"],
           )
           REPOSITORY_API_URL = os.environ["PUBLIC_REPOSITORY_API_URL"]
+          TRACKED_MARKETING_PATH = Path("shared/index.html")
           TRACKED_PRIVACY_PATH = Path("shared/privacy.html")
 
 
@@ -148,7 +149,7 @@ jobs:
           opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
 
 
-          def fetch_https(url: str, accept: str) -> bytes:
+          def fetch_https(url: str, accept: str) -> tuple[bytes, str]:
               parsed = urllib.parse.urlsplit(url)
               if parsed.scheme.lower() != "https" or not parsed.netloc or parsed.username:
                   raise RuntimeError("Public preflight URL must be a safe HTTPS URL")
@@ -165,21 +166,40 @@ jobs:
                   with opener.open(request, timeout=45) as response:
                       if response.status != 200:
                           raise RuntimeError("Public preflight endpoint did not return HTTP 200")
-                      if urllib.parse.urlsplit(response.geturl()).scheme.lower() != "https":
+                      final_url = response.geturl()
+                      if urllib.parse.urlsplit(final_url).scheme.lower() != "https":
                           raise RuntimeError("Public preflight endpoint resolved to a non-HTTPS URL")
-                      return response.read()
+                      return response.read(), final_url
               except urllib.error.HTTPError as exc:
                   raise RuntimeError(f"Public preflight endpoint returned HTTP {exc.code}") from None
               except urllib.error.URLError:
                   raise RuntimeError("Public preflight endpoint failed due to a transport error") from None
 
 
-          fetch_https(MARKETING_URL, "text/html")
-          fetch_https(SUPPORT_URL, "text/html")
+          marketing_document, marketing_final_url = fetch_https(MARKETING_URL, "text/html")
+          if marketing_final_url.rstrip("/") != MARKETING_URL.rstrip("/"):
+              raise RuntimeError("Marketing URL redirected away from the approved public URL")
+          tracked_marketing = TRACKED_MARKETING_PATH.read_bytes()
+          if not tracked_marketing or marketing_document != tracked_marketing:
+              raise RuntimeError("Published marketing page does not exactly match shared/index.html")
 
-          repository_document = json.loads(
-              fetch_https(REPOSITORY_API_URL, "application/vnd.github+json").decode("utf-8")
+          support_document, support_final_url = fetch_https(SUPPORT_URL, "text/html")
+          if support_final_url.rstrip("/") != SUPPORT_URL.rstrip("/"):
+              raise RuntimeError("Support URL redirected away from the approved GitHub Issues page")
+          support_text = support_document.decode("utf-8", errors="replace")
+          if (
+              "1120370331/RPBox" not in support_text
+              or "/1120370331/RPBox/issues" not in support_text
+          ):
+              raise RuntimeError("Support URL content is not the approved RPBox Issues page")
+
+          repository_bytes, repository_final_url = fetch_https(
+              REPOSITORY_API_URL,
+              "application/vnd.github+json",
           )
+          if repository_final_url != REPOSITORY_API_URL:
+              raise RuntimeError("GitHub repository API redirected unexpectedly")
+          repository_document = json.loads(repository_bytes.decode("utf-8"))
           if (
               repository_document.get("full_name") != "1120370331/RPBox"
               or repository_document.get("private") is not False
@@ -211,7 +231,7 @@ jobs:
               raise RuntimeError("Tracked privacy policy is missing required bilingual/deletion/contact content")
 
           for privacy_url in PRIVACY_URLS:
-              published_privacy = fetch_https(privacy_url, "text/html")
+              published_privacy, _ = fetch_https(privacy_url, "text/html")
               if (
                   len(published_privacy) != len(tracked_privacy)
                   or hashlib.sha256(published_privacy).hexdigest() != tracked_sha256
@@ -1129,7 +1149,7 @@ jobs:
                           f"- Version: verified `{VERSION}` in `{VERSION_STATE}`",
                           f"- Build: verified `{BUILD_NUMBER}` in `{BUILD_STATE}`",
                           "- Localization: verified `zh-Hans`",
-                          "- Public preflight: marketing/support reachable; repository public with Issues; both privacy hosts exactly match tracked bilingual policy",
+                          "- Public preflight: marketing page matches tracked content; support is the canonical public RPBox Issues page; both privacy hosts exactly match tracked bilingual policy",
                           "- Existing iPad screenshots: preserved baseline has at least four `COMPLETE` assets",
                           "- Local iPhone screenshots: exactly four SHA-256-approved 1242x2688 PNGs in fixed order",
                           "",
@@ -1264,7 +1284,7 @@ jobs:
                       f"- App identity: `{APP_ID}` / `{BUNDLE_ID}` verified",
                       f"- Version: `{VERSION}` remains in `{VERSION_STATE}`",
                       f"- Selected build: `{BUILD_NUMBER}` (`{BUILD_STATE}`)",
-                      "- Public URLs: marketing/support reachable; repository public with Issues; both privacy hosts exactly match tracked bilingual policy",
+                      "- Public URLs: marketing page matches tracked content; support is the canonical public RPBox Issues page; both privacy hosts exactly match tracked bilingual policy",
                       "- zh-Hans metadata: description, What's New, support URL, and marketing URL exact",
                       "- App Review notes: present and exact; contacts and demo credentials unchanged",
                       "- iPad screenshots: original set and asset IDs preserved, with at least four `COMPLETE` assets",
