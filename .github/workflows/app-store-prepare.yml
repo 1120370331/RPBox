@@ -1,0 +1,1302 @@
+name: Prepare App Store Version 1.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the validated metadata, build attachment, and iPhone screenshot changes
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-store-prepare-1-1
+  cancel-in-progress: false
+
+env:
+  ASC_API_BASE: https://api.appstoreconnect.apple.com
+  ASC_EXPECTED_APP_ID: '6761112311'
+  ASC_EXPECTED_BUNDLE_ID: app.rpbox.mobile
+  ASC_EXPECTED_VERSION: '1.1'
+  ASC_EXPECTED_VERSION_ID: 65b84c7b-ed28-46a4-9e54-888ccdc20138
+  ASC_EXPECTED_VERSION_STATE: PREPARE_FOR_SUBMISSION
+  ASC_EXPECTED_BUILD_NUMBER: '1000041'
+  ASC_EXPECTED_BUILD_ID: 70feeedd-6aeb-44c2-9e7b-672d5960cf5e
+  ASC_EXPECTED_BUILD_STATE: VALID
+  ASC_EXPECTED_LOCALIZATION_ID: d57fbf3c-e8fe-4fef-9c45-cece4973115d
+  ASC_EXPECTED_LOCALE: zh-Hans
+  SCREENSHOT_DIR: artifacts/app-store-screenshots-1242x2688
+  SCREENSHOT_SHA256_01: bc78df2fe7098832e48b3361c737d794cf80e5882b1f58b68a87f02b8a7ab89e
+  SCREENSHOT_SHA256_02: 7f82be18d5d8717e13762755fa2bd29746170dc5e1f4e156182425fa84b3f8e4
+  SCREENSHOT_SHA256_03: 3da583ab871c2b323deb59e7619ece1c37d2e749b8c64d5c054bf7f9bcaf70ac
+  SCREENSHOT_SHA256_04: 93712744420242ff8cb16eecdac28d94543e2132042df3ff407d25198b13156e
+  PUBLIC_MARKETING_URL: https://totalrpbox.com
+  PUBLIC_SUPPORT_URL: https://github.com/1120370331/RPBox/issues
+  PUBLIC_PRIVACY_URL: https://totalrpbox.com/privacy.html
+  PUBLIC_PRIVACY_WWW_URL: https://www.totalrpbox.com/privacy.html
+  PUBLIC_REPOSITORY_API_URL: https://api.github.com/repos/1120370331/RPBox
+
+jobs:
+  prepare:
+    name: Validate and prepare App Store Connect
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout exact repository candidate
+        uses: actions/checkout@v4
+
+      - name: Validate iPhone screenshot assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import os
+          import struct
+          from pathlib import Path
+
+
+          screenshot_dir = Path(os.environ["SCREENSHOT_DIR"])
+          expected_files = {
+              "01-guild-plaza.png": os.environ["SCREENSHOT_SHA256_01"],
+              "02-story-management.png": os.environ["SCREENSHOT_SHA256_02"],
+              "03-resource-market.png": os.environ["SCREENSHOT_SHA256_03"],
+              "04-rp-community.png": os.environ["SCREENSHOT_SHA256_04"],
+          }
+          expected_names = sorted(expected_files)
+
+          if not screenshot_dir.is_dir():
+              raise SystemExit(f"Screenshot directory is missing: {screenshot_dir}")
+
+          actual_names = sorted(
+              path.name
+              for path in screenshot_dir.iterdir()
+              if path.is_file() and path.suffix.lower() == ".png"
+          )
+          if actual_names != expected_names:
+              raise SystemExit(
+                  "Expected exactly the four approved 1242x2688 PNG files; "
+                  f"found {len(actual_names)} PNG file(s)"
+              )
+
+          for name in expected_names:
+              path = screenshot_dir / name
+              with path.open("rb") as source:
+                  header = source.read(24)
+              if len(header) != 24 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR":
+                  raise SystemExit(f"Screenshot is not a valid PNG with an IHDR header: {name}")
+              width, height = struct.unpack(">II", header[16:24])
+              if (width, height) != (1242, 2688):
+                  raise SystemExit(
+                      f"Screenshot {name} must be exactly 1242x2688; found {width}x{height}"
+                  )
+              if path.stat().st_size <= 0:
+                  raise SystemExit(f"Screenshot is empty: {name}")
+              actual_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+              if actual_sha256 != expected_files[name]:
+                  raise SystemExit(f"Screenshot does not match the approved SHA-256: {name}")
+
+          print("Validated names, dimensions, and SHA-256 for four approved iPhone screenshots.")
+          PY
+
+      - name: Preflight public App Store URLs and privacy content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+
+          MARKETING_URL = os.environ["PUBLIC_MARKETING_URL"]
+          SUPPORT_URL = os.environ["PUBLIC_SUPPORT_URL"]
+          PRIVACY_URLS = (
+              os.environ["PUBLIC_PRIVACY_URL"],
+              os.environ["PUBLIC_PRIVACY_WWW_URL"],
+          )
+          REPOSITORY_API_URL = os.environ["PUBLIC_REPOSITORY_API_URL"]
+          TRACKED_PRIVACY_PATH = Path("shared/privacy.html")
+
+
+          class HttpsOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+                  if urllib.parse.urlsplit(new_url).scheme.lower() != "https":
+                      raise RuntimeError("Public URL attempted a non-HTTPS redirect")
+                  return super().redirect_request(
+                      request,
+                      file_pointer,
+                      code,
+                      message,
+                      headers,
+                      new_url,
+                  )
+
+
+          opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
+
+
+          def fetch_https(url: str, accept: str) -> bytes:
+              parsed = urllib.parse.urlsplit(url)
+              if parsed.scheme.lower() != "https" or not parsed.netloc or parsed.username:
+                  raise RuntimeError("Public preflight URL must be a safe HTTPS URL")
+              request = urllib.request.Request(
+                  url,
+                  method="GET",
+                  headers={
+                      "Accept": accept,
+                      "Accept-Encoding": "identity",
+                      "User-Agent": "RPBox-AppStore-Public-Preflight/1.0",
+                  },
+              )
+              try:
+                  with opener.open(request, timeout=45) as response:
+                      if response.status != 200:
+                          raise RuntimeError("Public preflight endpoint did not return HTTP 200")
+                      if urllib.parse.urlsplit(response.geturl()).scheme.lower() != "https":
+                          raise RuntimeError("Public preflight endpoint resolved to a non-HTTPS URL")
+                      return response.read()
+              except urllib.error.HTTPError as exc:
+                  raise RuntimeError(f"Public preflight endpoint returned HTTP {exc.code}") from None
+              except urllib.error.URLError:
+                  raise RuntimeError("Public preflight endpoint failed due to a transport error") from None
+
+
+          fetch_https(MARKETING_URL, "text/html")
+          fetch_https(SUPPORT_URL, "text/html")
+
+          repository_document = json.loads(
+              fetch_https(REPOSITORY_API_URL, "application/vnd.github+json").decode("utf-8")
+          )
+          if (
+              repository_document.get("full_name") != "1120370331/RPBox"
+              or repository_document.get("private") is not False
+              or repository_document.get("has_issues") is not True
+          ):
+              raise RuntimeError("GitHub repository must be public with Issues enabled")
+
+          tracked_privacy = TRACKED_PRIVACY_PATH.read_bytes()
+          if not tracked_privacy:
+              raise RuntimeError("Tracked privacy policy is missing or empty")
+          tracked_sha256 = hashlib.sha256(tracked_privacy).hexdigest()
+          try:
+              privacy_text = tracked_privacy.decode("utf-8")
+          except UnicodeDecodeError:
+              raise RuntimeError("Tracked privacy policy must be valid UTF-8") from None
+          required_markers = (
+              '<article id="zh-CN"',
+              '<article id="en-US"',
+              "RPBox 隐私政策",
+              "RPBox Privacy Policy",
+              "个人中心 → 删除账号",
+              "Profile → Delete Account",
+              "10. 联系我们",
+              "10. Contact Us",
+              SUPPORT_URL,
+          )
+          missing_markers = [marker for marker in required_markers if marker not in privacy_text]
+          if missing_markers:
+              raise RuntimeError("Tracked privacy policy is missing required bilingual/deletion/contact content")
+
+          for privacy_url in PRIVACY_URLS:
+              published_privacy = fetch_https(privacy_url, "text/html")
+              if (
+                  len(published_privacy) != len(tracked_privacy)
+                  or hashlib.sha256(published_privacy).hexdigest() != tracked_sha256
+                  or published_privacy != tracked_privacy
+              ):
+                  raise RuntimeError("Published privacy policy does not exactly match shared/privacy.html")
+
+          print(
+              "Public preflight passed: marketing, support, public GitHub Issues, and exact bilingual privacy content."
+          )
+          PY
+
+      - name: Install App Store Connect JWT dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install \
+            --disable-pip-version-check \
+            --no-cache-dir \
+            'cryptography>=42,<47'
+
+      - name: Validate App Store Connect state and prepare version
+        shell: bash
+        env:
+          APPLY_CHANGES: ${{ inputs.apply }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import hashlib
+          import json
+          import os
+          import re
+          import sys
+          import textwrap
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from dataclasses import dataclass
+          from pathlib import Path
+
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+
+          API_BASE = os.environ["ASC_API_BASE"].rstrip("/")
+          APP_ID = os.environ["ASC_EXPECTED_APP_ID"]
+          BUNDLE_ID = os.environ["ASC_EXPECTED_BUNDLE_ID"]
+          VERSION = os.environ["ASC_EXPECTED_VERSION"]
+          VERSION_ID = os.environ["ASC_EXPECTED_VERSION_ID"]
+          VERSION_STATE = os.environ["ASC_EXPECTED_VERSION_STATE"]
+          BUILD_NUMBER = os.environ["ASC_EXPECTED_BUILD_NUMBER"]
+          BUILD_ID = os.environ["ASC_EXPECTED_BUILD_ID"]
+          BUILD_STATE = os.environ["ASC_EXPECTED_BUILD_STATE"]
+          LOCALIZATION_ID = os.environ["ASC_EXPECTED_LOCALIZATION_ID"]
+          LOCALE = os.environ["ASC_EXPECTED_LOCALE"]
+          SCREENSHOT_DIR = Path(os.environ["SCREENSHOT_DIR"])
+          APPLY = os.environ.get("APPLY_CHANGES", "false").strip().lower() == "true"
+
+          DESCRIPTION = (
+              "RPBox 是面向魔兽世界角色扮演玩家的独立开源工具与社区。可在手机端浏览与管理 RP 剧情、人物卡、"
+              "公会、社区内容和 RP 资源，支持人物卡分享、剧情归档、举报、隐藏、屏蔽和账号删除。"
+              "RPBox 与 Blizzard Entertainment 无隶属、赞助或认可关系。"
+          )
+          WHATS_NEW = textwrap.dedent("""\
+          RPBox iOS 1.1 更新：
+
+          1. 新增人物卡快捷跳转、特质查看与分享，并让剧情记录正确展示关联人物卡。
+          2. 完善公会解散、人物卡与公会举报、隐藏和屏蔽流程，举报可由版主按具体对象处理。
+          3. 补齐中英文隐私政策、服务条款、账号删除说明与安全操作提示。
+          4. 优化图片选择、预览、分享和多处移动端布局与无障碍体验。
+          """).strip()
+          SUPPORT_URL = os.environ["PUBLIC_SUPPORT_URL"]
+          MARKETING_URL = os.environ["PUBLIC_MARKETING_URL"]
+          PRIVACY_URL = os.environ["PUBLIC_PRIVACY_URL"]
+          REVIEW_NOTES = textwrap.dedent(f"""\
+          RPBox is an independent open-source tool and community for World of Warcraft role-playing players. It is not affiliated with, sponsored by, or endorsed by Blizzard Entertainment.
+
+          Existing demo credentials are provided in App Review Information.
+
+          Core review paths:
+          - Community content and profiles provide report and block safety actions.
+          - Character-card and guild detail views provide report, hide, and block actions.
+          - Privacy Policy and Terms are available before sign-in and under About.
+          - Account deletion is at Profile -> Delete Account.
+          - Camera and photo access are user-triggered only; the app does not write to the photo gallery.
+          - The app has no push notifications and no in-app purchases.
+
+          Support: {SUPPORT_URL}
+          Privacy: {PRIVACY_URL}
+          """).strip()
+
+          EXPECTED_SCREENSHOT_NAMES = [
+              "01-guild-plaza.png",
+              "02-story-management.png",
+              "03-resource-market.png",
+              "04-rp-community.png",
+          ]
+          APPROVED_SCREENSHOT_SHA256 = {
+              "01-guild-plaza.png": os.environ["SCREENSHOT_SHA256_01"],
+              "02-story-management.png": os.environ["SCREENSHOT_SHA256_02"],
+              "03-resource-market.png": os.environ["SCREENSHOT_SHA256_03"],
+              "04-rp-community.png": os.environ["SCREENSHOT_SHA256_04"],
+          }
+          IPHONE_DISPLAY_TYPE = "APP_IPHONE_65"
+          IPAD_DISPLAY_TYPE = "APP_IPAD_PRO_3GEN_129"
+          IPHONE_IN_PROGRESS_STATES = {"PROCESSING", "UPLOAD_COMPLETE"}
+          IPHONE_ALLOWED_STATES = {"AWAITING_UPLOAD", "COMPLETE", *IPHONE_IN_PROGRESS_STATES}
+          MUTABLE_LOCALIZATION_FIELDS = {"description", "whatsNew", "supportUrl", "marketingUrl"}
+
+
+          def b64url(value: bytes) -> str:
+              return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+          def attributes(resource: dict | None) -> dict:
+              if not isinstance(resource, dict):
+                  return {}
+              value = resource.get("attributes")
+              return value if isinstance(value, dict) else {}
+
+
+          def relationship_id(resource: dict, name: str) -> str | None:
+              relationships = resource.get("relationships")
+              relationship = relationships.get(name) if isinstance(relationships, dict) else None
+              data = relationship.get("data") if isinstance(relationship, dict) else None
+              if isinstance(data, dict) and data.get("id"):
+                  return str(data["id"])
+              return None
+
+
+          def present(value) -> bool:
+              return value is not None and (not isinstance(value, str) or bool(value.strip()))
+
+
+          def safe_error_message(value: object) -> str:
+              message = str(value)
+              message = re.sub(r"https://[^\s)\]>'\"]+", "[REDACTED_URL]", message)
+              for secret_name in ("ASC_ISSUER_ID", "ASC_KEY_ID", "ASC_API_KEY_BASE64"):
+                  secret = os.environ.get(secret_name, "")
+                  if secret:
+                      message = message.replace(secret, "[REDACTED]")
+              message = re.sub(
+                  r"(?i)(authorization|asset[_-]?token|access[_-]?token|private[_-]?key)\s*[:=]\s*\S+",
+                  r"\1=[REDACTED]",
+                  message,
+              )
+              return message[:600]
+
+
+          class TokenProvider:
+              def __init__(self) -> None:
+                  issuer_id = os.environ.get("ASC_ISSUER_ID", "").strip()
+                  key_id = os.environ.get("ASC_KEY_ID", "").strip()
+                  encoded_key = "".join(os.environ.get("ASC_API_KEY_BASE64", "").split())
+                  missing = [
+                      name
+                      for name, value in (
+                          ("ASC_ISSUER_ID", issuer_id),
+                          ("ASC_KEY_ID", key_id),
+                          ("ASC_API_KEY_BASE64", encoded_key),
+                      )
+                      if not value
+                  ]
+                  if missing:
+                      raise RuntimeError("Missing required GitHub secrets: " + ", ".join(missing))
+                  try:
+                      key_bytes = base64.b64decode(encoded_key, validate=True)
+                      private_key = serialization.load_pem_private_key(key_bytes, password=None)
+                  except Exception as exc:
+                      raise RuntimeError(
+                          "ASC_API_KEY_BASE64 is not a valid unencrypted PKCS#8 .p8 key"
+                      ) from exc
+                  if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+                      raise RuntimeError("App Store Connect API key is not an EC private key")
+                  self.issuer_id = issuer_id
+                  self.key_id = key_id
+                  self.private_key = private_key
+
+              def make_token(self) -> str:
+                  now = int(time.time())
+                  header = {"alg": "ES256", "kid": self.key_id, "typ": "JWT"}
+                  payload = {
+                      "iss": self.issuer_id,
+                      "iat": now - 5,
+                      "exp": now + 19 * 60,
+                      "aud": "appstoreconnect-v1",
+                  }
+                  signing_input = (
+                      b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+                      + "."
+                      + b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+                  )
+                  der_signature = self.private_key.sign(
+                      signing_input.encode("ascii"), ec.ECDSA(hashes.SHA256())
+                  )
+                  r_value, s_value = decode_dss_signature(der_signature)
+                  signature = r_value.to_bytes(32, "big") + s_value.to_bytes(32, "big")
+                  return signing_input + "." + b64url(signature)
+
+
+          class AscClient:
+              def __init__(self, token_provider: TokenProvider) -> None:
+                  self.token_provider = token_provider
+
+              def request(
+                  self,
+                  method: str,
+                  path: str,
+                  *,
+                  params: dict | None = None,
+                  payload: dict | None = None,
+                  allow_not_found: bool = False,
+              ) -> dict:
+                  if not path.startswith("/"):
+                      raise RuntimeError("Refused an App Store Connect API path without a leading slash")
+                  query = urllib.parse.urlencode(params or {}, doseq=True)
+                  url = API_BASE + path + (("?" + query) if query else "")
+                  body = None
+                  headers = {
+                      "Accept": "application/json",
+                      "Authorization": "Bearer " + self.token_provider.make_token(),
+                      "User-Agent": "RPBox-AppStore-Prepare/1.0",
+                  }
+                  if payload is not None:
+                      body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  request = urllib.request.Request(url, data=body, method=method, headers=headers)
+                  try:
+                      with urllib.request.urlopen(request, timeout=60) as response:
+                          response_body = response.read()
+                  except urllib.error.HTTPError as exc:
+                      status = exc.code
+                      if status == 404 and allow_not_found:
+                          exc.read()
+                          return {"data": None}
+                      try:
+                          error_document = json.loads(exc.read().decode("utf-8"))
+                      except Exception:
+                          error_document = {}
+                      first_error = error_document.get("errors", [{}])
+                      first_error = first_error[0] if isinstance(first_error, list) and first_error else {}
+                      code = str(first_error.get("code") or "unknown")
+                      title = str(first_error.get("title") or "request failed")
+                      raise RuntimeError(
+                          f"App Store Connect {method} {path} failed: HTTP {status}, code {code}, title {title}"
+                      ) from None
+                  except urllib.error.URLError:
+                      raise RuntimeError(
+                          f"App Store Connect {method} {path} failed due to a transport error"
+                      ) from None
+                  if not response_body:
+                      return {}
+                  try:
+                      return json.loads(response_body.decode("utf-8"))
+                  except Exception:
+                      raise RuntimeError(
+                          f"App Store Connect {method} {path} returned invalid JSON"
+                      ) from None
+
+              def get_resource(
+                  self,
+                  path: str,
+                  *,
+                  params: dict | None = None,
+                  allow_not_found: bool = False,
+              ) -> dict | None:
+                  document = self.request(
+                      "GET", path, params=params, allow_not_found=allow_not_found
+                  )
+                  data = document.get("data")
+                  if data is None:
+                      return None
+                  if not isinstance(data, dict):
+                      raise RuntimeError(f"Expected one resource from GET {path}")
+                  return data
+
+              def get_collection(self, path: str, *, params: dict | None = None) -> list[dict]:
+                  query = urllib.parse.urlencode(params or {}, doseq=True)
+                  next_url = API_BASE + path + (("?" + query) if query else "")
+                  resources: list[dict] = []
+                  seen: set[str] = set()
+                  while next_url:
+                      if next_url in seen or len(seen) >= 50:
+                          raise RuntimeError(f"Invalid pagination while reading {path}")
+                      if not next_url.startswith(API_BASE + "/"):
+                          raise RuntimeError(f"Refused non-App-Store-Connect pagination while reading {path}")
+                      seen.add(next_url)
+                      parsed = urllib.parse.urlsplit(next_url)
+                      document = self.request(
+                          "GET",
+                          parsed.path,
+                          params=urllib.parse.parse_qs(parsed.query, keep_blank_values=True),
+                      )
+                      data = document.get("data", [])
+                      if not isinstance(data, list):
+                          raise RuntimeError(f"Expected a collection from GET {path}")
+                      resources.extend(data)
+                      links = document.get("links")
+                      next_value = links.get("next") if isinstance(links, dict) else None
+                      next_url = next_value if isinstance(next_value, str) and next_value else ""
+                  return resources
+
+              def mutate(self, method: str, path: str, payload: dict) -> dict | None:
+                  document = self.request(method, path, payload=payload)
+                  data = document.get("data")
+                  if data is not None and not isinstance(data, dict):
+                      raise RuntimeError(f"Expected one resource from {method} {path}")
+                  return data
+
+
+          @dataclass(frozen=True)
+          class ScreenshotAsset:
+              path: Path
+              name: str
+              size: int
+              md5_hex: str
+              md5_base64: str
+              sha256_hex: str
+
+
+          def read_local_screenshots() -> list[ScreenshotAsset]:
+              assets = []
+              for name in EXPECTED_SCREENSHOT_NAMES:
+                  path = SCREENSHOT_DIR / name
+                  payload = path.read_bytes()
+                  digest = hashlib.md5(payload)
+                  sha256_hex = hashlib.sha256(payload).hexdigest()
+                  if sha256_hex != APPROVED_SCREENSHOT_SHA256[name]:
+                      raise RuntimeError(f"Screenshot no longer matches the approved SHA-256: {name}")
+                  assets.append(
+                      ScreenshotAsset(
+                          path=path,
+                          name=name,
+                          size=path.stat().st_size,
+                          md5_hex=digest.hexdigest().lower(),
+                          md5_base64=base64.b64encode(digest.digest()).decode("ascii"),
+                          sha256_hex=sha256_hex,
+                      )
+                  )
+              return assets
+
+
+          def screenshot_state(resource: dict) -> str:
+              delivery = attributes(resource).get("assetDeliveryState")
+              return str(delivery.get("state") or "") if isinstance(delivery, dict) else ""
+
+
+          def screenshot_dimensions(resource: dict) -> tuple[int | None, int | None]:
+              image_asset = attributes(resource).get("imageAsset")
+              if image_asset is None:
+                  return None, None
+              if not isinstance(image_asset, dict):
+                  raise RuntimeError("Screenshot imageAsset is malformed")
+              width = image_asset.get("width")
+              height = image_asset.get("height")
+              if width is None and height is None:
+                  return None, None
+              if width is None or height is None:
+                  raise RuntimeError("Screenshot imageAsset has incomplete dimensions")
+              try:
+                  return int(width), int(height)
+              except (TypeError, ValueError):
+                  raise RuntimeError("Screenshot imageAsset dimensions are invalid") from None
+
+
+          def screenshot_inventory(client: AscClient, localization_id: str) -> dict[str, dict]:
+              sets = client.get_collection(
+                  f"/v1/appStoreVersionLocalizations/{localization_id}/appScreenshotSets",
+                  params={"limit": 50},
+              )
+              inventory: dict[str, dict] = {}
+              for screenshot_set in sets:
+                  display_type = str(attributes(screenshot_set).get("screenshotDisplayType") or "")
+                  if not display_type:
+                      raise RuntimeError("Screenshot set is missing screenshotDisplayType")
+                  if display_type in inventory:
+                      raise RuntimeError(f"Multiple screenshot sets unexpectedly use {display_type}")
+                  set_id = str(screenshot_set.get("id") or "")
+                  screenshots = client.get_collection(
+                      f"/v1/appScreenshotSets/{set_id}/appScreenshots",
+                      params={"limit": 50},
+                  )
+                  inventory[display_type] = {"set": screenshot_set, "screenshots": screenshots}
+              return inventory
+
+
+          def assert_complete_ipad(inventory: dict[str, dict]) -> tuple[str, frozenset[str]]:
+              entry = inventory.get(IPAD_DISPLAY_TYPE)
+              if not entry:
+                  raise RuntimeError(f"Expected the existing {IPAD_DISPLAY_TYPE} screenshot set")
+              screenshot_set = entry["set"]
+              screenshots = entry["screenshots"]
+              if len(screenshots) < 4:
+                  raise RuntimeError(f"Existing {IPAD_DISPLAY_TYPE} set must contain at least four screenshots")
+              if any(screenshot_state(item) != "COMPLETE" for item in screenshots):
+                  raise RuntimeError(f"Every existing {IPAD_DISPLAY_TYPE} screenshot must be COMPLETE")
+              screenshot_ids = frozenset(str(item.get("id") or "") for item in screenshots)
+              if "" in screenshot_ids:
+                  raise RuntimeError("Existing iPad screenshot inventory contains an unidentified resource")
+              return str(screenshot_set.get("id") or ""), screenshot_ids
+
+
+          def checksum_matches(remote_checksum: object, asset: ScreenshotAsset) -> bool:
+              if not present(remote_checksum):
+                  return True
+              value = str(remote_checksum).strip()
+              return value.lower() == asset.md5_hex or value == asset.md5_base64
+
+
+          def validated_upload_operations(
+              resource: dict,
+              asset: ScreenshotAsset,
+          ) -> list[tuple[int, int, str, str, dict[str, str]]]:
+              if hashlib.sha256(asset.path.read_bytes()).hexdigest() != asset.sha256_hex:
+                  raise RuntimeError(f"Screenshot changed after validation: {asset.name}")
+              operations = attributes(resource).get("uploadOperations")
+              if not isinstance(operations, list) or not operations:
+                  raise RuntimeError("App Store Connect did not return screenshot upload operations")
+              normalized = []
+              for operation in operations:
+                  if not isinstance(operation, dict):
+                      raise RuntimeError("Screenshot upload operation is malformed")
+                  try:
+                      offset = int(operation.get("offset"))
+                      length = int(operation.get("length"))
+                  except (TypeError, ValueError):
+                      raise RuntimeError("Screenshot upload operation has an invalid range") from None
+                  url = str(operation.get("url") or "")
+                  method = str(operation.get("method") or "").upper()
+                  parsed_url = urllib.parse.urlsplit(url)
+                  if parsed_url.scheme != "https" or not parsed_url.netloc or parsed_url.username:
+                      raise RuntimeError("Screenshot upload operation did not use a safe HTTPS URL")
+                  if method not in {"PUT", "POST"}:
+                      raise RuntimeError("Screenshot upload operation uses an unexpected HTTP method")
+                  if offset < 0 or length <= 0 or offset + length > asset.size:
+                      raise RuntimeError("Screenshot upload operation range is outside the asset")
+                  raw_headers = operation.get("requestHeaders")
+                  request_headers: dict[str, str] = {}
+                  if isinstance(raw_headers, list):
+                      normalized_header_names: set[str] = set()
+                      for header in raw_headers:
+                          if not isinstance(header, dict) or not header.get("name"):
+                              raise RuntimeError("Screenshot upload operation header is malformed")
+                          header_name = str(header["name"])
+                          normalized_name = header_name.lower()
+                          if normalized_name in normalized_header_names:
+                              raise RuntimeError("Screenshot upload operation contains a duplicate header")
+                          normalized_header_names.add(normalized_name)
+                          request_headers[header_name] = str(header.get("value") or "")
+                  elif isinstance(raw_headers, dict):
+                      request_headers = {str(key): str(value) for key, value in raw_headers.items()}
+                      if len({key.lower() for key in request_headers}) != len(request_headers):
+                          raise RuntimeError("Screenshot upload operation contains a duplicate header")
+                  else:
+                      raise RuntimeError("Screenshot upload operation headers are malformed")
+                  normalized.append((offset, length, url, method, request_headers))
+              normalized.sort(key=lambda item: item[0])
+              cursor = 0
+              for offset, length, _, _, _ in normalized:
+                  if offset != cursor:
+                      raise RuntimeError("Screenshot upload operations do not cover the file exactly once")
+                  cursor += length
+              if cursor != asset.size:
+                  raise RuntimeError("Screenshot upload operations do not cover the full file")
+              return normalized
+
+
+          def validate_iphone_screenshot(
+              screenshot: dict,
+              asset: ScreenshotAsset,
+          ) -> str:
+              screenshot_id = str(screenshot.get("id") or "")
+              if not screenshot_id:
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} contains an unidentified screenshot")
+              remote_attributes = attributes(screenshot)
+              if str(remote_attributes.get("fileName") or "") != asset.name:
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} contains an unknown or out-of-order filename")
+              try:
+                  remote_size = int(remote_attributes.get("fileSize"))
+              except (TypeError, ValueError):
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} screenshot size is unavailable") from None
+              if remote_size != asset.size:
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} screenshot size does not match")
+              if not checksum_matches(remote_attributes.get("sourceFileChecksum"), asset):
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} screenshot checksum does not match")
+
+              dimensions = screenshot_dimensions(screenshot)
+              if dimensions != (None, None) and dimensions != (1242, 2688):
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} screenshot dimensions do not match")
+
+              state = screenshot_state(screenshot)
+              if state == "FAILED":
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} contains a FAILED screenshot")
+              if state not in IPHONE_ALLOWED_STATES:
+                  raise RuntimeError(
+                      f"{IPHONE_DISPLAY_TYPE} screenshot is in non-resumable state {state or 'UNKNOWN'}"
+                  )
+              if state == "COMPLETE" and dimensions != (1242, 2688):
+                  raise RuntimeError(f"Completed {IPHONE_DISPLAY_TYPE} dimensions do not match")
+              if state == "AWAITING_UPLOAD":
+                  validated_upload_operations(screenshot, asset)
+              return state
+
+
+          def validate_iphone_sequence(
+              screenshots: list[dict],
+              assets: list[ScreenshotAsset],
+          ) -> list[str]:
+              if len(screenshots) > len(assets):
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} contains more than four screenshots")
+              remote_names = [str(attributes(item).get("fileName") or "") for item in screenshots]
+              if len(set(remote_names)) != len(remote_names):
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} contains duplicate filenames")
+              approved_names = [asset.name for asset in assets]
+              if any(name not in approved_names for name in remote_names):
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} contains an unknown filename")
+              expected_prefix = approved_names[: len(screenshots)]
+              if remote_names != expected_prefix:
+                  raise RuntimeError(
+                      f"{IPHONE_DISPLAY_TYPE} must be the exact ordered approved filename prefix"
+                  )
+              return [
+                  validate_iphone_screenshot(screenshot, assets[index])
+                  for index, screenshot in enumerate(screenshots)
+              ]
+
+
+          def inspect_iphone_prefix(
+              inventory: dict[str, dict],
+              assets: list[ScreenshotAsset],
+          ) -> tuple[str | None, list[dict], list[str]]:
+              entry = inventory.get(IPHONE_DISPLAY_TYPE)
+              if not entry:
+                  return None, [], []
+              screenshot_set_id = str(entry["set"].get("id") or "")
+              if not screenshot_set_id:
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} set has no resource ID")
+              screenshots = entry["screenshots"]
+              states = validate_iphone_sequence(screenshots, assets)
+              return screenshot_set_id, screenshots, states
+
+
+          def assert_complete_ordered_iphone(
+              inventory: dict[str, dict],
+              assets: list[ScreenshotAsset],
+          ) -> str:
+              screenshot_set_id, screenshots, states = inspect_iphone_prefix(inventory, assets)
+              if not screenshot_set_id or len(screenshots) != len(assets):
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} must contain exactly four screenshots")
+              if any(state != "COMPLETE" for state in states):
+                  raise RuntimeError(f"Every {IPHONE_DISPLAY_TYPE} screenshot must be COMPLETE")
+              return screenshot_set_id
+
+
+          def upload_asset_operations(resource: dict, asset: ScreenshotAsset) -> None:
+              normalized = validated_upload_operations(resource, asset)
+
+              with asset.path.open("rb") as source:
+                  for offset, length, url, method, request_headers in normalized:
+                      source.seek(offset)
+                      chunk = source.read(length)
+                      if len(chunk) != length:
+                          raise RuntimeError("Could not read the requested screenshot upload range")
+                      request = urllib.request.Request(
+                          url,
+                          data=chunk,
+                          method=method,
+                          headers=request_headers,
+                      )
+                      try:
+                          with urllib.request.urlopen(request, timeout=120) as response:
+                              response.read()
+                      except urllib.error.HTTPError as exc:
+                          raise RuntimeError(
+                              f"Screenshot asset upload failed with HTTP {exc.code}"
+                          ) from None
+                      except urllib.error.URLError:
+                          raise RuntimeError("Screenshot asset upload failed due to a transport error") from None
+
+
+          def create_iphone_set(client: AscClient, localization_id: str) -> str:
+              screenshot_set = client.mutate(
+                  "POST",
+                  "/v1/appScreenshotSets",
+                  {
+                      "data": {
+                          "type": "appScreenshotSets",
+                          "attributes": {"screenshotDisplayType": IPHONE_DISPLAY_TYPE},
+                          "relationships": {
+                              "appStoreVersionLocalization": {
+                                  "data": {
+                                      "type": "appStoreVersionLocalizations",
+                                      "id": localization_id,
+                                  }
+                              }
+                          },
+                      }
+                  },
+              )
+              set_id = str((screenshot_set or {}).get("id") or "")
+              if not set_id:
+                  raise RuntimeError("Created iPhone screenshot set has no resource ID")
+              if attributes(screenshot_set or {}).get("screenshotDisplayType") != IPHONE_DISPLAY_TYPE:
+                  raise RuntimeError("Created iPhone screenshot set has an unexpected display type")
+              return set_id
+
+
+          def commit_awaiting_screenshot(
+              client: AscClient,
+              screenshot: dict,
+              asset: ScreenshotAsset,
+          ) -> None:
+              if validate_iphone_screenshot(screenshot, asset) != "AWAITING_UPLOAD":
+                  raise RuntimeError("Only an AWAITING_UPLOAD screenshot can be resumed")
+              screenshot_id = str(screenshot.get("id") or "")
+              upload_asset_operations(screenshot, asset)
+              client.mutate(
+                  "PATCH",
+                  f"/v1/appScreenshots/{screenshot_id}",
+                  {
+                      "data": {
+                          "type": "appScreenshots",
+                          "id": screenshot_id,
+                          "attributes": {
+                              "uploaded": True,
+                              "sourceFileChecksum": asset.md5_hex,
+                          },
+                      }
+                  },
+              )
+
+
+          def reserve_and_upload_screenshot(
+              client: AscClient,
+              screenshot_set_id: str,
+              asset: ScreenshotAsset,
+          ) -> str:
+              screenshot = client.mutate(
+                  "POST",
+                  "/v1/appScreenshots",
+                  {
+                      "data": {
+                          "type": "appScreenshots",
+                          "attributes": {"fileName": asset.name, "fileSize": asset.size},
+                          "relationships": {
+                              "appScreenshotSet": {
+                                  "data": {
+                                      "type": "appScreenshotSets",
+                                      "id": screenshot_set_id,
+                                  }
+                              }
+                          },
+                      }
+                  },
+              )
+              if not screenshot:
+                  raise RuntimeError("App Store Connect did not return the reserved screenshot")
+              commit_awaiting_screenshot(client, screenshot, asset)
+              return str(screenshot.get("id") or "")
+
+
+          def wait_for_iphone_prefix_complete(
+              client: AscClient,
+              screenshot_set_id: str,
+              assets: list[ScreenshotAsset],
+              expected_count: int,
+              timeout_seconds: int = 600,
+          ) -> list[dict]:
+              deadline = time.monotonic() + timeout_seconds
+              while True:
+                  screenshots = client.get_collection(
+                      f"/v1/appScreenshotSets/{screenshot_set_id}/appScreenshots",
+                      params={"limit": 50},
+                  )
+                  if len(screenshots) > expected_count:
+                      raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} changed concurrently while waiting")
+                  states = validate_iphone_sequence(screenshots, assets)
+                  if len(screenshots) == expected_count and all(
+                      state == "COMPLETE" for state in states
+                  ):
+                      return screenshots
+                  if time.monotonic() >= deadline:
+                      raise RuntimeError(
+                          f"Timed out waiting for {expected_count} ordered iPhone screenshot(s) to become COMPLETE"
+                      )
+                  time.sleep(15)
+
+
+          def prepare_iphone_screenshots(
+              client: AscClient,
+              localization_id: str,
+              expected_set_id: str | None,
+              assets: list[ScreenshotAsset],
+          ) -> tuple[str, list[str]]:
+              actions: list[str] = []
+              current_inventory = screenshot_inventory(client, localization_id)
+              current_set_id, screenshots, states = inspect_iphone_prefix(current_inventory, assets)
+              if current_set_id != expected_set_id:
+                  raise RuntimeError(f"{IPHONE_DISPLAY_TYPE} set identity changed concurrently")
+
+              if current_set_id is None:
+                  current_set_id = create_iphone_set(client, localization_id)
+                  screenshots = []
+                  states = []
+                  actions.append(f"Created an empty {IPHONE_DISPLAY_TYPE} screenshot set")
+
+              resumed_count = 0
+              for index, (screenshot, state) in enumerate(zip(screenshots, states, strict=True)):
+                  if state == "AWAITING_UPLOAD":
+                      commit_awaiting_screenshot(client, screenshot, assets[index])
+                      resumed_count += 1
+              if resumed_count:
+                  actions.append(
+                      f"Resumed {resumed_count} approved AWAITING_UPLOAD screenshot(s) without replacement"
+                  )
+
+              existing_count = len(screenshots)
+              if existing_count:
+                  wait_for_iphone_prefix_complete(
+                      client,
+                      current_set_id,
+                      assets,
+                      existing_count,
+                  )
+                  if any(state in IPHONE_IN_PROGRESS_STATES for state in states):
+                      actions.append("Waited for the existing ordered screenshot prefix to finish processing")
+
+              missing_assets = assets[existing_count:]
+              for asset in missing_assets:
+                  reserve_and_upload_screenshot(client, current_set_id, asset)
+              if missing_assets:
+                  actions.append(
+                      f"Created and uploaded {len(missing_assets)} missing ordered suffix screenshot(s)"
+                  )
+
+              wait_for_iphone_prefix_complete(
+                  client,
+                  current_set_id,
+                  assets,
+                  len(assets),
+              )
+              return current_set_id, actions
+
+
+          def append_summary(lines: list[str]) -> None:
+              summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+              if not summary_path:
+                  return
+              with Path(summary_path).open("a", encoding="utf-8") as summary:
+                  summary.write("\n".join(lines) + "\n")
+
+
+          def main() -> None:
+              if API_BASE != "https://api.appstoreconnect.apple.com":
+                  raise RuntimeError("ASC_API_BASE must be the official App Store Connect API host")
+              if not APP_ID.isdigit() or not BUNDLE_ID or VERSION != "1.1" or BUILD_NUMBER != "1000041":
+                  raise RuntimeError("Expected App Store release constants are invalid")
+              if re.search(r"(?i)\b(TODO|TBD|CHANGEME|PLACEHOLDER)\b|example\.com|<[^>]+>", REVIEW_NOTES):
+                  raise RuntimeError("Review notes contain a placeholder")
+
+              assets = read_local_screenshots()
+              client = AscClient(TokenProvider())
+
+              app = client.get_resource(f"/v1/apps/{APP_ID}")
+              if not app or str(app.get("id")) != APP_ID or attributes(app).get("bundleId") != BUNDLE_ID:
+                  raise RuntimeError("App identity does not match the expected numeric app ID and bundle ID")
+
+              versions = client.get_collection(
+                  f"/v1/apps/{APP_ID}/appStoreVersions",
+                  params={"filter[platform]": "IOS", "limit": 50},
+              )
+              matching_versions = [
+                  item for item in versions if str(attributes(item).get("versionString") or "") == VERSION
+              ]
+              if len(matching_versions) != 1:
+                  raise RuntimeError("Expected exactly one iOS App Store version 1.1")
+              version = matching_versions[0]
+              version_attributes_before = dict(attributes(version))
+              if str(version.get("id") or "") != VERSION_ID:
+                  raise RuntimeError("Dynamically resolved App Store version ID does not match the expected ID")
+              if version_attributes_before.get("platform") != "IOS":
+                  raise RuntimeError("App Store version 1.1 is not an iOS version")
+              if version_attributes_before.get("appVersionState") != VERSION_STATE:
+                  raise RuntimeError(f"App Store version 1.1 must be in {VERSION_STATE}")
+
+              builds = client.get_collection(
+                  "/v1/builds",
+                  params={"filter[app]": APP_ID, "filter[version]": BUILD_NUMBER, "limit": 50},
+              )
+              matching_builds = [
+                  item for item in builds if str(attributes(item).get("version") or "") == BUILD_NUMBER
+              ]
+              if len(matching_builds) != 1:
+                  raise RuntimeError("Expected exactly one app build numbered 1000041")
+              build = matching_builds[0]
+              if str(build.get("id") or "") != BUILD_ID:
+                  raise RuntimeError("Dynamically resolved build ID does not match the expected ID")
+              if attributes(build).get("processingState") != BUILD_STATE:
+                  raise RuntimeError(f"Build 1000041 must be in {BUILD_STATE} processing state")
+              pre_release = client.get_resource(f"/v1/builds/{BUILD_ID}/preReleaseVersion")
+              if not pre_release:
+                  raise RuntimeError("Build 1000041 has no pre-release version")
+              pre_release_attributes = attributes(pre_release)
+              if (
+                  str(pre_release_attributes.get("version") or "") != VERSION
+                  or pre_release_attributes.get("platform") != "IOS"
+              ):
+                  raise RuntimeError("Build 1000041 is not an iOS 1.1 build")
+
+              localizations = client.get_collection(
+                  f"/v1/appStoreVersions/{VERSION_ID}/appStoreVersionLocalizations",
+                  params={"limit": 50},
+              )
+              matching_localizations = [
+                  item for item in localizations if str(attributes(item).get("locale") or "") == LOCALE
+              ]
+              if len(matching_localizations) != 1:
+                  raise RuntimeError("Expected exactly one zh-Hans localization for App Store version 1.1")
+              localization = matching_localizations[0]
+              if str(localization.get("id") or "") != LOCALIZATION_ID:
+                  raise RuntimeError("Dynamically resolved localization ID does not match the expected ID")
+              localization_attributes_before = dict(attributes(localization))
+
+              review_detail = client.get_resource(
+                  f"/v1/appStoreVersions/{VERSION_ID}/appStoreReviewDetail"
+              )
+              if not review_detail or not review_detail.get("id"):
+                  raise RuntimeError("App Store version 1.1 must already have App Review Information")
+              review_detail_id = str(review_detail["id"])
+              review_attributes_before = dict(attributes(review_detail))
+              protected_review_fields = (
+                  "contactFirstName",
+                  "contactLastName",
+                  "contactPhone",
+                  "contactEmail",
+                  "demoAccountName",
+                  "demoAccountPassword",
+                  "demoAccountRequired",
+              )
+              if not all(
+                  present(review_attributes_before.get(field))
+                  for field in (
+                      "contactFirstName",
+                      "contactLastName",
+                      "contactPhone",
+                      "contactEmail",
+                      "demoAccountName",
+                      "demoAccountPassword",
+                  )
+              ):
+                  raise RuntimeError("Review contact information and demo credentials must already be complete")
+              existing_notes_raw = str(review_attributes_before.get("notes") or "")
+              existing_notes = existing_notes_raw.strip()
+              if existing_notes and existing_notes != REVIEW_NOTES:
+                  raise RuntimeError("Existing review notes are nonempty and do not match the approved notes")
+              for field in protected_review_fields:
+                  sensitive_value = review_attributes_before.get(field)
+                  if isinstance(sensitive_value, str) and sensitive_value.strip() and sensitive_value in REVIEW_NOTES:
+                      raise RuntimeError("Approved review notes unexpectedly contain protected Review Information")
+
+              selected_build = client.get_resource(
+                  f"/v1/appStoreVersions/{VERSION_ID}/build",
+                  allow_not_found=True,
+              )
+              selected_build_id = str((selected_build or {}).get("id") or "")
+              if selected_build_id and selected_build_id != BUILD_ID:
+                  raise RuntimeError("Version 1.1 already has a different selected build")
+
+              inventory_before = screenshot_inventory(client, LOCALIZATION_ID)
+              ipad_set_id, ipad_screenshot_ids = assert_complete_ipad(inventory_before)
+              iphone_set_id, iphone_screenshots, iphone_states = inspect_iphone_prefix(
+                  inventory_before,
+                  assets,
+              )
+
+              actions: list[str] = []
+              if not APPLY:
+                  actions.append(
+                      "Attach build 1000041" if selected_build_id != BUILD_ID else "Build 1000041 already attached"
+                  )
+                  actions.append("Patch only description, What's New, support URL, and marketing URL")
+                  actions.append("Patch only App Review notes; preserve contacts and demo credentials")
+                  if not iphone_set_id:
+                      actions.append("Create APP_IPHONE_65 and upload four approved ordered screenshots")
+                  elif len(iphone_screenshots) == len(assets) and all(
+                      state == "COMPLETE" for state in iphone_states
+                  ):
+                      actions.append("Approved APP_IPHONE_65 set is already COMPLETE in exact order")
+                  else:
+                      awaiting_count = sum(
+                          state == "AWAITING_UPLOAD" for state in iphone_states
+                      )
+                      processing_count = sum(
+                          state in IPHONE_IN_PROGRESS_STATES for state in iphone_states
+                      )
+                      missing_count = len(assets) - len(iphone_screenshots)
+                      actions.append(
+                          "Resume the approved ordered APP_IPHONE_65 prefix "
+                          f"({awaiting_count} awaiting upload, {processing_count} processing) and "
+                          f"create {missing_count} missing suffix screenshot(s)"
+                      )
+                  append_summary(
+                      [
+                          "# App Store 1.1 preparation — dry run",
+                          "",
+                          f"- App identity: verified `{APP_ID}` / `{BUNDLE_ID}`",
+                          f"- Version: verified `{VERSION}` in `{VERSION_STATE}`",
+                          f"- Build: verified `{BUILD_NUMBER}` in `{BUILD_STATE}`",
+                          "- Localization: verified `zh-Hans`",
+                          "- Public preflight: marketing/support reachable; repository public with Issues; both privacy hosts exactly match tracked bilingual policy",
+                          "- Existing iPad screenshots: preserved baseline has at least four `COMPLETE` assets",
+                          "- Local iPhone screenshots: exactly four SHA-256-approved 1242x2688 PNGs in fixed order",
+                          "",
+                          "## Sanitized mutation plan",
+                          "",
+                          *[f"- {action}" for action in actions],
+                          "",
+                          "> No App Store Connect mutation was sent. This workflow never submits for review or changes release type, privacy, age rating, review contacts, demo credentials, or updater metadata.",
+                      ]
+                  )
+                  print("Dry-run validation passed; sanitized plan written to the workflow summary.")
+                  return
+
+              if selected_build_id != BUILD_ID:
+                  client.mutate(
+                      "PATCH",
+                      f"/v1/appStoreVersions/{VERSION_ID}",
+                      {
+                          "data": {
+                              "type": "appStoreVersions",
+                              "id": VERSION_ID,
+                              "relationships": {
+                                  "build": {"data": {"type": "builds", "id": BUILD_ID}}
+                              },
+                          }
+                      },
+                  )
+                  actions.append("Attached build 1000041 to version 1.1")
+              else:
+                  actions.append("Build 1000041 was already attached; no build mutation sent")
+
+              desired_localization = {
+                  "description": DESCRIPTION,
+                  "whatsNew": WHATS_NEW,
+                  "supportUrl": SUPPORT_URL,
+                  "marketingUrl": MARKETING_URL,
+              }
+              if any(localization_attributes_before.get(key) != value for key, value in desired_localization.items()):
+                  client.mutate(
+                      "PATCH",
+                      f"/v1/appStoreVersionLocalizations/{LOCALIZATION_ID}",
+                      {
+                          "data": {
+                              "type": "appStoreVersionLocalizations",
+                              "id": LOCALIZATION_ID,
+                              "attributes": desired_localization,
+                          }
+                      },
+                  )
+                  actions.append("Updated the four approved zh-Hans localization fields")
+              else:
+                  actions.append("The four approved zh-Hans localization fields already matched")
+
+              if existing_notes_raw != REVIEW_NOTES:
+                  client.mutate(
+                      "PATCH",
+                      f"/v1/appStoreReviewDetails/{review_detail_id}",
+                      {
+                          "data": {
+                              "type": "appStoreReviewDetails",
+                              "id": review_detail_id,
+                              "attributes": {"notes": REVIEW_NOTES},
+                          }
+                      },
+                  )
+                  actions.append("Added the approved App Review notes only")
+              else:
+                  actions.append("Approved App Review notes already matched")
+
+              iphone_set_id, iphone_actions = prepare_iphone_screenshots(
+                  client,
+                  LOCALIZATION_ID,
+                  iphone_set_id,
+                  assets,
+              )
+              actions.extend(iphone_actions)
+              if not iphone_actions:
+                  actions.append("Existing approved ordered APP_IPHONE_65 set was left unchanged")
+
+              app_after = client.get_resource(f"/v1/apps/{APP_ID}")
+              if not app_after or attributes(app_after).get("bundleId") != BUNDLE_ID:
+                  raise RuntimeError("Post-apply app identity verification failed")
+              version_after = client.get_resource(f"/v1/appStoreVersions/{VERSION_ID}")
+              version_attributes_after = attributes(version_after)
+              if (
+                  not version_after
+                  or str(version_after.get("id") or "") != VERSION_ID
+                  or version_attributes_after.get("versionString") != VERSION
+                  or version_attributes_after.get("appVersionState") != VERSION_STATE
+                  or version_attributes_after.get("releaseType") != version_attributes_before.get("releaseType")
+              ):
+                  raise RuntimeError("Post-apply App Store version verification failed")
+
+              selected_build_after = client.get_resource(f"/v1/appStoreVersions/{VERSION_ID}/build")
+              if (
+                  not selected_build_after
+                  or str(selected_build_after.get("id") or "") != BUILD_ID
+                  or str(attributes(selected_build_after).get("version") or "") != BUILD_NUMBER
+              ):
+                  raise RuntimeError("Post-apply selected build is not build 1000041")
+
+              localization_after = client.get_resource(
+                  f"/v1/appStoreVersionLocalizations/{LOCALIZATION_ID}"
+              )
+              localization_attributes_after = attributes(localization_after)
+              if any(localization_attributes_after.get(key) != value for key, value in desired_localization.items()):
+                  raise RuntimeError("Post-apply localization metadata does not exactly match")
+              for key, value in localization_attributes_before.items():
+                  if key not in MUTABLE_LOCALIZATION_FIELDS and localization_attributes_after.get(key) != value:
+                      raise RuntimeError(f"Unexpected localization field changed: {key}")
+
+              review_after = client.get_resource(f"/v1/appStoreReviewDetails/{review_detail_id}")
+              review_attributes_after = attributes(review_after)
+              if review_attributes_after.get("notes") != REVIEW_NOTES:
+                  raise RuntimeError("Post-apply review notes do not exactly match")
+              for field in protected_review_fields:
+                  if review_attributes_after.get(field) != review_attributes_before.get(field):
+                      raise RuntimeError("Protected App Review Information changed unexpectedly")
+
+              inventory_after = screenshot_inventory(client, LOCALIZATION_ID)
+              ipad_set_after, ipad_screenshot_ids_after = assert_complete_ipad(inventory_after)
+              if ipad_set_after != ipad_set_id or ipad_screenshot_ids_after != ipad_screenshot_ids:
+                  raise RuntimeError("Existing iPad screenshot inventory changed unexpectedly")
+              verified_iphone_set_id = assert_complete_ordered_iphone(inventory_after, assets)
+              if verified_iphone_set_id != iphone_set_id:
+                  raise RuntimeError("Post-apply iPhone screenshot inventory verification failed")
+
+              append_summary(
+                  [
+                      "# App Store 1.1 preparation — applied and verified",
+                      "",
+                      f"- App identity: `{APP_ID}` / `{BUNDLE_ID}` verified",
+                      f"- Version: `{VERSION}` remains in `{VERSION_STATE}`",
+                      f"- Selected build: `{BUILD_NUMBER}` (`{BUILD_STATE}`)",
+                      "- Public URLs: marketing/support reachable; repository public with Issues; both privacy hosts exactly match tracked bilingual policy",
+                      "- zh-Hans metadata: description, What's New, support URL, and marketing URL exact",
+                      "- App Review notes: present and exact; contacts and demo credentials unchanged",
+                      "- iPad screenshots: original set and asset IDs preserved, with at least four `COMPLETE` assets",
+                      "- iPhone 6.5-inch screenshots: exactly four approved `COMPLETE` assets in fixed 01→02→03→04 order",
+                      "",
+                      "## Exact mutations/no-ops",
+                      "",
+                      *[f"- {action}" for action in actions],
+                      "",
+                      "> Preparation only: no review submission or publication was requested. Release type, privacy questionnaire, age rating, review contacts, demo credentials, and updater metadata were not changed.",
+                  ]
+              )
+              print("App Store 1.1 preparation applied and post-verified.")
+
+
+          try:
+              main()
+          except BaseException as exc:
+              if isinstance(exc, KeyboardInterrupt):
+                  message = "Workflow interrupted"
+              elif isinstance(exc, SystemExit) and isinstance(exc.code, str):
+                  message = exc.code
+              else:
+                  message = safe_error_message(exc)
+              append_summary(
+                  [
+                      "# App Store 1.1 preparation — failed closed",
+                      "",
+                      f"- {message or 'Unknown validation failure'}",
+                      "- No review submission or publication was requested.",
+                  ]
+              )
+              print(f"::error::{message or 'Unknown validation failure'}")
+              sys.exit(1)
+          PY
