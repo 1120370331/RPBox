@@ -1,9 +1,11 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const IOS_APP_STORE_ID = '6761112311'
 export const IOS_DEFAULT_PUBLIC_URL = `https://apps.apple.com/cn/app/rpbox/id${IOS_APP_STORE_ID}`
 export const IOS_DEFAULT_API_BASE = 'https://ksxvodevhonx.sealosbja.site/api/v1'
+export const IOS_RELEASE_CONTRACT_PATH = 'mobile/ios/release.json'
 
 export const IOS_USAGE_DESCRIPTIONS = Object.freeze({
   NSCameraUsageDescription: 'RPBox 仅在您拍照时访问相机，用于上传帖子、道具或评论图片。RPBox accesses the camera only when you take a photo to upload to a post, item, or comment.',
@@ -16,6 +18,28 @@ const placeholderAppIds = new Set([
   '123456789',
   '1234567890',
 ])
+
+export function validateIosReleaseContract(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('iOS release contract must be a JSON object')
+  }
+
+  const keys = Object.keys(value).sort()
+  if (keys.length !== 2 || keys[0] !== 'buildNumber' || keys[1] !== 'version') {
+    throw new Error('iOS release contract must contain only version and buildNumber')
+  }
+
+  const version = value.version
+  const buildNumber = value.buildNumber
+  if (typeof version !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/.test(version)) {
+    throw new Error('iOS release version must use strict major.minor or major.minor.patch format')
+  }
+  if (!Number.isSafeInteger(buildNumber) || buildNumber < 1 || buildNumber > 2_147_483_647) {
+    throw new Error('iOS buildNumber must be an integer between 1 and 2147483647')
+  }
+
+  return { version, buildNumber }
+}
 
 function parseStrictHttpsUrl(value, label) {
   if (typeof value !== 'string' || !value || value !== value.trim() || /[\r\n]/.test(value)) {
@@ -96,7 +120,13 @@ function runCli() {
       process.stdout.write(validateIosApiBase(process.env.IOS_API_BASE || ''))
       return
     }
-    throw new Error('Usage: node iosCompliance.mjs <validate-public-update-url|validate-api-base>')
+    if (process.argv[2] === 'release-contract') {
+      const contractPath = process.env.IOS_RELEASE_CONTRACT_PATH || IOS_RELEASE_CONTRACT_PATH
+      const contract = validateIosReleaseContract(JSON.parse(fs.readFileSync(contractPath, 'utf8')))
+      process.stdout.write(`${contract.version} ${contract.buildNumber}`)
+      return
+    }
+    throw new Error('Usage: node iosCompliance.mjs <validate-public-update-url|validate-api-base|release-contract>')
   } catch (error) {
     console.error(`[iOS Compliance] ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1

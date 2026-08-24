@@ -6,10 +6,50 @@ import {
   IOS_APP_STORE_ID,
   IOS_DEFAULT_API_BASE,
   IOS_DEFAULT_PUBLIC_URL,
+  IOS_RELEASE_CONTRACT_PATH,
   IOS_USAGE_DESCRIPTIONS,
   validateIosApiBase,
   validateIosPublicUpdateUrl,
+  validateIosReleaseContract,
 } from './iosCompliance.mjs'
+
+test('validates strict iOS release contracts', () => {
+  assert.deepEqual(
+    validateIosReleaseContract({ version: '1.1', buildNumber: 1000041 }),
+    { version: '1.1', buildNumber: 1000041 },
+  )
+  assert.deepEqual(
+    validateIosReleaseContract({ version: '1.1.1', buildNumber: 1000042 }),
+    { version: '1.1.1', buildNumber: 1000042 },
+  )
+
+  for (const value of [
+    null,
+    { version: '1', buildNumber: 1000041 },
+    { version: '01.1', buildNumber: 1000041 },
+    { version: '1.1', buildNumber: '1000041' },
+    { version: '1.1', buildNumber: 0 },
+    { version: '1.1', buildNumber: 1000041, channel: 'ios' },
+  ]) {
+    assert.throws(() => validateIosReleaseContract(value), { name: 'Error' })
+  }
+})
+
+test('tracked iOS release stays independent from Android package version', () => {
+  const releaseContract = validateIosReleaseContract(JSON.parse(
+    fs.readFileSync(new URL(`../ios/release.json`, import.meta.url), 'utf8'),
+  ))
+  const mobilePackage = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const releaseNotes = fs.readFileSync(new URL('../release-notes/1.1.txt', import.meta.url), 'utf8')
+  const pbxproj = fs.readFileSync(new URL('../ios/App/App.xcodeproj/project.pbxproj', import.meta.url), 'utf8')
+
+  assert.equal(IOS_RELEASE_CONTRACT_PATH, 'mobile/ios/release.json')
+  assert.deepEqual(releaseContract, { version: '1.1', buildNumber: 1000041 })
+  assert.equal(mobilePackage.version, '2.0.2', 'Android/mobile package version must remain unchanged')
+  assert.ok(releaseNotes.trim().length > 0, 'matching iOS release notes must be non-empty')
+  assert.equal((pbxproj.match(/MARKETING_VERSION = 1\.1;/g) || []).length, 2)
+  assert.equal((pbxproj.match(/CURRENT_PROJECT_VERSION = 1000041;/g) || []).length, 2)
+})
 
 test('accepts the verified production API base and other safe HTTPS API bases', () => {
   assert.equal(validateIosApiBase(IOS_DEFAULT_API_BASE), IOS_DEFAULT_API_BASE)
@@ -101,7 +141,9 @@ test('native preparation, verification, and release workflow use the shared comp
 test('release workflow fails closed and keeps TestFlight separate from public metadata', () => {
   const workflow = fs.readFileSync(new URL('../../.github/workflows/release-ios-testflight.yml', import.meta.url), 'utf8')
 
-  assert.match(workflow, /Requested iOS version must exactly match mobile\/package\.json/)
+  assert.match(workflow, /Requested iOS version must exactly match mobile\/ios\/release\.json/)
+  assert.match(workflow, /iosCompliance\.mjs release-contract/)
+  assert.match(workflow, /Manual iOS build number must be higher than the tracked build/)
   assert.match(workflow, /Release notes file is missing or empty/)
   assert.match(workflow, /name: Preflight production API/)
   assert.match(workflow, /IOS_API_HEALTH_URL/)

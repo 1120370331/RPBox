@@ -13,7 +13,7 @@ Apple App Store 提交不是流水线成功后的自动步骤。每次 iOS 提�
   2. 使用同一 upload keystore 签名并验证 APK/AAB
   3. 生成 `latest-android.json` 元数据
   4. 将 APK/AAB 作为 Actions artifact 保存，并只把 APK 与元数据部署到服务器 `releases/mobile`
-- iOS 触发方式：推送 `mobile-ios-v*` tag（例如 `mobile-ios-v2.0.2`）
+- iOS 触发方式：推送 `ios-v*` 或兼容的 `mobile-ios-v*` tag；版本必须与 `mobile/ios/release.json` 一致（当前为 `ios-v1.1`）
 - iOS 工作流文件：`.github/workflows/release-ios-testflight.yml`
 - iOS 主要动作：
   1. 生成并校验 Capacitor iOS 工程
@@ -27,9 +27,9 @@ Apple App Store 提交不是流水线成功后的自动步骤。每次 iOS 提�
 git tag mobile-v2.0.2
 git push origin mobile-v2.0.2
 
-# iOS TestFlight（`mobile-ios-v*` 也兼容）
-git tag ios-v2.0.2
-git push origin ios-v2.0.2
+# iOS TestFlight（版本独立于 Android，`mobile-ios-v*` 也兼容）
+git tag ios-v1.1
+git push origin ios-v1.1
 ```
 
 可选：在发版前新增更新说明文件 `mobile/release-notes/<version>.txt`，例如：
@@ -37,6 +37,8 @@ git push origin ios-v2.0.2
 ```text
 mobile/release-notes/0.1.0.txt
 ```
+
+iOS 版本和默认 build number 由 `mobile/ios/release.json` 冻结；当前 App Store Connect 已存在 1.1 待提交版本，因此 iOS 使用 `1.1 / 1000041`，Android 使用 `2.0.2 / 2000002`。两端共享功能源码，但不强制共享商店版本序列。
 
 ## 3. 服务器目录结构
 
