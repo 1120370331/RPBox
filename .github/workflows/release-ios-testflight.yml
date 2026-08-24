@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Override app version (semver, e.g. 1.0.10)'
+        description: 'iOS version; must match mobile/ios/release.json (for example 1.1)'
         required: false
       build_number:
-        description: 'Override iOS build number (numeric, e.g. 1000037)'
+        description: 'Optional retry build number; must be numeric and higher than the tracked iOS build'
         required: false
       release_notes:
         description: 'Override release notes (optional)'
@@ -86,6 +86,9 @@ jobs:
         run: |
           set -euo pipefail
 
+          CONTRACT_VALUES="$(node ./mobile/scripts/iosCompliance.mjs release-contract)"
+          read -r TRACKED_VERSION TRACKED_BUILD_NUMBER <<< "$CONTRACT_VALUES"
+
           if [ -n "${INPUT_VERSION:-}" ]; then
             VERSION="$INPUT_VERSION"
           elif [[ "${GITHUB_REF:-}" == refs/tags/ios-v* ]]; then
@@ -93,28 +96,34 @@ jobs:
           elif [[ "${GITHUB_REF:-}" == refs/tags/mobile-ios-v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/mobile-ios-v}"
           else
-            VERSION="$(node -p "require('./mobile/package.json').version")"
+            VERSION="$TRACKED_VERSION"
           fi
 
-          TRACKED_VERSION="$(node -p "require('./mobile/package.json').version")"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$ ]]; then
             echo "Invalid version: $VERSION"
             exit 1
           fi
           if [ "$VERSION" != "$TRACKED_VERSION" ]; then
-            echo "Requested iOS version must exactly match mobile/package.json"
+            echo "Requested iOS version must exactly match mobile/ios/release.json"
             exit 1
           fi
 
           if [ -n "${INPUT_BUILD_NUMBER:-}" ]; then
+            if ! [[ "$INPUT_BUILD_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+              echo "Manual iOS build number must contain 1 to 10 decimal digits without leading zeroes"
+              exit 1
+            fi
+            if [ "$INPUT_BUILD_NUMBER" -le "$TRACKED_BUILD_NUMBER" ] || [ "$INPUT_BUILD_NUMBER" -gt 2147483647 ]; then
+              echo "Manual iOS build number must be higher than the tracked build and no greater than 2147483647"
+              exit 1
+            fi
             BUILD_NUMBER="$INPUT_BUILD_NUMBER"
           else
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-            BUILD_NUMBER=$((MAJOR * 1000000 + MINOR * 1000 + PATCH))
+            BUILD_NUMBER="$TRACKED_BUILD_NUMBER"
           fi
 
-          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "Invalid build number: $BUILD_NUMBER"
+          if ! [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "Invalid tracked iOS build number"
             exit 1
           fi
 
@@ -575,14 +584,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          TRACKED_VERSION="$(node -p "require('./mobile/package.json').version")"
+          CONTRACT_VALUES="$(node ./mobile/scripts/iosCompliance.mjs release-contract)"
+          read -r TRACKED_VERSION TRACKED_BUILD_NUMBER <<< "$CONTRACT_VALUES"
           VERSION="${INPUT_VERSION:-$TRACKED_VERSION}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$ ]]; then
             echo "Invalid metadata version"
             exit 1
           fi
           if [ "$VERSION" != "$TRACKED_VERSION" ]; then
-            echo "Metadata version must exactly match mobile/package.json"
+            echo "Metadata version must exactly match mobile/ios/release.json"
             exit 1
           fi
 
