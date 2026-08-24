@@ -338,7 +338,10 @@ jobs:
             exit 1
           fi
 
-          KEYCHAIN_PASSWORD="${IOS_KEYCHAIN_PASSWORD:-temp-keychain-password}"
+          KEYCHAIN_PASSWORD="${IOS_KEYCHAIN_PASSWORD:-}"
+          if [ -z "$KEYCHAIN_PASSWORD" ]; then
+            KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          fi
           KEYCHAIN_NAME="build.keychain-db"
           CERT_PATH="$RUNNER_TEMP/cert.p12"
           PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"

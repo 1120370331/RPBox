@@ -265,6 +265,10 @@ func Init(cfg *config.DatabaseConfig) error {
 		return err
 	}
 
+	if err := hardenRPDBDemoAccounts(db); err != nil {
+		return fmt.Errorf("harden RPDB demo accounts: %w", err)
+	}
+
 	if err := migrateLegacyCommentLikeNotifications(db); err != nil {
 		return fmt.Errorf("migrate legacy comment like notifications: %w", err)
 	}
