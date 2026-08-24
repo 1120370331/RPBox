@@ -21,12 +21,9 @@ env:
   ASC_EXPECTED_APP_ID: '6761112311'
   ASC_EXPECTED_BUNDLE_ID: app.rpbox.mobile
   ASC_EXPECTED_VERSION: '1.1'
-  ASC_EXPECTED_VERSION_ID: 65b84c7b-ed28-46a4-9e54-888ccdc20138
   ASC_EXPECTED_VERSION_STATE: PREPARE_FOR_SUBMISSION
   ASC_EXPECTED_BUILD_NUMBER: '1000041'
-  ASC_EXPECTED_BUILD_ID: 70feeedd-6aeb-44c2-9e7b-672d5960cf5e
   ASC_EXPECTED_BUILD_STATE: VALID
-  ASC_EXPECTED_LOCALIZATION_ID: d57fbf3c-e8fe-4fef-9c45-cece4973115d
   ASC_EXPECTED_LOCALE: zh-Hans
   SCREENSHOT_DIR: artifacts/app-store-screenshots-1242x2688
   SCREENSHOT_SHA256_01: bc78df2fe7098832e48b3361c737d794cf80e5882b1f58b68a87f02b8a7ab89e
@@ -288,12 +285,9 @@ jobs:
           APP_ID = os.environ["ASC_EXPECTED_APP_ID"]
           BUNDLE_ID = os.environ["ASC_EXPECTED_BUNDLE_ID"]
           VERSION = os.environ["ASC_EXPECTED_VERSION"]
-          VERSION_ID = os.environ["ASC_EXPECTED_VERSION_ID"]
           VERSION_STATE = os.environ["ASC_EXPECTED_VERSION_STATE"]
           BUILD_NUMBER = os.environ["ASC_EXPECTED_BUILD_NUMBER"]
-          BUILD_ID = os.environ["ASC_EXPECTED_BUILD_ID"]
           BUILD_STATE = os.environ["ASC_EXPECTED_BUILD_STATE"]
-          LOCALIZATION_ID = os.environ["ASC_EXPECTED_LOCALIZATION_ID"]
           LOCALE = os.environ["ASC_EXPECTED_LOCALE"]
           SCREENSHOT_DIR = Path(os.environ["SCREENSHOT_DIR"])
           APPLY = os.environ.get("APPLY_CHANGES", "false").strip().lower() == "true"
@@ -348,6 +342,7 @@ jobs:
           IPHONE_IN_PROGRESS_STATES = {"PROCESSING", "UPLOAD_COMPLETE"}
           IPHONE_ALLOWED_STATES = {"AWAITING_UPLOAD", "COMPLETE", *IPHONE_IN_PROGRESS_STATES}
           MUTABLE_LOCALIZATION_FIELDS = {"description", "whatsNew", "supportUrl", "marketingUrl"}
+          SENSITIVE_RUNTIME_VALUES: set[str] = set()
 
 
           def b64url(value: bytes) -> str:
@@ -381,6 +376,14 @@ jobs:
                   secret = os.environ.get(secret_name, "")
                   if secret:
                       message = message.replace(secret, "[REDACTED]")
+              for sensitive_value in SENSITIVE_RUNTIME_VALUES:
+                  if sensitive_value:
+                      message = message.replace(sensitive_value, "[REDACTED]")
+              message = re.sub(
+                  r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+                  "[REDACTED_RESOURCE_ID]",
+                  message,
+              )
               message = re.sub(
                   r"(?i)(authorization|asset[_-]?token|access[_-]?token|private[_-]?key)\s*[:=]\s*\S+",
                   r"\1=[REDACTED]",
@@ -458,9 +461,11 @@ jobs:
                   query = urllib.parse.urlencode(params or {}, doseq=True)
                   url = API_BASE + path + (("?" + query) if query else "")
                   body = None
+                  authorization_token = self.token_provider.make_token()
+                  SENSITIVE_RUNTIME_VALUES.add(authorization_token)
                   headers = {
                       "Accept": "application/json",
-                      "Authorization": "Bearer " + self.token_provider.make_token(),
+                      "Authorization": "Bearer " + authorization_token,
                       "User-Agent": "RPBox-AppStore-Prepare/1.0",
                   }
                   if payload is not None:
@@ -672,6 +677,7 @@ jobs:
                   parsed_url = urllib.parse.urlsplit(url)
                   if parsed_url.scheme != "https" or not parsed_url.netloc or parsed_url.username:
                       raise RuntimeError("Screenshot upload operation did not use a safe HTTPS URL")
+                  SENSITIVE_RUNTIME_VALUES.add(url)
                   if method not in {"PUT", "POST"}:
                       raise RuntimeError("Screenshot upload operation uses an unexpected HTTP method")
                   if offset < 0 or length <= 0 or offset + length > asset.size:
@@ -695,6 +701,9 @@ jobs:
                           raise RuntimeError("Screenshot upload operation contains a duplicate header")
                   else:
                       raise RuntimeError("Screenshot upload operation headers are malformed")
+                  SENSITIVE_RUNTIME_VALUES.update(
+                      value for value in request_headers.values() if value
+                  )
                   normalized.append((offset, length, url, method, request_headers))
               normalized.sort(key=lambda item: item[0])
               cursor = 0
@@ -1018,8 +1027,10 @@ jobs:
                   raise RuntimeError("Expected exactly one iOS App Store version 1.1")
               version = matching_versions[0]
               version_attributes_before = dict(attributes(version))
-              if str(version.get("id") or "") != VERSION_ID:
-                  raise RuntimeError("Dynamically resolved App Store version ID does not match the expected ID")
+              version_id = str(version.get("id") or "")
+              if not version_id:
+                  raise RuntimeError("Dynamically resolved App Store version has no resource ID")
+              SENSITIVE_RUNTIME_VALUES.add(version_id)
               if version_attributes_before.get("platform") != "IOS":
                   raise RuntimeError("App Store version 1.1 is not an iOS version")
               if version_attributes_before.get("appVersionState") != VERSION_STATE:
@@ -1035,11 +1046,13 @@ jobs:
               if len(matching_builds) != 1:
                   raise RuntimeError("Expected exactly one app build numbered 1000041")
               build = matching_builds[0]
-              if str(build.get("id") or "") != BUILD_ID:
-                  raise RuntimeError("Dynamically resolved build ID does not match the expected ID")
+              build_id = str(build.get("id") or "")
+              if not build_id:
+                  raise RuntimeError("Dynamically resolved build has no resource ID")
+              SENSITIVE_RUNTIME_VALUES.add(build_id)
               if attributes(build).get("processingState") != BUILD_STATE:
                   raise RuntimeError(f"Build 1000041 must be in {BUILD_STATE} processing state")
-              pre_release = client.get_resource(f"/v1/builds/{BUILD_ID}/preReleaseVersion")
+              pre_release = client.get_resource(f"/v1/builds/{build_id}/preReleaseVersion")
               if not pre_release:
                   raise RuntimeError("Build 1000041 has no pre-release version")
               pre_release_attributes = attributes(pre_release)
@@ -1050,7 +1063,7 @@ jobs:
                   raise RuntimeError("Build 1000041 is not an iOS 1.1 build")
 
               localizations = client.get_collection(
-                  f"/v1/appStoreVersions/{VERSION_ID}/appStoreVersionLocalizations",
+                  f"/v1/appStoreVersions/{version_id}/appStoreVersionLocalizations",
                   params={"limit": 50},
               )
               matching_localizations = [
@@ -1059,16 +1072,19 @@ jobs:
               if len(matching_localizations) != 1:
                   raise RuntimeError("Expected exactly one zh-Hans localization for App Store version 1.1")
               localization = matching_localizations[0]
-              if str(localization.get("id") or "") != LOCALIZATION_ID:
-                  raise RuntimeError("Dynamically resolved localization ID does not match the expected ID")
+              localization_id = str(localization.get("id") or "")
+              if not localization_id:
+                  raise RuntimeError("Dynamically resolved localization has no resource ID")
+              SENSITIVE_RUNTIME_VALUES.add(localization_id)
               localization_attributes_before = dict(attributes(localization))
 
               review_detail = client.get_resource(
-                  f"/v1/appStoreVersions/{VERSION_ID}/appStoreReviewDetail"
+                  f"/v1/appStoreVersions/{version_id}/appStoreReviewDetail"
               )
               if not review_detail or not review_detail.get("id"):
                   raise RuntimeError("App Store version 1.1 must already have App Review Information")
               review_detail_id = str(review_detail["id"])
+              SENSITIVE_RUNTIME_VALUES.add(review_detail_id)
               review_attributes_before = dict(attributes(review_detail))
               protected_review_fields = (
                   "contactFirstName",
@@ -1078,6 +1094,12 @@ jobs:
                   "demoAccountName",
                   "demoAccountPassword",
                   "demoAccountRequired",
+              )
+              SENSITIVE_RUNTIME_VALUES.update(
+                  str(review_attributes_before[field])
+                  for field in protected_review_fields
+                  if isinstance(review_attributes_before.get(field), str)
+                  and review_attributes_before[field]
               )
               if not all(
                   present(review_attributes_before.get(field))
@@ -1101,14 +1123,14 @@ jobs:
                       raise RuntimeError("Approved review notes unexpectedly contain protected Review Information")
 
               selected_build = client.get_resource(
-                  f"/v1/appStoreVersions/{VERSION_ID}/build",
+                  f"/v1/appStoreVersions/{version_id}/build",
                   allow_not_found=True,
               )
               selected_build_id = str((selected_build or {}).get("id") or "")
-              if selected_build_id and selected_build_id != BUILD_ID:
+              if selected_build_id and selected_build_id != build_id:
                   raise RuntimeError("Version 1.1 already has a different selected build")
 
-              inventory_before = screenshot_inventory(client, LOCALIZATION_ID)
+              inventory_before = screenshot_inventory(client, localization_id)
               ipad_set_id, ipad_screenshot_ids = assert_complete_ipad(inventory_before)
               iphone_set_id, iphone_screenshots, iphone_states = inspect_iphone_prefix(
                   inventory_before,
@@ -1118,7 +1140,7 @@ jobs:
               actions: list[str] = []
               if not APPLY:
                   actions.append(
-                      "Attach build 1000041" if selected_build_id != BUILD_ID else "Build 1000041 already attached"
+                      "Attach build 1000041" if selected_build_id != build_id else "Build 1000041 already attached"
                   )
                   actions.append("Patch only description, What's New, support URL, and marketing URL")
                   actions.append("Patch only App Review notes; preserve contacts and demo credentials")
@@ -1163,16 +1185,16 @@ jobs:
                   print("Dry-run validation passed; sanitized plan written to the workflow summary.")
                   return
 
-              if selected_build_id != BUILD_ID:
+              if selected_build_id != build_id:
                   client.mutate(
                       "PATCH",
-                      f"/v1/appStoreVersions/{VERSION_ID}",
+                      f"/v1/appStoreVersions/{version_id}",
                       {
                           "data": {
                               "type": "appStoreVersions",
-                              "id": VERSION_ID,
+                              "id": version_id,
                               "relationships": {
-                                  "build": {"data": {"type": "builds", "id": BUILD_ID}}
+                                  "build": {"data": {"type": "builds", "id": build_id}}
                               },
                           }
                       },
@@ -1190,11 +1212,11 @@ jobs:
               if any(localization_attributes_before.get(key) != value for key, value in desired_localization.items()):
                   client.mutate(
                       "PATCH",
-                      f"/v1/appStoreVersionLocalizations/{LOCALIZATION_ID}",
+                      f"/v1/appStoreVersionLocalizations/{localization_id}",
                       {
                           "data": {
                               "type": "appStoreVersionLocalizations",
-                              "id": LOCALIZATION_ID,
+                              "id": localization_id,
                               "attributes": desired_localization,
                           }
                       },
@@ -1221,7 +1243,7 @@ jobs:
 
               iphone_set_id, iphone_actions = prepare_iphone_screenshots(
                   client,
-                  LOCALIZATION_ID,
+                  localization_id,
                   iphone_set_id,
                   assets,
               )
@@ -1232,27 +1254,27 @@ jobs:
               app_after = client.get_resource(f"/v1/apps/{APP_ID}")
               if not app_after or attributes(app_after).get("bundleId") != BUNDLE_ID:
                   raise RuntimeError("Post-apply app identity verification failed")
-              version_after = client.get_resource(f"/v1/appStoreVersions/{VERSION_ID}")
+              version_after = client.get_resource(f"/v1/appStoreVersions/{version_id}")
               version_attributes_after = attributes(version_after)
               if (
                   not version_after
-                  or str(version_after.get("id") or "") != VERSION_ID
+                  or str(version_after.get("id") or "") != version_id
                   or version_attributes_after.get("versionString") != VERSION
                   or version_attributes_after.get("appVersionState") != VERSION_STATE
                   or version_attributes_after.get("releaseType") != version_attributes_before.get("releaseType")
               ):
                   raise RuntimeError("Post-apply App Store version verification failed")
 
-              selected_build_after = client.get_resource(f"/v1/appStoreVersions/{VERSION_ID}/build")
+              selected_build_after = client.get_resource(f"/v1/appStoreVersions/{version_id}/build")
               if (
                   not selected_build_after
-                  or str(selected_build_after.get("id") or "") != BUILD_ID
+                  or str(selected_build_after.get("id") or "") != build_id
                   or str(attributes(selected_build_after).get("version") or "") != BUILD_NUMBER
               ):
                   raise RuntimeError("Post-apply selected build is not build 1000041")
 
               localization_after = client.get_resource(
-                  f"/v1/appStoreVersionLocalizations/{LOCALIZATION_ID}"
+                  f"/v1/appStoreVersionLocalizations/{localization_id}"
               )
               localization_attributes_after = attributes(localization_after)
               if any(localization_attributes_after.get(key) != value for key, value in desired_localization.items()):
@@ -1269,7 +1291,7 @@ jobs:
                   if review_attributes_after.get(field) != review_attributes_before.get(field):
                       raise RuntimeError("Protected App Review Information changed unexpectedly")
 
-              inventory_after = screenshot_inventory(client, LOCALIZATION_ID)
+              inventory_after = screenshot_inventory(client, localization_id)
               ipad_set_after, ipad_screenshot_ids_after = assert_complete_ipad(inventory_after)
               if ipad_set_after != ipad_set_id or ipad_screenshot_ids_after != ipad_screenshot_ids:
                   raise RuntimeError("Existing iPad screenshot inventory changed unexpectedly")

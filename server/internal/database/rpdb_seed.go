@@ -1,6 +1,8 @@
 package database
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,15 +14,14 @@ import (
 )
 
 const (
-	rpdbDemoUsername = "rpdb_demo"
-	rpdbDemoEmail    = "rpdb-demo@local.invalid"
-	rpdbDemoPassword = "RPBoxDemo2026!"
+	rpdbDemoUsername       = "rpdb_demo"
+	rpdbDemoEmail          = "rpdb-demo@local.invalid"
+	rpdbDemoDisabledReason = "System-managed RPDB demo identity; interactive sign-in is disabled."
 )
 
 type rpdbDemoAccountSpec struct {
 	Username string
 	Email    string
-	Role     string
 }
 
 type rpdbDemoWorkSpec struct {
@@ -65,25 +66,16 @@ func SeedRPDBDemo(db *gorm.DB) error {
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
-		author, err := ensureRPDBDemoAccount(tx, rpdbDemoAccountSpec{
-			Username: rpdbDemoUsername,
-			Email:    rpdbDemoEmail,
-		})
+		accountSpecs := rpdbDemoAccountSpecs()
+		author, err := ensureRPDBDemoAccount(tx, accountSpecs[0])
 		if err != nil {
 			return err
 		}
-		curator, err := ensureRPDBDemoAccount(tx, rpdbDemoAccountSpec{
-			Username: "rpdb_demo_curator",
-			Email:    "rpdb-demo-curator@local.invalid",
-			Role:     "moderator",
-		})
+		curator, err := ensureRPDBDemoAccount(tx, accountSpecs[1])
 		if err != nil {
 			return err
 		}
-		explorer, err := ensureRPDBDemoAccount(tx, rpdbDemoAccountSpec{
-			Username: "rpdb_demo_explorer",
-			Email:    "rpdb-demo-explorer@local.invalid",
-		})
+		explorer, err := ensureRPDBDemoAccount(tx, accountSpecs[2])
 		if err != nil {
 			return err
 		}
@@ -130,32 +122,16 @@ func SeedRPDBDemo(db *gorm.DB) error {
 
 func ensureRPDBDemoAccount(tx *gorm.DB, spec rpdbDemoAccountSpec) (model.User, error) {
 	var user model.User
-	err := tx.Where("username = ?", spec.Username).First(&user).Error
+	err := tx.Where("email = ?", spec.Email).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = tx.Where("username = ?", spec.Username).First(&user).Error
+	}
 	if err == nil {
-		updates := map[string]interface{}{}
-		if user.PassHash == "" {
-			hash, hashErr := authpkg.HashPassword(rpdbDemoPassword)
-			if hashErr != nil {
-				return model.User{}, fmt.Errorf("hash password for demo user %s: %w", spec.Username, hashErr)
-			}
-			updates["pass_hash"] = hash
+		if err := hardenRPDBDemoAccount(tx, &user, spec); err != nil {
+			return model.User{}, err
 		}
-		if !user.EmailVerified {
-			updates["email_verified"] = true
-		}
-		if user.Email == "" {
-			updates["email"] = spec.Email
-		}
-		if spec.Role != "" && user.Role != spec.Role {
-			updates["role"] = spec.Role
-		}
-		if len(updates) > 0 {
-			if err := tx.Model(&user).Updates(updates).Error; err != nil {
-				return model.User{}, fmt.Errorf("complete demo user %s: %w", spec.Username, err)
-			}
-			if err := tx.First(&user, user.ID).Error; err != nil {
-				return model.User{}, fmt.Errorf("reload demo user %s: %w", spec.Username, err)
-			}
+		if err := tx.First(&user, user.ID).Error; err != nil {
+			return model.User{}, fmt.Errorf("reload demo user %s: %w", spec.Username, err)
 		}
 		return user, nil
 	}
@@ -163,29 +139,112 @@ func ensureRPDBDemoAccount(tx *gorm.DB, spec rpdbDemoAccountSpec) (model.User, e
 		return model.User{}, fmt.Errorf("find demo user %s: %w", spec.Username, err)
 	}
 
-	hash, err := authpkg.HashPassword(rpdbDemoPassword)
+	hash, err := newRPDBDemoPasswordHash()
 	if err != nil {
-		return model.User{}, fmt.Errorf("hash password for demo user %s: %w", spec.Username, err)
-	}
-	role := spec.Role
-	if role == "" {
-		role = "user"
+		return model.User{}, fmt.Errorf("create disabled credential for demo user %s: %w", spec.Username, err)
 	}
 	user = model.User{
 		Username:           spec.Username,
 		Email:              spec.Email,
-		EmailVerified:      true,
+		EmailVerified:      false,
 		PassHash:           hash,
-		Role:               role,
+		Role:               "user",
 		Bio:                "RPBox RP 数据库演示账号",
 		Location:           "艾泽拉斯",
 		AgreementVersion:   "demo-seed",
 		AvatarReviewStatus: model.RPDBReviewNone,
+		IsMuted:            true,
+		MuteReason:         rpdbDemoDisabledReason,
+		IsBanned:           true,
+		BanReason:          rpdbDemoDisabledReason,
 	}
 	if err := tx.Create(&user).Error; err != nil {
 		return model.User{}, fmt.Errorf("create demo user %s: %w", spec.Username, err)
 	}
 	return user, nil
+}
+
+func rpdbDemoAccountSpecs() [3]rpdbDemoAccountSpec {
+	return [3]rpdbDemoAccountSpec{
+		{Username: rpdbDemoUsername, Email: rpdbDemoEmail},
+		{Username: "rpdb_demo_curator", Email: "rpdb-demo-curator@local.invalid"},
+		{Username: "rpdb_demo_explorer", Email: "rpdb-demo-explorer@local.invalid"},
+	}
+}
+
+// hardenRPDBDemoAccounts disables any stable demo identities that already exist.
+// It is intentionally called during normal database initialization, not only by
+// the manual demo-data seeder.
+func hardenRPDBDemoAccounts(db *gorm.DB) error {
+	if db == nil {
+		return errors.New("harden RPDB demo accounts: database is nil")
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, spec := range rpdbDemoAccountSpecs() {
+			var users []model.User
+			if err := tx.Where("username = ? OR email = ?", spec.Username, spec.Email).Find(&users).Error; err != nil {
+				return fmt.Errorf("find demo user %s for hardening: %w", spec.Username, err)
+			}
+			for index := range users {
+				if err := hardenRPDBDemoAccount(tx, &users[index], spec); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func hardenRPDBDemoAccount(tx *gorm.DB, user *model.User, spec rpdbDemoAccountSpec) error {
+	if isRPDBDemoAccountHardened(user, spec) {
+		return nil
+	}
+
+	hash, err := newRPDBDemoPasswordHash()
+	if err != nil {
+		return fmt.Errorf("rotate disabled credential for demo user %s: %w", spec.Username, err)
+	}
+	updates := map[string]interface{}{
+		"email_verified": false,
+		"pass_hash":      hash,
+		"role":           "user",
+		"is_muted":       true,
+		"muted_until":    nil,
+		"mute_reason":    rpdbDemoDisabledReason,
+		"is_banned":      true,
+		"banned_until":   nil,
+		"ban_reason":     rpdbDemoDisabledReason,
+		"banned_by":      nil,
+		"banned_at":      nil,
+	}
+	if err := tx.Model(user).Updates(updates).Error; err != nil {
+		return fmt.Errorf("harden demo user %s: %w", spec.Username, err)
+	}
+	return nil
+}
+
+func isRPDBDemoAccountHardened(user *model.User, spec rpdbDemoAccountSpec) bool {
+	return user != nil &&
+		!user.EmailVerified &&
+		user.PassHash != "" &&
+		user.Role == "user" &&
+		user.IsMuted &&
+		user.MutedUntil == nil &&
+		user.MuteReason == rpdbDemoDisabledReason &&
+		user.IsBanned &&
+		user.BannedUntil == nil &&
+		user.BanReason == rpdbDemoDisabledReason &&
+		user.BannedBy == nil &&
+		user.BannedAt == nil
+}
+
+func newRPDBDemoPasswordHash() (string, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", fmt.Errorf("generate random credential: %w", err)
+	}
+	return authpkg.HashPassword(base64.RawURLEncoding.EncodeToString(secret))
 }
 
 func ensureRPDBDemoTags(tx *gorm.DB, creatorID uint) (map[string]model.Tag, error) {

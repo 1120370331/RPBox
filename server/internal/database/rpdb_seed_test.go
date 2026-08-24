@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/testutil"
@@ -13,12 +14,18 @@ import (
 
 func TestSeedRPDBDemoCreatesCompleteIdempotentDataset(t *testing.T) {
 	db := newRPDBSeedTestDB(t)
+	compromisedPassword := "test-only-known:" + rpdbDemoUsername
+	compromisedHash, err := authpkg.HashPassword(compromisedPassword)
+	if err != nil {
+		t.Fatalf("hash test-only compromised credential: %v", err)
+	}
 
 	existingAuthor := model.User{
 		Username:      "rpdb_demo",
 		Email:         "rpdb-demo@local.invalid",
-		EmailVerified: false,
-		Role:          "user",
+		EmailVerified: true,
+		PassHash:      compromisedHash,
+		Role:          "moderator",
 		Bio:           "保留现有演示账号资料",
 		Location:      "用户自定义位置",
 	}
@@ -60,12 +67,13 @@ func TestSeedRPDBDemoCreatesCompleteIdempotentDataset(t *testing.T) {
 	if author.ID != existingAuthor.ID {
 		t.Fatalf("expected existing demo author ID %d, got %d", existingAuthor.ID, author.ID)
 	}
-	if author.Email != "rpdb-demo@local.invalid" || !author.EmailVerified {
+	if author.Email != "rpdb-demo@local.invalid" || author.EmailVerified {
 		t.Fatalf("unexpected demo login identity: email=%q verified=%v", author.Email, author.EmailVerified)
 	}
-	if !authpkg.CheckPassword("RPBoxDemo2026!", author.PassHash) {
-		t.Fatal("demo account password is not usable")
+	if authpkg.CheckPassword(compromisedPassword, author.PassHash) {
+		t.Fatal("demo account retained a deterministic seed credential")
 	}
+	assertRPDBDemoAccountDisabled(t, db, rpdbDemoAccountSpec{Username: rpdbDemoUsername, Email: rpdbDemoEmail})
 	if author.Bio != existingAuthor.Bio || author.Location != existingAuthor.Location {
 		t.Fatal("seed overwrote existing demo account profile fields")
 	}
@@ -83,9 +91,11 @@ func TestSeedRPDBDemoCreatesCompleteIdempotentDataset(t *testing.T) {
 	if err := db.Where("username = ?", "rpdb_demo_curator").First(&curator).Error; err != nil {
 		t.Fatalf("find demo curator: %v", err)
 	}
-	if curator.Role != "moderator" {
-		t.Fatalf("expected demo curator role moderator, got %q", curator.Role)
+	if curator.Role != "user" {
+		t.Fatalf("expected demo curator role user, got %q", curator.Role)
 	}
+	assertRPDBDemoAccountDisabled(t, db, rpdbDemoAccountSpec{Username: curator.Username, Email: "rpdb-demo-curator@local.invalid"})
+	assertRPDBDemoAccountDisabled(t, db, rpdbDemoAccountSpec{Username: "rpdb_demo_explorer", Email: "rpdb-demo-explorer@local.invalid"})
 
 	var works []model.RPDBWork
 	if err := db.Where("slug LIKE ?", "rpdb-demo-%").Order("slug ASC").Find(&works).Error; err != nil {
@@ -104,7 +114,7 @@ func TestSeedRPDBDemoCreatesCompleteIdempotentDataset(t *testing.T) {
 		if work.Status != model.RPDBStatusPublished || work.ReviewStatus != model.RPDBReviewApproved || !work.IsPublic {
 			t.Fatalf("work %q is not published, approved, and public", work.Slug)
 		}
-		if work.ReviewerID == nil || work.ReviewedAt == nil {
+		if work.ReviewerID == nil || *work.ReviewerID != curator.ID || work.ReviewedAt == nil {
 			t.Fatalf("work %q is missing review metadata", work.Slug)
 		}
 		expectedImageURL := rpdbDemoImageURL(work.Slug)
@@ -238,6 +248,7 @@ func TestSeedRPDBDemoCreatesCompleteIdempotentDataset(t *testing.T) {
 	}
 
 	stableCounts := rpdbSeedTableCounts(t, db)
+	stableHashes := rpdbDemoAccountHashes(t, db)
 	if err := SeedRPDBDemo(db); err != nil {
 		t.Fatalf("seed RPDB demo a third time: %v", err)
 	}
@@ -247,6 +258,12 @@ func TestSeedRPDBDemoCreatesCompleteIdempotentDataset(t *testing.T) {
 			t.Fatalf("table %s changed after stable reseed: second=%d third=%d", table, stable, thirdCounts[table])
 		}
 	}
+	thirdHashes := rpdbDemoAccountHashes(t, db)
+	for username, stableHash := range stableHashes {
+		if thirdHashes[username] != stableHash {
+			t.Fatalf("disabled credential for %s changed after an idempotent reseed", username)
+		}
+	}
 
 	if err := db.Where("slug LIKE ?", "rpdb-demo-%").Order("slug ASC").Find(&works).Error; err != nil {
 		t.Fatalf("reload demo works: %v", err)
@@ -254,6 +271,181 @@ func TestSeedRPDBDemoCreatesCompleteIdempotentDataset(t *testing.T) {
 	for _, work := range works {
 		assertRPDBDemoWorkCounters(t, db, work)
 	}
+}
+
+func TestHardenRPDBDemoAccountsRehardensExistingIdentitiesIdempotently(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{})
+	now := time.Now().UTC().Truncate(time.Second)
+	legacyModeratorID := uint(999999)
+	compromisedPasswords := make(map[string]string)
+	originalIDs := make(map[string]uint)
+	originalHashes := make(map[string]string)
+
+	for _, spec := range rpdbDemoAccountSpecs() {
+		compromisedPassword := "test-only-known:" + spec.Username
+		compromisedHash, err := authpkg.HashPassword(compromisedPassword)
+		if err != nil {
+			t.Fatalf("hash test-only compromised credential for %s: %v", spec.Username, err)
+		}
+		user := model.User{
+			Username:      spec.Username,
+			Email:         "legacy-" + spec.Email,
+			EmailVerified: true,
+			PassHash:      compromisedHash,
+			Role:          "admin",
+			MutedUntil:    &now,
+			MuteReason:    "legacy moderation state",
+			BannedUntil:   &now,
+			BanReason:     "legacy moderation state",
+			BannedBy:      &legacyModeratorID,
+			BannedAt:      &now,
+		}
+		if err := db.Create(&user).Error; err != nil {
+			t.Fatalf("create legacy demo identity %s: %v", spec.Username, err)
+		}
+		compromisedPasswords[spec.Username] = compromisedPassword
+		originalIDs[spec.Username] = user.ID
+		originalHashes[spec.Username] = compromisedHash
+	}
+
+	unrelatedPassword := "test-only-known:unrelated"
+	unrelatedHash, err := authpkg.HashPassword(unrelatedPassword)
+	if err != nil {
+		t.Fatalf("hash unrelated test credential: %v", err)
+	}
+	unrelated := model.User{
+		Username:      "unrelated_user",
+		Email:         "unrelated@example.invalid",
+		EmailVerified: true,
+		PassHash:      unrelatedHash,
+		Role:          "moderator",
+	}
+	if err := db.Create(&unrelated).Error; err != nil {
+		t.Fatalf("create unrelated identity: %v", err)
+	}
+
+	if err := hardenRPDBDemoAccounts(db); err != nil {
+		t.Fatalf("harden existing demo identities: %v", err)
+	}
+	firstHardenedHashes := make(map[string]string)
+	for _, spec := range rpdbDemoAccountSpecs() {
+		var user model.User
+		if err := db.Where("username = ?", spec.Username).First(&user).Error; err != nil {
+			t.Fatalf("reload hardened identity %s: %v", spec.Username, err)
+		}
+		if user.ID != originalIDs[spec.Username] {
+			t.Fatalf("hardening changed stable ID for %s", spec.Username)
+		}
+		if user.Email != "legacy-"+spec.Email {
+			t.Fatalf("hardening overwrote the existing email for %s", spec.Username)
+		}
+		if user.PassHash == originalHashes[spec.Username] || authpkg.CheckPassword(compromisedPasswords[spec.Username], user.PassHash) {
+			t.Fatalf("hardening retained a known credential for %s", spec.Username)
+		}
+		assertRPDBDemoAccountStateDisabled(t, user, spec)
+		firstHardenedHashes[spec.Username] = user.PassHash
+	}
+
+	if err := hardenRPDBDemoAccounts(db); err != nil {
+		t.Fatalf("repeat demo identity hardening: %v", err)
+	}
+	secondHardenedHashes := rpdbDemoAccountHashes(t, db)
+	for username, firstHash := range firstHardenedHashes {
+		if secondHardenedHashes[username] != firstHash {
+			t.Fatalf("disabled credential for %s changed during idempotent startup hardening", username)
+		}
+	}
+
+	var storedUnrelated model.User
+	if err := db.First(&storedUnrelated, unrelated.ID).Error; err != nil {
+		t.Fatalf("reload unrelated identity: %v", err)
+	}
+	if storedUnrelated.PassHash != unrelatedHash || storedUnrelated.Role != unrelated.Role || storedUnrelated.IsBanned {
+		t.Fatal("demo identity hardening modified an unrelated account")
+	}
+}
+
+func TestHardenRPDBDemoAccountsFindsRenamedSeedIdentityByStableEmail(t *testing.T) {
+	db := newRPDBSeedTestDB(t)
+	spec := rpdbDemoAccountSpecs()[0]
+	compromisedPassword := "test-only-known:renamed"
+	compromisedHash, err := authpkg.HashPassword(compromisedPassword)
+	if err != nil {
+		t.Fatalf("hash test-only compromised credential: %v", err)
+	}
+	user := model.User{
+		Username:      "renamed_demo_identity",
+		Email:         spec.Email,
+		EmailVerified: true,
+		PassHash:      compromisedHash,
+		Role:          "moderator",
+	}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create renamed demo identity: %v", err)
+	}
+
+	if err := hardenRPDBDemoAccounts(db); err != nil {
+		t.Fatalf("harden renamed demo identity: %v", err)
+	}
+	var reloaded model.User
+	if err := db.First(&reloaded, user.ID).Error; err != nil {
+		t.Fatalf("reload renamed demo identity: %v", err)
+	}
+	if reloaded.Username != user.Username || reloaded.Email != user.Email {
+		t.Fatal("hardening changed stable identity fields")
+	}
+	if authpkg.CheckPassword(compromisedPassword, reloaded.PassHash) {
+		t.Fatal("renamed demo identity retained a known credential")
+	}
+	assertRPDBDemoAccountStateDisabled(t, reloaded, spec)
+
+	if err := SeedRPDBDemo(db); err != nil {
+		t.Fatalf("refresh demo data after identity rename: %v", err)
+	}
+	var afterSeed model.User
+	if err := db.First(&afterSeed, user.ID).Error; err != nil {
+		t.Fatalf("reload renamed demo identity after seed: %v", err)
+	}
+	if afterSeed.Username != user.Username || afterSeed.Email != user.Email {
+		t.Fatal("demo refresh replaced or rewrote the renamed stable identity")
+	}
+	assertRPDBDemoAccountStateDisabled(t, afterSeed, spec)
+	var authoredWorks int64
+	if err := db.Model(&model.RPDBWork{}).Where("author_id = ? AND slug LIKE ?", user.ID, "rpdb-demo-%").Count(&authoredWorks).Error; err != nil {
+		t.Fatalf("count renamed identity demo works: %v", err)
+	}
+	if authoredWorks != 12 {
+		t.Fatalf("expected renamed stable identity to retain 12 demo works, got %d", authoredWorks)
+	}
+}
+
+func assertRPDBDemoAccountDisabled(t *testing.T, db *gorm.DB, spec rpdbDemoAccountSpec) {
+	t.Helper()
+	var user model.User
+	if err := db.Where("username = ?", spec.Username).First(&user).Error; err != nil {
+		t.Fatalf("find disabled demo identity %s: %v", spec.Username, err)
+	}
+	assertRPDBDemoAccountStateDisabled(t, user, spec)
+}
+
+func assertRPDBDemoAccountStateDisabled(t *testing.T, user model.User, spec rpdbDemoAccountSpec) {
+	t.Helper()
+	if !isRPDBDemoAccountHardened(&user, spec) {
+		t.Fatalf("demo identity %s is not fully disabled and unprivileged", spec.Username)
+	}
+}
+
+func rpdbDemoAccountHashes(t *testing.T, db *gorm.DB) map[string]string {
+	t.Helper()
+	hashes := make(map[string]string)
+	for _, spec := range rpdbDemoAccountSpecs() {
+		var user model.User
+		if err := db.Where("username = ?", spec.Username).First(&user).Error; err != nil {
+			t.Fatalf("load disabled credential for %s: %v", spec.Username, err)
+		}
+		hashes[spec.Username] = user.PassHash
+	}
+	return hashes
 }
 
 func newRPDBSeedTestDB(t *testing.T) *gorm.DB {
