@@ -54,6 +54,7 @@ export default {
   },
   menu: {
     cloudProfiles: 'Cloud Profiles',
+    rpboxCharacterCards: 'RPBox Character Cards',
     achievements: 'Achievements',
     favorites: 'My Favorites',
     posts: 'My Posts',

@@ -54,6 +54,7 @@ export default {
   },
   menu: {
     cloudProfiles: '云端人物卡',
+    rpboxCharacterCards: 'RPBox 人物卡',
     achievements: '成就墙',
     favorites: '我的收藏',
     posts: '我的帖子',

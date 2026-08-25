@@ -157,6 +157,21 @@ const router = createRouter({
       component: () => import('./views/details/ProfileDetail.vue'),
     },
     {
+      path: '/my-character-cards',
+      name: 'my-character-cards',
+      component: () => import('./views/profile/MyCharacterCards.vue'),
+    },
+    {
+      path: '/character-cards/new',
+      name: 'character-card-new',
+      component: () => import('./views/character-cards/CharacterCardNew.vue'),
+    },
+    {
+      path: '/character-cards/:id/edit',
+      name: 'character-card-edit',
+      component: () => import('./views/character-cards/CharacterCardEditor.vue'),
+    },
+    {
       path: '/character-cards/:id',
       name: 'character-card-detail',
       component: () => import('./views/details/CharacterCardDetail.vue'),

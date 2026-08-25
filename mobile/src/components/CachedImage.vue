@@ -84,7 +84,7 @@ function handleError() {
 }
 
 watch(
-  () => [props.src, props.useCache],
+  () => [props.src, props.useCache, props.authFetch],
   () => {
     resolveSource()
   },

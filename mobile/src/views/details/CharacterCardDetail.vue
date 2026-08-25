@@ -5,12 +5,14 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   getCharacterCard,
   getCharacterCardShare,
+  updateCharacterCard,
   type CharacterCard,
   type CharacterCardPersonalityTrait,
   type CharacterCardTRP3Color,
 } from '@/api/characterCard'
 import { resolveApiUrl } from '@/api/image'
 import { createContentReport } from '@/api/safety'
+import CachedImage from '@/components/CachedImage.vue'
 import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import { handleJumpLinkClick, sanitizeJumpLinks } from '@/utils/jumpLink'
@@ -32,6 +34,8 @@ const loadFailed = ref(false)
 const sharing = ref(false)
 const safetySheetOpen = ref(false)
 const safetySubmitting = ref(false)
+const makePrivateDialogOpen = ref(false)
+const makingPrivate = ref(false)
 const activeTab = ref<DetailTab>('basic')
 const selectedPortraitIndex = ref(0)
 const previewOpen = ref(false)
@@ -42,13 +46,55 @@ const impressionRef = ref<HTMLElement | null>(null)
 const otherRef = ref<HTMLElement | null>(null)
 
 const cardId = computed(() => Number(route.params.id))
+const isOwner = computed(() => {
+  const currentUserId = Number(userStore.user?.id)
+  const ownerId = Number(card.value?.user_id)
+  return Number.isInteger(currentUserId) && currentUserId > 0 && currentUserId === ownerId
+})
 const canShare = computed(() => card.value?.status === 'published'
   && card.value.visibility === 'public'
   && card.value.review_status === 'approved')
+const canMakePrivate = computed(() => isOwner.value
+  && card.value?.status === 'published'
+  && card.value.visibility === 'public')
 const canUseSafetyAction = computed(() => {
   const currentUserId = userStore.user?.id
   const ownerId = card.value?.user_id
-  return Boolean(currentUserId && ownerId && currentUserId !== ownerId)
+  return Boolean(currentUserId && ownerId && !isOwner.value)
+})
+const ownerStatus = computed(() => {
+  const loadedCard = card.value
+  if (!loadedCard) return 'draft'
+  if (loadedCard.status === 'draft') return 'draft'
+  if (loadedCard.review_status === 'rejected') return 'rejected'
+  if (loadedCard.review_status === 'pending') return 'pending'
+  if (loadedCard.visibility === 'private') return 'private'
+  if (loadedCard.status === 'published'
+    && loadedCard.visibility === 'public'
+    && loadedCard.review_status === 'approved') return 'published'
+  return 'unsubmitted'
+})
+const statusMark = computed(() => {
+  if (!isOwner.value) {
+    return {
+      className: 'published',
+      icon: 'ri-shield-check-line',
+      label: t('characterCards.detail.publicMark'),
+    }
+  }
+  const iconByStatus = {
+    draft: 'ri-draft-line',
+    private: 'ri-lock-2-line',
+    pending: 'ri-time-line',
+    rejected: 'ri-close-circle-line',
+    published: 'ri-shield-check-line',
+    unsubmitted: 'ri-send-plane-line',
+  } as const
+  return {
+    className: ownerStatus.value,
+    icon: iconByStatus[ownerStatus.value],
+    label: t(`characterCards.detail.ownerStatus.${ownerStatus.value}`),
+  }
 })
 const displayName = computed(() => {
   if (!card.value) return ''
@@ -306,6 +352,34 @@ async function shareCard() {
   }
 }
 
+function openMakePrivateDialog() {
+  if (!canMakePrivate.value || makingPrivate.value) return
+  makePrivateDialogOpen.value = true
+}
+
+function closeMakePrivateDialog() {
+  if (makingPrivate.value) return
+  makePrivateDialogOpen.value = false
+}
+
+async function confirmMakePrivate() {
+  const loadedCard = card.value
+  if (!loadedCard || !canMakePrivate.value || makingPrivate.value) return
+  makingPrivate.value = true
+  try {
+    const updated = await updateCharacterCard(loadedCard.id, { visibility: 'private' })
+    if (card.value?.id !== loadedCard.id) return
+    card.value = updated
+    makePrivateDialogOpen.value = false
+    toast.success(t('characterCards.detail.makePrivateSuccess'))
+  } catch (error) {
+    console.error('Failed to make character card private', error)
+    toast.error((error as Error)?.message || t('characterCards.detail.makePrivateFailed'))
+  } finally {
+    makingPrivate.value = false
+  }
+}
+
 function openSafetySheet() {
   if (!canUseSafetyAction.value || safetySubmitting.value) return
   safetySheetOpen.value = true
@@ -372,9 +446,15 @@ function goBack() {
 
 function openPreview(src: string, alt = '') {
   if (!src) return
-  previewSrc.value = resolveApiUrl(src)
+  previewSrc.value = /^(?:blob:|data:)/i.test(src) ? src : resolveApiUrl(src)
   previewAlt.value = alt
   previewOpen.value = true
+}
+
+function openRenderedImagePreview(event: MouseEvent, fallbackSrc: string, alt = '') {
+  const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  const renderedImage = trigger?.querySelector<HTMLImageElement>('img')
+  openPreview(renderedImage?.currentSrc || renderedImage?.src || fallbackSrc, alt)
 }
 
 function handleRichContentClick(event: MouseEvent) {
@@ -396,9 +476,9 @@ watch(activeTab, hydrateRichLinks)
       <button type="button" class="back-btn" :aria-label="t('common.button.back')" @click="goBack">
         <i class="ri-arrow-left-line" aria-hidden="true" />
       </button>
-      <div>
+      <div class="character-card-heading">
         <span>RPBOX · CHARACTER</span>
-        <h1>{{ t('characterCards.detail.title') }}</h1>
+        <h1>{{ isOwner ? t('characterCards.detail.ownerTitle') : t('characterCards.detail.title') }}</h1>
       </div>
       <button
         v-if="canShare"
@@ -432,9 +512,15 @@ watch(activeTab, hydrateRichLinks)
             type="button"
             class="portrait-stage"
             :aria-label="t('characterCards.detail.previewImage')"
-            @click="openPreview(selectedPortrait.src, t('characterCards.detail.portraitAlt', { name: displayName }))"
+            @click="openRenderedImagePreview($event, selectedPortrait.src, t('characterCards.detail.portraitAlt', { name: displayName }))"
           >
-            <img :src="selectedPortrait.src" :alt="t('characterCards.detail.portraitAlt', { name: displayName })" />
+            <CachedImage
+              class="portrait-stage-image"
+              :src="selectedPortrait.src"
+              :alt="t('characterCards.detail.portraitAlt', { name: displayName })"
+              :auth-fetch="isOwner"
+              loading="eager"
+            />
             <span class="portrait-stage__zoom"><i class="ri-zoom-in-line" aria-hidden="true" />{{ t('characterCards.detail.previewImage') }}</span>
           </button>
           <div v-else class="portrait-empty">
@@ -451,12 +537,14 @@ watch(activeTab, hydrateRichLinks)
               :aria-pressed="selectedPortraitIndex === index"
               @click="selectedPortraitIndex = index"
             >
-              <img :src="portrait.src" alt="" />
+              <CachedImage :src="portrait.src" alt="" :auth-fetch="isOwner" />
             </button>
           </div>
 
           <div class="character-plaque">
-            <span class="public-mark"><i class="ri-shield-check-line" aria-hidden="true" />{{ t('characterCards.detail.publicMark') }}</span>
+            <span class="public-mark" :class="`public-mark--${statusMark.className}`">
+              <i :class="statusMark.icon" aria-hidden="true" />{{ statusMark.label }}
+            </span>
             <h2 :style="displayColor ? { color: displayColor } : undefined">{{ displayName }}</h2>
             <strong>{{ card.title || card.full_title || t('characterCards.detail.titleMissing') }}</strong>
             <p>{{ identityLine || t('characterCards.detail.identityMissing') }}</p>
@@ -464,6 +552,33 @@ watch(activeTab, hydrateRichLinks)
         </section>
 
         <p class="character-summary">{{ card.summary || t('characterCards.detail.summaryMissing') }}</p>
+
+        <section v-if="isOwner" class="owner-card-action" data-testid="character-card-owner-tools">
+          <div>
+            <span>{{ t(`characterCards.detail.ownerStatus.${ownerStatus}`) }}</span>
+            <p>{{ t(`characterCards.detail.ownerStatusBody.${ownerStatus}`) }}</p>
+          </div>
+          <div class="owner-card-buttons">
+            <button
+              type="button"
+              data-testid="character-card-owner-edit"
+              @click="router.push({ name: 'character-card-edit', params: { id: card.id } })"
+            >
+              <i class="ri-quill-pen-line" aria-hidden="true" />
+              {{ t('characterCards.detail.edit') }}
+            </button>
+            <button
+              v-if="canMakePrivate"
+              type="button"
+              class="make-private-button"
+              data-testid="character-card-owner-make-private"
+              @click="openMakePrivateDialog"
+            >
+              <i class="ri-lock-2-line" aria-hidden="true" />
+              {{ t('characterCards.detail.makePrivate') }}
+            </button>
+          </div>
+        </section>
 
         <button
           v-if="canUseSafetyAction"
@@ -575,9 +690,13 @@ watch(activeTab, hydrateRichLinks)
               type="button"
               class="impression-mark impression-mark--image"
               :aria-label="t('characterCards.detail.previewImage')"
-              @click="openPreview(impression.icon_image_url, impression.title)"
+              @click="openRenderedImagePreview($event, impression.icon_image_url, impression.title)"
             >
-              <img :src="resolveApiUrl(impression.icon_image_url)" alt="" />
+              <CachedImage
+                :src="resolveApiUrl(impression.icon_image_url)"
+                alt=""
+                :auth-fetch="isOwner"
+              />
               <i class="ri-zoom-in-line" aria-hidden="true" />
             </button>
             <div v-else class="impression-mark" :title="impression.trp3_icon">
@@ -593,9 +712,14 @@ watch(activeTab, hydrateRichLinks)
               type="button"
               class="impression-image"
               :aria-label="t('characterCards.detail.previewImage')"
-              @click="openPreview(impression.image_url, impression.title)"
+              @click="openRenderedImagePreview($event, impression.image_url, impression.title)"
             >
-              <img :src="resolveApiUrl(impression.image_url)" :alt="impression.title" />
+              <CachedImage
+                class="impression-cached-image"
+                :src="resolveApiUrl(impression.image_url)"
+                :alt="impression.title"
+                :auth-fetch="isOwner"
+              />
               <i class="ri-zoom-in-line" aria-hidden="true" />
             </button>
           </article>
@@ -613,6 +737,38 @@ watch(activeTab, hydrateRichLinks)
         </section>
       </template>
     </main>
+
+    <div
+      v-if="makePrivateDialogOpen && card"
+      class="owner-dialog-mask"
+      data-testid="character-card-make-private-dialog"
+      @click.self="closeMakePrivateDialog"
+    >
+      <section
+        class="owner-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="character-card-make-private-title"
+      >
+        <span>VISIBILITY · CONTROL</span>
+        <h2 id="character-card-make-private-title">{{ t('characterCards.detail.makePrivateTitle') }}</h2>
+        <p>{{ t('characterCards.detail.makePrivateMessage', { name: displayName }) }}</p>
+        <div>
+          <button type="button" :disabled="makingPrivate" @click="closeMakePrivateDialog">
+            {{ t('characterCards.common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="owner-dialog-confirm"
+            data-testid="character-card-make-private-confirm"
+            :disabled="makingPrivate"
+            @click="confirmMakePrivate"
+          >
+            {{ makingPrivate ? t('characterCards.detail.makingPrivate') : t('characterCards.detail.makePrivateConfirm') }}
+          </button>
+        </div>
+      </section>
+    </div>
 
     <ImagePreviewDialog
       :open="previewOpen"
@@ -638,7 +794,7 @@ watch(activeTab, hydrateRichLinks)
   color: var(--color-text-main);
 }
 
-.character-card-header > div {
+.character-card-heading {
   flex: 1;
   min-width: 0;
 }
@@ -703,7 +859,7 @@ watch(activeTab, hydrateRichLinks)
 }
 
 .page-state button {
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 17px;
   border: 0;
   border-radius: 999px;
@@ -731,11 +887,10 @@ watch(activeTab, hydrateRichLinks)
   background: var(--color-primary-light);
 }
 
-.portrait-stage img {
+.portrait-stage-image {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
 }
 
 .portrait-stage::after {
@@ -802,10 +957,9 @@ watch(activeTab, hydrateRichLinks)
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 
-.portrait-film img {
+.portrait-film :deep(.cached-image) {
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
 
 .character-plaque {
@@ -826,6 +980,28 @@ watch(activeTab, hydrateRichLinks)
   color: var(--color-success);
   font-size: 10px;
   font-weight: 700;
+}
+
+.public-mark--draft,
+.public-mark--private {
+  background: var(--color-primary-light);
+  color: var(--color-text-secondary);
+}
+
+.public-mark--pending,
+.public-mark--unsubmitted {
+  background: var(--tag-bg);
+  color: var(--color-accent);
+}
+
+.public-mark--rejected {
+  background: var(--color-primary-light);
+  color: var(--btn-danger-bg);
+}
+
+.public-mark--published {
+  background: var(--color-success-light);
+  color: var(--color-success);
 }
 
 .character-plaque h2 {
@@ -858,6 +1034,138 @@ watch(activeTab, hydrateRichLinks)
   color: var(--color-text-secondary);
   font-size: 13px;
   line-height: 1.75;
+}
+
+.owner-card-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-bg);
+}
+
+.owner-card-action > div {
+  min-width: 0;
+}
+
+.owner-card-action span {
+  color: var(--color-accent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.owner-card-action p {
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.owner-card-action button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--text-light);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.owner-card-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.owner-card-action button.make-private-button {
+  border-color: var(--color-border);
+  background: var(--input-bg);
+  color: var(--color-secondary);
+}
+
+.owner-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: 16px;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.owner-dialog {
+  width: 100%;
+  max-width: 380px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-panel-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.owner-dialog > span {
+  color: var(--color-accent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.owner-dialog h2 {
+  margin-top: 6px;
+  color: var(--color-text-main);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 20px;
+}
+
+.owner-dialog p {
+  margin-top: 10px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.owner-dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.owner-dialog button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.owner-dialog button.owner-dialog-confirm {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--text-light);
+}
+
+.owner-dialog button:disabled {
+  opacity: 0.55;
 }
 
 .character-safety-action {
@@ -1179,10 +1487,9 @@ watch(activeTab, hydrateRichLinks)
   font: 700 13px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-.impression-mark img {
+.impression-mark :deep(.cached-image) {
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
 
 .impression-mark i,
@@ -1235,11 +1542,11 @@ watch(activeTab, hydrateRichLinks)
   background: var(--color-primary-light);
 }
 
-.impression-image img {
+.impression-cached-image {
   display: block;
   width: 100%;
+  height: 230px;
   max-height: 230px;
-  object-fit: cover;
 }
 
 .impression-notes {

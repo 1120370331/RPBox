@@ -7,7 +7,7 @@ import { getImageUrl, resolveApiUrl } from '@/api/image'
 import {
   isApprovedPublicCharacterCard,
   listMyCharacterCards,
-  type CharacterCard,
+  type CharacterCardSummary,
 } from '@/api/characterCard'
 import { buildCharacterCardJumpPlaceholder } from '@/utils/jumpLink'
 
@@ -53,7 +53,7 @@ const hasLoaded = ref(false)
 const guilds = ref<Guild[]>([])
 const guildStories = ref<GuildStoryCard[]>([])
 const publicPosts = ref<PostWithAuthor[]>([])
-const publicCharacterCards = ref<CharacterCard[]>([])
+const publicCharacterCards = ref<CharacterCardSummary[]>([])
 const postSearch = ref('')
 const characterCardSearch = ref('')
 
@@ -209,13 +209,13 @@ function formatShortDate(value: string) {
   })
 }
 
-function getCharacterCardName(characterCard: CharacterCard) {
+function getCharacterCardName(characterCard: CharacterCardSummary) {
   return characterCard.display_name?.trim()
     || [characterCard.first_name, characterCard.last_name].filter(Boolean).join(' ')
     || t('community.editor.quickJumpSheet.unnamedCharacterCard')
 }
 
-function getCharacterCardSummary(characterCard: CharacterCard) {
+function getCharacterCardSummary(characterCard: CharacterCardSummary) {
   return characterCard.summary?.trim()
     || [characterCard.race, characterCard.class].filter(Boolean).join(' · ')
     || t('community.editor.quickJumpSheet.characterCardSummaryMissing')
@@ -265,7 +265,7 @@ function insertGuild(guild: Guild) {
   open.value = false
 }
 
-function insertCharacterCard(characterCard: CharacterCard) {
+function insertCharacterCard(characterCard: CharacterCardSummary) {
   if (!isApprovedPublicCharacterCard(characterCard)) return
   props.onInsert(buildCharacterCardJumpPlaceholder(characterCard.id))
   open.value = false

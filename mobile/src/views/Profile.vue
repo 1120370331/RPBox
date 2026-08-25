@@ -427,6 +427,15 @@ onMounted(() => {
           <span>{{ $t('profile.menu.cloudProfiles') }}</span>
           <i class="ri-arrow-right-s-line arrow" />
         </button>
+        <button
+          class="menu-item"
+          data-testid="profile-rpbox-character-cards"
+          @click="router.push({ name: 'my-character-cards' })"
+        >
+          <i class="ri-profile-line" />
+          <span>{{ $t('profile.menu.rpboxCharacterCards') }}</span>
+          <i class="ri-arrow-right-s-line arrow" />
+        </button>
         <button class="menu-item" @click="router.push('/profile/achievements')">
           <i class="ri-medal-line" />
           <span>{{ $t('profile.menu.achievements') }}</span>
