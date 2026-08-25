@@ -2,7 +2,7 @@
 
 本文档说明 RPBox 手机端（Capacitor）发布流水线、iOS TestFlight 流程、服务端 updater 元数据，以及客户端自动检测更新流程。
 
-Apple App Store 提交不是流水线成功后的自动步骤。每次 iOS 提交前必须完成 [Apple App Store 审核清单](./app-store-review.md)，关闭其中全部 `BLOCKED` 项，并在 App Store Connect 安全填写审核账号；不要把真实审核凭据写入仓库。
+Apple App Store 提交不是 TestFlight 流水线成功后的自动步骤。每次 iOS 提交前必须完成 [Apple App Store 审核清单](./app-store-review.md)，通过 prepare 与 submit 的 dry-run 门禁，并在 App Store Connect 安全填写审核账号；不要把真实审核凭据写入仓库。
 
 ## 1. 流水线总览
 
@@ -15,6 +15,7 @@ Apple App Store 提交不是流水线成功后的自动步骤。每次 iOS 提�
   4. 将 APK/AAB 作为 Actions artifact 保存，并只把 APK 与元数据部署到服务器 `releases/mobile`
 - iOS 触发方式：新版本可推送 `ios-v*` 或兼容的 `mobile-ios-v*` tag；同一商店版本递增 build 时使用手动 workflow dispatch。版本必须与 `mobile/ios/release.json` 一致（当前为 `1.1 / 1000042`）
 - iOS 工作流文件：`.github/workflows/release-ios-testflight.yml`
+- App Store 准备与提交：`.github/workflows/app-store-prepare.yml`、`.github/workflows/app-store-submit.yml`；两者默认只做 dry run，正式提交还要求精确确认短语
 - iOS 主要动作：
   1. 生成并校验 Capacitor iOS 工程
   2. 使用 Distribution 证书和 App Store provisioning profile 创建 archive
@@ -37,7 +38,7 @@ gh workflow run release-ios-testflight.yml --ref main -f version=1.1
 mobile/release-notes/0.1.0.txt
 ```
 
-iOS 版本和默认 build number 由 `mobile/ios/release.json` 冻结；当前待构建、上传和验证的候选为 `1.1 / 1000042`，`1.1 / 1000041` 只作为不含本次 RPBox 人物卡功能的旧候选保留。Android 当前为 `2.0.3 / 2000003`。两端共享功能源码，但不强制共享商店版本序列；不得在新候选通过 TestFlight 和人工门禁前提交审核或提升生产 iOS updater。
+iOS 版本和默认 build number 由 `mobile/ios/release.json` 冻结；当前送审候选为 `1.1 / 1000042`，已完成签名上传、`VALID` processing、元数据绑定和审核提交，App Store Connect 状态为 `WAITING_FOR_REVIEW`。`1.1 / 1000041` 只作为不含本次 RPBox 人物卡功能的旧候选保留。Android 当前为 `2.0.3 / 2000003`。两端共享功能源码，但不强制共享商店版本序列；只有 Apple 公共页面已显示 1.1 后，才可发布生产 iOS updater 元数据。
 
 ## 3. 服务器目录结构
 
