@@ -43,6 +43,44 @@ func TestGitHubReleasePageLatestRejectsUnexpectedRedirect(t *testing.T) {
 	}
 }
 
+func TestMusicianReleaseMetadataAndPackageContract(t *testing.T) {
+	musician, ok := findTRP3GitHubProject("musician")
+	if !ok {
+		t.Fatal("expected Musician project metadata")
+	}
+	if musician.projectID != 290830 || musician.license != "GPL-3.0" {
+		t.Fatalf("unexpected Musician metadata: projectID=%d license=%q", musician.projectID, musician.license)
+	}
+
+	releaseURL, err := url.Parse("https://github.com/LenweSaralonde/Musician/releases/tag/1.9.16.1")
+	if err != nil {
+		t.Fatalf("parse release URL: %v", err)
+	}
+	latest, err := gitHubReleasePageLatest(musician, releaseURL)
+	if err != nil {
+		t.Fatalf("build Musician latest info: %v", err)
+	}
+	if latest.DownloadURL != "https://github.com/LenweSaralonde/Musician/releases/download/1.9.16.1/Musician-1.9.16.1.zip" {
+		t.Fatalf("unexpected Musician download URL %q", latest.DownloadURL)
+	}
+	if latest.License != "GPL-3.0" {
+		t.Fatalf("unexpected Musician license %q", latest.License)
+	}
+
+	zipPath := filepath.Join(t.TempDir(), "Musician-1.9.16.1.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"Musician/Musician.toc":      "## Version: 1.9.16.1\n",
+		"Musician/core/Musician.lua": "print('ok')\n",
+	})
+	version, err := validateTRP3AddonZipPackage(zipPath, musician, "1.9.16.1")
+	if err != nil {
+		t.Fatalf("validate Musician zip: %v", err)
+	}
+	if version != "1.9.16.1" {
+		t.Fatalf("expected Musician toc version 1.9.16.1, got %q", version)
+	}
+}
+
 func TestParseTRP3ProxyURLSupportsRoxyColonFormat(t *testing.T) {
 	proxyURL, err := parseTRP3ProxyURL("192.0.2.10:5782:user:pass")
 	if err != nil {

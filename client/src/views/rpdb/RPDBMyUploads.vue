@@ -63,6 +63,7 @@ function statusLabel(work: RPDBWork) {
 function typeLabel(work: RPDBWork) {
   if (work.type === 'transmog') return '幻化方案'
   if (work.type === 'home_showcase') return '家宅分享'
+  if (work.type === 'musician_midi') return 'Musician MIDI'
   return '魔兽物品'
 }
 
@@ -262,7 +263,7 @@ onMounted(load)
         <div class="upload-main">
           <div class="upload-heading">
             <div>
-              <span class="type-label">{{ draft.type === 'transmog' ? '幻化方案' : draft.type === 'home_showcase' ? '家宅分享' : '魔兽物品' }}</span>
+              <span class="type-label">{{ draft.type === 'transmog' ? '幻化方案' : draft.type === 'home_showcase' ? '家宅分享' : draft.type === 'musician_midi' ? 'Musician MIDI' : '魔兽物品' }}</span>
               <span class="status-label draft">草稿</span>
             </div>
             <time>{{ formatDate(draft.updated_at) }}</time>

@@ -85,6 +85,9 @@ const commentLikeBusy = ref(new Set<number>())
 const workId = computed(() => Number(route.params.id))
 const extra = computed(() => parseRPDBExtra(work.value?.extra))
 const shareCode = computed(() => extra.value.share_code?.trim() || '')
+const musicianMIDIURL = computed(() => work.value?.type === 'musician_midi' ? resolveRPDBMediaUrl(extra.value.midi_url) : '')
+const musicianMIDIName = computed(() => extra.value.midi_name?.trim() || 'Musician MIDI')
+const musicianCode = computed(() => extra.value.musician_code?.replace(/\s+/g, '') || '')
 const mediaItems = computed<Array<{ type: RPDBMedia['type']; url: string; caption: string }>>(() => {
   const result: Array<{ type: RPDBMedia['type']; url: string; caption: string }> = []
   if (work.value?.cover_image) {
@@ -513,6 +516,21 @@ async function copyShareCode() {
   }
 }
 
+async function copyMusicianCode() {
+  if (!musicianCode.value || shareCodeCopying.value) return
+  shareCodeCopying.value = true
+  shareCodeCopied.value = false
+  try {
+    await copyTextToClipboard(musicianCode.value, musicianMIDIName.value)
+    shareCodeCopied.value = true
+    toast.success('Musician 音乐代码已复制，粘贴到游戏内导入框即可')
+  } catch {
+    toast.error('复制失败')
+  } finally {
+    shareCodeCopying.value = false
+  }
+}
+
 async function copyTomTom(step: (typeof orderedGuideSteps.value)[number]) {
   const command = buildTomTomCommand(step)
   if (!command) return
@@ -653,12 +671,26 @@ onMounted(load)
               </strong>
             </button>
           </div>
+          <div v-if="work.type === 'musician_midi' && musicianCode" class="hero-action-area">
+            <button type="button" class="hero-copy-code" data-testid="copy-musician-code" :disabled="shareCodeCopying" @click="copyMusicianCode">
+              <i class="ri-file-copy-line" />
+              <span><b>复制 Musician 音乐代码</b><small>复制后粘贴到游戏内歌曲导入框</small></span>
+              <strong><i :class="shareCodeCopied ? 'ri-check-line' : 'ri-file-copy-line'" />{{ shareCodeCopying ? '复制中' : shareCodeCopied ? '已复制' : '复制' }}</strong>
+            </button>
+          </div>
+          <div v-else-if="work.type === 'musician_midi' && musicianMIDIURL" class="hero-action-area">
+            <a class="hero-copy-code" :href="musicianMIDIURL" :download="musicianMIDIName" target="_blank" rel="noopener">
+              <i class="ri-download-cloud-2-line" />
+              <span><b>下载 MIDI</b><small>{{ musicianMIDIName }}</small></span>
+              <strong><i class="ri-download-line" />下载</strong>
+            </a>
+          </div>
           <button v-if="canEdit" type="button" class="edit-work" @click="router.push({ name: 'rpdb-edit', params: { id: work.id } })">
             <i class="ri-edit-line" />编辑这份作品
           </button>
         </section>
 
-        <dl class="metadata-strip">
+        <dl v-if="work.type !== 'musician_midi'" class="metadata-strip">
           <div>
             <dt>{{ work.type === 'home_showcase' ? '开放状态' : '获取状态' }}</dt>
             <dd>{{ availabilityLabel(work.availability_status) }}</dd>
@@ -714,7 +746,7 @@ onMounted(load)
           </div>
         </section>
 
-        <section v-if="orderedGuideSteps.length && work.type !== 'home_showcase'" class="content-section">
+        <section v-if="orderedGuideSteps.length && work.type !== 'home_showcase' && work.type !== 'musician_midi'" class="content-section">
           <header><span>获取攻略</span><h2>按步骤完成收集</h2></header>
           <ol class="guide-list">
             <li v-for="(step, index) in orderedGuideSteps" :key="step.id || index">
@@ -1423,6 +1455,7 @@ onMounted(load)
   background: var(--color-accent);
   color: #fff;
   text-align: left;
+  text-decoration: none;
 }
 
 .hero-copy-code > i {

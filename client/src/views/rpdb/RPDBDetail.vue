@@ -74,6 +74,7 @@ const viewerImages = ref<string[]>([])
 const viewerStartIndex = ref(0)
 const copiedHomeShareCode = ref(false)
 const copiedTransmogShareCode = ref(false)
+const copiedMusicianCode = ref(false)
 const FLOATING_TOC_WIDE_VIEWPORT = 2160
 const tocCollapsed = ref(typeof window !== 'undefined' && window.innerWidth < FLOATING_TOC_WIDE_VIEWPORT)
 const listPickerOpen = ref(false)
@@ -94,8 +95,20 @@ const reportContext = ref<{
 const typeLabel = computed(() => {
   if (work.value?.type === 'item_showcase') return '魔兽物品'
   if (work.value?.type === 'transmog') return '幻化方案'
+  if (work.value?.type === 'musician_midi') return 'Musician MIDI'
   return '家宅分享'
 })
+const musicianMIDIDetails = computed<Record<string, string | number>>(() => {
+  if (work.value?.type !== 'musician_midi') return {}
+  try {
+    return JSON.parse(work.value.extra || '{}')
+  } catch {
+    return {}
+  }
+})
+const musicianMIDIURL = computed(() => resolveApiUrl(String(musicianMIDIDetails.value.midi_url || '')))
+const musicianMIDIName = computed(() => String(musicianMIDIDetails.value.midi_name || 'Musician MIDI'))
+const musicianCode = computed(() => String(musicianMIDIDetails.value.musician_code || '').replace(/\s+/g, ''))
 const homeDetails = computed<Record<string, string>>(() => {
   if (work.value?.type !== 'home_showcase') return {}
   try {
@@ -123,10 +136,11 @@ const tableOfContents = computed(() => {
     },
   ]
   if (work.value.transmog_slots?.length) result.push({ label: '幻化部件', target: 'rpdb-section-transmog' })
-  if (work.value.guide_steps?.length && work.value.type !== 'home_showcase') {
+  if (work.value.guide_steps?.length && work.value.type !== 'home_showcase' && work.value.type !== 'musician_midi') {
     result.push({ label: '获取攻略', target: 'rpdb-section-guide' })
   }
   if (work.value.type === 'home_showcase') result.push({ label: '家宅资料', target: 'rpdb-section-home' })
+  if (work.value.type === 'musician_midi') result.push({ label: 'MIDI 文件', target: 'rpdb-section-musician-midi' })
   if (recommendations.value.length) result.push({ label: '相关推荐', target: 'rpdb-section-recommendations' })
   result.push({ label: '玩家讨论', target: 'rpdb-section-discussion' })
   return result
@@ -549,6 +563,18 @@ function openImageViewer(images: string[], index: number) {
   showImageViewer.value = images.length > 0
 }
 
+async function copyMusicianCode() {
+  if (!musicianCode.value) return
+  try {
+    await navigator.clipboard?.writeText(musicianCode.value)
+    copiedMusicianCode.value = true
+    toast.success('Musician 音乐代码已复制，粘贴到游戏内导入框即可')
+    window.setTimeout(() => copiedMusicianCode.value = false, 1800)
+  } catch {
+    toast.error('复制失败，请在正文区域手动复制音乐代码')
+  }
+}
+
 function openCommentImage(src: string) {
   if (!src) return
   openImageViewer([resolveApiUrl(src)], 0)
@@ -671,7 +697,7 @@ onBeforeUnmount(() => {
             <small>v{{ work.version }}</small>
           </span>
         </div>
-        <dl class="hero-metadata">
+        <dl v-if="work.type !== 'musician_midi'" class="hero-metadata">
           <div><dt>{{ work.type === 'home_showcase' ? '开放状态' : '获取状态' }}</dt><dd>{{ availabilityLabel(work.availability_status, work.type) }}</dd></div>
           <div><dt>是否绑定</dt><dd>{{ bindTypeLabel(work.bind_type) }}</dd></div>
           <div><dt>阵营</dt><dd>{{ factionLabel(work.faction) }}</dd></div>
@@ -712,6 +738,27 @@ onBeforeUnmount(() => {
             <i class="ri-file-copy-line"></i>
             {{ copiedHomeShareCode ? '已复制住宅分享代码' : '复制住宅分享代码' }}
           </button>
+          <button
+            v-if="work.type === 'musician_midi' && musicianCode"
+            type="button"
+            class="home-copy-code hero-copy-code hero-midi-download"
+            data-testid="copy-musician-code-hero"
+            @click="copyMusicianCode"
+          >
+            <i :class="copiedMusicianCode ? 'ri-check-line' : 'ri-file-copy-line'"></i>
+            {{ copiedMusicianCode ? '已复制音乐代码' : '复制 Musician 音乐代码' }}
+          </button>
+          <a
+            v-else-if="work.type === 'musician_midi' && musicianMIDIURL"
+            class="home-copy-code hero-copy-code hero-midi-download"
+            :href="musicianMIDIURL"
+            :download="musicianMIDIName"
+            target="_blank"
+            rel="noopener"
+          >
+            <i class="ri-download-cloud-2-line"></i>
+            下载 MIDI
+          </a>
         </div>
       </div>
     </section>
@@ -760,11 +807,26 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-if="work.type !== 'home_showcase'">
+        <section v-if="work.type !== 'home_showcase' && work.type !== 'musician_midi'">
           <h3>获取助手</h3>
           <p>{{ work.guide_steps?.length || 0 }} 个步骤，其中 {{ coordinateCount }} 个包含 TomTom 坐标。</p>
           <div class="assistant-actions">
             <button type="button" :disabled="!work.guide_steps?.length" @click="scrollToSection('rpdb-section-guide')"><i class="ri-route-line"></i>跳到攻略</button>
+          </div>
+        </section>
+
+        <section v-if="work.type === 'musician_midi' && musicianCode">
+          <h3>Musician 音乐代码</h3>
+          <p>复制后粘贴到 Musician 的歌曲导入框。</p>
+          <div class="assistant-actions">
+            <button type="button" @click="copyMusicianCode"><i class="ri-file-copy-line"></i>{{ copiedMusicianCode ? '已复制' : '复制音乐代码' }}</button>
+          </div>
+        </section>
+        <section v-else-if="work.type === 'musician_midi' && musicianMIDIURL">
+          <h3>Musician MIDI</h3>
+          <p>{{ musicianMIDIName }}</p>
+          <div class="assistant-actions">
+            <a :href="musicianMIDIURL" :download="musicianMIDIName" target="_blank" rel="noopener"><i class="ri-download-cloud-2-line"></i>下载 MIDI</a>
           </div>
         </section>
 
@@ -1139,7 +1201,7 @@ onBeforeUnmount(() => {
 .hero-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:14px 0 0;padding:11px 0;border-top:1px solid var(--rpdb-line);border-bottom:1px solid var(--rpdb-line)}.hero-stats div{display:grid;justify-items:center;gap:4px;border-right:1px solid var(--rpdb-line)}.hero-stats div:last-child{border-right:0}.hero-stats dt{display:inline-flex;align-items:center;gap:4px;color:var(--color-text-secondary);font-size:10px}.hero-stats dt i{color:var(--color-accent);font-size:13px}.hero-stats dd{margin:0;color:var(--color-text-main);font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
 .hero-action-area{display:grid;gap:10px;margin-top:auto;padding-top:20px}
 .hero-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.hero-actions button,.assistant-actions button,.verify-actions button,.home-copy-code,.transmog-copy-code,.floating-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main)}
+.hero-actions button,.assistant-actions button,.assistant-actions a,.verify-actions button,.home-copy-code,.transmog-copy-code,.floating-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main);text-decoration:none}
 .hero-actions button{min-width:0;padding:0 8px;font-size:12px;font-weight:800;white-space:nowrap}
 .hero-actions button.active,.hero-actions .primary,.floating-actions button.active,.floating-actions button.primary{border-color:var(--color-accent);background:var(--color-accent);color:#fff}
 .hero-actions .report-action{color:var(--color-text-secondary)}
@@ -1216,7 +1278,7 @@ onBeforeUnmount(() => {
 .toc button{padding:8px 9px;border:0;border-radius:9px;background:transparent;color:var(--color-text-secondary);text-align:left}
 .toc button.active,.toc button:hover{background:var(--rpdb-soft);color:var(--color-text-main);font-weight:700}
 .assistant-actions{display:grid;gap:7px}
-.assistant-actions button{width:100%}
+.assistant-actions button,.assistant-actions a{width:100%}
 .assistant-actions button:disabled{opacity:.45}
 .floating-actions{display:grid;gap:7px}
 .floating-view{display:flex;min-height:36px;align-items:center;gap:6px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-text-secondary);font-weight:800}.floating-view i{color:var(--color-accent)}.floating-view b{margin-left:auto;color:var(--color-text-main);font-size:11px}

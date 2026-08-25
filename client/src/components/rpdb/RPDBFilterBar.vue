@@ -69,10 +69,10 @@ function patchType(value: RPDBWorkType | '') {
 
     <div class="filter-row" data-testid="rpdb-filter-row">
       <select :value="modelValue.type" aria-label="作品类型" @change="patchType(($event.target as HTMLSelectElement).value as RPDBWorkType | '')">
-        <option value="">全部分类</option><option value="item_showcase">魔兽物品</option><option value="transmog">幻化方案</option><option value="home_showcase">家宅分享</option>
+        <option value="">全部分类</option><option value="item_showcase">魔兽物品</option><option value="transmog">幻化方案</option><option value="home_showcase">家宅分享</option><option value="musician_midi">Musician MIDI</option>
       </select>
 
-      <select v-if="modelValue.type !== 'home_showcase'" :value="modelValue.availability_status" aria-label="获取状态" @change="patch('availability_status', ($event.target as HTMLSelectElement).value)">
+      <select v-if="modelValue.type !== 'home_showcase' && modelValue.type !== 'musician_midi'" :value="modelValue.availability_status" aria-label="获取状态" @change="patch('availability_status', ($event.target as HTMLSelectElement).value)">
         <option value="">全部获取状态</option><option value="available">可获取</option><option value="limited">限时获取</option><option value="removed">已绝版</option><option value="unknown">未知</option>
       </select>
       <select v-else :value="modelValue.availability_status" aria-label="参观状态" @change="patch('availability_status', ($event.target as HTMLSelectElement).value)">

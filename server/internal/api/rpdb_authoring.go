@@ -1,11 +1,13 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -454,7 +456,7 @@ func firstRPDBGuildID(guildIDs []uint) *uint {
 func validateRPDBWriteRequest(request rpdbWorkWriteRequest, creating bool) error {
 	if creating || request.has("type") {
 		switch request.Type {
-		case model.RPDBWorkTypeItemShowcase, model.RPDBWorkTypeTransmog, model.RPDBWorkTypeHomeShowcase:
+		case model.RPDBWorkTypeItemShowcase, model.RPDBWorkTypeTransmog, model.RPDBWorkTypeHomeShowcase, model.RPDBWorkTypeMusicianMIDI:
 		default:
 			return fmt.Errorf("不支持的作品类型")
 		}
@@ -492,12 +494,77 @@ func validateRPDBWriteRequest(request rpdbWorkWriteRequest, creating bool) error
 			return err
 		}
 	}
+	if request.Type == model.RPDBWorkTypeMusicianMIDI && request.Status != model.RPDBStatusDraft {
+		if err := validateRPDBMusicianMIDIExtra(request.Extra, true); err != nil {
+			return err
+		}
+	}
 	for _, step := range request.GuideSteps {
 		if step.X < 0 || step.X > 100 || step.Y < 0 || step.Y > 100 {
 			return fmt.Errorf("攻略坐标必须位于 0 到 100 之间")
 		}
 	}
 	return nil
+}
+
+func validateRPDBMusicianMIDIExtra(raw json.RawMessage, required bool) error {
+	var extra struct {
+		MIDIURL      string `json:"midi_url"`
+		MIDIName     string `json:"midi_name"`
+		MIDISize     int64  `json:"midi_size"`
+		MusicianCode string `json:"musician_code"`
+	}
+	if len(raw) > 0 && strings.TrimSpace(string(raw)) != "null" {
+		if err := json.Unmarshal(raw, &extra); err != nil {
+			return fmt.Errorf("Musician MIDI 文件信息格式无效")
+		}
+	}
+	extra.MIDIURL = strings.TrimSpace(extra.MIDIURL)
+	normalizedCode := strings.Join(strings.Fields(extra.MusicianCode), "")
+	if extra.MIDIURL == "" && normalizedCode == "" {
+		if required {
+			return fmt.Errorf("请上传 MIDI 文件或填写 Musician 音乐代码")
+		}
+		return nil
+	}
+	if normalizedCode != "" {
+		if len(normalizedCode) > 2<<20 {
+			return fmt.Errorf("Musician 音乐代码不能超过 2MB")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(normalizedCode)
+		if err != nil || !isMusicianSongCode(decoded) {
+			return fmt.Errorf("Musician 音乐代码无效，请粘贴官方转换器生成的完整代码")
+		}
+	}
+	if extra.MIDIURL != "" {
+		if err := validateRPDBURL(extra.MIDIURL); err != nil {
+			return err
+		}
+		parsed, err := url.Parse(extra.MIDIURL)
+		if err != nil || !strings.HasPrefix(path.Clean(parsed.Path), "/uploads/rpdb/musician-midi/") {
+			return fmt.Errorf("Musician MIDI 文件地址无效")
+		}
+	}
+	if len([]rune(strings.TrimSpace(extra.MIDIName))) > 255 {
+		return fmt.Errorf("Musician MIDI 文件名不能超过 255 个字符")
+	}
+	if extra.MIDISize < 0 || extra.MIDISize > maxRPDBMusicianMIDIBytes {
+		return fmt.Errorf("Musician MIDI 文件不能超过 10MB")
+	}
+	return nil
+}
+
+func isMusicianSongCode(decoded []byte) bool {
+	if len(decoded) < 11 || (string(decoded[:4]) != "MUS8" && string(decoded[:4]) != "MUS7") {
+		return false
+	}
+	titleLength := int(decoded[4])<<8 | int(decoded[5])
+	modeIndex := 6 + titleLength
+	if modeIndex+5 > len(decoded) {
+		return false
+	}
+	mode := decoded[modeIndex]
+	return mode == 0x10 || mode == 0x20
 }
 
 func validateRPDBURL(value string) error {

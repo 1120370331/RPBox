@@ -72,6 +72,7 @@ describe('sidebar badge store', () => {
           addons: [
             { id: 'total-rp-3', installed: true, version: '2.0.0' },
             { id: 'total-rp-3-extended', installed: true, version: '1.0.0' },
+            { id: 'musician', installed: true, version: '1.9.15.0' },
           ],
         })
       }
@@ -81,13 +82,14 @@ describe('sidebar badge store', () => {
       addons: [
         { id: 'total-rp-3', latestVersion: '2.1.0' },
         { id: 'total-rp-3-extended', latestVersion: '1.0.0' },
+        { id: 'musician', latestVersion: '1.9.16.1' },
       ],
     })
     mocks.getAddonLatest.mockResolvedValue({ version: '1.1.0' })
 
     const store = useSidebarBadgesStore()
     await store.initialize(42)
-    expect(store.addonUpdateCount).toBe(2)
+    expect(store.addonUpdateCount).toBe(3)
 
     store.markMenuRead('warcraft')
     expect(store.addonUpdateCount).toBe(0)
@@ -97,7 +99,7 @@ describe('sidebar badge store', () => {
 
     mocks.getAddonLatest.mockResolvedValue({ version: '1.2.0' })
     await store.refreshAddonUpdates()
-    expect(store.addonUpdateCount).toBe(2)
+    expect(store.addonUpdateCount).toBe(3)
   })
 
   it('does not create an update badge when server metadata is older than the installed add-on', async () => {

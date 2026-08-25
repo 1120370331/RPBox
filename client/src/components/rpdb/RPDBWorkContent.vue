@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { RPDBWork, RPDBWorkPayload } from '@/api/rpdb'
+import { resolveRPDBMediaURL, type RPDBWork, type RPDBWorkPayload } from '@/api/rpdb'
 import { hydrateJumpCards, sanitizeJumpLinks } from '@/utils/jumpLink'
 import RPDBGuideSection from './RPDBGuideSection.vue'
 
@@ -30,6 +30,28 @@ const transmogSlotOrder = [
 const transmogSlotRank = new Map(transmogSlotOrder.map((slot, index) => [slot.value, index]))
 const transmogSlotLabel = new Map(transmogSlotOrder.map(slot => [slot.value, slot.label]))
 const isHome = computed(() => props.work.type === 'home_showcase')
+const isMusicianMIDI = computed(() => props.work.type === 'musician_midi')
+const workExtra = computed<Record<string, unknown>>(() => {
+  const value = props.work.extra
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  try {
+    const parsed = JSON.parse(String(value || '{}'))
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+})
+const musicianMIDIURL = computed(() => resolveRPDBMediaURL(String(workExtra.value.midi_url || '')))
+const musicianMIDIName = computed(() => String(workExtra.value.midi_name || 'Musician MIDI'))
+const musicianCode = computed(() => String(workExtra.value.musician_code || '').replace(/\s+/g, ''))
+const copiedMusicianCode = ref(false)
+const musicianMIDISize = computed(() => {
+  const size = Number(workExtra.value.midi_size || 0)
+  if (!size) return ''
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+})
 const description = computed(() => props.work.effect_description || props.work.rp_use_cases || props.work.summary || '')
 const orderedTransmogSlots = computed(() => {
   return [...(props.work.transmog_slots || [])]
@@ -56,6 +78,17 @@ watch(() => props.work.content, () => {
 
 function formatSlotLabel(slot: string) {
   return transmogSlotLabel.get(slot) || slot
+}
+
+async function copyMusicianCode() {
+  if (!musicianCode.value) return
+  try {
+    await navigator.clipboard.writeText(musicianCode.value)
+    copiedMusicianCode.value = true
+    window.setTimeout(() => copiedMusicianCode.value = false, 1800)
+  } catch {
+    copiedMusicianCode.value = false
+  }
 }
 </script>
 
@@ -85,6 +118,23 @@ function formatSlotLabel(slot: string) {
           <i :class="copiedTransmogShareCode ? 'ri-check-line' : 'ri-file-copy-line'"></i>
           {{ copiedTransmogShareCode ? '已复制' : '复制代码' }}
         </button>
+      </div>
+      <div v-if="isMusicianMIDI && (musicianCode || musicianMIDIURL)" id="rpdb-section-musician-midi" class="inline-share-code musician-midi-download" data-testid="musician-midi-download">
+        <span>
+          <i class="ri-file-music-line"></i>
+          <span>
+            <b>{{ musicianCode ? 'Musician 音乐代码' : musicianMIDIName }}</b>
+            <small>{{ musicianCode ? '复制后粘贴到 Musician 的歌曲导入框' : `${musicianMIDISize || 'Standard MIDI'} · 原始 MIDI 文件` }}</small>
+          </span>
+        </span>
+        <div class="musician-midi-actions">
+          <button v-if="musicianCode" type="button" data-testid="copy-musician-code" @click="copyMusicianCode">
+            <i :class="copiedMusicianCode ? 'ri-check-line' : 'ri-file-copy-line'"></i>{{ copiedMusicianCode ? '已复制' : '复制音乐代码' }}
+          </button>
+          <a v-if="musicianMIDIURL" :href="musicianMIDIURL" :download="musicianMIDIName" target="_blank" rel="noopener">
+            <i class="ri-download-cloud-2-line"></i>下载 MIDI
+          </a>
+        </div>
       </div>
     </section>
 
@@ -129,7 +179,7 @@ function formatSlotLabel(slot: string) {
       </div>
     </section>
 
-    <RPDBGuideSection v-if="!isHome" :steps="work.guide_steps || []" />
+    <RPDBGuideSection v-if="!isHome && !isMusicianMIDI" :steps="work.guide_steps || []" />
 
     <section v-if="isHome" id="rpdb-section-home" class="editorial-section home-profile">
       <header class="section-heading">
@@ -155,7 +205,7 @@ function formatSlotLabel(slot: string) {
 .rich-content :deep(img){max-width:100%;height:auto;border-radius:10px}
 .empty-copy{color:var(--color-text-secondary)}
 .inline-share-code{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:20px;padding:14px 16px;border:1px solid color-mix(in srgb,var(--color-accent) 42%,var(--color-border));border-radius:12px;background:color-mix(in srgb,var(--color-accent) 7%,var(--color-card-bg))}
-.inline-share-code>span{display:flex;min-width:0;align-items:center;gap:11px}.inline-share-code>span>i{display:grid;width:36px;height:36px;flex:0 0 36px;place-items:center;border-radius:9px;background:var(--color-accent);color:#fff;font-size:18px}.inline-share-code>span>span{display:flex;min-width:0;flex-direction:column;gap:3px}.inline-share-code b{color:var(--color-text-main)}.inline-share-code small{color:var(--color-text-secondary);line-height:1.45}.inline-share-code button{display:inline-flex;min-height:38px;flex:0 0 auto;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--color-accent);border-radius:9px;background:var(--color-accent);color:#fff;font-weight:800}
+.inline-share-code>span{display:flex;min-width:0;align-items:center;gap:11px}.inline-share-code>span>i{display:grid;width:36px;height:36px;flex:0 0 36px;place-items:center;border-radius:9px;background:var(--color-accent);color:#fff;font-size:18px}.inline-share-code>span>span{display:flex;min-width:0;flex-direction:column;gap:3px}.inline-share-code b{color:var(--color-text-main)}.inline-share-code small{color:var(--color-text-secondary);line-height:1.45}.inline-share-code button,.inline-share-code a{display:inline-flex;min-height:38px;flex:0 0 auto;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--color-accent);border-radius:9px;background:var(--color-accent);color:#fff;font-weight:800;text-decoration:none}.musician-midi-actions{display:flex;flex:0 0 auto;gap:7px}
 .slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
 .slot-grid article{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px;align-items:start;padding:12px;border:1px solid color-mix(in srgb,var(--color-border) 72%,transparent);border-radius:12px;background:color-mix(in srgb,var(--color-card-bg) 84%,#fff 16%)}
 .slot-grid i{color:var(--color-accent);font-size:20px}
@@ -173,5 +223,5 @@ function formatSlotLabel(slot: string) {
 .home-profile dt{color:var(--color-text-secondary)}
 .home-profile dd{margin:0;color:var(--color-text-main);text-align:right}
 .visit-notes{margin:16px 0 0;padding:13px;border-radius:12px;background:color-mix(in srgb,var(--color-card-bg) 84%,#fff 16%);color:var(--color-text-secondary);line-height:1.75}
-@media(max-width:680px){.editorial-section{padding:22px 18px}.inline-share-code{align-items:stretch;flex-direction:column}.inline-share-code button{width:100%}.home-profile dl{grid-template-columns:1fr}}
+@media(max-width:680px){.editorial-section{padding:22px 18px}.inline-share-code{align-items:stretch;flex-direction:column}.musician-midi-actions{flex-direction:column}.inline-share-code button,.inline-share-code a{width:100%}.home-profile dl{grid-template-columns:1fr}}
 </style>

@@ -176,7 +176,8 @@ const trp3MirrorFile = ref<File | null>(null)
 const trp3MirrorFileInput = ref<HTMLInputElement | null>(null)
 const fallbackTRP3MirrorOptions = [
   { id: 'total-rp-3', name: 'Total RP 3' },
-  { id: 'total-rp-3-extended', name: 'Total RP 3: Extended' }
+  { id: 'total-rp-3-extended', name: 'Total RP 3: Extended' },
+  { id: 'musician', name: 'Musician' }
 ]
 const trp3MirrorUploadOptions = computed(() => (
   trp3MirrorAddons.value.length > 0

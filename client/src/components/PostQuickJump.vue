@@ -83,6 +83,7 @@ const rpdbTypes: Array<{ value: RPDBWorkType | ''; label: string; icon: string }
   { value: 'item_showcase', label: '魔兽物品', icon: 'ri-magic-line' },
   { value: 'transmog', label: '幻化方案', icon: 'ri-shirt-line' },
   { value: 'home_showcase', label: '家宅分享', icon: 'ri-home-heart-line' },
+  { value: 'musician_midi', label: 'Musician MIDI', icon: 'ri-music-2-line' },
 ]
 
 const filteredRPDBWorks = computed(() => {
@@ -416,6 +417,7 @@ function getRPDBTypeLabel(type: RPDBWorkType) {
     item_showcase: '魔兽物品',
     transmog: '幻化方案',
     home_showcase: '家宅分享',
+    musician_midi: 'Musician MIDI',
   }
   return labels[type]
 }
@@ -425,6 +427,7 @@ function getRPDBTypeIcon(type: RPDBWorkType) {
     item_showcase: 'ri-magic-line',
     transmog: 'ri-shirt-line',
     home_showcase: 'ri-home-heart-line',
+    musician_midi: 'ri-music-2-line',
   }
   return icons[type]
 }
@@ -434,6 +437,7 @@ function getRPDBVariant(type: RPDBWorkType) {
     item_showcase: 'rpdb-item',
     transmog: 'rpdb-transmog',
     home_showcase: 'rpdb-home',
+    musician_midi: 'rpdb-musician-midi',
   }
   return variants[type]
 }
@@ -844,6 +848,7 @@ function escapeHtml(value: string) {
 }
 
 .jump-item--rpdb-transmog { --rpdb-accent: #55758B; }
+.jump-item--rpdb-musician-midi { --rpdb-accent: #7A4F87; }
 .jump-item--rpdb-home { --rpdb-accent: #4F7A62; }
 
 .jump-item__cover {

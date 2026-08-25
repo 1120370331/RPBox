@@ -55,13 +55,14 @@ describe('RPDBMain', () => {
     expect(listRPDBWorks).toHaveBeenCalledWith(expect.objectContaining({ page: 1, page_size: 12 }))
     expect(listRPDBHotWorks).toHaveBeenCalledWith(expect.objectContaining({ limit: 3 }))
     const typeButtons = wrapper.findAll('.channel-tabs button')
-    expect(typeButtons).toHaveLength(4)
+    expect(typeButtons).toHaveLength(5)
     expect(typeButtons.map(button => button.text())).toEqual(
       expect.arrayContaining([
         expect.stringContaining('全部内容'),
         expect.stringContaining('魔兽物品'),
         expect.stringContaining('幻化方案'),
         expect.stringContaining('家宅分享'),
+        expect.stringContaining('Musician MIDI'),
       ]),
     )
   })

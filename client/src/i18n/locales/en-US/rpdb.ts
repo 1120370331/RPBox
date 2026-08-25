@@ -1,6 +1,6 @@
 export default {
   jumpPreview: {
-    type: { item: 'WoW Item', transmog: 'Transmog Set', home: 'Housing Showcase' },
+    type: { item: 'WoW Item', transmog: 'Transmog Set', home: 'Housing Showcase', musicianMidi: 'Musician MIDI' },
     unnamed: 'Untitled content',
     emptySummary: 'The author has not added a summary yet.',
     anonymous: 'Anonymous contributor',
@@ -43,11 +43,13 @@ export default {
       item: { title: 'WoW Item', description: 'Share effects, RP uses, and acquisition guides' },
       transmog: { title: 'Transmog Set', description: 'Document a full set, alternatives, and acquisition notes' },
       home: { title: 'Housing Showcase', description: 'Share a home, visit details, and importable code' },
+      musicianMidi: { title: 'Musician MIDI', description: 'Upload and share MIDI songs that can be imported into Musician' },
     },
     typeForm: {
       item: { title: 'WoW item details', description: 'Add the source, binding, faction limits, and practical RP uses.' },
       transmog: { title: 'Transmog details', description: 'Add armor type, faction limits, set pieces, and acquisition methods.' },
       home: { title: 'Housing details', description: 'Add visit settings, space type, and an importable housing share code.' },
+      musicianMidi: { title: 'Musician MIDI file', description: 'Upload a Standard MIDI file in .mid, .midi, or .kar format, up to 10 MB.' },
     },
     field: {
       title: 'Content title', summary: 'Short introduction', availability: 'Availability', visibility: 'Visibility',
@@ -95,12 +97,28 @@ export default {
     validation: {
       titleRequired: 'Enter a content title before publishing', visibilityRequired: 'Select content visibility',
       guildRequired: 'Select the guild that can view this content',
+      musicianMidiRequired: 'Upload a MIDI file or paste a Musician music code before publishing',
+      musicianMidiFormat: 'Only .mid, .midi, and .kar files are supported',
+      musicianMidiSize: 'Musician MIDI files cannot exceed 10 MB',
     },
     style: {
       empty: 'No style tags selected', expand: 'Show {count} more', collapse: 'Show less', loading: 'Loading system style tags...',
     },
     transmog: {
       slotsTitle: 'Transmog slots', slotsHelp: 'Fill in each used piece from the content checklist on the right.',
+    },
+    musicianMidi: {
+      emptyTitle: 'No MIDI file uploaded', help: 'Choose a Standard MIDI file to convert for Musician',
+      ready: 'Importable song content is ready', required: 'Add a music code or MIDI file before publishing',
+      contentTitle: 'Song notes', contentHelp: 'Use the post body for credits, ensemble parts, recommended instruments, and import guidance.',
+      recommended: 'Recommended', codeTitle: 'Copy directly into Musician',
+      codeHelp: 'Musician imports the Base64 music code produced by its official converter, not the raw MIDI file.',
+      stepConvert: 'Choose the MIDI file in the official converter and copy the result.',
+      stepPaste: 'Paste the complete generated music code below.',
+      stepImport: 'Readers copy it from RPDB and paste it into the Musician import field.',
+      codeLabel: 'Musician music code', codePlaceholder: 'Paste the official Musician code beginning with TVVTOA…',
+      codeLength: '{count} characters', codeReady: 'Musician music code added',
+      rawFileTitle: 'Also keep the original MIDI file', rawFileHelp: 'Useful for downloading, editing, or converting again.',
     },
     media: {
       title: 'Images', description: 'The cover appears in lists and at the top of the post. Previews show the result. Both can be added later.',
@@ -115,7 +133,7 @@ export default {
       eyebrow: 'Post editor', title: 'Post and acquisition guide',
       description: 'Explain the real experience first, then add an actionable route and content checklist.',
       body: 'Post', itemGuide: 'Item acquisition guide', transmogGuide: 'Transmog piece guide',
-      homeNotes: 'Housing notes', shareCode: 'Share code', versionNotes: 'Version notes',
+      homeNotes: 'Housing notes', musicianMidiNotes: 'Song notes', midiFile: 'MIDI file', shareCode: 'Share code', versionNotes: 'Version notes',
     },
     guide: {
       eyebrow: 'Acquisition guide', title: 'Acquisition guide', transmogTitle: 'Piece acquisition guide',
@@ -136,7 +154,7 @@ export default {
       close: 'Close editor', uploadCover: 'Upload cover', replaceCover: 'Replace cover', customCover: 'Custom cover',
       removeCover: 'Remove cover', uploadPreview: 'Upload previews', addMorePreviews: 'Add more previews',
       internalLink: 'Internal link', addGuideStep: 'Add guide step', importRoute: 'Import route', deleteStep: 'Delete step',
-      uploadHomeCode: 'Upload code file', remove: 'Remove', addItem: 'Add item', addFurniture: 'Add furniture',
+      uploadHomeCode: 'Upload code file', uploadMusicianMidi: 'Upload MIDI', openMusicianConverter: 'Open official converter', copyMusicianCode: 'Copy music code', remove: 'Remove', addItem: 'Add item', addFurniture: 'Add furniture',
       uploadIcon: 'Upload icon', upload: 'Upload', clearIcon: 'Clear icon', internalPreview: 'Internal preview',
       saveDraft: 'Save draft', newDraft: 'New draft', continueDraft: 'Continue latest', deleteDraft: 'Delete draft', deleteWork: 'Delete work', publish: 'Publish',
     },
@@ -158,7 +176,8 @@ export default {
       waypointsPartial: 'Imported {count} route points and skipped {rejected} lines',
       waypointsImported: 'Imported {count} route points in order', coverUploaded: 'Cover uploaded',
       uploadMissingUrl: 'The upload response did not include an image URL', previewsAdded: 'Added {count} preview images',
-      furnitureIconUploaded: 'Furniture icon uploaded', homeCodeImported: 'Housing code imported',
+      furnitureIconUploaded: 'Furniture icon uploaded', homeCodeImported: 'Housing code imported', musicianMidiUploaded: 'Musician MIDI file uploaded',
+      musicianCodeCopied: 'Musician music code copied', musicianCodeCopyFailed: 'Copy failed; select and copy the code manually',
       homeCodeReadFailed: 'Could not read the housing code', draftSaved: 'Draft autosaved', published: 'Published',
       revisionSubmitted: 'Changes submitted for review',
     },

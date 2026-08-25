@@ -18,13 +18,14 @@ const itemTypeLabels: Record<string, string> = {
   toy: '玩具',
   quest_item: '任务道具',
 }
-const typeLabel = computed(() => ({ item_showcase: '魔兽物品', transmog: '幻化方案', home_showcase: '家宅分享' }[props.work.type]))
-const typeIcon = computed(() => ({ item_showcase: 'ri-magic-line', transmog: 'ri-shirt-line', home_showcase: 'ri-home-heart-line' }[props.work.type]))
+const typeLabel = computed(() => ({ item_showcase: '魔兽物品', transmog: '幻化方案', home_showcase: '家宅分享', musician_midi: 'Musician MIDI' }[props.work.type]))
+const typeIcon = computed(() => ({ item_showcase: 'ri-magic-line', transmog: 'ri-shirt-line', home_showcase: 'ri-home-heart-line', musician_midi: 'ri-music-2-line' }[props.work.type]))
 const coverURL = computed(() => resolveRPDBMediaURL(props.work.cover_image))
 const styleTags = computed(() => sortRPDBStyleTags((props.work.tags || []).filter(tag => tag.name.endsWith('风格'))).slice(0, 3))
 const availabilityLabel = computed(() => {
   if (!props.work.availability_status) return ''
   if (props.work.type === 'home_showcase') return props.work.availability_status === 'available' ? '可参观' : '仅展示'
+  if (props.work.type === 'musician_midi') return '可下载'
   return props.work.availability_status === 'removed' ? '已绝版' : props.work.availability_status === 'limited' ? '限时获取' : '可获取'
 })
 const itemTypeLabel = computed(() => itemTypeLabels[props.work.item_type || 'item'] || '物品')

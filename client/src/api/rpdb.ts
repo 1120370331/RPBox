@@ -3,7 +3,7 @@ import request from './request'
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? '/api/v1' : 'http://localhost:8080/api/v1')
 const API_HOST = API_BASE.replace(/\/api\/v1\/?$/, '')
 
-export type RPDBWorkType = 'item_showcase' | 'transmog' | 'home_showcase'
+export type RPDBWorkType = 'item_showcase' | 'transmog' | 'home_showcase' | 'musician_midi'
 export type RPDBVerificationStatus = 'unverified' | 'verified' | 'stale' | 'disputed'
 export type RPDBListStatus = 'wanted' | 'farming' | 'owned' | 'paused'
 export type RPDBVisibility = 'public' | 'guild' | 'private'
@@ -245,6 +245,12 @@ export interface RPDBRecommendation extends RPDBWork {
   }
 }
 
+export interface RPDBMusicianMIDIUploadResponse {
+  url: string
+  name: string
+  size: number
+}
+
 export function listRPDBWorks(params: ListRPDBWorksParams = {}) {
   return request.get<{ works: RPDBWork[]; total: number; page: number; page_size: number }>('/rpdb/works', { params })
 }
@@ -285,6 +291,14 @@ export function updateRPDBWork(id: number, payload: Partial<RPDBWorkPayload>) {
 
 export function deleteRPDBWork(id: number) {
   return request.delete<void>(`/rpdb/works/${id}`)
+}
+
+export function uploadRPDBMusicianMIDI(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post<RPDBMusicianMIDIUploadResponse>('/rpdb/uploads/musician-midi', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }
 
 export function listRPDBDrafts(params: { work_id?: number } = {}) {

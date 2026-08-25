@@ -1,7 +1,7 @@
 import { request } from '@shared/api/request'
 import { resolveApiUrl } from './image'
 
-export type RPDBWorkType = 'item_showcase' | 'transmog' | 'home_showcase'
+export type RPDBWorkType = 'item_showcase' | 'transmog' | 'home_showcase' | 'musician_midi'
 export type RPDBListStatus = 'wanted' | 'farming' | 'owned' | 'paused'
 export type RPDBVisibility = 'public' | 'guild' | 'private'
 
@@ -222,6 +222,14 @@ export function listRPDBHotWorks(params: { type?: RPDBWorkType | ''; limit?: num
 
 export function getRPDBWork(id: number) {
   return request.get<{ work: RPDBWork }>(`/rpdb/works/${id}`)
+}
+
+export function uploadRPDBMusicianMIDI(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post<{ url: string; name: string; size: number }>('/rpdb/uploads/musician-midi', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }
 
 export function listRPDBWorkRecommendations(id: number, limit = 4) {
