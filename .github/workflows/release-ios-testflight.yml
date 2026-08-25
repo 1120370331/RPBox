@@ -172,6 +172,7 @@ jobs:
       - name: Test mobile application
         run: |
           node --test mobile/scripts/iosCompliance.test.mjs
+          node --test mobile/scripts/appStoreSubmitWorkflow.test.mjs
           pnpm --filter rpbox-mobile test
           pnpm --filter rpbox-mobile type-check
 
