@@ -230,7 +230,7 @@ test('iPhone and iPad screenshots use exact ordered approved contracts', () => {
 })
 
 test('age rating is tied to the unique current appInfo and exact approved values', () => {
-  assert.match(workflow, /attributes\(item\)\.get\("appStoreState"\) == VERSION_STATE/)
+  assert.match(workflow, /attributes\(item\)\.get\("appStoreState"\) == app_version_state/)
   assert.match(workflow, /len\(current_app_infos\) != 1/)
   const booleanFields = {
     userGeneratedContent: true,
@@ -274,13 +274,67 @@ test('workflow uses only the modern reviewSubmissions API and exact JSON:API typ
   assert.match(workflow, /data\.get\("attributes"\) == \{"submitted": True\}/)
   assert.doesNotMatch(workflow, /appStoreVersionSubmissions/)
   assert.doesNotMatch(workflow, /\/appStoreVersionSubmission(?:\W|$)/)
+  assert.doesNotMatch(
+    workflow,
+    /\/v1\/reviewSubmissionItems\/\{[^}]+\}\/appStoreVersion/,
+  )
 })
 
-test('workflow is recoverable, polls authoritative state, and emits no sensitive artifact', () => {
-  assert.match(workflow, /READY_FOR_REVIEW/)
-  assert.match(workflow, /select_reusable_submission/)
+test('fresh and recovery states are strict and linkage uses version state plus one item', () => {
+  const python = embeddedPythonBlocks(workflow)[0]
+  const selector = python.slice(
+    python.indexOf('def select_submission_path('),
+    python.indexOf('def assert_exact_submission_item('),
+  )
+  const linkageWait = python.slice(
+    python.indexOf('def wait_for_version_item_linkage('),
+    python.indexOf('def create_submission_with_recovery('),
+  )
+
+  assert.match(workflow, /RECOVERY_VERSION_STATE = "READY_FOR_REVIEW"/)
+  assert.match(workflow, /app_version_state not in \{VERSION_STATE, RECOVERY_VERSION_STATE\}/)
+  assert.match(workflow, /def select_submission_path/)
+  assert.match(workflow, /app_version_state == VERSION_STATE and not active/)
+  assert.match(workflow, /return None, True, "fresh"/)
+  assert.match(workflow, /if app_version_state == VERSION_STATE:/)
+  assert.match(workflow, /if items:\s*\n\s+raise RuntimeError\("A fresh PREPARE_FOR_SUBMISSION version has an unexpected item"\)/)
+  assert.match(workflow, /if app_version_state == RECOVERY_VERSION_STATE:/)
+  assert.match(workflow, /if len\(items\) != 1:/)
+  assert.match(selector, /resolve_submission_item_version_id\(client, items\[0\]\) != version_id/)
+  assert.match(workflow, /return candidate, False, "recovery"/)
+  assert.match(workflow, /candidate_attributes\.get\("platform"\) != "IOS"/)
+  assert.match(workflow, /candidate_attributes\.get\("state"\) != "READY_FOR_REVIEW"/)
+  assert.match(workflow, /def wait_for_version_item_linkage/)
+  assert.ok(workflow.includes('f"/v1/appStoreVersions/{version_id}"'))
+  assert.match(workflow, /version_state == RECOVERY_VERSION_STATE and len\(items\) == 1/)
+  assert.match(linkageWait, /resolve_submission_item_version_id\(client, items\[0\]\) != version_id/)
+  assert.match(workflow, /if submission_path != "recovery":/)
+  assert.match(workflow, /Only a verified recovery path may reuse an existing item/)
+})
+
+test('item linkage resolves exactly through inline data or self include without forbidden relationship GET', () => {
+  assert.match(workflow, /def get_resource_with_included/)
+  assert.match(workflow, /included = document\.get\("included", \[\]\)/)
+  assert.match(workflow, /def inline_item_version_id/)
+  assert.match(workflow, /relationship = relationships\(item\)\.get\("appStoreVersion"\)/)
+  assert.match(workflow, /data\.get\("type"\) != "appStoreVersions"/)
+  assert.match(workflow, /def resolve_submission_item_version_id/)
+  assert.ok(workflow.includes('f"/v1/reviewSubmissionItems/{item_id}"'))
+  assert.match(workflow, /params=\{"include": "appStoreVersion"\}/)
+  assert.match(workflow, /resource\.get\("type"\) == "appStoreVersions"/)
+  assert.match(workflow, /if len\(included_versions\) != 1:/)
+  assert.match(workflow, /if not candidate_ids or len\(set\(candidate_ids\)\) != 1:/)
+  assert.match(workflow, /assert_exact_submission_item\(client, submission_id, version_id\)/)
+  assert.doesNotMatch(
+    workflow,
+    /\/v1\/reviewSubmissionItems\/\{[^}]+\}\/appStoreVersion/,
+  )
+})
+
+test('workflow recovers partial apply, polls authoritative state, and emits no sensitive artifact', () => {
   assert.match(workflow, /create_submission_with_recovery/)
   assert.match(workflow, /add_item_with_recovery/)
+  assert.match(workflow, /wait_for_version_item_linkage/)
   assert.match(workflow, /WAITING_FOR_REVIEW/)
   assert.match(workflow, /IN_REVIEW/)
   assert.match(workflow, /poll_submitted_state/)
