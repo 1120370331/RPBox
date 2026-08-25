@@ -22,7 +22,7 @@ env:
   ASC_EXPECTED_BUNDLE_ID: app.rpbox.mobile
   ASC_EXPECTED_VERSION: '1.1'
   ASC_EXPECTED_VERSION_STATE: PREPARE_FOR_SUBMISSION
-  ASC_EXPECTED_BUILD_NUMBER: '1000041'
+  ASC_EXPECTED_BUILD_NUMBER: '1000042'
   ASC_EXPECTED_BUILD_STATE: VALID
   ASC_EXPECTED_LOCALE: zh-Hans
   SCREENSHOT_DIR: artifacts/app-store-screenshots-1242x2688
@@ -300,10 +300,11 @@ jobs:
           WHATS_NEW = textwrap.dedent("""\
           RPBox iOS 1.1 更新：
 
-          1. 新增人物卡快捷跳转、特质查看与分享，并让剧情记录正确展示关联人物卡。
-          2. 完善公会解散、人物卡与公会举报、隐藏和屏蔽流程，举报可由版主按具体对象处理。
-          3. 补齐中英文隐私政策、服务条款、账号删除说明与安全操作提示。
-          4. 优化图片选择、预览、分享和多处移动端布局与无障碍体验。
+          1. 新增独立的 RPBox 人物卡入口，可查看自己的卡片，并从空白或 TRP3 云备份创建。
+          2. 支持编辑人物卡资料、背景故事、第一印象与其他内容，管理角色大图、发布送审和私密状态。
+          3. 完善公会解散、人物卡与公会举报、隐藏和屏蔽流程，举报可由版主按具体对象处理。
+          4. 补齐中英文隐私政策、服务条款、账号删除说明与安全操作提示。
+          5. 优化图片选择、预览、分享和多处移动端布局与无障碍体验。
           """).strip()
           SUPPORT_URL = os.environ["PUBLIC_SUPPORT_URL"]
           MARKETING_URL = os.environ["PUBLIC_MARKETING_URL"]
@@ -1004,7 +1005,7 @@ jobs:
           def main() -> None:
               if API_BASE != "https://api.appstoreconnect.apple.com":
                   raise RuntimeError("ASC_API_BASE must be the official App Store Connect API host")
-              if not APP_ID.isdigit() or not BUNDLE_ID or VERSION != "1.1" or BUILD_NUMBER != "1000041":
+              if not APP_ID.isdigit() or not BUNDLE_ID or VERSION != "1.1" or BUILD_NUMBER != "1000042":
                   raise RuntimeError("Expected App Store release constants are invalid")
               if re.search(r"(?i)\b(TODO|TBD|CHANGEME|PLACEHOLDER)\b|example\.com|<[^>]+>", REVIEW_NOTES):
                   raise RuntimeError("Review notes contain a placeholder")
@@ -1044,23 +1045,23 @@ jobs:
                   item for item in builds if str(attributes(item).get("version") or "") == BUILD_NUMBER
               ]
               if len(matching_builds) != 1:
-                  raise RuntimeError("Expected exactly one app build numbered 1000041")
+                  raise RuntimeError("Expected exactly one app build numbered 1000042")
               build = matching_builds[0]
               build_id = str(build.get("id") or "")
               if not build_id:
                   raise RuntimeError("Dynamically resolved build has no resource ID")
               SENSITIVE_RUNTIME_VALUES.add(build_id)
               if attributes(build).get("processingState") != BUILD_STATE:
-                  raise RuntimeError(f"Build 1000041 must be in {BUILD_STATE} processing state")
+                  raise RuntimeError(f"Build 1000042 must be in {BUILD_STATE} processing state")
               pre_release = client.get_resource(f"/v1/builds/{build_id}/preReleaseVersion")
               if not pre_release:
-                  raise RuntimeError("Build 1000041 has no pre-release version")
+                  raise RuntimeError("Build 1000042 has no pre-release version")
               pre_release_attributes = attributes(pre_release)
               if (
                   str(pre_release_attributes.get("version") or "") != VERSION
                   or pre_release_attributes.get("platform") != "IOS"
               ):
-                  raise RuntimeError("Build 1000041 is not an iOS 1.1 build")
+                  raise RuntimeError("Build 1000042 is not an iOS 1.1 build")
 
               localizations = client.get_collection(
                   f"/v1/appStoreVersions/{version_id}/appStoreVersionLocalizations",
@@ -1128,7 +1129,27 @@ jobs:
               )
               selected_build_id = str((selected_build or {}).get("id") or "")
               if selected_build_id and selected_build_id != build_id:
-                  raise RuntimeError("Version 1.1 already has a different selected build")
+                  selected_build_number = str(attributes(selected_build).get("version") or "")
+                  if (
+                      not re.fullmatch(r"[1-9][0-9]{0,9}", selected_build_number)
+                      or int(selected_build_number) >= int(BUILD_NUMBER)
+                      or attributes(selected_build).get("processingState") != BUILD_STATE
+                  ):
+                      raise RuntimeError(
+                          "Version 1.1 has a selected build that is not an older valid numeric build"
+                      )
+                  selected_pre_release = client.get_resource(
+                      f"/v1/builds/{selected_build_id}/preReleaseVersion"
+                  )
+                  selected_pre_release_attributes = attributes(selected_pre_release)
+                  if (
+                      not selected_pre_release
+                      or str(selected_pre_release_attributes.get("version") or "") != VERSION
+                      or selected_pre_release_attributes.get("platform") != "IOS"
+                  ):
+                      raise RuntimeError(
+                          "Version 1.1 selected build does not belong to the same iOS pre-release version"
+                      )
 
               inventory_before = screenshot_inventory(client, localization_id)
               ipad_set_id, ipad_screenshot_ids = assert_complete_ipad(inventory_before)
@@ -1140,7 +1161,7 @@ jobs:
               actions: list[str] = []
               if not APPLY:
                   actions.append(
-                      "Attach build 1000041" if selected_build_id != build_id else "Build 1000041 already attached"
+                      "Attach build 1000042" if selected_build_id != build_id else "Build 1000042 already attached"
                   )
                   actions.append("Patch only description, What's New, support URL, and marketing URL")
                   actions.append("Patch only App Review notes; preserve contacts and demo credentials")
@@ -1199,9 +1220,9 @@ jobs:
                           }
                       },
                   )
-                  actions.append("Attached build 1000041 to version 1.1")
+                  actions.append("Attached build 1000042 to version 1.1")
               else:
-                  actions.append("Build 1000041 was already attached; no build mutation sent")
+                  actions.append("Build 1000042 was already attached; no build mutation sent")
 
               desired_localization = {
                   "description": DESCRIPTION,
@@ -1271,7 +1292,7 @@ jobs:
                   or str(selected_build_after.get("id") or "") != build_id
                   or str(attributes(selected_build_after).get("version") or "") != BUILD_NUMBER
               ):
-                  raise RuntimeError("Post-apply selected build is not build 1000041")
+                  raise RuntimeError("Post-apply selected build is not build 1000042")
 
               localization_after = client.get_resource(
                   f"/v1/appStoreVersionLocalizations/{localization_id}"

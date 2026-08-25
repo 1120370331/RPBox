@@ -1,6 +1,6 @@
 # RPBox Apple App Store 审核清单
 
-更新日期：2026-08-24
+更新日期：2026-08-25
 
 本文是 RPBox iOS 提交前的仓库证据与人工门禁清单，不代表 App Store Connect 已配置完成，也不代表当前构建已经通过真机、TestFlight 或 Apple 审核。所有标为 `BLOCKED` 的项目在提交前必须由发布负责人关闭。
 
@@ -27,9 +27,9 @@
 | 相机和照片权限 | CONDITIONAL | JS 照片路径调用 `Camera.pickImages({ limit: 1 })` 且没有 JS Photos 权限请求；但解析到的 `@capacitor/camera` 6.1.3 原生 `showPhotos()` 仍会在 PHPicker 前调用 `PHPhotoLibrary.requestAuthorization`，因此不能推断一定没有广泛照片权限提示。拍照使用 `saveToGallery: false`，未发现保存功能；三个权限说明由 `mobile/scripts/iosCompliance.mjs` 单一来源生成并由 verifier 校验 | 必须在最终 IPA 的真实 iOS 版本上首次选择照片，记录实际提示和授权后的可见范围；确认共享权限文案与真机行为准确，并在审核备注说明应用不自动保存到照片库 |
 | 推送通知 | PASS | 推送插件、Capacitor 配置、Pod 和 lock 项均已移除；对候选仓库的 `PushNotifications`、`push-notifications` 和 `aps-environment` 检索无命中；当前无推送能力且不收集令牌 | 若未来启用，先补 capability/entitlement、用户触发的权限请求、令牌生命周期、政策和 App Privacy 标签，再提交新版本 |
 | 广告、跟踪与 ATT | PASS | 当前仓库未发现广告 SDK 或跨应用/网站跟踪代码；政策只对当前版本作此声明 | 对最终 lockfile、原生依赖和网络请求复扫；保持无跟踪时不要显示无意义的 ATT 提示；一旦引入跟踪须重做标签和同意流程 |
-| iOS 签名、配置与更新 URL | CONDITIONAL | `ios-v1.1` 流水线 `32720411896` 已完成 archive、IPA 导出、签名/entitlement/PrivacyInfo 校验和 TestFlight 上传；ASC 二次审计确认 1.1 build 1000041 为 `VALID`。公开更新 URL 强制绑定 App ID 6761112311，TestFlight 没有提前更新生产 updater | 在支持的 iPhone/iPad 安装该 TestFlight build 并完成真机路径；只有 1.1 公开后才显式发布生产 iOS updater 元数据 |
+| iOS 签名、配置与更新 URL | BLOCKED | 旧候选 1.1 build 1000041 曾完成 archive、IPA、签名/entitlement/PrivacyInfo 校验和 TestFlight 上传，并被只读审计确认为 `VALID`。当前源码候选已冻结为 1.1 build 1000042，以包含新的 RPBox 人物卡能力；它尚未完成 archive、上传、App Store Connect processing 或真机验证。公开更新 URL 强制绑定公开 App Store 页面，TestFlight 阶段不得提前更新生产 updater | 对当前提交精确构建并上传 1000042，确认处理状态为 `VALID`；在支持的 iPhone/iPad 安装该 build，完成冷启动、登录、人物卡、图片、隐私/安全及深链路径。只有 1.1 公开后才显式发布生产 iOS updater 元数据 |
 | 稳定性、后端与演示账号（2.1） | BLOCKED | 2026-08-24 验证当前生产地址 `https://ksxvodevhonx.sealosbja.site`：DNS/TLS 正常，`/health` 返回 200，数据库驱动的 `/api/v1/rpdb/works` 返回 200，匿名访问受保护路径返回 401。ASC 1.1 的审核联系人和演示账号字段已填写，但值被审计流程脱敏，尚未验证真实登录；`rpbox.app` 本身未注册 | 保持现有生产主机在线并从第二个独立网络复核；用 TestFlight 验证 ASC 中的主演示账号和一次性删除账号仍有效，凭据只留在 App Store Connect |
-| 截图、描述与版本元数据（2.3） | CONDITIONAL | ASC 准备任务 `32724285097` 已关联 1.1 build 1000041，写入中文描述、What’s New、支持/营销 URL 和审核备注，并在不改动原 iPad 资源的前提下上传 4 张固定顺序的 iPhone 6.5 英寸截图。只读复核 `32724395477` 确认 1.1 共有 iPhone+iPad 两组 8 张截图、build/审核联系人/演示账号/备注均存在。公开 1.0 的 App Privacy 仍声明音频、游戏内容及多类诊断数据 | 在 App Store Connect 最终页面复核截图内容权利、App Privacy 与实际数据流；用真机确认截图展示的功能均可用且没有调试/占位内容 |
+| 截图、描述与版本元数据（2.3） | BLOCKED | 旧候选 1.1 build 1000041 曾关联中文描述、What’s New、支持/营销 URL、审核备注及固定顺序的 iPhone/iPad 截图。当前 prepare 契约已改为只接受 1.1 build 1000042，并更新 What’s New 以覆盖 RPBox 人物卡入口、空白或云备份创建、查看编辑、角色大图、发布送审和私密控制；1000042 尚未关联，元数据也尚未对该候选执行 apply 后复核。公开 1.0 的 App Privacy 仍声明音频、游戏内容及多类诊断数据 | 等 1000042 为 `VALID` 后先运行 dry run，再仅以 `apply=true` 绑定该 build 并更新限定元数据；不得在此流程提交审核。在 App Store Connect 最终页面复核截图内容权利、App Privacy 与实际数据流，并用 1000042 真机确认截图描述的功能没有调试、占位或误导内容 |
 | 深链与 Universal Links | CONDITIONAL | iOS 工程声明 `app.rpbox.mobile` scheme，并关联 `totalrpbox.com` 与 `www.totalrpbox.com` | 在已安装最终包上验证一个自定义 scheme 和一个 Universal Link；确认线上 AASA 文件、Team ID/Bundle ID、路径范围及 HTTPS 均正确；失败时修复或删除元数据声明 |
 | 年龄分级、UGC 与知识产权 | BLOCKED | ASC 1.1 年龄分级声明已将 `userGeneratedContent` 和 `messagingAndChat` 设为 true，其他内容强度仍为 NONE；条款包含 UGC 禁止行为和 Blizzard/WoW 非隶属声明，但线上内容强度及素材权利仍需人工复核 | 按实际公开内容复核幻想暴力、粗俗语言、成人暗示等频率；核查截图、图标、名称、示例人物卡及用户内容的使用权；避免暗示 Blizzard 赞助或认可 |
 
@@ -69,6 +69,7 @@
 8. 将应用分别切换为中文和英文，确认举报表单的标题、原因、提示、字段、按钮和状态文字无残留硬编码。
 9. 对道具或 RP 数据库作品再抽查一条举报路径；剧情详情抽查「举报」入口。
 10. 验证公开支持链接可作为应用内举报不可用时的后备渠道，并确认实际有人接收。
+11. A 打开「个人中心 → RPBox 人物卡」，分别从空白和 TRP3 云备份创建卡片；验证查看、五类资料编辑、角色大图管理、保存为私密及发布送审，并确认草稿/私密/待审状态不会误显示为公开已审核。
 
 拒绝提交的情况：举报只显示成功但未进入队列、屏蔽不影响内容展示、版主无法处理、支持链接不可访问、线上没有明确负责人或响应流程。
 
@@ -125,8 +126,8 @@ Health endpoint verified from independent networks: [VERIFIED_HEALTH_URL_AND_DAT
 The account is active, contains representative non-sensitive demo content, and will remain available throughout review. Please enter these credentials only in App Store Connect Review Information; they are intentionally not stored in the source repository.
 
 CORE REVIEW PATHS
-1. Sign in, then open Community to view a seeded post named “[DEMO_POST_TITLE]”.
-2. On that post, use “Report Content” to select a reason, add an explanation, and submit it to moderators. “Block Author” is available on the same detail screen.
+1. Sign in, open Profile → RPBox Character Cards, and create a card from either a blank card or a TRP3 cloud backup. Open the card, edit its profile sections and character image, then verify private saving and public submission states.
+2. Open Community to view a seeded post named “[DEMO_POST_TITLE]”. On that post, use “Report Content” to select a reason, add an explanation, and submit it to moderators. “Block Author” is available on the same detail screen.
 3. A non-owned character card and guild each provide their own object-specific Report/Hide action and owner blocking. Reports for different objects remain separate, moderator review includes the object's title, preview, URL, and author, and hidden/blocked objects remain excluded from detail and public lists. The safety sheet is localized in Chinese and English.
 4. Manage blocked users at Profile → Blocked Users.
 5. Privacy Policy and Terms are available before sign-in and at Profile → About RPBox. Public privacy URL: https://totalrpbox.com/privacy.html
@@ -153,7 +154,7 @@ If anything in the review environment is unavailable, please contact us through 
 
 在以下项目全部完成前不要点击 Submit for Review：
 
-- [ ] 最终 IPA 已通过 `npm run verify:ios-project`、类型检查、构建和原生归档门禁。
+- [ ] 当前候选 1.1 build 1000042 的 IPA 已通过 `npm run verify:ios-project`、类型检查、构建、原生归档和 App Store Connect `VALID` 门禁；旧 build 1000041 的证据不能替代。
 - [ ] 至少一台受支持 iPhone（以及声明支持 iPad 时的一台 iPad）通过 TestFlight 冷启动、登录、上传、举报、屏蔽、删除账号和外链检查。
 - [ ] 从至少两个独立网络确认最终编入 IPA 的生产 API 的 DNS、TLS、`/health`、数据库读取和实际登录路径；生产审核后端、主演示账号和一次性删除账号在审核期间持续可用，凭据只放 App Store Connect。当前候选使用已验证的 Sealos 生产地址，不得回退到未注册的 `api.rpbox.app`。
 - [ ] 线上隐私政策、支持 URL、官网、AASA 和深链均从非开发者网络验证。

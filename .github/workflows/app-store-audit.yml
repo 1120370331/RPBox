@@ -91,6 +91,7 @@ jobs:
               "contactlastname",
               "contactphone",
               "contactemail",
+              "feedbackemail",
               "demoaccountname",
               "demoaccountpassword",
               "submittedbyactor",
@@ -105,6 +106,7 @@ jobs:
               "authorization",
               "accesstoken",
               "assettoken",
+              "email",
           )
 
 
@@ -384,7 +386,7 @@ jobs:
                       )
               lines.extend([
                   "",
-                  "The JSON artifact contains the sanitized response data and per-request status. Review-contact values, demo credentials, review notes, authorization data, asset tokens, and screenshot delivery URLs are redacted.",
+                  "The JSON artifact contains the sanitized response data and per-request status. Review-contact values, reviewer/tester feedback emails, demo credentials, review notes, authorization data, asset tokens, and screenshot delivery URLs are redacted.",
                   "",
               ])
               (AUDIT_DIR / "app-store-connect-audit.md").write_text("\n".join(lines), encoding="utf-8")

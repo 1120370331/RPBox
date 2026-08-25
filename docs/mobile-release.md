@@ -6,14 +6,14 @@ Apple App Store 提交不是流水线成功后的自动步骤。每次 iOS 提�
 
 ## 1. 流水线总览
 
-- Android 触发方式：推送 `mobile-v*` tag（例如 `mobile-v2.0.2`）
+- Android 触发方式：推送 `mobile-v*` tag（例如 `mobile-v2.0.3`）
 - 工作流文件：`.github/workflows/release-mobile.yml`
 - 主要动作：
   1. 构建 Android Release APK 与 Google Play AAB
   2. 使用同一 upload keystore 签名并验证 APK/AAB
   3. 生成 `latest-android.json` 元数据
   4. 将 APK/AAB 作为 Actions artifact 保存，并只把 APK 与元数据部署到服务器 `releases/mobile`
-- iOS 触发方式：推送 `ios-v*` 或兼容的 `mobile-ios-v*` tag；版本必须与 `mobile/ios/release.json` 一致（当前为 `ios-v1.1`）
+- iOS 触发方式：新版本可推送 `ios-v*` 或兼容的 `mobile-ios-v*` tag；同一商店版本递增 build 时使用手动 workflow dispatch。版本必须与 `mobile/ios/release.json` 一致（当前为 `1.1 / 1000042`）
 - iOS 工作流文件：`.github/workflows/release-ios-testflight.yml`
 - iOS 主要动作：
   1. 生成并校验 Capacitor iOS 工程
@@ -24,12 +24,11 @@ Apple App Store 提交不是流水线成功后的自动步骤。每次 iOS 提�
 ## 2. 发布命令
 
 ```bash
-git tag mobile-v2.0.2
-git push origin mobile-v2.0.2
+git tag mobile-v2.0.3
+git push origin mobile-v2.0.3
 
-# iOS TestFlight（版本独立于 Android，`mobile-ios-v*` 也兼容）
-git tag ios-v1.1
-git push origin ios-v1.1
+# iOS TestFlight：1.1 tag 已用于旧 build，不移动或复用旧 tag
+gh workflow run release-ios-testflight.yml --ref main -f version=1.1
 ```
 
 可选：在发版前新增更新说明文件 `mobile/release-notes/<version>.txt`，例如：
@@ -38,7 +37,7 @@ git push origin ios-v1.1
 mobile/release-notes/0.1.0.txt
 ```
 
-iOS 版本和默认 build number 由 `mobile/ios/release.json` 冻结；当前 App Store Connect 已存在 1.1 待提交版本，因此 iOS 使用 `1.1 / 1000041`，Android 使用 `2.0.2 / 2000002`。两端共享功能源码，但不强制共享商店版本序列。
+iOS 版本和默认 build number 由 `mobile/ios/release.json` 冻结；当前待构建、上传和验证的候选为 `1.1 / 1000042`，`1.1 / 1000041` 只作为不含本次 RPBox 人物卡功能的旧候选保留。Android 当前为 `2.0.3 / 2000003`。两端共享功能源码，但不强制共享商店版本序列；不得在新候选通过 TestFlight 和人工门禁前提交审核或提升生产 iOS updater。
 
 ## 3. 服务器目录结构
 

@@ -1,0 +1,1200 @@
+name: Submit App Store Version 1.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Submit the already-prepared iOS 1.1 version to App Review
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: Type SUBMIT-RPBOX-IOS-1.1-BUILD-1000042 when apply is enabled
+        required: true
+        default: DRY-RUN
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-store-submit-1-1
+  cancel-in-progress: false
+
+env:
+  ASC_API_BASE: https://api.appstoreconnect.apple.com
+  ASC_EXPECTED_APP_ID: '6761112311'
+  ASC_EXPECTED_BUNDLE_ID: app.rpbox.mobile
+  ASC_EXPECTED_VERSION: '1.1'
+  ASC_EXPECTED_VERSION_STATE: PREPARE_FOR_SUBMISSION
+  ASC_EXPECTED_BUILD_NUMBER: '1000042'
+  ASC_EXPECTED_BUILD_STATE: VALID
+  ASC_EXPECTED_RELEASE_TYPE: AFTER_APPROVAL
+  ASC_EXPECTED_LOCALE: zh-Hans
+  ASC_CONFIRMATION_PHRASE: SUBMIT-RPBOX-IOS-1.1-BUILD-1000042
+  SCREENSHOT_DIR: artifacts/app-store-screenshots-1242x2688
+  SCREENSHOT_SHA256_01: bc78df2fe7098832e48b3361c737d794cf80e5882b1f58b68a87f02b8a7ab89e
+  SCREENSHOT_SHA256_02: 7f82be18d5d8717e13762755fa2bd29746170dc5e1f4e156182425fa84b3f8e4
+  SCREENSHOT_SHA256_03: 3da583ab871c2b323deb59e7619ece1c37d2e749b8c64d5c054bf7f9bcaf70ac
+  SCREENSHOT_SHA256_04: 93712744420242ff8cb16eecdac28d94543e2132042df3ff407d25198b13156e
+  PUBLIC_MARKETING_URL: https://totalrpbox.com
+  PUBLIC_SUPPORT_URL: https://github.com/1120370331/RPBox/issues
+  PUBLIC_PRIVACY_URL: https://totalrpbox.com/privacy.html
+
+jobs:
+  submit:
+    name: Validate and submit App Store version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Enforce main branch and explicit confirmation
+        shell: bash
+        env:
+          APPLY: ${{ inputs.apply }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Refused: App Store submission is allowed only from the main branch." >&2
+            exit 1
+          fi
+          if [ "$APPLY" = "true" ] && [ "$CONFIRMATION" != "$ASC_CONFIRMATION_PHRASE" ]; then
+            echo "Refused: the apply confirmation phrase did not match." >&2
+            exit 1
+          fi
+
+      - name: Checkout exact main candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install short-lived JWT signing dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install \
+            --disable-pip-version-check \
+            --no-cache-dir \
+            'cryptography>=42,<47'
+
+      - name: Preflight and submit through the modern review API
+        shell: bash
+        env:
+          APPLY: ${{ inputs.apply }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_API_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import hashlib
+          import json
+          import os
+          import re
+          import struct
+          import sys
+          import textwrap
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+
+          API_BASE = os.environ.get("ASC_API_BASE", "").rstrip("/")
+          APP_ID = os.environ.get("ASC_EXPECTED_APP_ID", "").strip()
+          BUNDLE_ID = os.environ.get("ASC_EXPECTED_BUNDLE_ID", "").strip()
+          VERSION = os.environ.get("ASC_EXPECTED_VERSION", "").strip()
+          VERSION_STATE = os.environ.get("ASC_EXPECTED_VERSION_STATE", "").strip()
+          BUILD_NUMBER = os.environ.get("ASC_EXPECTED_BUILD_NUMBER", "").strip()
+          BUILD_STATE = os.environ.get("ASC_EXPECTED_BUILD_STATE", "").strip()
+          RELEASE_TYPE = os.environ.get("ASC_EXPECTED_RELEASE_TYPE", "").strip()
+          LOCALE = os.environ.get("ASC_EXPECTED_LOCALE", "").strip()
+          CONFIRMATION_PHRASE = os.environ.get("ASC_CONFIRMATION_PHRASE", "")
+          APPLY = os.environ.get("APPLY", "false").lower() == "true"
+          CONFIRMATION = os.environ.get("CONFIRMATION", "")
+          SCREENSHOT_DIR = Path(os.environ["SCREENSHOT_DIR"])
+
+          DESCRIPTION = (
+              "RPBox 是面向魔兽世界角色扮演玩家的独立开源工具与社区。可在手机端浏览与管理 RP 剧情、人物卡、"
+              "公会、社区内容和 RP 资源，支持人物卡分享、剧情归档、举报、隐藏、屏蔽和账号删除。"
+              "RPBox 与 Blizzard Entertainment 无隶属、赞助或认可关系。"
+          )
+          WHATS_NEW = textwrap.dedent("""\
+          RPBox iOS 1.1 更新：
+
+          1. 新增独立的 RPBox 人物卡入口，可查看自己的卡片，并从空白或 TRP3 云备份创建。
+          2. 支持编辑人物卡资料、背景故事、第一印象与其他内容，管理角色大图、发布送审和私密状态。
+          3. 完善公会解散、人物卡与公会举报、隐藏和屏蔽流程，举报可由版主按具体对象处理。
+          4. 补齐中英文隐私政策、服务条款、账号删除说明与安全操作提示。
+          5. 优化图片选择、预览、分享和多处移动端布局与无障碍体验。
+          """).strip()
+          SUPPORT_URL = os.environ["PUBLIC_SUPPORT_URL"]
+          MARKETING_URL = os.environ["PUBLIC_MARKETING_URL"]
+          PRIVACY_URL = os.environ["PUBLIC_PRIVACY_URL"]
+          REVIEW_NOTES = textwrap.dedent(f"""\
+          RPBox is an independent open-source tool and community for World of Warcraft role-playing players. It is not affiliated with, sponsored by, or endorsed by Blizzard Entertainment.
+
+          Existing demo credentials are provided in App Review Information.
+
+          Core review paths:
+          - Community content and profiles provide report and block safety actions.
+          - Character-card and guild detail views provide report, hide, and block actions.
+          - Privacy Policy and Terms are available before sign-in and under About.
+          - Account deletion is at Profile -> Delete Account.
+          - Camera and photo access are user-triggered only; the app does not write to the photo gallery.
+          - The app has no push notifications and no in-app purchases.
+
+          Support: {SUPPORT_URL}
+          Privacy: {PRIVACY_URL}
+          """).strip()
+
+          IPHONE_DISPLAY_TYPE = "APP_IPHONE_65"
+          IPAD_DISPLAY_TYPE = "APP_IPAD_PRO_3GEN_129"
+          EXPECTED_SCREENSHOT_NAMES = (
+              "01-guild-plaza.png",
+              "02-story-management.png",
+              "03-resource-market.png",
+              "04-rp-community.png",
+          )
+          APPROVED_SCREENSHOT_SHA256 = {
+              "01-guild-plaza.png": os.environ["SCREENSHOT_SHA256_01"],
+              "02-story-management.png": os.environ["SCREENSHOT_SHA256_02"],
+              "03-resource-market.png": os.environ["SCREENSHOT_SHA256_03"],
+              "04-rp-community.png": os.environ["SCREENSHOT_SHA256_04"],
+          }
+          IPAD_APPROVED_SCREENSHOTS = (
+              (
+                  "bb5683e30c1bcb71bd77b2cfc3b7d0ba_2732x2048.jpg",
+                  533634,
+                  "757c163aaadb21965fb8500e47e4d56d",
+                  2732,
+                  2048,
+              ),
+              (
+                  "f23c33aed97c29f10000f4df229e0edb_2732x2048.jpg",
+                  658259,
+                  "368aa71ecae380ec7cb6746b95d42ca0",
+                  2732,
+                  2048,
+              ),
+              (
+                  "b1fb3442fd2dc8f9eb18c8577b7c70ca_2732x2048.png",
+                  2503979,
+                  "f3ce75507d22aa30f41cc725cdaf55aa",
+                  2732,
+                  2048,
+              ),
+              (
+                  "1cf03c055edc5c82bab9a195a495361a_2732x2048.png",
+                  594484,
+                  "e5b0080420058fa645ad16e0790ae121",
+                  2732,
+                  2048,
+              ),
+          )
+          KEYWORDS_LENGTH = 19
+          KEYWORDS_SHA256 = "5a69f9891492a90c7bfd351d5c118a2a07f67375d72c283c3cf523328c7da176"
+          REQUIRED_REVIEW_FIELDS = (
+              "contactFirstName",
+              "contactLastName",
+              "contactPhone",
+              "contactEmail",
+              "demoAccountName",
+              "demoAccountPassword",
+          )
+          REQUIRED_AGE_RATING_BOOLEANS = {
+              "userGeneratedContent": True,
+              "messagingAndChat": True,
+              "unrestrictedWebAccess": False,
+              "advertising": False,
+              "gambling": False,
+              "lootBox": False,
+          }
+          REQUIRED_AGE_RATING_NONE = (
+              "alcoholTobaccoOrDrugUseOrReferences",
+              "contests",
+              "gamblingSimulated",
+              "horrorOrFearThemes",
+              "matureOrSuggestiveThemes",
+              "medicalOrTreatmentInformation",
+              "profanityOrCrudeHumor",
+              "sexualContentGraphicAndNudity",
+              "sexualContentOrNudity",
+              "violenceCartoonOrFantasy",
+              "violenceRealistic",
+              "violenceRealisticProlongedGraphicOrSadistic",
+          )
+          INACTIVE_SUBMISSION_STATES = {"COMPLETE", "CANCELED", "CANCELLED"}
+          SUBMITTED_STATES = {
+              "WAITING_FOR_REVIEW",
+              "IN_REVIEW",
+              "UNRESOLVED_ISSUES",
+              "COMPLETING",
+              "COMPLETE",
+          }
+          FAILED_AFTER_SUBMIT_STATES = {"CANCELING", "CANCELED", "CANCELLED"}
+          SENSITIVE_RUNTIME_VALUES: set[str] = set()
+
+
+          def present(value: object) -> bool:
+              return value is not None and (not isinstance(value, str) or bool(value.strip()))
+
+
+          def attributes(resource: dict | None) -> dict:
+              if not isinstance(resource, dict):
+                  return {}
+              value = resource.get("attributes")
+              return value if isinstance(value, dict) else {}
+
+
+          def relationships(resource: dict | None) -> dict:
+              if not isinstance(resource, dict):
+                  return {}
+              value = resource.get("relationships")
+              return value if isinstance(value, dict) else {}
+
+
+          def remember_resource(resource: dict | None) -> None:
+              if isinstance(resource, dict):
+                  resource_id = str(resource.get("id") or "")
+                  if resource_id:
+                      SENSITIVE_RUNTIME_VALUES.add(resource_id)
+
+
+          def safe_error_message(value: object) -> str:
+              message = str(value)
+              for name in (
+                  "ASC_ISSUER_ID",
+                  "ASC_KEY_ID",
+                  "ASC_API_KEY_BASE64",
+                  "CONFIRMATION",
+              ):
+                  secret = os.environ.get(name, "")
+                  if secret:
+                      message = message.replace(secret, "[REDACTED]")
+              for sensitive_value in sorted(SENSITIVE_RUNTIME_VALUES, key=len, reverse=True):
+                  if sensitive_value:
+                      message = message.replace(sensitive_value, "[REDACTED]")
+              message = re.sub(
+                  r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+                  "[REDACTED_RESOURCE_ID]",
+                  message,
+              )
+              message = re.sub(
+                  r"(?i)(authorization|password|secret|token|private[_-]?key)\s*[:=]\s*\S+",
+                  r"\1=[REDACTED]",
+                  message,
+              )
+              message = re.sub(r"https://[^\s)\]>'\"]+", "[REDACTED_URL]", message)
+              return message[:600]
+
+
+          def append_summary(lines: list[str]) -> None:
+              summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+              if not summary_path:
+                  return
+              with Path(summary_path).open("a", encoding="utf-8") as summary:
+                  summary.write("\n".join(lines) + "\n")
+
+
+          def b64url(value: bytes) -> str:
+              return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+          class TokenProvider:
+              def __init__(self) -> None:
+                  issuer_id = os.environ.get("ASC_ISSUER_ID", "").strip()
+                  key_id = os.environ.get("ASC_KEY_ID", "").strip()
+                  encoded_key = "".join(os.environ.get("ASC_API_KEY_BASE64", "").split())
+                  missing = [
+                      name
+                      for name, value in (
+                          ("ASC_ISSUER_ID", issuer_id),
+                          ("ASC_KEY_ID", key_id),
+                          ("ASC_API_KEY_BASE64", encoded_key),
+                      )
+                      if not value
+                  ]
+                  if missing:
+                      raise RuntimeError("Required App Store Connect credentials are missing")
+                  SENSITIVE_RUNTIME_VALUES.update((issuer_id, key_id, encoded_key))
+                  try:
+                      key_bytes = base64.b64decode(encoded_key, validate=True)
+                      private_key = serialization.load_pem_private_key(key_bytes, password=None)
+                  except Exception as exc:
+                      raise RuntimeError("The App Store Connect signing key is invalid") from exc
+                  if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+                      raise RuntimeError("The App Store Connect signing key has the wrong key type")
+                  self.issuer_id = issuer_id
+                  self.key_id = key_id
+                  self.private_key = private_key
+
+              def make_token(self) -> str:
+                  now = int(time.time())
+                  header = {"alg": "ES256", "kid": self.key_id, "typ": "JWT"}
+                  payload = {
+                      "iss": self.issuer_id,
+                      "iat": now - 5,
+                      "exp": now + 19 * 60,
+                      "aud": "appstoreconnect-v1",
+                  }
+                  signing_input = (
+                      b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+                      + "."
+                      + b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+                  )
+                  der_signature = self.private_key.sign(
+                      signing_input.encode("ascii"), ec.ECDSA(hashes.SHA256())
+                  )
+                  r_value, s_value = decode_dss_signature(der_signature)
+                  raw_signature = r_value.to_bytes(32, "big") + s_value.to_bytes(32, "big")
+                  token = signing_input + "." + b64url(raw_signature)
+                  SENSITIVE_RUNTIME_VALUES.add(token)
+                  return token
+
+
+          class AscRequestError(RuntimeError):
+              pass
+
+
+          class AscClient:
+              def __init__(self, token_provider: TokenProvider) -> None:
+                  self.token_provider = token_provider
+
+              def request(
+                  self,
+                  method: str,
+                  path: str,
+                  *,
+                  operation: str,
+                  params: dict | None = None,
+                  payload: dict | None = None,
+                  allow_not_found: bool = False,
+              ) -> dict:
+                  if not path.startswith("/"):
+                      raise RuntimeError("Refused an API path without a leading slash")
+                  query = urllib.parse.urlencode(params or {}, doseq=True)
+                  url = API_BASE + path + (("?" + query) if query else "")
+                  body = None
+                  headers = {
+                      "Accept": "application/json",
+                      "Authorization": "Bearer " + self.token_provider.make_token(),
+                      "User-Agent": "RPBox-AppStore-Submit/1.0",
+                  }
+                  if payload is not None:
+                      body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                      headers["Content-Type"] = "application/json"
+                  request = urllib.request.Request(url, data=body, method=method, headers=headers)
+                  try:
+                      with urllib.request.urlopen(request, timeout=60) as response:
+                          response_body = response.read()
+                  except urllib.error.HTTPError as exc:
+                      status = exc.code
+                      if status == 404 and allow_not_found:
+                          exc.read()
+                          return {"data": None}
+                      try:
+                          document = json.loads(exc.read().decode("utf-8"))
+                      except Exception:
+                          document = {}
+                      errors = document.get("errors") if isinstance(document, dict) else None
+                      first_error = errors[0] if isinstance(errors, list) and errors else {}
+                      code = str(first_error.get("code") or "unknown")
+                      title = str(first_error.get("title") or "request failed")
+                      raise AscRequestError(
+                          f"{operation} failed: HTTP {status}, code {code}, title {title}"
+                      ) from None
+                  except urllib.error.URLError:
+                      raise AscRequestError(f"{operation} failed due to a transport error") from None
+                  if not response_body:
+                      return {}
+                  try:
+                      document = json.loads(response_body.decode("utf-8"))
+                  except Exception:
+                      raise AscRequestError(f"{operation} returned invalid JSON") from None
+                  if not isinstance(document, dict):
+                      raise AscRequestError(f"{operation} returned an invalid document")
+                  return document
+
+              def get_resource(
+                  self,
+                  path: str,
+                  *,
+                  operation: str,
+                  params: dict | None = None,
+                  allow_not_found: bool = False,
+              ) -> dict | None:
+                  document = self.request(
+                      "GET",
+                      path,
+                      operation=operation,
+                      params=params,
+                      allow_not_found=allow_not_found,
+                  )
+                  data = document.get("data")
+                  if data is None:
+                      return None
+                  if not isinstance(data, dict):
+                      raise RuntimeError(f"{operation} did not return one resource")
+                  remember_resource(data)
+                  return data
+
+              def get_collection(
+                  self,
+                  path: str,
+                  *,
+                  operation: str,
+                  params: dict | None = None,
+              ) -> list[dict]:
+                  query = urllib.parse.urlencode(params or {}, doseq=True)
+                  next_url = API_BASE + path + (("?" + query) if query else "")
+                  resources: list[dict] = []
+                  visited: set[str] = set()
+                  while next_url:
+                      if next_url in visited or len(visited) >= 50:
+                          raise RuntimeError(f"{operation} returned invalid pagination")
+                      if not next_url.startswith(API_BASE + "/"):
+                          raise RuntimeError(f"{operation} returned an untrusted pagination URL")
+                      visited.add(next_url)
+                      parsed = urllib.parse.urlsplit(next_url)
+                      document = self.request(
+                          "GET",
+                          parsed.path,
+                          operation=operation,
+                          params=urllib.parse.parse_qs(parsed.query, keep_blank_values=True),
+                      )
+                      data = document.get("data", [])
+                      if not isinstance(data, list):
+                          raise RuntimeError(f"{operation} did not return a collection")
+                      for resource in data:
+                          if not isinstance(resource, dict):
+                              raise RuntimeError(f"{operation} returned a malformed resource")
+                          remember_resource(resource)
+                          resources.append(resource)
+                      links = document.get("links")
+                      next_value = links.get("next") if isinstance(links, dict) else None
+                      next_url = next_value if isinstance(next_value, str) and next_value else ""
+                  return resources
+
+              def mutate(self, method: str, path: str, payload: dict, *, operation: str) -> dict | None:
+                  if not APPLY:
+                      raise RuntimeError("Mutation attempted during dry run")
+                  allowed = (
+                      (method == "POST" and path == "/v1/reviewSubmissions")
+                      or (method == "POST" and path == "/v1/reviewSubmissionItems")
+                      or (method == "PATCH" and re.fullmatch(r"/v1/reviewSubmissions/[^/]+", path))
+                  )
+                  if not allowed:
+                      raise RuntimeError("Refused a mutation outside the review-submission allowlist")
+                  data = payload.get("data") if isinstance(payload, dict) else None
+                  if not isinstance(data, dict):
+                      raise RuntimeError("Refused a mutation without one JSON:API resource")
+                  if method == "POST" and path == "/v1/reviewSubmissions":
+                      app_linkage = relationships(data).get("app")
+                      app_data = app_linkage.get("data") if isinstance(app_linkage, dict) else None
+                      valid_payload = (
+                          set(data) == {"type", "attributes", "relationships"}
+                          and data.get("type") == "reviewSubmissions"
+                          and data.get("attributes") == {"platform": "IOS"}
+                          and app_data == {"type": "apps", "id": APP_ID}
+                      )
+                  elif method == "POST" and path == "/v1/reviewSubmissionItems":
+                      item_relationships = relationships(data)
+                      submission_linkage = item_relationships.get("reviewSubmission")
+                      submission_data = (
+                          submission_linkage.get("data")
+                          if isinstance(submission_linkage, dict)
+                          else None
+                      )
+                      version_linkage = item_relationships.get("appStoreVersion")
+                      version_data = (
+                          version_linkage.get("data")
+                          if isinstance(version_linkage, dict)
+                          else None
+                      )
+                      valid_payload = (
+                          set(data) == {"type", "relationships"}
+                          and data.get("type") == "reviewSubmissionItems"
+                          and isinstance(submission_data, dict)
+                          and submission_data.get("type") == "reviewSubmissions"
+                          and present(submission_data.get("id"))
+                          and isinstance(version_data, dict)
+                          and version_data.get("type") == "appStoreVersions"
+                          and present(version_data.get("id"))
+                      )
+                  else:
+                      path_id = path.rsplit("/", 1)[-1]
+                      valid_payload = (
+                          set(data) == {"type", "id", "attributes"}
+                          and data.get("type") == "reviewSubmissions"
+                          and str(data.get("id") or "") == path_id
+                          and data.get("attributes") == {"submitted": True}
+                      )
+                  if not valid_payload:
+                      raise RuntimeError("Refused a mutation that does not match the frozen JSON:API contract")
+                  document = self.request(
+                      method,
+                      path,
+                      operation=operation,
+                      payload=payload,
+                  )
+                  data = document.get("data")
+                  if data is not None and not isinstance(data, dict):
+                      raise RuntimeError(f"{operation} did not return one resource")
+                  remember_resource(data)
+                  return data
+
+
+          def screenshot_state(resource: dict) -> str:
+              delivery_state = attributes(resource).get("assetDeliveryState")
+              if not isinstance(delivery_state, dict):
+                  return ""
+              return str(delivery_state.get("state") or "")
+
+
+          def png_dimensions(path: Path) -> tuple[int, int]:
+              with path.open("rb") as source:
+                  header = source.read(24)
+              if (
+                  len(header) != 24
+                  or header[:8] != b"\x89PNG\r\n\x1a\n"
+                  or header[12:16] != b"IHDR"
+              ):
+                  raise RuntimeError("An approved iPhone screenshot is not a valid PNG")
+              return struct.unpack(">II", header[16:24])
+
+
+          def read_approved_iphone_contract() -> tuple[tuple[str, int, str, int, int], ...]:
+              if not SCREENSHOT_DIR.is_dir():
+                  raise RuntimeError("The approved iPhone screenshot directory is missing")
+              actual_names = tuple(
+                  sorted(path.name for path in SCREENSHOT_DIR.iterdir() if path.is_file())
+              )
+              if actual_names != tuple(sorted(EXPECTED_SCREENSHOT_NAMES)):
+                  raise RuntimeError("The approved iPhone screenshot directory must contain exactly four files")
+              approved = []
+              for name in EXPECTED_SCREENSHOT_NAMES:
+                  path = SCREENSHOT_DIR / name
+                  payload = path.read_bytes()
+                  if hashlib.sha256(payload).hexdigest() != APPROVED_SCREENSHOT_SHA256[name]:
+                      raise RuntimeError("An iPhone screenshot does not match its approved SHA-256")
+                  width, height = png_dimensions(path)
+                  if (width, height) != (1242, 2688):
+                      raise RuntimeError("Every approved iPhone screenshot must be 1242x2688")
+                  approved.append(
+                      (name, len(payload), hashlib.md5(payload).hexdigest(), width, height)
+                  )
+              return tuple(approved)
+
+
+          def checksum_matches(value: object, md5_hex: str) -> bool:
+              if not isinstance(value, str) or not value.strip():
+                  return False
+              normalized = value.strip()
+              md5_base64 = base64.b64encode(bytes.fromhex(md5_hex)).decode("ascii")
+              return normalized.lower() == md5_hex or normalized == md5_base64
+
+
+          def image_dimensions(resource: dict) -> tuple[int, int] | None:
+              image_asset = attributes(resource).get("imageAsset")
+              if not isinstance(image_asset, dict):
+                  return None
+              try:
+                  return int(image_asset.get("width")), int(image_asset.get("height"))
+              except (TypeError, ValueError):
+                  return None
+
+
+          def validate_screenshot_contract(
+              client: AscClient,
+              localization_id: str,
+              display_type: str,
+              label: str,
+              approved: tuple[tuple[str, int, str, int, int], ...],
+          ) -> None:
+              screenshot_sets = client.get_collection(
+                  f"/v1/appStoreVersionLocalizations/{localization_id}/appScreenshotSets",
+                  operation="read screenshot sets",
+                  params={"limit": 50},
+              )
+              matching_sets = [
+                  item
+                  for item in screenshot_sets
+                  if str(attributes(item).get("screenshotDisplayType") or "") == display_type
+              ]
+              if len(matching_sets) != 1:
+                  raise RuntimeError(f"Expected exactly one {label} screenshot set")
+              screenshot_set_id = str(matching_sets[0].get("id") or "")
+              if not screenshot_set_id:
+                  raise RuntimeError(f"The {label} screenshot set has no resource identifier")
+              screenshots = client.get_collection(
+                  f"/v1/appScreenshotSets/{screenshot_set_id}/appScreenshots",
+                  operation=f"read {label} screenshots",
+                  params={"limit": 50},
+              )
+              if len(screenshots) != 4 or len(approved) != 4:
+                  raise RuntimeError(f"The {label} screenshot inventory must contain exactly four items")
+              for position, (screenshot, expected) in enumerate(zip(screenshots, approved), start=1):
+                  expected_name, expected_size, expected_md5, expected_width, expected_height = expected
+                  screenshot_attributes = attributes(screenshot)
+                  try:
+                      remote_size = int(screenshot_attributes.get("fileSize"))
+                  except (TypeError, ValueError):
+                      remote_size = -1
+                  if (
+                      str(screenshot_attributes.get("fileName") or "") != expected_name
+                      or remote_size != expected_size
+                      or not checksum_matches(
+                          screenshot_attributes.get("sourceFileChecksum"), expected_md5
+                      )
+                      or image_dimensions(screenshot) != (expected_width, expected_height)
+                      or screenshot_state(screenshot) != "COMPLETE"
+                  ):
+                      raise RuntimeError(
+                          f"The {label} screenshot at approved position {position} does not match"
+                      )
+
+
+          def relationship_id(resource: dict, relationship_name: str, expected_type: str) -> str:
+              relationship = relationships(resource).get(relationship_name)
+              data = relationship.get("data") if isinstance(relationship, dict) else None
+              if not isinstance(data, dict) or data.get("type") != expected_type:
+                  return ""
+              value = str(data.get("id") or "")
+              if value:
+                  SENSITIVE_RUNTIME_VALUES.add(value)
+              return value
+
+
+          def read_submission_items(client: AscClient, submission_id: str) -> list[dict]:
+              return client.get_collection(
+                  f"/v1/reviewSubmissions/{submission_id}/items",
+                  operation="read review submission items",
+                  params={"limit": 50},
+              )
+
+
+          def item_version_id(client: AscClient, item: dict) -> str:
+              linked_id = relationship_id(item, "appStoreVersion", "appStoreVersions")
+              if linked_id:
+                  return linked_id
+              item_id = str(item.get("id") or "")
+              if not item_id:
+                  return ""
+              linked_version = client.get_resource(
+                  f"/v1/reviewSubmissionItems/{item_id}/appStoreVersion",
+                  operation="resolve review submission item",
+                  allow_not_found=True,
+              )
+              if not linked_version or linked_version.get("type") != "appStoreVersions":
+                  return ""
+              return str(linked_version.get("id") or "")
+
+
+          def read_review_submissions(client: AscClient) -> list[dict]:
+              return client.get_collection(
+                  f"/v1/apps/{APP_ID}/reviewSubmissions",
+                  operation="read review submissions",
+                  params={"limit": 50},
+              )
+
+
+          def select_reusable_submission(
+              client: AscClient,
+              submissions: list[dict],
+              version_id: str,
+          ) -> tuple[dict | None, bool]:
+              active = [
+                  item
+                  for item in submissions
+                  if str(attributes(item).get("state") or "") not in INACTIVE_SUBMISSION_STATES
+              ]
+              if not active:
+                  return None, True
+              if len(active) != 1:
+                  raise RuntimeError("Expected no more than one active review submission")
+              candidate = active[0]
+              candidate_attributes = attributes(candidate)
+              if candidate_attributes.get("platform") != "IOS":
+                  raise RuntimeError("An active review submission exists for another platform")
+              if candidate_attributes.get("state") != "READY_FOR_REVIEW":
+                  raise RuntimeError("An in-progress review submission already exists")
+              submission_id = str(candidate.get("id") or "")
+              if not submission_id:
+                  raise RuntimeError("The reusable review submission has no resource identifier")
+              items = read_submission_items(client, submission_id)
+              if len(items) > 1:
+                  raise RuntimeError("The reusable review submission contains multiple items")
+              if not items:
+                  return candidate, True
+              if item_version_id(client, items[0]) != version_id:
+                  raise RuntimeError("The reusable review submission targets a different resource")
+              return candidate, False
+
+
+          def assert_submission_item(
+              client: AscClient,
+              submission_id: str,
+              version_id: str,
+          ) -> None:
+              items = read_submission_items(client, submission_id)
+              if len(items) != 1 or item_version_id(client, items[0]) != version_id:
+                  raise RuntimeError("Review submission item verification failed")
+
+
+          def create_submission_with_recovery(
+              client: AscClient,
+              version_id: str,
+          ) -> tuple[dict, bool]:
+              payload = {
+                  "data": {
+                      "type": "reviewSubmissions",
+                      "attributes": {"platform": "IOS"},
+                      "relationships": {
+                          "app": {"data": {"type": "apps", "id": APP_ID}}
+                      },
+                  }
+              }
+              try:
+                  submission = client.mutate(
+                      "POST",
+                      "/v1/reviewSubmissions",
+                      payload,
+                      operation="create review submission",
+                  )
+                  if not submission:
+                      raise RuntimeError("Create review submission returned no resource")
+                  return submission, True
+              except AscRequestError as original_error:
+                  recovered, needs_item = select_reusable_submission(
+                      client, read_review_submissions(client), version_id
+                  )
+                  if not recovered:
+                      raise original_error
+                  return recovered, needs_item
+
+
+          def add_item_with_recovery(
+              client: AscClient,
+              submission_id: str,
+              version_id: str,
+          ) -> None:
+              payload = {
+                  "data": {
+                      "type": "reviewSubmissionItems",
+                      "relationships": {
+                          "reviewSubmission": {
+                              "data": {"type": "reviewSubmissions", "id": submission_id}
+                          },
+                          "appStoreVersion": {
+                              "data": {"type": "appStoreVersions", "id": version_id}
+                          },
+                      },
+                  }
+              }
+              try:
+                  client.mutate(
+                      "POST",
+                      "/v1/reviewSubmissionItems",
+                      payload,
+                      operation="add App Store version to review submission",
+                  )
+              except AscRequestError as original_error:
+                  try:
+                      assert_submission_item(client, submission_id, version_id)
+                  except Exception:
+                      raise original_error
+              assert_submission_item(client, submission_id, version_id)
+
+
+          def read_submission_state(client: AscClient, submission_id: str) -> str:
+              submission = client.get_resource(
+                  f"/v1/reviewSubmissions/{submission_id}",
+                  operation="read review submission state",
+              )
+              if not submission:
+                  raise RuntimeError("Review submission disappeared during verification")
+              return str(attributes(submission).get("state") or "")
+
+
+          def poll_submitted_state(
+              client: AscClient,
+              submission_id: str,
+              timeout_seconds: int = 600,
+          ) -> str:
+              deadline = time.monotonic() + timeout_seconds
+              while True:
+                  state = read_submission_state(client, submission_id)
+                  if state in SUBMITTED_STATES:
+                      return state
+                  if state in FAILED_AFTER_SUBMIT_STATES:
+                      raise RuntimeError("The review submission entered a canceled state")
+                  if state != "READY_FOR_REVIEW":
+                      raise RuntimeError("The review submission entered an unexpected state")
+                  if time.monotonic() >= deadline:
+                      raise RuntimeError("Timed out waiting for App Store Connect to accept the submission")
+                  time.sleep(15)
+
+
+          def submit_with_recovery(client: AscClient, submission_id: str) -> str:
+              payload = {
+                  "data": {
+                      "type": "reviewSubmissions",
+                      "id": submission_id,
+                      "attributes": {"submitted": True},
+                  }
+              }
+              try:
+                  client.mutate(
+                      "PATCH",
+                      f"/v1/reviewSubmissions/{submission_id}",
+                      payload,
+                      operation="submit review submission",
+                  )
+              except AscRequestError as original_error:
+                  state = read_submission_state(client, submission_id)
+                  if state in SUBMITTED_STATES:
+                      return state
+                  if state != "READY_FOR_REVIEW":
+                      raise original_error
+                  client.mutate(
+                      "PATCH",
+                      f"/v1/reviewSubmissions/{submission_id}",
+                      payload,
+                      operation="retry review submission",
+                  )
+              return poll_submitted_state(client, submission_id)
+
+
+          def main() -> None:
+              if API_BASE != "https://api.appstoreconnect.apple.com":
+                  raise RuntimeError("ASC_API_BASE must be the official App Store Connect API host")
+              if os.environ.get("GITHUB_REF") != "refs/heads/main":
+                  raise RuntimeError("App Store submission is allowed only from the main branch")
+              if (
+                  APP_ID != "6761112311"
+                  or BUNDLE_ID != "app.rpbox.mobile"
+                  or VERSION != "1.1"
+                  or VERSION_STATE != "PREPARE_FOR_SUBMISSION"
+                  or BUILD_NUMBER != "1000042"
+                  or BUILD_STATE != "VALID"
+                  or RELEASE_TYPE != "AFTER_APPROVAL"
+                  or LOCALE != "zh-Hans"
+              ):
+                  raise RuntimeError("Expected App Store release constants are invalid")
+              if APPLY and CONFIRMATION != CONFIRMATION_PHRASE:
+                  raise RuntimeError("The apply confirmation phrase did not match")
+
+              release_contract_path = Path("mobile/ios/release.json")
+              try:
+                  release_contract = json.loads(release_contract_path.read_text(encoding="utf-8"))
+              except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                  raise RuntimeError("The repository iOS release contract is missing or invalid") from exc
+              if type(release_contract) is not dict or set(release_contract) != {
+                  "version",
+                  "buildNumber",
+              }:
+                  raise RuntimeError("The repository iOS release contract has unexpected fields")
+              if (
+                  type(release_contract.get("version")) is not str
+                  or release_contract["version"] != "1.1"
+                  or type(release_contract.get("buildNumber")) is not int
+                  or release_contract["buildNumber"] != 1000042
+              ):
+                  raise RuntimeError("The repository iOS release contract does not match 1.1/1000042")
+              if (
+                  release_contract["version"] != VERSION
+                  or str(release_contract["buildNumber"]) != BUILD_NUMBER
+              ):
+                  raise RuntimeError("Workflow constants drifted from the repository iOS release contract")
+
+              project_path = Path("mobile/ios/App/App.xcodeproj/project.pbxproj")
+              try:
+                  project_text = project_path.read_text(encoding="utf-8")
+              except (OSError, UnicodeError) as exc:
+                  raise RuntimeError("The checked-out iOS project is missing or unreadable") from exc
+              project_build_numbers = re.findall(
+                  r"CURRENT_PROJECT_VERSION\s*=\s*([^;]+);", project_text
+              )
+              if len(project_build_numbers) != 2 or any(
+                  value.strip() != "1000042" for value in project_build_numbers
+              ):
+                  raise RuntimeError("The checked-out iOS project build number does not match 1000042")
+
+              release_notes_path = Path("mobile/release-notes/1.1.txt")
+              try:
+                  release_notes = release_notes_path.read_text(encoding="utf-8").strip()
+              except (OSError, UnicodeError) as exc:
+                  raise RuntimeError("The checked-out iOS release notes are missing or unreadable") from exc
+              if release_notes != WHATS_NEW:
+                  raise RuntimeError("The checked-out iOS release notes drifted from the approved What's New")
+              approved_iphone_screenshots = read_approved_iphone_contract()
+
+              client = AscClient(TokenProvider())
+              app = client.get_resource(
+                  f"/v1/apps/{APP_ID}", operation="verify app identity"
+              )
+              if (
+                  not app
+                  or str(app.get("id") or "") != APP_ID
+                  or attributes(app).get("bundleId") != BUNDLE_ID
+              ):
+                  raise RuntimeError("App identity does not match the frozen release contract")
+
+              versions = client.get_collection(
+                  f"/v1/apps/{APP_ID}/appStoreVersions",
+                  operation="read iOS App Store versions",
+                  params={"filter[platform]": "IOS", "limit": 50},
+              )
+              matching_versions = [
+                  item
+                  for item in versions
+                  if str(attributes(item).get("versionString") or "") == VERSION
+              ]
+              if len(matching_versions) != 1:
+                  raise RuntimeError("Expected exactly one iOS App Store version 1.1")
+              version = matching_versions[0]
+              version_id = str(version.get("id") or "")
+              version_attributes = attributes(version)
+              if (
+                  not version_id
+                  or version_attributes.get("platform") != "IOS"
+                  or version_attributes.get("appVersionState") != VERSION_STATE
+                  or version_attributes.get("releaseType") != RELEASE_TYPE
+              ):
+                  raise RuntimeError("App Store version state or release type does not match")
+
+              builds = client.get_collection(
+                  "/v1/builds",
+                  operation="read frozen iOS build",
+                  params={"filter[app]": APP_ID, "filter[version]": BUILD_NUMBER, "limit": 50},
+              )
+              matching_builds = [
+                  item for item in builds if str(attributes(item).get("version") or "") == BUILD_NUMBER
+              ]
+              if len(matching_builds) != 1:
+                  raise RuntimeError("Expected exactly one app build numbered 1000042")
+              build = matching_builds[0]
+              build_id = str(build.get("id") or "")
+              if not build_id or attributes(build).get("processingState") != BUILD_STATE:
+                  raise RuntimeError("Build 1000042 is not VALID")
+              pre_release = client.get_resource(
+                  f"/v1/builds/{build_id}/preReleaseVersion",
+                  operation="verify build pre-release version",
+              )
+              if (
+                  not pre_release
+                  or str(attributes(pre_release).get("version") or "") != VERSION
+                  or attributes(pre_release).get("platform") != "IOS"
+              ):
+                  raise RuntimeError("Build 1000042 is not an iOS 1.1 build")
+              selected_build = client.get_resource(
+                  f"/v1/appStoreVersions/{version_id}/build",
+                  operation="verify selected build",
+              )
+              if (
+                  not selected_build
+                  or str(selected_build.get("id") or "") != build_id
+                  or str(attributes(selected_build).get("version") or "") != BUILD_NUMBER
+                  or attributes(selected_build).get("processingState") != BUILD_STATE
+              ):
+                  raise RuntimeError("Version 1.1 is not linked to build 1000042 in VALID state")
+
+              localizations = client.get_collection(
+                  f"/v1/appStoreVersions/{version_id}/appStoreVersionLocalizations",
+                  operation="read version localizations",
+                  params={"limit": 50},
+              )
+              matching_localizations = [
+                  item for item in localizations if attributes(item).get("locale") == LOCALE
+              ]
+              if len(matching_localizations) != 1:
+                  raise RuntimeError("Expected exactly one zh-Hans version localization")
+              localization = matching_localizations[0]
+              localization_id = str(localization.get("id") or "")
+              localization_attributes = attributes(localization)
+              expected_localization = {
+                  "description": DESCRIPTION,
+                  "whatsNew": WHATS_NEW,
+                  "supportUrl": SUPPORT_URL,
+                  "marketingUrl": MARKETING_URL,
+              }
+              if not localization_id or any(
+                  localization_attributes.get(field) != expected
+                  for field, expected in expected_localization.items()
+              ):
+                  raise RuntimeError("The zh-Hans App Store metadata does not match the approved contract")
+              keywords = localization_attributes.get("keywords")
+              if (
+                  type(keywords) is not str
+                  or len(keywords) != KEYWORDS_LENGTH
+                  or hashlib.sha256(keywords.encode("utf-8")).hexdigest() != KEYWORDS_SHA256
+              ):
+                  raise RuntimeError("The zh-Hans keywords do not match the approved protected baseline")
+              placeholder = re.compile(r"(?i)\b(TODO|TBD|CHANGEME|PLACEHOLDER)\b|<[^>]+>")
+              if any(
+                  placeholder.search(value) for value in expected_localization.values()
+              ):
+                  raise RuntimeError("The approved zh-Hans App Store metadata contains a placeholder")
+
+              review_detail = client.get_resource(
+                  f"/v1/appStoreVersions/{version_id}/appStoreReviewDetail",
+                  operation="read App Review information",
+              )
+              review_attributes = attributes(review_detail)
+              for field in REQUIRED_REVIEW_FIELDS:
+                  value = review_attributes.get(field)
+                  if isinstance(value, str) and value:
+                      SENSITIVE_RUNTIME_VALUES.add(value)
+              notes = review_attributes.get("notes")
+              if isinstance(notes, str) and notes:
+                  SENSITIVE_RUNTIME_VALUES.add(notes)
+              if not review_detail or not all(
+                  present(review_attributes.get(field)) for field in REQUIRED_REVIEW_FIELDS
+              ):
+                  raise RuntimeError("Review contact information and demo credentials are incomplete")
+              if review_attributes.get("demoAccountRequired") is not True:
+                  raise RuntimeError("App Review must require the approved demo account")
+              if notes != REVIEW_NOTES or placeholder.search(str(notes or "")):
+                  raise RuntimeError("App Review notes do not match the approved contract")
+
+              validate_screenshot_contract(
+                  client,
+                  localization_id,
+                  IPHONE_DISPLAY_TYPE,
+                  "iPhone",
+                  approved_iphone_screenshots,
+              )
+              validate_screenshot_contract(
+                  client,
+                  localization_id,
+                  IPAD_DISPLAY_TYPE,
+                  "iPad",
+                  IPAD_APPROVED_SCREENSHOTS,
+              )
+
+              app_infos = client.get_collection(
+                  f"/v1/apps/{APP_ID}/appInfos",
+                  operation="read app information records",
+                  params={"limit": 50},
+              )
+              current_app_infos = [
+                  item
+                  for item in app_infos
+                  if attributes(item).get("appStoreState") == VERSION_STATE
+              ]
+              if len(current_app_infos) != 1:
+                  raise RuntimeError("Expected exactly one PREPARE_FOR_SUBMISSION app information record")
+              current_app_info_id = str(current_app_infos[0].get("id") or "")
+              if not current_app_info_id:
+                  raise RuntimeError("The current app information record has no resource identifier")
+              age_rating = client.get_resource(
+                  f"/v1/appInfos/{current_app_info_id}/ageRatingDeclaration",
+                  operation="read current age rating declaration",
+                  allow_not_found=True,
+              )
+              age_rating_attributes = attributes(age_rating)
+              if not age_rating:
+                  raise RuntimeError("The current app information record has no age rating declaration")
+              if any(
+                  age_rating_attributes.get(field) is not expected
+                  for field, expected in REQUIRED_AGE_RATING_BOOLEANS.items()
+              ):
+                  raise RuntimeError("The current age rating boolean contract does not match")
+              if any(
+                  age_rating_attributes.get(field) != "NONE"
+                  for field in REQUIRED_AGE_RATING_NONE
+              ):
+                  raise RuntimeError("The current age rating content intensity contract does not match")
+
+              submissions = read_review_submissions(client)
+              reusable_submission, needs_item = select_reusable_submission(
+                  client, submissions, version_id
+              )
+              reuse_plan = "reuse one recoverable READY_FOR_REVIEW submission" if reusable_submission else "create one review submission"
+              item_plan = "add the unique App Store version item" if needs_item else "reuse the verified App Store version item"
+
+              if not APPLY:
+                  append_summary(
+                      [
+                          "# App Store 1.1 submission — dry run",
+                          "",
+                          f"- App identity: verified `{APP_ID}` / `{BUNDLE_ID}`",
+                          f"- Version: `{VERSION}` in `{VERSION_STATE}` with `{RELEASE_TYPE}` release",
+                          f"- Selected build: `{BUILD_NUMBER}` in `{BUILD_STATE}` and linked to iOS `{VERSION}`",
+                          f"- Approved `{LOCALE}` metadata and protected keywords baseline: exact contract verified",
+                          "- Review notes, contact, required demo account, and credentials: exact contract verified (protected values suppressed)",
+                          "- Screenshot contracts: exact approved iPhone and iPad inventories verified",
+                          "- Current PREPARE_FOR_SUBMISSION age rating contract: verified",
+                          "",
+                          "## Sanitized mutation plan",
+                          "",
+                          f"- {reuse_plan}",
+                          f"- {item_plan}",
+                          "- Mark the review submission as submitted",
+                          "- Poll App Store Connect until the submission is WAITING_FOR_REVIEW, IN_REVIEW, or a later accepted state",
+                          "",
+                          "> No mutation was sent. This workflow does not change release type, privacy, age rating, screenshots, metadata, review contacts, demo credentials, or updater data.",
+                      ]
+                  )
+                  print("Dry-run preflight passed; a sanitized submission plan was written.")
+                  return
+
+              submission = reusable_submission
+              if not submission:
+                  submission, needs_item = create_submission_with_recovery(client, version_id)
+              submission_id = str(submission.get("id") or "")
+              if not submission_id:
+                  raise RuntimeError("The review submission has no resource identifier")
+              current_state = read_submission_state(client, submission_id)
+              if current_state != "READY_FOR_REVIEW":
+                  raise RuntimeError("The review submission is not READY_FOR_REVIEW")
+              if needs_item:
+                  add_item_with_recovery(client, submission_id, version_id)
+              else:
+                  assert_submission_item(client, submission_id, version_id)
+
+              final_state = submit_with_recovery(client, submission_id)
+              if final_state not in SUBMITTED_STATES:
+                  raise RuntimeError("Post-submit state verification failed")
+              append_summary(
+                  [
+                      "# App Store 1.1 submission — applied",
+                      "",
+                      f"- App identity: verified `{APP_ID}` / `{BUNDLE_ID}`",
+                      f"- Submitted version/build: `{VERSION}` / `{BUILD_NUMBER}`",
+                      f"- Verified App Store Connect state after polling: `{final_state}`",
+                      "- Review submission contains exactly one item for the frozen App Store version",
+                      "- Release type, privacy, age rating, screenshots, metadata, review contacts, demo credentials, and updater data were not modified",
+                  ]
+              )
+              print("App Store submission was accepted and verified by polling.")
+
+
+          try:
+              main()
+          except Exception as exc:
+              safe_message = safe_error_message(exc)
+              append_summary(
+                  [
+                      "# App Store 1.1 submission — failed closed",
+                      "",
+                      f"- Sanitized error: {safe_message}",
+                      "- No credentials, contact values, demo credentials, or Apple resource identifiers are included in this summary.",
+                  ]
+              )
+              print("App Store submission failed closed: " + safe_message, file=sys.stderr)
+              raise SystemExit(1)
+          PY
