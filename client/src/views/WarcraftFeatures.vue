@@ -47,7 +47,7 @@ interface InstalledAddonInfo {
   path: string | null
 }
 
-type Trp3PluginId = 'total-rp-3' | 'total-rp-3-extended'
+type Trp3PluginId = 'total-rp-3' | 'total-rp-3-extended' | 'musician'
 type PluginCardId = Trp3PluginId | 'rpbox'
 type PluginState = 'locked' | 'checking' | 'idle' | 'missing' | 'update' | 'ready'
 
@@ -147,6 +147,12 @@ const pluginCards = computed<PluginCard[]>(() => [
     '道具、剧本、背包等拓展功能',
     'ri-tools-line',
   ),
+  buildTrp3Card(
+    'musician',
+    'Musician',
+    '在游戏中演奏并聆听其他玩家的音乐',
+    'ri-music-2-line',
+  ),
   buildRpboxCard(),
 ])
 
@@ -197,7 +203,10 @@ async function bindProgressEvents() {
 }
 
 function isKnownPluginId(pluginId: string): pluginId is PluginCardId {
-  return pluginId === 'total-rp-3' || pluginId === 'total-rp-3-extended' || pluginId === 'rpbox'
+  return pluginId === 'total-rp-3'
+    || pluginId === 'total-rp-3-extended'
+    || pluginId === 'musician'
+    || pluginId === 'rpbox'
 }
 
 function getNativeErrorMessage(e: any, fallback: string) {
@@ -471,7 +480,7 @@ async function checkTrp3Addons() {
   } catch (e: any) {
     trp3Latest.value = null
     trp3Status.value = mergeTrp3Latest(localStatus, null)
-    throw new Error(e?.message || '获取 TRP/TRPEx 最新版本失败')
+    throw new Error(e?.message || '获取插件最新版本失败')
   }
 }
 

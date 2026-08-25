@@ -6,6 +6,7 @@ const (
 	RPDBWorkTypeItemShowcase = "item_showcase"
 	RPDBWorkTypeTransmog     = "transmog"
 	RPDBWorkTypeHomeShowcase = "home_showcase"
+	RPDBWorkTypeMusicianMIDI = "musician_midi"
 
 	RPDBStatusDraft     = "draft"
 	RPDBStatusPending   = "pending"

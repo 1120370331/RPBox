@@ -10,6 +10,7 @@ import {
   listRPDBDrafts,
   publishRPDBDraft,
   resolveRPDBMediaURL,
+  uploadRPDBMusicianMIDI,
   updateRPDBDraft,
   type RPDBDraft,
   type RPDBGuideStep,
@@ -67,6 +68,7 @@ const coverInputRef = ref<HTMLInputElement | null>(null)
 const topicDraft = ref('')
 const showAllStyleTags = ref(false)
 const uploadingFurnitureIcon = ref<RPDBReference | null>(null)
+const musicianMIDIUploading = ref(false)
 const customStyleTags = ref<string[]>([])
 const officialSelectedTags = ref<Tag[]>([])
 const titleTouched = ref(false)
@@ -117,6 +119,12 @@ const homeDetails = reactive({
 const transmogDetails = reactive({
   share_code: '',
 })
+const musicianMIDIDetails = reactive({
+  midi_url: '',
+  midi_name: '',
+  midi_size: 0,
+  musician_code: '',
+})
 const typeOptions = computed<Array<{ id: RPDBWorkType; icon: string; title: string; description: string }>>(() => [
   {
     id: 'item_showcase',
@@ -135,6 +143,12 @@ const typeOptions = computed<Array<{ id: RPDBWorkType; icon: string; title: stri
     icon: 'ri-home-heart-line',
     title: t('rpdb.editor.workType.home.title'),
     description: t('rpdb.editor.workType.home.description'),
+  },
+  {
+    id: 'musician_midi',
+    icon: 'ri-music-2-line',
+    title: t('rpdb.editor.workType.musicianMidi.title'),
+    description: t('rpdb.editor.workType.musicianMidi.description'),
   },
 ])
 const availabilityOptions = computed(() => ['available', 'limited', 'removed', 'unknown'].map(value => ({
@@ -190,7 +204,7 @@ const spaceTypeOptions = computed(() => ['indoor', 'outdoor', 'indoor_outdoor'].
 })))
 
 const isEdit = computed(() => Boolean(editingWorkId.value))
-const isGuideType = computed(() => form.type !== 'home_showcase')
+const isGuideType = computed(() => form.type !== 'home_showcase' && form.type !== 'musician_midi')
 const localDraftKey = computed(() => `rpdb-editor-draft:${currentDraftId.value || 'new'}`)
 const coverPreviewURL = computed(() => resolveRPDBMediaURL(form.cover_image))
 const previewMedia = computed(() => form.media?.find(item => item.type === 'image' || item.type === 'gif'))
@@ -237,11 +251,13 @@ const visibleStyleTags = computed(() => {
 const typeFormTitle = computed(() => {
   if (form.type === 'home_showcase') return t('rpdb.editor.typeForm.home.title')
   if (form.type === 'transmog') return t('rpdb.editor.typeForm.transmog.title')
+  if (form.type === 'musician_midi') return t('rpdb.editor.typeForm.musicianMidi.title')
   return t('rpdb.editor.typeForm.item.title')
 })
 const typeFormDescription = computed(() => {
   if (form.type === 'home_showcase') return t('rpdb.editor.typeForm.home.description')
   if (form.type === 'transmog') return t('rpdb.editor.typeForm.transmog.description')
+  if (form.type === 'musician_midi') return t('rpdb.editor.typeForm.musicianMidi.description')
   return t('rpdb.editor.typeForm.item.description')
 })
 const titleHasError = computed(() => titleTouched.value && !form.title.trim())
@@ -263,6 +279,15 @@ function selectWorkType(type: RPDBWorkType) {
     ensureHomeFurniture()
     return
   }
+  if (type === 'musician_midi') {
+    form.references = []
+    form.transmog_slots = []
+    form.guide_steps = []
+    form.armor_type = ''
+    form.bind_type = ''
+    form.faction = ''
+    return
+  }
   if (type === 'item_showcase') {
     form.armor_type = ''
   }
@@ -271,7 +296,7 @@ function selectWorkType(type: RPDBWorkType) {
 }
 
 function ensurePrimaryReference(type: RPDBWorkType = form.type) {
-  if (type === 'home_showcase') return
+  if (type === 'home_showcase' || type === 'musician_midi') return
   if (!form.references?.length) {
     addReference(type === 'transmog' ? 'transmog' : 'item')
     return
@@ -540,6 +565,61 @@ async function uploadFurnitureIcon(event: Event, reference: RPDBReference) {
   }
 }
 
+function formatMIDIFileSize(size: number) {
+  if (!size) return ''
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+async function uploadMusicianMIDI(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!/\.(mid|midi|kar)$/i.test(file.name)) {
+    toast.error(t('rpdb.editor.validation.musicianMidiFormat'))
+    input.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.error(t('rpdb.editor.validation.musicianMidiSize'))
+    input.value = ''
+    return
+  }
+
+  musicianMIDIUploading.value = true
+  try {
+    const result = await uploadRPDBMusicianMIDI(file) as { url?: string; name?: string; size?: number; data?: { url?: string; name?: string; size?: number } }
+    const uploaded = result.data || result
+    if (!uploaded.url) throw new Error(t('rpdb.editor.toast.uploadMissingUrl'))
+    musicianMIDIDetails.midi_url = uploaded.url
+    musicianMIDIDetails.midi_name = uploaded.name || file.name
+    musicianMIDIDetails.midi_size = uploaded.size || file.size
+    toast.success(t('rpdb.editor.toast.musicianMidiUploaded'))
+  } catch (error) {
+    toast.error((error as Error).message)
+  } finally {
+    musicianMIDIUploading.value = false
+    input.value = ''
+  }
+}
+
+function removeMusicianMIDI() {
+  Object.assign(musicianMIDIDetails, { midi_url: '', midi_name: '', midi_size: 0 })
+}
+
+async function copyMusicianCode() {
+  const code = musicianMIDIDetails.musician_code.replace(/\s+/g, '')
+  if (!code) return
+  musicianMIDIDetails.musician_code = code
+  try {
+    await navigator.clipboard.writeText(code)
+    toast.success(t('rpdb.editor.toast.musicianCodeCopied'))
+  } catch {
+    toast.error(t('rpdb.editor.toast.musicianCodeCopyFailed'))
+  }
+}
+
 function toggleStyleTag(tag: Pick<Tag, 'id' | 'name'>) {
   if (!tag.id) {
     const selected = customStyleTags.value.some(name => name.toLowerCase() === tag.name.toLowerCase())
@@ -659,6 +739,7 @@ function resetEditorForm() {
     space_type: 'indoor_outdoor',
   })
   transmogDetails.share_code = ''
+  Object.assign(musicianMIDIDetails, { midi_url: '', midi_name: '', midi_size: 0, musician_code: '' })
   customStyleTags.value = []
   officialSelectedTags.value = []
   titleTouched.value = false
@@ -676,7 +757,7 @@ function normalizeEditorCollections() {
 function applyDraftPayload(draft: RPDBDraft) {
   resetEditorForm()
   Object.assign(form, draft.payload || {})
-  if (draft.type === 'item_showcase' || draft.type === 'transmog' || draft.type === 'home_showcase') {
+  if (draft.type === 'item_showcase' || draft.type === 'transmog' || draft.type === 'home_showcase' || draft.type === 'musician_midi') {
     form.type = draft.type
   }
   normalizeEditorCollections()
@@ -688,6 +769,11 @@ function applyDraftPayload(draft: RPDBDraft) {
     Object.assign(homeDetails, form.extra || {})
   } else if (form.type === 'transmog') {
     transmogDetails.share_code = String(form.extra?.share_code || '')
+  } else if (form.type === 'musician_midi') {
+    musicianMIDIDetails.midi_url = String(form.extra?.midi_url || '')
+    musicianMIDIDetails.midi_name = String(form.extra?.midi_name || '')
+    musicianMIDIDetails.midi_size = Number(form.extra?.midi_size || 0)
+    musicianMIDIDetails.musician_code = String(form.extra?.musician_code || '')
   }
   ensureEditorDefaults()
 }
@@ -929,6 +1015,15 @@ function syncExtraDetails() {
     }
     return
   }
+  if (form.type === 'musician_midi') {
+    form.extra = {
+      midi_url: musicianMIDIDetails.midi_url,
+      midi_name: musicianMIDIDetails.midi_name,
+      midi_size: musicianMIDIDetails.midi_size,
+      musician_code: musicianMIDIDetails.musician_code.replace(/\s+/g, ''),
+    }
+    return
+  }
   form.extra = form.type === 'transmog'
     ? { share_code: transmogDetails.share_code }
     : {}
@@ -948,6 +1043,12 @@ function ensureEditorDefaults() {
   }
   if (form.type === 'home_showcase') {
     ensureHomeFurniture()
+    return
+  }
+  if (form.type === 'musician_midi') {
+    form.references = []
+    form.transmog_slots = []
+    form.guide_steps = []
     return
   }
   ensurePrimaryReference()
@@ -978,6 +1079,11 @@ async function save(status: 'draft' | 'published') {
     toast.error(t('rpdb.editor.validation.titleRequired'))
     scrollToSection('section-basics')
     window.setTimeout(() => document.getElementById('rpdb-title')?.focus(), 250)
+    return
+  }
+  if (form.type === 'musician_midi' && !musicianMIDIDetails.midi_url && !musicianMIDIDetails.musician_code.trim()) {
+    toast.error(t('rpdb.editor.validation.musicianMidiRequired'))
+    scrollToSection('section-details')
     return
   }
   saving.value = true
@@ -1061,7 +1167,7 @@ onBeforeUnmount(() => {
   autoSaveTimer = null
 })
 
-watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, { deep: true })
+watch([form, homeDetails, transmogDetails, musicianMIDIDetails, customStyleTags], scheduleAutoSave, { deep: true })
 </script>
 
 <template>
@@ -1170,7 +1276,7 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
             <span>{{ t('rpdb.editor.field.summary') }} <em class="optional-label">{{ t('rpdb.editor.common.optional') }}</em></span>
             <textarea v-model="form.summary" maxlength="512" :placeholder="t('rpdb.editor.placeholder.summary')"></textarea>
           </label>
-          <label v-if="form.type !== 'home_showcase'">
+          <label v-if="form.type !== 'home_showcase' && form.type !== 'musician_midi'">
             <span>{{ t('rpdb.editor.field.availability') }}</span>
             <RPDBSelect v-model="form.availability_status" :options="availabilityOptions" />
           </label>
@@ -1259,6 +1365,48 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
           <div class="slot-helper-panel">
             <i class="ri-shirt-line"></i>
             <span><b>{{ t('rpdb.editor.transmog.slotsTitle') }}</b><small>{{ t('rpdb.editor.transmog.slotsHelp') }}</small></span>
+          </div>
+        </section>
+
+        <section v-else-if="form.type === 'musician_midi'" class="type-form-panel musician-midi-type-form" data-testid="musician-midi-editor-fields">
+          <div class="musician-code-flow">
+            <div class="musician-code-flow__intro">
+              <span>{{ t('rpdb.editor.musicianMidi.recommended') }}</span>
+              <div><b>{{ t('rpdb.editor.musicianMidi.codeTitle') }}</b><small>{{ t('rpdb.editor.musicianMidi.codeHelp') }}</small></div>
+              <a href="https://musician.lenwe.io/import/" target="_blank" rel="noopener"><i class="ri-external-link-line"></i>{{ t('rpdb.editor.action.openMusicianConverter') }}</a>
+            </div>
+            <ol>
+              <li>{{ t('rpdb.editor.musicianMidi.stepConvert') }}</li>
+              <li>{{ t('rpdb.editor.musicianMidi.stepPaste') }}</li>
+              <li>{{ t('rpdb.editor.musicianMidi.stepImport') }}</li>
+            </ol>
+            <label>
+              <span>{{ t('rpdb.editor.musicianMidi.codeLabel') }}</span>
+              <textarea v-model="musicianMIDIDetails.musician_code" data-testid="musician-code-input" :placeholder="t('rpdb.editor.musicianMidi.codePlaceholder')" maxlength="2097152" spellcheck="false"></textarea>
+            </label>
+            <div class="musician-code-flow__actions">
+              <small>{{ t('rpdb.editor.musicianMidi.codeLength', { count: musicianMIDIDetails.musician_code.replace(/\s+/g, '').length }) }}</small>
+              <button type="button" :disabled="!musicianMIDIDetails.musician_code.trim()" @click="copyMusicianCode"><i class="ri-file-copy-line"></i>{{ t('rpdb.editor.action.copyMusicianCode') }}</button>
+            </div>
+          </div>
+
+          <div class="musician-midi-optional"><span>{{ t('rpdb.editor.common.optional') }}</span>{{ t('rpdb.editor.musicianMidi.rawFileTitle') }}</div>
+          <div class="musician-midi-upload">
+            <i class="ri-music-2-line"></i>
+            <div>
+              <b>{{ musicianMIDIDetails.midi_name || t('rpdb.editor.musicianMidi.emptyTitle') }}</b>
+              <small v-if="musicianMIDIDetails.midi_url">
+                {{ formatMIDIFileSize(musicianMIDIDetails.midi_size) }} · {{ t('rpdb.editor.musicianMidi.ready') }}
+              </small>
+              <small v-else>{{ t('rpdb.editor.musicianMidi.rawFileHelp') }}</small>
+            </div>
+            <label>
+              <input type="file" accept=".mid,.midi,.kar,audio/midi,audio/x-midi" data-testid="musician-midi-file-input" @change="uploadMusicianMIDI">
+              <span><i :class="musicianMIDIUploading ? 'ri-loader-4-line spinning' : 'ri-upload-cloud-2-line'"></i>{{ musicianMIDIUploading ? t('rpdb.editor.status.uploading') : t('rpdb.editor.action.uploadMusicianMidi') }}</span>
+            </label>
+            <button v-if="musicianMIDIDetails.midi_url" type="button" class="remove" @click="removeMusicianMIDI">
+              <i class="ri-delete-bin-line"></i>{{ t('rpdb.editor.action.remove') }}
+            </button>
           </div>
         </section>
 
@@ -1398,8 +1546,9 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
             <span>{{ t('rpdb.editor.writing.body') }}</span>
             <span v-if="form.type === 'item_showcase'">{{ t('rpdb.editor.writing.itemGuide') }}</span>
             <span v-else-if="form.type === 'transmog'">{{ t('rpdb.editor.writing.transmogGuide') }}</span>
-            <span v-else>{{ t('rpdb.editor.writing.homeNotes') }}</span>
-            <span>{{ form.type === 'home_showcase' ? t('rpdb.editor.writing.shareCode') : t('rpdb.editor.writing.versionNotes') }}</span>
+            <span v-else-if="form.type === 'home_showcase'">{{ t('rpdb.editor.writing.homeNotes') }}</span>
+            <span v-else>{{ t('rpdb.editor.writing.musicianMidiNotes') }}</span>
+            <span>{{ form.type === 'home_showcase' ? t('rpdb.editor.writing.shareCode') : form.type === 'musician_midi' ? t('rpdb.editor.writing.midiFile') : t('rpdb.editor.writing.versionNotes') }}</span>
           </div>
         </div>
 
@@ -1489,7 +1638,7 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
           </div>
         </section>
 
-        <section v-else class="home-editor">
+        <section v-else-if="form.type === 'home_showcase'" class="home-editor">
           <div class="section-heading">
             <div>
               <span>{{ t('rpdb.editor.workType.home.title') }}</span>
@@ -1498,11 +1647,20 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
             </div>
           </div>
         </section>
+        <section v-else class="home-editor">
+          <div class="section-heading">
+            <div>
+              <span>{{ t('rpdb.editor.workType.musicianMidi.title') }}</span>
+              <h2>{{ t('rpdb.editor.musicianMidi.contentTitle') }}</h2>
+              <p>{{ t('rpdb.editor.musicianMidi.contentHelp') }}</p>
+            </div>
+          </div>
+        </section>
       </main>
 
       <aside class="content-inspector">
         <details open data-testid="rpdb-content-checklist">
-          <summary><span><i class="ri-list-check-3"></i>{{ t('rpdb.editor.checklist.title') }}</span><b>{{ form.type === 'transmog' ? form.transmog_slots?.filter(slot => slot.role !== 'unused').length || 0 : form.references?.length || 0 }}</b></summary>
+          <summary><span><i class="ri-list-check-3"></i>{{ t('rpdb.editor.checklist.title') }}</span><b>{{ form.type === 'transmog' ? form.transmog_slots?.filter(slot => slot.role !== 'unused').length || 0 : form.type === 'musician_midi' ? (musicianMIDIDetails.musician_code.trim() || musicianMIDIDetails.midi_url ? 1 : 0) : form.references?.length || 0 }}</b></summary>
           <div class="inspector-body">
             <div v-if="form.type === 'item_showcase'" class="checklist-stack" data-testid="item-content-checklist">
               <details
@@ -1559,6 +1717,13 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
                   </details>
                 </div>
               </details>
+            </div>
+
+            <div v-else-if="form.type === 'musician_midi'" class="checklist-stack" data-testid="musician-midi-content-checklist">
+              <div class="compact-card musician-midi-checklist">
+                <i class="ri-file-music-line"></i>
+                <span><b>{{ musicianMIDIDetails.musician_code.trim() ? t('rpdb.editor.musicianMidi.codeReady') : musicianMIDIDetails.midi_name || t('rpdb.editor.musicianMidi.emptyTitle') }}</b><small>{{ musicianMIDIDetails.musician_code.trim() || musicianMIDIDetails.midi_url ? t('rpdb.editor.musicianMidi.ready') : t('rpdb.editor.musicianMidi.required') }}</small></span>
+              </div>
             </div>
 
             <div v-else class="checklist-stack" data-testid="home-content-checklist">
@@ -1711,7 +1876,7 @@ watch([form, homeDetails, transmogDetails, customStyleTags], scheduleAutoSave, {
 .media-upload>span i{font-size:30px}
 .media-upload>span small{max-width:210px;color:var(--color-text-secondary);line-height:1.5}
 .media-upload em{position:absolute;inset:auto 8px 8px;padding:5px 8px;border-radius:999px;background:rgba(25,17,12,.68);color:#fff;font-size:10px;font-style:normal}
-.type-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.type-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
 .visibility-setup{display:grid;grid-template-columns:minmax(210px,.75fr) minmax(240px,1fr);align-items:end;gap:12px;margin-bottom:14px;padding:0 0 14px;border-bottom:1px solid var(--rpdb-line)}
 .visibility-setup__intro{display:flex;min-width:0;align-items:center;gap:9px;padding-bottom:4px}.visibility-setup__intro>i{display:grid;width:30px;height:30px;flex:0 0 auto;place-items:center;border-radius:7px;background:var(--rpdb-soft);color:var(--color-accent);font-size:17px}.visibility-setup__intro>span{display:grid;min-width:0;gap:3px}.visibility-setup__intro b{font-size:12px}.visibility-setup__intro small,.visibility-empty{color:var(--color-text-secondary);font-size:10px;font-weight:500;line-height:1.45}.visibility-empty{display:flex;min-height:34px;align-items:center;padding:7px 9px;border:1px dashed var(--rpdb-line);border-radius:7px;background:var(--rpdb-muted)}
 .visibility-setup>[data-testid="visibility-guild-select"]{grid-column:2}
@@ -1741,6 +1906,12 @@ label>span{font-size:12px}
 input,textarea,select{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main);font:inherit}
 textarea{min-height:70px;resize:vertical}
 .transmog-code-field textarea{min-height:92px;font:11px/1.55 Consolas,'SFMono-Regular',monospace;overflow-wrap:anywhere}
+.musician-midi-type-form{display:grid;gap:14px}.musician-code-flow{display:grid;gap:12px;padding:16px;border:1px solid color-mix(in srgb,var(--color-accent) 38%,var(--rpdb-line));border-radius:12px;background:var(--rpdb-soft)}.musician-code-flow__intro{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}.musician-code-flow__intro>span,.musician-midi-optional>span{padding:3px 7px;border-radius:999px;background:var(--color-accent);color:#fff;font-size:10px;font-weight:800}.musician-code-flow__intro>div{display:grid;gap:3px}.musician-code-flow__intro small{color:var(--color-text-secondary);font-weight:500;line-height:1.5}.musician-code-flow__intro>a,.musician-code-flow__actions button{display:inline-flex;min-height:34px;align-items:center;justify-content:center;gap:5px;padding:0 10px;border:1px solid var(--rpdb-line);border-radius:8px;background:var(--color-panel-bg);color:var(--color-accent);font-weight:700;text-decoration:none}.musician-code-flow ol{display:grid;gap:5px;margin:0;padding-left:22px;color:var(--color-text-secondary);font-size:11px;line-height:1.5}.musician-code-flow textarea{min-height:128px;font:11px/1.5 Consolas,'SFMono-Regular',monospace;overflow-wrap:anywhere}.musician-code-flow__actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.musician-code-flow__actions small{color:var(--color-text-secondary)}.musician-code-flow__actions button:disabled{cursor:not-allowed;opacity:.5}.musician-midi-optional{display:flex;align-items:center;gap:7px;color:var(--color-text-secondary);font-size:11px;font-weight:700}
+.musician-midi-upload{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:18px;border:1px dashed color-mix(in srgb,var(--color-accent) 55%,var(--rpdb-line));border-radius:12px;background:var(--rpdb-soft)}
+.musician-midi-upload>i{font-size:34px;color:var(--color-accent)}
+.musician-midi-upload>div{display:grid;gap:4px;min-width:0}.musician-midi-upload>div b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.musician-midi-upload>div small{color:var(--color-text-secondary)}
+.musician-midi-upload label{cursor:pointer}.musician-midi-upload label input{display:none}.musician-midi-upload label span,.musician-midi-upload>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:9px;background:var(--color-panel-bg);color:var(--color-accent);font-weight:700}.musician-midi-upload>button{color:var(--color-danger,#b83232)}
+.musician-midi-checklist{display:flex;align-items:center;gap:10px;padding:12px}.musician-midi-checklist>i{font-size:24px;color:var(--color-accent)}.musician-midi-checklist>span{display:grid;gap:3px;min-width:0}.musician-midi-checklist b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.musician-midi-checklist small{color:var(--color-text-secondary)}
 .check-list{display:grid;gap:4px;margin-bottom:12px}
 .check-list>div{display:grid;grid-template-columns:20px 1fr auto;gap:7px;align-items:center;padding:8px 0;color:var(--color-text-secondary)}
 .check-list i,.check-list b{color:var(--btn-danger-bg)}
@@ -1808,6 +1979,8 @@ textarea{min-height:70px;resize:vertical}
 .slot-extra-grid{display:grid;gap:7px;padding:9px;border-top:1px solid var(--rpdb-line);background:var(--color-panel-bg)}
 @media(max-width:1160px){.media-strip{grid-template-columns:1fr 1fr}.media-strip__heading{grid-column:1/-1}.publish-panel{border-top:1px solid var(--rpdb-line);border-left:0}.publish-panel .check-list{grid-template-columns:1fr 1fr;gap:0 18px}.publish-actions{grid-template-columns:repeat(3,1fr)}.editor-lower{grid-template-columns:1fr}.content-inspector{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.editor-heading,.writing-heading,.section-heading{align-items:flex-start;flex-direction:column}.media-strip,.editor-upper,.tomtom-import{grid-template-columns:1fr}.tomtom-import__mark{padding:0 0 10px;border-right:0;border-bottom:1px solid var(--rpdb-line)}.tomtom-import>button{width:100%}.type-cards,.metadata-grid,.context-fields,.home-grid,.content-inspector{grid-template-columns:1fr}.span-2{grid-column:auto}.publish-panel .check-list{grid-template-columns:1fr}.publish-actions{grid-template-columns:1fr}.guide-step-list article{grid-template-columns:32px 1fr}.step-coordinate{grid-column:2;padding:10px 0 0;border-top:1px dashed var(--rpdb-line);border-left:0}.step-grid{grid-template-columns:1fr}.outline-chips{justify-content:flex-start}}
+@media(max-width:760px){.musician-midi-upload{grid-template-columns:auto minmax(0,1fr)}.musician-midi-upload label,.musician-midi-upload>button{grid-column:1/-1}.musician-midi-upload label span,.musician-midi-upload>button{width:100%}}
+@media(max-width:760px){.musician-code-flow__intro{grid-template-columns:1fr}.musician-code-flow__intro>a{width:100%}.musician-code-flow__actions{align-items:stretch;flex-direction:column}.musician-code-flow__actions button{width:100%}}
 @media(max-width:760px){.visibility-setup{grid-template-columns:1fr}.visibility-setup>[data-testid="visibility-guild-select"]{grid-column:auto}}
 @media(max-width:480px){.editor-heading h1{font-size:26px}.media-upload{height:165px}.step-coordinate>div{grid-template-columns:1fr 1fr}}
 

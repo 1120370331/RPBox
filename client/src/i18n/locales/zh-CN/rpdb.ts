@@ -1,6 +1,6 @@
 export default {
   jumpPreview: {
-    type: { item: '魔兽物品', transmog: '幻化方案', home: '家宅分享' },
+    type: { item: '魔兽物品', transmog: '幻化方案', home: '家宅分享', musicianMidi: 'Musician MIDI' },
     unnamed: '未命名内容',
     emptySummary: '作者尚未填写内容摘要。',
     anonymous: '匿名贡献者',
@@ -67,6 +67,10 @@ export default {
         title: '家宅分享',
         description: '展示住宅空间、参观信息和分享代码',
       },
+      musicianMidi: {
+        title: 'Musician MIDI',
+        description: '上传并分享可供 Musician 导入的 MIDI 乐曲',
+      },
     },
     typeForm: {
       item: {
@@ -80,6 +84,10 @@ export default {
       home: {
         title: '家宅资料',
         description: '填写参观状态、空间类型和可导入的家宅分享代码。',
+      },
+      musicianMidi: {
+        title: 'Musician MIDI 文件',
+        description: '上传标准 MIDI 文件，支持 .mid、.midi 与 .kar，单个文件不超过 10MB。',
       },
     },
     field: {
@@ -159,6 +167,9 @@ export default {
       titleRequired: '请填写内容标题后再发布',
       visibilityRequired: '请选择内容可见度',
       guildRequired: '请选择可查看内容的公会',
+      musicianMidiRequired: '请上传 MIDI 文件或填写 Musician 音乐代码',
+      musicianMidiFormat: '仅支持 .mid、.midi 或 .kar 文件',
+      musicianMidiSize: 'Musician MIDI 文件不能超过 10MB',
     },
     style: {
       empty: '尚未选择风格标签',
@@ -169,6 +180,26 @@ export default {
     transmog: {
       slotsTitle: '幻化部位',
       slotsHelp: '在右侧内容清单中逐项填写使用的部件。',
+    },
+    musicianMidi: {
+      emptyTitle: '尚未上传 MIDI 文件',
+      help: '选择可供 Musician 转换的标准 MIDI 文件',
+      ready: '已具备可用的乐曲导入内容',
+      required: '发布前请填写音乐代码或上传 MIDI 文件',
+      contentTitle: '乐曲介绍',
+      contentHelp: '可在正文中补充曲目来源、演奏分工、推荐乐器和使用说明。',
+      recommended: '推荐',
+      codeTitle: '直接复制到 Musician 导入',
+      codeHelp: 'Musician 游戏内导入的是官方转换器生成的 Base64 音乐代码，不是原始 MIDI 文件。',
+      stepConvert: '在官方转换器中选择 MIDI 文件并点击复制。',
+      stepPaste: '把生成的完整音乐代码粘贴到下方。',
+      stepImport: '浏览者在 RPDB 点击复制，然后粘贴到 Musician 的导入框即可。',
+      codeLabel: 'Musician 音乐代码',
+      codePlaceholder: '粘贴以 TVVTOA… 开头的官方 Musician 音乐代码',
+      codeLength: '{count} 个字符',
+      codeReady: 'Musician 音乐代码已填写',
+      rawFileTitle: '同时保存原始 MIDI 文件',
+      rawFileHelp: '便于下载、二次编辑或重新转换',
     },
     media: {
       title: '图片展示',
@@ -198,6 +229,8 @@ export default {
       itemGuide: '道具获取攻略',
       transmogGuide: '幻化部件攻略',
       homeNotes: '家宅展示说明',
+      musicianMidiNotes: '乐曲说明',
+      midiFile: 'MIDI 文件',
       shareCode: '分享代码',
       versionNotes: '版本说明',
     },
@@ -239,6 +272,9 @@ export default {
       importRoute: '导入路线',
       deleteStep: '删除步骤',
       uploadHomeCode: '上传代码文件',
+      uploadMusicianMidi: '上传 MIDI',
+      openMusicianConverter: '打开官方转换器',
+      copyMusicianCode: '复制音乐代码',
       remove: '移除',
       addItem: '添加物品',
       addFurniture: '添加家具',
@@ -281,6 +317,9 @@ export default {
       furnitureIconUploaded: '家具图标已上传',
       homeCodeImported: '家宅代码已导入',
       homeCodeReadFailed: '读取家宅代码失败',
+      musicianMidiUploaded: 'Musician MIDI 文件已上传',
+      musicianCodeCopied: 'Musician 音乐代码已复制',
+      musicianCodeCopyFailed: '复制失败，请手动选择代码复制',
       draftSaved: '草稿已自动保存',
       published: '发布成功',
       revisionSubmitted: '修改草稿已发布，等待审核',

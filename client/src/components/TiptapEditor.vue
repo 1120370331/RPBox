@@ -107,6 +107,7 @@ type JumpVariant =
   | 'rpdb-item'
   | 'rpdb-transmog'
   | 'rpdb-home'
+  | 'rpdb-musician-midi'
   | 'character-card'
 
 function normalizeJumpText(value: unknown) {
@@ -136,6 +137,7 @@ function resolveJumpVariant(attrs: Record<string, any>): JumpVariant | '' {
     const rpdbType = normalizeJumpText(attrs.rpdbType)
     if (rpdbType === 'transmog') return 'rpdb-transmog'
     if (rpdbType === 'home_showcase') return 'rpdb-home'
+    if (rpdbType === 'musician_midi') return 'rpdb-musician-midi'
     return 'rpdb-item'
   }
   if (type === 'character_card') return 'character-card'
@@ -328,19 +330,23 @@ function buildJumpCard(attrs: Record<string, any>): any {
     ]
   }
 
-  if (variant === 'rpdb-item' || variant === 'rpdb-transmog' || variant === 'rpdb-home') {
+  if (variant === 'rpdb-item' || variant === 'rpdb-transmog' || variant === 'rpdb-home' || variant === 'rpdb-musician-midi') {
     const summary = normalizeJumpText(attrs.summary) || '作者尚未填写作品摘要。'
     const rpdbTitle = title || '未命名作品'
     const icon = variant === 'rpdb-transmog'
       ? 'ri-shirt-line'
       : variant === 'rpdb-home'
         ? 'ri-home-heart-line'
-        : 'ri-magic-line'
+        : variant === 'rpdb-musician-midi'
+          ? 'ri-music-2-line'
+          : 'ri-magic-line'
     const category = variant === 'rpdb-transmog'
       ? '幻化方案'
       : variant === 'rpdb-home'
         ? '家宅分享'
-        : '魔兽物品'
+        : variant === 'rpdb-musician-midi'
+          ? 'Musician MIDI'
+          : '魔兽物品'
     const mediaChildren: any[] = image
       ? [['img', { src: image, alt: '' }]]
       : [['i', { class: icon }]]

@@ -30,6 +30,7 @@ const resultTitle = computed(() => ({
   item_showcase: '魔兽物品',
   transmog: '幻化方案',
   home_showcase: '家宅分享',
+  musician_midi: 'Musician MIDI',
 }[filters.type as RPDBWorkType] || '最新发布'))
 const hotTitle = computed(() => {
   if (!filters.type) return '热度 Top3 · 近7日'
@@ -41,6 +42,7 @@ const channels: Array<{ id: RPDBWorkType | ''; icon: string; label: string }> = 
   { id: 'item_showcase', icon: 'ri-magic-line', label: '魔兽物品' },
   { id: 'transmog', icon: 'ri-shirt-line', label: '幻化方案' },
   { id: 'home_showcase', icon: 'ri-home-heart-line', label: '家宅分享' },
+  { id: 'musician_midi', icon: 'ri-music-2-line', label: 'Musician MIDI' },
 ]
 
 async function load() {
@@ -108,11 +110,11 @@ function setViewMode(mode: ViewMode) {
 }
 
 function typeLabel(type?: RPDBWorkType) {
-  return ({ item_showcase: '魔兽物品', transmog: '幻化方案', home_showcase: '家宅分享' } as const)[type || 'item_showcase']
+  return ({ item_showcase: '魔兽物品', transmog: '幻化方案', home_showcase: '家宅分享', musician_midi: 'Musician MIDI' } as const)[type || 'item_showcase']
 }
 
 function typeIcon(type?: RPDBWorkType) {
-  return ({ item_showcase: 'ri-magic-line', transmog: 'ri-shirt-line', home_showcase: 'ri-home-heart-line' } as const)[type || 'item_showcase']
+  return ({ item_showcase: 'ri-magic-line', transmog: 'ri-shirt-line', home_showcase: 'ri-home-heart-line', musician_midi: 'ri-music-2-line' } as const)[type || 'item_showcase']
 }
 
 function formatCount(value?: number) {
@@ -155,6 +157,7 @@ onMounted(() => {
           <button type="button" :class="{ active: filters.type === 'item_showcase' }" @click="setType('item_showcase')"><i class="ri-magic-line"></i>魔兽物品</button>
           <button type="button" :class="{ active: filters.type === 'transmog' }" @click="setType('transmog')"><i class="ri-shirt-line"></i>幻化方案</button>
           <button type="button" :class="{ active: filters.type === 'home_showcase' }" @click="setType('home_showcase')"><i class="ri-home-heart-line"></i>家宅分享</button>
+          <button type="button" :class="{ active: filters.type === 'musician_midi' }" @click="setType('musician_midi')"><i class="ri-music-2-line"></i>Musician MIDI</button>
         </div>
         <div class="content-nav__actions">
           <router-link to="/rpdb/my-uploads"><i class="ri-upload-cloud-2-line"></i>我的上传</router-link>

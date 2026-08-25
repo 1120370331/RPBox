@@ -91,7 +91,7 @@ trp3_addons:
   # 示例：socks5://username:password@192.0.2.10:5782
   proxy_url: ""
   cache_enabled: true
-  # TRP3/TRPEx zip 首次下载后会缓存到 storage/cache/addons/trp3，并在 OSS 启用时同步到 OSS。
+  # TRP3/TRPEx/Musician zip 首次下载后会缓存到 storage/cache/addons/trp3，并在 OSS 启用时同步到 OSS。
   cache_subdir: "cache/addons/trp3"
   max_download_mb: 256
   timeout_seconds: 15

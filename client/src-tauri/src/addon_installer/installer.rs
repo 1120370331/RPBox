@@ -88,6 +88,15 @@ const TRP3_ADDONS: &[Trp3AddonDefinition] = &[
         curseforge_url: "https://www.curseforge.com/wow/addons/total-rp-3-extended/files",
         source_url: "https://github.com/Total-RP/Total-RP-3-Extended",
     },
+    Trp3AddonDefinition {
+        id: "musician",
+        name: "Musician",
+        primary_folder: "Musician",
+        folders: &["Musician"],
+        toc: "Musician.toc",
+        curseforge_url: "https://www.curseforge.com/wow/addons/musician/files",
+        source_url: "https://github.com/LenweSaralonde/Musician",
+    },
 ];
 
 /// 获取插件安装路径
@@ -201,7 +210,7 @@ pub fn check_trp3_addons(wow_path: &str) -> Trp3AddonCheckResult {
         addons_dir: addons_dir.to_string_lossy().to_string(),
         latest_check_available: false,
         latest_check_note:
-            "本地插件检测完成；最新版本与下载地址由 RPBox 后端同步 Total RP GitHub Releases。"
+            "本地插件检测完成；最新版本与下载地址由 RPBox 后端同步插件官方 GitHub Releases。"
                 .to_string(),
         addons,
     }
@@ -229,11 +238,11 @@ where
     let addon = TRP3_ADDONS
         .iter()
         .find(|addon| addon.id == addon_id)
-        .ok_or_else(|| format!("未知的 TRP3 插件: {}", addon_id))?;
+        .ok_or_else(|| format!("未知的插件: {}", addon_id))?;
 
     let url = download_url.trim();
     if url.is_empty() {
-        return Err("缺少 TRP3 插件下载地址，请先从 RPBox 后端获取 GitHub 元数据".to_string());
+        return Err("缺少插件下载地址，请先从 RPBox 后端获取 GitHub 元数据".to_string());
     }
     validate_trp3_download_url(url, addon)?;
 
@@ -276,7 +285,7 @@ pub fn install_trp3_addon_zip_data(
     let addon = TRP3_ADDONS
         .iter()
         .find(|addon| addon.id == addon_id)
-        .ok_or_else(|| format!("未知的 TRP3 插件: {}", addon_id))?;
+        .ok_or_else(|| format!("未知的插件: {}", addon_id))?;
 
     let version_dir = get_version_dir(wow_path);
     let addons_dir = version_dir.join("Interface").join("AddOns");
@@ -312,7 +321,7 @@ pub fn uninstall_trp3_addon(
     let addon = TRP3_ADDONS
         .iter()
         .find(|addon| addon.id == addon_id)
-        .ok_or_else(|| format!("未知的 TRP3 插件: {}", addon_id))?;
+        .ok_or_else(|| format!("未知的插件: {}", addon_id))?;
 
     let version_dir = get_version_dir(wow_path);
     let addons_dir = version_dir.join("Interface").join("AddOns");
@@ -342,19 +351,19 @@ fn validate_trp3_download_url(url: &str, addon: &Trp3AddonDefinition) -> Result<
     }
 
     if parsed.scheme() != "https" {
-        return Err("TRP3 插件下载必须使用 HTTPS，开发环境仅允许本机 RPBox 后端地址".to_string());
+        return Err("插件下载必须使用 HTTPS，开发环境仅允许本机 RPBox 后端地址".to_string());
     }
 
-    if !looks_like_total_rp_github_download(url, addon) {
-        return Err("仅允许安装 Total RP 官方 GitHub Release 或其镜像下载地址".to_string());
+    if !looks_like_official_github_download(url, addon) {
+        return Err("仅允许安装插件官方 GitHub Release 或其镜像下载地址".to_string());
     }
 
     let lowered = decode_url_repeated(url);
     if !lowered.contains(".zip")
         && !lowered.contains("/zipball/")
-        && !lowered.contains("/repos/total-rp/")
+        && !lowered.contains("/releases/assets/")
     {
-        return Err("TRP3 插件下载地址必须指向 zip 包或 GitHub zipball".to_string());
+        return Err("插件下载地址必须指向 zip 包或 GitHub zipball".to_string());
     }
 
     Ok(())
@@ -382,7 +391,7 @@ fn looks_like_rpbox_trp3_download(parsed: &reqwest::Url, addon: &Trp3AddonDefini
     parsed.path().eq_ignore_ascii_case(&expected_path)
 }
 
-fn looks_like_total_rp_github_download(url: &str, addon: &Trp3AddonDefinition) -> bool {
+fn looks_like_official_github_download(url: &str, addon: &Trp3AddonDefinition) -> bool {
     let lowered = decode_url_repeated(url);
     match addon.id {
         "total-rp-3" => {
@@ -394,6 +403,12 @@ fn looks_like_total_rp_github_download(url: &str, addon: &Trp3AddonDefinition) -
             lowered.contains("github.com/total-rp/total-rp-3-extended/releases/download/")
                 || lowered.contains("api.github.com/repos/total-rp/total-rp-3-extended/zipball/")
                 || lowered.contains("codeload.github.com/total-rp/total-rp-3-extended/zip/")
+        }
+        "musician" => {
+            lowered.contains("github.com/lenwesaralonde/musician/releases/download/")
+                || lowered.contains("api.github.com/repos/lenwesaralonde/musician/zipball/")
+                || lowered.contains("api.github.com/repos/lenwesaralonde/musician/releases/assets/")
+                || lowered.contains("codeload.github.com/lenwesaralonde/musician/zip/")
         }
         _ => false,
     }
@@ -473,7 +488,7 @@ fn extract_trp3_zip(data: &[u8], dest: &Path, addon: &Trp3AddonDefinition) -> Re
     }
 
     if extracted == 0 {
-        return Err("插件包中没有可安装的 Total RP 插件文件".to_string());
+        return Err("插件包中没有可安装的插件文件".to_string());
     }
 
     Ok(())
@@ -759,4 +774,38 @@ pub fn uninstall_addon(wow_path: &str, flavor: &str) -> Result<(), String> {
         fs::remove_dir_all(&addon_path).map_err(|e| format!("删除插件失败: {}", e))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn musician_definition_supports_official_release_downloads() {
+        let musician = TRP3_ADDONS
+            .iter()
+            .find(|addon| addon.id == "musician")
+            .expect("musician definition");
+
+        assert_eq!(musician.primary_folder, "Musician");
+        assert_eq!(musician.toc, "Musician.toc");
+        assert!(validate_trp3_download_url(
+            "https://github.com/LenweSaralonde/Musician/releases/download/1.9.16.1/Musician-1.9.16.1.zip",
+            musician,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn musician_definition_rejects_untrusted_downloads() {
+        let musician = TRP3_ADDONS
+            .iter()
+            .find(|addon| addon.id == "musician")
+            .expect("musician definition");
+
+        assert!(
+            validate_trp3_download_url("https://example.com/Musician-1.9.16.1.zip", musician,)
+                .is_err()
+        );
+    }
 }

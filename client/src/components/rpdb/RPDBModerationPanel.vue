@@ -110,7 +110,7 @@ function formatDate(value?: string) {
 }
 
 function typeLabel(type: RPDBWork['type']) {
-  return type === 'item_showcase' ? '魔兽物品' : type === 'transmog' ? '幻化方案' : '家宅分享'
+  return type === 'item_showcase' ? '魔兽物品' : type === 'transmog' ? '幻化方案' : type === 'musician_midi' ? 'Musician MIDI' : '家宅分享'
 }
 
 function parseRevisionPayload(revision: RPDBRevisionReviewItem): Record<string, unknown> {

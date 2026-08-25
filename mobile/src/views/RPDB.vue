@@ -64,6 +64,7 @@ const channels: Array<{ id: RPDBWorkType | ''; label: string; icon: string }> = 
   { id: 'item_showcase', label: '物品', icon: 'ri-magic-line' },
   { id: 'transmog', label: '幻化', icon: 'ri-shirt-line' },
   { id: 'home_showcase', label: '家宅', icon: 'ri-home-heart-line' },
+  { id: 'musician_midi', label: 'MIDI', icon: 'ri-music-2-line' },
 ]
 
 const sortOptions: Array<{ value: NonNullable<ListRPDBWorksParams['sort']>; label: string }> = [
@@ -360,7 +361,7 @@ onUnmounted(() => {
             <button type="button" aria-label="关闭" @click="filterSheetOpen = false"><i class="ri-close-line" /></button>
           </header>
           <div class="filter-grid">
-            <label>
+            <label v-if="filters.type !== 'musician_midi'">
               <span>获取状态</span>
               <select v-model="advancedFilters.availability">
                 <option value="">全部状态</option>
@@ -370,7 +371,7 @@ onUnmounted(() => {
                 <option value="unknown">未知</option>
               </select>
             </label>
-            <label>
+            <label v-if="filters.type !== 'musician_midi'">
               <span>阵营</span>
               <select v-model="advancedFilters.faction">
                 <option value="">全部阵营</option>

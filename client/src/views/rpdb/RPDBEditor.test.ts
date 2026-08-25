@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import RPDBEditor from './RPDBEditor.vue'
-import { createRPDBDraft, deleteRPDBWork, getRPDBDraft } from '@/api/rpdb'
+import { createRPDBDraft, deleteRPDBWork, getRPDBDraft, uploadRPDBMusicianMIDI } from '@/api/rpdb'
 import { uploadImage } from '@/api/item'
 import i18n from '@/i18n'
 
@@ -48,6 +48,7 @@ vi.mock('@/api/rpdb', async () => {
     deleteRPDBDraft: vi.fn(),
     deleteRPDBWork: vi.fn(),
     publishRPDBDraft: vi.fn().mockResolvedValue({ work: { id: 999 } }),
+    uploadRPDBMusicianMIDI: vi.fn(),
   }
 })
 
@@ -337,10 +338,10 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('[data-testid="post-quick-jump"]').exists()).toBe(true)
   })
 
-  it('offers item, transmog and housing while keeping guides inside item and transmog', async () => {
+  it('offers item, transmog, housing, and Musician MIDI with type-specific sections', async () => {
     const wrapper = await mountEditor()
 
-    expect(wrapper.findAll('.type-cards button')).toHaveLength(3)
+    expect(wrapper.findAll('.type-cards button')).toHaveLength(4)
     expect(wrapper.find('[data-testid="item-editor-fields"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="transmog-editor-fields"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-editor-fields"]').exists()).toBe(false)
@@ -380,6 +381,33 @@ describe('RPDBEditor', () => {
     expect(wrapper.text()).not.toContain('空间亮点')
     expect(wrapper.text()).not.toContain('家宅代码预览')
     expect(wrapper.find('[data-testid="add-guide-step-bottom"]').exists()).toBe(false)
+
+    await wrapper.findAll('.type-cards button')[3].trigger('click')
+    expect(wrapper.find('[data-testid="musician-midi-editor-fields"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="musician-midi-content-checklist"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('上传 MIDI')
+    expect(wrapper.find('[data-testid="add-guide-step-bottom"]').exists()).toBe(false)
+  })
+
+  it('uploads a Musician MIDI file into the draft payload', async () => {
+    vi.mocked(uploadRPDBMusicianMIDI).mockResolvedValue({
+      url: '/uploads/rpdb/musician-midi/test.mid',
+      name: 'test.mid',
+      size: 128,
+    })
+    const wrapper = await mountEditor()
+    await wrapper.findAll('.type-cards button')[3].trigger('click')
+
+    const input = wrapper.get('[data-testid="musician-midi-file-input"]')
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [new File(['MThd\u0000\u0000\u0000\u0006'], 'test.mid', { type: 'audio/midi' })],
+    })
+    await input.trigger('change')
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('test.mid'))
+    expect(uploadRPDBMusicianMIDI).toHaveBeenCalledOnce()
+    expect(wrapper.get('[data-testid="musician-midi-content-checklist"]').text()).toContain('已具备可用的乐曲导入内容')
   })
 
   it('uses type-specific content checklists for item, transmog and housing', async () => {

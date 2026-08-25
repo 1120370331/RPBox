@@ -380,7 +380,7 @@ func normalizeRPDBDraftPayload(payload []byte) (rpdbWorkWriteRequest, []byte, er
 	}
 	if request.has("type") && request.Type != "" {
 		switch request.Type {
-		case model.RPDBWorkTypeItemShowcase, model.RPDBWorkTypeTransmog, model.RPDBWorkTypeHomeShowcase:
+		case model.RPDBWorkTypeItemShowcase, model.RPDBWorkTypeTransmog, model.RPDBWorkTypeHomeShowcase, model.RPDBWorkTypeMusicianMIDI:
 		default:
 			return request, nil, fmt.Errorf("不支持的作品类型")
 		}
@@ -407,6 +407,11 @@ func normalizeRPDBDraftPayload(payload []byte) (rpdbWorkWriteRequest, []byte, er
 			return request, nil, err
 		}
 		if err := validateRPDBURL(media.ThumbnailURL); err != nil {
+			return request, nil, err
+		}
+	}
+	if request.Type == model.RPDBWorkTypeMusicianMIDI && request.has("extra") {
+		if err := validateRPDBMusicianMIDIExtra(request.Extra, false); err != nil {
 			return request, nil, err
 		}
 	}

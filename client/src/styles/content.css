@@ -488,7 +488,7 @@
   background: var(--color-accent, #B87333);
 }
 
-.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--character-card) {
+.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--rpdb-musician-midi):not(.jump-card--character-card) {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 14px;
@@ -514,7 +514,7 @@
   object-fit: cover;
 }
 
-.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--character-card) .jump-card__content {
+.jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--rpdb-musician-midi):not(.jump-card--character-card) .jump-card__content {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -655,7 +655,8 @@
 
 .jump-card--rpdb-item,
 .jump-card--rpdb-transmog,
-.jump-card--rpdb-home {
+.jump-card--rpdb-home,
+.jump-card--rpdb-musician-midi {
   --rpdb-jump-accent: #A65F2A;
   --rpdb-jump-soft: #FBF2E8;
   display: grid;
@@ -680,9 +681,16 @@
   border-bottom: 2px solid var(--rpdb-jump-accent);
 }
 
+.jump-card--rpdb-musician-midi {
+  --rpdb-jump-accent: #7A4F87;
+  --rpdb-jump-soft: #F5EFF7;
+  border-top: 2px solid var(--rpdb-jump-accent);
+}
+
 .jump-card--rpdb-item:hover,
 .jump-card--rpdb-transmog:hover,
-.jump-card--rpdb-home:hover {
+.jump-card--rpdb-home:hover,
+.jump-card--rpdb-musician-midi:hover {
   border-color: var(--rpdb-jump-accent);
   box-shadow: 0 7px 20px rgba(var(--shadow-base), 0.16);
 }
@@ -714,7 +722,8 @@
 
 .jump-card--rpdb-item:hover .jump-card__rpdb-media img,
 .jump-card--rpdb-transmog:hover .jump-card__rpdb-media img,
-.jump-card--rpdb-home:hover .jump-card__rpdb-media img {
+.jump-card--rpdb-home:hover .jump-card__rpdb-media img,
+.jump-card--rpdb-musician-midi:hover .jump-card__rpdb-media img {
   transform: scale(1.03);
 }
 
@@ -755,7 +764,8 @@
 
 .jump-card--rpdb-item .jump-card__title,
 .jump-card--rpdb-transmog .jump-card__title,
-.jump-card--rpdb-home .jump-card__title {
+.jump-card--rpdb-home .jump-card__title,
+.jump-card--rpdb-musician-midi .jump-card__title {
   overflow: hidden;
   color: var(--color-text-main, #2C1810);
   font-size: 16px;
@@ -851,7 +861,7 @@
     padding-right: 16px;
   }
 
-  .jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--character-card) {
+  .jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--rpdb-musician-midi):not(.jump-card--character-card) {
     grid-template-columns: 1fr;
   }
 
@@ -862,7 +872,8 @@
 
   .jump-card--rpdb-item,
   .jump-card--rpdb-transmog,
-  .jump-card--rpdb-home {
+  .jump-card--rpdb-home,
+  .jump-card--rpdb-musician-midi {
     grid-template-columns: 4px 82px minmax(0, 1fr) 32px;
     height: 104px;
   }

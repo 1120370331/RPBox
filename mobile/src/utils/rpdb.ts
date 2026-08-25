@@ -4,12 +4,14 @@ const typeLabels: Record<RPDBWorkType, string> = {
   item_showcase: '魔兽物品',
   transmog: '幻化方案',
   home_showcase: '家宅分享',
+  musician_midi: 'Musician MIDI',
 }
 
 const typeIcons: Record<RPDBWorkType, string> = {
   item_showcase: 'ri-magic-line',
   transmog: 'ri-shirt-line',
   home_showcase: 'ri-home-heart-line',
+  musician_midi: 'ri-music-2-line',
 }
 
 export function getRPDBTypeLabel(type: RPDBWorkType) {

@@ -77,6 +77,7 @@ type trp3GitHubProject struct {
 	repo          string
 	filePrefix    string
 	curseForgeURL string
+	license       string
 	fallback      TRP3AddonLatestInfo
 }
 
@@ -107,6 +108,7 @@ var trp3GitHubProjects = []trp3GitHubProject{
 		repo:          "Total-RP-3",
 		filePrefix:    "totalRP3-",
 		curseForgeURL: "https://www.curseforge.com/wow/addons/total-rp-3/files",
+		license:       "Apache-2.0",
 		fallback: TRP3AddonLatestInfo{
 			ID:            "total-rp-3",
 			Name:          "Total RP 3",
@@ -129,6 +131,7 @@ var trp3GitHubProjects = []trp3GitHubProject{
 		repo:          "Total-RP-3-Extended",
 		filePrefix:    "totalRP3_Extended-",
 		curseForgeURL: "https://www.curseforge.com/wow/addons/total-rp-3-extended/files",
+		license:       "Apache-2.0",
 		fallback: TRP3AddonLatestInfo{
 			ID:            "total-rp-3-extended",
 			Name:          "Total RP 3: Extended",
@@ -141,6 +144,29 @@ var trp3GitHubProjects = []trp3GitHubProject{
 			SourceURL:     "https://github.com/Total-RP/Total-RP-3-Extended/releases/tag/2.3.5",
 			CurseForgeURL: "https://www.curseforge.com/wow/addons/total-rp-3-extended/files",
 			License:       "Apache-2.0",
+		},
+	},
+	{
+		id:            "musician",
+		name:          "Musician",
+		projectID:     290830,
+		owner:         "LenweSaralonde",
+		repo:          "Musician",
+		filePrefix:    "Musician-",
+		curseForgeURL: "https://www.curseforge.com/wow/addons/musician/files",
+		license:       "GPL-3.0",
+		fallback: TRP3AddonLatestInfo{
+			ID:            "musician",
+			Name:          "Musician",
+			ProjectID:     290830,
+			Repository:    "LenweSaralonde/Musician",
+			LatestVersion: "1.9.16.1",
+			DownloadURL:   "https://github.com/LenweSaralonde/Musician/releases/download/1.9.16.1/Musician-1.9.16.1.zip",
+			FileName:      "Musician-1.9.16.1.zip",
+			FileDate:      "2026-08-14T11:16:34Z",
+			SourceURL:     "https://github.com/LenweSaralonde/Musician/releases/tag/1.9.16.1",
+			CurseForgeURL: "https://www.curseforge.com/wow/addons/musician/files",
+			License:       "GPL-3.0",
 		},
 	},
 }
@@ -166,7 +192,7 @@ func (s *Server) downloadTRP3Addon(c *gin.Context) {
 	addonID := strings.TrimSpace(c.Param("id"))
 	project, ok := findTRP3GitHubProject(addonID)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "unknown TRP3 addon"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "unknown addon"})
 		return
 	}
 
@@ -184,7 +210,7 @@ func (s *Server) downloadTRP3Addon(c *gin.Context) {
 		}
 	}
 	if addon == nil || strings.TrimSpace(addon.DownloadURL) == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "TRP3 download metadata unavailable"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "addon download metadata unavailable"})
 		return
 	}
 
@@ -203,7 +229,7 @@ func (s *Server) downloadTRP3Addon(c *gin.Context) {
 		if s.serveTRP3AddonFromOSSCache(c, cacheKey, fileName) {
 			return
 		}
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "TRP3 自有镜像包暂不可用，请重新上传该版本"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "插件自有镜像包暂不可用，请重新上传该版本"})
 		return
 	}
 
@@ -235,7 +261,7 @@ func (s *Server) downloadTRP3Addon(c *gin.Context) {
 
 	if maxBytes := s.trp3AddonMaxDownloadBytes(); maxBytes > 0 && resp.ContentLength > maxBytes {
 		resp.Body.Close()
-		c.JSON(http.StatusBadGateway, gin.H{"error": "TRP3 插件包超过服务器允许的最大下载大小"})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "插件包超过服务器允许的最大下载大小"})
 		return
 	}
 
@@ -298,7 +324,7 @@ func (s *Server) listTRP3MirrorAddons(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"updatedAt": manifest.UpdatedAt,
 		"addons":    addons,
-		"note":      "版主上传的镜像包会优先覆盖公开 TRP3 最新版本接口；未上传的项目继续使用 GitHub Releases 兜底。",
+		"note":      "版主上传的镜像包会优先覆盖公开插件最新版本接口；未上传的项目继续使用 GitHub Releases 兜底。",
 	})
 }
 
@@ -306,7 +332,7 @@ func (s *Server) uploadTRP3MirrorAddon(c *gin.Context) {
 	addonID := strings.TrimSpace(firstNonEmpty(c.PostForm("addon_id"), c.PostForm("addonId")))
 	project, ok := findTRP3GitHubProject(addonID)
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown TRP3 addon"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown addon"})
 		return
 	}
 
@@ -332,7 +358,7 @@ func (s *Server) uploadTRP3MirrorAddon(c *gin.Context) {
 	}
 	maxBytes := s.trp3AddonMaxDownloadBytes()
 	if maxBytes > 0 && fileHeader.Size > maxBytes {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "TRP3 插件包超过服务器允许的最大上传大小"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "插件包超过服务器允许的最大上传大小"})
 		return
 	}
 
@@ -392,7 +418,7 @@ func (s *Server) uploadTRP3MirrorAddon(c *gin.Context) {
 		return
 	}
 	if maxBytes > 0 && written > maxBytes {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "TRP3 插件包超过服务器允许的最大上传大小"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "插件包超过服务器允许的最大上传大小"})
 		return
 	}
 	addonInfo.SizeBytes = written
@@ -443,7 +469,7 @@ func (s *Server) uploadTRP3MirrorAddon(c *gin.Context) {
 	addonInfo.DownloadURL = buildPublicURL(c, "/api/v1/addon/trp3/download/"+url.PathEscape(project.id))
 	addonInfo.CacheKey = cacheKey
 	addonInfo.CacheSource = s.trp3MirrorAddonCacheSource(project, addonInfo)
-	c.JSON(http.StatusOK, gin.H{"message": "TRP3 镜像包已发布", "addon": addonInfo})
+	c.JSON(http.StatusOK, gin.H{"message": "插件镜像包已发布", "addon": addonInfo})
 }
 
 func (s *Server) loadTRP3Latest(ctx context.Context) (*TRP3LatestResponse, error) {
@@ -459,7 +485,7 @@ func (s *Server) loadTRP3Latest(ctx context.Context) (*TRP3LatestResponse, error
 
 	var result *TRP3LatestResponse
 	if !s.cfg.TRP3Addons.Enabled {
-		result = s.fallbackTRP3Latest("fallback", "TRP3 GitHub 查询未启用，当前使用服务器内置版本信息。")
+		result = s.fallbackTRP3Latest("fallback", "插件 GitHub 查询未启用，当前使用服务器内置版本信息。")
 	} else {
 		result = s.fetchTRP3LatestFromGitHub(ctx)
 	}
@@ -579,7 +605,7 @@ func (m TRP3MirrorAddonInfo) toLatestInfo(project trp3GitHubProject) TRP3AddonLa
 		FileDate:      firstNonEmpty(m.FileDate, m.UploadedAt),
 		SourceURL:     sourceURL,
 		CurseForgeURL: project.curseForgeURL,
-		License:       "Apache-2.0",
+		License:       project.license,
 	}
 }
 
@@ -760,6 +786,8 @@ func trp3AddonExpectedPackage(project trp3GitHubProject) (string, string) {
 		return "totalRP3", "totalRP3.toc"
 	case "total-rp-3-extended":
 		return "totalRP3_Extended", "totalRP3_Extended.toc"
+	case "musician":
+		return "Musician", "Musician.toc"
 	default:
 		return "", ""
 	}
@@ -774,7 +802,7 @@ func validateTRP3AddonZipPackage(filePath string, project trp3GitHubProject, exp
 
 	expectedRoot, expectedTOC := trp3AddonExpectedPackage(project)
 	if expectedRoot == "" || expectedTOC == "" {
-		return "", fmt.Errorf("unknown TRP3 addon")
+		return "", fmt.Errorf("unknown addon")
 	}
 
 	foundRoot := false
@@ -852,7 +880,7 @@ func (s *Server) fetchTRP3LatestFromGitHub(ctx context.Context) *TRP3LatestRespo
 	if len(fallbacks) == 0 {
 		return &TRP3LatestResponse{
 			Source: "github",
-			Note:   "已从 Total RP GitHub Releases 获取 Total RP 3 与 Total RP 3: Extended 最新版本信息。",
+			Note:   "已从插件官方 GitHub Releases 获取最新版本信息。",
 			Addons: addons,
 		}
 	}
@@ -863,7 +891,7 @@ func (s *Server) fetchTRP3LatestFromGitHub(ctx context.Context) *TRP3LatestRespo
 	}
 	return &TRP3LatestResponse{
 		Source: source,
-		Note:   "部分 TRP3 GitHub 元数据暂时无法获取，已对失败项使用服务器内置兜底信息：" + strings.Join(fallbacks, "；"),
+		Note:   "部分插件 GitHub 元数据暂时无法获取，已对失败项使用服务器内置兜底信息：" + strings.Join(fallbacks, "；"),
 		Addons: addons,
 	}
 }
@@ -943,7 +971,7 @@ func (s *Server) fetchGitHubAddonLatest(ctx context.Context, project trp3GitHubP
 		FileDate:      firstNonEmpty(release.PublishedAt, releaseAssetDate(release, fileName)),
 		SourceURL:     sourceURL,
 		CurseForgeURL: project.curseForgeURL,
-		License:       "Apache-2.0",
+		License:       project.license,
 	}, nil
 }
 
@@ -1018,7 +1046,7 @@ func gitHubReleasePageLatest(project trp3GitHubProject, releaseURL *url.URL) (TR
 		FileName:      fileName,
 		SourceURL:     releaseURL.String(),
 		CurseForgeURL: project.curseForgeURL,
-		License:       "Apache-2.0",
+		License:       project.license,
 	}, nil
 }
 
@@ -1459,10 +1487,10 @@ func findTRP3GitHubProject(addonID string) (trp3GitHubProject, bool) {
 func validateTRP3RemoteDownloadURL(rawURL string, project trp3GitHubProject) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("TRP3 下载地址格式无效")
+		return fmt.Errorf("插件下载地址格式无效")
 	}
 	if parsed.Scheme != "https" {
-		return fmt.Errorf("TRP3 下载必须使用 HTTPS")
+		return fmt.Errorf("插件下载必须使用 HTTPS")
 	}
 
 	decoded := decodeURLRepeated(rawURL)
@@ -1471,14 +1499,14 @@ func validateTRP3RemoteDownloadURL(rawURL string, project trp3GitHubProject) err
 		!strings.Contains(decoded, "api.github.com/repos/"+repository+"/zipball/") &&
 		!strings.Contains(decoded, "api.github.com/repos/"+repository+"/releases/assets/") &&
 		!strings.Contains(decoded, "codeload.github.com/"+repository+"/zip/") {
-		return fmt.Errorf("TRP3 下载地址必须来自 Total RP 官方 GitHub 仓库或其镜像")
+		return fmt.Errorf("插件下载地址必须来自对应的官方 GitHub 仓库或其镜像")
 	}
 
 	if !strings.Contains(decoded, ".zip") &&
 		!strings.Contains(decoded, "/zipball/") &&
 		!strings.Contains(decoded, "/releases/assets/") &&
-		!strings.Contains(decoded, "/repos/total-rp/") {
-		return fmt.Errorf("TRP3 下载地址必须指向 zip 包或 GitHub zipball")
+		!strings.Contains(decoded, "/repos/"+repository+"/") {
+		return fmt.Errorf("插件下载地址必须指向 zip 包或 GitHub zipball")
 	}
 
 	return nil

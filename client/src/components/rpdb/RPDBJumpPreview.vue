@@ -35,6 +35,7 @@ const previewTypes: Record<RPDBWorkType, { labelKey: string; icon: string; varia
   item_showcase: { labelKey: 'rpdb.jumpPreview.type.item', icon: 'ri-magic-line', variant: 'item' },
   transmog: { labelKey: 'rpdb.jumpPreview.type.transmog', icon: 'ri-shirt-line', variant: 'transmog' },
   home_showcase: { labelKey: 'rpdb.jumpPreview.type.home', icon: 'ri-home-heart-line', variant: 'home' },
+  musician_midi: { labelKey: 'rpdb.jumpPreview.type.musicianMidi', icon: 'ri-music-2-line', variant: 'musician-midi' },
 }
 
 let activeCard: HTMLElement | null = null
@@ -80,10 +81,11 @@ function parseCount(value: string | null) {
 
 function resolveWorkType(card: HTMLElement): RPDBWorkType {
   const value = card.getAttribute('data-jump-rpdb-type')
-  if (value === 'transmog' || value === 'home_showcase' || value === 'item_showcase') return value
+  if (value === 'transmog' || value === 'home_showcase' || value === 'item_showcase' || value === 'musician_midi') return value
   const variant = card.getAttribute('data-jump-variant') || ''
   if (variant === 'rpdb-transmog') return 'transmog'
   if (variant === 'rpdb-home') return 'home_showcase'
+  if (variant === 'rpdb-musician-midi') return 'musician_midi'
   return 'item_showcase'
 }
 
@@ -515,6 +517,11 @@ onBeforeUnmount(() => {
   color: var(--color-text-main, #2C1810);
   font-size: 10px;
   text-overflow: ellipsis;
+}
+
+.rpdb-jump-preview--musician-midi {
+  --preview-accent: #7A4F87;
+  --preview-soft: #F5EFF7;
 }
 
 .rpdb-jump-preview__code {

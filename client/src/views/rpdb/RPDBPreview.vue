@@ -20,6 +20,7 @@ const typeLabel = computed(() => ({
   item_showcase: '魔兽物品',
   transmog: '幻化方案',
   home_showcase: '家宅分享',
+  musician_midi: 'Musician MIDI',
 }[work.value.type] || '玩家作品'))
 const homeDetails = computed<Record<string, string>>(() => {
   const value = work.value.extra
@@ -36,16 +37,20 @@ const checks = computed(() => [
   { label: '封面与媒体', done: Boolean(work.value.cover_image || work.value.media?.length) },
   { label: '正文内容', done: Boolean(work.value.content?.trim()) },
   {
-    label: work.value.type === 'home_showcase' ? '家宅资料' : '关联游戏物品',
+    label: work.value.type === 'home_showcase' ? '家宅资料' : work.value.type === 'musician_midi' ? 'MIDI 文件' : '关联游戏物品',
     done: work.value.type === 'home_showcase'
       ? Boolean(homeDetails.value.share_code)
+      : work.value.type === 'musician_midi'
+        ? Boolean(homeDetails.value.midi_url)
       : Boolean(work.value.references?.length),
   },
   {
-    label: work.value.type === 'home_showcase' ? '参观说明' : '获取攻略',
+    label: work.value.type === 'home_showcase' ? '参观说明' : work.value.type === 'musician_midi' ? '乐曲介绍' : '获取攻略',
     done: work.value.type === 'home_showcase'
       ? Boolean(homeDetails.value.visit_notes)
-      : Boolean(work.value.guide_steps?.length),
+      : work.value.type === 'musician_midi'
+        ? Boolean(work.value.content?.trim())
+        : Boolean(work.value.guide_steps?.length),
   },
 ])
 const completedChecks = computed(() => checks.value.filter(item => item.done).length)
@@ -119,9 +124,9 @@ const completedChecks = computed(() => checks.value.filter(item => item.done).le
               <section>
                 <h3>作品资料</h3>
                 <dl>
-                  <div><dt>获取状态</dt><dd>{{ availabilityLabel(work.availability_status, work.type) }}</dd></div>
+                  <div v-if="work.type !== 'musician_midi'"><dt>获取状态</dt><dd>{{ availabilityLabel(work.availability_status, work.type) }}</dd></div>
                   <div v-if="work.type === 'item_showcase'"><dt>是否绑定</dt><dd>{{ bindTypeLabel(work.bind_type) }}</dd></div>
-                  <div><dt>阵营</dt><dd>{{ factionLabel(work.faction) }}</dd></div>
+                  <div v-if="work.type !== 'musician_midi'"><dt>阵营</dt><dd>{{ factionLabel(work.faction) }}</dd></div>
                   <div v-if="work.type === 'transmog'"><dt>护甲类型</dt><dd>{{ work.armor_type || '不限' }}</dd></div>
                 </dl>
               </section>

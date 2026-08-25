@@ -12,6 +12,7 @@ import {
   publishRPDBDraft,
   resolveRPDBMediaUrl,
   updateRPDBDraft,
+  uploadRPDBMusicianMIDI,
   type RPDBTransmogSlot,
   type RPDBVisibility,
   type RPDBWork,
@@ -39,6 +40,7 @@ const activeStep = ref<'basic' | 'content' | 'structure' | 'publish'>('basic')
 const previewMode = ref(false)
 const coverUploading = ref(false)
 const mediaUploading = ref(false)
+const musicianMIDIUploading = ref(false)
 const coverInput = ref<HTMLInputElement | null>(null)
 const mediaInput = ref<HTMLInputElement | null>(null)
 const tags = ref<Tag[]>([])
@@ -96,6 +98,10 @@ const extra = reactive({
   copy_status: 'copyable',
   visit_status: 'friend_only',
   space_type: 'indoor_outdoor',
+  midi_url: '',
+  midi_name: '',
+  midi_size: 0,
+  musician_code: '',
 })
 const stepItems = [
   { id: 'basic' as const, label: '基础资料', icon: 'ri-file-info-line' },
@@ -116,7 +122,7 @@ const completionChecks = computed(() => [
   { label: '作品摘要', done: Boolean(form.summary?.trim()) },
   { label: '封面或展示媒体', done: Boolean(form.cover_image || form.media?.length) },
   { label: '作品正文', done: Boolean(form.content?.trim()) },
-  { label: form.type === 'home_showcase' ? '家宅资料' : '获取攻略', done: form.type === 'home_showcase' ? Boolean(extra.visit_notes || extra.share_code) : Boolean(form.guide_steps?.length) },
+  { label: form.type === 'home_showcase' ? '家宅资料' : form.type === 'musician_midi' ? '音乐代码或 MIDI' : '获取攻略', done: form.type === 'home_showcase' ? Boolean(extra.visit_notes || extra.share_code) : form.type === 'musician_midi' ? Boolean(extra.musician_code.trim() || extra.midi_url) : Boolean(form.guide_steps?.length) },
 ])
 const completionPercent = computed(() => Math.round((completionChecks.value.filter(item => item.done).length / completionChecks.value.length) * 100))
 
@@ -146,6 +152,10 @@ function applyPayload(payload: Partial<RPDBWorkPayload>) {
   extra.copy_status = String(details.copy_status || 'copyable')
   extra.visit_status = String(details.visit_status || 'friend_only')
   extra.space_type = String(details.space_type || 'indoor_outdoor')
+  extra.midi_url = String(details.midi_url || '')
+  extra.midi_name = String(details.midi_name || '')
+  extra.midi_size = Number(details.midi_size || 0)
+  extra.musician_code = String(details.musician_code || '')
   normalizeTypeFields()
 }
 
@@ -186,13 +196,15 @@ function buildPayload(): RPDBWorkPayload {
     content: form.content?.trim(),
     rp_use_cases: form.rp_use_cases?.trim(),
     effect_description: form.effect_description?.trim(),
-    extra: {
-      share_code: extra.share_code.trim(),
-      visit_notes: extra.visit_notes.trim(),
-      copy_status: extra.copy_status,
-      visit_status: extra.visit_status,
-      space_type: extra.space_type,
-    },
+    extra: form.type === 'musician_midi'
+      ? { midi_url: extra.midi_url, midi_name: extra.midi_name, midi_size: extra.midi_size, musician_code: extra.musician_code.replace(/\s+/g, '') }
+      : {
+          share_code: extra.share_code.trim(),
+          visit_notes: extra.visit_notes.trim(),
+          copy_status: extra.copy_status,
+          visit_status: extra.visit_status,
+          space_type: extra.space_type,
+        },
     status: 'draft',
     is_public: form.visibility === 'public',
     guild_id: form.visibility === 'guild' ? form.guild_ids?.[0] : undefined,
@@ -200,12 +212,18 @@ function buildPayload(): RPDBWorkPayload {
     references: (form.references || []).filter(item => item.name?.trim() || item.external_id?.trim()),
     media: (form.media || []).filter(item => item.url?.trim()).map((item, index) => ({ ...item, sort_order: index + 1 })),
     transmog_slots: form.type === 'transmog' ? (form.transmog_slots || []).filter(item => item.role !== 'unused') : [],
-    guide_steps: form.type === 'home_showcase' ? [] : (form.guide_steps || []).map((item, index) => ({ ...item, sort_order: index + 1 })),
+    guide_steps: form.type === 'home_showcase' || form.type === 'musician_midi' ? [] : (form.guide_steps || []).map((item, index) => ({ ...item, sort_order: index + 1 })),
     tag_ids: selectedTagIds.value,
   }
 }
 
 function normalizeTypeFields() {
+  if (form.type === 'musician_midi') {
+    form.references = []
+    form.guide_steps = []
+    form.transmog_slots = []
+    return
+  }
   if (form.type === 'transmog') ensureSlots()
   if (form.type === 'home_showcase') {
     form.guide_steps = []
@@ -220,6 +238,13 @@ function selectType(type: RPDBWorkType) {
   if (isEditing.value && type !== form.type) return
   form.type = type
   normalizeTypeFields()
+}
+
+function workTypeDescription(type: RPDBWorkType) {
+  if (type === 'item_showcase') return '特效物品、玩具与装备'
+  if (type === 'transmog') return '整套或散件幻化方案'
+  if (type === 'home_showcase') return '住宅展示与参观资料'
+  return '可供 Musician 导入的 MIDI 乐曲'
 }
 
 function ensureSlots() {
@@ -363,6 +388,59 @@ async function uploadMedia(event: Event) {
   }
 }
 
+async function uploadMusicianMIDI(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!/\.(mid|midi|kar)$/i.test(file.name)) {
+    toast.warning('仅支持 .mid、.midi 或 .kar 文件')
+    input.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.warning('MIDI 文件不能超过 10MB')
+    input.value = ''
+    return
+  }
+  musicianMIDIUploading.value = true
+  try {
+    const result = await uploadRPDBMusicianMIDI(file)
+    extra.midi_url = result.url
+    extra.midi_name = result.name || file.name
+    extra.midi_size = result.size || file.size
+    toast.success('Musician MIDI 文件已上传')
+  } catch (error) {
+    toast.error((error as Error).message || 'MIDI 文件上传失败')
+  } finally {
+    musicianMIDIUploading.value = false
+    input.value = ''
+  }
+}
+
+function removeMusicianMIDI() {
+  extra.midi_url = ''
+  extra.midi_name = ''
+  extra.midi_size = 0
+}
+
+async function copyMusicianCode() {
+  const code = extra.musician_code.replace(/\s+/g, '')
+  if (!code) return
+  extra.musician_code = code
+  try {
+    await navigator.clipboard.writeText(code)
+    toast.success('Musician 音乐代码已复制')
+  } catch {
+    toast.error('复制失败，请手动选择代码复制')
+  }
+}
+
+function formatMIDIFileSize(size: number) {
+  if (!size) return ''
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
 async function ensureDraft() {
   const payload = buildPayload()
   if (currentDraftId.value) {
@@ -408,6 +486,11 @@ async function publish() {
   if (!form.title.trim()) {
     activeStep.value = 'basic'
     toast.warning('请先填写作品标题')
+    return
+  }
+  if (form.type === 'musician_midi' && !extra.midi_url && !extra.musician_code.trim()) {
+    activeStep.value = 'structure'
+    toast.warning('请先上传 Musician MIDI 文件')
     return
   }
   publishing.value = true
@@ -545,8 +628,8 @@ onBeforeUnmount(() => {
         <section v-if="activeStep === 'basic'" class="editor-section">
           <header><span>01 · 基础资料</span><h2>先决定这是一份什么档案</h2><p>类型会影响后续需要填写的攻略和结构化字段。</p></header>
           <div class="type-selector">
-            <button v-for="type in (['item_showcase','transmog','home_showcase'] as RPDBWorkType[])" :key="type" type="button" :class="{ active: form.type === type }" :disabled="isEditing && form.type !== type" @click="selectType(type)">
-              <i :class="getRPDBTypeIcon(type)" /><span><b>{{ getRPDBTypeLabel(type) }}</b><small>{{ type === 'item_showcase' ? '特效物品、玩具与装备' : type === 'transmog' ? '整套或散件幻化方案' : '住宅展示与参观资料' }}</small></span>
+            <button v-for="type in (['item_showcase','transmog','home_showcase','musician_midi'] as RPDBWorkType[])" :key="type" type="button" :class="{ active: form.type === type }" :disabled="isEditing && form.type !== type" @click="selectType(type)">
+              <i :class="getRPDBTypeIcon(type)" /><span><b>{{ getRPDBTypeLabel(type) }}</b><small>{{ workTypeDescription(type) }}</small></span>
             </button>
           </div>
           <label class="field required"><span>作品标题</span><input v-model="form.title" maxlength="160" placeholder="填写玩家会搜索的准确名称"></label>
@@ -586,7 +669,7 @@ onBeforeUnmount(() => {
 
         <section v-if="activeStep === 'structure'" class="editor-section">
           <header><span>03 · 攻略数据</span><h2>补充可检索、可执行的信息</h2><p>这些字段会直接出现在详情页、筛选器与收集助手中。</p></header>
-          <div class="metadata-grid">
+          <div v-if="form.type !== 'musician_midi'" class="metadata-grid">
             <label class="field"><span>{{ form.type === 'home_showcase' ? '开放状态' : '获取状态' }}</span><select v-model="form.availability_status"><option value="available">可获取</option><option value="limited">限时获取</option><option value="removed">已绝版</option><option value="unknown">未知</option><option v-if="form.type === 'home_showcase'" value="friend_only">好友可参观</option><option v-if="form.type === 'home_showcase'" value="closed">暂不开放</option></select></label>
             <label v-if="form.type !== 'home_showcase'" class="field"><span>绑定方式</span><select v-model="form.bind_type"><option value="no">不绑定</option><option value="yes">绑定</option><option value="account">战网绑定</option><option value="pickup">拾取绑定</option><option value="use">使用绑定</option></select></label>
             <label class="field"><span>阵营</span><select v-model="form.faction"><option value="neutral">中立</option><option value="alliance">联盟</option><option value="horde">部落</option></select></label>
@@ -614,7 +697,29 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <div class="subsection"><header><h3>{{ form.type === 'home_showcase' ? '家具与引用对象' : '关联物品' }}</h3><button type="button" @click="addReference()"><i class="ri-add-line" />添加</button></header>
+          <template v-if="form.type === 'musician_midi'">
+            <div class="subsection musician-midi-section">
+              <header><h3>Musician 音乐代码</h3><small>推荐 · 可直接粘贴导入</small></header>
+              <div class="musician-code-guide">
+                <p>Musician 游戏内导入的是官方转换器生成的 Base64 音乐代码，不是原始 MIDI 文件。</p>
+                <ol><li>在官方转换器选择 MIDI 并复制结果</li><li>把完整代码粘贴到下方</li><li>浏览者可在详情页一键复制进游戏</li></ol>
+                <a href="https://musician.lenwe.io/import/" target="_blank" rel="noopener"><i class="ri-external-link-line" />打开官方转换器</a>
+              </div>
+              <label class="field"><span>Musician 音乐代码</span><textarea v-model="extra.musician_code" rows="6" maxlength="2097152" spellcheck="false" placeholder="粘贴以 TVVTOA… 开头的官方 Musician 音乐代码" /></label>
+              <button type="button" class="copy-midi-code" :disabled="!extra.musician_code.trim()" @click="copyMusicianCode"><i class="ri-file-copy-line" />复制音乐代码</button>
+            </div>
+            <div class="subsection musician-midi-section">
+              <header><h3>原始 MIDI 文件（可选）</h3><small>.mid / .midi / .kar，最大 10MB</small></header>
+              <div class="midi-file-card">
+                <i class="ri-file-music-line" />
+                <span><b>{{ extra.midi_name || '尚未上传 MIDI 文件' }}</b><small>{{ extra.midi_url ? `${formatMIDIFileSize(extra.midi_size)} · 已上传` : '上传后可在作品详情中下载' }}</small></span>
+                <label><input type="file" accept=".mid,.midi,.kar,audio/midi,audio/x-midi" hidden @change="uploadMusicianMIDI"><i :class="musicianMIDIUploading ? 'ri-loader-4-line spin' : 'ri-upload-cloud-2-line'" />{{ musicianMIDIUploading ? '上传中' : '上传 MIDI' }}</label>
+                <button v-if="extra.midi_url" type="button" @click="removeMusicianMIDI"><i class="ri-delete-bin-line" /></button>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="form.type !== 'musician_midi'" class="subsection"><header><h3>{{ form.type === 'home_showcase' ? '家具与引用对象' : '关联物品' }}</h3><button type="button" @click="addReference()"><i class="ri-add-line" />添加</button></header>
             <div class="reference-list">
               <details v-for="(reference, index) in form.references" :key="index">
                 <summary><span><i class="ri-archive-2-line" />{{ reference.name || `引用对象 ${index + 1}` }}</span><button type="button" @click.prevent="removeReference(index)"><i class="ri-delete-bin-line" /></button></summary>
@@ -623,7 +728,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-if="form.type !== 'home_showcase'" class="subsection"><header><h3>获取攻略</h3><button type="button" @click="addGuideStep"><i class="ri-add-line" />添加步骤</button></header>
+          <div v-if="form.type !== 'home_showcase' && form.type !== 'musician_midi'" class="subsection"><header><h3>获取攻略</h3><button type="button" @click="addGuideStep"><i class="ri-add-line" />添加步骤</button></header>
             <div class="tomtom-import"><textarea v-model="tomtomImport" rows="3" placeholder="/way 47 72.4 46.8 夜色镇入口&#10;每行一个坐标" /><button type="button" @click="importTomTom"><i class="ri-route-line" />批量导入</button></div>
             <div class="guide-editor-list">
               <article v-for="(step, index) in form.guide_steps" :key="index"><span>{{ index + 1 }}</span><div><label class="field"><span>步骤标题</span><input v-model="step.title"></label><label class="field"><span>说明</span><textarea v-model="step.body" rows="3" /></label><div class="coordinate-grid"><label class="field"><span>区域</span><input v-model="step.zone"></label><label class="field"><span>地图 ID</span><input v-model="step.map_id"></label><label class="field"><span>X</span><input v-model.number="step.x" type="number" step="0.01"></label><label class="field"><span>Y</span><input v-model.number="step.y" type="number" step="0.01"></label></div><label class="field"><span>前置条件</span><input v-model="step.prerequisite"></label></div><button type="button" @click="removeGuideStep(index)"><i class="ri-delete-bin-line" /></button></article>
@@ -669,6 +774,8 @@ onBeforeUnmount(() => {
 .media-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.media-upload{position:relative;display:block;width:100%;aspect-ratio:4/3;overflow:hidden;padding:0;border:1px dashed var(--color-accent);border-radius:7px;background:var(--color-card-bg);color:var(--color-secondary)}.media-upload.compact{aspect-ratio:4/3}.media-upload>span{display:grid;height:100%;place-items:center;align-content:center;gap:4px}.media-upload>span>i{font-size:28px}.media-upload b{font-size:11px}.media-upload small{color:var(--color-text-secondary);font-size:8px}.text-button{display:inline-flex;min-height:34px;align-items:center;justify-content:center;gap:4px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-card-bg);color:var(--color-secondary);font-size:10px}.text-button.danger{color:#b6382d}.media-list{display:grid;gap:8px}.media-list article{display:grid;grid-template-columns:56px minmax(0,1fr) 34px;gap:7px;padding:8px;border:1px solid var(--color-border);border-radius:7px;background:var(--color-panel-bg)}.media-preview{display:grid;width:56px;height:56px;place-items:center;overflow:hidden;border-radius:5px;background:var(--color-primary-light);color:var(--color-secondary)}.media-list article>div{display:grid;gap:5px}.media-list article>button{width:34px;height:34px;border:0;background:transparent;color:#b6382d}
 .tag-selector{display:flex;flex-wrap:wrap;gap:6px;max-height:190px;overflow:auto}.tag-selector button{min-height:30px;padding:0 9px;border:1px solid var(--color-border);border-radius:5px;background:var(--color-card-bg);color:var(--color-text-secondary);font-size:9px}.tag-selector button.active{border-color:var(--color-accent);background:var(--tag-bg);color:var(--color-secondary)}
 .subsection{display:grid;gap:11px;padding-top:14px;border-top:1px solid var(--color-border)}.subsection>header{display:flex;align-items:center;justify-content:space-between;gap:9px}.subsection>header h3{font-size:15px}.subsection>header small{color:var(--color-text-secondary);font-size:9px}.subsection>header button{display:inline-flex;min-height:32px;align-items:center;gap:4px;padding:0 9px;border:1px solid var(--color-border);border-radius:5px;background:var(--color-card-bg);color:var(--color-secondary);font-size:9px}
+.midi-file-card{display:grid;grid-template-columns:38px minmax(0,1fr) auto auto;gap:9px;align-items:center;padding:11px;border:1px dashed var(--color-accent);border-radius:7px;background:var(--color-card-bg)}.midi-file-card>i{font-size:26px;color:var(--color-accent)}.midi-file-card>span{display:grid;gap:3px;min-width:0}.midi-file-card b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.midi-file-card small{color:var(--color-text-secondary);font-size:9px}.midi-file-card label{display:inline-flex;min-height:34px;align-items:center;gap:5px;padding:0 10px;border-radius:6px;background:var(--color-primary);color:#fff;font-size:10px;font-weight:700}.midi-file-card>button{display:grid;width:34px;height:34px;place-items:center;border:1px solid var(--color-border);border-radius:6px;background:var(--color-panel-bg);color:#b6382d}
+.musician-code-guide{display:grid;gap:8px;padding:11px;border-radius:7px;background:var(--color-card-bg)}.musician-code-guide p,.musician-code-guide ol{margin:0;color:var(--color-text-secondary);font-size:10px;line-height:1.55}.musician-code-guide ol{padding-left:18px}.musician-code-guide a,.copy-midi-code{display:inline-flex;min-height:34px;align-items:center;justify-content:center;gap:5px;padding:0 10px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-panel-bg);color:var(--color-secondary);font-size:10px;font-weight:700;text-decoration:none}.copy-midi-code:disabled{opacity:.5}.musician-midi-section textarea{font-family:Consolas,'SFMono-Regular',monospace;font-size:10px;overflow-wrap:anywhere}
 .slot-list,.reference-list{display:grid;gap:7px}.slot-list details,.reference-list details{overflow:hidden;border:1px solid var(--color-border);border-radius:7px;background:var(--color-panel-bg)}.slot-list summary,.reference-list summary{display:flex;min-height:42px;align-items:center;justify-content:space-between;gap:8px;padding:0 10px;cursor:pointer;list-style:none}.slot-list summary::-webkit-details-marker,.reference-list summary::-webkit-details-marker{display:none}.slot-list summary button{display:inline-flex;min-height:34px;align-items:center;gap:6px;border:0;background:transparent;color:var(--color-text-secondary);font-size:11px}.slot-list summary button.active{color:var(--color-secondary);font-weight:800}.slot-fields,.reference-fields{display:grid;gap:8px;padding:9px;border-top:1px solid var(--color-border);background:rgba(75,54,33,.025)}.reference-list summary>span{display:inline-flex;min-width:0;align-items:center;gap:6px;overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.reference-list summary>button{width:32px;height:32px;border:0;background:transparent;color:#b6382d}
 .tomtom-import{display:grid;gap:7px;padding:9px;border:1px solid var(--color-border);border-radius:7px;background:var(--color-panel-bg)}.tomtom-import textarea{width:100%;padding:9px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);font:10px/1.5 Consolas,monospace}.tomtom-import button{min-height:36px;border:0;border-radius:6px;background:var(--color-primary);color:#fff}.guide-editor-list{display:grid;gap:9px}.guide-editor-list article{display:grid;grid-template-columns:30px minmax(0,1fr) 32px;gap:7px;padding:9px;border:1px solid var(--color-border);border-radius:7px;background:var(--color-panel-bg)}.guide-editor-list article>span{display:grid;width:30px;height:30px;place-items:center;border-radius:5px;background:var(--color-primary);color:#edbf84;font-size:10px;font-weight:800}.guide-editor-list article>div{display:grid;gap:7px}.guide-editor-list article>button{width:32px;height:32px;border:0;background:transparent;color:#b6382d}.coordinate-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .quality-panel,.visibility-panel{display:grid;gap:13px;padding:13px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-panel-bg)}.quality-score{display:grid;grid-template-columns:1fr auto;gap:4px;align-items:end}.quality-score strong{color:var(--color-secondary);font:800 28px/1 Georgia,serif}.quality-score span{color:var(--color-text-secondary);font-size:10px}.quality-score>div{grid-column:1/-1;height:7px;overflow:hidden;border-radius:4px;background:var(--color-border)}.quality-score i{display:block;height:100%;background:var(--color-accent)}.quality-panel ul{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:0;list-style:none}.quality-panel li{display:flex;align-items:center;gap:5px;color:var(--color-text-secondary);font-size:10px}.quality-panel li.done{color:var(--color-success)}.visibility-panel h3{font-size:15px}.visibility-options{display:grid;gap:6px}.visibility-options button{display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px;align-items:center;min-height:54px;padding:8px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-card-bg);text-align:left}.visibility-options button>i{display:grid;width:34px;height:34px;place-items:center;border-radius:6px;background:var(--tag-bg);color:var(--color-secondary)}.visibility-options span{display:flex;flex-direction:column}.visibility-options small{margin-top:3px;color:var(--color-text-secondary);font-size:8px}.visibility-options button.active{border-color:var(--color-accent);background:rgba(184,115,51,.06)}.guild-selector{display:flex;flex-wrap:wrap;gap:6px}.guild-selector button{display:inline-flex;min-height:32px;align-items:center;gap:5px;padding:0 8px;border:1px solid var(--color-border);border-radius:5px;background:var(--color-card-bg);font-size:9px}.guild-selector button.active{border-color:var(--color-accent);color:var(--color-secondary)}.guild-selector p{color:var(--color-text-secondary);font-size:10px}.large-preview,.delete-draft{display:inline-flex;min-height:44px;align-items:center;justify-content:center;gap:6px;border-radius:7px;font-weight:800}.large-preview{border:0;background:var(--color-primary);color:#fff}.delete-draft{border:1px solid #b6382d;background:transparent;color:#b6382d}

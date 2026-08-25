@@ -335,6 +335,7 @@ func (s *Server) setupRoutes() {
 
 			// RP 数据库投稿与个人内容
 			auth.POST("/rpdb/works", s.createRPDBWork)
+			auth.POST("/rpdb/uploads/musician-midi", s.uploadRPDBMusicianMIDI)
 			auth.PUT("/rpdb/works/:id", s.updateRPDBWork)
 			auth.DELETE("/rpdb/works/:id", s.deleteRPDBWork)
 			auth.GET("/rpdb/my/works", s.listMyRPDBWorks)
