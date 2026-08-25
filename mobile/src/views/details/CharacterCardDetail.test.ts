@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   shareRouteLink: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  updateCharacterCard: vi.fn(),
   userStore: { user: { id: 99 } as { id: number } | null },
 }))
 
@@ -58,6 +59,7 @@ vi.mock('@shared/stores/user', () => ({
 vi.mock('@/api/characterCard', () => ({
   getCharacterCard: mocks.getCharacterCard,
   getCharacterCardShare: mocks.getCharacterCardShare,
+  updateCharacterCard: mocks.updateCharacterCard,
 }))
 
 vi.mock('@/api/safety', () => ({
@@ -153,6 +155,7 @@ beforeEach(() => {
   mocks.userStore.user = { id: 99 }
   mocks.routerPush.mockResolvedValue(undefined)
   mocks.routerReplace.mockResolvedValue(undefined)
+  mocks.updateCharacterCard.mockResolvedValue({ ...publicCard, visibility: 'private' })
 })
 
 afterEach(() => {
@@ -160,6 +163,85 @@ afterEach(() => {
 })
 
 describe('mobile public character-card safety actions', () => {
+  it('shows truthful owner status and an Edit action without owner safety controls', async () => {
+    let host = await mountCard(7, {
+      status: 'published',
+      visibility: 'private',
+      review_status: 'approved',
+    })
+
+    expect(host.querySelector('.public-mark')?.textContent)
+      .toContain('characterCards.detail.ownerStatus.private')
+    expect(host.querySelector('[data-testid="character-card-safety-open"]')).toBeNull()
+    const edit = host.querySelector<HTMLButtonElement>('[data-testid="character-card-owner-edit"]')
+    expect(edit).not.toBeNull()
+    edit?.click()
+    expect(mocks.routerPush).toHaveBeenCalledWith({
+      name: 'character-card-edit',
+      params: { id: 42 },
+    })
+
+    host = await mountCard(7, {
+      status: 'published',
+      visibility: 'public',
+      review_status: 'pending',
+    })
+    expect(host.querySelector('.public-mark')?.textContent)
+      .toContain('characterCards.detail.ownerStatus.pending')
+    expect(host.querySelector('[data-testid="character-card-owner-edit"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="character-card-safety-open"]')).toBeNull()
+  })
+
+  it('preserves non-owner sharing alongside the safety action', async () => {
+    mocks.getCharacterCardShare.mockResolvedValue({
+      path: '/character-cards/42',
+      title: 'Elia Moonwhisper',
+      summary: 'A public role-playing character.',
+      updated_at: '2026-08-24T08:00:00Z',
+    })
+    mocks.shareRouteLink.mockResolvedValue(undefined)
+    const host = await mountCard(99)
+
+    expect(host.querySelector('[data-testid="character-card-safety-open"]')).not.toBeNull()
+    host.querySelector<HTMLButtonElement>('.character-share-btn')?.click()
+    await flushUi()
+
+    expect(mocks.getCharacterCardShare).toHaveBeenCalledWith(42)
+    expect(mocks.shareRouteLink).toHaveBeenCalledWith({
+      path: '/character-cards/42',
+      title: 'Elia Moonwhisper',
+      text: 'A public role-playing character.',
+      dialogTitle: 'characterCards.detail.shareDialogTitle',
+    })
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('characterCards.detail.shareSuccess')
+  })
+
+  it('confirms an owner visibility change and never exposes it to non-owners', async () => {
+    let host = await mountCard(7)
+    const makePrivate = host.querySelector<HTMLButtonElement>('[data-testid="character-card-owner-make-private"]')
+    expect(makePrivate).not.toBeNull()
+
+    makePrivate?.click()
+    await nextTick()
+    expect(mocks.updateCharacterCard).not.toHaveBeenCalled()
+    expect(host.querySelector('[data-testid="character-card-make-private-dialog"]')).not.toBeNull()
+
+    host.querySelector<HTMLButtonElement>('[data-testid="character-card-make-private-confirm"]')?.click()
+    await flushUi()
+
+    expect(mocks.updateCharacterCard).toHaveBeenCalledTimes(1)
+    expect(mocks.updateCharacterCard).toHaveBeenCalledWith(42, { visibility: 'private' })
+    expect(host.querySelector('.public-mark')?.textContent)
+      .toContain('characterCards.detail.ownerStatus.private')
+    expect(host.querySelector('[data-testid="character-card-owner-make-private"]')).toBeNull()
+    expect(host.querySelector('[data-testid="character-card-make-private-dialog"]')).toBeNull()
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('characterCards.detail.makePrivateSuccess')
+
+    host = await mountCard(99)
+    expect(host.querySelector('[data-testid="character-card-owner-make-private"]')).toBeNull()
+    expect(host.querySelector('[data-testid="character-card-safety-open"]')).not.toBeNull()
+  })
+
   it('shows the action only to a signed-in non-owner', async () => {
     let host = await mountCard(99)
     expect(host.querySelector('[data-testid="character-card-safety-open"]')).not.toBeNull()

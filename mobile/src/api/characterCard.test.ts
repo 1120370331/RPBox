@@ -1,15 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  addCharacterCardPortrait,
+  createCharacterCard,
+  deleteCharacterCard,
+  deleteCharacterCardPortrait,
   getCharacterCard,
+  getCharacterCardSources,
   getCharacterCardShare,
   isApprovedPublicCharacterCard,
   listMyCharacterCards,
+  publishCharacterCard,
+  setCharacterCardPortraitCover,
   type CharacterCardAdditionalInfo,
   type CharacterCardPersonalityTrait,
+  updateCharacterCard,
+  uploadCharacterCardPortrait,
 } from './characterCard'
 
 const requestMock = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
+  put: vi.fn(),
+  delete: vi.fn(),
 }))
 
 vi.mock('@shared/api/request', () => ({
@@ -102,5 +114,71 @@ describe('mobile character card approved DTO fields', () => {
     expect(requestMock.get).toHaveBeenCalledWith('/character-cards/42')
     expect(card.additional_info).toEqual([additionalInfo])
     expect(card.personality_traits).toEqual([personalityTrait])
+  })
+})
+
+describe('mobile character-card management API', () => {
+  it('normalizes data envelopes for sources and card mutations', async () => {
+    requestMock.get.mockResolvedValueOnce({
+      data: { sources: [{ backup_id: 8, account_id: 'MAIN', profile_id: 'elia' }] },
+    })
+    requestMock.post.mockResolvedValueOnce({
+      data: { character_card: { id: 61, user_id: 7 } },
+    })
+    requestMock.put.mockResolvedValueOnce({
+      character_card: { id: 61, user_id: 7, display_name: 'Elia' },
+    })
+    requestMock.post.mockResolvedValueOnce({
+      character_card: { id: 61, review_status: 'pending' },
+    })
+
+    await expect(getCharacterCardSources()).resolves.toEqual({
+      sources: [{ backup_id: 8, account_id: 'MAIN', profile_id: 'elia' }],
+    })
+    await expect(createCharacterCard({
+      source_type: 'backup',
+      source_backup_id: 8,
+      source_profile_id: 'elia',
+    })).resolves.toMatchObject({ id: 61, user_id: 7 })
+    await expect(updateCharacterCard(61, { display_name: 'Elia' })).resolves.toMatchObject({
+      id: 61,
+      display_name: 'Elia',
+    })
+    await expect(publishCharacterCard(61)).resolves.toMatchObject({ id: 61, review_status: 'pending' })
+
+    expect(requestMock.get).toHaveBeenCalledWith('/character-card-sources')
+    expect(requestMock.post).toHaveBeenNthCalledWith(1, '/character-cards', {
+      source_type: 'backup',
+      source_backup_id: 8,
+      source_profile_id: 'elia',
+    })
+    expect(requestMock.put).toHaveBeenCalledWith('/character-cards/61', { display_name: 'Elia' })
+    expect(requestMock.post).toHaveBeenNthCalledWith(2, '/character-cards/61/publish')
+  })
+
+  it('uses the pending portrait reference and exact gallery paths', async () => {
+    requestMock.post.mockResolvedValueOnce({ data: { portrait_image_ref: ' pending/portrait.webp ' } })
+    requestMock.post.mockResolvedValueOnce({ character_card: { id: 61, portraits: [{ id: 91 }] } })
+    requestMock.put.mockResolvedValueOnce({ character_card: { id: 61, portraits: [{ id: 91, is_cover: true }] } })
+    requestMock.delete.mockResolvedValueOnce({ character_card: { id: 61, portraits: [] } })
+    const file = new File(['portrait'], 'portrait.webp', { type: 'image/webp' })
+
+    await expect(uploadCharacterCardPortrait(file)).resolves.toBe('pending/portrait.webp')
+    const uploadCall = requestMock.post.mock.calls[0]
+    expect(uploadCall[0]).toBe('/upload/character-card-portrait')
+    expect(uploadCall[1]).toBeInstanceOf(FormData)
+    expect((uploadCall[1] as FormData).get('image')).toBe(file)
+
+    await addCharacterCardPortrait(61, 'pending/portrait.webp')
+    await setCharacterCardPortraitCover(61, 91)
+    await deleteCharacterCardPortrait(61, 91)
+    await deleteCharacterCard(61)
+
+    expect(requestMock.post).toHaveBeenNthCalledWith(2, '/character-cards/61/portraits', {
+      image_ref: 'pending/portrait.webp',
+    })
+    expect(requestMock.put).toHaveBeenCalledWith('/character-cards/61/portraits/91/cover')
+    expect(requestMock.delete).toHaveBeenNthCalledWith(1, '/character-cards/61/portraits/91')
+    expect(requestMock.delete).toHaveBeenCalledWith('/character-cards/61')
   })
 })
