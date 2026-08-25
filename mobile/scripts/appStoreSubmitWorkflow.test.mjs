@@ -66,7 +66,9 @@ test('submission workflow freezes the release contract and GitHub safety gates',
   assert.match(workflow, /ASC_EXPECTED_RELEASE_TYPE: AFTER_APPROVAL/)
   assert.match(workflow, /uses: actions\/checkout@v4/)
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/)
-  assert.match(workflow, /persist-credentials: false/)
+  assert.match(workflow, /submodules: false/)
+  assert.match(workflow, /name: Remove checkout credentials/)
+  assert.match(workflow, /git config --local --unset-all http\.https:\/\/github\.com\/\.extraheader/)
 })
 
 test('every embedded Python block compiles without executing network code', () => {

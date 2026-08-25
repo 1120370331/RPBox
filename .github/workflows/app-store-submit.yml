@@ -69,7 +69,13 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
-          persist-credentials: false
+          submodules: false
+
+      - name: Remove checkout credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --local --unset-all http.https://github.com/.extraheader || true
 
       - name: Install short-lived JWT signing dependency
         shell: bash
