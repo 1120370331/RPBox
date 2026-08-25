@@ -458,30 +458,6 @@ jobs:
                   remember_resource(data)
                   return data
 
-              def get_resource_with_included(
-                  self,
-                  path: str,
-                  *,
-                  operation: str,
-                  params: dict | None = None,
-              ) -> tuple[dict, list[dict]]:
-                  document = self.request(
-                      "GET",
-                      path,
-                      operation=operation,
-                      params=params,
-                  )
-                  data = document.get("data")
-                  included = document.get("included", [])
-                  if not isinstance(data, dict) or not isinstance(included, list):
-                      raise RuntimeError(f"{operation} returned an invalid included-resource document")
-                  if any(not isinstance(resource, dict) for resource in included):
-                      raise RuntimeError(f"{operation} returned a malformed included resource")
-                  remember_resource(data)
-                  for resource in included:
-                      remember_resource(resource)
-                  return data, included
-
               def get_collection(
                   self,
                   path: str,
@@ -518,6 +494,48 @@ jobs:
                       next_value = links.get("next") if isinstance(links, dict) else None
                       next_url = next_value if isinstance(next_value, str) and next_value else ""
                   return resources
+
+              def get_collection_with_included(
+                  self,
+                  path: str,
+                  *,
+                  operation: str,
+                  params: dict | None = None,
+              ) -> tuple[list[dict], list[dict]]:
+                  query = urllib.parse.urlencode(params or {}, doseq=True)
+                  next_url = API_BASE + path + (("?" + query) if query else "")
+                  resources: list[dict] = []
+                  included_resources: list[dict] = []
+                  visited: set[str] = set()
+                  while next_url:
+                      if next_url in visited or len(visited) >= 50:
+                          raise RuntimeError(f"{operation} returned invalid pagination")
+                      if not next_url.startswith(API_BASE + "/"):
+                          raise RuntimeError(f"{operation} returned an untrusted pagination URL")
+                      visited.add(next_url)
+                      parsed = urllib.parse.urlsplit(next_url)
+                      document = self.request(
+                          "GET",
+                          parsed.path,
+                          operation=operation,
+                          params=urllib.parse.parse_qs(parsed.query, keep_blank_values=True),
+                      )
+                      data = document.get("data", [])
+                      included = document.get("included", [])
+                      if not isinstance(data, list) or not isinstance(included, list):
+                          raise RuntimeError(f"{operation} returned an invalid included collection")
+                      if any(not isinstance(resource, dict) for resource in (*data, *included)):
+                          raise RuntimeError(f"{operation} returned a malformed resource")
+                      for resource in data:
+                          remember_resource(resource)
+                          resources.append(resource)
+                      for resource in included:
+                          remember_resource(resource)
+                          included_resources.append(resource)
+                      links = document.get("links")
+                      next_value = links.get("next") if isinstance(links, dict) else None
+                      next_url = next_value if isinstance(next_value, str) and next_value else ""
+                  return resources, included_resources
 
               def mutate(self, method: str, path: str, payload: dict, *, operation: str) -> dict | None:
                   if not APPLY:
@@ -698,11 +716,14 @@ jobs:
                       )
 
 
-          def read_submission_items(client: AscClient, submission_id: str) -> list[dict]:
-              return client.get_collection(
+          def read_submission_items(
+              client: AscClient,
+              submission_id: str,
+          ) -> tuple[list[dict], list[dict]]:
+              return client.get_collection_with_included(
                   f"/v1/reviewSubmissions/{submission_id}/items",
                   operation="read review submission items",
-                  params={"limit": 50},
+                  params={"include": "appStoreVersion", "limit": 50},
               )
 
 
@@ -720,27 +741,16 @@ jobs:
               return linked_id
 
 
-          def resolve_submission_item_version_id(client: AscClient, item: dict) -> str:
-              linked_id = inline_item_version_id(item)
-              if linked_id:
-                  return linked_id
-              item_id = str(item.get("id") or "")
-              if not item_id:
-                  raise RuntimeError("The review submission item has no resource identifier")
-              item_resource, included = client.get_resource_with_included(
-                  f"/v1/reviewSubmissionItems/{item_id}",
-                  operation="resolve exact review submission item linkage",
-                  params={"include": "appStoreVersion"},
-              )
-              if (
-                  item_resource.get("type") != "reviewSubmissionItems"
-                  or str(item_resource.get("id") or "") != item_id
-              ):
-                  raise RuntimeError("The review submission item self resource changed identity")
+          def resolve_submission_items_version_id(
+              items: list[dict],
+              included: list[dict],
+          ) -> str:
+              if len(items) != 1:
+                  raise RuntimeError("Expected exactly one review submission item")
               candidate_ids: list[str] = []
-              self_linked_id = inline_item_version_id(item_resource)
-              if self_linked_id:
-                  candidate_ids.append(self_linked_id)
+              inline_linked_id = inline_item_version_id(items[0])
+              if inline_linked_id:
+                  candidate_ids.append(inline_linked_id)
               included_versions = [
                   resource
                   for resource in included
@@ -755,7 +765,7 @@ jobs:
                   SENSITIVE_RUNTIME_VALUES.add(included_id)
                   candidate_ids.append(included_id)
               if not candidate_ids or len(set(candidate_ids)) != 1:
-                  raise RuntimeError("Could not resolve one exact App Store version from the item")
+                  raise RuntimeError("Could not resolve one exact App Store version from the item collection")
               return candidate_ids[0]
 
 
@@ -808,15 +818,15 @@ jobs:
               submission_id = str(candidate.get("id") or "")
               if not submission_id:
                   raise RuntimeError("The reusable review submission has no resource identifier")
-              items = read_submission_items(client, submission_id)
+              items, included = read_submission_items(client, submission_id)
               if app_version_state == VERSION_STATE:
-                  if items:
+                  if items or included:
                       raise RuntimeError("A fresh PREPARE_FOR_SUBMISSION version has an unexpected item")
                   return candidate, True, "fresh"
               if app_version_state == RECOVERY_VERSION_STATE:
                   if len(items) != 1:
                       raise RuntimeError("A recoverable READY_FOR_REVIEW version requires exactly one item")
-                  if resolve_submission_item_version_id(client, items[0]) != version_id:
+                  if resolve_submission_items_version_id(items, included) != version_id:
                       raise RuntimeError("The recoverable review submission targets another version")
                   return candidate, False, "recovery"
               raise RuntimeError("The App Store version is not in a permitted submission state")
@@ -827,8 +837,8 @@ jobs:
               submission_id: str,
               version_id: str,
           ) -> None:
-              items = read_submission_items(client, submission_id)
-              if len(items) != 1 or resolve_submission_item_version_id(client, items[0]) != version_id:
+              items, included = read_submission_items(client, submission_id)
+              if resolve_submission_items_version_id(items, included) != version_id:
                   raise RuntimeError("The review submission does not contain the exact App Store version")
 
 
@@ -841,11 +851,11 @@ jobs:
               deadline = time.monotonic() + timeout_seconds
               while True:
                   version_state = read_version_state(client, version_id)
-                  items = read_submission_items(client, submission_id)
+                  items, included = read_submission_items(client, submission_id)
                   if len(items) > 1:
                       raise RuntimeError("The review submission unexpectedly contains multiple items")
                   if version_state == RECOVERY_VERSION_STATE and len(items) == 1:
-                      if resolve_submission_item_version_id(client, items[0]) != version_id:
+                      if resolve_submission_items_version_id(items, included) != version_id:
                           raise RuntimeError("The linked review submission item targets another version")
                       return
                   if version_state != VERSION_STATE:
@@ -917,7 +927,11 @@ jobs:
                       operation="add App Store version to review submission",
                   )
               except AscRequestError as original_error:
-                  if len(read_submission_items(client, submission_id)) != 1:
+                  items, included = read_submission_items(client, submission_id)
+                  if (
+                      len(items) != 1
+                      or resolve_submission_items_version_id(items, included) != version_id
+                  ):
                       raise original_error
               wait_for_version_item_linkage(client, version_id, submission_id)
 
