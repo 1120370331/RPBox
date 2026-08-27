@@ -1,0 +1,99 @@
+name: Sync Musician Addon Cache
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Download, validate, and upload Musician
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve official Musician release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/LenweSaralonde/Musician/releases/latest \
+            > release.json
+
+          VERSION="$(jq -r '.tag_name | sub("^v"; "")' release.json)"
+          ASSET_URL="$(jq -r '.assets[] | select(.name | test("^Musician-.*\\.zip$")) | .browser_download_url' release.json | head -n1)"
+          FILE_NAME="$(jq -r '.assets[] | select(.name | test("^Musician-.*\\.zip$")) | .name' release.json | head -n1)"
+          [ -n "$VERSION" ] && [ "$VERSION" != "null" ]
+          [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]
+          [ -n "$FILE_NAME" ] && [ "$FILE_NAME" != "null" ]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+          echo "file_name=$FILE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Download official package
+        env:
+          ASSET_URL: ${{ steps.release.outputs.asset_url }}
+          FILE_NAME: ${{ steps.release.outputs.file_name }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "$FILE_NAME" "$ASSET_URL"
+
+      - name: Validate package layout and version
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          FILE_NAME: ${{ steps.release.outputs.file_name }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          import zipfile
+
+          file_name = os.environ["FILE_NAME"]
+          expected_version = os.environ["VERSION"]
+          with zipfile.ZipFile(file_name) as archive:
+              toc_names = [name for name in archive.namelist() if name.lower().endswith("musician/musician.toc")]
+              if not toc_names:
+                  raise SystemExit("Musician/Musician.toc is missing")
+              toc = archive.read(toc_names[0]).decode("utf-8", errors="replace")
+          match = re.search(r"^## Version:\s*(.+?)\s*$", toc, re.MULTILINE)
+          if not match:
+              raise SystemExit("Musician.toc version is missing")
+          actual_version = match.group(1).strip().removeprefix("v")
+          if actual_version != expected_version:
+              raise SystemExit(f"version mismatch: release={expected_version} toc={actual_version}")
+          PY
+          sha256sum "$FILE_NAME"
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload atomically to production cache
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          FILE_NAME: ${{ steps.release.outputs.file_name }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          REMOTE_DIR="RPBox/server/storage/cache/addons/trp3/musician/$VERSION"
+          REMOTE_TARGET="$SERVER_USER@$SERVER_HOST"
+          LOCAL_SHA="$(sha256sum "$FILE_NAME" | awk '{print $1}')"
+
+          ssh -p 2233 "$REMOTE_TARGET" "mkdir -p '$REMOTE_DIR'"
+          scp -P 2233 "$FILE_NAME" "$REMOTE_TARGET:$REMOTE_DIR/$FILE_NAME.part"
+          ssh -p 2233 "$REMOTE_TARGET" \
+            "mv -f '$REMOTE_DIR/$FILE_NAME.part' '$REMOTE_DIR/$FILE_NAME' && test -s '$REMOTE_DIR/$FILE_NAME'"
+          REMOTE_SHA="$(ssh -p 2233 "$REMOTE_TARGET" "sha256sum '$REMOTE_DIR/$FILE_NAME' | awk '{print \$1}'")"
+          [ "$LOCAL_SHA" = "$REMOTE_SHA" ]
+          echo "Musician $VERSION cached at $REMOTE_DIR/$FILE_NAME"
