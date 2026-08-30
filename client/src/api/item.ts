@@ -280,9 +280,10 @@ export function resolveApiUrl(url: string | undefined | null): string {
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
     return url
   }
-  // 如果是相对路径，加上 API_HOST
-  if (url.startsWith('/api/')) {
+  // 后端上传接口会返回 /uploads/...，桌面 WebView 不能用自身 origin
+  // 直接加载该路径，因此所有相对资源都应统一指向 API 服务。
+  if (url.startsWith('/')) {
     return `${API_HOST}${url}`
   }
-  return url
+  return `${API_HOST}/${url}`
 }
