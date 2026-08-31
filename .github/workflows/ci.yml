@@ -71,9 +71,19 @@ jobs:
             # Preserve the explicit proxy trust boundary introduced by the
             # server security middleware. The production ingress terminates
             # TLS locally before forwarding to RPBox.
-            if [ -f server/config.yaml ] && ! grep -Eq '^[[:space:]]+trusted_proxies:' server/config.yaml; then
-              grep -Eq '^server:[[:space:]]*$' server/config.yaml
-              sed -i '/^server:[[:space:]]*$/a\  trusted_proxies:\n    - "127.0.0.0/8"\n    - "::1/128"' server/config.yaml
+            if [ -f server/config.yaml ]; then
+              if ! grep -Eq '^[[:space:]]+trusted_proxies:' server/config.yaml; then
+                grep -Eq '^server:[[:space:]]*$' server/config.yaml
+                sed -i '/^server:[[:space:]]*$/a\  trusted_proxies:' server/config.yaml
+              fi
+              for trusted_proxy in \
+                '127.0.0.0/8' '::1/128' \
+                '10.0.0.0/8' '100.64.0.0/10' '172.16.0.0/12' '192.168.0.0/16' \
+                'fc00::/7' 'fe80::/10'; do
+                if ! grep -Fq -- "- \"$trusted_proxy\"" server/config.yaml; then
+                  sed -i "/^[[:space:]]*trusted_proxies:[[:space:]]*$/a\\    - \"$trusted_proxy\"" server/config.yaml
+                fi
+              done
             fi
 
             # 写入生产后端运行时密钥。文件不进仓库，config.Load 会在启动时读取。
@@ -124,4 +134,13 @@ jobs:
               fi
               sleep 2
             done
+
+            api_host="$(awk -F': ' '/^[[:space:]]+api_host:/{print $2; exit}' config.yaml | tr -d '"' | xargs)"
+            if [ -n "$api_host" ]; then
+              public_health_status="$(curl -sS --max-redirs 0 -o /dev/null -w '%{http_code}' "${api_host%/}/api/v1/updater/windows/x86_64/0.0.0" || true)"
+              if [ "$public_health_status" != "200" ]; then
+                echo "Public health check failed with HTTP $public_health_status"
+                exit 1
+              fi
+            fi
             sudo supervisorctl status rpbox
