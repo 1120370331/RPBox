@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { resolveRPDBMediaURL, type RPDBWork, type RPDBWorkPayload } from '@/api/rpdb'
 import { hydrateJumpCards, sanitizeJumpLinks } from '@/utils/jumpLink'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import RPDBGuideSection from './RPDBGuideSection.vue'
 
 const props = defineProps<{
@@ -53,6 +54,7 @@ const musicianMIDISize = computed(() => {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 })
 const description = computed(() => props.work.effect_description || props.work.rp_use_cases || props.work.summary || '')
+const sanitizedWorkContent = computed(() => sanitizeRichHtml(props.work.content || ''))
 const orderedTransmogSlots = computed(() => {
   return [...(props.work.transmog_slots || [])]
     .filter(slot => slot.role !== 'unused')
@@ -104,7 +106,7 @@ async function copyMusicianCode() {
         <b>适用场景</b>
         {{ work.rp_use_cases }}
       </p>
-      <div v-if="work.content" ref="richContentRef" class="rich-content" v-html="work.content"></div>
+      <div v-if="work.content" ref="richContentRef" class="rich-content" v-html="sanitizedWorkContent"></div>
       <p v-else class="empty-copy">作者尚未补充完整正文。</p>
       <div v-if="work.type === 'transmog' && transmogShareCode" class="inline-share-code" data-testid="inline-transmog-share-code">
         <span>

@@ -18,6 +18,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { handleAttachmentClick } from '@/utils/download'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import { useEmoteStore } from '@/stores/emote'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import CollectionBanner from '@/components/CollectionBanner.vue'
@@ -30,6 +31,7 @@ const dialog = useDialog()
 const emoteStore = useEmoteStore()
 const loading = ref(false)
 const item = ref<Item | null>(null)
+const sanitizedDetailContent = computed(() => sanitizeRichHtml(item.value?.detail_content || ''))
 const author = ref<any>(null)
 const tags = ref<any[]>([])
 const images = ref<ItemImage[]>([])  // 画作图片列表
@@ -480,7 +482,7 @@ function appendEmoteToken(target: { value: string }, token: string) {
 }
 
 function renderCommentContent(content: string) {
-  return renderEmoteContent(content, emoteStore.emoteMap)
+  return sanitizeRichHtml(renderEmoteContent(content, emoteStore.emoteMap))
 }
 
 function openCommentImage(src: string) {
@@ -773,7 +775,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
         <!-- 详细介绍 -->
         <div v-if="item.detail_content" class="item-detail-content">
           <h3>{{ t('market.detail.detailContent') }}</h3>
-          <div ref="detailContentRef" class="rich-content" v-html="item.detail_content" @click="handleDetailContentClick"></div>
+          <div ref="detailContentRef" class="rich-content" v-html="sanitizedDetailContent" @click="handleDetailContentClick"></div>
         </div>
 
         <div class="item-tags" v-if="tags.length > 0">

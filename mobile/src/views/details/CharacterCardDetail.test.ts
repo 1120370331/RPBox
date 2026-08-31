@@ -320,6 +320,31 @@ describe('mobile public character-card safety actions', () => {
     expect(clampedMarker?.style.transform).toBe('translateX(-100%)')
   })
 
+  it('sanitizes stored rich text while preserving supported content and jump metadata', async () => {
+    const host = await mountCard(99, {
+      background_story: [
+        '<p style="color: red; text-align: center">Safe paragraph</p>',
+        '<ul><li>Safe list item</li></ul>',
+        '<img src="/safe.png" alt="Safe image" onerror="alert(1)">',
+        '<svg onload="alert(2)"><circle></circle></svg>',
+        '<a href="javascript:alert(3)">Unsafe link</a>',
+        '<span class="jump-link" data-jump-href="/posts/12" data-jump-type="post">Safe jump</span>',
+      ].join(''),
+    })
+
+    const content = host.querySelector<HTMLElement>('.rich-content')
+    expect(content).not.toBeNull()
+    expect(content?.innerHTML).not.toMatch(/onerror|onload|javascript:|<svg/i)
+    expect(content?.querySelector('p')?.textContent).toBe('Safe paragraph')
+    expect(content?.querySelector('p')?.getAttribute('style')).toBe('text-align: center')
+    expect(content?.querySelector('li')?.textContent).toBe('Safe list item')
+    expect(content?.querySelector<HTMLImageElement>('img')?.getAttribute('src')).toBe('/safe.png')
+    const jump = content?.querySelector<HTMLElement>('.jump-link')
+    expect(jump?.dataset.jumpHref).toBe('/posts/12')
+    expect(jump?.dataset.jumpType).toBe('post')
+    expect(jump?.textContent).toBe('Safe jump')
+  })
+
   it('submits one exact structured character-card report and blocks close while pending', async () => {
     let resolveReport!: (value: { message: string }) => void
     mocks.createContentReport.mockImplementation(() => new Promise<{ message: string }>((resolve) => {

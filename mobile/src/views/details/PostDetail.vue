@@ -12,6 +12,7 @@ import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks } from '@/utils/jumpLink'
 import { shareRouteLink } from '@/utils/mobileShare'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
@@ -101,7 +102,7 @@ function canUseCommentSafetyActions(comment: PostComment): boolean {
 }
 const commentPreviewHtml = computed(() => {
   void emoteVersion.value
-  return renderTextWithEmotes(commentText.value || '')
+  return sanitizeRichHtml(renderTextWithEmotes(commentText.value || ''))
 })
 
 function buildReportExcerpt(content: string) {
@@ -361,7 +362,7 @@ function normalizePostContentHtml(raw: string) {
   }
 
   if (!/<[a-z][\s\S]*>/i.test(html)) {
-    return renderTextWithEmotes(html)
+    return sanitizeRichHtml(renderTextWithEmotes(html))
   }
 
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -385,12 +386,12 @@ function normalizePostContentHtml(raw: string) {
   })
 
   sanitizeJumpLinks(doc.body)
-  return doc.body.innerHTML
+  return sanitizeRichHtml(doc.body.innerHTML)
 }
 
 function renderCommentHtml(content: string) {
   void emoteVersion.value
-  return renderTextWithEmotes(content || '')
+  return sanitizeRichHtml(renderTextWithEmotes(content || ''))
 }
 
 function mapContentUrl(url: string) {

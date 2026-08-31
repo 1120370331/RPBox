@@ -169,6 +169,32 @@ describe('ArchivesMain archive workbench', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledTimes(1)
   })
 
+  it('does not send character binding fields for narration records', async () => {
+    archiveRecordsForTest = [{
+      ...archiveRecords[0],
+      mark: 'B',
+      raw_profile: '{"FN":"Historic Name"}',
+    }]
+
+    const wrapper = await mountArchives()
+    await wrapper.get('.staging-test-trigger').trigger('click')
+    await flushPromises()
+    await wrapper.get('.r-modal__footer .r-button--primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.addStoryEntries).toHaveBeenCalledTimes(1)
+    const entry = mocks.addStoryEntries.mock.calls[0][1][0]
+    expect(entry).toMatchObject({
+      type: 'narration',
+      speaker: '',
+      is_npc: false,
+    })
+    expect(entry.ref_id).toBeUndefined()
+    expect(entry.game_id).toBeUndefined()
+    expect(entry.trp3_data).toBeUndefined()
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1)
+  })
+
   it('reuses a story created by a failed attempt and reconciles before retrying', async () => {
     mocks.addStoryEntries
       .mockRejectedValueOnce(new Error('temporary failure'))

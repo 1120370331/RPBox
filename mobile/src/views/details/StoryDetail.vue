@@ -8,6 +8,7 @@ import { getImageUrl, resolveApiUrl } from '@/api/image'
 import { getCharacter, type Character } from '@/api/character'
 import { createContentReport } from '@/api/safety'
 import { ensureEmoteMapLoaded, renderTextWithEmotes } from '@/utils/emote'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import {
   createBookmark,
   deleteBookmark,
@@ -583,7 +584,7 @@ async function submitStoryReport() {
 
 function renderEntryTextHtml(content: string) {
   void emoteVersion.value
-  return renderTextWithEmotes(content || '')
+  return sanitizeRichHtml(renderTextWithEmotes(content || ''))
 }
 
 onMounted(async () => {

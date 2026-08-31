@@ -4,6 +4,23 @@ import RPDBWorkContent from './RPDBWorkContent.vue'
 import type { RPDBWorkPayload } from '@/api/rpdb'
 
 describe('RPDBWorkContent Musician MIDI', () => {
+  it('sanitizes server-provided rich HTML before Vue inserts it', () => {
+    const wrapper = mount(RPDBWorkContent, {
+      props: {
+        work: {
+          type: 'item',
+          title: 'Unsafe work',
+          content: '<p>Safe copy</p><img src="/safe.png" onerror="alert(1)"><svg onload="alert(2)"></svg><a href="javascript:alert(3)">unsafe link</a>',
+        },
+      },
+    })
+
+    const rich = wrapper.get('.rich-content')
+    expect(rich.html()).toContain('<p>Safe copy</p>')
+    expect(rich.find('img').attributes('src')).toBe('/safe.png')
+    expect(rich.html()).not.toMatch(/onerror|onload|javascript:|<svg/i)
+  })
+
   it('renders the uploaded MIDI as a downloadable Musician file', () => {
     const work: RPDBWorkPayload = {
       type: 'musician_midi',

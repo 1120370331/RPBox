@@ -6,12 +6,22 @@
 ## Version: 1.0.14
 ## Dependencies: totalRP3
 ## OptionalDeps: totalRP3_Extended
-## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_ProfileSnapshots, RPBox_ProfileExport, RPBox_Config, RPBox_Sync, RPBox_RecordState
+## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_ProfileSnapshots, RPBox_ProfileExport, RPBox_Config, RPBox_Sync, RPBox_RecordState, RPBox_ItemGuardDB
 
 Locales\zhCN.lua
 
 Core.lua
 Theme.lua
+ItemGuardRules.lua
+ItemGuardBlacklist.lua
+ItemGuardPublisherWhitelist.lua
+ItemGuardSoundRules.lua
+ItemGuardLifecycleRules.lua
+ItemGuardVariableRules.lua
+ItemGuardAuraRules.lua
+ItemGuardContentRules.lua
+ItemGuardLuaRules.lua
+ItemGuard.lua
 MainFrame.lua
 ChatLogger.lua
 LogWindow.lua

@@ -84,4 +84,22 @@ describe('RPDBFilterBar', () => {
 
     expect(wrapper.emitted('search')).toBeTruthy()
   })
+
+  it('applies dropdown filters immediately while keeping keyword search explicit', async () => {
+    const wrapper = mountFilter({ search: '', type: 'item_showcase', sort: 'updated_at' })
+
+    await wrapper.get('[aria-label="获取状态"]').setValue('available')
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      availability_status: 'available',
+      page: 1,
+    })
+    expect(wrapper.emitted('search')).toHaveLength(1)
+
+    await wrapper.get('[aria-label="排序"]').setValue('popular')
+    expect(wrapper.emitted('search')).toHaveLength(2)
+
+    await wrapper.get('.search-box input').setValue('月光')
+    expect(wrapper.emitted('search')).toHaveLength(2)
+  })
 })

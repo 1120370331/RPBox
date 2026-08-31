@@ -298,7 +298,12 @@ func (s *Server) exportRPDBList(c *gin.Context) {
 		writer.Flush()
 		c.JSON(http.StatusOK, gin.H{"format": "csv", "content": builder.String()})
 	case "tomtom":
-		content, missing := buildRPDBTomTomExport(detail.Entries)
+		steps, err := loadRPDBTomTomGuideSteps(detail.Entries)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载导出路线失败"})
+			return
+		}
+		content, missing := buildRPDBTomTomExport(detail.Entries, steps)
 		c.JSON(http.StatusOK, gin.H{
 			"format":              "tomtom",
 			"content":             content,
@@ -342,14 +347,45 @@ func buildRPDBListResponse(list model.RPDBList, viewerID uint) (rpdbListResponse
 	return response, nil
 }
 
-func buildRPDBTomTomExport(entries []rpdbListEntryResponse) (string, []gin.H) {
+func loadRPDBTomTomGuideSteps(entries []rpdbListEntryResponse) ([]model.RPDBGuideStep, error) {
+	workIDs := make([]uint, 0, len(entries))
+	seen := make(map[uint]struct{}, len(entries))
+	for _, entry := range entries {
+		if entry.WorkID == 0 {
+			continue
+		}
+		if _, exists := seen[entry.WorkID]; exists {
+			continue
+		}
+		seen[entry.WorkID] = struct{}{}
+		workIDs = append(workIDs, entry.WorkID)
+	}
+	if len(workIDs) == 0 {
+		return nil, nil
+	}
+
+	var steps []model.RPDBGuideStep
+	if err := database.DB.
+		Where("work_id IN ?", workIDs).
+		Order("work_id ASC, sort_order ASC, id ASC").
+		Find(&steps).Error; err != nil {
+		return nil, err
+	}
+	return steps, nil
+}
+
+func buildRPDBTomTomExport(entries []rpdbListEntryResponse, steps []model.RPDBGuideStep) (string, []gin.H) {
+	stepsByWorkID := make(map[uint][]model.RPDBGuideStep, len(entries))
+	for _, step := range steps {
+		stepsByWorkID[step.WorkID] = append(stepsByWorkID[step.WorkID], step)
+	}
+
 	lines := make([]string, 0)
 	missing := make([]gin.H, 0)
 	for _, entry := range entries {
-		var steps []model.RPDBGuideStep
-		database.DB.Where("work_id = ?", entry.WorkID).Order("sort_order ASC").Find(&steps)
-		available := make([]model.RPDBGuideStep, 0, len(steps))
-		for _, step := range steps {
+		workSteps := stepsByWorkID[entry.WorkID]
+		available := make([]model.RPDBGuideStep, 0, len(workSteps))
+		for _, step := range workSteps {
 			if !validRPDBTomTomCoordinates(step) {
 				continue
 			}

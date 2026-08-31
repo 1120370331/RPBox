@@ -9,13 +9,33 @@ import (
 	ws "github.com/rpbox/server/internal/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// 允许所有来源（生产环境应该限制）
+func (s *Server) webSocketUpgrader() websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     s.isAllowedWebSocketOrigin,
+	}
+}
+
+func (s *Server) isAllowedWebSocketOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// Native clients are not required to send Origin.
 		return true
-	},
+	}
+
+	// Reject ambiguous duplicate Origin headers even when the first value is
+	// trusted. Browser WebSocket handshakes contain at most one Origin value.
+	if len(r.Header.Values("Origin")) != 1 || s.cfg == nil {
+		return false
+	}
+
+	for _, allowedOrigin := range s.cfg.CORS.AllowedOrigins {
+		if allowedOrigin != "*" && allowedOrigin == origin {
+			return true
+		}
+	}
+	return false
 }
 
 // handleWebSocket 处理 WebSocket 连接
@@ -28,6 +48,7 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 	}
 
 	// 升级 HTTP 连接到 WebSocket
+	upgrader := s.webSocketUpgrader()
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("[WebSocket] 升级连接失败: %v", err)

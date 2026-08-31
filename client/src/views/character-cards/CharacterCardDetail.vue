@@ -28,6 +28,7 @@ import {
 } from '@/utils/characterCardDraft'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardCoverPortrait, normalizeCharacterCardPortraits } from '@/utils/characterCardPortraits'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,6 +39,9 @@ const userStore = useUserStore()
 
 const cardId = computed(() => Number(route.params.id))
 const card = ref<CharacterCard | null>(null)
+const sanitizedBackgroundStory = computed(() => sanitizeRichHtml(card.value?.background_story || ''))
+const sanitizedFirstImpression = computed(() => sanitizeRichHtml(card.value?.first_impression || ''))
+const sanitizedOtherContent = computed(() => sanitizeRichHtml(card.value?.other_content || ''))
 const loading = ref(true)
 const actionLoading = ref(false)
 const showShareDialog = ref(false)
@@ -464,7 +468,7 @@ function goBack() {
             role="tabpanel"
             aria-labelledby="character-detail-tab-background"
           >
-            <div v-if="card.background_story" ref="backgroundRef" class="character-rich" v-html="card.background_story"></div>
+            <div v-if="card.background_story" ref="backgroundRef" class="character-rich" v-html="sanitizedBackgroundStory"></div>
             <div v-else class="empty-chapter"><i class="ri-book-open-line" aria-hidden="true"></i><span>{{ t('characterCards.detail.backgroundMissing') }}</span></div>
           </section>
 
@@ -537,7 +541,7 @@ function goBack() {
                   <span>{{ t('characterCards.detail.supplement') }}</span>
                   <h3>{{ t('characterCards.detail.otherNotes') }}</h3>
                 </header>
-                <div ref="impressionRef" class="character-rich" v-html="card.first_impression"></div>
+                <div ref="impressionRef" class="character-rich" v-html="sanitizedFirstImpression"></div>
               </section>
             </template>
             <div v-else class="empty-chapter"><i class="ri-eye-2-line" aria-hidden="true"></i><span>{{ t('characterCards.detail.impressionsMissing') }}</span></div>
@@ -550,7 +554,7 @@ function goBack() {
             role="tabpanel"
             aria-labelledby="character-detail-tab-other"
           >
-            <div v-if="card.other_content" ref="otherRef" class="character-rich" v-html="card.other_content"></div>
+            <div v-if="card.other_content" ref="otherRef" class="character-rich" v-html="sanitizedOtherContent"></div>
             <div v-else class="empty-chapter"><i class="ri-archive-stack-line" aria-hidden="true"></i><span>{{ t('characterCards.detail.otherMissing') }}</span></div>
           </section>
 

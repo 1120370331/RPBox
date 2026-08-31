@@ -11,30 +11,34 @@ import (
 func CORS(cfg *config.Config) gin.HandlerFunc {
 	allowedOrigins := make(map[string]struct{})
 	for _, origin := range cfg.CORS.AllowedOrigins {
-		allowedOrigins[origin] = struct{}{}
-	}
-	if cfg.Server.Mode == "debug" {
-		for _, origin := range cfg.CORS.DevOrigins {
+		if origin != "" {
 			allowedOrigins[origin] = struct{}{}
 		}
 	}
-	// 如果没有配置任何 Origin，允许所有（向后兼容）
-	allowAll := len(allowedOrigins) == 0
+	if cfg.Server.Mode == "debug" {
+		for _, origin := range cfg.CORS.DevOrigins {
+			if origin != "" {
+				allowedOrigins[origin] = struct{}{}
+			}
+		}
+	}
+	// An unconfigured release server fails closed. The permissive fallback is
+	// kept only for explicitly configured debug mode to preserve local setup.
+	allowAll := cfg.Server.Mode == gin.DebugMode && len(allowedOrigins) == 0
 
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		allowed := false
 		if origin != "" {
+			c.Header("Vary", "Origin")
 			if allowAll {
 				allowed = true
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Access-Control-Allow-Credentials", "true")
-				c.Header("Vary", "Origin")
 			} else if _, ok := allowedOrigins[origin]; ok {
 				allowed = true
 				c.Header("Access-Control-Allow-Origin", origin)
 				c.Header("Access-Control-Allow-Credentials", "true")
-				c.Header("Vary", "Origin")
 			}
 		}
 		if allowed {

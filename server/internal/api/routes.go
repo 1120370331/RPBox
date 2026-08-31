@@ -29,7 +29,10 @@ func (s *Server) setupRoutes() {
 	{
 		// 公开接口
 		authPublic := v1.Group("/auth")
-		authPublic.Use(middleware.StrictRateLimit(s.cfg.RateLimit.Auth.RPS, s.cfg.RateLimit.Auth.Burst))
+		authPublic.Use(
+			middleware.StrictRateLimit(s.cfg.RateLimit.Auth.RPS, s.cfg.RateLimit.Auth.Burst),
+			middleware.BodyLimit(authPublicBodyLimitBytes),
+		)
 		{
 			authPublic.POST("/send-code", s.sendVerificationCode)
 			authPublic.POST("/register", s.register)
@@ -77,8 +80,12 @@ func (s *Server) setupRoutes() {
 		// 公开公会列表（社区广场）
 		v1.GET("/public/guilds", s.listPublicGuilds)
 
-		// 测试端点（仅用于开发）
-		v1.POST("/test/send-notification", s.testSendNotification)
+		// 开发测试端点不进入 release 路由表，并且仅允许管理员调用。
+		if s.cfg.Server.Mode == gin.DebugMode {
+			debugAdmin := v1.Group("/test")
+			debugAdmin.Use(middleware.JWTAuth(), middleware.AdminAuth())
+			debugAdmin.POST("/send-notification", s.testSendNotification)
+		}
 
 		// 画作图片公开访问
 		v1.GET("/items/:id/images/:imageId", s.getItemImage)

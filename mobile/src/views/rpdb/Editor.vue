@@ -25,6 +25,7 @@ import { listGuilds, type Guild } from '@/api/guild'
 import MobileRichEditor from '@/components/MobileRichEditor.vue'
 import CachedImage from '@/components/CachedImage.vue'
 import { getRPDBTypeIcon, getRPDBTypeLabel } from '@/utils/rpdb'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -125,6 +126,7 @@ const completionChecks = computed(() => [
   { label: form.type === 'home_showcase' ? '家宅资料' : form.type === 'musician_midi' ? '音乐代码或 MIDI' : '获取攻略', done: form.type === 'home_showcase' ? Boolean(extra.visit_notes || extra.share_code) : form.type === 'musician_midi' ? Boolean(extra.musician_code.trim() || extra.midi_url) : Boolean(form.guide_steps?.length) },
 ])
 const completionPercent = computed(() => Math.round((completionChecks.value.filter(item => item.done).length / completionChecks.value.length) * 100))
+const previewContentHtml = computed(() => sanitizeRichHtml(form.content || ''))
 
 function parseObject(value: unknown) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
@@ -619,7 +621,7 @@ onBeforeUnmount(() => {
         <section class="preview-content">
           <h3>{{ form.type === 'home_showcase' ? '空间故事' : '作品介绍' }}</h3>
           <p v-if="form.effect_description">{{ form.effect_description }}</p>
-          <div v-if="form.content" class="rich-preview" v-html="form.content" />
+          <div v-if="form.content" class="rich-preview" v-html="previewContentHtml" />
           <p v-else class="empty">正文内容将在这里显示。</p>
         </section>
       </main>

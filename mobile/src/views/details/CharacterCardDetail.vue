@@ -17,6 +17,7 @@ import ImagePreviewDialog from '@/components/ImagePreviewDialog.vue'
 import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import { handleJumpLinkClick, sanitizeJumpLinks } from '@/utils/jumpLink'
 import { shareRouteLink } from '@/utils/mobileShare'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
 
@@ -296,7 +297,7 @@ function normalizeRichContent(input: string) {
     }
   })
   sanitizeJumpLinks(doc.body)
-  return doc.body.innerHTML
+  return sanitizeRichHtml(doc.body.innerHTML)
 }
 
 async function hydrateRichLinks() {

@@ -518,7 +518,7 @@ describe('RPDBDetail', () => {
     expect(wrapper.find('.comments-title').exists()).toBe(true)
     expect(wrapper.find('.comment-badge').text()).toBe('2')
     expect(wrapper.find('.comment-item').exists()).toBe(true)
-    expect(wrapper.find('.comment-avatar img').attributes('src')).toBe('/avatar.png')
+    expect(wrapper.find('.comment-avatar img').attributes('src')).toMatch(/\/avatar\.png$/)
     expect(wrapper.find('.comment-meta .like-btn-inline').classes()).toContain('active')
     expect(wrapper.find('.replies-list .reply-item').exists()).toBe(true)
     expect(wrapper.text()).toContain('回复 @旅店老板')

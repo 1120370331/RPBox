@@ -1,9 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/viper"
 )
@@ -121,10 +123,11 @@ type BackupOSSConfig struct {
 }
 
 type ServerConfig struct {
-	Port          string `mapstructure:"port"`
-	Mode          string `mapstructure:"mode"`
-	MaxBodySizeMB int    `mapstructure:"max_body_size_mb"`
-	ApiHost       string `mapstructure:"api_host"` // API 基础 URL，如 https://api.rpbox.app
+	Port           string   `mapstructure:"port"`
+	Mode           string   `mapstructure:"mode"`
+	MaxBodySizeMB  int      `mapstructure:"max_body_size_mb"`
+	ApiHost        string   `mapstructure:"api_host"` // API 基础 URL，如 https://api.rpbox.app
+	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 
 type DatabaseConfig struct {
@@ -193,6 +196,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
 	viper.SetDefault("server.max_body_size_mb", 200)
+	viper.SetDefault("server.trusted_proxies", []string{})
 	viper.SetDefault("storage.path", "storage") // 改为相对路径，不带 ./
 	viper.SetDefault("database.sslmode", "require")
 	viper.SetDefault("database.sslrootcert", "")
@@ -238,6 +242,7 @@ func Load() (*Config, error) {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 	_ = viper.BindEnv("curseforge.api_key", "CURSEFORGE_API_KEY")
+	_ = viper.BindEnv("jwt.secret", "JWT_SECRET")
 	_ = viper.BindEnv("trp3_addons.github_token", "TRP3_ADDONS_GITHUB_TOKEN", "GITHUB_TOKEN")
 	_ = viper.BindEnv("trp3_addons.github_download_mirror_base_url", "TRP3_ADDONS_GITHUB_DOWNLOAD_MIRROR_BASE_URL")
 	_ = viper.BindEnv("trp3_addons.proxy_url", "TRP3_ADDONS_PROXY_URL", "HTTPS_PROXY", "HTTP_PROXY")
@@ -259,9 +264,102 @@ func Load() (*Config, error) {
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
+	if err := validateJWTConfig(cfg.Server.Mode, cfg.JWT.Secret); err != nil {
+		return nil, err
+	}
 
 	globalConfig = &cfg
 	return &cfg, nil
+}
+
+func validateJWTConfig(serverMode, secret string) error {
+	if !strings.EqualFold(strings.TrimSpace(serverMode), "release") {
+		return nil
+	}
+	if len(strings.TrimSpace(secret)) < 32 {
+		return fmt.Errorf("jwt.secret must contain at least 32 UTF-8 bytes when server.mode is release")
+	}
+	if isPlaceholderJWTSecret(secret) {
+		return fmt.Errorf("jwt.secret must not use an example, placeholder, development, or test value when server.mode is release")
+	}
+	return nil
+}
+
+func isPlaceholderJWTSecret(secret string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(secret))
+	knownPlaceholders := map[string]struct{}{
+		"your-secret-key-change-in-production": {},
+		"change-me-in-production":              {},
+		"change-this-in-production":            {},
+		"replace-me-with-a-secure-secret":      {},
+		"replace-with-a-secure-secret":         {},
+		"example-jwt-secret":                   {},
+		"placeholder-jwt-secret":               {},
+		"development-jwt-secret":               {},
+		"test-jwt-secret":                      {},
+	}
+	if _, found := knownPlaceholders[normalized]; found {
+		return true
+	}
+	weakMarkers := map[string]struct{}{
+		"change":      {},
+		"default":     {},
+		"dev":         {},
+		"development": {},
+		"example":     {},
+		"insecure":    {},
+		"local":       {},
+		"placeholder": {},
+		"replace":     {},
+		"sample":      {},
+		"temp":        {},
+		"temporary":   {},
+		"test":        {},
+		"testing":     {},
+		"unsafe":      {},
+		"your":        {},
+	}
+	placeholderVocabulary := map[string]struct{}{
+		"a": {}, "change": {}, "default": {}, "dev": {}, "development": {},
+		"do": {}, "example": {}, "for": {}, "in": {}, "insecure": {},
+		"jwt": {}, "key": {}, "local": {}, "me": {}, "not": {},
+		"only": {}, "placeholder": {}, "please": {}, "prod": {}, "production": {},
+		"replace": {}, "sample": {}, "secret": {}, "secure": {}, "temp": {},
+		"temporary": {}, "test": {}, "testing": {}, "this": {}, "token": {},
+		"unsafe": {}, "use": {}, "value": {}, "with": {}, "your": {},
+	}
+	tokens := strings.FieldsFunc(normalized, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	containsWeakMarker := false
+	usesOnlyPlaceholderVocabulary := len(tokens) > 0
+	for _, token := range tokens {
+		if _, found := weakMarkers[token]; found {
+			containsWeakMarker = true
+		}
+		if _, found := placeholderVocabulary[token]; !found {
+			usesOnlyPlaceholderVocabulary = false
+		}
+	}
+	if containsWeakMarker && usesOnlyPlaceholderVocabulary {
+		return true
+	}
+
+	// Padding an obvious weak value must not make it production-safe.
+	compact := strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '\t', '\r', '\n', '-', '_', '.', ':', '/', '\\':
+			return -1
+		default:
+			return r
+		}
+	}, normalized)
+	for _, weak := range []string{"example", "placeholder", "development", "dev", "test", "testing", "changeme", "replaceme"} {
+		if compact == strings.Repeat(weak, len(compact)/len(weak)) && len(compact)%len(weak) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func loadDotEnv(path string) error {
