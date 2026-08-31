@@ -183,6 +183,7 @@ async function loadUserProfile() {
         story_count: res.story_count,
         story_entry_count: res.story_entry_count,
         profile_count: res.profile_count,
+        character_card_count: res.character_card_count,
         max_post_views: res.max_post_views,
         max_item_downloads: res.max_item_downloads,
         total_likes: res.total_likes,
@@ -370,7 +371,7 @@ function previewAchievementNotification() {
   const entry = featuredAchievementEntry.value
   if (!entry) return
   toast.achievement(
-    `成就解锁：${entry.definition.title}`,
+    entry.definition.title,
     entry.definition.condition,
     {
       icon: entry.definition.icon,
@@ -492,7 +493,7 @@ function previewAchievementNotification() {
               <div class="stat-label">剧情</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value">{{ userProfile.profile_count || 0 }}</div>
+              <div class="stat-value">{{ userProfile.character_card_count ?? userProfile.profile_count ?? 0 }}</div>
               <div class="stat-label">人物卡</div>
             </div>
           </div>

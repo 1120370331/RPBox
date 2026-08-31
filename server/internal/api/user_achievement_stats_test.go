@@ -22,6 +22,8 @@ func TestUserProfileAchievementStatsUseSignInDaysAndStoryEntries(t *testing.T) {
 		&model.Story{},
 		&model.StoryEntry{},
 		&model.Profile{},
+		&model.CharacterCard{},
+		&model.CharacterCardPublication{},
 		&model.UserDailyActivity{},
 		&model.UserActivityLog{},
 	)
@@ -73,6 +75,19 @@ func TestUserProfileAchievementStatsUseSignInDaysAndStoryEntries(t *testing.T) {
 	if err := db.Create(&profile).Error; err != nil {
 		t.Fatalf("create profile: %v", err)
 	}
+	characterCard := model.CharacterCard{UserID: user.ID, DisplayName: "RPBox Card"}
+	otherCharacterCard := model.CharacterCard{UserID: other.ID, DisplayName: "Other RPBox Card"}
+	if err := db.Create(&[]*model.CharacterCard{&characterCard, &otherCharacterCard}).Error; err != nil {
+		t.Fatalf("create character cards: %v", err)
+	}
+	approvedAt := time.Now().UTC()
+	publications := []model.CharacterCardPublication{
+		{CharacterCardID: characterCard.ID, UserID: user.ID, Payload: `{}`, ApprovedAt: approvedAt},
+		{CharacterCardID: otherCharacterCard.ID, UserID: other.ID, Payload: `{}`, ApprovedAt: approvedAt},
+	}
+	if err := db.Create(&publications).Error; err != nil {
+		t.Fatalf("create character card publications: %v", err)
+	}
 
 	story := model.Story{UserID: user.ID, Title: "archived"}
 	if err := db.Create(&story).Error; err != nil {
@@ -121,6 +136,7 @@ func TestUserProfileAchievementStatsUseSignInDaysAndStoryEntries(t *testing.T) {
 			StoryCount            int64 `json:"story_count"`
 			StoryEntryCount       int64 `json:"story_entry_count"`
 			ProfileCount          int64 `json:"profile_count"`
+			CharacterCardCount    int64 `json:"character_card_count"`
 			MaxPostViews          int64 `json:"max_post_views"`
 			MaxItemDownloads      int64 `json:"max_item_downloads"`
 			TotalLikes            int64 `json:"total_likes"`
@@ -148,6 +164,9 @@ func TestUserProfileAchievementStatsUseSignInDaysAndStoryEntries(t *testing.T) {
 		}
 		if payload.ProfileCount != 1 {
 			t.Fatalf("expected profile_count 1, got %d", payload.ProfileCount)
+		}
+		if payload.CharacterCardCount != 1 {
+			t.Fatalf("expected character_card_count 1, got %d", payload.CharacterCardCount)
 		}
 		if payload.MaxPostViews != 25 {
 			t.Fatalf("expected max_post_views 25, got %d", payload.MaxPostViews)

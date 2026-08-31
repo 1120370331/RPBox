@@ -45,6 +45,8 @@ describe('RPDBMain', () => {
     expect(wrapper.find('.content-rail').exists()).toBe(false)
     expect(wrapper.find('.content-nav').exists()).toBe(true)
     expect(wrapper.find('a[href="/rpdb/my-uploads"]').text()).toContain('我的上传')
+    expect(wrapper.get('a[href="/rpdb/create"]').classes()).toContain('publish-action')
+    expect(wrapper.get('a[href="/rpdb/create"]').text()).toContain('发布内容')
     expect(wrapper.find('.featured-grid').exists()).toBe(true)
     expect(wrapper.text()).toContain('热度 Top3')
     expect(wrapper.text()).not.toContain('社区精选')

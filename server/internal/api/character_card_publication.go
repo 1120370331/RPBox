@@ -778,6 +778,7 @@ func (s *Server) reviewCharacterCard(c *gin.Context) {
 		}
 		return
 	}
+	s.invalidateUserProfileCache(c.Request.Context(), card.UserID)
 	if req.Action == "approve" && oldSnapshot != nil {
 		for asset := range characterCardSnapshotAssetPaths(*oldSnapshot) {
 			s.cleanupCharacterCardAssetIfUnreferenced(c, card.UserID, card.ID, asset)

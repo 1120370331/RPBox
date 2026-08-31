@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@/stores/theme'
@@ -9,6 +9,10 @@ import UpdateNotification from '@/components/UpdateNotification.vue'
 import ChangelogDialog from '@/components/ChangelogDialog.vue'
 import RDialog from '@/components/RDialog.vue'
 import RToast from '@/components/RToast.vue'
+import AchievementCelebration from '@/components/AchievementCelebration.vue'
+import { useToastStore } from '@/stores/toast'
+import { buildAchievementProgressContext } from '@/utils/achievementProgress'
+import { detectNewAchievements } from '@/utils/achievementCompletion'
 import { handleExternalLinkClick } from '@/utils/externalLink'
 
 const themeStore = useThemeStore()
@@ -16,6 +20,22 @@ const userStore = useUserStore()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const toastStore = useToastStore()
+
+watch(() => userStore.user, (profile) => {
+  if (!profile?.id) return
+  const sponsorLevel = Number(profile.sponsor_level) || (profile.is_sponsor ? 2 : 0)
+  const context = buildAchievementProgressContext({
+    profile: profile as unknown as Record<string, unknown>,
+    sponsorLevel,
+  })
+  for (const achievement of detectNewAchievements(profile.id, context)) {
+    toastStore.achievement(achievement.title, achievement.condition, {
+      icon: achievement.icon,
+      rarity: achievement.rarity,
+    })
+  }
+}, { deep: true, immediate: true })
 
 function handleOffline() {
   if (!userStore.token) return
@@ -44,6 +64,10 @@ onUnmounted(() => {
   <UpdateNotification />
   <ChangelogDialog />
   <RDialog />
+  <AchievementCelebration
+    :celebration="toastStore.activeAchievement"
+    @dismiss="toastStore.dismissAchievement"
+  />
   <RToast />
 </template>
 
