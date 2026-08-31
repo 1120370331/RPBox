@@ -8,6 +8,7 @@ export interface UserInfo extends UserData {
   story_count?: number
   story_entry_count?: number
   profile_count?: number
+  character_card_count?: number
   item_count?: number
   guild_count?: number
   total_sign_in_days?: number

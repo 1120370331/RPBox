@@ -44,7 +44,7 @@ export function buildAchievementProgressContext({
     totalLikes: readProfileNumber(profile, 'total_likes', 'like_count', 'received_likes'),
     totalItemDownloads: readProfileNumber(profile, 'total_item_downloads', 'item_download_count', 'download_count'),
     storyCount: readProfileNumber(profile, 'story_entry_count', 'story_archive_line_count', 'story_count'),
-    profileCount: readProfileNumber(profile, 'profile_count'),
+    profileCount: readProfileNumber(profile, 'character_card_count', 'profile_count'),
     sponsorLevel,
     forumLevel: readProfileNumber(profile, 'forum_level'),
   }

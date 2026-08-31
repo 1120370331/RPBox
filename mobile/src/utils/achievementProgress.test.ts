@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAchievementProgressContext } from './achievementProgress'
+import { buildAchievementEntries, buildAchievementProgressContext } from './achievementProgress'
 
 describe('mobile achievement progress context', () => {
   it('uses cumulative sign-in stats from the profile payload', () => {
@@ -52,5 +52,21 @@ describe('mobile achievement progress context', () => {
     })
 
     expect(context.storyCount).toBe(0)
+  })
+
+  it('uses RPBox character cards for the nameplate achievement', () => {
+    const currentContext = buildAchievementProgressContext({
+      id: 1,
+      profile_count: 0,
+      character_card_count: 1,
+    })
+    expect(currentContext.profileCount).toBe(1)
+    expect(buildAchievementEntries(currentContext).find(entry => entry.definition.id === 'profile.first')?.progress.earned).toBe(true)
+
+    expect(buildAchievementProgressContext({
+      id: 1,
+      profile_count: 3,
+      character_card_count: 0,
+    }).profileCount).toBe(0)
   })
 })

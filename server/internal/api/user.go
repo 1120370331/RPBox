@@ -63,6 +63,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		StoryCount         int64      `json:"story_count"`
 		StoryEntryCount    int64      `json:"story_entry_count"`
 		ProfileCount       int64      `json:"profile_count"`
+		CharacterCardCount int64      `json:"character_card_count"`
 		MaxPostViews       int64      `json:"max_post_views"`
 		MaxItemDownloads   int64      `json:"max_item_downloads"`
 		TotalLikes         int64      `json:"total_likes"`
@@ -92,6 +93,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 		StoryCount:          counts.StoryCount,
 		StoryEntryCount:     counts.StoryEntryCount,
 		ProfileCount:        counts.ProfileCount,
+		CharacterCardCount:  counts.CharacterCardCount,
 		MaxPostViews:        counts.MaxPostViews,
 		MaxItemDownloads:    counts.MaxItemDownloads,
 		TotalLikes:          counts.TotalLikes,
@@ -431,6 +433,7 @@ type userProfileCounts struct {
 	StoryCount            int64
 	StoryEntryCount       int64
 	ProfileCount          int64
+	CharacterCardCount    int64
 	MaxPostViews          int64
 	MaxItemDownloads      int64
 	TotalLikes            int64
@@ -473,6 +476,7 @@ func loadUserProfileCounts(db *gorm.DB, userID uint, now time.Time) userProfileC
 		Where("stories.user_id = ?", userID).
 		Count(&counts.StoryEntryCount)
 	db.Model(&model.Profile{}).Where("user_id = ?", userID).Count(&counts.ProfileCount)
+	db.Model(&model.CharacterCardPublication{}).Where("user_id = ?", userID).Count(&counts.CharacterCardCount)
 
 	if stats, err := service.GetSignInStats(db, userID, now); err == nil {
 		counts.TotalSignInDays = stats.TotalDays
@@ -500,6 +504,7 @@ type publicUserProfileResponse struct {
 	StoryCount            int64     `json:"story_count"`
 	StoryEntryCount       int64     `json:"story_entry_count"`
 	ProfileCount          int64     `json:"profile_count"`
+	CharacterCardCount    int64     `json:"character_card_count"`
 	MaxPostViews          int64     `json:"max_post_views"`
 	MaxItemDownloads      int64     `json:"max_item_downloads"`
 	TotalLikes            int64     `json:"total_likes"`
@@ -551,6 +556,7 @@ func buildPublicUserProfile(apiHost string, user model.User, counts userProfileC
 		StoryCount:            counts.StoryCount,
 		StoryEntryCount:       counts.StoryEntryCount,
 		ProfileCount:          counts.ProfileCount,
+		CharacterCardCount:    counts.CharacterCardCount,
 		MaxPostViews:          counts.MaxPostViews,
 		MaxItemDownloads:      counts.MaxItemDownloads,
 		TotalLikes:            counts.TotalLikes,
@@ -631,6 +637,7 @@ func (s *Server) getUserProfile(c *gin.Context) {
 			"story_count":               publicProfile.StoryCount,
 			"story_entry_count":         publicProfile.StoryEntryCount,
 			"profile_count":             publicProfile.ProfileCount,
+			"character_card_count":      publicProfile.CharacterCardCount,
 			"max_post_views":            publicProfile.MaxPostViews,
 			"max_item_downloads":        publicProfile.MaxItemDownloads,
 			"total_likes":               publicProfile.TotalLikes,

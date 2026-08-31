@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
@@ -10,6 +10,9 @@ import { useToastStore } from '@shared/stores/toast'
 import { useMobileUpdater } from '@/composables/useMobileUpdater'
 import { resolveInAppPathFromUrl } from '@/utils/appLink'
 import RToast from './components/RToast.vue'
+import AchievementCelebration from '../../client/src/components/AchievementCelebration.vue'
+import { buildAchievementProgressContext } from '@/utils/achievementProgress'
+import { detectNewAchievements } from '../../client/src/utils/achievementCompletion'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -32,6 +35,17 @@ let stableViewportHeight = 0
 let viewportRestoreTimers: Array<ReturnType<typeof setTimeout>> = []
 let focusInHandler: ((event: FocusEvent) => void) | null = null
 let focusOutHandler: ((event: FocusEvent) => void) | null = null
+
+watch(() => userStore.user, (profile) => {
+  if (!profile?.id) return
+  const context = buildAchievementProgressContext(profile as Record<string, unknown>)
+  for (const achievement of detectNewAchievements(profile.id, context)) {
+    toast.achievement(achievement.title, achievement.condition, {
+      icon: achievement.icon,
+      rarity: achievement.rarity,
+    })
+  }
+}, { deep: true, immediate: true })
 
 function handleOffline() {
   if (!userStore.token) return
@@ -91,6 +105,10 @@ function isEditableTarget(target: EventTarget | null) {
 async function bindNativeBackButton() {
   if (!Capacitor.isNativePlatform()) return
   backButtonHandle = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+    if (toast.activeAchievement) {
+      toast.dismissAchievement()
+      return
+    }
     const path = router.currentRoute.value.path
 
     if (isHomeRoute(path)) {
@@ -229,5 +247,9 @@ onBeforeUnmount(() => {
 
 <template>
   <router-view />
+  <AchievementCelebration
+    :celebration="toast.activeAchievement"
+    @dismiss="toast.dismissAchievement"
+  />
   <RToast />
 </template>

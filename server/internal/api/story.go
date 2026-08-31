@@ -469,6 +469,7 @@ func (s *Server) getStory(c *gin.Context) {
 	}
 	if !isOwner {
 		entries = redactUnavailableStoryCharacterCardBindings(entries, characterCards)
+		incrementStoryViewCount(&story)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -476,6 +477,18 @@ func (s *Server) getStory(c *gin.Context) {
 		"entries":         entries,
 		"character_cards": characterCards,
 	})
+}
+
+func incrementStoryViewCount(story *model.Story) {
+	if story == nil || story.ID == 0 {
+		return
+	}
+	result := database.DB.Model(&model.Story{}).
+		Where("id = ?", story.ID).
+		UpdateColumn("view_count", gorm.Expr("view_count + ?", 1))
+	if result.Error == nil && result.RowsAffected == 1 {
+		story.ViewCount++
+	}
 }
 
 func (s *Server) loadStoryCharacterCards(entries []model.StoryEntry, ownerID uint, ownerView bool) (map[uint]characterCardDTO, error) {
@@ -1276,9 +1289,6 @@ func (s *Server) getPublicStory(c *gin.Context) {
 		return
 	}
 
-	// 增加浏览次数
-	database.DB.Model(&story).Update("view_count", story.ViewCount+1)
-
 	// 获取条目
 	var entries []model.StoryEntry
 	if err := database.DB.Where("story_id = ?", story.ID).Order("timestamp, sort_order").Find(&entries).Error; err != nil {
@@ -1315,6 +1325,7 @@ func (s *Server) getPublicStory(c *gin.Context) {
 	database.DB.First(&user, story.UserID)
 
 	musicTracks, musicSegments := s.loadPublicStoryMusic(story.ID)
+	incrementStoryViewCount(&story)
 
 	c.JSON(http.StatusOK, gin.H{
 		"story":           story,

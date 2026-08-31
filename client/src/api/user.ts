@@ -13,6 +13,7 @@ export interface UserInfo extends UserData {
   story_count?: number
   story_entry_count?: number
   profile_count?: number
+  character_card_count?: number
   max_post_views?: number
   max_item_downloads?: number
   total_likes?: number

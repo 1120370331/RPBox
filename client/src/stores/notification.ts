@@ -44,12 +44,15 @@ export const useNotificationStore = defineStore('notification', () => {
         lastNotification.value = message.data
         const toastStore = useToastStore()
         if (message.data?.type === 'achievement' || message.data?.target_type === 'achievement') {
+          const rawTitle = message.data?.achievement_name || message.data?.title || '新成就'
+          const achievementTitle = rawTitle.replace(/^成就解锁\s*[：:]?\s*/, '') || '新成就'
           toastStore.achievement(
-            message.data?.title || '成就解锁',
+            achievementTitle,
             message.data?.content || message.data?.achievement_name || '新的成就已加入你的个人资料',
             {
               icon: message.data?.icon,
               rarity: message.data?.rarity,
+              completedAt: message.data?.created_at,
             },
           )
         } else {

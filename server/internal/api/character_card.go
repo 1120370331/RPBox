@@ -427,6 +427,7 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 		return
 	}
 
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 	c.JSON(http.StatusCreated, gin.H{"character_card": s.buildCharacterCardDTO(card, impressions, nil, true, true)})
 }
 
@@ -840,6 +841,7 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 	for asset := range publicationAssetsToCheck {
 		s.cleanupCharacterCardAssetIfUnreferenced(c, userID, card.ID, asset)
 	}
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 	if err := database.DB.First(&card, card.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
 		return
@@ -878,6 +880,7 @@ func (s *Server) deleteCharacterCard(c *gin.Context) {
 		return
 	}
 
+	s.invalidateUserProfileCache(c.Request.Context(), userID)
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 

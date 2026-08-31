@@ -312,7 +312,7 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
   {
     id: 'profile.first',
     title: '亮出名牌',
-    condition: '第一次上传人物卡',
+    condition: '发布第一张 RPBox 人物卡',
     category: 'profile',
     rarity: 'common',
     metric: 'profileCount',

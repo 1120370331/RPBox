@@ -337,6 +337,7 @@ func (s *Server) buildAuthPayload(user model.User) (gin.H, error) {
 			"story_count":               counts.StoryCount,
 			"story_entry_count":         counts.StoryEntryCount,
 			"profile_count":             counts.ProfileCount,
+			"character_card_count":      counts.CharacterCardCount,
 			"max_post_views":            counts.MaxPostViews,
 			"max_item_downloads":        counts.MaxItemDownloads,
 			"total_likes":               counts.TotalLikes,

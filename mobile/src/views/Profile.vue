@@ -14,7 +14,6 @@ import {
   buildAchievementProgressContext,
   buildAchievementWallEntries,
   pickFeaturedAchievement,
-  type AchievementEntry,
 } from '@/utils/achievementProgress'
 
 const { t } = useI18n()
@@ -121,6 +120,7 @@ async function loadProfile() {
         story_count: res.story_count,
         story_entry_count: res.story_entry_count,
         profile_count: res.profile_count,
+        character_card_count: res.character_card_count,
         max_post_views: res.max_post_views,
         max_item_downloads: res.max_item_downloads,
         total_likes: res.total_likes,
@@ -136,7 +136,6 @@ async function loadProfile() {
 
 async function handleDailySignIn() {
   if (signingIn.value || displayUser.value?.signed_in_today) return
-  const beforeEarnedIds = getEarnedAchievementIds(displayUser.value as Record<string, unknown> | null)
   signingIn.value = true
   try {
     const result = await signInDaily()
@@ -153,44 +152,12 @@ async function handleDailySignIn() {
     } else {
       toast.info(result.message)
     }
-    const refreshed = await loadProfile()
-    showNewAchievementToasts(
-      beforeEarnedIds,
-      (refreshed || userInfo.value || displayUser.value) as Record<string, unknown> | null,
-    )
+    await loadProfile()
   } catch (error) {
     console.error('Failed to sign in daily', error)
     toast.error((error as Error)?.message || t('profile.activity.signInFailed'))
   } finally {
     signingIn.value = false
-  }
-}
-
-function buildEntriesForProfile(profile: Record<string, unknown> | null): AchievementEntry[] {
-  return buildAchievementEntries(buildAchievementProgressContext(profile))
-}
-
-function getEarnedAchievementIds(profile: Record<string, unknown> | null) {
-  return new Set(
-    buildEntriesForProfile(profile)
-      .filter((entry) => entry.progress.earned)
-      .map((entry) => entry.definition.id),
-  )
-}
-
-function showNewAchievementToasts(beforeEarnedIds: Set<string>, profile: Record<string, unknown> | null) {
-  const newlyEarned = buildEntriesForProfile(profile)
-    .filter((entry) => entry.progress.earned && !beforeEarnedIds.has(entry.definition.id))
-
-  for (const entry of newlyEarned.slice(0, 3)) {
-    toast.achievement(
-      t('profile.achievements.unlockedTitle', { title: entry.definition.title }),
-      entry.definition.condition,
-      {
-        icon: entry.definition.icon,
-        rarity: entry.definition.rarity,
-      },
-    )
   }
 }
 
