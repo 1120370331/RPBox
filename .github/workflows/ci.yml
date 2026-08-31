@@ -68,6 +68,14 @@ jobs:
               rm -rf /tmp/rpbox_addons_backup
             fi
 
+            # Preserve the explicit proxy trust boundary introduced by the
+            # server security middleware. The production ingress terminates
+            # TLS locally before forwarding to RPBox.
+            if [ -f server/config.yaml ] && ! grep -Eq '^[[:space:]]+trusted_proxies:' server/config.yaml; then
+              grep -Eq '^server:[[:space:]]*$' server/config.yaml
+              sed -i '/^server:[[:space:]]*$/a\  trusted_proxies:\n    - "127.0.0.0/8"\n    - "::1/128"' server/config.yaml
+            fi
+
             # 写入生产后端运行时密钥。文件不进仓库，config.Load 会在启动时读取。
             tmp_env="$(mktemp)"
             cat > "$tmp_env" <<'RPBOX_ENV'
@@ -104,7 +112,8 @@ jobs:
             server_port="$(awk '/^server:/{in_server=1; next} in_server && /^[^[:space:]]/{exit} in_server && /^[[:space:]]+port:/{print $2; exit}' config.yaml | tr -d '"')"
             server_port="${server_port:-8080}"
             for i in $(seq 1 30); do
-              if curl -fsS "http://127.0.0.1:${server_port}/api/v1/updater/windows/x86_64/0.0.0" >/dev/null; then
+              health_status="$(curl -sS -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' "http://127.0.0.1:${server_port}/api/v1/updater/windows/x86_64/0.0.0" || true)"
+              if [ "$health_status" = "200" ]; then
                 break
               fi
               if [ "$i" -eq 30 ]; then
