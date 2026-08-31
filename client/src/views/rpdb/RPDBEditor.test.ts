@@ -410,6 +410,20 @@ describe('RPDBEditor', () => {
     expect(wrapper.get('[data-testid="musician-midi-content-checklist"]').text()).toContain('已具备可用的乐曲导入内容')
   })
 
+  it('saves an in-progress Musician code without blocking autosave', async () => {
+    const wrapper = await mountEditor()
+    await wrapper.findAll('.type-cards button')[3].trigger('click')
+    await wrapper.get('[data-testid="musician-code-input"]').setValue('TVVTOA')
+    await wrapper.get('[data-testid="save-rpdb-draft"]').trigger('click')
+
+    await vi.waitFor(() => expect(createRPDBDraft).toHaveBeenCalled())
+    const calls = vi.mocked(createRPDBDraft).mock.calls
+    expect(calls[calls.length - 1]?.[0]).toMatchObject({
+      type: 'musician_midi',
+      extra: { musician_code: 'TVVTOA' },
+    })
+  })
+
   it('uses type-specific content checklists for item, transmog and housing', async () => {
     const wrapper = await mountEditor()
 

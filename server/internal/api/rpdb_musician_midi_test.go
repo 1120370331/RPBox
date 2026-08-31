@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -98,6 +99,76 @@ func TestValidateRPDBWriteRequestSupportsMusicianMIDI(t *testing.T) {
 	valid.Extra = json.RawMessage(`{"musician_code":"not-base64"}`)
 	if err := validateRPDBWriteRequest(valid, true); err == nil || !strings.Contains(err.Error(), "音乐代码无效") {
 		t.Fatalf("expected invalid Musician code to be rejected, got %v", err)
+	}
+}
+
+func TestMusicianMIDIDraftAutosavesPartialCodeAndPublishesCompleteCode(t *testing.T) {
+	server, _, token := newRPDBAuthoringTestServer(t)
+	partialCode := "TVVTOA"
+	createResponse := performRequest(
+		server.router,
+		http.MethodPost,
+		"/api/v1/rpdb/drafts",
+		map[string]interface{}{
+			"payload": map[string]interface{}{
+				"type":       model.RPDBWorkTypeMusicianMIDI,
+				"title":      "Editing Musician song",
+				"status":     model.RPDBStatusDraft,
+				"visibility": model.RPDBVisibilityPublic,
+				"extra": map[string]interface{}{
+					"musician_code": partialCode,
+				},
+			},
+		},
+		token,
+	)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("partial Musician draft should autosave, got %d body=%s", createResponse.Code, createResponse.Body.String())
+	}
+
+	var created struct {
+		Draft model.RPDBDraft `json:"draft"`
+	}
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode draft response: %v", err)
+	}
+	publishPath := "/api/v1/rpdb/drafts/" + strconv.FormatUint(uint64(created.Draft.ID), 10) + "/publish"
+	incompletePublish := performRequest(server.router, http.MethodPost, publishPath, nil, token)
+	if incompletePublish.Code != http.StatusBadRequest || !strings.Contains(incompletePublish.Body.String(), "音乐代码无效") {
+		t.Fatalf("incomplete Musician code should fail only at publish, got %d body=%s", incompletePublish.Code, incompletePublish.Body.String())
+	}
+
+	title := []byte("Moonlight")
+	songData := append([]byte{'M', 'U', 'S', '8', 0, byte(len(title))}, title...)
+	songData = append(songData, 0x10, 0, 0, 0, 0)
+	completeCode := base64.RawStdEncoding.EncodeToString(songData)
+	updateResponse := performRequest(
+		server.router,
+		http.MethodPut,
+		"/api/v1/rpdb/drafts/"+strconv.FormatUint(uint64(created.Draft.ID), 10),
+		map[string]interface{}{
+			"payload": map[string]interface{}{
+				"type":       model.RPDBWorkTypeMusicianMIDI,
+				"title":      "Published Musician song",
+				"status":     model.RPDBStatusDraft,
+				"visibility": model.RPDBVisibilityPublic,
+				"extra": map[string]interface{}{
+					"musician_code": completeCode,
+				},
+			},
+		},
+		token,
+	)
+	if updateResponse.Code != http.StatusOK {
+		t.Fatalf("complete Musician draft should save, got %d body=%s", updateResponse.Code, updateResponse.Body.String())
+	}
+
+	published := performRequest(server.router, http.MethodPost, publishPath, nil, token)
+	if published.Code != http.StatusCreated {
+		t.Fatalf("complete Musician draft should publish, got %d body=%s", published.Code, published.Body.String())
+	}
+	if !strings.Contains(published.Body.String(), "Published Musician song") {
+		t.Fatalf("published Musician response lost content: %s", published.Body.String())
 	}
 }
 
