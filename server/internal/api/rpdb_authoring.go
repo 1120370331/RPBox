@@ -531,9 +531,14 @@ func validateRPDBMusicianMIDIExtra(raw json.RawMessage, required bool) error {
 		if len(normalizedCode) > 2<<20 {
 			return fmt.Errorf("Musician 音乐代码不能超过 2MB")
 		}
-		decoded, err := base64.StdEncoding.DecodeString(normalizedCode)
-		if err != nil || !isMusicianSongCode(decoded) {
-			return fmt.Errorf("Musician 音乐代码无效，请粘贴官方转换器生成的完整代码")
+		// Drafts are saved while the user is still typing or pasting a long code.
+		// Full format validation belongs to publication so autosave never rejects
+		// a legitimate in-progress Musician code.
+		if required {
+			decoded, err := decodeMusicianSongCode(normalizedCode)
+			if err != nil || !isMusicianSongCode(decoded) {
+				return fmt.Errorf("Musician 音乐代码无效，请粘贴官方转换器生成的完整代码")
+			}
 		}
 	}
 	if extra.MIDIURL != "" {
@@ -552,6 +557,17 @@ func validateRPDBMusicianMIDIExtra(raw json.RawMessage, required bool) error {
 		return fmt.Errorf("Musician MIDI 文件不能超过 10MB")
 	}
 	return nil
+}
+
+func decodeMusicianSongCode(value string) ([]byte, error) {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err == nil {
+		return decoded, nil
+	}
+	if strings.Contains(value, "=") {
+		return nil, err
+	}
+	return base64.RawStdEncoding.DecodeString(value)
 }
 
 func isMusicianSongCode(decoded []byte) bool {
