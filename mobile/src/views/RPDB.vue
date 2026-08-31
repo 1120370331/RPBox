@@ -156,10 +156,8 @@ function clearSearch() {
   }
 }
 
-function applyAdvancedFilters() {
+function closeAdvancedFilters() {
   filterSheetOpen.value = false
-  if (filters.page === 1) void loadWorks()
-  else filters.page = 1
 }
 
 function resetAdvancedFilters() {
@@ -197,7 +195,27 @@ const { save: saveListState } = useListStateCache<RPDBListState>({
   }),
 })
 
-watch(() => [filters.type, filters.sort, filters.page], loadWorks)
+watch(
+  () => [
+    filters.type,
+    filters.sort,
+    filters.page,
+    advancedFilters.availability,
+    advancedFilters.faction,
+    advancedFilters.armorType,
+    advancedFilters.bindType,
+    advancedFilters.tagId,
+  ],
+  (values, previousValues) => {
+    const advancedFilterChanged = previousValues
+      && values.slice(3).some((value, index) => value !== previousValues[index + 3])
+    if (advancedFilterChanged && filters.page !== 1) {
+      filters.page = 1
+      return
+    }
+    void loadWorks()
+  },
+)
 
 onMounted(async () => {
   await Promise.all([
@@ -409,7 +427,7 @@ onUnmounted(() => {
           </div>
           <footer>
             <button type="button" class="secondary" @click="resetAdvancedFilters">重置</button>
-            <button type="button" class="primary" @click="applyAdvancedFilters">查看结果</button>
+            <button type="button" class="primary" @click="closeAdvancedFilters">完成</button>
           </footer>
         </section>
       </div>

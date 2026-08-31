@@ -37,6 +37,7 @@ local DEFAULT_CONFIG = {
     -- 显示设置
     showIcon = true,  -- 是否显示头像图标
     showSystemMessages = false,  -- 是否在日志中显示人物卡更新等系统信息
+    itemGuardEnabled = true,  -- TRP3 Extended 对象与光环防护默认开启
     uiTheme = "modern",  -- modern: 简约档案；classic: 暴雪原生
     ignoreSelf = false,  -- 是否屏蔽自己的消息
     ignoreNonRPPlayers = false,  -- 是否屏蔽未检测到 RP 人物卡的玩家
@@ -920,6 +921,8 @@ local function ShowHelp()
     print("  /rpbox clear [all] - 清理记录")
     print("  /rpbox log [today] - 打开回放窗口")
     print("  /rpbox item mark/list - 道具标记")
+    print("  /rpbox guard status/on/off/scan/list/allow/ignore/unignore <根ID> - TRP3 对象与 Lua 防护")
+    print("  /rpbox guard trust/untrust 名字-服务器；trustlist - 可信内容发布者")
     print("  /rpbox cache list - 列出已缓存的人物卡")
     print("  /rpbox cache stats - 显示缓存统计")
     print("  /rpbox cache import - 导入TRP3所有人物卡")
@@ -987,6 +990,12 @@ local function HandleSlashCommand(msg)
             ns.ListMarkedItems()
         else
             print("|cFF00FF00[RPBox]|r 用法: /rpbox item mark/list")
+        end
+    elseif cmd == "guard" then
+        if ns.ItemGuard and ns.ItemGuard.HandleSlash then
+            ns.ItemGuard:HandleSlash(subcmd, param)
+        else
+            print("|cFFFF0000[RPBox]|r 对象防护模块尚未就绪")
         end
     elseif cmd == "cache" or cmd == "profiles" then
         if subcmd == "list" or subcmd == "" then
@@ -1147,6 +1156,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         InitSavedVariables()
         CleanupFromClientState()
         print(L["ADDON_LOADED"] or "|cFF00FF00[RPBox]|r 插件已加载")
+
+        if ns.ItemGuard and ns.ItemGuard.Initialize then
+            ns.ItemGuard:Initialize()
+        end
 
         -- 注册TRP3事件监听
         if TRP3_Addon and TRP3_Addon.RegisterCallback then

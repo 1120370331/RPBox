@@ -163,7 +163,7 @@ describe('jumpLink utils', () => {
     expect(card.getAttribute('data-jump-label')).toBe('服务器')
     expect(card.getAttribute('data-jump-title')).toBe('更新后的战报')
     expect(card.getAttribute('data-jump-author')).toBe('新作者')
-    expect(card.getAttribute('data-jump-avatar')).toBe('/uploads/avatar.jpg')
+    expect(card.getAttribute('data-jump-avatar')).toMatch(/\/uploads\/avatar\.jpg$/)
     expect(card.getAttribute('data-jump-image')).toContain('/api/v1/images/post-cover/12')
     expect(card.querySelector('.jump-card__label')?.textContent).toBe('服务器')
     expect(card.querySelector('.jump-card__title')?.textContent).toBe('更新后的战报')

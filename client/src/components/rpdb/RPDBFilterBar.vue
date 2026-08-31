@@ -7,8 +7,9 @@ const props = defineProps<{ modelValue: ListRPDBWorksParams; styleTags?: Array<P
 const emit = defineEmits<{ 'update:modelValue': [value: ListRPDBWorksParams]; search: [] }>()
 const tagSuggestionsOpen = ref(false)
 
-function patch(key: keyof ListRPDBWorksParams, value: string | number | undefined) {
+function patch(key: keyof ListRPDBWorksParams, value: string | number | undefined, applyImmediately = false) {
   emit('update:modelValue', { ...props.modelValue, [key]: value, page: 1 })
+  if (applyImmediately) emit('search')
 }
 
 const normalizedTagSearch = computed(() => normalizeTopicSearch(props.modelValue.tag_search || ''))
@@ -54,6 +55,7 @@ function patchType(value: RPDBWorkType | '') {
     tag_search: undefined,
     page: 1,
   })
+  emit('search')
 }
 </script>
 
@@ -72,22 +74,22 @@ function patchType(value: RPDBWorkType | '') {
         <option value="">全部分类</option><option value="item_showcase">魔兽物品</option><option value="transmog">幻化方案</option><option value="home_showcase">家宅分享</option><option value="musician_midi">Musician MIDI</option>
       </select>
 
-      <select v-if="modelValue.type !== 'home_showcase' && modelValue.type !== 'musician_midi'" :value="modelValue.availability_status" aria-label="获取状态" @change="patch('availability_status', ($event.target as HTMLSelectElement).value)">
+      <select v-if="modelValue.type !== 'home_showcase' && modelValue.type !== 'musician_midi'" :value="modelValue.availability_status" aria-label="获取状态" @change="patch('availability_status', ($event.target as HTMLSelectElement).value, true)">
         <option value="">全部获取状态</option><option value="available">可获取</option><option value="limited">限时获取</option><option value="removed">已绝版</option><option value="unknown">未知</option>
       </select>
-      <select v-else :value="modelValue.availability_status" aria-label="参观状态" @change="patch('availability_status', ($event.target as HTMLSelectElement).value)">
+      <select v-else :value="modelValue.availability_status" aria-label="参观状态" @change="patch('availability_status', ($event.target as HTMLSelectElement).value, true)">
         <option value="">全部参观状态</option><option value="available">可参观</option><option value="limited">需预约</option><option value="removed">暂不开放</option><option value="unknown">未知</option>
       </select>
 
-      <select v-if="modelValue.type === 'transmog'" :value="modelValue.armor_type" aria-label="护甲类型" @change="patch('armor_type', ($event.target as HTMLSelectElement).value)">
+      <select v-if="modelValue.type === 'transmog'" :value="modelValue.armor_type" aria-label="护甲类型" @change="patch('armor_type', ($event.target as HTMLSelectElement).value, true)">
         <option value="">全部护甲</option><option value="cloth">布甲</option><option value="leather">皮甲</option><option value="mail">锁甲</option><option value="plate">板甲</option><option value="cosmetic">装饰</option>
       </select>
 
-      <select v-if="modelValue.type === 'item_showcase'" :value="modelValue.bind_type" aria-label="绑定状态" @change="patch('bind_type', ($event.target as HTMLSelectElement).value)">
+      <select v-if="modelValue.type === 'item_showcase'" :value="modelValue.bind_type" aria-label="绑定状态" @change="patch('bind_type', ($event.target as HTMLSelectElement).value, true)">
         <option value="">全部绑定状态</option><option value="yes">绑定</option><option value="no">不绑定</option>
       </select>
 
-      <select v-if="modelValue.type === 'transmog' || modelValue.type === 'item_showcase'" :value="modelValue.faction" aria-label="阵营" @change="patch('faction', ($event.target as HTMLSelectElement).value)">
+      <select v-if="modelValue.type === 'transmog' || modelValue.type === 'item_showcase'" :value="modelValue.faction" aria-label="阵营" @change="patch('faction', ($event.target as HTMLSelectElement).value, true)">
         <option value="">全部阵营</option><option value="alliance">联盟</option><option value="horde">部落</option><option value="neutral">不限阵营</option>
       </select>
 
@@ -114,7 +116,7 @@ function patchType(value: RPDBWorkType | '') {
         </div>
       </div>
 
-      <select :value="modelValue.sort" aria-label="排序" @change="patch('sort', ($event.target as HTMLSelectElement).value)">
+      <select :value="modelValue.sort" aria-label="排序" @change="patch('sort', ($event.target as HTMLSelectElement).value, true)">
         <option value="updated_at">最近更新</option><option value="created_at">最新发布</option><option value="popular">热门浏览</option><option value="favorite">收藏最多</option><option value="comments">讨论最多</option>
       </select>
     </div>

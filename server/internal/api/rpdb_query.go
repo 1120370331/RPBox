@@ -43,6 +43,8 @@ type rpdbWorkListResponse struct {
 }
 
 func (s *Server) listRPDBWorks(c *gin.Context) {
+	prepareRPDBHTTPResponse(c)
+
 	page := parsePositiveInt(c.Query("page"), 1)
 	pageSize := parsePositiveInt(c.Query("page_size"), 12)
 	if pageSize > 12 {
@@ -63,7 +65,7 @@ func (s *Server) listRPDBWorks(c *gin.Context) {
 			cacheKey = cache.VersionedKey(rpdbListCacheName, version, cache.HashKey(filterKey))
 			var cached rpdbWorkListResponse
 			if err := s.cache.Get(c.Request.Context(), cacheKey, &cached); err == nil {
-				c.JSON(http.StatusOK, cached)
+				writeRPDBConditionalJSON(c, viewerID, rpdbWorkCardsArePublic(cached.Works), cached)
 				return
 			}
 		}
@@ -101,10 +103,12 @@ func (s *Server) listRPDBWorks(c *gin.Context) {
 	if cacheKey != "" {
 		_ = s.cache.Set(c.Request.Context(), cacheKey, response, cache.TTL["rpdb:list"])
 	}
-	c.JSON(http.StatusOK, response)
+	writeRPDBConditionalJSON(c, viewerID, rpdbWorkCardsArePublic(response.Works), response)
 }
 
 func (s *Server) getRPDBWork(c *gin.Context) {
+	prepareRPDBHTTPResponse(c)
+
 	workID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || workID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的作品 ID"})
@@ -175,12 +179,14 @@ func (s *Server) getRPDBWork(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"work": detail})
+	writeRPDBConditionalJSON(c, viewerID, rpdbWorkIsPublic(work), gin.H{"work": detail})
 }
 
 // listRPDBHotWorks returns rolling 7-day heat TopN works.
 // Only optional type filter is applied; search/tag/etc. are ignored.
 func (s *Server) listRPDBHotWorks(c *gin.Context) {
+	prepareRPDBHTTPResponse(c)
+
 	limit := parsePositiveInt(c.Query("limit"), 3)
 	if limit > 6 {
 		limit = 6
@@ -219,7 +225,7 @@ func (s *Server) listRPDBHotWorks(c *gin.Context) {
 	}
 
 	if len(ranked) == 0 {
-		c.JSON(http.StatusOK, gin.H{"works": []rpdbWorkCard{}, "window_days": 7})
+		writeRPDBConditionalJSON(c, viewerID, true, gin.H{"works": []rpdbWorkCard{}, "window_days": 7})
 		return
 	}
 
@@ -256,7 +262,7 @@ func (s *Server) listRPDBHotWorks(c *gin.Context) {
 		cards[i].ViewCount = int(rankMap[cards[i].ID])
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	writeRPDBConditionalJSON(c, viewerID, rpdbWorkCardsArePublic(cards), gin.H{
 		"works":       cards,
 		"window_days": 7,
 		"limit":       limit,
@@ -321,6 +327,8 @@ func loadRPDBEventViewCounts(workIDs []uint) (map[uint]int64, error) {
 }
 
 func (s *Server) getRPDBWorkPreview(c *gin.Context) {
+	prepareRPDBHTTPResponse(c)
+
 	workID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || workID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的作品 ID"})
@@ -347,7 +355,7 @@ func (s *Server) getRPDBWorkPreview(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "加载作品预览失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"work": cards[0]})
+	writeRPDBConditionalJSON(c, viewerID, rpdbWorkIsPublic(work), gin.H{"work": cards[0]})
 }
 
 func canViewRPDBWork(work model.RPDBWork, viewerID uint) bool {

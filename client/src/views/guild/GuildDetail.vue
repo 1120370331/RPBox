@@ -12,6 +12,7 @@ import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import LazyBgImage from '@/components/LazyBgImage.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +21,7 @@ const { confirm, alert } = useDialog()
 
 const loading = ref(true)
 const guild = ref<Guild | null>(null)
+const sanitizedGuildLore = computed(() => sanitizeRichHtml(guild.value?.lore || ''))
 const myRole = ref('')
 const members = ref<GuildMember[]>([])
 const pendingApplicationCount = ref(0)
@@ -523,7 +525,7 @@ onMounted(loadGuild)
             <div class="bento-card lore-card" :class="{ clickable: guild.lore }" @click="guild.lore && (showLoreModal = true)">
               <div class="card-icon"><i class="ri-quill-pen-line"></i></div>
               <h3>{{ t('guild.detail.guildLore') }} <i v-if="guild.lore" class="ri-arrow-right-s-line"></i></h3>
-              <div v-if="guild.lore" class="lore-preview" v-html="guild.lore"></div>
+              <div v-if="guild.lore" class="lore-preview" v-html="sanitizedGuildLore"></div>
               <p v-else class="empty-hint">{{ t('guild.detail.noLore') }}</p>
             </div>
 
@@ -568,7 +570,7 @@ onMounted(loadGuild)
 
     <!-- 公会设定详情弹窗 -->
     <RModal v-model="showLoreModal" :title="t('guild.detail.guildLore')" width="800px">
-      <div class="article-content" v-html="guild?.lore"></div>
+      <div class="article-content" v-html="sanitizedGuildLore"></div>
     </RModal>
 
     <!-- 设置弹窗 -->

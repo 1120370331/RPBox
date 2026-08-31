@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/pkg/auth"
@@ -13,6 +14,7 @@ import (
 func JWTAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var token string
+		queryToken := stripQueryToken(c)
 
 		// 优先从 Authorization header 获取 token
 		authHeader := c.GetHeader("Authorization")
@@ -23,9 +25,10 @@ func JWTAuth() gin.HandlerFunc {
 			}
 		}
 
-		// 如果 header 没有 token，尝试从 URL 查询参数获取（用于 WebSocket）
-		if token == "" {
-			token = c.Query("token")
+		// 浏览器 WebSocket API 无法设置 Authorization header，因此通知 WebSocket
+		// 在真实升级请求中保留查询参数认证。其他请求不得使用查询参数认证。
+		if token == "" && isNotificationWebSocketUpgrade(c.Request) {
+			token = queryToken
 		}
 
 		if token == "" {
@@ -58,6 +61,25 @@ func JWTAuth() gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Next()
 	}
+}
+
+func isNotificationWebSocketUpgrade(r *http.Request) bool {
+	return r.Method == http.MethodGet &&
+		r.URL.Path == "/api/v1/ws/notifications" &&
+		websocket.IsWebSocketUpgrade(r)
+}
+
+// stripQueryToken removes credentials from the request URL before downstream
+// handlers inspect it. The returned value is only eligible for use by the
+// notification WebSocket upgrade path.
+func stripQueryToken(c *gin.Context) string {
+	query := c.Request.URL.Query()
+	token := query.Get("token")
+	if _, exists := query["token"]; exists {
+		query.Del("token")
+		c.Request.URL.RawQuery = query.Encode()
+	}
+	return token
 }
 
 // ModeratorAuth 版主权限中间件

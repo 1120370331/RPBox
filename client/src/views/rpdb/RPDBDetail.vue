@@ -36,6 +36,7 @@ import { useToastStore } from '@/stores/toast'
 import { useEmoteStore } from '@/stores/emote'
 import { useUserStore } from '@/stores/user'
 import { renderEmoteContent } from '@/utils/emote'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import { attachImagePreview } from '@/utils/imagePreview'
 import { resolveApiUrl } from '@/api/item'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -616,7 +617,7 @@ function openReplyEmojiPicker(event: MouseEvent) {
 }
 
 function renderComment(value: string) {
-  return renderEmoteContent(value, emoteStore.emoteMap)
+  return sanitizeRichHtml(renderEmoteContent(value, emoteStore.emoteMap))
 }
 
 function formatCommentTime(value: string) {

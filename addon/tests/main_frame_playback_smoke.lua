@@ -322,6 +322,16 @@ function StaticPopup_Show(name) return StaticPopupDialogs[name] end
 
 RAID_CLASS_COLORS = {}
 CLASS_ICON_TCOORDS = {}
+ChatTypeInfo = {
+    SAY = { r = 1.00, g = 0.25, b = 0.50 },
+    YELL = { r = 1.00, g = 0.10, b = 0.10 },
+    EMOTE = { r = 1.00, g = 0.50, b = 0.25 },
+    PARTY = { r = 0.67, g = 0.67, b = 1.00 },
+    RAID = { r = 1.00, g = 0.50, b = 0.00 },
+    WHISPER = { r = 1.00, g = 0.50, b = 1.00 },
+    WHISPER_INFORM = { r = 1.00, g = 0.50, b = 1.00 },
+    GUILD = { r = 0.25, g = 1.00, b = 0.25 },
+}
 TRP3_API = nil
 ReloadUI = function() end
 GetRealmName = function() return "SmokeRealm" end
@@ -365,6 +375,52 @@ local snapshots = {
 
 local newMessageCallbacks = {}
 local listChangeCallbacks = {}
+local itemGuardToggles = {}
+local itemGuardActions = {}
+local itemGuardChangeCallback
+local itemGuardBlacklistActions = {}
+local itemGuardBlacklistChangeCallback
+local itemGuardBlacklistEntries = {
+    { identity = "蕾火演员死冯-金色平原", source = "builtin", reason = "RPBox 内置恶意道具来源名单" },
+    { identity = "工作人员二号-金色平原", source = "builtin", reason = "RPBox 内置恶意道具来源名单" },
+    { identity = "绿宝石兽-金色平原", source = "builtin", reason = "RPBox 内置恶意道具来源名单" },
+    { identity = "userbad-smokerealm", source = "user", reason = "手动添加" },
+}
+local itemGuardEntries = {
+    {
+        rootID = "risk-item",
+        itemName = "风险道具",
+        reasons = { "步骤循环中包含重复添加物品行为" },
+        score = 140,
+        status = "quarantined",
+        quarantined = true,
+        ignored = false,
+        icon = "inv_misc_questionmark",
+    },
+}
+for index = 2, 47 do
+    local status
+    if index % 3 == 0 then
+        status = "ignored"
+    elseif index % 3 == 1 then
+        status = "released"
+    else
+        status = "quarantined"
+    end
+    itemGuardEntries[#itemGuardEntries + 1] = {
+        rootID = string.format("risk-%03d", index),
+        itemName = string.format("批量风险道具 %02d", index),
+        reasons = {
+            index == 37 and "海妖特殊原因：异常添加物品" or "单次添加物品数量异常",
+            "用于风险筛选回放",
+        },
+        score = 100 + index,
+        status = status,
+        quarantined = status == "quarantined",
+        ignored = status == "ignored",
+        icon = "inv_misc_questionmark",
+    }
+end
 local function render_chat_link_labels(text)
     text = tostring(text or "")
     text = text:gsub("|c%x%x%x%x%x%x%x%x|H[^|]+|h(%b[])|h|r", "%1")
@@ -389,6 +445,44 @@ local ns = {
     RemoveFromBlacklist = function() end,
     RegisterOnNewMessage = function(callback) newMessageCallbacks[#newMessageCallbacks + 1] = callback end,
     RegisterOnListChange = function(callback) listChangeCallbacks[#listChangeCallbacks + 1] = callback end,
+    ItemGuard = {
+        SetEnabled = function(_, enabled) itemGuardToggles[#itemGuardToggles + 1] = enabled end,
+        GetRiskEntries = function() return itemGuardEntries end,
+        ScanAll = function() itemGuardActions[#itemGuardActions + 1] = { action = "scan" } end,
+        SetIsolation = function(_, rootID, isolated)
+            itemGuardActions[#itemGuardActions + 1] = { action = "isolate", rootID = rootID, value = isolated }
+        end,
+        SetIgnored = function(_, rootID, ignored)
+            itemGuardActions[#itemGuardActions + 1] = { action = "ignore", rootID = rootID, value = ignored }
+        end,
+        RegisterOnChanged = function(_, callback) itemGuardChangeCallback = callback end,
+    },
+    ItemGuardBlacklist = {
+        Initialize = function() return true end,
+        GetEntries = function() return itemGuardBlacklistEntries end,
+        AddUser = function(identity)
+            local normalized = string.lower((identity or ""):gsub("%s+", ""))
+            itemGuardBlacklistActions[#itemGuardBlacklistActions + 1] = { action = "add", identity = normalized }
+            itemGuardBlacklistEntries[#itemGuardBlacklistEntries + 1] = {
+                identity = normalized,
+                source = "user",
+            }
+            if itemGuardBlacklistChangeCallback then itemGuardBlacklistChangeCallback() end
+            return true, "已加入来源黑名单"
+        end,
+        RemoveUser = function(identity)
+            itemGuardBlacklistActions[#itemGuardBlacklistActions + 1] = { action = "remove", identity = identity }
+            for index, entry in ipairs(itemGuardBlacklistEntries) do
+                if entry.identity == identity and entry.source == "user" then
+                    table.remove(itemGuardBlacklistEntries, index)
+                    break
+                end
+            end
+            if itemGuardBlacklistChangeCallback then itemGuardBlacklistChangeCallback() end
+            return true, "已移出来源黑名单"
+        end,
+        RegisterOnChanged = function(callback) itemGuardBlacklistChangeCallback = callback end,
+    },
 }
 
 local function trigger_new_message(times)
@@ -667,13 +761,186 @@ while frame.logState.page < frame.logState.totalPages do
 end
 assert_equal(click(frame.nextPageBtn), false, "next-page button should be disabled on the last page")
 assert_contains(frame.logContent.rows[frame.logState.displayCount].text:GetText(), "legacy-marker", "oldest record was not reachable")
+assert_true(frame.statusText:IsShown(), "log status should be visible on the log tab")
+assert_true(frame.refreshBtn:IsShown(), "log refresh should be visible on the log tab")
+assert_true(frame.clearBtn:IsShown() and frame.exportBtn:IsShown() and frame.copyBtn:IsShown(), "log actions should be visible on the log tab")
 
 -- Drive the production settings UI: values are clamped to 40..120 and only
 -- the bounded row pool grows, never the full archive.
 click(find_tab(frame, "settings"))
 local settingsContent = frame.settingsContent
-assert_true(settingsContent.themeClassicBtn ~= nil and settingsContent.themeModernBtn ~= nil, "theme controls were not created")
+assert_true(not frame.statusText:IsShown(), "settings tab leaked the log status")
+assert_true(not frame.refreshBtn:IsShown(), "settings tab leaked the log refresh action")
+assert_true(not frame.clearBtn:IsShown() and not frame.exportBtn:IsShown() and not frame.copyBtn:IsShown(), "settings tab leaked log-only actions")
+assert_true(settingsContent.themeClassicBtn ~= nil and settingsContent.themeModernBtn ~= nil,
+    "theme controls were not created")
 assert_true(settingsContent.ignoreNonRPCb ~= nil, "non-RP player filter setting was not created")
+assert_true(settingsContent.itemGuardCb ~= nil, "item-guard setting was not created")
+assert_true(settingsContent.itemGuardCb:IsShown(), "item-guard setting is hidden in the real settings layout")
+assert_equal(settingsContent.itemGuardCb.text:GetText(), "开启 TRP3 对象与光环防护",
+    "object-and-aura guard setting uses stale wording")
+assert_true(settingsContent.itemGuardTopOffset <= 60, "item-guard setting is not in the visible top feature area")
+assert_equal(frame.settingsScroll:GetVerticalScroll(), 0, "settings tab did not return to its visible top area")
+assert_true(settingsContent.itemGuardCb:GetChecked() == true, "item guard should default to enabled")
+settingsContent.itemGuardCb:SetChecked(false)
+click(settingsContent.itemGuardCb)
+assert_true(RPBox_Config.itemGuardEnabled == false, "item-guard setting was not persisted")
+assert_equal(itemGuardToggles[#itemGuardToggles], false, "item-guard module was not disabled")
+settingsContent.itemGuardCb:SetChecked(true)
+click(settingsContent.itemGuardCb)
+assert_true(RPBox_Config.itemGuardEnabled == true, "item guard could not be re-enabled")
+assert_equal(itemGuardToggles[#itemGuardToggles], true, "item-guard module was not enabled")
+
+assert_equal(#settingsContent.checkboxes, 8, "channel grid should contain all eight channel toggles")
+assert_equal(settingsContent.checkboxes[1].gridColumn, 1, "channel grid first item column is wrong")
+assert_equal(settingsContent.checkboxes[1].gridRow, 1, "channel grid first item row is wrong")
+assert_equal(settingsContent.checkboxes[4].gridColumn, 4, "channel grid fourth item should end row one")
+assert_equal(settingsContent.checkboxes[5].gridColumn, 1, "channel grid fifth item should start row two")
+assert_equal(settingsContent.checkboxes[8].gridColumn, 4, "channel grid last item should end row two")
+assert_contains(settingsContent.checkboxes[1].text:GetText(), "|cffFF4080说话|r", "SAY did not use its native ChatTypeInfo color")
+assert_equal(settingsContent.checkboxes[6].nativeChatType, "WHISPER", "incoming whisper used the wrong native chat type")
+assert_equal(settingsContent.checkboxes[7].nativeChatType, "WHISPER_INFORM", "outgoing whisper used the wrong native chat type")
+assert_true(settingsContent.checkboxes[4]._point[2] < settingsContent:GetWidth(), "four-column channel grid overflows settings content")
+frame:SetSize(680, 540)
+frame._scripts.OnSizeChanged(frame, 680, 540)
+assert_equal(settingsContent:GetWidth(), 616, "settings content did not adapt to minimum window width")
+assert_true(
+    settingsContent.checkboxes[4]._point[2] + settingsContent.channelColumnWidth <= settingsContent:GetWidth(),
+    "four-column channel grid overflows at minimum window width"
+)
+frame:SetSize(780, 560)
+frame._scripts.OnSizeChanged(frame, 780, 560)
+
+click(find_tab(frame, "guard"))
+assert_true(not frame.statusText:IsShown(), "guard tab leaked the log status")
+assert_true(not frame.refreshBtn:IsShown(), "guard tab leaked the log refresh action")
+assert_true(not frame.clearBtn:IsShown() and not frame.exportBtn:IsShown() and not frame.copyBtn:IsShown(), "guard tab leaked log-only actions")
+assert_true(frame.guardContent ~= nil and frame.guardContent.rows ~= nil, "risk-management GUI was not created")
+local guardContent = frame.guardContent
+assert_equal(#guardContent.rows, 20, "risk GUI should create only one bounded page of rows")
+assert_equal(guardContent.totalEntries, 47, "risk GUI did not read all fixture entries")
+assert_equal(guardContent.totalMatches, 47, "default risk filter should show all entries")
+assert_equal(guardContent.totalPages, 3, "risk GUI pagination count is incorrect")
+assert_contains(guardContent.pageInfo:GetText(), "匹配 47 / 总计 47", "risk pagination summary is incomplete")
+click(guardContent.scanBtn)
+assert_equal(itemGuardActions[#itemGuardActions].action, "scan", "manual risk scan was not delegated")
+local guardRow = frame.guardContent.rows[1]
+assert_true(guardRow ~= nil and guardRow:IsShown(), "risk item row was not rendered")
+assert_equal(guardRow.name:GetText(), "风险道具", "risk item name was not rendered")
+assert_contains(guardRow.reason:GetText(), "步骤循环", "risk reason was not rendered")
+assert_contains(guardRow.idText:GetText(), "风险分 140", "risk score was not rendered")
+assert_equal(guardRow.status:GetText(), "已隔离", "risk status was not rendered")
+assert_true(guardRow.quarantineCb:GetChecked(), "isolation checkbox did not reflect current state")
+assert_equal(guardRow.ignoreBtn:GetText(), "加入忽略", "ignore-list action was not shown")
+assert_equal(guardRow.ignoreBtn:GetAlpha(), 0.48, "ignore-list action was not de-emphasized")
+
+click(find_tab(frame, "log"))
+Timer.drain()
+assert_true(frame.statusText:IsShown(), "returning to log did not restore its status")
+assert_true(frame.refreshBtn:IsShown(), "returning to log did not restore refresh")
+assert_true(frame.clearBtn:IsShown() and frame.exportBtn:IsShown() and frame.copyBtn:IsShown(), "returning to log did not restore log actions")
+click(find_tab(frame, "guard"))
+
+-- The minimum supported window keeps the text rail and the fixed action rail
+-- disjoint, and the row itself inside the guard content width.
+frame:SetSize(680, 540)
+frame._scripts.OnSizeChanged(frame, 680, 540)
+assert_equal(guardContent:GetWidth(), 616, "risk content did not adapt to minimum window width")
+assert_equal(guardRow:GetWidth(), 600, "risk row did not stay inside minimum-width content")
+assert_true(guardRow._rpboxTextRight < guardRow._rpboxActionLeft, "risk text overlaps the action rail")
+assert_equal(guardRow.ignoreBtn:GetWidth(), 96, "ignore action width should remain stable")
+assert_equal(guardRow.ignoreBtn._point[1], "BOTTOMRIGHT", "ignore action lost its right-edge anchor")
+frame:SetSize(780, 560)
+frame._scripts.OnSizeChanged(frame, 780, 560)
+
+-- Search covers names, root IDs, and reasons; every filter change returns to
+-- page one without growing the row pool.
+click(guardContent.nextPageBtn)
+frame.guardScroll:SetVerticalScroll(120)
+guardContent.searchBox:SetText("risk-037")
+guardContent.searchBox._scripts.OnTextChanged(guardContent.searchBox, true)
+assert_equal(guardContent.page, 1, "risk ID search did not reset pagination")
+assert_equal(frame.guardScroll:GetVerticalScroll(), 0, "risk search did not return the list to the top")
+assert_equal(guardContent.totalMatches, 1, "risk ID search returned the wrong number of entries")
+assert_equal(guardContent.rows[1].entry.rootID, "risk-037", "risk ID search rendered the wrong entry")
+guardContent.searchBox:SetText("海妖特殊原因")
+guardContent.searchBox._scripts.OnTextChanged(guardContent.searchBox, true)
+assert_equal(guardContent.totalMatches, 1, "risk reason search did not match reason text")
+assert_equal(guardContent.rows[1].entry.rootID, "risk-037", "risk reason search rendered the wrong entry")
+guardContent.searchBox:SetText("批量风险道具 07")
+guardContent.searchBox._scripts.OnTextChanged(guardContent.searchBox, true)
+assert_equal(guardContent.totalMatches, 1, "risk name search did not match item name")
+assert_equal(guardContent.rows[1].entry.rootID, "risk-007", "risk name search rendered the wrong entry")
+guardContent.searchBox:SetText("")
+guardContent.searchBox._scripts.OnTextChanged(guardContent.searchBox, true)
+
+click(guardContent.nextPageBtn)
+click(guardContent.statusButtons.ignored)
+assert_equal(guardContent.statusFilter, "ignored", "ignored-state filter was not selected")
+assert_equal(guardContent.page, 1, "status filter did not reset pagination")
+assert_true(guardContent.totalMatches > 0, "ignored-state fixture should not be empty")
+for _, row in ipairs(guardContent.rows) do
+    if row:IsShown() then
+        assert_equal(row.entry.status, "ignored", "status filter rendered a non-ignored entry")
+    end
+end
+click(guardContent.statusButtons.all)
+assert_equal(guardContent.totalMatches, 47, "all-state filter did not restore all entries")
+click(guardContent.nextPageBtn)
+assert_equal(guardContent.page, 2, "risk next-page button did not advance")
+assert_equal(guardContent.rows[1].entry.rootID, "risk-021", "risk second page starts at the wrong entry")
+assert_true(#guardContent.rows <= 20, "risk pagination grew the bounded row pool")
+click(guardContent.prevPageBtn)
+assert_equal(guardContent.page, 1, "risk previous-page button did not return to page one")
+
+guardRow = guardContent.rows[1]
+guardRow.quarantineCb:SetChecked(false)
+click(guardRow.quarantineCb)
+assert_equal(itemGuardActions[#itemGuardActions].action, "isolate", "isolation state was not delegated")
+assert_equal(itemGuardActions[#itemGuardActions].value, false, "temporary release state was not delegated")
+click(guardRow.ignoreBtn)
+assert_equal(itemGuardActions[#itemGuardActions].action, "ignore", "ignore-list action was not delegated")
+assert_equal(itemGuardActions[#itemGuardActions].value, true, "ignore-list state was not delegated")
+assert_true(itemGuardChangeCallback ~= nil, "risk GUI did not subscribe to guard updates")
+
+-- The source blacklist is a bounded, collapsible manager inside the guard
+-- page. Built-in entries are visible and read-only; user entries delegate all
+-- mutations to ItemGuardBlacklist without changing risk pagination.
+assert_true(itemGuardBlacklistChangeCallback ~= nil, "blacklist GUI did not subscribe to source-list updates")
+assert_contains(guardContent.blacklistToggleBtn:GetText(), "来源黑名单 (4)", "source blacklist count is missing")
+assert_contains(guardContent.blacklistToggleBtn:GetText(), "展开", "source blacklist toggle should use readable text")
+assert_true(not guardContent.blacklistToggleBtn:GetText():find("▾", 1, true),
+    "source blacklist toggle retained an unsupported glyph")
+click(guardContent.blacklistToggleBtn)
+assert_true(guardContent.blacklistPanel:IsShown(), "source blacklist panel did not expand")
+assert_contains(guardContent.blacklistToggleBtn:GetText(), "收起", "expanded source blacklist lacks readable state text")
+assert_equal(#guardContent.blacklistRows, 5, "source blacklist row pool must stay bounded")
+assert_equal(guardContent.blacklistRows[1].source:GetText(), "系统", "built-in source label is missing")
+assert_true(not guardContent.blacklistRows[1].removeBtn:IsShown(), "built-in source exposed a delete action")
+
+guardContent.blacklistInput:SetText("NewBad-SmokeRealm")
+guardContent.blacklistInput._scripts.OnEnterPressed(guardContent.blacklistInput)
+assert_equal(itemGuardBlacklistActions[#itemGuardBlacklistActions].action, "add", "blacklist add was not delegated")
+assert_equal(itemGuardBlacklistActions[#itemGuardBlacklistActions].identity, "newbad-smokerealm", "blacklist add identity changed")
+assert_contains(guardContent.blacklistToggleBtn:GetText(), "来源黑名单 (5)", "blacklist GUI did not refresh after add")
+assert_true(guardContent.blacklistInput._focused == false, "blacklist Enter submission did not clear focus")
+
+local removableBlacklistRow
+for _, row in ipairs(guardContent.blacklistRows) do
+    if row.entry and row.entry.identity == "newbad-smokerealm" then removableBlacklistRow = row end
+end
+assert_true(removableBlacklistRow ~= nil, "new user blacklist entry was not rendered")
+assert_equal(removableBlacklistRow.source:GetText(), "用户", "user source label is missing")
+assert_true(removableBlacklistRow.removeBtn:IsShown(), "user source did not expose delete")
+click(removableBlacklistRow.removeBtn)
+assert_equal(itemGuardBlacklistActions[#itemGuardBlacklistActions].action, "remove", "blacklist remove was not delegated")
+assert_equal(itemGuardBlacklistActions[#itemGuardBlacklistActions].identity, "newbad-smokerealm", "blacklist remove targeted wrong identity")
+assert_equal(guardContent.totalEntries, 47, "blacklist mutations changed risk result count")
+assert_equal(guardContent.totalPages, 3, "blacklist mutations broke risk pagination")
+click(guardContent.blacklistToggleBtn)
+assert_true(not guardContent.blacklistPanel:IsShown(), "source blacklist panel did not collapse")
+
+click(find_tab(frame, "settings"))
 assert_true(settingsContent.ignoreNonRPCb:GetChecked() == false, "non-RP player filter should default to off")
 settingsContent.ignoreNonRPCb:SetChecked(true)
 click(settingsContent.ignoreNonRPCb)
@@ -687,6 +954,10 @@ settingsContent.showSystemMessagesCb:SetChecked(true)
 click(settingsContent.showSystemMessagesCb)
 assert_true(RPBox_Config.showSystemMessages == true, "system-message visibility setting was not persisted")
 assert_true(settingsContent.themeModernBtn:IsEnabled() == false, "active modern theme should be selected")
+RPBox_Config.uiTheme = "removed-theme"
+assert_equal(ns.UI.GetTheme(), "modern", "removed theme should fall back to modern")
+assert_equal(RPBox_Config.uiTheme, "modern", "removed theme fallback was not persisted")
+ns.UI.ApplyAll()
 click(settingsContent.themeClassicBtn)
 assert_equal(RPBox_Config.uiTheme, "classic", "classic theme selection was not persisted")
 assert_equal(frame._rpboxTheme, "classic", "classic theme was not applied immediately")

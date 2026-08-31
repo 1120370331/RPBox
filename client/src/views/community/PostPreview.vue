@@ -6,6 +6,7 @@ import { POST_CATEGORIES } from '@/api/post'
 import { useUserStore } from '@/stores/user'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 
 const router = useRouter()
@@ -29,6 +30,9 @@ interface PreviewData {
 
 const previewData = ref<PreviewData | null>(null)
 const articleContentRef = ref<HTMLElement | null>(null)
+const sanitizedPreviewContent = computed(() => sanitizeRichHtml(
+  previewData.value?.content || `<p>${t('community.preview.noContent')}</p>`,
+))
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
@@ -172,7 +176,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 
             <div class="zen-divider"></div>
 
-            <div ref="articleContentRef" class="article-content" v-html="previewData.content || `<p>${t('community.preview.noContent')}</p>`" @click="handlePreviewContentClick"></div>
+            <div ref="articleContentRef" class="article-content" v-html="sanitizedPreviewContent" @click="handlePreviewContentClick"></div>
           </div>
         </article>
 

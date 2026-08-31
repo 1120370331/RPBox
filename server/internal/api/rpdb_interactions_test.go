@@ -33,6 +33,7 @@ func newRPDBInteractionTestServer(t *testing.T) (*Server, model.User, model.RPDB
 		&model.RPDBListEntry{},
 		&model.RPDBReference{},
 		&model.RPDBGuideStep{},
+		&model.RPDBViewEvent{},
 	)
 	user := model.User{Username: "collector", Email: "collector@example.com", PassHash: "hash"}
 	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash"}

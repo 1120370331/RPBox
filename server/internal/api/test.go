@@ -9,7 +9,7 @@ import (
 	"github.com/rpbox/server/pkg/validator"
 )
 
-// testSendNotification 测试发送通知（仅用于开发测试）
+// testSendNotification 在 debug 模式下为管理员创建测试通知。
 func (s *Server) testSendNotification(c *gin.Context) {
 	var req struct {
 		UserID  uint   `json:"user_id" binding:"required"`

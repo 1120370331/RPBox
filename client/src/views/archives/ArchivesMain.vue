@@ -20,6 +20,7 @@ import { getGuild, type Guild } from '@/api/guild'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import type { ChatRecord, IdentityEndpoint, ProfileSnapshot } from '@/types/chatLog'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 interface InstalledAddonInfo {
   installed: boolean
@@ -41,6 +42,9 @@ const currentGuild = ref<Guild | null>(null)
 const storyFilter = computed<StoryFilterParams | undefined>(() => {
   return filterGuildId.value ? { guild_id: String(filterGuildId.value) } : undefined
 })
+const viewingGuildHtml = computed(() => sanitizeRichHtml(
+  t('archives.filter.viewingGuild', { name: `<strong>${currentGuild.value?.name || ''}</strong>` }),
+))
 
 // 创建剧情对话框
 const showCreateModal = ref(false)
@@ -522,6 +526,7 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
     }
 
     const isIdentityEvent = Boolean(record.event) || record.mark === 'S'
+    const canBindCharacter = type === 'dialogue' && !isIdentityEvent
 
     return {
       source_id: `chat_${record.record_key}`,
@@ -530,10 +535,10 @@ function buildEntriesFromRecords(records: ChatRecord[]): CreateStoryEntryRequest
       content,
       channel: channel,
       timestamp: new Date(record.timestamp * 1000).toISOString(),
-      ref_id: isIdentityEvent ? undefined : record.ref_id,
-      game_id: isIdentityEvent ? undefined : record.sender.gameID,
-      trp3_data: isIdentityEvent ? undefined : record.raw_profile,
-      is_npc: isIdentityEvent ? false : isNpc,
+      ref_id: canBindCharacter ? record.ref_id : undefined,
+      game_id: canBindCharacter ? record.sender.gameID : undefined,
+      trp3_data: canBindCharacter ? record.raw_profile : undefined,
+      is_npc: canBindCharacter && isNpc,
     }
   })
 }
@@ -754,7 +759,7 @@ function handleViewStory(id: number) {
     <div v-if="currentGuild" class="guild-filter-banner anim-item" style="--delay: 0.7">
       <div class="banner-content">
         <i class="ri-shield-line"></i>
-        <span v-html="$t('archives.filter.viewingGuild', { name: `<strong>${currentGuild.name}</strong>` })"></span>
+        <span v-html="viewingGuildHtml"></span>
       </div>
       <button class="clear-filter-btn" @click="router.push({ name: 'archives' })">
         <i class="ri-close-line"></i>

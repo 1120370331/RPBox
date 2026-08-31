@@ -27,6 +27,11 @@ type SwitchClaims struct {
 
 const accountSwitchPurpose = "account_switch"
 
+type bearerTokenClaims struct {
+	Claims
+	Purpose string `json:"purpose,omitempty"`
+}
+
 func GenerateToken(userID uint, username string, expireHours int) (string, error) {
 	claims := Claims{
 		UserID:   userID,
@@ -57,27 +62,38 @@ func GenerateSwitchToken(userID uint, username string, expireDays int) (string, 
 }
 
 func ParseToken(tokenStr string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	})
+	parsedClaims := &bearerTokenClaims{}
+	token, err := jwt.ParseWithClaims(tokenStr, parsedClaims, jwtKey,
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithExpirationRequired(),
+	)
 	if err != nil {
 		return nil, err
 	}
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		return claims, nil
+	if token.Valid && parsedClaims.Purpose == "" {
+		return &parsedClaims.Claims, nil
 	}
 	return nil, jwt.ErrSignatureInvalid
 }
 
 func ParseSwitchToken(tokenStr string) (*SwitchClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &SwitchClaims{}, func(t *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	})
+	parsedClaims := &SwitchClaims{}
+	token, err := jwt.ParseWithClaims(tokenStr, parsedClaims, jwtKey,
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithExpirationRequired(),
+	)
 	if err != nil {
 		return nil, err
 	}
-	if claims, ok := token.Claims.(*SwitchClaims); ok && token.Valid && claims.Purpose == accountSwitchPurpose {
-		return claims, nil
+	if token.Valid && parsedClaims.Purpose == accountSwitchPurpose {
+		return parsedClaims, nil
 	}
 	return nil, jwt.ErrSignatureInvalid
+}
+
+func jwtKey(token *jwt.Token) (interface{}, error) {
+	if token.Method != jwt.SigningMethodHS256 {
+		return nil, jwt.ErrSignatureInvalid
+	}
+	return jwtSecret, nil
 }

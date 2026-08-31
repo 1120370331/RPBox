@@ -9,6 +9,7 @@ import CharacterCardImpressionMark from '@/components/character-cards/CharacterC
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardDisplayName, normalizeCharacterCardImpressions } from '@/utils/characterCardDraft'
 import { getCharacterCardCoverPortrait, normalizeCharacterCardPortraits } from '@/utils/characterCardPortraits'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 const props = defineProps<{
   card: CharacterCard
@@ -17,6 +18,9 @@ const props = defineProps<{
 const { t, locale } = useI18n()
 const posterRef = ref<HTMLElement | null>(null)
 const displayName = computed(() => getCharacterCardDisplayName(props.card))
+const sanitizedBackgroundStory = computed(() => sanitizeRichHtml(props.card.background_story || ''))
+const sanitizedFirstImpression = computed(() => sanitizeRichHtml(props.card.first_impression || ''))
+const sanitizedOtherContent = computed(() => sanitizeRichHtml(props.card.other_content || ''))
 const displayColor = computed(() => getCharacterCardDisplayColor(props.card))
 const posterNameColor = computed(() => displayColor.value
   ? `color-mix(in srgb, ${displayColor.value} 55%, #211b18)`
@@ -136,7 +140,7 @@ defineExpose({ getElement })
         <h2>{{ t('characterCards.tabs.background') }}</h2>
         <small>{{ t('characterCards.share.poster.chronicleCaption') }}</small>
       </header>
-      <div v-if="card.background_story" class="poster-rich" v-html="card.background_story"></div>
+      <div v-if="card.background_story" class="poster-rich" v-html="sanitizedBackgroundStory"></div>
       <p v-else class="poster-empty">{{ t('characterCards.detail.backgroundMissing') }}</p>
     </section>
 
@@ -173,7 +177,7 @@ defineExpose({ getElement })
 
       <div v-if="card.first_impression" class="poster-supplement">
         <span>{{ t('characterCards.detail.supplement') }}</span>
-        <div class="poster-rich" v-html="card.first_impression"></div>
+        <div class="poster-rich" v-html="sanitizedFirstImpression"></div>
       </div>
     </section>
 
@@ -183,7 +187,7 @@ defineExpose({ getElement })
         <h2>{{ t('characterCards.tabs.other') }}</h2>
         <small>{{ t('characterCards.share.poster.otherCaption') }}</small>
       </header>
-      <div v-if="card.other_content" class="poster-rich" v-html="card.other_content"></div>
+      <div v-if="card.other_content" class="poster-rich" v-html="sanitizedOtherContent"></div>
       <p v-else class="poster-empty">{{ t('characterCards.detail.otherMissing') }}</p>
     </section>
 

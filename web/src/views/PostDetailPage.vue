@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getPost } from '@shared/api/post'
 import RCard from '@shared/components/RCard.vue'
 import RLoading from '@shared/components/RLoading.vue'
+import { sanitizeRichHtml } from '@shared/utils/sanitizeHtml'
 
 const route = useRoute()
 const post = ref<any>(null)
+const sanitizedPostContent = computed(() => sanitizeRichHtml(post.value?.content || ''))
 const loading = ref(true)
 
 onMounted(async () => {
@@ -29,7 +31,7 @@ onMounted(async () => {
         <span>{{ post.author?.username }}</span>
         <span>{{ post.view_count }} 浏览</span>
       </div>
-      <div class="post-content" v-html="post.content"></div>
+      <div class="post-content" v-html="sanitizedPostContent"></div>
     </RCard>
   </div>
 </template>

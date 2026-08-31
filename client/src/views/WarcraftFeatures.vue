@@ -156,17 +156,6 @@ const pluginCards = computed<PluginCard[]>(() => [
   buildRpboxCard(),
 ])
 
-const pluginReadyCount = computed(() => pluginCards.value.filter(card => card.state === 'ready').length)
-const activeInstallCount = computed(() => installingPluginIds.value.length)
-
-const pluginStatusSummary = computed(() => {
-  if (!hasWowPath.value) return '等待目录'
-  if (checkingPlugins.value) return '检测中'
-  if (activeInstallCount.value) return `${activeInstallCount.value} 个处理中`
-  if (pluginReadyCount.value === pluginCards.value.length) return '全部就绪'
-  return `${pluginReadyCount.value}/${pluginCards.value.length} 就绪`
-})
-
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
   await bindProgressEvents()
@@ -710,10 +699,6 @@ async function openAddonFolder() {
         <h1>魔兽功能</h1>
         <p>先定位游戏目录，再安装插件，最后进入人物卡备份和剧情故事。</p>
       </div>
-      <div class="title-status" :class="{ ready: hasWowPath }">
-        <span>当前状态</span>
-        <strong>{{ pluginStatusSummary }}</strong>
-      </div>
     </section>
 
     <section class="directory-row anim-item" style="--delay: 1">
@@ -979,31 +964,6 @@ h3 {
   color: var(--color-text-secondary, #856a52);
   font-size: 12px;
   line-height: 1.5;
-}
-
-.title-status {
-  min-width: 132px;
-  padding: 11px 14px;
-  border-radius: 8px;
-  background: rgba(21, 94, 145, 0.07);
-  border: 1px solid rgba(21, 94, 145, 0.15);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.title-status.ready {
-  background: rgba(46, 125, 50, 0.08);
-  border-color: rgba(46, 125, 50, 0.18);
-}
-
-.title-status span {
-  color: var(--color-text-secondary, #856a52);
-  font-size: 12px;
-}
-
-.title-status strong {
-  font-size: 15px;
 }
 
 .directory-row,

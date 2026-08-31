@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,13 +38,24 @@ type Server struct {
 	trp3MirrorManifestMu sync.Mutex
 }
 
+const (
+	// multipartMemoryThresholdBytes is only the in-memory portion of a
+	// multipart form. net/http transparently spills larger file parts to the
+	// process temporary directory, while BodyLimit remains the hard request
+	// limit.
+	multipartMemoryThresholdBytes int64 = 8 << 20
+	authPublicBodyLimitBytes      int64 = 1 << 20
+)
+
 func NewServer(cfg *config.Config) *Server {
 	gin.SetMode(cfg.Server.Mode)
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.LoggerWithFormatter(safeGinLogFormatter), gin.Recovery())
+	configureTrustedProxies(router, cfg.Server.TrustedProxies)
 	if cfg.Server.Mode == gin.ReleaseMode {
-		router.Use(middleware.HTTPSRedirect())
+		router.Use(middleware.HTTPSRedirect(cfg))
 	}
-	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.SecurityHeaders(cfg))
 	router.Use(middleware.CORS(cfg))
 	router.Use(middleware.RateLimit(cfg.RateLimit.Global.RPS, cfg.RateLimit.Global.Burst))
 	maxBodySizeMB := cfg.Server.MaxBodySizeMB
@@ -51,8 +65,10 @@ func NewServer(cfg *config.Config) *Server {
 	maxBodySizeBytes := int64(maxBodySizeMB) << 20
 	router.Use(middleware.BodyLimit(maxBodySizeBytes))
 
-	// 设置 multipart 内存限制
-	router.MaxMultipartMemory = maxBodySizeBytes
+	// Keep multipart parsing memory bounded independently from the configurable
+	// hard request limit. This still permits legitimate larger uploads because
+	// net/http stores the excess file data in temporary files.
+	router.MaxMultipartMemory = multipartMemoryLimit(maxBodySizeBytes)
 
 	// 创建 WebSocket Hub
 	hub := ws.NewHub()
@@ -101,6 +117,75 @@ func NewServer(cfg *config.Config) *Server {
 
 	s.setupRoutes()
 	return s
+}
+
+func multipartMemoryLimit(maxBodySizeBytes int64) int64 {
+	if maxBodySizeBytes < multipartMemoryThresholdBytes {
+		return maxBodySizeBytes
+	}
+	return multipartMemoryThresholdBytes
+}
+
+func safeGinLogFormatter(param gin.LogFormatterParams) string {
+	var statusColor, methodColor, resetColor string
+	if param.IsOutputColor() {
+		statusColor = param.StatusCodeColor()
+		methodColor = param.MethodColor()
+		resetColor = param.ResetColor()
+	}
+
+	if param.Latency > time.Minute {
+		param.Latency = param.Latency.Truncate(time.Second)
+	}
+	return fmt.Sprintf("[GIN] %v |%s %3d %s| %13v | %15s |%s %-7s %s %#v\n%s",
+		param.TimeStamp.Format("2006/01/02 - 15:04:05"),
+		statusColor, param.StatusCode, resetColor,
+		param.Latency,
+		param.ClientIP,
+		methodColor, param.Method, resetColor,
+		redactTokenQuery(param.Path),
+		param.ErrorMessage,
+	)
+}
+
+// redactTokenQuery preserves the request path and all non-secret query data
+// while removing every token parameter value from access logs. It deliberately
+// decodes query keys so encoded spellings such as %74oken cannot bypass it.
+func redactTokenQuery(path string) string {
+	queryStart := strings.IndexByte(path, '?')
+	if queryStart < 0 || queryStart == len(path)-1 {
+		return path
+	}
+
+	parts := strings.Split(path[queryStart+1:], "&")
+	for index, part := range parts {
+		rawKey, _, _ := strings.Cut(part, "=")
+		key, err := url.QueryUnescape(rawKey)
+		if err == nil && key == "token" {
+			parts[index] = rawKey + "=[REDACTED]"
+		}
+	}
+	return path[:queryStart+1] + strings.Join(parts, "&")
+}
+
+// configureTrustedProxies applies an explicit proxy boundary. Gin otherwise
+// trusts every proxy by default, which lets direct clients spoof ClientIP via
+// X-Forwarded-For. Invalid configuration fails closed and leaves proxy-header
+// processing disabled.
+func configureTrustedProxies(router *gin.Engine, trustedProxies []string) {
+	if err := router.SetTrustedProxies(nil); err != nil {
+		log.Printf("[Security] failed to disable trusted proxies: %v", err)
+		return
+	}
+	if len(trustedProxies) == 0 {
+		return
+	}
+	if err := router.SetTrustedProxies(trustedProxies); err != nil {
+		log.Printf("[Security] invalid server.trusted_proxies configuration; proxy headers disabled: %v", err)
+		if disableErr := router.SetTrustedProxies(nil); disableErr != nil {
+			log.Printf("[Security] failed to disable trusted proxies after invalid configuration: %v", disableErr)
+		}
+	}
 }
 
 func (s *Server) Run() error {

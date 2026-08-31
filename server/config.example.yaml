@@ -2,6 +2,16 @@ server:
   port: "8080"
   mode: "debug"
   max_body_size_mb: 200
+  # HTTPS API origin used for release-mode redirects. It must not include a path.
+  api_host: "https://api.example.com"
+  # Only list the actual reverse proxy peers that connect directly to RPBox.
+  # Leave empty when RPBox is exposed directly. Never use 0.0.0.0/0 or ::/0.
+  # The private range below is an example for a reverse proxy on a Docker/LAN network;
+  # narrow it to the real proxy address or subnet in production.
+  trusted_proxies:
+    - "127.0.0.1/32"
+    - "::1/128"
+    - "172.16.0.0/12"
 
 cors:
   allowed_origins:

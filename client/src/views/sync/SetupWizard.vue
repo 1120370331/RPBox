@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 interface DetectedPath {
   path: string
@@ -25,6 +26,9 @@ const pathError = ref('')
 
 // Step 2
 const profileCount = ref(0)
+const foundProfilesHtml = computed(() => sanitizeRichHtml(
+  t('sync.setup.foundProfiles', { count: `<strong>${profileCount.value}</strong>` }),
+))
 
 onMounted(async () => {
   setTimeout(() => mounted.value = true, 50)
@@ -185,7 +189,7 @@ function complete() {
       <div v-if="currentStep === 2" class="step-content success">
         <div class="success-icon">✓</div>
         <h2>{{ $t('sync.setup.complete') }}</h2>
-        <p class="result" v-html="$t('sync.setup.foundProfiles', { count: `<strong>${profileCount}</strong>` })"></p>
+        <p class="result" v-html="foundProfilesHtml"></p>
         <button class="btn-primary" @click="complete">{{ $t('sync.setup.startUsing') }}</button>
       </div>
     </div>

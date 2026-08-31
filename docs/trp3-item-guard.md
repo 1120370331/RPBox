@@ -1,14 +1,93 @@
-# RPBox TRP3 恶意道具检测器（实验版）
+# RPBox TRP3 对象与光环防护
 
-脚本位置：[`refs/TRP3ItemGuard.lua`](../refs/TRP3ItemGuard.lua)
+## RPBox_Addon 集成方案
 
-## 结论
+当前正式入口已经集成到 [`addon/RPBox_Addon/ItemGuard.lua`](../addon/RPBox_Addon/ItemGuard.lua)，随 RPBox 自动加载，不需要 `/run` 或检测器道具。
+
+当前集成范围：
+
+- 新接收或更新的对象先进入 `unscanned` 状态，默认不信任并阻止执行；扫描通过后自动恢复图标、可使用状态并转为 `trusted`；
+- 包装 TRP3 对象注册入口，覆盖聊天链接导入、交换、共享仓库等接收路径；无对象 ID 的更新事件还会通过对象引用变化补扫；
+- 可达步骤环、递归工作流和异常展开只记结构分，不会单独隔离；
+- 循环/递归路径中实际出现 `item_add` 时叠加恶意行为分并隔离；
+- `item_loot(isDrop=true)` 纳入地面掉落行为分，循环掉落和超量槽位/数量会隔离；
+- 单次 `item_add` 101–1000 只增加行为分，超过 1000 才硬阻断；对象内效果总数只报告，不再一刀切；
+- 运行时限制 5 秒与 60 秒窗口内的 `item_add`、地面掉落和实际背包写入；递归调用本身只记录，不触发隔离；
+- 循环或递归中的高频声音若缺少有效停止路径会隔离；运行时第一次超频只阻止声音，重复超频才隔离道具；
+- 只在真实摧毁回调 `LI.OD` 中检测自我再生，普通摧毁奖励和纯递归不会单独隔离；
+- 区分工作流临时变量与对象、战役持久变量，对动态键、值增长和运行时写入体积实施配额；
+- 光环的应用、事件、Tick、到期和取消工作流进入同一套行为扫描，事件处理器会被加入可达入口；
+- 光环取消工作流直接或间接重新施加自身时硬隔离；运行时还会在取消调用及后续 2 秒观察窗内拦截 Lua/短延时回调重新施加同一光环；
+- 已隔离光环的脚本不再执行，活动光环会通过无回调的移除入口清理，避免取消回调再次触发恶意行为；
+- 文档渲染前检查单页、总正文、页数及变量展开后的实际大小，超过 512 KiB/页、2 MiB/对象或 256 页时按崩溃级风险硬隔离；
+- 对象、容器、光环及新写入变量检查单值、累计大小、条目数、嵌套深度与结构节点；单变量超过 512 KiB、累计超过 2 MiB、超过 2048 条或结构超过 4096 节点时阻断；
+- 对可达 Lua Script Effect 做词法扫描并把源码 hash 纳入指纹；排除注释/字符串误报，硬阻断无限循环、共享库/执行上下文写入、`op()` 代码位置注入、核心宏覆写和超量分配；
+- 包装 `runLuaScriptEffect`，限制每对象 5 秒调用次数、编译字节和递归深度；执行后恢复被修改的 `string/table/math` 共享库与 RPBox/TRP3 防护 hook；
+- 普通有界循环、局部 UI 计算和单次安全 effect 只进入风险提示，不因“存在 Lua”本身隔离；
+- 发布者白名单只包含用户显式添加的条目；TRP3 `my` 数据库确认的本人作品按本地所有权处理。可信发布者可跳过 Lua 提示/组合策略，但不能跳过无限循环、崩溃载荷、沙箱逃逸、核心数据篡改和来源黑名单；
+- 默认开启，可在 RPBox 设置中手动关闭；
+- 隔离后移除“可使用”并显示红叉图标；
+- 右键隔离道具显示提示，可直接把当前对象的传输发送者/最后编辑者/创建者加入发布者白名单并重新扫描；硬风险不会因信任作者而解除；
+- 隔离提示按风险优先级编号分行；确认移除时统一删除当前槽位、所属根载体及其内部对象，载体按根 ID 定位，不会误删背包容器，也不会触发 `LI.OD` 摧毁工作流；
+- RPBox“对象防护”页持续保留风险台账和待扫描状态，可切换当前隔离状态；
+- 风险台账拆分显示行为分、放大分、运行时实证分和策略分；步骤环 +15、同对象工作流递归 +20，结构分封顶 40；
+- 只有在风险台账中显式“加入忽略”才会跨扫描放行，风险记录仍保留；
+- 来源黑名单独立于行为评分：命中系统或用户黑名单时策略分 +120 并隔离；
+- 内置黑名单精确包含“蕾火演员死冯-金色平原”“工作人员二号-金色平原”“绿宝石兽-金色平原”；
+- 隔离、备份和允许记录保存在 `RPBox_ItemGuardDB`。
+
+状态相互独立：
+
+| 状态 | 含义 |
+|---|---|
+| `unscanned` | 新接收或已更新，尚未完成安全扫描；默认阻止执行 |
+| `trusted` | 当前指纹已扫描通过，可正常执行；不进入风险台账 |
+| `finding` | 风险事实与原因，临时放行不会删除 |
+| `observed` | 非阻断风险提示；对象已扫描并可执行 |
+| `quarantined` | 当前移除“可使用”并显示红叉 |
+| `released` | 用户临时放行，可继续使用；下次扫描恢复隔离 |
+| `ignored` | 用户在 GUI 中二次确认加入忽略清单，后续扫描不自动隔离 |
+
+从数据库版本 2 起，旧版由弹窗“无视风险”产生的持久忽略记录会自动清除，避免一次点击永久绕过后续扫描。
+
+集成文件：
+
+- [`addon/RPBox_Addon/ItemGuard.lua`](../addon/RPBox_Addon/ItemGuard.lua)
+- [`addon/RPBox_Addon/ItemGuardRules.lua`](../addon/RPBox_Addon/ItemGuardRules.lua)
+- [`addon/RPBox_Addon/ItemGuardBlacklist.lua`](../addon/RPBox_Addon/ItemGuardBlacklist.lua)
+- [`addon/RPBox_Addon/ItemGuardPublisherWhitelist.lua`](../addon/RPBox_Addon/ItemGuardPublisherWhitelist.lua)
+- [`addon/RPBox_Addon/ItemGuardSoundRules.lua`](../addon/RPBox_Addon/ItemGuardSoundRules.lua)
+- [`addon/RPBox_Addon/ItemGuardLifecycleRules.lua`](../addon/RPBox_Addon/ItemGuardLifecycleRules.lua)
+- [`addon/RPBox_Addon/ItemGuardVariableRules.lua`](../addon/RPBox_Addon/ItemGuardVariableRules.lua)
+- [`addon/RPBox_Addon/ItemGuardAuraRules.lua`](../addon/RPBox_Addon/ItemGuardAuraRules.lua)
+- [`addon/RPBox_Addon/ItemGuardContentRules.lua`](../addon/RPBox_Addon/ItemGuardContentRules.lua)
+- [`addon/RPBox_Addon/ItemGuardLuaRules.lua`](../addon/RPBox_Addon/ItemGuardLuaRules.lua)
+- [`addon/RPBox_Addon/Core.lua`](../addon/RPBox_Addon/Core.lua)
+- [`addon/RPBox_Addon/MainFrame.lua`](../addon/RPBox_Addon/MainFrame.lua)
+- [`addon/tests/item_guard_smoke.lua`](../addon/tests/item_guard_smoke.lua)
+
+发布者白名单命令：
+
+```text
+/rpbox guard trust 名字-服务器
+/rpbox guard untrust 名字-服务器
+/rpbox guard trustlist
+```
+
+发布者白名单没有任何系统预置条目，全部由用户自行添加，保存在 `RPBox_ItemGuardDB.publisherWhitelist`。隔离弹窗的“信任作者”会优先选择传输发送者，其次选择最后编辑者/创建者。来源黑名单优先级始终高于发布者信任。
+TRP3 发布者字段不是密码学签名：在线接收优先使用 `TRP3_Security.sender`，本机作品优先使用 `TRP3_DB.my`；缺少这两项时才回退到最后编辑者/创建者元数据。因此发布者白名单只能降低策略误报，不能替代硬风险检查。
+
+## 独立注入方案
+
+早期独立脚本仍保存在 [`refs/TRP3ItemGuard.lua`](../refs/TRP3ItemGuard.lua)，用于规则研究，不是当前 RPBox 插件的运行入口。以下内容记录该方案。
+
+## 独立方案结论
 
 可以利用一次性 `_G` 引导实现 TRP3 Extended 道具的执行前扫描和会话级隔离，不需要制作或安装独立插件。但它不能像操作系统杀毒软件一样提供绝对保证。
 
 最重要的边界是：如果恶意 Lua 已经进入不终止的同步循环，WoW 主线程会被占满，任何后装的检测器都无法获得执行机会。因此检测器必须在 `/reload` 后、再次使用或信任可疑道具之前安装。
 
-本实验版遵循以下原则：
+该独立方案遵循以下原则：
 
 - 默认隔离，不自动删除道具、剧本或 SavedVariables；
 - 隔离时移除道具的“可使用”标记，并把图标替换成 `ui-engineering-90-remote-close-icon`；
@@ -251,15 +330,15 @@ TRP3_API.inventory.addItem
 
 ### 不自动修复膨胀的 SavedVariables
 
-实验版不会删除背包物品、交换缓存或数据库记录。已经膨胀的数据需要先备份，再离线审计和清理。
+检测器不会删除背包物品、交换缓存或数据库记录。已经膨胀的数据需要先备份，再离线审计和清理。
 
 ### 不替代来源验证
 
 最佳防护仍是：不对陌生发送者建立全局信任，不运行来源不明的 Lua，不把完整 `_G` 注入所有 TRP3 脚本。
 
-## 推荐的正式方案
+## 独立方案的后续方向
 
-当前交付就是会话内 Lua 检测器，不要求独立插件。若未来需要开机自动保护和跨会话隔离名单，才需要进一步改造成插件模块，并增加：
+独立脚本本身仍是会话内 Lua 检测器。当前 RPBox_Addon 已经承担自动启动和跨会话隔离职责；后续可继续增加：
 
 1. 在 TRP3 初始化后自动安装、在任何对象执行前生效；
 2. 独立 SavedVariables 保存隔离名单、规则版本和审计记录；

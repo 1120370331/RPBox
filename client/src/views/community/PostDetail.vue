@@ -19,6 +19,7 @@ import { renderEmoteContent } from '@/utils/emote'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
 import { buildPublicSitePathUrl } from '@/utils/desktopDeepLink'
 import { handleAttachmentClick } from '@/utils/download'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
@@ -37,6 +38,7 @@ const submittingComment = ref(false)
 const actionLoading = ref(false)
 
 const post = ref<any>(null)
+const sanitizedPostContent = computed(() => sanitizeRichHtml(post.value?.content || ''))
 const authorAvatar = ref('')
 const comments = ref<CommentWithAuthor[]>([])
 const liked = ref(false)
@@ -445,7 +447,7 @@ function appendEmoteToken(target: { value: string }, token: string) {
 }
 
 function renderCommentContent(content: string) {
-  return renderEmoteContent(content, emoteStore.emoteMap)
+  return sanitizeRichHtml(renderEmoteContent(content, emoteStore.emoteMap))
 }
 
 function buildReportExcerpt(content: string) {
@@ -836,7 +838,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
             <div class="zen-divider"></div>
 
-            <div ref="articleContentRef" class="article-content" v-html="post.content" @click="handleArticleClick"></div>
+            <div ref="articleContentRef" class="article-content" v-html="sanitizedPostContent" @click="handleArticleClick"></div>
           </div>
 
           <!-- 作者操作 -->

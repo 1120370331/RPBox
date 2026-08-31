@@ -53,6 +53,8 @@ type rpdbRecommendationInteraction struct {
 }
 
 func (s *Server) listRPDBWorkRecommendations(c *gin.Context) {
+	prepareRPDBHTTPResponse(c)
+
 	workID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || workID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的作品 ID"})
@@ -88,7 +90,12 @@ func (s *Server) listRPDBWorkRecommendations(c *gin.Context) {
 			)
 			var cached rpdbRecommendationResponse
 			if err := s.cache.Get(c.Request.Context(), cacheKey, &cached); err == nil {
-				c.JSON(http.StatusOK, cached)
+				writeRPDBConditionalJSON(
+					c,
+					viewerID,
+					rpdbWorkIsPublic(current) && rpdbRecommendationsArePublic(cached.Recommendations),
+					cached,
+				)
 				return
 			}
 		}
@@ -103,7 +110,21 @@ func (s *Server) listRPDBWorkRecommendations(c *gin.Context) {
 	if cacheKey != "" {
 		_ = s.cache.Set(c.Request.Context(), cacheKey, response, cache.TTL["rpdb:list"])
 	}
-	c.JSON(http.StatusOK, response)
+	writeRPDBConditionalJSON(
+		c,
+		viewerID,
+		rpdbWorkIsPublic(current) && rpdbRecommendationsArePublic(response.Recommendations),
+		response,
+	)
+}
+
+func rpdbRecommendationsArePublic(recommendations []rpdbRecommendation) bool {
+	for _, recommendation := range recommendations {
+		if !rpdbWorkIsPublic(recommendation.RPDBWork) {
+			return false
+		}
+	}
+	return true
 }
 
 func buildRPDBRecommendations(current model.RPDBWork, viewerID uint, limit int) ([]rpdbRecommendation, error) {

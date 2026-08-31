@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { Item } from '@/api/item'
 import { handleJumpLinkClick, sanitizeJumpLinks, hydrateJumpCardImages } from '@/utils/jumpLink'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 const router = useRouter()
 const { t } = useI18n()
 const item = ref<Item | null>(null)
+const sanitizedDetailContent = computed(() => sanitizeRichHtml(item.value?.detail_content || ''))
 const previewFrom = ref('')
 const detailContentRef = ref<HTMLElement | null>(null)
 
@@ -108,7 +110,7 @@ function handlePreviewContentClick(event: MouseEvent) {
         <!-- 详细介绍 -->
         <div v-if="item.detail_content" class="item-detail-content">
           <h3>{{ t('market.detail.detailContent') }}</h3>
-          <div ref="detailContentRef" class="rich-content" v-html="item.detail_content" @click="handlePreviewContentClick"></div>
+          <div ref="detailContentRef" class="rich-content" v-html="sanitizedDetailContent" @click="handlePreviewContentClick"></div>
         </div>
 
         <div class="action-buttons">

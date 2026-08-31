@@ -2039,21 +2039,40 @@ end
 
 -- 频道配置列表
 local CHANNEL_CONFIG = {
-    { key = "SAY", name = "说话" },
-    { key = "YELL", name = "大喊" },
-    { key = "EMOTE", name = "表情" },
-    { key = "PARTY", name = "小队" },
-    { key = "RAID", name = "团队" },
-    { key = "WHISPER_IN", name = "收到密语" },
-    { key = "WHISPER_OUT", name = "发送密语" },
-    { key = "GUILD", name = "公会" },
+    { key = "SAY", name = "说话", chatType = "SAY" },
+    { key = "YELL", name = "大喊", chatType = "YELL" },
+    { key = "EMOTE", name = "表情", chatType = "EMOTE" },
+    { key = "PARTY", name = "小队", chatType = "PARTY" },
+    { key = "RAID", name = "团队", chatType = "RAID" },
+    { key = "WHISPER_IN", name = "收到密语", chatType = "WHISPER" },
+    { key = "WHISPER_OUT", name = "发送密语", chatType = "WHISPER_INFORM" },
+    { key = "GUILD", name = "公会", chatType = "GUILD" },
 }
+
+local function GetNativeChannelLabel(channelInfo)
+    local color = ChatTypeInfo and ChatTypeInfo[channelInfo.chatType]
+    if not color or type(color.r) ~= "number" or type(color.g) ~= "number" or type(color.b) ~= "number" then
+        return channelInfo.name, nil
+    end
+
+    local function ToColorByte(value)
+        return math.min(math.max(math.floor(value * 255 + 0.5), 0), 255)
+    end
+    local hex = string.format(
+        "%02X%02X%02X",
+        ToColorByte(color.r),
+        ToColorByte(color.g),
+        ToColorByte(color.b)
+    )
+    return "|cff" .. hex .. channelInfo.name .. "|r", hex
+end
 
 -- 刷新设置内容
 local function RefreshSettingsContent()
     if not MainFrame or not MainFrame.settingsContent then return end
 
     local content = MainFrame.settingsContent
+    content:SetWidth(math.max((MainFrame:GetWidth() or 680) - 64, 580))
     -- 清空
     for _, child in pairs({content:GetChildren()}) do
         child:Hide()
@@ -2074,11 +2093,13 @@ local function RefreshSettingsContent()
     -- 总开关
     if not content.enabledCb then
         content.enabledCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
+        content.enabledCb:SetSize(24, 24)
         content.enabledCb.text = content.enabledCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         content.enabledCb.text:SetPoint("LEFT", content.enabledCb, "RIGHT", 2, 0)
         UI.RegisterCheckButton(content.enabledCb)
         UI.RegisterText(content.enabledCb.text, "primary")
     end
+    content.enabledCb:ClearAllPoints()
     content.enabledCb:SetPoint("TOPLEFT", 10, -yOffset)
     content.enabledCb.text:SetText("开启聊天记录功能")
     content.enabledCb:SetChecked(RPBox_Config.enabled ~= false)
@@ -2089,6 +2110,45 @@ local function RefreshSettingsContent()
     UI.RefreshCheckButton(content.enabledCb)
     content.enabledCb:Show()
     yOffset = yOffset + 26
+
+    -- TRP3 Extended 对象与光环防护
+    if not content.itemGuardCb then
+        content.itemGuardCb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
+        content.itemGuardCb:SetSize(24, 24)
+        content.itemGuardCb.text = content.itemGuardCb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        content.itemGuardCb.text:SetPoint("LEFT", content.itemGuardCb, "RIGHT", 2, 0)
+        UI.RegisterCheckButton(content.itemGuardCb)
+        UI.RegisterText(content.itemGuardCb.text, "primary")
+    end
+    content.itemGuardCb:ClearAllPoints()
+    content.itemGuardCb:SetPoint("TOPLEFT", 10, -yOffset)
+    content.itemGuardTopOffset = yOffset
+    content.itemGuardCb.text:SetText("开启 TRP3 对象与光环防护")
+    content.itemGuardCb:SetChecked(RPBox_Config.itemGuardEnabled ~= false)
+    content.itemGuardCb:SetScript("OnClick", function(self)
+        local enabled = self:GetChecked() and true or false
+        RPBox_Config.itemGuardEnabled = enabled
+        if ns.ItemGuard and ns.ItemGuard.SetEnabled then
+            ns.ItemGuard:SetEnabled(enabled)
+        end
+        UI.RefreshCheckButton(self)
+    end)
+    UI.RefreshCheckButton(content.itemGuardCb)
+    content.itemGuardCb:Show()
+    yOffset = yOffset + 24
+
+    if not content.itemGuardHint then
+        content.itemGuardHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        UI.RegisterText(content.itemGuardHint, "muted")
+    end
+    content.itemGuardHint:ClearAllPoints()
+    content.itemGuardHint:SetPoint("TOPLEFT", 36, -yOffset)
+    content.itemGuardHint:SetWidth(math.max(content:GetWidth() - 46, 320))
+    content.itemGuardHint:SetJustifyH("LEFT")
+    content.itemGuardHint:SetWordWrap(false)
+    content.itemGuardHint:SetText("新对象先扫描再放行；拦截 Lua 逃逸、异常生成、恶意光环及崩溃载荷")
+    content.itemGuardHint:Show()
+    yOffset = yOffset + 22
 
     -- 频道监听设置标题
     yOffset = yOffset + 15
@@ -2103,10 +2163,15 @@ local function RefreshSettingsContent()
 
     -- 频道复选框
     content.checkboxes = content.checkboxes or {}
+    local channelColumnWidth = math.floor((content:GetWidth() - 20) / 4)
+    local channelGridTop = yOffset
+    content.channelColumnWidth = channelColumnWidth
+    content.channelGridTop = channelGridTop
     for i, channelInfo in ipairs(CHANNEL_CONFIG) do
         local cb = content.checkboxes[i]
         if not cb then
             cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate,BackdropTemplate")
+            cb:SetSize(24, 24)
             cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             cb.text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
             content.checkboxes[i] = cb
@@ -2114,9 +2179,21 @@ local function RefreshSettingsContent()
             UI.RegisterText(cb.text, "primary")
         end
 
-        cb:SetPoint("TOPLEFT", 10, -yOffset)
-        cb.text:SetText(channelInfo.name)
+        local column = ((i - 1) % 4) + 1
+        local row = math.floor((i - 1) / 4) + 1
+        cb:ClearAllPoints()
+        cb:SetPoint("TOPLEFT", 10 + (column - 1) * channelColumnWidth, -(channelGridTop + (row - 1) * 30))
+        cb.text:SetWidth(math.max(channelColumnWidth - 34, 70))
+        cb.text:SetJustifyH("LEFT")
+        cb.text:SetWordWrap(false)
+        cb.text:SetNonSpaceWrap(false)
+        local channelLabel, nativeColorHex = GetNativeChannelLabel(channelInfo)
+        cb.text:SetText(channelLabel)
         cb.channelKey = channelInfo.key
+        cb.nativeChatType = channelInfo.chatType
+        cb.nativeColorHex = nativeColorHex
+        cb.gridColumn = column
+        cb.gridRow = row
 
         -- 读取当前配置
         local channels = RPBox_Config and RPBox_Config.channels or {}
@@ -2133,8 +2210,8 @@ local function RefreshSettingsContent()
 
         UI.RefreshCheckButton(cb)
         cb:Show()
-        yOffset = yOffset + 26
     end
+    yOffset = channelGridTop + 60
 
     -- 屏蔽设置标题
     yOffset = yOffset + 15
@@ -2266,9 +2343,9 @@ local function RefreshSettingsContent()
 
     if not content.themeHint then
         content.themeHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        content.themeHint:SetText("简约档案：扁平深色框体、铜色状态线；切换即时生效")
         UI.RegisterText(content.themeHint, "muted")
     end
+    content.themeHint:SetText("简约档案与暴雪原生框体可即时切换")
     content.themeHint:SetPoint("TOPLEFT", 10, -yOffset - 28)
     content.themeHint:Show()
     yOffset = yOffset + 52
@@ -2375,6 +2452,609 @@ local function RefreshSettingsContent()
     UI.ApplyAll()
 end
 
+local GUARD_STATUS_TEXT = {
+    unscanned = "待扫描",
+    quarantined = "已隔离",
+    observed = "风险提示",
+    released = "临时放行",
+    ignored = "已忽略",
+}
+
+local GUARD_STATUS_COLOR = {
+    unscanned = { 0.35, 0.68, 1.00 },
+    quarantined = { 1.00, 0.30, 0.28 },
+    observed = { 1.00, 0.82, 0.30 },
+    released = { 1.00, 0.72, 0.28 },
+    ignored = { 0.55, 0.62, 0.66 },
+}
+
+local GUARD_PAGE_SIZE = 20
+local GUARD_BLACKLIST_PAGE_SIZE = 5
+local GUARD_STATUS_FILTERS = {
+    { key = "all", text = "全部" },
+    { key = "unscanned", text = "待扫描" },
+    { key = "quarantined", text = "已隔离" },
+    { key = "observed", text = "风险提示" },
+    { key = "released", text = "临时放行" },
+    { key = "ignored", text = "已忽略" },
+}
+
+local function GetItemGuardContentWidth()
+    if MainFrame then
+        return math.max((MainFrame:GetWidth() or 680) - 64, 580)
+    end
+    return 716
+end
+
+local function UpdateItemGuardLayoutWidth()
+    if not MainFrame or not MainFrame.guardContent then return end
+
+    local content = MainFrame.guardContent
+    local contentWidth = GetItemGuardContentWidth()
+    content:SetWidth(contentWidth)
+
+    if content.scopeHint then content.scopeHint:SetWidth(contentWidth - 20) end
+    if content.searchBox then content.searchBox:SetWidth(contentWidth - 60) end
+    if content.pageInfo then content.pageInfo:SetWidth(contentWidth - 164) end
+
+    if content.blacklistPanel then
+        local panelWidth = contentWidth - 16
+        content.blacklistPanel:SetWidth(panelWidth)
+        if content.blacklistInput then
+            content.blacklistInput:SetWidth(math.max(panelWidth - 214, 220))
+        end
+        for _, row in ipairs(content.blacklistRows or {}) do
+            row:SetWidth(panelWidth - 16)
+            if row.identity then row.identity:SetWidth(math.max(panelWidth - 190, 180)) end
+        end
+    end
+
+    for _, row in ipairs(content.rows or {}) do
+        local rowWidth = contentWidth - 16
+        local textWidth = math.max(rowWidth - 222, 220)
+        row:SetWidth(rowWidth)
+        row.name:SetWidth(textWidth)
+        row.idText:SetWidth(textWidth)
+        row.reason:SetWidth(textWidth)
+        row._rpboxTextRight = 58 + textWidth
+        row._rpboxActionLeft = rowWidth - 156
+    end
+end
+
+local function ItemGuardEntryMatchesSearch(entry, query)
+    if query == "" then return true end
+
+    local values = {
+        tostring(entry.itemName or ""),
+        tostring(entry.rootID or ""),
+    }
+    for _, reason in ipairs(entry.reasons or {}) do
+        values[#values + 1] = tostring(reason)
+    end
+    return string.lower(table.concat(values, "\n")):find(query, 1, true) ~= nil
+end
+
+local RefreshItemGuardContent
+
+local function RefreshItemGuardBlacklistPanel(content)
+    local blacklist = ns.ItemGuardBlacklist
+    if blacklist and blacklist.Initialize then blacklist.Initialize() end
+    local entries = blacklist and blacklist.GetEntries and blacklist.GetEntries() or {}
+
+    if not content.blacklistToggleBtn then
+        content.blacklistToggleBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate,BackdropTemplate")
+        content.blacklistToggleBtn:SetSize(160, 20)
+        content.blacklistToggleBtn:SetScript("OnClick", function()
+            content.blacklistExpanded = not content.blacklistExpanded
+            content.blacklistPage = 1
+            RefreshItemGuardContent()
+        end)
+        UI.RegisterButton(content.blacklistToggleBtn)
+    end
+    content.blacklistToggleBtn:ClearAllPoints()
+    content.blacklistToggleBtn:SetPoint("TOPRIGHT", -10, -104)
+    content.blacklistToggleBtn:SetText(string.format(
+        "来源黑名单 (%d) %s",
+        #entries,
+        content.blacklistExpanded and "收起" or "展开"
+    ))
+    content.blacklistToggleBtn:Show()
+
+    if not content.blacklistPanel then
+        local panel = CreateFrame("Frame", nil, content, "BackdropTemplate")
+        panel:SetHeight(194)
+        UI.RegisterPanel(panel, { inset = true })
+        content.blacklistPanel = panel
+
+        local function SubmitBlacklistEntry()
+            if not ns.ItemGuardBlacklist or not ns.ItemGuardBlacklist.AddUser then return end
+            local ok, message = ns.ItemGuardBlacklist.AddUser(content.blacklistInput:GetText())
+            content.blacklistFeedback = message or ""
+            if ok then
+                content.blacklistInput:SetText("")
+                local updated = ns.ItemGuardBlacklist.GetEntries and ns.ItemGuardBlacklist.GetEntries() or {}
+                content.blacklistPage = math.max(1, math.ceil(#updated / GUARD_BLACKLIST_PAGE_SIZE))
+            end
+            RefreshItemGuardContent()
+        end
+
+        content.blacklistInput = CreateFrame("EditBox", nil, panel, "InputBoxTemplate,BackdropTemplate")
+        content.blacklistInput:SetHeight(22)
+        content.blacklistInput:SetAutoFocus(false)
+        content.blacklistInput:SetScript("OnEnterPressed", function(self)
+            SubmitBlacklistEntry()
+            self:ClearFocus()
+        end)
+        content.blacklistInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        UI.RegisterEditBox(content.blacklistInput)
+
+        content.blacklistAddBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate,BackdropTemplate")
+        content.blacklistAddBtn:SetSize(70, 22)
+        content.blacklistAddBtn:SetText("添加")
+        content.blacklistAddBtn:SetScript("OnClick", SubmitBlacklistEntry)
+        UI.RegisterButton(content.blacklistAddBtn)
+
+        content.blacklistHint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        content.blacklistHint:SetJustifyH("LEFT")
+        UI.RegisterText(content.blacklistHint, "muted")
+
+        content.blacklistRows = {}
+        for index = 1, GUARD_BLACKLIST_PAGE_SIZE do
+            local row = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+            row:SetHeight(24)
+            row:SetPoint("TOPLEFT", 8, -40 - ((index - 1) * 25))
+            UI.RegisterPanel(row, { inset = true })
+
+            row.identity = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.identity:SetPoint("LEFT", 8, 0)
+            row.identity:SetJustifyH("LEFT")
+            row.identity:SetWordWrap(false)
+            row.identity:SetNonSpaceWrap(false)
+            UI.RegisterText(row.identity, "primary")
+
+            row.source = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.source:SetPoint("RIGHT", -66, 0)
+            row.source:SetWidth(56)
+            row.source:SetJustifyH("RIGHT")
+            UI.RegisterText(row.source, "muted")
+
+            row.removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate,BackdropTemplate")
+            row.removeBtn:SetSize(50, 18)
+            row.removeBtn:SetPoint("RIGHT", -6, 0)
+            row.removeBtn:SetText("删除")
+            row.removeBtn:SetScript("OnClick", function()
+                if row.entry and ns.ItemGuardBlacklist and ns.ItemGuardBlacklist.RemoveUser then
+                    local _, message = ns.ItemGuardBlacklist.RemoveUser(row.entry.identity)
+                    content.blacklistFeedback = message or ""
+                    RefreshItemGuardContent()
+                end
+            end)
+            UI.RegisterButton(row.removeBtn)
+            content.blacklistRows[index] = row
+        end
+
+        content.blacklistPrevBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate,BackdropTemplate")
+        content.blacklistPrevBtn:SetSize(54, 18)
+        content.blacklistPrevBtn:SetText("上一页")
+        content.blacklistPrevBtn:SetScript("OnClick", function()
+            content.blacklistPage = math.max((content.blacklistPage or 1) - 1, 1)
+            RefreshItemGuardContent()
+        end)
+        UI.RegisterButton(content.blacklistPrevBtn)
+
+        content.blacklistNextBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate,BackdropTemplate")
+        content.blacklistNextBtn:SetSize(54, 18)
+        content.blacklistNextBtn:SetText("下一页")
+        content.blacklistNextBtn:SetScript("OnClick", function()
+            content.blacklistPage = math.min((content.blacklistPage or 1) + 1, content.blacklistPages or 1)
+            RefreshItemGuardContent()
+        end)
+        UI.RegisterButton(content.blacklistNextBtn)
+
+        content.blacklistPageInfo = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        UI.RegisterText(content.blacklistPageInfo, "muted")
+    end
+
+    local panel = content.blacklistPanel
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", 8, -134)
+    if not content.blacklistExpanded then
+        panel:Hide()
+        return 0
+    end
+    panel:Show()
+
+    content.blacklistInput:ClearAllPoints()
+    content.blacklistInput:SetPoint("TOPLEFT", 8, -9)
+    content.blacklistInput:Show()
+    content.blacklistAddBtn:ClearAllPoints()
+    content.blacklistAddBtn:SetPoint("LEFT", content.blacklistInput, "RIGHT", 6, 0)
+    content.blacklistAddBtn:Show()
+    content.blacklistHint:ClearAllPoints()
+    content.blacklistHint:SetPoint("LEFT", content.blacklistAddBtn, "RIGHT", 8, 0)
+    content.blacklistHint:SetText(content.blacklistFeedback ~= "" and content.blacklistFeedback or "输入 名字-服务器")
+    content.blacklistHint:Show()
+
+    content.blacklistPages = math.max(1, math.ceil(#entries / GUARD_BLACKLIST_PAGE_SIZE))
+    content.blacklistPage = math.min(math.max(tonumber(content.blacklistPage) or 1, 1), content.blacklistPages)
+    local first = (content.blacklistPage - 1) * GUARD_BLACKLIST_PAGE_SIZE + 1
+    for index, row in ipairs(content.blacklistRows) do
+        local entry = entries[first + index - 1]
+        row.entry = entry
+        if entry then
+            row.identity:SetText(entry.identity)
+            row.source:SetText(entry.source == "builtin" and "系统" or "用户")
+            if entry.source == "builtin" then
+                row.removeBtn:Hide()
+                row.source:SetTextColor(1.00, 0.72, 0.28)
+            else
+                row.removeBtn:Show()
+                row.source:SetTextColor(0.70, 0.75, 0.80)
+            end
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+
+    content.blacklistPrevBtn:ClearAllPoints()
+    content.blacklistPrevBtn:SetPoint("BOTTOMLEFT", 8, 7)
+    content.blacklistNextBtn:ClearAllPoints()
+    content.blacklistNextBtn:SetPoint("LEFT", content.blacklistPrevBtn, "RIGHT", 5, 0)
+    content.blacklistPageInfo:ClearAllPoints()
+    content.blacklistPageInfo:SetPoint("LEFT", content.blacklistNextBtn, "RIGHT", 8, 0)
+    content.blacklistPageInfo:SetText(string.format("第 %d / %d 页 · 共 %d 项", content.blacklistPage, content.blacklistPages, #entries))
+    content.blacklistPrevBtn:SetEnabled(content.blacklistPage > 1)
+    content.blacklistNextBtn:SetEnabled(content.blacklistPage < content.blacklistPages)
+    content.blacklistPrevBtn:Show()
+    content.blacklistNextBtn:Show()
+    content.blacklistPageInfo:Show()
+    return 202
+end
+
+RefreshItemGuardContent = function()
+    if not MainFrame or not MainFrame.guardContent then return end
+    local content = MainFrame.guardContent
+    local guard = ns.ItemGuard
+    local entries = guard and guard.GetRiskEntries and guard:GetRiskEntries() or {}
+
+    if not content.title then
+        content.title = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        content.title:SetText("TRP3 对象与光环防护")
+        UI.RegisterText(content.title, "heading")
+    end
+    content.title:SetPoint("TOPLEFT", 8, -8)
+    content.title:Show()
+
+    if not content.summary then
+        content.summary = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        UI.RegisterText(content.summary, "muted")
+    end
+    local unscannedCount, quarantinedCount, observedCount, releasedCount, ignoredCount = 0, 0, 0, 0, 0
+    for _, entry in ipairs(entries) do
+        if entry.status == "unscanned" then unscannedCount = unscannedCount + 1
+        elseif entry.status == "quarantined" then quarantinedCount = quarantinedCount + 1
+        elseif entry.status == "observed" then observedCount = observedCount + 1
+        elseif entry.status == "ignored" then ignoredCount = ignoredCount + 1
+        else releasedCount = releasedCount + 1 end
+    end
+    content.summary:SetPoint("TOPLEFT", 8, -34)
+    content.summary:SetText(string.format(
+        "记录 %d 项 · 待扫描 %d · 隔离 %d · 提示 %d · 放行 %d · 忽略 %d",
+        #entries,
+        unscannedCount,
+        quarantinedCount,
+        observedCount,
+        releasedCount,
+        ignoredCount
+    ))
+    content.summary:Show()
+
+    if not content.scanBtn then
+        content.scanBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate,BackdropTemplate")
+        content.scanBtn:SetSize(88, 22)
+        content.scanBtn:SetText("立即扫描")
+        content.scanBtn:SetScript("OnClick", function()
+            if ns.ItemGuard and ns.ItemGuard.ScanAll then ns.ItemGuard:ScanAll() end
+        end)
+        UI.RegisterButton(content.scanBtn)
+    end
+    content.scanBtn:SetPoint("TOPRIGHT", -10, -10)
+    content.scanBtn:Show()
+
+    if not content.scopeHint then
+        content.scopeHint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        UI.RegisterText(content.scopeHint, "muted")
+    end
+    content.scopeHint:SetPoint("TOPLEFT", 8, -54)
+    content.scopeHint:SetText("新对象先扫描再放行；拦截 Lua 逃逸、异常生成、恶意光环及崩溃载荷。")
+    content.scopeHint:SetJustifyH("LEFT")
+    content.scopeHint:SetWordWrap(false)
+    content.scopeHint:Show()
+
+    if not content.searchLabel then
+        content.searchLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        content.searchLabel:SetText("搜索")
+        UI.RegisterText(content.searchLabel, "primary")
+    end
+    content.searchLabel:SetPoint("TOPLEFT", 8, -82)
+    content.searchLabel:Show()
+
+    if not content.searchBox then
+        content.searchBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate,BackdropTemplate")
+        content.searchBox:SetHeight(22)
+        content.searchBox:SetAutoFocus(false)
+        content.searchBox:SetScript("OnTextChanged", function(self, userInput)
+            if not userInput then return end
+            content.searchText = self:GetText() or ""
+            content.page = 1
+            if MainFrame.guardScroll then MainFrame.guardScroll:SetVerticalScroll(0) end
+            RefreshItemGuardContent()
+        end)
+        content.searchBox:SetScript("OnEscapePressed", function(self)
+            self:SetText("")
+            content.searchText = ""
+            content.page = 1
+            if MainFrame.guardScroll then MainFrame.guardScroll:SetVerticalScroll(0) end
+            RefreshItemGuardContent()
+            self:ClearFocus()
+        end)
+        UI.RegisterEditBox(content.searchBox)
+    end
+    content.searchBox:SetPoint("TOPLEFT", 48, -76)
+    content.searchBox:Show()
+
+    if not content.statusLabel then
+        content.statusLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        content.statusLabel:SetText("状态")
+        UI.RegisterText(content.statusLabel, "primary")
+    end
+    content.statusLabel:SetPoint("TOPLEFT", 8, -110)
+    content.statusLabel:Show()
+
+    content.statusFilter = content.statusFilter or "all"
+    content.statusButtons = content.statusButtons or {}
+    local previousStatusButton
+    for _, filter in ipairs(GUARD_STATUS_FILTERS) do
+        local button = content.statusButtons[filter.key]
+        if not button then
+            button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate,BackdropTemplate")
+            button:SetSize(72, 20)
+            button:SetText(filter.text)
+            button.filterKey = filter.key
+            button:SetScript("OnClick", function(self)
+                content.statusFilter = self.filterKey
+                content.page = 1
+                if MainFrame.guardScroll then MainFrame.guardScroll:SetVerticalScroll(0) end
+                RefreshItemGuardContent()
+            end)
+            UI.RegisterButton(button)
+            content.statusButtons[filter.key] = button
+        end
+        button:ClearAllPoints()
+        if previousStatusButton then
+            button:SetPoint("LEFT", previousStatusButton, "RIGHT", 4, 0)
+        else
+            button:SetPoint("TOPLEFT", 48, -104)
+        end
+        local selected = content.statusFilter == filter.key
+        button:SetEnabled(not selected)
+        UI.SetButtonSelected(button, selected)
+        button:Show()
+        previousStatusButton = button
+    end
+
+    local blacklistOffset = RefreshItemGuardBlacklistPanel(content)
+
+    local normalizedQuery = string.lower(strtrim(content.searchText or content.searchBox:GetText() or ""))
+    local filteredEntries = {}
+    for _, entry in ipairs(entries) do
+        local statusMatches = content.statusFilter == "all" or entry.status == content.statusFilter
+        if statusMatches and ItemGuardEntryMatchesSearch(entry, normalizedQuery) then
+            filteredEntries[#filteredEntries + 1] = entry
+        end
+    end
+    content.filteredEntries = filteredEntries
+    content.totalMatches = #filteredEntries
+    content.totalEntries = #entries
+    content.totalPages = math.max(1, math.ceil(#filteredEntries / GUARD_PAGE_SIZE))
+    content.page = math.min(math.max(tonumber(content.page) or 1, 1), content.totalPages)
+
+    if not content.empty then
+        content.empty = content:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+        content.empty:SetText("当前没有待处理的防护记录")
+        UI.RegisterText(content.empty, "muted")
+    end
+    content.empty:SetPoint("TOPLEFT", 12, -(148 + blacklistOffset))
+    if #filteredEntries == 0 then
+        content.empty:SetText(#entries == 0 and "当前没有待处理的防护记录" or "没有符合筛选条件的防护记录")
+        content.empty:Show()
+    else
+        content.empty:Hide()
+    end
+
+    content.rows = content.rows or {}
+    for _, row in ipairs(content.rows) do row:Hide() end
+
+    local yOffset = 138 + blacklistOffset
+    local pageStart = (content.page - 1) * GUARD_PAGE_SIZE + 1
+    local pageEnd = math.min(pageStart + GUARD_PAGE_SIZE - 1, #filteredEntries)
+    local visibleIndex = 0
+    for entryIndex = pageStart, pageEnd do
+        local entry = filteredEntries[entryIndex]
+        visibleIndex = visibleIndex + 1
+        local row = content.rows[visibleIndex]
+        if not row then
+            row = CreateFrame("Frame", nil, content, "BackdropTemplate")
+            row:SetSize(600, 80)
+            UI.RegisterPanel(row, { inset = true })
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(38, 38)
+            row.icon:SetPoint("TOPLEFT", 10, -10)
+
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.name:SetPoint("TOPLEFT", 58, -9)
+            row.name:SetJustifyH("LEFT")
+            row.name:SetWordWrap(false)
+            row.name:SetNonSpaceWrap(false)
+            UI.RegisterText(row.name, "primary")
+
+            row.idText = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.idText:SetPoint("TOPLEFT", 58, -29)
+            row.idText:SetJustifyH("LEFT")
+            row.idText:SetWordWrap(false)
+            row.idText:SetNonSpaceWrap(false)
+            UI.RegisterText(row.idText, "muted")
+
+            row.reason = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.reason:SetPoint("TOPLEFT", 58, -52)
+            row.reason:SetJustifyH("LEFT")
+            row.reason:SetWordWrap(false)
+            row.reason:SetNonSpaceWrap(false)
+            UI.RegisterText(row.reason, "secondary")
+
+            row.status = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            row.status:SetPoint("TOPRIGHT", -14, -10)
+            row.status:SetWidth(136)
+            row.status:SetJustifyH("RIGHT")
+
+            row.quarantineCb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate,BackdropTemplate")
+            row.quarantineCb:SetSize(22, 22)
+            row.quarantineCb:SetPoint("TOPRIGHT", -72, -27)
+            row.quarantineCb.text = row.quarantineCb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            row.quarantineCb.text:SetPoint("LEFT", row.quarantineCb, "RIGHT", 1, 0)
+            row.quarantineCb.text:SetText("隔离")
+            UI.RegisterCheckButton(row.quarantineCb)
+            UI.RegisterText(row.quarantineCb.text, "primary")
+            row.quarantineCb:SetScript("OnClick", function(self)
+                local current = row.entry
+                if current and ns.ItemGuard then
+                    ns.ItemGuard:SetIsolation(current.rootID, self:GetChecked())
+                    RefreshItemGuardContent()
+                end
+            end)
+
+            row.ignoreBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate,BackdropTemplate")
+            row.ignoreBtn:SetSize(96, 20)
+            row.ignoreBtn:SetPoint("BOTTOMRIGHT", -12, 8)
+            UI.RegisterButton(row.ignoreBtn)
+            row.ignoreBtn:SetScript("OnClick", function()
+                local current = row.entry
+                if current and ns.ItemGuard then
+                    ns.ItemGuard:SetIgnored(current.rootID, not current.ignored)
+                    RefreshItemGuardContent()
+                end
+            end)
+
+            content.rows[visibleIndex] = row
+        end
+
+        row.entry = entry
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 8, -yOffset)
+        row.icon:SetTexture("Interface\\Icons\\" .. tostring(entry.icon or "inv_misc_questionmark"))
+        row.name:SetText(entry.itemName or entry.rootID)
+        local scoreDetail = "风险分 " .. tostring(entry.score or 0)
+            .. " · 行为 " .. tostring(entry.behaviorScore or 0)
+            .. " / 放大 " .. tostring(entry.amplificationScore or 0)
+            .. " / 实证 " .. tostring(entry.observationScore or 0)
+        if (entry.policyScore or 0) > 0 then
+            scoreDetail = scoreDetail .. " / 策略 " .. tostring(entry.policyScore)
+        end
+        if entry.publisherTrust and entry.publisherTrust.identity then
+            scoreDetail = scoreDetail .. " · 可信发布者 " .. tostring(entry.publisherTrust.identity)
+        end
+        local typeText = entry.objectType == "aura" and "光环"
+            or entry.objectType == "document" and "文档"
+            or entry.objectType == "lua" and "Lua 对象"
+            or "道具"
+        row.idText:SetText(entry.rootID .. " · " .. typeText .. " · " .. scoreDetail)
+        row.reason:SetText((entry.reasons and entry.reasons[1]) or "风险记录")
+        row.status:SetText(GUARD_STATUS_TEXT[entry.status] or entry.status)
+        local statusColor = GUARD_STATUS_COLOR[entry.status] or GUARD_STATUS_COLOR.released
+        row.status:SetTextColor(statusColor[1], statusColor[2], statusColor[3])
+        row.quarantineCb:SetChecked(entry.quarantined)
+        row.quarantineCb:SetEnabled(not entry.pending)
+        UI.RefreshCheckButton(row.quarantineCb)
+        if entry.ignored then
+            row.ignoreBtn:SetText("取消忽略")
+            row.ignoreBtn:SetAlpha(0.82)
+        else
+            row.ignoreBtn:SetText("加入忽略")
+            row.ignoreBtn:SetAlpha(0.48)
+        end
+        row.ignoreBtn:SetEnabled(not entry.pending)
+        row:Show()
+        yOffset = yOffset + 86
+    end
+
+    if not content.prevPageBtn then
+        content.prevPageBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate,BackdropTemplate")
+        content.prevPageBtn:SetSize(68, 22)
+        content.prevPageBtn:SetText("上一页")
+        content.prevPageBtn:SetScript("OnClick", function()
+            if content.page <= 1 then return end
+            content.page = content.page - 1
+            if MainFrame.guardScroll then MainFrame.guardScroll:SetVerticalScroll(0) end
+            RefreshItemGuardContent()
+        end)
+        UI.RegisterButton(content.prevPageBtn)
+
+        content.nextPageBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate,BackdropTemplate")
+        content.nextPageBtn:SetSize(68, 22)
+        content.nextPageBtn:SetText("下一页")
+        content.nextPageBtn:SetScript("OnClick", function()
+            if content.page >= content.totalPages then return end
+            content.page = content.page + 1
+            if MainFrame.guardScroll then MainFrame.guardScroll:SetVerticalScroll(0) end
+            RefreshItemGuardContent()
+        end)
+        UI.RegisterButton(content.nextPageBtn)
+
+        content.pageInfo = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        content.pageInfo:SetJustifyH("LEFT")
+        UI.RegisterText(content.pageInfo, "muted")
+    end
+    local footerOffset = math.max(yOffset + 2, 166)
+    content.prevPageBtn:ClearAllPoints()
+    content.prevPageBtn:SetPoint("TOPLEFT", 8, -footerOffset)
+    content.nextPageBtn:ClearAllPoints()
+    content.nextPageBtn:SetPoint("LEFT", content.prevPageBtn, "RIGHT", 6, 0)
+    content.pageInfo:ClearAllPoints()
+    content.pageInfo:SetPoint("LEFT", content.nextPageBtn, "RIGHT", 10, 0)
+    content.pageInfo:SetText(string.format(
+        "第 %d / %d 页 · 匹配 %d / 总计 %d",
+        content.page,
+        content.totalPages,
+        #filteredEntries,
+        #entries
+    ))
+    content.prevPageBtn:SetEnabled(content.page > 1)
+    content.nextPageBtn:SetEnabled(content.page < content.totalPages)
+    content.prevPageBtn:Show()
+    content.nextPageBtn:Show()
+    content.pageInfo:Show()
+
+    content:SetHeight(math.max(320, footerOffset + 34))
+    UpdateItemGuardLayoutWidth()
+    UI.ApplyAll()
+end
+
+local function SetLogFooterVisible(visible)
+    if not MainFrame then return end
+    local footerControls = {
+        MainFrame.statusText,
+        MainFrame.refreshBtn,
+        MainFrame.copyBtn,
+        MainFrame.exportBtn,
+        MainFrame.clearBtn,
+    }
+    for _, control in ipairs(footerControls) do
+        if visible then control:Show() else control:Hide() end
+    end
+end
+
 -- 切换标签页
 local function SwitchTab(tabName)
     if not MainFrame then return end
@@ -2384,12 +3064,14 @@ local function SwitchTab(tabName)
         InvalidateLogRender()
     end
     currentTab = tabName
+    SetLogFooterVisible(tabName == "log")
 
     -- 隐藏所有内容
     if MainFrame.logScroll then MainFrame.logScroll:Hide() end
     if MainFrame.listScroll then MainFrame.listScroll:Hide() end
     if MainFrame.debugScroll then MainFrame.debugScroll:Hide() end
     if MainFrame.settingsScroll then MainFrame.settingsScroll:Hide() end
+    if MainFrame.guardScroll then MainFrame.guardScroll:Hide() end
     if MainFrame.filterFrame then MainFrame.filterFrame:Hide() end
     if MainFrame.ledgerHeader then MainFrame.ledgerHeader:Hide() end
     if MainFrame.logSurface then MainFrame.logSurface:Hide() end
@@ -2420,8 +3102,12 @@ local function SwitchTab(tabName)
         MainFrame.debugScroll:Show()
         RefreshDebugContent()
     elseif tabName == "settings" then
+        MainFrame.settingsScroll:SetVerticalScroll(0)
         MainFrame.settingsScroll:Show()
         RefreshSettingsContent()
+    elseif tabName == "guard" then
+        MainFrame.guardScroll:Show()
+        RefreshItemGuardContent()
     end
 end
 
@@ -2446,8 +3132,11 @@ local function CreateMainFrame()
     end)
     MainFrame:SetScript("OnSizeChanged", function()
         UpdateLogLayoutWidth()
+        UpdateItemGuardLayoutWidth()
         if MainFrame:IsShown() and currentTab == "log" and MainFrame.logState then
             RefreshVisibleLogRows()
+        elseif MainFrame:IsShown() and currentTab == "settings" then
+            RefreshSettingsContent()
         end
     end)
 
@@ -2504,12 +3193,14 @@ local function CreateMainFrame()
     local tabLog = CreateTabButton(MainFrame, "聊天记录", "log", 0)
     local tabWhite = CreateTabButton(MainFrame, "白名单", "whitelist", 85)
     local tabBlack = CreateTabButton(MainFrame, "黑名单", "blacklist", 170)
-    local tabSettings = CreateTabButton(MainFrame, "设置", "settings", 255)
-    local tabDebug = CreateTabButton(MainFrame, "调试", "debug", 340)
+    local tabGuard = CreateTabButton(MainFrame, "对象防护", "guard", 255)
+    local tabSettings = CreateTabButton(MainFrame, "设置", "settings", 340)
+    local tabDebug = CreateTabButton(MainFrame, "调试", "debug", 425)
 
     table.insert(MainFrame.tabButtons, tabLog)
     table.insert(MainFrame.tabButtons, tabWhite)
     table.insert(MainFrame.tabButtons, tabBlack)
+    table.insert(MainFrame.tabButtons, tabGuard)
     table.insert(MainFrame.tabButtons, tabSettings)
     table.insert(MainFrame.tabButtons, tabDebug)
 
@@ -2824,6 +3515,35 @@ local function CreateMainFrame()
     MainFrame.listScroll = listScroll
     MainFrame.listContent = listContent
 
+    -- 道具风险管理
+    local guardScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
+    guardScroll:SetPoint("TOPLEFT", 12, -60)
+    guardScroll:SetPoint("BOTTOMRIGHT", -30, 40)
+    guardScroll:Hide()
+
+    local guardContent = CreateFrame("Frame", nil, guardScroll)
+    guardContent:SetSize(620, 320)
+    guardScroll:SetScrollChild(guardContent)
+    UI.RegisterScrollFrame(guardScroll)
+
+    MainFrame.guardScroll = guardScroll
+    MainFrame.guardContent = guardContent
+
+    if ns.ItemGuard and ns.ItemGuard.RegisterOnChanged then
+        ns.ItemGuard:RegisterOnChanged(function()
+            if MainFrame and MainFrame:IsShown() and currentTab == "guard" then
+                RefreshItemGuardContent()
+            end
+        end)
+    end
+    if ns.ItemGuardBlacklist and ns.ItemGuardBlacklist.RegisterOnChanged then
+        ns.ItemGuardBlacklist.RegisterOnChanged(function()
+            if MainFrame and MainFrame:IsShown() and currentTab == "guard" then
+                RefreshItemGuardContent()
+            end
+        end)
+    end
+
     -- 调试滚动框架（带可复制的EditBox）
     local debugScroll = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
     debugScroll:SetPoint("TOPLEFT", 12, -60)
@@ -2882,6 +3602,7 @@ local function CreateMainFrame()
         end
     end)
     UI.RegisterButton(refreshBtn)
+    MainFrame.refreshBtn = refreshBtn
 
     -- 复制按钮
     local copyBtn = CreateFrame("Button", nil, MainFrame, "UIPanelButtonTemplate,BackdropTemplate")

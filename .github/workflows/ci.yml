@@ -6,7 +6,7 @@ on:
     branches: [main, master]
 
 env:
-  GO_VERSION: '1.24.x'
+  GO_VERSION: '1.25.13'
 
 jobs:
   # 后端构建
@@ -81,7 +81,7 @@ jobs:
 
             cd server
             echo "Building server..."
-            go build -o rpbox-server cmd/server/main.go
+            GOTOOLCHAIN=go${{ env.GO_VERSION }} go build -o rpbox-server cmd/server/main.go
             chmod 755 rpbox-server
             if [ ! -x rpbox-server ]; then
               echo "Build failed: rpbox-server is missing or not executable"

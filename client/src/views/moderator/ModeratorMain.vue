@@ -12,6 +12,7 @@ import { getGuild } from '@/api/guild'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import ImageViewer from '@/components/ImageViewer.vue'
 import CharacterCardPortrait from '@/components/character-cards/CharacterCardPortrait.vue'
 import RPDBModerationPanel from '@/components/rpdb/RPDBModerationPanel.vue'
@@ -287,6 +288,8 @@ const pendingReviewCount = computed(() => stats.value?.total_pending_reviews ?? 
 const showPreviewModal = ref(false)
 const previewType = ref<'post' | 'item' | 'guild'>('post')
 const previewData = ref<any>(null)
+const sanitizedPreviewContent = computed(() => sanitizeRichHtml(previewData.value?.content || ''))
+const sanitizedPreviewDetailContent = computed(() => sanitizeRichHtml(previewData.value?.detail_content || ''))
 const previewLoading = ref(false)
 const previewReviewAction = ref<'approve' | 'reject'>('approve')
 const previewReviewComment = ref('')
@@ -5109,7 +5112,7 @@ function formatBanTime(dateStr: string | null) {
                     <span class="category-tag">{{ previewData.category }}</span>
                   </div>
                 </div>
-                <div class="preview-content" v-html="previewData.content"></div>
+                <div class="preview-content" v-html="sanitizedPreviewContent"></div>
               </template>
 
               <!-- 作品预览 -->
@@ -5152,7 +5155,7 @@ function formatBanTime(dateStr: string | null) {
                 <!-- 详细介绍 -->
                 <div v-if="previewData.detail_content" class="preview-detail-content">
                   <h4>详细介绍</h4>
-                  <div class="rich-content" v-html="previewData.detail_content"></div>
+                  <div class="rich-content" v-html="sanitizedPreviewDetailContent"></div>
                 </div>
 
                 <!-- 标签 -->

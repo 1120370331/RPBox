@@ -34,6 +34,7 @@ import SafetyReportSheet from '@/components/SafetyReportSheet.vue'
 import { createContentReport, type ReportTargetType } from '@/api/safety'
 import { handleJumpLinkClick, sanitizeJumpLinks } from '@/utils/jumpLink'
 import { copyTextToClipboard, shareRouteLink } from '@/utils/mobileShare'
+import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import {
   buildTomTomCommand,
   getRPDBSummary,
@@ -225,9 +226,9 @@ function canReportComment(item: RPDBComment) {
 
 function normalizeRichContent(raw: string) {
   const html = raw.trim()
-  if (!html || typeof DOMParser === 'undefined') return html
+  if (!html || typeof DOMParser === 'undefined') return sanitizeRichHtml(html)
   if (!/<[a-z][\s\S]*>/i.test(html)) {
-    return html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+    return sanitizeRichHtml(html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'))
   }
   const doc = new DOMParser().parseFromString(html, 'text/html')
   doc.querySelectorAll('script, style, iframe, object, embed').forEach(node => node.remove())
@@ -257,7 +258,7 @@ function normalizeRichContent(raw: string) {
     }
   })
   sanitizeJumpLinks(doc.body)
-  return doc.body.innerHTML
+  return sanitizeRichHtml(doc.body.innerHTML)
 }
 
 function handleContentClick(event: MouseEvent) {
