@@ -9,7 +9,7 @@ local ADDON_NAME, ns = ...
 local Rules = {}
 ns.ItemGuardContentRules = Rules
 
-Rules.RULE_VERSION = 1
+Rules.RULE_VERSION = 2
 Rules.LIMITS = {
     DOCUMENT_PAGE_BYTES = 512 * 1024,
     DOCUMENT_TOTAL_BYTES = 2 * 1024 * 1024,
@@ -129,9 +129,15 @@ function Rules.MeasureValue(value, limits)
         end
         local currentType = type(current)
         if currentType ~= "table" then
+            if currentType ~= "string" and currentType ~= "number" and currentType ~= "boolean"
+                and currentType ~= "nil" then metrics.invalidValue = true end
+            if currentType == "number" and (current ~= current or math.abs(current) == math.huge) then
+                metrics.invalidValue = true
+            end
             metrics.bytes = metrics.bytes + ScalarBytes(current)
             return
         end
+        if getmetatable(current) then metrics.invalidValue = true; return end
         if seen[current] then
             metrics.cyclic = true
             return
@@ -186,14 +192,15 @@ function Rules.AnalyzeVariables(vars, context)
                 reason = "单个变量载荷超过崩溃防护上限 512 KiB",
             })
         end
-        if measured.tooDeep or measured.tooManyNodes or measured.cyclic then
+        if measured.invalidValue or measured.tooDeep or measured.tooManyNodes or measured.cyclic then
             AddHardFinding(result, {
-                kind = measured.cyclic and "variable_cycle_crash_size"
+                kind = measured.invalidValue and "variable_invalid_value" or measured.cyclic and "variable_cycle_crash_size"
                     or measured.tooDeep and "variable_depth_crash_size"
                     or "variable_nodes_crash_size",
                 variable = CanonicalID(name) or "dynamic",
                 nodes = measured.nodes,
-                reason = measured.cyclic
+                reason = measured.invalidValue and "变量包含不可保存的值或元表"
+                    or measured.cyclic
                         and "变量结构包含循环引用，已按崩溃风险阻止"
                     or measured.tooDeep
                         and "变量结构嵌套超过崩溃防护上限"

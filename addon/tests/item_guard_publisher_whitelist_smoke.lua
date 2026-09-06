@@ -22,7 +22,9 @@ assert_equal(#whitelist.GetEntries(), 0, "publisher whitelist should not contain
 assert_equal(whitelist.MatchRoot("not-default", { MD = { CB = "伊迪-金色平原" } }), nil,
     "publisher was trusted without an explicit user entry")
 
-local selfMatch = whitelist.MatchRoot("self", { MD = { CB = "Spoofed-SmokeRealm" } })
+local ownRoot = { MD = { CB = "Self-SmokeRealm" } }
+TRP3_DB.my.self = ownRoot
+local selfMatch = whitelist.MatchRoot("self", ownRoot)
 assert_equal(selfMatch and selfMatch.source, "self", "current player was not trusted")
 assert_equal(whitelist.MatchRoot("spoofed-self", { MD = { CB = "Self-SmokeRealm" } }), nil,
     "self identity metadata was trusted without TRP3_DB.my ownership")
@@ -36,7 +38,9 @@ assert_true(RPBox_ItemGuardDB.publisherWhitelist["trusted-smokerealm"] ~= nil,
     "publisher trust was not persisted")
 
 local userMatch = whitelist.MatchRoot("user", { MD = { CB = "Trusted-SmokeRealm" } })
-assert_equal(userMatch and userMatch.source, "user", "user publisher did not match")
+assert_equal(userMatch and userMatch.source, "user", "explicit user publisher trust was ignored")
+assert_equal(whitelist.MatchRoot("self", { MD = { CB = "Self-SmokeRealm" } }), nil,
+    "a replacement sharing an owned ID inherited trust")
 
 TRP3_Security.sender.transport = "Unknown-SmokeRealm"
 local spoofed = whitelist.MatchRoot("transport", { MD = { CB = "Trusted-SmokeRealm" } })
@@ -53,4 +57,9 @@ assert_equal(changed, 2, "publisher remove did not notify")
 assert_equal(whitelist.MatchRoot("user", { MD = { CB = "Trusted-SmokeRealm" } }), nil,
     "removed publisher remained trusted")
 
+TRP3_API.security = { resolveEffectSecurity = function(id, effect)
+    return id == "native-trusted" and effect == "script", 3
+end }
+local native = whitelist.MatchRoot("native-trusted", { MD = {} })
+assert_equal(native and native.source, "trp3", "TRP3 authorization was not respected")
 print("item_guard_publisher_whitelist_smoke: PASS")

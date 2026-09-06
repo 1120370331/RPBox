@@ -6,7 +6,7 @@ local ADDON_NAME, ns = ...
 local Rules = {}
 ns.ItemGuardRules = Rules
 
-Rules.RULE_VERSION = 2
+Rules.RULE_VERSION = 3
 
 local MAX_AMPLIFICATION_SCORE = 40
 local BLOCK_SCORE = 100
@@ -794,6 +794,14 @@ local function AnalyzeClass(result, classID, class, context)
 
     for workflowID in pairs(reachableWorkflows) do
         local descriptor = descriptors[workflowID]
+        if ns.ItemGuardStructure then
+            local valid, reason = ns.ItemGuardStructure.ValidateWorkflow(descriptor.workflow)
+            if not valid then
+                AddFinding(result, { kind = "unsafe_compilation", classID = classID,
+                    workflowID = workflowID, score = 120, hard = true, bypassable = false,
+                    reason = reason })
+            end
+        end
         local cyclicSteps = {}
         local stepComponents = StronglyConnected(descriptor.reachableSteps, descriptor.stepEdges)
         for _, component in ipairs(stepComponents) do
@@ -804,8 +812,10 @@ local function AnalyzeClass(result, classID, class, context)
                     kind = "step_cycle",
                     workflowID = workflowID,
                     classID = classID,
-                    score = 15,
-                    reason = "工作流“" .. workflowID .. "”存在可达步骤循环",
+                    score = 120,
+                    hard = true,
+                    bypassable = false,
+                    reason = "工作流“" .. workflowID .. "”的步骤连接成环，无法安全编译",
                     steps = component,
                 })
             end

@@ -6,6 +6,7 @@ import {
   normalizeSharedPath,
   resolveDesktopRouteFromUrl,
   resolveSharedPathFromUrl,
+  sharePublicSitePath,
 } from '../utils/desktopDeepLink'
 
 describe('desktop deep link utils', () => {
@@ -37,6 +38,27 @@ describe('desktop deep link utils', () => {
     expect(buildPublicSitePathUrl('/posts/12')).toBe('https://totalrpbox.com/posts/12')
     expect(buildPublicSitePathUrl('/character-cards/23')).toBe('https://totalrpbox.com/character-cards/23')
     expect(() => buildPublicSitePathUrl('/community/post/12')).toThrow('Unsupported shared path')
+  })
+
+  it('copies a public item link when the system share sheet is unavailable', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'share', { configurable: true, value: undefined })
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+
+    await expect(sharePublicSitePath({ path: '/items/17', title: 'Shared item' })).resolves.toBe('copied')
+    expect(writeText).toHaveBeenCalledWith('https://totalrpbox.com/items/17')
+  })
+
+  it('uses the system share sheet for a public item link when available', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share })
+
+    await expect(sharePublicSitePath({ path: '/items/18', title: 'Shared item' })).resolves.toBe('shared')
+    expect(share).toHaveBeenCalledWith({
+      title: 'Shared item',
+      text: 'Shared item',
+      url: 'https://totalrpbox.com/items/18',
+    })
   })
 
   it('resolves desktop routes directly from external urls', () => {

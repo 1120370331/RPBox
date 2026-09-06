@@ -235,6 +235,9 @@ export default {
       favorited: '已收藏',
       favorite: '收藏',
       viewImportCode: '查看导入代码',
+      share: '分享',
+      follow: '关注',
+      followed: '已关注',
     },
     importCode: {
       title: '导入代码',
@@ -265,6 +268,12 @@ export default {
       codeCopied: '导入代码已复制到剪贴板',
       downloadStarted: '开始下载图片',
       downloadAllStarted: '开始下载 {count} 张图片',
+      shareSuccess: '已打开系统分享',
+      shareLinkCopied: '分享链接已复制',
+      shareFailed: '分享失败，请稍后重试',
+      followed: '已关注，内容更新时会通知你',
+      unfollowed: '已取消关注',
+      followFailed: '关注操作失败，请稍后重试',
     },
     importTutorial: {
       title: '如何在游戏中导入',

@@ -371,6 +371,7 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 
 	if req.Action == "approve" {
 		s.bumpPostListCache(c.Request.Context())
+		notifyPostFollowers(*reviewedPost)
 
 		ensurePostCoverUpdatedAt(reviewedPost)
 		reviewedPost.CoverImage = postCoverURL(*reviewedPost)
@@ -1173,6 +1174,7 @@ func (s *Server) reviewItemEdit(c *gin.Context) {
 		}
 
 		ensureItemPreviewUpdatedAt(&item)
+		notifyItemFollowers(item)
 		item.PreviewImage = buildItemPreviewURL(item, strings.TrimSpace(item.PreviewImage) != "")
 		c.JSON(http.StatusOK, gin.H{"message": "编辑已通过并应用", "item": item})
 	} else if req.Action == "reject" {

@@ -18,6 +18,7 @@ local BUILTIN_IDENTITIES = {
 
 local callbacks = {}
 local builtinByIdentity = {}
+local normalizedDatabase
 
 local function Trim(value)
     return (tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", ""))
@@ -53,6 +54,7 @@ end
 local function EnsureDatabase()
     RPBox_ItemGuardDB = RPBox_ItemGuardDB or {}
     local current = RPBox_ItemGuardDB.userBlacklist
+    if current == normalizedDatabase and type(current) == "table" then return current end
     if type(current) ~= "table" then current = {} end
 
     local normalizedEntries = {}
@@ -71,12 +73,13 @@ local function EnsureDatabase()
     end
 
     RPBox_ItemGuardDB.userBlacklist = normalizedEntries
+    normalizedDatabase = normalizedEntries
     return normalizedEntries
 end
 
-local function NotifyChanged()
+local function NotifyChanged(identity)
     for _, callback in ipairs(callbacks) do
-        pcall(callback)
+        pcall(callback, identity)
     end
 end
 
@@ -128,7 +131,7 @@ function Blacklist.AddUser(identity, reason, colonReason)
         identity = normalized,
         reason = reason ~= "" and reason or nil,
     }
-    NotifyChanged()
+    NotifyChanged(normalized)
     return true, "已加入来源黑名单"
 end
 
@@ -145,7 +148,7 @@ function Blacklist.RemoveUser(identity, colonIdentity)
         return false, "用户黑名单中不存在该身份"
     end
     entries[normalized] = nil
-    NotifyChanged()
+    NotifyChanged(normalized)
     return true, "已移出来源黑名单"
 end
 

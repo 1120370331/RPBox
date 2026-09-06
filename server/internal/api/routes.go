@@ -187,12 +187,15 @@ func (s *Server) setupRoutes() {
 			auth.POST("/items/:id/tags", s.addItemTag)
 			auth.DELETE("/items/:id/tags/:tagId", s.removeItemTag)
 			auth.GET("/items/favorites", s.listMyItemFavorites)
+			auth.GET("/items/follows", s.listMyItemFollows)
 			auth.GET("/items/likes", s.listMyItemLikes)
 			auth.GET("/items/views", s.listMyItemViews)
 			auth.POST("/items/:id/like", s.likeItem)
 			auth.DELETE("/items/:id/like", s.unlikeItem)
 			auth.POST("/items/:id/favorite", s.favoriteItem)
 			auth.DELETE("/items/:id/favorite", s.unfavoriteItem)
+			auth.POST("/items/:id/follow", s.followItem)
+			auth.DELETE("/items/:id/follow", s.unfollowItem)
 
 			// 画作图片管理
 			auth.POST("/items/:id/images", s.uploadItemImages)
@@ -260,6 +263,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/posts", s.listPosts)
 			auth.POST("/posts", s.createPost)
 			auth.GET("/posts/favorites", s.listMyFavorites)
+			auth.GET("/posts/follows", s.listMyPostFollows)
 			auth.GET("/posts/likes", s.listMyPostLikes)
 			auth.GET("/posts/views", s.listMyPostViews)
 			auth.GET("/posts/events", s.listEvents) // 活动日历
@@ -272,6 +276,8 @@ func (s *Server) setupRoutes() {
 			auth.DELETE("/posts/:id/like", s.unlikePost)
 			auth.POST("/posts/:id/favorite", s.favoritePost)
 			auth.DELETE("/posts/:id/favorite", s.unfavoritePost)
+			auth.POST("/posts/:id/follow", s.followPost)
+			auth.DELETE("/posts/:id/follow", s.unfollowPost)
 			auth.GET("/posts/:id/tags", s.getPostTags)
 			auth.POST("/posts/:id/tags", s.addPostTag)
 			auth.DELETE("/posts/:id/tags/:tagId", s.removePostTag)

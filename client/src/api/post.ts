@@ -173,6 +173,7 @@ export interface PostDetailResponse {
   tags: any[]
   liked: boolean
   favorited: boolean
+  followed: boolean
 }
 
 export async function getPost(id: number): Promise<PostDetailResponse> {
@@ -221,6 +222,18 @@ export async function listComments(postId: number): Promise<{ comments: CommentW
 
 export async function createComment(postId: number, content: string, parentId?: number, imageUrl = ''): Promise<Comment> {
   return request.post(`/posts/${postId}/comments`, { content, image_url: imageUrl, parent_id: parentId })
+}
+
+export async function followPost(id: number): Promise<void> {
+  return request.post(`/posts/${id}/follow`)
+}
+
+export async function unfollowPost(id: number): Promise<void> {
+  return request.delete(`/posts/${id}/follow`)
+}
+
+export async function listMyPostFollows(): Promise<{ posts: PostWithAuthor[]; total: number }> {
+  return request.get('/posts/follows')
 }
 
 export async function deleteComment(postId: number, commentId: number): Promise<void> {

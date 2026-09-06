@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, getItemImageDownloadUrl, getItemImageUrl, resolveApiUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
+import { getItem, downloadItem, getItemComments, addItemComment, likeItem, unlikeItem, favoriteItem, unfavoriteItem, followItem, unfollowItem, getItemImageDownloadUrl, getItemImageUrl, resolveApiUrl, type Item, type ItemComment, type ItemImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import ImageViewer from '@/components/ImageViewer.vue'
@@ -22,6 +22,7 @@ import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import { useEmoteStore } from '@/stores/emote'
 import { createContentReport, createUserBlock, type ReportTargetType } from '@/api/safety'
 import CollectionBanner from '@/components/CollectionBanner.vue'
+import { sharePublicSitePath } from '@/utils/desktopDeepLink'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,6 +54,7 @@ const replyImageURL = ref('')
 const showImportCode = ref(false)
 const isLiked = ref(false)
 const isFavorited = ref(false)
+const isFollowed = ref(false)
 const submitting = ref(false)
 const submittingReply = ref(false)
 const detailContentRef = ref<HTMLElement | null>(null)
@@ -233,6 +235,7 @@ async function loadItemDetail() {
       tags.value = res.data.tags || []
       isLiked.value = !!res.data.liked
       isFavorited.value = !!res.data.favorited
+      isFollowed.value = !!res.data.followed
       // 画作类型加载图片列表，并转换为完整 URL
       if (res.data.images) {
         images.value = res.data.images.map((img: any) => ({
@@ -459,6 +462,46 @@ function handleEmojiSelect(token: string) {
     appendEmoteToken(newComment, token)
   }
   showEmojiPicker.value = false
+}
+
+async function handleFollow() {
+  if (!item.value || submitting.value) return
+  submitting.value = true
+  try {
+    if (isFollowed.value) {
+      await unfollowItem(item.value.id)
+      isFollowed.value = false
+      toast.success(t('market.detail.messages.unfollowed'))
+    } else {
+      await followItem(item.value.id)
+      isFollowed.value = true
+      toast.success(t('market.detail.messages.followed'))
+    }
+  } catch (error: any) {
+    console.error('关注作品失败:', error)
+    toast.error(error?.message || t('market.detail.messages.followFailed'))
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handleShare() {
+  if (!item.value?.id || isPreview.value) return
+
+  try {
+    const result = await sharePublicSitePath({
+      path: `/items/${item.value.id}`,
+      title: item.value.name,
+      text: item.value.description || item.value.name,
+    })
+    toast.success(t(result === 'shared'
+      ? 'market.detail.messages.shareSuccess'
+      : 'market.detail.messages.shareLinkCopied'))
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return
+    console.error('分享作品失败:', error)
+    toast.error(t('market.detail.messages.shareFailed'))
+  }
 }
 
 function handleReplyEmojiSelect(token: string) {
@@ -802,6 +845,20 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
           <button class="favorite-btn" :class="{ active: isFavorited }" @click="handleFavorite">
             <i :class="isFavorited ? 'ri-bookmark-fill' : 'ri-bookmark-line'"></i>
             {{ isFavorited ? t('market.detail.actions.favorited') : t('market.detail.actions.favorite') }}
+          </button>
+          <button
+            v-if="!isPreview && currentUserId && currentUserId !== item.author_id"
+            class="follow-btn"
+            :class="{ active: isFollowed }"
+            :disabled="submitting"
+            @click="handleFollow"
+          >
+            <i :class="isFollowed ? 'ri-notification-3-fill' : 'ri-notification-3-line'"></i>
+            {{ isFollowed ? t('market.detail.actions.followed') : t('market.detail.actions.follow') }}
+          </button>
+          <button v-if="!isPreview" class="share-btn" @click="handleShare">
+            <i class="ri-share-forward-line"></i>
+            {{ t('market.detail.actions.share') }}
           </button>
         </div>
 
@@ -1478,6 +1535,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
 .action-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -1557,8 +1615,9 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   color: var(--color-accent);
 }
 
-.like-btn, .favorite-btn {
+.like-btn, .favorite-btn, .follow-btn, .share-btn {
   flex: 1;
+  min-width: 112px;
   height: 48px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
@@ -1823,6 +1882,19 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   border-radius: 8px;
   display: flex;
   gap: 12px;
+}
+
+.follow-btn:hover,
+.follow-btn.active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel-bg));
+}
+
+.share-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel-bg));
 }
 
 .review-input-box > .comment-image-picker {

@@ -66,6 +66,8 @@ export default {
     publish: 'Publish',
     favorites: 'Favorites',
     history: 'History',
+    follow: 'Follow',
+    followed: 'Following',
     myPosts: 'My Posts',
   },
   comment: {
@@ -255,6 +257,9 @@ export default {
     likeFailed: 'Like failed',
     shareSuccess: 'Share sheet opened',
     shareLinkCopied: 'Share link copied',
+    followed: 'Following. You will be notified about updates',
+    unfollowed: 'Unfollowed',
+    followFailed: 'Unable to update follow status. Please try again',
     shareFailed: 'Failed to share, please try again',
     replyTo: 'Reply to {name}',
     replyToLabel: 'Reply to',

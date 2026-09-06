@@ -455,6 +455,9 @@ local ns = {
         SetIgnored = function(_, rootID, ignored)
             itemGuardActions[#itemGuardActions + 1] = { action = "ignore", rootID = rootID, value = ignored }
         end,
+        RequestIgnore = function(_, rootID)
+            itemGuardActions[#itemGuardActions + 1] = { action = "requestIgnore", rootID = rootID }
+        end,
         RegisterOnChanged = function(_, callback) itemGuardChangeCallback = callback end,
     },
     ItemGuardBlacklist = {
@@ -899,8 +902,7 @@ click(guardRow.quarantineCb)
 assert_equal(itemGuardActions[#itemGuardActions].action, "isolate", "isolation state was not delegated")
 assert_equal(itemGuardActions[#itemGuardActions].value, false, "temporary release state was not delegated")
 click(guardRow.ignoreBtn)
-assert_equal(itemGuardActions[#itemGuardActions].action, "ignore", "ignore-list action was not delegated")
-assert_equal(itemGuardActions[#itemGuardActions].value, true, "ignore-list state was not delegated")
+assert_equal(itemGuardActions[#itemGuardActions].action, "requestIgnore", "ignore action did not request confirmation")
 assert_true(itemGuardChangeCallback ~= nil, "risk GUI did not subscribe to guard updates")
 
 -- The source blacklist is a bounded, collapsible manager inside the guard

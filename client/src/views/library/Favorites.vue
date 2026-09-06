@@ -2,8 +2,8 @@
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { listMyFavorites, type PostWithAuthor, POST_CATEGORIES } from '@/api/post'
-import { listMyItemFavorites, type Item, getImageUrl } from '@/api/item'
+import { listMyFavorites, listMyPostFollows, type PostWithAuthor, POST_CATEGORIES } from '@/api/post'
+import { listMyItemFavorites, listMyItemFollows, type Item, getImageUrl } from '@/api/item'
 import { listMyCollectionFavorites, type CollectionWithAuthor } from '@/api/collection'
 import { listMyRPDBFavorites, type RPDBWork } from '@/api/rpdb'
 import LazyBgImage from '@/components/LazyBgImage.vue'
@@ -14,9 +14,11 @@ const router = useRouter()
 const { t } = useI18n()
 const mounted = ref(false)
 const loading = ref(false)
-const activeTab = ref<'posts' | 'items' | 'collections' | 'rpdb'>('posts')
+const activeTab = ref<'posts' | 'items' | 'following' | 'collections' | 'rpdb'>('posts')
 const posts = ref<PostWithAuthor[]>([])
 const items = ref<Item[]>([])
+const followedPosts = ref<PostWithAuthor[]>([])
+const followedItems = ref<Item[]>([])
 const collections = ref<CollectionWithAuthor[]>([])
 const rpdbWorks = ref<RPDBWork[]>([])
 const searchText = ref('')
@@ -53,6 +55,26 @@ const filteredItems = computed(() => {
       typeLabel,
     ].some(value => value && value.toLowerCase().includes(keyword.value))
   })
+})
+
+const filteredFollowedPosts = computed(() => {
+  if (!keyword.value) return followedPosts.value
+  return followedPosts.value.filter((post) => [
+    post.title,
+    post.author_name,
+    post.category,
+    getCategoryLabel(post.category || ''),
+  ].some(value => value && value.toLowerCase().includes(keyword.value)))
+})
+
+const filteredFollowedItems = computed(() => {
+  if (!keyword.value) return followedItems.value
+  return followedItems.value.filter((item) => [
+    item.name,
+    item.author_username,
+    item.type,
+    typeMap.value[item.type as keyof typeof typeMap.value] || item.type,
+  ].some(value => value && value.toLowerCase().includes(keyword.value)))
 })
 
 const filteredCollections = computed(() => {
@@ -98,6 +120,13 @@ async function loadFavorites() {
       if (res.code === 0) {
         items.value = res.data.items || []
       }
+    } else if (activeTab.value === 'following') {
+      const [postRes, itemRes]: any[] = await Promise.all([
+        listMyPostFollows(),
+        listMyItemFollows(),
+      ])
+      followedPosts.value = postRes.posts || []
+      followedItems.value = itemRes.code === 0 ? (itemRes.data.items || []) : []
     } else if (activeTab.value === 'collections') {
       const res = await listMyCollectionFavorites()
       collections.value = res.collections || []
@@ -152,6 +181,15 @@ function getCategoryLabel(category: string) {
         </div>
       </div>
       <div class="tab-group">
+        <button
+          data-testid="favorites-tab-following"
+          class="tab-btn"
+          :class="{ active: activeTab === 'following' }"
+          @click="activeTab = 'following'"
+        >
+          <i class="ri-notification-3-line"></i>
+          {{ t('library.favorites.tabs.following') }}
+        </button>
         <button
           class="tab-btn"
           :class="{ active: activeTab === 'posts' }"
@@ -267,6 +305,45 @@ function getCategoryLabel(category: string) {
               </div>
             </div>
           </div>
+        </div>
+
+        <div v-else-if="activeTab === 'following'" class="following-content">
+          <div v-if="filteredFollowedPosts.length === 0 && filteredFollowedItems.length === 0" class="empty-state">
+            <i class="ri-notification-off-line"></i>
+            <p>{{ searchText ? t('library.favorites.empty.followingSearch') : t('library.favorites.empty.following') }}</p>
+          </div>
+          <template v-else>
+            <section v-if="filteredFollowedPosts.length" class="following-section">
+              <h2><i class="ri-chat-3-line"></i>{{ t('library.favorites.followingPosts') }}</h2>
+              <div class="post-grid">
+                <div v-for="post in filteredFollowedPosts" :key="post.id" class="post-card" @click="goToPost(post.id)">
+                  <div v-if="post.cover_image_url" class="post-cover">
+                    <img :src="getImageUrl('post-cover', post.id, { w: 480, q: 80, v: post.cover_image_updated_at || post.updated_at })" alt="" loading="lazy" />
+                  </div>
+                  <div class="post-body">
+                    <div class="post-meta"><span class="category-tag">{{ getCategoryLabel(post.category) }}</span><span class="author-name">{{ post.author_name }}</span></div>
+                    <h3 class="post-title">{{ post.title }}</h3>
+                    <div class="post-stats"><span><i class="ri-eye-line"></i> {{ post.view_count }}</span><span><i class="ri-heart-3-line"></i> {{ post.like_count }}</span><span><i class="ri-chat-3-line"></i> {{ post.comment_count }}</span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section v-if="filteredFollowedItems.length" class="following-section">
+              <h2><i class="ri-box-3-line"></i>{{ t('library.favorites.followingItems') }}</h2>
+              <div class="item-grid">
+                <div v-for="item in filteredFollowedItems" :key="item.id" class="item-card" @click="goToItem(item.id)">
+                  <LazyBgImage class="item-image" :src="item.preview_image_url ? getImageUrl('item-preview', item.id, { w: 400, q: 80, v: item.preview_image_updated_at || item.updated_at }) : undefined">
+                    <div v-if="!item.preview_image_url" class="placeholder-icon"><i class="ri-box-3-line"></i></div>
+                  </LazyBgImage>
+                  <div class="item-body">
+                    <h3 class="item-title">{{ item.name }}</h3>
+                    <div class="item-meta"><span class="item-type">{{ typeMap[item.type] || item.type }}</span><span class="item-author">{{ item.author_username || t('library.favorites.anonymous') }}</span></div>
+                    <div class="item-stats"><span><i class="ri-heart-3-line"></i> {{ item.like_count }}</span><span><i class="ri-star-fill"></i> {{ item.rating.toFixed(1) }}</span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </template>
         </div>
 
         <div v-else-if="activeTab === 'collections'">
@@ -427,6 +504,31 @@ function getCategoryLabel(category: string) {
 
 .content {
   min-height: 320px;
+}
+
+.following-content,
+.following-section {
+  display: grid;
+  gap: 18px;
+}
+
+.following-section + .following-section {
+  margin-top: 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.following-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--color-text-main);
+  font-size: 17px;
+}
+
+.following-section h2 i {
+  color: var(--color-accent);
 }
 
 .loading-state {

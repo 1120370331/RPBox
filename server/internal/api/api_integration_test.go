@@ -3,11 +3,14 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rpbox/server/internal/database"
@@ -95,6 +98,66 @@ func TestProfileVersionFlow(t *testing.T) {
 	}
 	if len(versions.Versions) != 1 {
 		t.Fatalf("expected 1 version entry, got %d", len(versions.Versions))
+	}
+}
+
+func TestListItemsVersionsAuthorAvatarFromAuthorUpdateTime(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.User{}, &model.Item{}, &model.UserBlock{}, &model.UserHiddenContent{})
+	database.DB = db
+
+	viewer := model.User{Username: "viewer", Email: "viewer@example.com", PassHash: "hash"}
+	author := model.User{
+		Username:           "avatar-author",
+		Email:              "avatar-author@example.com",
+		PassHash:           "hash",
+		Avatar:             "/uploads/users/avatar-author/new.png",
+		AvatarReviewStatus: "approved",
+	}
+	if err := db.Create(&viewer).Error; err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	if err := db.Create(&author).Error; err != nil {
+		t.Fatalf("create author: %v", err)
+	}
+
+	avatarUpdatedAt := time.Date(2026, 9, 6, 12, 34, 56, 0, time.UTC)
+	if err := db.Model(&model.User{}).Where("id = ?", author.ID).UpdateColumn("updated_at", avatarUpdatedAt).Error; err != nil {
+		t.Fatalf("set author update time: %v", err)
+	}
+	item := model.Item{
+		AuthorID:     author.ID,
+		Name:         "Cache-versioned item",
+		Type:         "item",
+		Status:       "published",
+		ReviewStatus: "approved",
+		IsPublic:     true,
+	}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatalf("create item: %v", err)
+	}
+
+	server := newTestServer(t, db)
+	resp := performRequest(server.router, http.MethodGet, "/api/v1/items", nil, newTestToken(t, viewer))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var payload struct {
+		Data struct {
+			Items []struct {
+				AuthorAvatar string `json:"author_avatar"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload.Data.Items) != 1 {
+		t.Fatalf("expected one item, got %d", len(payload.Data.Items))
+	}
+	wantVersion := fmt.Sprintf("v=%d", avatarUpdatedAt.Unix())
+	if !strings.Contains(payload.Data.Items[0].AuthorAvatar, wantVersion) {
+		t.Fatalf("expected avatar URL to contain %q, got %q", wantVersion, payload.Data.Items[0].AuthorAvatar)
 	}
 }
 

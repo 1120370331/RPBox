@@ -68,6 +68,41 @@ export function buildPublicSitePathUrl(path: string) {
   return new URL(normalized, `${getPublicSiteOrigin()}/`).toString()
 }
 
+export async function sharePublicSitePath(options: { path: string; title: string; text?: string }) {
+  const url = buildPublicSitePathUrl(options.path)
+  if (navigator.share) {
+    await navigator.share({
+      title: options.title,
+      text: options.text || options.title,
+      url,
+    })
+    return 'shared' as const
+  }
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(url)
+      return 'copied' as const
+    } catch {
+      // Some desktop webviews expose Clipboard but deny it at runtime.
+      // Fall through to the selection-based copy path.
+    }
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = url
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) throw new Error('Clipboard copy failed')
+
+  return 'copied' as const
+}
+
 export function resolveSharedPathFromUrl(rawUrl: string) {
   if (!rawUrl) return null
 

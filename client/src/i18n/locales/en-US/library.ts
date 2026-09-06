@@ -8,6 +8,7 @@ export default {
     tabs: {
       posts: 'Posts',
       items: 'Works',
+      following: 'Following',
       collections: 'Collections',
       rpdb: 'RP Database',
     },
@@ -16,6 +17,8 @@ export default {
       postsSearch: 'No matching favorite posts found',
       items: 'No favorite works',
       itemsSearch: 'No matching favorite works found',
+      following: 'No followed content',
+      followingSearch: 'No matching followed content found',
       collections: 'No favorite collections',
       collectionsSearch: 'No matching favorite collections found',
       rpdb: 'No favorite RP Database works',
@@ -29,5 +32,7 @@ export default {
     anonymous: 'Anonymous',
     noDescription: 'No description',
     itemCount: '{count} items',
+    followingPosts: 'Followed posts',
+    followingItems: 'Followed works',
   },
 }

@@ -189,7 +189,10 @@ func (s *Server) listItems(c *gin.Context) {
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").Where("id IN ?", authorIDs).Find(&authors)
+		// userAvatarURL uses UpdatedAt as the immutable image cache version.
+		// Keep it in this projection or every list entry gets the zero-time version
+		// and can remain pinned to a previously cached avatar.
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "updated_at").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	// 创建作者ID到用户信息的映射
@@ -318,7 +321,7 @@ func (s *Server) listUserItemsByRelation(c *gin.Context, joinTable, orderColumn 
 
 	var authors []model.User
 	if len(authorIDs) > 0 {
-		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").Where("id IN ?", authorIDs).Find(&authors)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "updated_at").Where("id IN ?", authorIDs).Find(&authors)
 	}
 
 	authorMap := make(map[uint]model.User)
@@ -604,7 +607,7 @@ func (s *Server) getItem(c *gin.Context) {
 	}
 
 	// 检查当前用户是否点赞和收藏
-	var liked, favorited bool
+	var liked, favorited, followed bool
 	var existingLike model.ItemLike
 	if err := database.DB.Where("item_id = ? AND user_id = ?", item.ID, userID).First(&existingLike).Error; err == nil {
 		liked = true
@@ -613,6 +616,10 @@ func (s *Server) getItem(c *gin.Context) {
 	if err := database.DB.Where("item_id = ? AND user_id = ?", item.ID, userID).First(&existingFavorite).Error; err == nil {
 		favorited = true
 	}
+	var existingFollow model.ItemFollow
+	if err := database.DB.Where("item_id = ? AND user_id = ?", item.ID, userID).First(&existingFollow).Error; err == nil {
+		followed = true
+	}
 
 	response := gin.H{
 		"item":      item,
@@ -620,6 +627,7 @@ func (s *Server) getItem(c *gin.Context) {
 		"tags":      tags,
 		"liked":     liked,
 		"favorited": favorited,
+		"followed":  followed,
 	}
 
 	// 如果是画作类型，获取图片列表
@@ -668,6 +676,7 @@ func (s *Server) updateItem(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "道具不存在"})
 		return
 	}
+	wasPublished := item.Status == "published" && item.ReviewStatus == "approved"
 
 	// 验证权限：只有作者可以编辑
 	if item.AuthorID != userID {
@@ -889,6 +898,9 @@ func (s *Server) updateItem(c *gin.Context) {
 		mentionMessage := "在作品《" + item.Name + "》中提到了你"
 		service.CreateMentionNotifications(userID, "item", item.ID, mentionMessage, item.DetailContent, item.Description)
 	}
+	if wasPublished && item.Status == "published" && item.ReviewStatus == "approved" {
+		notifyItemFollowers(item)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
@@ -923,6 +935,7 @@ func (s *Server) deleteItem(c *gin.Context) {
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemComment{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemLike{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemFavorite{})
+	database.DB.Where("item_id = ?", id).Delete(&model.ItemFollow{})
 	database.DB.Where("item_id = ?", id).Delete(&model.ItemRating{})
 
 	var itemImages []model.ItemImage
@@ -1122,7 +1135,7 @@ func (s *Server) getItemComments(c *gin.Context) {
 	var result []CommentWithUser
 	for _, comment := range comments {
 		var user model.User
-		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience").First(&user, comment.UserID)
+		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "updated_at").First(&user, comment.UserID)
 		nameColor, nameBold := userDisplayStyle(user)
 		levelInfo := resolveForumLevelInfo(user.ActivityExperience)
 		result = append(result, CommentWithUser{

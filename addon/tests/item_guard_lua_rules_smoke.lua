@@ -140,7 +140,10 @@ local globalRequest = Rules.AnalyzeCode("local G = args._G", {
     rootID = "global-request",
     trustedPublisher = true,
 })
-assert_true(globalRequest.blocked, "publisher trust bypassed an _G request")
+assert_false(globalRequest.blocked, "trusted UI compatibility was blocked solely for requesting _G")
+assert_true(Rules.AnalyzeCode("local G = args._G").blocked, "untrusted _G request was automatically authorized")
+assert_false(Rules.AnalyzeCode("local n=math.ceil(1.2); n=3; local x=math.pi; x=2").blocked,
+    "local scalar assignment was mistaken for a shared-library write")
 
 local function effect(id, args) return { id = id, args = args or {} } end
 local function workflow(effects) return { ST = { ["1"] = { t = "list", e = effects } } } end

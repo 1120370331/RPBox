@@ -992,7 +992,7 @@ func (s *Server) getPost(c *gin.Context) {
 	levelInfo := resolveForumLevelInfo(author.ActivityExperience)
 
 	var tags []model.Tag
-	var liked, favorited bool
+	var liked, favorited, followed bool
 	if !isEmbedPreview {
 		// 获取标签
 		var postTags []model.PostTag
@@ -1013,6 +1013,10 @@ func (s *Server) getPost(c *gin.Context) {
 		var postFav model.PostFavorite
 		if err := database.DB.Where("post_id = ? AND user_id = ?", id, userID).First(&postFav).Error; err == nil {
 			favorited = true
+		}
+		var postFollow model.PostFollow
+		if err := database.DB.Where("post_id = ? AND user_id = ?", id, userID).First(&postFollow).Error; err == nil {
+			followed = true
 		}
 	}
 
@@ -1035,6 +1039,7 @@ func (s *Server) getPost(c *gin.Context) {
 		"tags":                     tags,
 		"liked":                    liked,
 		"favorited":                favorited,
+		"followed":                 followed,
 	})
 }
 
@@ -1049,6 +1054,7 @@ func (s *Server) updatePost(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
 		return
 	}
+	wasPublished := post.Status == "published" && post.ReviewStatus == "approved"
 
 	// 只有作者或管理员/版主可以更新
 	if post.AuthorID != userID && !isModerator {
@@ -1367,6 +1373,9 @@ func (s *Server) updatePost(c *gin.Context) {
 		mentionMessage := "在帖子《" + post.Title + "》中提到了你"
 		service.CreateMentionNotifications(userID, "post", post.ID, mentionMessage, post.Content)
 	}
+	if wasPublished && post.Status == "published" && post.ReviewStatus == "approved" {
+		notifyPostFollowers(post)
+	}
 	s.bumpPostListCache(c.Request.Context())
 	ensurePostCoverUpdatedAt(&post)
 	post.CoverImage = postCoverURL(post)
@@ -1401,6 +1410,7 @@ func (s *Server) deletePost(c *gin.Context) {
 	database.DB.Where("post_id = ?", id).Delete(&model.Comment{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostLike{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostFavorite{})
+	database.DB.Where("post_id = ?", id).Delete(&model.PostFollow{})
 	database.DB.Where("post_id = ?", id).Delete(&model.PostEditRequest{})
 
 	s.cleanupPostImages(c, post)

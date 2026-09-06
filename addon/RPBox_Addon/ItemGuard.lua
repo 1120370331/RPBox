@@ -10,8 +10,9 @@ ns.ItemGuard = Guard
 
 local ISOLATION_ICON = "ui-engineering-90-remote-close-icon"
 local VISUAL_CHILD_GROUPS = { "IN", "QE", "ST" }
-local DB_VERSION = 2
+local DB_VERSION = 3
 local RULE_VERSION = table.concat({
+    "guard=3;structure=" .. tostring(ns.ItemGuardStructure and ns.ItemGuardStructure.RULE_VERSION or 0),
     "core=" .. tostring(ns.ItemGuardRules and ns.ItemGuardRules.RULE_VERSION or 1),
     "sound=" .. tostring(ns.ItemGuardSoundRules and ns.ItemGuardSoundRules.RULE_VERSION or 0),
     "lifecycle=" .. tostring(ns.ItemGuardLifecycleRules and ns.ItemGuardLifecycleRules.RULE_VERSION or 0),
@@ -22,11 +23,6 @@ local RULE_VERSION = table.concat({
 }, ";")
 
 local LIMITS = {
-    maxWorkflows = 128,
-    maxSteps = 768,
-    maxEffects = 3072,
-    maxExpandedSteps = 4096,
-    maxItemAddEffects = 24,
     maxSingleItemAdd = 1000,
     runtimeWindow = 5,
     runtimeItemAddCalls = 20,
@@ -37,6 +33,12 @@ local LIMITS = {
     runtimeLongWriteCalls = 100,
     runtimeLongWriteCount = 1000,
     auraCancelWatchSeconds = 2,
+    workflowDepth = 12,
+    taskEffects = 1000,
+    taskWorkflows = 256,
+    taskQueued = 128,
+    taskWrites = 1000,
+    taskLifetime = 900,
 }
 
 local state = {
@@ -52,6 +54,15 @@ local state = {
     currentDestruction = nil,
     currentVariableEffect = nil,
     currentAuraCancellation = nil,
+    currentTask = nil,
+    taskDepth = 0,
+    rootEpochs = {},
+    contextTasks = setmetatable({}, { __mode = "k" }),
+    luaContexts = setmetatable({}, { __mode = "k" }),
+    revisions = {},
+    revisionOrder = {},
+    revisionBytes = 0,
+    globalWrites = { tokens = 2000, updatedAt = 0 },
     auraCancellationWatch = {},
     runtime = {},
     luaDepth = {},
@@ -65,6 +76,8 @@ local state = {
     temporaryAllow = {},
     original = {},
     changeCallbacks = {},
+    notificationQueued = false,
+    trustStamps = {},
 }
 Guard._state = state
 
@@ -84,15 +97,21 @@ local function EnsureDatabase()
         -- persistent allowlist. Current data requires an explicit GUI action.
         RPBox_ItemGuardDB.ignored = {}
     end
+    if previousVersion < 3 then RPBox_ItemGuardDB.ignored = {} end
     RPBox_ItemGuardDB.version = DB_VERSION
     return RPBox_ItemGuardDB
 end
 
 local function NotifyChanged()
-    for _, callback in ipairs(state.changeCallbacks) do
-        local ok, err = pcall(callback)
-        if not ok then Print("风险界面刷新失败：" .. tostring(err), "ff5555") end
-    end
+    if state.notificationQueued then return end
+    state.notificationQueued = true
+    C_Timer.After(0.05, function()
+        state.notificationQueued = false
+        for _, callback in ipairs(state.changeCallbacks) do
+            local ok, err = pcall(callback)
+            if not ok then Print("风险界面刷新失败：" .. tostring(err), "ff5555") end
+        end
+    end)
 end
 
 function Guard:RegisterOnChanged(callback)
@@ -108,6 +127,9 @@ local function IsReady()
         and TRP3_API.inventory
         and TRP3_API.script.executeClassScript
         and TRP3_API.script.playEffect
+        and TRP3_API.script.getEffect
+        and TRP3_API.script.runWorkflow
+        and TRP3_API.script.delayed
         and TRP3_API.script.setVar
         and TRP3_API.script.runLuaScriptEffect
         and TRP3_API.inventory.addItem
@@ -156,36 +178,9 @@ local function GetObjectType(root)
     local documentType = TRP3_DB.types.DOCUMENT
     if auraType and root.TY == auraType then return "aura" end
     if documentType and root.TY == documentType then return "document" end
-    -- Auras and documents can be nested below campaign-style roots. The root
-    -- remains the isolation owner and is therefore a protected object too.
-    local seen = {}
-    local function NestedProtectedType(class)
-        if type(class) ~= "table" or seen[class] then return nil end
-        seen[class] = true
-        if auraType and class.TY == auraType then return "aura" end
-        if documentType and class.TY == documentType then return "document" end
-        if type(class.SC) == "table" then
-            for _, workflow in pairs(class.SC) do
-                for _, step in pairs(type(workflow) == "table" and type(workflow.ST) == "table"
-                    and workflow.ST or {}) do
-                    for _, effect in pairs(type(step) == "table" and type(step.e) == "table"
-                        and step.e or {}) do
-                        if type(effect) == "table" and (effect.id == "script" or effect.id == "secure_macro") then
-                            return "lua"
-                        end
-                    end
-                end
-            end
-        end
-        for _, groupName in ipairs(VISUAL_CHILD_GROUPS) do
-            for _, child in pairs(type(class[groupName]) == "table" and class[groupName] or {}) do
-                local childType = NestedProtectedType(child)
-                if childType then return childType end
-            end
-        end
-        return nil
-    end
-    return NestedProtectedType(root)
+    -- Classification must be constant-time and precede bounded preflight.
+    -- Campaign, quest and dialogue roots receive the same execution protection.
+    return "object"
 end
 
 local function IsProtectedRoot(root)
@@ -198,7 +193,10 @@ local function IsVisuallyIsolated(root)
 end
 
 local function ResolveRootFromArgs(effectArgs, fallbackID)
+    -- An explicit dispatch target is authoritative; inherited args may still
+    -- identify the caller when TRP3 crosses an object/campaign boundary.
     local classID = fallbackID
+    if classID then return GetRootID(classID) end
     if type(effectArgs) == "table" then
         classID = effectArgs.classID or classID
         if not classID and type(effectArgs.object) == "table" then
@@ -211,16 +209,42 @@ local function ResolveRootFromArgs(effectArgs, fallbackID)
     return GetRootID(classID)
 end
 
+local function RequiredFailure(rootID, reason, kind)
+    return {
+        rootID = rootID, blocked = true, complete = false,
+        score = 120, behaviorScore = 120, amplificationScore = 0, observationScore = 0,
+        reasons = { reason }, fingerprint = RULE_VERSION .. ":failed:" .. tostring(kind),
+        findings = { { kind = kind or "scan_failed", reason = reason, hard = true,
+            bypassable = false, score = 120 } },
+    }
+end
+
+local function HasInvariant(result)
+    if not result or result.complete == false then return true end
+    for _, finding in ipairs(result.findings or {}) do
+        if finding.hard and finding.bypassable ~= true then return true end
+    end
+    return false
+end
+
+local function TaskValid(task)
+    if not task then return true end
+    if task.revoked or task.generation ~= state.retryGeneration or GetTime() > task.expiresAt then return false end
+    for rootID, epoch in pairs(task.roots) do
+        if (state.rootEpochs[rootID] or 0) ~= epoch then return false end
+    end
+    return true
+end
+
+local function RevokeRoot(rootID)
+    state.rootEpochs[rootID] = (state.rootEpochs[rootID] or 0) + 1
+end
+
 local function CanonicalID(value)
     if type(value) == "string" or type(value) == "number" then
         return tostring(value)
     end
     return nil
-end
-
-local function GetStep(steps, stepID)
-    if type(steps) ~= "table" or not stepID then return nil end
-    return steps[stepID] or steps[tonumber(stepID)]
 end
 
 local function AddReason(result, reason)
@@ -254,270 +278,6 @@ local function NewScanResult(rootID)
         itemAdds = 0,
         workflowCalls = 0,
     }
-end
-
-local function AddEdge(edges, target)
-    target = CanonicalID(target)
-    if target then edges[target] = true end
-end
-
-local function FindStepCycleNodes(steps, edges)
-    local visiting, complete = {}, {}
-    local stack, stackIndex, cycleNodes = {}, {}, {}
-
-    local function Visit(stepID)
-        if complete[stepID] then return end
-        if visiting[stepID] then
-            local first = stackIndex[stepID] or 1
-            for index = first, #stack do cycleNodes[stack[index]] = true end
-            return
-        end
-        visiting[stepID] = true
-        stack[#stack + 1] = stepID
-        stackIndex[stepID] = #stack
-        for target in pairs(edges[stepID] or {}) do
-            if GetStep(steps, target) then Visit(target) end
-        end
-        stackIndex[stepID] = nil
-        stack[#stack] = nil
-        visiting[stepID] = nil
-        complete[stepID] = true
-    end
-
-    if GetStep(steps, "1") then Visit("1") end
-    return cycleNodes
-end
-
-local function EstimateExpandedSteps(steps, edges)
-    local cache, calculating = {}, {}
-
-    local function Cost(stepID)
-        if cache[stepID] then return cache[stepID] end
-        if calculating[stepID] then return LIMITS.maxExpandedSteps + 1 end
-        calculating[stepID] = true
-        local total = 1
-        for target in pairs(edges[stepID] or {}) do
-            if GetStep(steps, target) then
-                total = total + Cost(target)
-                if total > LIMITS.maxExpandedSteps then break end
-            end
-        end
-        calculating[stepID] = nil
-        cache[stepID] = total
-        return total
-    end
-
-    if not GetStep(steps, "1") then return 0 end
-    return Cost("1")
-end
-
-local function ScanWorkflow(classLabel, workflowID, workflow, result, workflowEdges, workflowItemAdds)
-    result.workflows = result.workflows + 1
-    if result.workflows > LIMITS.maxWorkflows then
-        AddScore(result, 30, "工作流数量超过常规规模")
-        return
-    end
-
-    local steps = type(workflow) == "table" and workflow.ST or nil
-    if type(steps) ~= "table" then return end
-
-    local stepEdges = {}
-    local itemAddSteps = {}
-    local currentWorkflowItemAdds = 0
-    local targets = workflowEdges[workflowID] or {}
-    workflowEdges[workflowID] = targets
-
-    -- First build the structural graph without inspecting effect payloads.
-    for rawStepID, step in pairs(steps) do
-        local stepID = CanonicalID(rawStepID)
-        if stepID and type(step) == "table" then
-            local edges = {}
-            stepEdges[stepID] = edges
-            AddEdge(edges, step.n)
-            if step.t == "branch" and type(step.b) == "table" then
-                for _, branch in pairs(step.b) do
-                    if type(branch) == "table" then AddEdge(edges, branch.n) end
-                end
-            end
-        end
-    end
-
-    -- Only reachable steps can be compiled or executed. Disconnected editor
-    -- leftovers must not create false-positive cycles or item_add counts.
-    local reachable = {}
-    local function MarkReachable(stepID)
-        if reachable[stepID] or not GetStep(steps, stepID) then return end
-        reachable[stepID] = true
-        for target in pairs(stepEdges[stepID] or {}) do MarkReachable(target) end
-    end
-    MarkReachable("1")
-
-    for stepID in pairs(reachable) do
-        local step = GetStep(steps, stepID)
-        result.steps = result.steps + 1
-        if result.steps > LIMITS.maxSteps then
-            AddScore(result, 30, "工作流步骤数量超过常规规模")
-            return
-        end
-
-        if step.t == "branch" and type(step.b) == "table" then
-            for _, branch in pairs(step.b) do
-                if type(branch) == "table"
-                    and type(branch.failWorkflow) == "string"
-                    and branch.failWorkflow ~= "" then
-                    targets[branch.failWorkflow] = true
-                    result.workflowCalls = result.workflowCalls + 1
-                end
-            end
-        end
-
-        if type(step.e) == "table" then
-            for _, itemEffect in pairs(step.e) do
-                if type(itemEffect) == "table" then
-                    result.effects = result.effects + 1
-                    if result.effects > LIMITS.maxEffects then
-                        AddScore(result, 30, "工作流效果数量超过常规规模")
-                        return
-                    end
-
-                    local effectID = tostring(itemEffect.id or "")
-                    local effectArgs = type(itemEffect.args) == "table" and itemEffect.args or {}
-                    local signatureArg1, signatureArg2 = "", ""
-                    if effectID ~= "script" then
-                        signatureArg1 = tostring(effectArgs[1] or "")
-                        signatureArg2 = tostring(effectArgs[2] or "")
-                    end
-                    result.signatureParts[#result.signatureParts + 1] = table.concat({
-                        classLabel,
-                        tostring(workflowID),
-                        stepID,
-                        effectID,
-                        signatureArg1,
-                        signatureArg2,
-                    }, "\30")
-
-                    if effectID == "item_add" then
-                        result.itemAdds = result.itemAdds + 1
-                        currentWorkflowItemAdds = currentWorkflowItemAdds + 1
-                        itemAddSteps[stepID] = true
-                        local requestedCount = tonumber(effectArgs[2])
-                        if requestedCount and requestedCount > LIMITS.maxSingleItemAdd then
-                            result.blocked = true
-                            AddScore(result, 120, "单次添加物品数量异常：" .. tostring(requestedCount))
-                        end
-                    elseif effectID == "run_workflow" or effectID == "run_item_workflow" then
-                        result.workflowCalls = result.workflowCalls + 1
-                        local source = tostring(effectArgs[1] or "o")
-                        local target = tostring(effectArgs[2] or "")
-                        if source == "o" and target ~= "" then targets[target] = true end
-                    end
-                end
-            end
-        end
-    end
-
-    workflowItemAdds[workflowID] = currentWorkflowItemAdds
-
-    local cycleNodes = FindStepCycleNodes(steps, stepEdges)
-    local hasCycle, cycleAddsItems = false, false
-    for stepID in pairs(cycleNodes) do
-        hasCycle = true
-        if itemAddSteps[stepID] then cycleAddsItems = true end
-    end
-    if hasCycle then
-        AddScore(result, 20, "工作流“" .. tostring(workflowID) .. "”存在步骤循环")
-        if cycleAddsItems then
-            result.blocked = true
-            AddScore(result, 120, "步骤循环中包含重复添加物品行为")
-        end
-    elseif EstimateExpandedSteps(steps, stepEdges) > LIMITS.maxExpandedSteps then
-        AddScore(result, 25, "工作流“" .. tostring(workflowID) .. "”展开规模异常")
-        if currentWorkflowItemAdds > 0 then
-            result.blocked = true
-            AddScore(result, 100, "异常展开工作流中包含物品添加行为")
-        end
-    end
-end
-
-local function FindWorkflowCycleNodes(workflowEdges)
-    local visiting, complete = {}, {}
-    local stack, stackIndex, cycleNodes = {}, {}, {}
-
-    local function Visit(workflowID)
-        if complete[workflowID] then return end
-        if visiting[workflowID] then
-            local first = stackIndex[workflowID] or 1
-            for index = first, #stack do cycleNodes[stack[index]] = true end
-            return
-        end
-        visiting[workflowID] = true
-        stack[#stack + 1] = workflowID
-        stackIndex[workflowID] = #stack
-        for target in pairs(workflowEdges[workflowID] or {}) do
-            if workflowEdges[target] then Visit(target) end
-        end
-        stackIndex[workflowID] = nil
-        stack[#stack] = nil
-        visiting[workflowID] = nil
-        complete[workflowID] = true
-    end
-
-    for workflowID in pairs(workflowEdges) do Visit(workflowID) end
-    return cycleNodes
-end
-
-local function ScanClass(class, classLabel, result, seen)
-    if type(class) ~= "table" or seen[class] then return end
-    seen[class] = true
-
-    if type(class.SC) == "table" then
-        local workflowEdges = {}
-        local workflowItemAdds = {}
-        for rawWorkflowID, workflow in pairs(class.SC) do
-            local workflowID = CanonicalID(rawWorkflowID)
-            if workflowID then
-                ScanWorkflow(classLabel, workflowID, workflow, result, workflowEdges, workflowItemAdds)
-            end
-        end
-        local recursiveNodes = FindWorkflowCycleNodes(workflowEdges)
-        local hasRecursion, recursiveAddsItems = false, false
-        for workflowID in pairs(recursiveNodes) do
-            hasRecursion = true
-            if (workflowItemAdds[workflowID] or 0) > 0 then recursiveAddsItems = true end
-        end
-        if hasRecursion then
-            AddScore(result, 20, "存在递归工作流调用")
-            if recursiveAddsItems then
-                result.blocked = true
-                AddScore(result, 120, "递归工作流中包含重复添加物品行为")
-            end
-        end
-    end
-
-    for _, groupName in ipairs({ "IN", "QE", "ST" }) do
-        local group = class[groupName]
-        if type(group) == "table" then
-            for childID, child in pairs(group) do
-                ScanClass(child, classLabel .. " " .. tostring(childID), result, seen)
-            end
-        end
-    end
-end
-
-local function BuildFingerprint(root, result)
-    local metadata = type(root.MD) == "table" and root.MD or {}
-    table.sort(result.signatureParts)
-    return table.concat({
-        tostring(RULE_VERSION),
-        tostring(metadata.V or ""),
-        tostring(metadata.SD or ""),
-        tostring(metadata.CB or ""),
-        tostring(result.workflows),
-        tostring(result.steps),
-        tostring(result.effects),
-        tostring(result.itemAdds),
-        table.concat(result.signatureParts, "\29"),
-    }, "\31")
 end
 
 local function HasHardFinding(result)
@@ -583,7 +343,9 @@ local function MergeRuleResults(rootID, root, result, context)
         local rules = module.rules
         if rules and rules.Analyze then
             local ok, moduleResult = pcall(rules.Analyze, rootID, root, context or {})
-            if ok and type(moduleResult) == "table" then
+            if ok and type(moduleResult) == "table" and type(moduleResult.blocked) == "boolean"
+                and type(moduleResult.findings) == "table" and type(moduleResult.reasons) == "table"
+                and type(moduleResult.fingerprint) == "string" then
                 behaviorScore = behaviorScore + (tonumber(moduleResult.behaviorScore) or 0)
                 -- Structural modules observe many of the same loops. Taking the
                 -- strongest result avoids charging the same cycle more than once.
@@ -610,7 +372,10 @@ local function MergeRuleResults(rootID, root, result, context)
             else
                 result.moduleMetrics[module.name] = { analysisError = tostring(moduleResult) }
                 fingerprints[#fingerprints + 1] = module.name .. "=error"
+                return RequiredFailure(rootID, "防护检查失败：" .. module.name, "analysis_error")
             end
+        else
+            return RequiredFailure(rootID, "防护模块缺失：" .. module.name, "missing_analyzer")
         end
     end
 
@@ -621,8 +386,10 @@ local function MergeRuleResults(rootID, root, result, context)
     result.score = result.behaviorScore + result.amplificationScore + result.observationScore
     result.blocked = hardBlocked or (result.hasSideEffect and result.score >= 100)
     result.ruleVersion = RULE_VERSION
+    result.complete = true
     result.publisherTrust = context and context.publisherTrust or nil
     result.fingerprint = table.concat(fingerprints, "|")
+        .. "|trusted=" .. tostring(context and context.trustedPublisher == true)
     return result
 end
 
@@ -630,19 +397,37 @@ function Guard:ScanRoot(rootID, root)
     rootID = GetRootID(rootID)
     root = root or GetRootObject(rootID)
     if not rootID or type(root) ~= "table" then return nil end
+    if not ns.ItemGuardLuaSandbox or not ns.ItemGuardLuaExpressions then
+        return RequiredFailure(rootID, "Lua 执行防护模块缺失", "missing_lua_runtime")
+    end
 
-    local context = BuildRuleContext(rootID, root)
+    local structure = ns.ItemGuardStructure
+    if not structure then return RequiredFailure(rootID, "结构防护模块缺失", "missing_structure") end
+    local checked, valid, problem = pcall(structure.Validate, root)
+    if not checked or not valid then
+        return RequiredFailure(rootID, checked and problem or "对象结构检查失败", "invalid_structure")
+    end
+    local okContext, context = pcall(BuildRuleContext, rootID, root)
+    if not okContext then return RequiredFailure(rootID, "对象来源检查失败", "invalid_context") end
+    local revision = structure.Revision(root)
+    local cached = state.scanCache[rootID]
+    local trustStamp = context.trustedPublisher == true
+    if cached and cached.complete and state.revisions[rootID] == revision
+        and state.trustStamps[rootID] == trustStamp then return cached end
+    state.trustStamps[rootID] = trustStamp
+    if TRP3_API and TRP3_API.script and TRP3_API.script.clearRootCompilation then
+        TRP3_API.script.clearRootCompilation(rootID)
+    end
     local result
     if ns.ItemGuardRules and ns.ItemGuardRules.Analyze then
-        result = ns.ItemGuardRules.Analyze(rootID, root, context)
-    else
-        result = NewScanResult(rootID)
-        ScanClass(root, rootID, result, {})
-        if result.itemAdds > LIMITS.maxItemAddEffects then
-            result.blocked = true
-            AddScore(result, 120, "物品添加效果数量异常：" .. tostring(result.itemAdds))
+        local ok, analyzed = pcall(ns.ItemGuardRules.Analyze, rootID, root, context)
+        if not ok or type(analyzed) ~= "table" or type(analyzed.findings) ~= "table"
+            or type(analyzed.fingerprint) ~= "string" then
+            return RequiredFailure(rootID, "工作流防护检查失败", "analysis_error")
         end
-        result.fingerprint = BuildFingerprint(root, result)
+        result = analyzed
+    else
+        return RequiredFailure(rootID, "工作流防护模块缺失", "missing_analyzer")
     end
     result = MergeRuleResults(rootID, root, result, context)
 
@@ -675,16 +460,33 @@ function Guard:ScanRoot(rootID, root)
     end
 
     state.scanCache[rootID] = result
+    result.contentRevision = result.complete and revision or nil
+    state.revisionBytes = state.revisionBytes - #(state.revisions[rootID] or "")
+    state.revisions[rootID] = result.complete and revision or nil
+    state.revisionBytes = state.revisionBytes + #(state.revisions[rootID] or "")
+    for index = #state.revisionOrder, 1, -1 do
+        if state.revisionOrder[index] == rootID then table.remove(state.revisionOrder, index) end
+    end
+    state.revisionOrder[#state.revisionOrder + 1] = rootID
+    while #state.revisionOrder > 64 or state.revisionBytes > 8 * 1024 * 1024 do
+        local expired = table.remove(state.revisionOrder, 1)
+        state.revisionBytes = state.revisionBytes - #(state.revisions[expired] or "")
+        state.revisions[expired] = nil
+        if state.scanCache[expired] then state.scanCache[expired].contentRevision = nil end
+    end
     return result
 end
 
 local function GetIgnoredFingerprint(rootID)
-    return EnsureDatabase().ignored[rootID]
+    local approval = EnsureDatabase().ignored[rootID]
+    return type(approval) == "table" and approval.fingerprint or nil
 end
 
 function Guard:IsIgnored(rootID, fingerprint)
     local ignoredFingerprint = GetIgnoredFingerprint(rootID)
     return ignoredFingerprint ~= nil and ignoredFingerprint == fingerprint
+        and not HasInvariant(state.scanCache[rootID])
+        and EnsureDatabase().ignored[rootID].revision == state.scanCache[rootID].contentRevision
 end
 
 function Guard:IsQuarantined(rootID)
@@ -740,7 +542,7 @@ function Guard:UpdateFinding(rootID, result, source)
         database.findings[rootID] = finding
     end
     result.reasons = BuildPrioritizedReasons(result)
-    finding.itemName = root.BA and root.BA.NA or rootID
+    finding.itemName = type(root.BA) == "table" and root.BA.NA or rootID
     finding.objectType = GetObjectType(root) or "object"
     finding.reasons = result.reasons
     finding.score = result.score or 0
@@ -783,9 +585,11 @@ end
 local function CollectVisualTargets(rootID, root)
     local targets = {}
     local seen = {}
+    local visited = 0
     local separator = TRP3_API and TRP3_API.extended and TRP3_API.extended.ID_SEPARATOR or " "
-    local function Visit(classID, class)
-        if type(class) ~= "table" or seen[class] then return end
+    local function Visit(classID, class, depth)
+        if type(class) ~= "table" or seen[class] or depth > 32 or visited >= 1024 then return end
+        visited = visited + 1
         seen[class] = true
         if type(class.BA) == "table" then
             targets[#targets + 1] = { classID = classID, class = class }
@@ -794,12 +598,13 @@ local function CollectVisualTargets(rootID, root)
             local group = class[groupName]
             if type(group) == "table" then
                 for childID, child in pairs(group) do
-                    Visit(classID .. separator .. tostring(childID), child)
+                    Visit(classID .. separator .. tostring(childID), child, depth + 1)
+                    if visited >= 1024 then break end
                 end
             end
         end
     end
-    Visit(rootID, root)
+    Visit(rootID, root, 1)
     return targets
 end
 
@@ -875,7 +680,8 @@ end
 function Guard:MarkUnscanned(rootID, source)
     rootID = GetRootID(rootID)
     local root = GetRootObject(rootID)
-    if not rootID or not IsProtectedRoot(root) then return false end
+    if not rootID or type(root) ~= "table" then return false end
+    if source == "received" or source == "updated" or source == "runtime-lua-mutation" then RevokeRoot(rootID) end
     state.scanCache[rootID] = nil
     state.temporaryAllow[rootID] = nil
     state.scanStatus[rootID] = {
@@ -897,7 +703,7 @@ function Guard:MarkUnscanned(rootID, source)
     if visualPending and root.TY == TRP3_DB.types.ITEM
         and not database.quarantined[rootID]
         and not pending then
-        root.BA = root.BA or {}
+        root.BA = type(root.BA) == "table" and root.BA or {}
         local record = {
             rootID = rootID,
             rootRef = root,
@@ -938,6 +744,7 @@ function Guard:QueueScan(rootID, source)
 end
 
 local function QueueAuraRemoval(rootID, root)
+    if not ns.ItemGuardStructure or not ns.ItemGuardStructure.Validate(root) then return end
     local auras = TRP3_API and TRP3_API.extended and TRP3_API.extended.auras
     if not auras or not auras.remove then return end
     local auraType = TRP3_DB and TRP3_DB.types and TRP3_DB.types.AURA
@@ -972,10 +779,12 @@ function Guard:Quarantine(rootID, result, source)
     if not state.enabled then return false end
     rootID = GetRootID(rootID)
     local root = GetRootObject(rootID)
-    if not rootID or not IsProtectedRoot(root) then return false end
+    if not rootID or type(root) ~= "table" then return false end
 
     result = result or self:ScanRoot(rootID, root)
-    if not result or self:IsIgnored(rootID, result.fingerprint) then return false end
+    if not result or (not HasInvariant(result) and self:IsIgnored(rootID, result.fingerprint)) then return false end
+    RevokeRoot(rootID)
+    if state.currentTask then state.currentTask.revoked = true end
     ReleasePendingProtection(rootID)
 
     local database = EnsureDatabase()
@@ -983,7 +792,7 @@ function Guard:Quarantine(rootID, result, source)
     local record = database.quarantined[rootID]
     local scan = state.scanStatus[rootID]
     if not record then
-        root.BA = root.BA or {}
+        root.BA = type(root.BA) == "table" and root.BA or {}
         record = {
             rootID = rootID,
             itemName = root.BA.NA or rootID,
@@ -994,7 +803,7 @@ function Guard:Quarantine(rootID, result, source)
         }
         database.quarantined[rootID] = record
     elseif (scan and scan.replaced) or (record.fingerprint ~= result.fingerprint
-        and root.BA and root.BA.IC ~= ISOLATION_ICON) then
+        and type(root.BA) == "table" and root.BA.IC ~= ISOLATION_ICON) then
         record.itemName = root.BA.NA or rootID
         record.hadIcon = root.BA.IC ~= nil
         record.originalIcon = root.BA.IC
@@ -1008,7 +817,7 @@ function Guard:Quarantine(rootID, result, source)
     if finding then finding.disposition = "quarantined" end
 
     if root.TY == TRP3_DB.types.ITEM then self:ApplyVisualIsolation(rootID, record) end
-    state.scanStatus[rootID] = { status = "blocked", fingerprint = result.fingerprint }
+    state.scanStatus[rootID] = { status = result.complete == false and "scan_failed" or "blocked", fingerprint = result.fingerprint }
     QueueAuraRemoval(rootID, root)
     NotifyChanged()
     return true
@@ -1019,6 +828,11 @@ function Guard:ReleaseQuarantine(rootID)
     local database = EnsureDatabase()
     local record = rootID and database.quarantined[rootID]
     if not record then return false end
+    local result = self:ScanRoot(rootID)
+    if HasInvariant(result) then
+        Print("该对象命中不可豁免的保护规则，无法放行。", "ff5555")
+        return false
+    end
 
     local root = GetRootObject(rootID)
     local scan = rootID and state.scanStatus[rootID]
@@ -1027,7 +841,7 @@ function Guard:ReleaseQuarantine(rootID)
         self:RestoreVisualIsolation(rootID, record)
     end
     database.quarantined[rootID] = nil
-    state.temporaryAllow[rootID] = record.fingerprint
+    state.temporaryAllow[rootID] = { fingerprint = record.fingerprint, revision = result.contentRevision }
     state.scanStatus[rootID] = { status = "released", fingerprint = record.fingerprint }
     local finding = database.findings[rootID]
     if finding then finding.disposition = "released" end
@@ -1044,12 +858,26 @@ function Guard:SetIgnored(rootID, ignored)
     if ignored then
         state.temporaryAllow[rootID] = nil
         local result = self:ScanRoot(rootID, root)
+        if HasInvariant(result) then
+            Print("该对象命中不可豁免的保护规则，无法加入忽略。", "ff5555")
+            return false
+        end
         local existingFinding = database.findings[rootID]
         local findingSource = existingFinding and existingFinding.source
             or (result and result.blocked and "scan")
             or "manual"
         local finding = result and self:UpdateFinding(rootID, result, findingSource) or existingFinding
-        database.ignored[rootID] = result and result.fingerprint or (finding and finding.fingerprint)
+        local bytes, count = #(result.contentRevision or ""), 1
+        for id, approval in pairs(database.ignored) do
+            if id ~= rootID and type(approval) == "table" then
+                bytes = bytes + #(approval.revision or ""); count = count + 1
+            end
+        end
+        if count > 32 or bytes > 8 * 1024 * 1024 then
+            Print("版本例外记录已达上限，请先移除不再需要的忽略记录。", "ffcc00")
+            return false
+        end
+        database.ignored[rootID] = { fingerprint = result.fingerprint, revision = result.contentRevision }
         if database.quarantined[rootID] then self:ReleaseQuarantine(rootID) end
         state.temporaryAllow[rootID] = nil
         state.scanStatus[rootID] = {
@@ -1070,6 +898,30 @@ function Guard:SetIgnored(rootID, ignored)
     NotifyChanged()
     return true
 end
+
+function Guard:RequestIgnore(rootID)
+    local result = self:ScanRoot(rootID)
+    if HasInvariant(result) then
+        Print("资源上限、扫描失败及核心安全规则不能加入忽略。", "ff5555")
+        return false
+    end
+    StaticPopup_Show("RPBOX_ITEM_GUARD_IGNORE", tostring(rootID), nil,
+        { rootID = rootID, fingerprint = result.fingerprint, revision = result.contentRevision })
+    return true
+end
+
+StaticPopupDialogs["RPBOX_ITEM_GUARD_IGNORE"] = {
+    text = "将对象“%s”的当前版本加入策略忽略？\n\n后续版本需要重新复核。执行预算、资源上限及运行时熔断继续生效。",
+    button1 = "确认忽略此版本", button2 = CANCEL,
+    OnAccept = function(self, data)
+        data = data or self.data
+        if not data then return end
+        local result = Guard:ScanRoot(data.rootID)
+        if result and result.fingerprint == data.fingerprint and result.contentRevision == data.revision then Guard:SetIgnored(data.rootID, true)
+        else Print("对象已更新，请重新检查风险。", "ffcc00") end
+    end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+}
 
 function Guard:SetIsolation(rootID, isolated)
     rootID = GetRootID(rootID)
@@ -1094,11 +946,12 @@ function Guard:GetRiskEntries()
         finding.reasons = BuildPrioritizedReasons(finding)
         local root = GetRootObject(rootID)
         local quarantine = database.quarantined[rootID]
-        local ignored = database.ignored[rootID] ~= nil
-            and database.ignored[rootID] == finding.fingerprint
+        local ignored = self:IsIgnored(rootID, finding.fingerprint)
         local scan = state.scanStatus[rootID]
         local status
-        if scan and scan.status == "unscanned" then
+        if scan and scan.status == "scan_failed" then
+            status = "scan_failed"
+        elseif scan and scan.status == "unscanned" then
             status = "unscanned"
         elseif ignored then
             status = "ignored"
@@ -1111,7 +964,7 @@ function Guard:GetRiskEntries()
         end
         entries[#entries + 1] = {
             rootID = rootID,
-            itemName = finding.itemName or (root and root.BA and root.BA.NA) or rootID,
+            itemName = finding.itemName or (root and type(root.BA) == "table" and root.BA.NA) or rootID,
             objectType = finding.objectType or GetObjectType(root) or "object",
             reasons = status == "unscanned"
                     and { "等待安全扫描，执行已暂时阻止" }
@@ -1128,7 +981,7 @@ function Guard:GetRiskEntries()
             advisory = finding.advisory == true,
             publisherTrust = finding.publisherTrust,
             icon = quarantine and quarantine.originalIcon
-                or (root and root.BA and root.BA.IC)
+                or (root and type(root.BA) == "table" and root.BA.IC)
                 or "inv_misc_questionmark",
             firstSeenAt = finding.firstSeenAt,
             lastSeenAt = finding.lastSeenAt,
@@ -1140,7 +993,7 @@ function Guard:GetRiskEntries()
             if IsProtectedRoot(root) then
                 entries[#entries + 1] = {
                     rootID = rootID,
-                    itemName = root.BA and root.BA.NA or rootID,
+                    itemName = type(root.BA) == "table" and root.BA.NA or rootID,
                     objectType = GetObjectType(root) or "object",
                     reasons = { "等待安全扫描，执行已暂时阻止" },
                     score = 0,
@@ -1154,13 +1007,13 @@ function Guard:GetRiskEntries()
                     pending = true,
                     icon = state.pendingProtection[rootID]
                             and state.pendingProtection[rootID].originalIcon
-                        or (root.BA and root.BA.IC)
+                        or (type(root.BA) == "table" and root.BA.IC)
                         or "inv_misc_questionmark",
                 }
             end
         end
     end
-    local statusOrder = { unscanned = 1, quarantined = 2, observed = 3, released = 4, ignored = 5 }
+    local statusOrder = { scan_failed = 0, unscanned = 1, quarantined = 2, observed = 3, released = 4, ignored = 5 }
     table.sort(entries, function(left, right)
         local leftOrder = statusOrder[left.status] or 9
         local rightOrder = statusOrder[right.status] or 9
@@ -1213,7 +1066,7 @@ local function BuildRemovalContext(rootID, slotButton, containerFrame)
             carrier = {
                 rootID = rootID,
                 classID = classID,
-                name = root.BA and root.BA.NA or rootID,
+                name = type(root.BA) == "table" and root.BA.NA or rootID,
                 type = root.TY,
             }
         end
@@ -1338,7 +1191,7 @@ function Guard:TrustRootPublisher(rootID)
     else
         added, message = whitelist.AddUser(
             publisher.identity,
-            "从隔离对象“" .. tostring(root.BA and root.BA.NA or rootID) .. "”信任"
+            "从隔离对象“" .. tostring(type(root.BA) == "table" and root.BA.NA or rootID) .. "”信任"
         )
         if not added and whitelist.MatchRoot and whitelist.MatchRoot(rootID, root) then
             added, message = true, "该发布者已在白名单中"
@@ -1457,6 +1310,7 @@ local function ResetLongRuntime(bucket, now)
     bucket.longWriteCount = 0
     bucket.variableLongWrites = 0
     bucket.variableLongBytes = 0
+    bucket.variableKeys = {}
 end
 
 local function GetRuntimeBucket(rootID)
@@ -1627,7 +1481,7 @@ RuntimeTrip = function(rootID, reason, findingKind)
     }
     if Guard:Quarantine(rootID, result, "runtime") then
         local root = GetRootObject(rootID)
-        local itemName = root and root.BA and root.BA.NA or rootID
+        local itemName = root and type(root.BA) == "table" and root.BA.NA or rootID
         Print("已隔离“" .. tostring(itemName) .. "”：" .. reason, "ff5555")
     end
     return false
@@ -1649,7 +1503,7 @@ local function GetLootDropStats(effectArgs)
 end
 
 local function CheckEffectRate(effectID, effectArgs, rootID, shouldBeSecured)
-    if not rootID then return true end
+    rootID = rootID or "<unknown>"
     local soundAllowed = CheckSoundRate(effectID, effectArgs, rootID, shouldBeSecured)
     if not soundAllowed then return false end
     local bucket = GetRuntimeBucket(rootID)
@@ -1704,10 +1558,24 @@ local function CheckLifecycleRespawn(rootID, classID, itemData)
 end
 
 local function CheckDirectAdd(rootID, itemData)
-    if not rootID then return true end
+    rootID = rootID or "<unknown>"
     local bucket = GetRuntimeBucket(rootID)
     local count = type(itemData) == "table" and tonumber(itemData.count) or 1
     count = count or 1
+    if count ~= count or count == math.huge or count < 0 then return RuntimeTrip(rootID, "背包写入数量无效") end
+    local global = state.globalWrites
+    local now = GetTime()
+    global.tokens = math.min(2000, global.tokens + math.max(0, now - global.updatedAt) * (1000 / 60))
+    global.updatedAt = now
+    if count > global.tokens then return RuntimeTrip(rootID, "所有对象累计背包写入速率超过限制", "global_write_budget") end
+    global.tokens = global.tokens - count
+    local task = state.currentTask
+    if task then
+        task.writes = task.writes + math.max(0, count)
+        if not TaskValid(task) or task.writes > LIMITS.taskWrites then
+            return RuntimeTrip(rootID, "任务累计背包写入超过限制", "write_task_budget")
+        end
+    end
     bucket.directAddCalls = bucket.directAddCalls + 1
     bucket.directAddCount = bucket.directAddCount + math.max(0, count)
     bucket.longWriteCalls = bucket.longWriteCalls + 1
@@ -1725,11 +1593,18 @@ end
 local function CallWithContext(rootID, destruction, callback, ...)
     local previousRoot = state.currentRoot
     local previousDestruction = state.currentDestruction
+    local previousTask = state.currentTask
+    local task = previousTask or { roots = {}, effects = 0, workflows = 0, writes = 0,
+        queued = 0, generation = state.retryGeneration, expiresAt = GetTime() + LIMITS.taskLifetime }
+    if not TaskValid(task) then return 0 end
+    if rootID then task.roots[rootID] = state.rootEpochs[rootID] or 0 end
+    state.currentTask = task
     state.currentRoot = rootID or previousRoot
     state.currentDestruction = destruction or previousDestruction
     local results = { pcall(callback, ...) }
     state.currentRoot = previousRoot
     state.currentDestruction = previousDestruction
+    state.currentTask = previousTask
     if not results[1] then error(results[2], 0) end
     return Unpack(results, 2)
 end
@@ -1737,6 +1612,16 @@ end
 
 local function CallWithRoot(rootID, callback, ...)
     return CallWithContext(rootID, nil, callback, ...)
+end
+
+local function ResumeTask(task, callback, ...)
+    if not TaskValid(task) then return 0 end
+    local previous = state.currentTask
+    state.currentTask = task or previous
+    local results = { pcall(callback, ...) }
+    state.currentTask = previous
+    if not results[1] then error(results[2], 0) end
+    return Unpack(results, 2)
 end
 
 local function CallWithVariableEffect(rootID, classification, callback, ...)
@@ -1810,12 +1695,15 @@ end
 
 local function CheckBeforeExecute(fullID, effectArgs)
     local rootID = ResolveRootFromArgs(effectArgs, fullID)
-    if not state.enabled or not rootID then return true, rootID end
+    if not state.enabled then return true, rootID end
+    if not rootID or not TaskValid(state.currentTask) then return false, rootID end
     local root = GetRootObject(rootID)
-    if not IsProtectedRoot(root) then return true, rootID end
+    if type(root) ~= "table" then return false, rootID end
     if not CheckCrashPayload(rootID, effectArgs) then return false, rootID end
     local result = Guard:ScanRoot(rootID)
-    if result and state.temporaryAllow[rootID] == result.fingerprint then
+    local temporary = state.temporaryAllow[rootID]
+    if result and not HasInvariant(result) and temporary and temporary.fingerprint == result.fingerprint
+        and temporary.revision == result.contentRevision then
         return true, rootID
     end
     if result and Guard:IsIgnored(rootID, result.fingerprint) then
@@ -1826,6 +1714,10 @@ local function CheckBeforeExecute(fullID, effectArgs)
         or scan.fingerprint ~= result.fingerprint then
         Guard:MarkUnscanned(rootID, "execute")
         if result then Guard:ScanAndApply(rootID, result) else Guard:QueueScan(rootID, "execute") end
+        return false, rootID
+    end
+    if result.complete == false then
+        Guard:Quarantine(rootID, result, "scan")
         return false, rootID
     end
     if result and result.blocked then
@@ -1864,9 +1756,9 @@ local function SnapshotSharedLibraries()
     return snapshot
 end
 
-local function RestoreSharedLibraries()
+local function RestoreSharedLibraries(baseline)
     local changed = false
-    for _, entry in pairs(state.luaLibraryBaseline or {}) do
+    for _, entry in pairs(baseline or state.luaLibraryBaseline or {}) do
         local library, values = entry.library, entry.values
         for key in pairs(library) do
             if values[key] == nil then library[key] = nil; changed = true end
@@ -1884,6 +1776,13 @@ end
 
 local function RestoreGuardHookIntegrity()
     local changed = false
+    for _, entry in ipairs({ { "getEffect", "wrappedGetEffect" }, { "getOperand", "wrappedGetOperand" },
+        { "runWorkflow", "wrappedRunWorkflow" }, { "delayed", "wrappedDelayed" }, { "cast", "wrappedCast" } }) do
+        if state[entry[2]] and TRP3_API.script[entry[1]] ~= state[entry[2]] then
+            TRP3_API.script[entry[1]] = state[entry[2]]
+            changed = true
+        end
+    end
     if TRP3_API.script.executeClassScript ~= state.wrappedExecute then
         TRP3_API.script.executeClassScript = state.wrappedExecute
         changed = true
@@ -1943,6 +1842,13 @@ local function InstallHooks()
     state.original.runLuaScriptEffect = TRP3_API.script.runLuaScriptEffect
     state.original.addItem = TRP3_API.inventory.addItem
     state.original.registerObject = TRP3_API.extended.registerObject
+    state.original.getEffect = TRP3_API.script.getEffect
+    state.original.getOperand = TRP3_API.script.getOperand
+    state.operandMethods = {}
+    state.original.runWorkflow = TRP3_API.script.runWorkflow
+    state.original.delayed = TRP3_API.script.delayed
+    state.original.cast = TRP3_API.script.cast
+    state.effectProxies = setmetatable({}, { __mode = "k" })
     local auras = TRP3_API.extended.auras
     state.original.auraApply = auras and auras.apply or nil
     state.original.auraCancel = auras and auras.cancel or nil
@@ -1954,23 +1860,65 @@ local function InstallHooks()
     state.luaLibraryBaseline = SnapshotSharedLibraries()
 
     state.wrappedExecute = function(scriptID, classScripts, effectArgs, fullID)
+        effectArgs = state.luaContexts[effectArgs] or effectArgs
         local allowed, rootID = CheckBeforeExecute(fullID, effectArgs)
         if not allowed then return 0 end
+        local okClass, class = pcall(TRP3_API.extended.getClass, fullID)
+        if not okClass or not class or class.SC ~= classScripts then
+            RuntimeTrip(rootID, "执行脚本与目标对象不一致", "execution_identity_mismatch")
+            return 0
+        end
+        -- Missing optional workflows retain TRP3's authoring error behavior.
+        if type(classScripts) ~= "table" or classScripts[scriptID] == nil then
+            return state.original.executeClassScript(scriptID, classScripts, effectArgs, fullID)
+        end
+        local valid, reason = ns.ItemGuardStructure.ValidateWorkflow(classScripts[scriptID])
+        if not valid then RuntimeTrip(rootID, reason, "unsafe_compilation"); return 0 end
+        local task = state.currentTask or (type(effectArgs) == "table" and state.contextTasks[effectArgs])
+        if not TaskValid(task) then return 0 end
+        if state.taskDepth >= LIMITS.workflowDepth then
+            RuntimeTrip(rootID, "工作流调用深度超过限制", "workflow_runtime_depth"); return 0
+        end
+        local args = {}
+        for key, value in pairs(effectArgs or {}) do args[key] = value end
+        args.classID = fullID
         local destruction = GetDestructionContext(rootID, fullID, scriptID)
-        return CallWithContext(
+        return ResumeTask(task, CallWithContext,
             rootID,
             destruction,
-            state.original.executeClassScript,
-            scriptID,
-            classScripts,
-            effectArgs,
-            fullID
+            function()
+                local current = state.currentTask
+                current.workflows = current.workflows + 1
+                if current.workflows > LIMITS.taskWorkflows then
+                    RuntimeTrip(rootID, "任务累计工作流调用超过限制", "workflow_task_budget"); return 0
+                end
+                state.contextTasks[args] = current
+                state.taskDepth = state.taskDepth + 1
+                local results = { pcall(state.original.executeClassScript, scriptID, classScripts, args, fullID) }
+                state.taskDepth = state.taskDepth - 1
+                if not results[1] then
+                    if Guard:IsQuarantined(rootID) then return 0 end
+                    error(results[2], 0)
+                end
+                return Unpack(results, 2)
+            end
         )
     end
 
-    state.wrappedPlayEffect = function(effectID, shouldBeSecured, effectArgs, ...)
+    local function DispatchEffect(callback, effectID, shouldBeSecured, effectArgs, ...)
+        effectArgs = state.luaContexts[effectArgs] or effectArgs
         if not state.enabled then
-            return state.original.playEffect(effectID, shouldBeSecured, effectArgs, ...)
+            return callback(effectID, shouldBeSecured, effectArgs, ...)
+        end
+        local task = state.currentTask or (type(effectArgs) == "table" and state.contextTasks[effectArgs])
+        if not TaskValid(task) then return 0 end
+        if task then
+            task.effects = task.effects + 1
+            if task.effects > LIMITS.taskEffects then
+                RuntimeTrip(ResolveRootFromArgs(effectArgs) or state.currentRoot,
+                    "任务累计效果数量超过限制", "effect_task_budget")
+                return 0
+            end
         end
         local rootID = ResolveRootFromArgs(effectArgs) or state.currentRoot
         local effectParameters = { ... }
@@ -1989,23 +1937,27 @@ local function InstallHooks()
             if not allowed then return 0 end
         end
         local result = rootID and (state.scanCache[rootID] or Guard:ScanRoot(rootID)) or nil
-        if result and Guard:IsIgnored(rootID, result.fingerprint) then
-            return CallWithRoot(rootID, state.original.playEffect, effectID, shouldBeSecured, effectArgs, ...)
-        end
         if rootID and Guard:IsQuarantined(rootID) then
             -- A stop effect must remain available so quarantine cannot leave an
             -- already playing malicious sound stuck on the client.
             if soundClassification and soundClassification.kind == "stop" then
                 CheckSoundRate(effectID, effectParameters, rootID, shouldBeSecured)
-                return CallWithRoot(rootID, state.original.playEffect, effectID, shouldBeSecured, effectArgs, ...)
+                return CallWithRoot(rootID, callback, effectID, shouldBeSecured, effectArgs, ...)
             end
             return 0
         end
+        if effectID == "secure_macro" and ns.ItemGuardLuaRules.IsLegacyBootstrapMacro(effectParameters[1]) then
+            -- Compatibility is local to the subsequently executing trusted Lua.
+            -- Never let an item replace the global TRP3 executor.
+            if not rootID or not GetPublisherTrust(rootID) then return 0 end
+            if effectArgs then effectArgs.LAST = 0 end
+            return 0
+        end
         if not CheckEffectRate(effectID, effectParameters, rootID, shouldBeSecured) then return 0 end
-        return CallWithVariableEffect(
+        return ResumeTask(task, CallWithVariableEffect,
             rootID,
             variableClassification,
-            state.original.playEffect,
+            callback,
             effectID,
             shouldBeSecured,
             effectArgs,
@@ -2013,7 +1965,39 @@ local function InstallHooks()
         )
     end
 
+    state.wrappedPlayEffect = function(...)
+        -- Real TRP3's local playEffect also looks up getEffect. Meter at the
+        -- effect method so both paths are covered, without double charging.
+        return state.original.playEffect(...)
+    end
+    if state.original.getEffect then
+        state.wrappedGetEffect = function(effectID)
+            local info = state.original.getEffect(effectID)
+            if not info then return nil end
+            local proxy = state.effectProxies[info]
+            if proxy then return proxy end
+            proxy = {}
+            for key, value in pairs(info) do proxy[key] = value end
+            for _, methodName in ipairs({ "method", "securedMethod" }) do
+                local method = info[methodName]
+                if method then
+                    local secured = methodName == "securedMethod"
+                    proxy[methodName] = function(_, parameters, args)
+                        local function call(_, _, actualArgs, ...)
+                            return method(info, { ... }, actualArgs)
+                        end
+                        return DispatchEffect(call, effectID, secured, args, Unpack(parameters or {}))
+                    end
+                end
+            end
+            state.effectProxies[info] = proxy
+            return proxy
+        end
+    end
+
     state.wrappedSetVar = function(effectArgs, source, operationType, varName, varValue)
+        local detached = effectArgs
+        effectArgs = state.luaContexts[effectArgs] or effectArgs
         local rootID = ResolveRootFromArgs(effectArgs) or state.currentRoot
         local classification = state.currentVariableEffect or {
             interactive = false,
@@ -2021,12 +2005,38 @@ local function InstallHooks()
             persistent = source == "o" or source == "c",
         }
         if state.enabled and rootID then
+            if not TaskValid(state.currentTask or state.contextTasks[effectArgs]) then return nil end
             if Guard:IsQuarantined(rootID)
                 or not CheckVariableWrite(rootID, classification, source, varName, varValue) then
                 return nil
             end
+            local storage
+            if source == "w" then storage = effectArgs.custom
+            elseif source == "o" and effectArgs.object then storage = effectArgs.object.vars
+            elseif source == "c" and TRP3_API.quest and TRP3_API.quest.getActiveCampaignLog then
+                local campaign = TRP3_API.quest.getActiveCampaignLog()
+                storage = campaign and campaign.vars
+            end
+            if type(varName) ~= "string" and type(varName) ~= "number" then return nil end
+            local candidate, entries = {}, 0
+            for key, value in pairs(type(storage) == "table" and storage or {}) do
+                entries = entries + 1
+                if entries > 2048 then RuntimeTrip(rootID, "目标变量条目超过限制"); return nil end
+                candidate[key] = value
+            end
+            if operationType == "=" or (operationType == "[=]" and not candidate[varName]) then
+                candidate[varName] = varValue
+            end
+            if not CheckCrashVariableTable(rootID, candidate) then return nil end
         end
-        return state.original.setVar(effectArgs, source, operationType, varName, varValue)
+        local result = state.original.setVar(effectArgs, source, operationType, varName, varValue)
+        if detached ~= effectArgs then
+            if source == "w" then detached.custom = ns.ItemGuardLuaSandbox.CopyContext(effectArgs.custom)
+            elseif source == "o" and detached.object and effectArgs.object then
+                detached.object.vars = ns.ItemGuardLuaSandbox.CopyContext(effectArgs.object.vars)
+            end
+        end
+        return result
     end
 
     state.wrappedAddItem = function(container, classID, itemData, dropIfFull, toSlot)
@@ -2036,14 +2046,11 @@ local function InstallHooks()
             and not CheckCrashVariableTable(payloadRootID, itemData.vars) then
             return 1
         end
-        if state.enabled and rootID then
-            local result = state.scanCache[rootID] or Guard:ScanRoot(rootID)
-            if not (result and Guard:IsIgnored(rootID, result.fingerprint)) then
-                if Guard:IsQuarantined(rootID)
-                    or not CheckLifecycleRespawn(rootID, classID, itemData)
-                    or not CheckDirectAdd(rootID, itemData) then
-                    return 1
-                end
+        if state.enabled then
+            if (rootID and Guard:IsQuarantined(rootID))
+                or not CheckLifecycleRespawn(rootID, classID, itemData)
+                or not CheckDirectAdd(rootID, itemData) then
+                return 1
             end
         end
         return state.original.addItem(container, classID, itemData, dropIfFull, toSlot)
@@ -2056,14 +2063,25 @@ local function InstallHooks()
         local rootID = ResolveRootFromArgs(effectArgs) or state.currentRoot
         local runtimeRootID = rootID or "<unknown>"
         if rootID and Guard:IsQuarantined(rootID) then return 0 end
+        local allowed = CheckBeforeExecute(rootID, effectArgs)
+        if not allowed or not ns.ItemGuardLuaSandbox then return 0 end
 
         local rules = ns.ItemGuardLuaRules
         local publisherTrust = rootID and GetPublisherTrust(rootID) or nil
-        local analysis = rules and rules.AnalyzeCode and rules.AnalyzeCode(code, {
+        local analyzed, analysis = pcall(function() return rules and rules.AnalyzeCode and rules.AnalyzeCode(code, {
             rootID = runtimeRootID,
             trustedPublisher = publisherTrust ~= nil,
-        }) or nil
-        if analysis and analysis.blocked then
+        }) or nil end)
+        if not analyzed or type(analysis) ~= "table" then
+            RuntimeTrip(rootID, "Lua 防护分析失败", "lua_analysis_error"); return 0
+        end
+        local rootResult = state.scanCache[rootID]
+        local temporary = state.temporaryAllow[rootID]
+        local exception = rootResult and not HasInvariant(rootResult)
+            and (Guard:IsIgnored(rootID, rootResult.fingerprint)
+                or (temporary and temporary.fingerprint == rootResult.fingerprint
+                    and temporary.revision == rootResult.contentRevision))
+        if analysis.blocked and (HasInvariant(analysis) or not exception) then
             local finding = analysis.findings and analysis.findings[1]
             RuntimeTrip(
                 rootID,
@@ -2090,19 +2108,39 @@ local function InstallHooks()
             return 0
         end
         state.luaDepth[runtimeRootID] = depth
+        local baseline = SnapshotSharedLibraries()
+        local copied, detached
+        if publisherTrust then
+            copied, detached = true, {}
+            for key, value in pairs(effectArgs or {}) do detached[key] = value end
+            detached._G = _G
+        else
+            copied, detached = pcall(ns.ItemGuardLuaSandbox.CopyContext, effectArgs)
+        end
+        if not copied then
+            state.luaDepth[runtimeRootID] = depth > 1 and depth - 1 or nil
+            RuntimeTrip(rootID, "Lua 上下文超过限制", "lua_context_budget"); return 0
+        end
+        state.luaContexts[detached] = effectArgs
         local previousFingerprint = rootID and state.scanStatus[rootID]
             and state.scanStatus[rootID].fingerprint or nil
         local results = { pcall(
             CallWithRoot,
             rootID,
-            state.original.runLuaScriptEffect,
-            code,
-            effectArgs,
-            secured
+            function()
+                state.contextTasks[detached] = state.currentTask
+                if publisherTrust then
+                    return ns.ItemGuardLuaSandbox.RunTrusted(state.original.runLuaScriptEffect,
+                        code, detached, secured, { budget = state.currentTask, valid = TaskValid })
+                end
+                return ns.ItemGuardLuaSandbox.Run(state.original.runLuaScriptEffect,
+                    code, detached, secured, { budget = state.currentTask })
+            end
         ) }
+        state.luaContexts[detached] = nil
         state.luaDepth[runtimeRootID] = depth > 1 and depth - 1 or nil
 
-        local librariesChanged = RestoreSharedLibraries()
+        local librariesChanged = RestoreSharedLibraries(baseline)
         local hooksChanged = RestoreGuardHookIntegrity()
         if librariesChanged or hooksChanged then
             RuntimeTrip(
@@ -2123,12 +2161,28 @@ local function InstallHooks()
                 if Guard:IsQuarantined(rootID) then return 0 end
             end
         end
-        if not results[1] then error(results[2], 0) end
+        if not results[1] then
+            if ns.ItemGuardLuaSandbox.IsCancelledError(results[2]) then return 0 end
+            if publisherTrust and not ns.ItemGuardLuaSandbox.IsBudgetError(results[2]) then error(results[2], 0) end
+            local reason = type(results[2]) == "table" and results[2].message or tostring(results[2])
+            RuntimeTrip(rootID, "Lua 执行已中止：" .. tostring(reason), "lua_execution_failed")
+            return 0
+        end
         return Unpack(results, 2)
     end
 
     if state.original.registerObject then
         state.wrappedRegisterObject = function(objectFullID, object, count, registerTo)
+            if state.enabled then
+                local checked, valid, reason = pcall(function()
+                    if not ns.ItemGuardStructure then return false, "结构防护模块缺失" end
+                    return ns.ItemGuardStructure.Validate(object)
+                end)
+                if not checked or not valid then
+                    Print("已拒绝接收对象：" .. tostring(checked and reason or "结构检查失败"), "ff5555")
+                    error("RPBox 拒绝注册不安全的对象结构", 0)
+                end
+            end
             local result = state.original.registerObject(objectFullID, object, count, registerTo)
             if state.enabled and not state.mutating then
                 Guard:QueueScan(objectFullID, "received")
@@ -2172,6 +2226,9 @@ local function InstallHooks()
                 return state.original.auraRemove(auraID)
             end
             local previous = state.currentAuraCancellation
+            -- Revoke work issued by this aura before invoking cancellation.
+            -- Delayed callbacks retain their task token beyond the short watch.
+            if rootID then RevokeRoot(rootID) end
             local cancellation = { auraID = canonicalAuraID, rootID = rootID }
             local watchToken = {}
             local priorWatch = canonicalAuraID and state.auraCancellationWatch[canonicalAuraID] or nil
@@ -2292,6 +2349,79 @@ local function InstallHooks()
         end
     end
 
+    if state.original.runWorkflow then
+        state.wrappedRunWorkflow = function(args, source, workflowID, slotID)
+            args = state.luaContexts[args] or args
+            if type(args) ~= "table" then return 0 end
+            local task = state.currentTask or state.contextTasks[args]
+            if not TaskValid(task) then return 0 end
+            local target, object, container = args.classID, args.object, args.container
+            if source == "c" then
+                local log = TRP3_API.quest and TRP3_API.quest.getQuestLog and TRP3_API.quest.getQuestLog()
+                target = log and log.currentCampaign
+            elseif source == "p" then object = container; target = object and object.id
+            elseif source == "ch" then
+                container = object
+                object = container and container.content and container.content[slotID]
+                target = object and object.id
+            elseif source == "si" then
+                object = container and container.content and container.content[slotID]
+                target = object and object.id
+            elseif source ~= "o" then return 0 end
+            if not target then return 0 end
+            local ok, class = pcall(TRP3_API.extended.getClass, target)
+            if not ok or not class or not class.SC then return 0 end
+            local nextArgs = {}
+            for key, value in pairs(args) do nextArgs[key] = value end
+            nextArgs.classID, nextArgs.object, nextArgs.container = target, object, container
+            state.contextTasks[nextArgs] = task
+            return ResumeTask(task, state.wrappedExecute, workflowID, class.SC, nextArgs, target)
+        end
+    end
+    local function WrapScheduler(original)
+        return function(delay, callback)
+            local task, rootID = state.currentTask, state.currentRoot
+            if not task then return original(delay, callback) end
+            if not TaskValid(task) then return end
+            task.queued = task.queued + 1
+            if type(delay) ~= "number" or delay ~= delay or delay < 0
+                or delay > LIMITS.taskLifetime or task.queued > LIMITS.taskQueued then
+                RuntimeTrip(rootID, "任务延迟或累计调度数量超过限制", "scheduled_task_budget")
+                return
+            end
+            return original(delay, function()
+                if TaskValid(task) then return ResumeTask(task, CallWithRoot, rootID, callback) end
+            end)
+        end
+    end
+    if state.original.delayed then state.wrappedDelayed = WrapScheduler(state.original.delayed) end
+    if state.original.cast then state.wrappedCast = WrapScheduler(state.original.cast) end
+    if state.original.getOperand then
+        state.wrappedGetOperand = function(operandID)
+            local info = state.original.getOperand(operandID)
+            if not info then return nil end
+            if not state.operandMethods[info] then
+                local original = info.CodeReplacement
+                local record = { own = rawget(info, "CodeReplacement") }
+                record.wrapped = function(self, parameters)
+                    local valid, problem = pcall(ns.ItemGuardLuaSandbox.ValidateOperand, operandID, Unpack(parameters or {}))
+                    if not valid then
+                        RuntimeTrip(state.currentRoot, tostring(problem), "operand_validation_failed")
+                        error(problem, 0)
+                    end
+                    return original(self, parameters)
+                end
+                state.operandMethods[info] = record
+                info.CodeReplacement = record.wrapped
+            end
+            return info
+        end
+        TRP3_API.script.getOperand = state.wrappedGetOperand
+    end
+    if state.wrappedGetEffect then TRP3_API.script.getEffect = state.wrappedGetEffect end
+    if state.wrappedRunWorkflow then TRP3_API.script.runWorkflow = state.wrappedRunWorkflow end
+    if state.wrappedDelayed then TRP3_API.script.delayed = state.wrappedDelayed end
+    if state.wrappedCast then TRP3_API.script.cast = state.wrappedCast end
     TRP3_API.script.executeClassScript = state.wrappedExecute
     TRP3_API.script.playEffect = state.wrappedPlayEffect
     TRP3_API.script.setVar = state.wrappedSetVar
@@ -2314,7 +2444,17 @@ end
 
 local function RestoreHooks()
     if not state.installed then return end
+    for info, record in pairs(state.operandMethods or {}) do
+        if info.CodeReplacement == record.wrapped then info.CodeReplacement = record.own end
+    end
+    state.operandMethods = {}
     if TRP3_API and TRP3_API.script then
+        for _, entry in ipairs({ { "getEffect", "wrappedGetEffect" }, { "getOperand", "wrappedGetOperand" },
+            { "runWorkflow", "wrappedRunWorkflow" }, { "delayed", "wrappedDelayed" }, { "cast", "wrappedCast" } }) do
+            if state[entry[2]] and TRP3_API.script[entry[1]] == state[entry[2]] then
+                TRP3_API.script[entry[1]] = state.original[entry[1]]
+            end
+        end
         if TRP3_API.script.executeClassScript == state.wrappedExecute then
             TRP3_API.script.executeClassScript = state.original.executeClassScript
         end
@@ -2353,6 +2493,8 @@ local function RestoreHooks()
         TRP3_API.script.clearAllCompilations()
     end
     state.currentRoot = nil
+    state.currentTask = nil
+    state.taskDepth = 0
     state.currentDestruction = nil
     state.currentVariableEffect = nil
     state.currentAuraCancellation = nil
@@ -2407,16 +2549,42 @@ local function RegisterCallbacks()
         end)
     end
 
+    if TRP3_Extended.Events.SECURITY_CHANGED then
+        TRP3_API.RegisterCallback(TRP3_Extended, TRP3_Extended.Events.SECURITY_CHANGED, function()
+            if state.enabled then Guard:ScanAll() end
+        end)
+    end
     state.callbacksRegistered = true
+end
+
+function Guard:RescanIdentity(identity)
+    if not state.enabled then return end
+    if not identity then self:ScanAll(); return end
+    local normalize = ns.ItemGuardBlacklist.NormalizeIdentity
+    identity = normalize(identity)
+    if not identity then return end
+    local affected = {}
+    for _, store in ipairs({ TRP3_Tools_DB or {}, TRP3_Exchange_DB or {}, TRP3_DB and TRP3_DB.global or {} }) do
+        for rootID, root in pairs(store) do
+            if type(rootID) == "string" and not rootID:find(" ", 1, true) and type(root) == "table" then
+                local metadata = type(root.MD) == "table" and root.MD or {}
+                local sender = TRP3_Security and TRP3_Security.sender and TRP3_Security.sender[rootID]
+                if normalize(sender) == identity or normalize(metadata.CB) == identity or normalize(metadata.SB) == identity then
+                    affected[rootID] = true
+                end
+            end
+        end
+    end
+    for rootID in pairs(affected) do self:QueueScan(rootID, "policy") end
+    NotifyChanged()
 end
 
 local function RegisterBlacklistCallback()
     if state.blacklistCallbackRegistered or not ns.ItemGuardBlacklist then return end
     if ns.ItemGuardBlacklist.Initialize then ns.ItemGuardBlacklist.Initialize() end
     if ns.ItemGuardBlacklist.RegisterOnChanged then
-        ns.ItemGuardBlacklist.RegisterOnChanged(function()
-            state.scanCache = {}
-            if state.enabled then Guard:ScanAll() end
+        ns.ItemGuardBlacklist.RegisterOnChanged(function(identity)
+            Guard:RescanIdentity(identity)
         end)
     end
     state.blacklistCallbackRegistered = true
@@ -2426,9 +2594,8 @@ local function RegisterPublisherCallback()
     if state.publisherCallbackRegistered or not ns.ItemGuardPublisherWhitelist then return end
     if ns.ItemGuardPublisherWhitelist.Initialize then ns.ItemGuardPublisherWhitelist.Initialize() end
     if ns.ItemGuardPublisherWhitelist.RegisterOnChanged then
-        ns.ItemGuardPublisherWhitelist.RegisterOnChanged(function()
-            state.scanCache = {}
-            if state.enabled then Guard:ScanAll() end
+        ns.ItemGuardPublisherWhitelist.RegisterOnChanged(function(identity)
+            Guard:RescanIdentity(identity)
         end)
     end
     state.publisherCallbackRegistered = true
@@ -2553,11 +2720,13 @@ function Guard:ScanAll()
 
     local function ProcessBatch()
         if not state.enabled or generation ~= state.scanGeneration then return end
-        local batchEnd = math.min(index + 9, #rootIDs)
+        local batchEnd = math.min(index + 1, #rootIDs)
+        local started = debugprofilestop and debugprofilestop()
         while index <= batchEnd do
             Guard:ScanAndApply(rootIDs[index])
             if Guard:IsQuarantined(rootIDs[index]) then blocked = blocked + 1 end
             index = index + 1
+            if started and debugprofilestop() - started >= 4 then break end
         end
         if index <= #rootIDs then
             C_Timer.After(0, ProcessBatch)
@@ -2601,7 +2770,7 @@ local function TryStart(generation, attempt)
     if attempt < 20 then
         C_Timer.After(1, function() TryStart(generation, attempt + 1) end)
     else
-        Print("未检测到 Total RP 3 Extended，对象防护保持待命。", "ffcc00")
+        Print("TRP3 Extended 未就绪或防护接口不兼容，运行时防护尚未安装。", "ffcc00")
     end
 end
 
@@ -2662,9 +2831,7 @@ function Guard:HandleSlash(subcommand, parameter)
             Print("未找到隔离记录：" .. parameter, "ff5555")
         end
     elseif subcommand == "ignore" and parameter ~= "" then
-        if self:SetIgnored(parameter, true) then
-            Print("已加入忽略清单：" .. parameter, "ffcc66")
-        end
+        self:RequestIgnore(parameter)
     elseif subcommand == "unignore" and parameter ~= "" then
         if self:SetIgnored(parameter, false) then
             Print("已移出忽略清单并重新扫描：" .. parameter, "ffcc66")

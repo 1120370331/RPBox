@@ -10,6 +10,7 @@ local Whitelist = {}
 ns.ItemGuardPublisherWhitelist = Whitelist
 
 local callbacks = {}
+local normalizedDatabase
 
 local function Trim(value)
     return (tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", ""))
@@ -34,6 +35,7 @@ end
 local function EnsureDatabase()
     RPBox_ItemGuardDB = RPBox_ItemGuardDB or {}
     local current = RPBox_ItemGuardDB.publisherWhitelist
+    if current == normalizedDatabase and type(current) == "table" then return current end
     if type(current) ~= "table" then current = {} end
     local normalizedEntries = {}
     for key, value in pairs(current) do
@@ -50,11 +52,12 @@ local function EnsureDatabase()
         end
     end
     RPBox_ItemGuardDB.publisherWhitelist = normalizedEntries
+    normalizedDatabase = normalizedEntries
     return normalizedEntries
 end
 
-local function NotifyChanged()
-    for _, callback in ipairs(callbacks) do pcall(callback) end
+local function NotifyChanged(identity)
+    for _, callback in ipairs(callbacks) do pcall(callback, identity) end
 end
 
 local function FindEntry(identity)
@@ -103,7 +106,7 @@ function Whitelist.AddUser(identity, reason, colonReason)
         identity = normalized,
         reason = reason ~= "" and reason or nil,
     }
-    NotifyChanged()
+    NotifyChanged(normalized)
     return true, "已信任该内容发布者"
 end
 
@@ -114,7 +117,7 @@ function Whitelist.RemoveUser(identity, colonIdentity)
     local entries = EnsureDatabase()
     if not entries[normalized] then return false, "发布者白名单中不存在该身份" end
     entries[normalized] = nil
-    NotifyChanged()
+    NotifyChanged(normalized)
     return true, "已取消信任该内容发布者"
 end
 
@@ -122,7 +125,7 @@ function Whitelist.ResolveRootPublisher(rootID, root, colonRoot)
     if rootID == Whitelist then rootID, root = root, colonRoot end
     if type(root) ~= "table" then return nil end
 
-    if TRP3_DB and type(TRP3_DB.my) == "table" and TRP3_DB.my[rootID] then
+    if TRP3_DB and type(TRP3_DB.my) == "table" and TRP3_DB.my[rootID] == root then
         return {
             identity = Whitelist.NormalizeIdentity(
                 TRP3_API and TRP3_API.globals and TRP3_API.globals.player_id
@@ -159,9 +162,21 @@ end
 
 function Whitelist.MatchRoot(rootID, root, colonRoot)
     if rootID == Whitelist then rootID, root = root, colonRoot end
+    -- RPBox extends TRP3's policy rather than silently discarding the user's
+    -- existing per-object, sender or effect-group permissions.
+    local security = TRP3_API and TRP3_API.security
+    if security and type(security.resolveEffectSecurity) == "function" then
+        local ok, trusted, reason = pcall(security.resolveEffectSecurity, rootID, "script")
+        if ok and trusted == true then
+            return { identity = "TRP3", source = "trp3", field = "TRP3.security",
+                reason = "TRP3 已允许此对象执行 Lua（来源 " .. tostring(reason or "user") .. "）" }
+        end
+    end
     local publisher = Whitelist.ResolveRootPublisher(rootID, root)
     if not publisher then return nil end
     if publisher.source == "self" then return publisher end
+    -- Metadata alone grants nothing. An explicit user-created publisher entry
+    -- can suppress compatibility policy; runtime and hard behavior checks stay.
     local entry = FindEntry(publisher.identity)
     if not entry then return nil end
     return {

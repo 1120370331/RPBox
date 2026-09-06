@@ -633,7 +633,7 @@ TRP3_API.extended.removeObject = function(rootID)
     TRP3_DB.global[rootID .. " child"] = nil
 end
 
-originalPlayEffect = function(effectID, _, effectArgs, ...)
+local function mockEffectBody(effectID, _, effectArgs, ...)
     originalCalls.effect = originalCalls.effect + 1
     local parameters = { ... }
     if effectID == "item_add" then
@@ -650,13 +650,29 @@ originalPlayEffect = function(effectID, _, effectArgs, ...)
     return 0
 end
 
+local mockEffects = {}
+TRP3_API.script.getEffect = function(effectID)
+    if not mockEffects[effectID] then
+        mockEffects[effectID] = { method = function(_, parameters, effectArgs)
+            return mockEffectBody(effectID, false, effectArgs, (unpack or table.unpack)(parameters))
+        end }
+    end
+    return mockEffects[effectID]
+end
+TRP3_API.script.runWorkflow = function() end
+TRP3_API.script.delayed = function(delay, callback) C_Timer.After(delay, callback) end
+originalPlayEffect = function(effectID, _, effectArgs, ...)
+    local info = TRP3_API.script.getEffect(effectID)
+    return info.method(info, { ... }, effectArgs)
+end
+
 originalRunLua = function(code, effectArgs, secured)
     originalCalls.runLua = originalCalls.runLua + 1
-    if code == "RUNTIME_LIBRARY_TAMPER" then
+    if code:find("RUNTIME_LIBRARY_TAMPER", 1, true) then
         string.lower = function() return "tampered" end
-    elseif code == "RUNTIME_HOOK_TAMPER" then
+    elseif code:find("RUNTIME_HOOK_TAMPER", 1, true) then
         TRP3_API.script.playEffect = function() return "tampered" end
-    elseif code == "RAW_SETVAR_CRASH" then
+    elseif code:find("RAW_SETVAR_CRASH", 1, true) then
         TRP3_API.script.setVar(
             effectArgs,
             "o",
@@ -664,7 +680,7 @@ originalRunLua = function(code, effectArgs, secured)
             "payload",
             string.rep("z", (512 * 1024) + 1)
         )
-    elseif code == "DYNAMIC_NEST" then
+    elseif code:find("DYNAMIC_NEST", 1, true) then
         TRP3_API.script.runLuaScriptEffect(code, effectArgs, secured)
     end
     return 9
@@ -723,8 +739,15 @@ RPBox_ItemGuardDB = {
     },
 }
 
+TRP3_Security = { sender = {
+    trusted_lua_policy = "TrustedPublisher-SmokeRealm",
+    hard_lua = "TrustedPublisher-SmokeRealm",
+    macro_escape = "TrustedPublisher-SmokeRealm",
+    untrusted_lua_policy = "Policy-SmokeRealm",
+} }
 local namespace = {}
 for _, path in ipairs({
+    "addon/RPBox_Addon/ItemGuardStructure.lua",
     "addon/RPBox_Addon/ItemGuardRules.lua",
     "addon/RPBox_Addon/ItemGuardBlacklist.lua",
     "addon/RPBox_Addon/ItemGuardPublisherWhitelist.lua",
@@ -734,6 +757,8 @@ for _, path in ipairs({
     "addon/RPBox_Addon/ItemGuardAuraRules.lua",
     "addon/RPBox_Addon/ItemGuardContentRules.lua",
     "addon/RPBox_Addon/ItemGuardLuaRules.lua",
+    "addon/RPBox_Addon/ItemGuardLuaSandbox.lua",
+    "addon/RPBox_Addon/ItemGuardLuaExpressions.lua",
     "addon/RPBox_Addon/ItemGuard.lua",
 }) do
     local chunk = assert(loadfile(path))
@@ -826,11 +851,9 @@ for _ = 1, 41 do
     )
 end
 assert_true(Guard:IsQuarantined("runtime_lua_rate"), "runtime Lua call-rate limit did not quarantine")
-assert_true(not Guard:IsQuarantined("cycle"), "pure step recursion was treated as malicious")
-assert_equal(cycle.BA.US, true, "rule update did not restore a legacy false-positive usability state")
-assert_equal(cycle.BA.IC, "original_Cycle", "rule update did not restore a legacy false-positive icon")
-assert_true(RPBox_ItemGuardDB.findings.cycle == nil, "legacy false-positive finding was not removed")
-assert_equal(Guard._state.scanCache.cycle.score, 15, "pure step recursion score changed")
+assert_true(Guard:IsQuarantined("cycle"), "compile cycle was released")
+assert_equal(cycle.BA.US, nil, "compile cycle remained usable")
+assert_true(RPBox_ItemGuardDB.findings.cycle ~= nil, "compile invariant is missing from ledger")
 assert_true(Guard:IsQuarantined("huge"), "excessive item_add was not quarantined")
 assert_true(Guard._state.scanCache.huge.score >= 120, "excessive item_add did not receive behavior score")
 assert_true(not Guard:IsQuarantined("recursive"), "pure workflow recursion was treated as malicious")
@@ -839,8 +862,8 @@ assert_true(Guard:IsQuarantined("cycle_add"), "step recursion with item_add was 
 assert_true(Guard._state.scanCache.cycle_add.score >= 100, "step recursion and item_add scores were not combined")
 assert_true(Guard:IsQuarantined("recursive_add"), "recursive workflows with item_add were not quarantined")
 assert_true(Guard._state.scanCache.recursive_add.score >= 100, "workflow recursion and item_add scores were not combined")
-assert_true(RPBox_ItemGuardDB.findings.cycle_add.reasons[1]:find("重复执行物品添加", 1, true) ~= nil,
-    "step recursion was shown before its malicious item-add behavior")
+assert_true(RPBox_ItemGuardDB.findings.cycle_add.reasons[1]:find("编译", 1, true) ~= nil,
+    "compile-time invariant was not prioritized")
 assert_true(RPBox_ItemGuardDB.findings.recursive_add.reasons[1]:find("重复执行物品添加", 1, true) ~= nil,
     "workflow recursion was shown before its malicious item-add behavior")
 assert_true(Guard:IsQuarantined("static_sound"), "sound rule module was not merged into the guard scan")
@@ -861,8 +884,8 @@ assert_true(not Guard:IsQuarantined("safe_document"), "ordinary document content
 assert_true(not Guard:IsQuarantined("expansion_document"),
     "unexpanded variable document was quarantined statically")
 assert_true(Guard:IsQuarantined("huge_document"), "crash-sized document content was not quarantined")
-assert_true(Guard._state.scanCache.huge_document.moduleMetrics.content.documentBytes > 512 * 1024,
-    "document content metrics are missing")
+assert_equal(Guard._state.scanCache.huge_document.findings[1].kind, "invalid_structure",
+    "oversize document did not stop at bounded preflight")
 assert_true(TRP3_API.extended.auras.apply ~= originalAuraApply, "aura application hook was not installed")
 assert_true(TRP3_API.extended.auras.cancel ~= originalAuraCancel, "aura cancellation hook was not installed")
 assert_true(TRP3_API.extended.auras.setVariable ~= originalAuraSetVariable,
@@ -933,16 +956,9 @@ assert_true(LastPopup.dialog.button1.enabled, "slot-backed popup disabled remova
 assert_true(not LastPopup.dialog.button3.enabled, "trust-author action was enabled without a usable publisher")
 assert_equal(LastPopup.dialog.button3.alpha, 0.35, "unavailable trust-author action was not de-emphasized")
 
-assert_true(Guard:ReleaseQuarantine("cycle_add"), "temporary release API failed")
-assert_true(not Guard:IsQuarantined("cycle_add"), "temporary release did not clear quarantine")
-assert_equal(cycleAdd.BA.US, true, "release did not restore usability")
-assert_equal(cycleAdd.BA.IC, "original_CycleAdd", "release did not restore icon")
-assert_equal(cycleAddChild.BA.US, true, "release did not restore nested item usability")
-assert_equal(cycleAddChild.BA.IC, "original_CycleAddChild", "release did not restore nested item icon")
-assert_equal(cycleAddGrandchild.BA.US, true, "release did not restore deep nested item usability")
-assert_equal(cycleAddGrandchild.BA.IC, "original_CycleAddGrandchild",
-    "release did not restore deep nested item icon")
-assert_true(RPBox_ItemGuardDB.ignored.cycle_add == nil, "temporary release was persisted as an ignore entry")
+assert_true(not Guard:ReleaseQuarantine("cycle_add"), "compile invariant was released")
+assert_true(not Guard:SetIgnored("cycle_add", true), "compile invariant was ignored")
+assert_equal(cycleAddChild.BA.US, nil, "nested unsafe object was restored")
 
 local hugeSlotInfo = { id = "huge", count = 2 }
 playerInventory.content["2"] = hugeSlotInfo
@@ -1001,41 +1017,10 @@ assert_equal(removeCalls[#removeCalls].slotInfo, internalRiskInfo,
 assert_equal(removeCalls[#removeCalls].manuallyDestroyed, false,
     "carrier removal triggered the destruction workflow")
 
-local releasedEntries = Guard:GetRiskEntries()
-local releasedCycle
-for _, entry in ipairs(releasedEntries) do
-    if entry.rootID == "cycle_add" then releasedCycle = entry end
-end
-assert_true(releasedCycle and releasedCycle.status == "released", "risk finding disappeared after temporary release")
-
 local beforeExecute = originalCalls.execute
 local ret = TRP3_API.script.executeClassScript("onUse", cycleAdd.SC, { object = { id = "cycle_add" } }, "cycle_add")
-assert_equal(ret, 7, "ignored item did not execute original workflow")
-assert_equal(originalCalls.execute, beforeExecute + 1, "ignored item was still blocked")
-
-Guard:ScanAll()
-drain_timers()
-assert_true(Guard:IsQuarantined("cycle_add"), "temporary release survived a new scan")
-assert_equal(cycleAddChild.BA.IC, "ui-engineering-90-remote-close-icon",
-    "re-scan did not reapply nested isolation")
-TRP3_Extended:TriggerEvent("ON_SLOT_USE", cycleSlotButton, playerContainerFrame)
-assert_equal(LastPopup.arg1, "CycleAdd", "re-scanned risk did not show its popup again")
-
-assert_true(Guard:SetIgnored("cycle_add", true), "explicit ignore action failed")
-assert_true(not Guard:IsQuarantined("cycle_add"), "explicit ignore did not remove quarantine")
-Guard:ScanAll()
-drain_timers()
-assert_true(not Guard:IsQuarantined("cycle_add"), "explicit ignore did not survive scanning")
-assert_equal(cycleAddChild.BA.IC, "original_CycleAddChild", "explicit ignore did not restore nested item icon")
-local ignoredEntry
-for _, entry in ipairs(Guard:GetRiskEntries()) do
-    if entry.rootID == "cycle_add" then ignoredEntry = entry end
-end
-assert_true(ignoredEntry and ignoredEntry.status == "ignored", "ignored risk was removed from the risk ledger")
-assert_true(Guard:SetIgnored("cycle_add", false), "removing ignore failed")
-assert_true(Guard:IsQuarantined("cycle_add"), "removing ignore did not reapply isolation")
-assert_equal(cycleAddChild.BA.IC, "ui-engineering-90-remote-close-icon",
-    "removing ignore did not reapply nested item icon")
+assert_equal(ret, 0, "compile invariant reached original executor")
+assert_equal(originalCalls.execute, beforeExecute, "blocked workflow executed")
 
 local auraApplyBeforeStatic = originalCalls.auraApply
 TRP3_API.extended.auras.apply("static_aura aura", "=")
@@ -1309,11 +1294,9 @@ TRP3_Exchange_DB.replaced_risk = replacedRiskSecond
 TRP3_API.extended.registerObject("replaced_risk", replacedRiskSecond, 0)
 drain_timers()
 assert_true(Guard:IsQuarantined("replaced_risk"), "updated risky object escaped quarantine")
-assert_true(Guard:ReleaseQuarantine("replaced_risk"), "updated risky object could not be released for restore check")
-assert_equal(replacedRiskSecond.BA.IC, "original_ReplacedRiskSecond",
-    "quarantine restored the previous object's icon onto its replacement")
-assert_equal(replacedRiskSecond.BA.US, true,
-    "quarantine restored the previous object's usability onto its replacement")
+assert_true(not Guard:ReleaseQuarantine("replaced_risk"), "updated hard-risk object was released")
+assert_equal(RPBox_ItemGuardDB.quarantined.replaced_risk.originalIcon, "original_ReplacedRiskSecond",
+    "replacement visual backup retained stale icon")
 
 local replacedCleanRisk = item("ReplacedCleanRisk", {
     onUse = workflow({ ["1"] = { t = "list", e = { effect("item_add", { "safe", "1001" }) } } }),
