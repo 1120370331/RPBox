@@ -25,11 +25,6 @@ func (s *Server) followPost(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
 		return
 	}
-	if post.AuthorID == userID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不能关注自己的帖子"})
-		return
-	}
-
 	follow := model.PostFollow{PostID: post.ID, UserID: userID}
 	result := database.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&follow)
 	if result.Error != nil {
@@ -71,11 +66,6 @@ func (s *Server) followItem(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "作品不存在"})
 		return
 	}
-	if item.AuthorID == userID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不能关注自己的作品"})
-		return
-	}
-
 	follow := model.ItemFollow{ItemID: item.ID, UserID: userID}
 	result := database.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&follow)
 	if result.Error != nil {
@@ -108,7 +98,7 @@ func notifyPostFollowers(post model.Post) {
 		return
 	}
 	var follows []model.PostFollow
-	if err := database.DB.Where("post_id = ? AND user_id <> ?", post.ID, post.AuthorID).Find(&follows).Error; err != nil {
+	if err := database.DB.Where("post_id = ?", post.ID).Find(&follows).Error; err != nil {
 		return
 	}
 	for _, follow := range follows {
@@ -129,7 +119,7 @@ func notifyItemFollowers(item model.Item) {
 		return
 	}
 	var follows []model.ItemFollow
-	if err := database.DB.Where("item_id = ? AND user_id <> ?", item.ID, item.AuthorID).Find(&follows).Error; err != nil {
+	if err := database.DB.Where("item_id = ?", item.ID).Find(&follows).Error; err != nil {
 		return
 	}
 	for _, follow := range follows {

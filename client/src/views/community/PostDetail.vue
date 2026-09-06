@@ -818,7 +818,6 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
                 <span>{{ post.favorite_count }}</span>
               </button>
               <button
-                v-if="currentUserId && currentUserId !== post.author_id"
                 class="action-btn"
                 :class="{ active: followed }"
                 :disabled="actionLoading"

@@ -847,7 +847,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
             {{ isFavorited ? t('market.detail.actions.favorited') : t('market.detail.actions.favorite') }}
           </button>
           <button
-            v-if="!isPreview && currentUserId && currentUserId !== item.author_id"
+            v-if="!isPreview"
             class="follow-btn"
             :class="{ active: isFollowed }"
             :disabled="submitting"
