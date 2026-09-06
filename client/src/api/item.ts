@@ -287,3 +287,15 @@ export function resolveApiUrl(url: string | undefined | null): string {
   }
   return `${API_HOST}/${url}`
 }
+
+export function followItem(id: number) {
+  return request.post(`/items/${id}/follow`)
+}
+
+export function unfollowItem(id: number) {
+  return request.delete(`/items/${id}/follow`)
+}
+
+export function listMyItemFollows() {
+  return request.get('/items/follows')
+}

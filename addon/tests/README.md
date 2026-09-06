@@ -35,3 +35,9 @@ npx --yes --package=fengari-node-cli fengari addon/tests/item_guard_content_rule
 npx --yes --package=fengari-node-cli fengari addon/tests/item_guard_lua_rules_smoke.lua
 npx --yes --package=fengari-node-cli fengari addon/tests/item_guard_publisher_whitelist_smoke.lua
 ```
+
+## Guard 3 native integration regression
+
+Run `python addon/tests/run_guard_tests.py` with `lupa` installed to exercise all guard suites in native Lua 5.1. `--runtime-path` supports an isolated installation. The reference smoke can take an installed compiler via `--reference <ScriptGeneration.lua>`. It preserves real TRP3 compilation, local effect dispatch and Lua execution, with substituted WoW side effects. Fengari-only execution is insufficient for this test because TRP3 relies on native Lua array traversal order.
+
+Guard 3 intentionally replaces the previous pure-step-cycle allow contract with a compilation invariant. Policy-only exceptions remain available; hard limits and runtime breakers cannot be ignored. The main-frame smoke verifies delegation to the confirmation flow rather than immediate ignore.

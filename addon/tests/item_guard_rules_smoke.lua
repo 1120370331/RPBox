@@ -62,14 +62,14 @@ assert_true(type(Rules) == "table", "rules namespace was not registered")
 assert_true(type(Rules.RULE_VERSION) == "number", "rule version is missing")
 assert_true(type(Rules.Analyze) == "function", "Analyze interface is missing")
 
--- A pure reachable step SCC is structural evidence only.
+-- A reachable step SCC cannot be compiled safely, even without side effects.
 local pureStepLoop = analyze(item_root("main", {
     main = workflow({
         ["1"] = list({}, "2"),
         ["2"] = list({}, "1"),
     }),
 }))
-assert_false(pureStepLoop.blocked, "pure step loop must not be quarantined")
+assert_true(pureStepLoop.blocked, "compile cycle must be quarantined")
 assert_equal(pureStepLoop.behaviorScore, 0, "pure step loop gained behavior score")
 assert_equal(pureStepLoop.amplificationScore, 15, "step SCC amplification score changed")
 assert_true(has_kind(pureStepLoop, "step_cycle"), "step SCC finding is missing")
@@ -127,7 +127,7 @@ assert_true(excessiveAdd.blocked, ">1000 item_add must be a hard block")
 assert_true(hasExcessiveAdd and excessiveAddFinding.hard, ">1000 item_add hard finding is missing")
 
 local dynamicAdd = analyze(item_root("main", {
-    main = workflow({ ["1"] = list({ effect("item_add", { "safe", "${object.qty}" }) }, "1") }),
+    main = workflow({ ["1"] = list({ effect("item_add", { "safe", "${object.qty}" }) }) }),
 }))
 assert_false(dynamicAdd.blocked, "dynamic item_add count must be deferred to runtime")
 assert_true(has_kind(dynamicAdd, "item_add_dynamic_count"), "dynamic item_add report is missing")

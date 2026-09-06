@@ -9,7 +9,7 @@ local ADDON_NAME, ns = ...
 local Rules = {}
 ns.ItemGuardLuaRules = Rules
 
-Rules.RULE_VERSION = 1
+Rules.RULE_VERSION = 3
 Rules.LIMITS = {
     SCRIPT_SOURCE_BYTES = 512 * 1024,
     OBJECT_SOURCE_BYTES = 2 * 1024 * 1024,
@@ -22,6 +22,18 @@ Rules.LIMITS = {
 }
 
 local CHILD_GROUPS = { "IN", "QE", "ST" }
+
+-- This exact legacy bootstrap only supplies args._G. RPBox emulates it for a
+-- trusted object without ever installing its process-wide executor override.
+function Rules.IsLegacyBootstrapMacro(macro)
+    if type(macro) ~= "string" then return false end
+    local compact = macro:gsub("%s+", "")
+    local saved = compact:match("^/runif([%a_][%w_]*)==nilthen")
+    if not saved then return false end
+    return compact == "/runif" .. saved .. "==nilthen" .. saved
+        .. "=TRP3_API.script.runLuaScriptEffect;TRP3_API.script.runLuaScriptEffect=function(c,a,s)a._G=_G;return"
+        .. saved .. "(c,a,s);end;end"
+end
 local SHARED_LIBRARIES = { string = true, table = true, math = true }
 local HIGH_IMPACT_EFFECTS = {
     item_add = true,
@@ -116,7 +128,7 @@ local function AddFinding(result, finding, level)
     if not result._reasonSet[finding.reason] then
         result._reasonSet[finding.reason] = true
         result.reasons[#result.reasons + 1] = finding.reason
-    end
+    else return end
     finding.score = level == "hard" and 120 or level == "policy" and 100 or 20
     finding.hard = level == "hard" or level == "policy"
     finding.bypassable = level ~= "hard"
@@ -214,7 +226,10 @@ local function Lex(code)
             position = finish
         else
             local pair = code:sub(position, position + 1)
-            if pair == "==" or pair == "~=" or pair == "<=" or pair == ">=" or pair == ".." then
+            if code:sub(position, position + 2) == "..." then
+                tokens[#tokens + 1] = { kind = "symbol", value = "...", position = position }
+                position = position + 3
+            elseif pair == "==" or pair == "~=" or pair == "<=" or pair == ">=" or pair == ".." then
                 tokens[#tokens + 1] = { kind = "symbol", value = pair, position = position }
                 position = position + 2
             else
@@ -224,6 +239,61 @@ local function Lex(code)
         end
     end
     return tokens
+end
+
+-- Shared with the execution instrumenter; string/comment bodies never become
+-- executable tokens. Runtime instrumentation also handles dynamic conditions.
+Rules.Tokenize = Lex
+
+-- Match executable block boundaries, retaining source offsets for budget
+-- insertion. This is not a proof of Lua safety: every loop/function is metered.
+function Rules.ControlFlow(tokens, generated)
+    local stack, insertions, repeated = {}, {}, {}
+    for index, token in ipairs(tokens) do
+        local loops = false
+        for cursor = #stack, 1, -1 do
+            if stack[cursor].kind == "function" then break end
+            if stack[cursor].loop then loops = true end
+        end
+        repeated[index] = loops
+        local frame = stack[#stack]
+        if frame and frame.kind == "function" and not frame.body then
+            if token.kind == "symbol" and token.value == "(" then frame.parens = (frame.parens or 0) + 1 end
+            if token.kind == "symbol" and token.value == ")" then
+                frame.parens = (frame.parens or 0) - 1
+                if frame.parens == 0 then
+                    frame.body = true
+                    insertions[#insertions + 1] = token.position + 1
+                end
+            end
+        end
+        if token.kind == "identifier" then
+            local value = token.value
+            if not generated and value:find("^__rpbox") then return nil, "Lua 使用了防护保留标识符" end
+            if value == "function" then stack[#stack + 1] = { kind = value }
+            elseif value == "for" or value == "while" then
+                stack[#stack + 1] = { kind = value, loop = true, pending = true }
+            elseif value == "repeat" then
+                stack[#stack + 1] = { kind = value, loop = true }
+                insertions[#insertions + 1] = token.position + #value
+            elseif value == "if" then stack[#stack + 1] = { kind = value }
+            elseif value == "do" then
+                frame = stack[#stack]
+                if frame and frame.pending then
+                    frame.pending = false
+                    insertions[#insertions + 1] = token.position + #value
+                else stack[#stack + 1] = { kind = value } end
+            elseif value == "end" or value == "until" then
+                frame = stack[#stack]
+                if not frame or (value == "until") ~= (frame.kind == "repeat") then
+                    return nil, "Lua 块结构无法安全分析"
+                end
+                stack[#stack] = nil
+            end
+        end
+    end
+    if #stack ~= 0 then return nil, "Lua 块结构不完整" end
+    return insertions, repeated
 end
 
 local function TokenValue(tokens, index, expected)
@@ -332,21 +402,38 @@ local function PathAt(tokens, index)
     if not tokens[index] or tokens[index].kind ~= "identifier" then return nil end
     local parts = { tokens[index].value }
     local cursor = index + 1
-    while TokenValue(tokens, cursor) == "." and tokens[cursor + 1]
-        and tokens[cursor + 1].kind == "identifier" do
-        parts[#parts + 1] = tokens[cursor + 1].value
-        cursor = cursor + 2
+    while true do
+        if TokenValue(tokens, cursor) == "." and tokens[cursor + 1]
+            and tokens[cursor + 1].kind == "identifier" then
+            parts[#parts + 1] = tokens[cursor + 1].value
+            cursor = cursor + 2
+        elseif TokenValue(tokens, cursor) == "[" and tokens[cursor + 1]
+            and tokens[cursor + 1].kind == "string" and TokenValue(tokens, cursor + 2) == "]" then
+            parts[#parts + 1] = tokens[cursor + 1].value
+            cursor = cursor + 3
+        else
+            break
+        end
     end
     return table.concat(parts, "."), cursor
 end
 
 local function HasAssignmentSoon(tokens, index, limit)
-    for cursor = index, math.min(#tokens, index + (limit or 8)) do
-        local value = tokens[cursor].value
-        if value == "=" then return true end
-        if value == ";" then return false end
+    -- Only inspect the lvalue suffix; never mistake a later statement's '='
+    -- or the assignment binding a local function alias for a library write.
+    local cursor = index
+    while TokenValue(tokens, cursor) == "[" do
+        local depth = 1
+        cursor = cursor + 1
+        while tokens[cursor] and depth > 0 do
+            if tokens[cursor].kind == "symbol" then
+                if tokens[cursor].value == "[" then depth = depth + 1 end
+                if tokens[cursor].value == "]" then depth = depth - 1 end
+            end
+            cursor = cursor + 1
+        end
     end
-    return false
+    return TokenValue(tokens, cursor) == "="
 end
 
 local function ArgumentPath(argument, aliases)
@@ -369,14 +456,16 @@ function Rules.AnalyzeCode(code, context)
     end
     result.metrics.scripts = 1
     result.metrics.sourceBytes = #code
-    result._signatures[1] = tostring(#code) .. ":" .. StableHash(code)
     if #code > Rules.LIMITS.SCRIPT_SOURCE_BYTES then
         AddFinding(result, {
             kind = "lua_source_crash_size",
             bytes = #code,
             reason = "单段 Lua 源码超过崩溃防护上限 512 KiB",
         }, "hard")
+        result.fingerprint = "igl" .. Rules.RULE_VERSION .. ":oversize:" .. #code
+        return result
     end
+    result._signatures[1] = tostring(#code) .. ":" .. StableHash(code)
 
     local tokens, lexError = Lex(code)
     if not tokens then
@@ -389,8 +478,25 @@ function Rules.AnalyzeCode(code, context)
         return result
     end
 
+    local positions, repeated = Rules.ControlFlow(tokens)
+    if not positions then
+        AddFinding(result, { kind = "lua_unsupported_structure", reason = repeated }, "hard")
+        result.fingerprint = "igl" .. Rules.RULE_VERSION .. ":" .. result._signatures[1]
+        return result
+    end
+    if ns.ItemGuardLuaExpressions then
+        local parsed, parseError = pcall(ns.ItemGuardLuaExpressions.Rewrite, code, tokens)
+        if not parsed then
+            AddFinding(result, { kind = "lua_unsupported_expression",
+                reason = "Lua 表达式无法安全计量：" .. tostring(parseError) }, "hard")
+            result.fingerprint = "igl" .. Rules.RULE_VERSION .. ":" .. result._signatures[1]
+            return result
+        end
+    end
+
     local hasLoop, hasUnboundedLoop, hasExit = false, false, false
     local hasHighImpactEffect, hasNestedScript, hasDynamicEffect = false, false, false
+    local repeatedHighImpact, repeatedNestedScript, repeatedPersistence = false, false, false
     local hasRecursiveFunction = false
     local highImpactEffectCalls = 0
     local hasContextWrite, hasPersistentContextWrite = false, false
@@ -399,7 +505,8 @@ function Rules.AnalyzeCode(code, context)
 
     for index, token in ipairs(tokens) do
         local value = token.value
-        if value == "break" or value == "return" then hasExit = true end
+        if token.kind ~= "identifier" then value = "" end
+        if value == "break" then hasExit = true end
         if value == "function" and tokens[index + 1] and tokens[index + 1].kind == "identifier" then
             local functionName = tokens[index + 1].value
             for cursor = index + 2, math.min(#tokens, index + 400) do
@@ -410,9 +517,13 @@ function Rules.AnalyzeCode(code, context)
                 end
             end
         end
-        if value == "while" and (TokenValue(tokens, index + 1) == "true"
-            or TokenValue(tokens, index + 1) == "1") then
-            hasLoop, hasUnboundedLoop = true, true
+        if value == "while" then
+            hasLoop = true
+            local condition = index + 1
+            while TokenValue(tokens, condition) == "(" do condition = condition + 1 end
+            if TokenValue(tokens, condition) == "true" or TokenValue(tokens, condition) == "1" then
+                hasUnboundedLoop = true
+            end
         elseif value == "repeat" then
             hasLoop = true
             for cursor = index + 1, math.min(#tokens, index + 80) do
@@ -434,20 +545,39 @@ function Rules.AnalyzeCode(code, context)
                         break
                     end
                 end
-                if from and to then maxLiteralLoop = math.max(maxLiteralLoop, math.abs(to - from) + 1) end
+                if from and to then
+                    local raw = {}
+                    local cursor = index + 3
+                    while tokens[cursor] and TokenValue(tokens, cursor) ~= "do" do
+                        raw[#raw + 1] = tokens[cursor].value
+                        cursor = cursor + 1
+                    end
+                    local header = table.concat(raw)
+                    local startValue, endValue, increment = header:match("^([^,]+),([^,]+),([^,]+)$")
+                    local stride = increment and tonumber(increment) or 1
+                    from, to = tonumber(startValue) or from, tonumber(endValue) or to
+                    if stride == 0 then hasUnboundedLoop = true
+                    elseif stride then
+                        maxLiteralLoop = math.max(maxLiteralLoop, math.max(0, math.floor((to - from) / stride) + 1))
+                    end
+                end
             end
         end
 
         if value == "local" and tokens[index + 1] and tokens[index + 1].kind == "identifier"
             and TokenValue(tokens, index + 2) == "=" then
-            local sourcePath = PathAt(tokens, index + 3)
-            if sourcePath then aliases[tokens[index + 1].value] = sourcePath end
+            local sourcePath, finish = PathAt(tokens, index + 3)
+            local isTableAlias = sourcePath == "string" or sourcePath == "table" or sourcePath == "math"
+                or sourcePath == "args.scripts" or sourcePath == "args.object"
+                or sourcePath == "args.object.vars" or sourcePath == "args.container"
+                or sourcePath == "args.container.content"
+            aliases[tokens[index + 1].value] = isTableAlias and TokenValue(tokens, finish) ~= "(" and sourcePath or nil
         end
 
         local path, pathEnd = PathAt(tokens, index)
         if path then
             local first = path:match("^[^%.]+")
-            if aliases[first] then
+            if aliases[first] and TokenValue(tokens, index - 1) ~= "local" then
                 path = aliases[first] .. path:sub(#first + 1)
                 first = path:match("^[^%.]+")
             end
@@ -479,11 +609,12 @@ function Rules.AnalyzeCode(code, context)
                 }, "hard")
             elseif path:find("^args%.object%.vars") and HasAssignmentSoon(tokens, pathEnd, 8) then
                 hasContextWrite, hasPersistentContextWrite = true, true
+                repeatedPersistence = repeatedPersistence or repeated[index]
                 result.metrics.contextWrites = result.metrics.contextWrites + 1
                 AddFinding(result, {
                     kind = "lua_variable_direct_write",
                     path = path,
-                    reason = "Lua 直接写对象变量，未经过 setVar 检查",
+                    reason = "Lua 直接修改对象变量副本；需要保存的修改请使用 setVar",
                 }, "advisory")
             end
             if path == "args._G" or path:find("^args%._G%.") then
@@ -491,7 +622,7 @@ function Rules.AnalyzeCode(code, context)
                 AddFinding(result, {
                     kind = "lua_global_environment_request",
                     reason = "Lua 请求外部注入完整 _G 环境",
-                }, "hard")
+                }, "policy")
             end
         end
 
@@ -528,11 +659,12 @@ function Rules.AnalyzeCode(code, context)
                 }, "hard")
             elseif targetPath and targetPath:find("^args%.object%.vars") then
                 hasPersistentContextWrite = true
+                repeatedPersistence = repeatedPersistence or repeated[index]
                 AddFinding(result, {
                     kind = "lua_variable_table_mutator",
                     path = targetPath,
                     reason = "Lua 通过 table 直接修改对象变量",
-                }, hasLoop and "hard" or "advisory")
+                }, repeated[index] and "hard" or "advisory")
             end
         end
 
@@ -546,9 +678,11 @@ function Rules.AnalyzeCode(code, context)
             else
                 if HIGH_IMPACT_EFFECTS[effectID] then
                     hasHighImpactEffect = true
+                    repeatedHighImpact = repeatedHighImpact or repeated[index]
                     highImpactEffectCalls = highImpactEffectCalls + 1
                 end
                 hasNestedScript = hasNestedScript or effectID == "script"
+                repeatedNestedScript = repeatedNestedScript or (effectID == "script" and repeated[index])
             end
         elseif value == "op" and TokenValue(tokens, index + 1) == "(" then
             local arguments = ParseCallArguments(tokens, index + 1)
@@ -570,7 +704,8 @@ function Rules.AnalyzeCode(code, context)
             and TokenValue(tokens, index + 2) == "rep" and TokenValue(tokens, index + 3) == "(" then
             local arguments = ParseCallArguments(tokens, index + 3)
             local count = arguments and tonumber(SingleLiteral(arguments[2], "number")) or nil
-            if count then maxRep = math.max(maxRep, count) end
+            local text = arguments and SingleLiteral(arguments[1], "string")
+            if count and text then maxRep = math.max(maxRep, #text * math.max(0, count)) end
         end
     end
 
@@ -622,14 +757,14 @@ function Rules.AnalyzeCode(code, context)
             reason = "单段 Lua 密集调用背包、通信、声音、弹窗或光环效果",
         }, "policy")
     end
-    if hasLoop and hasHighImpactEffect then
+    if repeatedHighImpact then
         AddFinding(result, {
             kind = "lua_loop_high_impact_effect",
             reason = "Lua 循环结合背包、光环、文档、通信、声音或弹窗效果",
         }, (maxLiteralLoop > Rules.LIMITS.AMPLIFIED_LOOP_ITERATIONS or hasUnboundedLoop)
             and "hard" or "policy")
     end
-    if hasLoop and hasNestedScript then
+    if repeatedNestedScript then
         AddFinding(result, {
             kind = "lua_loop_nested_script",
             reason = "Lua 循环中递归启动新的 Script Effect",
@@ -640,7 +775,7 @@ function Rules.AnalyzeCode(code, context)
             reason = "Lua 会动态启动另一段 Script Effect",
         }, "policy")
     end
-    if hasLoop and hasPersistentContextWrite then
+    if repeatedPersistence then
         AddFinding(result, {
             kind = "lua_loop_direct_persistence",
             reason = "Lua 循环直接增长持久对象变量",
@@ -778,7 +913,11 @@ local function AnalyzeClass(result, classID, class, context)
                     result._signatures[#result._signatures + 1] = table.concat({
                         classID, workflowID, stepID, "macro", tostring(#macro), StableHash(macro),
                     }, "|")
-                    if (lower:find("/run", 1, true) or lower:find("/script", 1, true))
+                    if Rules.IsLegacyBootstrapMacro(macro) then
+                        AddFinding(result, { kind = "legacy_global_bootstrap", classID = classID,
+                            workflowID = workflowID, stepID = stepID,
+                            reason = "旧版 UI 道具需要全局环境兼容，需用户信任" }, "policy")
+                    elseif (lower:find("/run", 1, true) or lower:find("/script", 1, true))
                         and (lower:find("runluascripteffect", 1, true)
                             or lower:find("rpbox_itemguarddb", 1, true)
                             or lower:find("trp3_security", 1, true)
@@ -791,6 +930,15 @@ local function AnalyzeClass(result, classID, class, context)
                             reason = "安全宏尝试覆写 Lua 执行器、防护或 TRP3 核心数据",
                         }, "hard")
                     elseif lower:find("/run", 1, true) or lower:find("/script", 1, true) then
+                        for line in macro:gmatch("[^\r\n]+") do
+                            local body = line:match("^%s*/run%s+(.+)$") or line:match("^%s*/script%s+(.+)$")
+                            if body then
+                                local inspected = Rules.AnalyzeCode(body, { rootID = result.rootID, trustedPublisher = true })
+                                for _, finding in ipairs(inspected.findings or {}) do
+                                    if finding.hard and not finding.bypassable then AddFinding(result, finding, "hard") end
+                                end
+                            end
+                        end
                         AddFinding(result, {
                             kind = "secure_macro_lua",
                             classID = classID,

@@ -8,6 +8,7 @@ export default {
     tabs: {
       posts: '帖子',
       items: '作品',
+      following: '关注',
       collections: '合集',
       rpdb: 'RP 数据库',
     },
@@ -16,6 +17,8 @@ export default {
       postsSearch: '未找到匹配的收藏帖子',
       items: '暂无收藏作品',
       itemsSearch: '未找到匹配的收藏作品',
+      following: '暂无关注内容',
+      followingSearch: '未找到匹配的关注内容',
       collections: '暂无收藏合集',
       collectionsSearch: '未找到匹配的收藏合集',
       rpdb: '暂无收藏的 RP 数据库作品',
@@ -29,5 +32,7 @@ export default {
     anonymous: '匿名',
     noDescription: '暂无简介',
     itemCount: '共{count}项',
+    followingPosts: '关注的帖子',
+    followingItems: '关注的作品',
   },
 }

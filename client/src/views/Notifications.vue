@@ -20,6 +20,7 @@ const tabs = [
   { id: 'like', label: '点赞', icon: 'ri-heart-line' },
   { id: 'comment', label: '评论', icon: 'ri-chat-3-line' },
   { id: 'mention', label: '提及', icon: 'ri-at-line' },
+  { id: 'follow', label: '关注更新', icon: 'ri-notification-3-line' },
   { id: 'guild', label: '公会', icon: 'ri-shield-line' },
   { id: 'system', label: '系统', icon: 'ri-information-line' },
 ]
@@ -171,6 +172,7 @@ function getTypeBadge(type: string): string {
     'post_comment': 'REPLY',
     'item_comment': 'REPLY',
     'mention': 'AT',
+    'follow_update': 'UPDATE',
     'guild_application': 'GUILD',
     'system': 'SYS'
   }

@@ -2458,6 +2458,7 @@ local GUARD_STATUS_TEXT = {
     observed = "风险提示",
     released = "临时放行",
     ignored = "已忽略",
+    scan_failed = "检查失败",
 }
 
 local GUARD_STATUS_COLOR = {
@@ -2466,6 +2467,7 @@ local GUARD_STATUS_COLOR = {
     observed = { 1.00, 0.82, 0.30 },
     released = { 1.00, 0.72, 0.28 },
     ignored = { 0.55, 0.62, 0.66 },
+    scan_failed = { 0.92, 0.32, 0.26 },
 }
 
 local GUARD_PAGE_SIZE = 20
@@ -2477,6 +2479,7 @@ local GUARD_STATUS_FILTERS = {
     { key = "observed", text = "风险提示" },
     { key = "released", text = "临时放行" },
     { key = "ignored", text = "已忽略" },
+    { key = "scan_failed", text = "检查失败" },
 }
 
 local function GetItemGuardContentWidth()
@@ -2942,7 +2945,8 @@ RefreshItemGuardContent = function()
             row.ignoreBtn:SetScript("OnClick", function()
                 local current = row.entry
                 if current and ns.ItemGuard then
-                    ns.ItemGuard:SetIgnored(current.rootID, not current.ignored)
+                    if current.ignored then ns.ItemGuard:SetIgnored(current.rootID, false)
+                    else ns.ItemGuard:RequestIgnore(current.rootID) end
                     RefreshItemGuardContent()
                 end
             end)

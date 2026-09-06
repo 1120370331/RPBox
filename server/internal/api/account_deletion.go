@@ -344,6 +344,9 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		if err := tx.Where("post_id IN ?", ownedPostIDs).Delete(&model.PostFavorite{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("post_id IN ?", ownedPostIDs).Delete(&model.PostFollow{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("post_id IN ?", ownedPostIDs).Delete(&model.PostView{}).Error; err != nil {
 			return err
 		}
@@ -372,6 +375,9 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 			return err
 		}
 		if err := tx.Where("item_id IN ?", ownedItemIDs).Delete(&model.ItemFavorite{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("item_id IN ?", ownedItemIDs).Delete(&model.ItemFollow{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("item_id IN ?", ownedItemIDs).Delete(&model.ItemRating{}).Error; err != nil {
@@ -480,6 +486,9 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 	if err := tx.Where("user_id = ?", userID).Delete(&model.PostFavorite{}).Error; err != nil {
 		return err
 	}
+	if err := tx.Where("user_id = ?", userID).Delete(&model.PostFollow{}).Error; err != nil {
+		return err
+	}
 	if err := tx.Where("user_id = ?", userID).Delete(&model.PostView{}).Error; err != nil {
 		return err
 	}
@@ -490,6 +499,9 @@ func (s *Server) deleteAccountInTx(tx *gorm.DB, user model.User, cleanupPlan *ac
 		return err
 	}
 	if err := tx.Where("user_id = ?", userID).Delete(&model.ItemFavorite{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("user_id = ?", userID).Delete(&model.ItemFollow{}).Error; err != nil {
 		return err
 	}
 	if err := tx.Where("user_id = ?", userID).Delete(&model.ItemView{}).Error; err != nil {

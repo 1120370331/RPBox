@@ -4,6 +4,7 @@
 ## Notes-zhCN: RPBox 配套插件 - 聊天记录采集与人物卡导出
 ## Author: RPBox Team
 ## Version: 1.0.14
+## X-RPBox-Guard-Version: 3.1
 ## Dependencies: totalRP3
 ## OptionalDeps: totalRP3_Extended
 ## SavedVariables: RPBox_ChatLog, RPBox_ProfileCache, RPBox_ProfileSnapshots, RPBox_ProfileExport, RPBox_Config, RPBox_Sync, RPBox_RecordState, RPBox_ItemGuardDB
@@ -12,6 +13,7 @@ Locales\zhCN.lua
 
 Core.lua
 Theme.lua
+ItemGuardStructure.lua
 ItemGuardRules.lua
 ItemGuardBlacklist.lua
 ItemGuardPublisherWhitelist.lua
@@ -21,6 +23,8 @@ ItemGuardVariableRules.lua
 ItemGuardAuraRules.lua
 ItemGuardContentRules.lua
 ItemGuardLuaRules.lua
+ItemGuardLuaExpressions.lua
+ItemGuardLuaSandbox.lua
 ItemGuard.lua
 MainFrame.lua
 ChatLogger.lua

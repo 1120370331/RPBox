@@ -525,6 +525,7 @@ loadTags()
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+  color: var(--color-text-main);
 }
 
 .back-btn {
@@ -532,24 +533,25 @@ loadTags()
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: rgba(255,255,255,0.8);
+  background: color-mix(in srgb, var(--color-panel-bg) 84%, transparent);
   border: none;
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main);
   margin-bottom: 24px;
 }
 
 .back-btn:hover {
-  background: rgba(255,255,255,1);
+  background: var(--color-panel-bg);
 }
 
 .upload-container {
-  background: #fff;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 16px;
   padding: 32px;
-  box-shadow: 0 8px 20px rgba(93,64,55,0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .form-header {
@@ -559,12 +561,12 @@ loadTags()
 
 .form-header h1 {
   font-size: 28px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 8px;
 }
 
 .form-header p {
-  color: #999;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -583,18 +585,20 @@ loadTags()
 .form-group label {
   font-size: 14px;
   font-weight: 600;
-  color: #5D4037;
+  color: var(--color-text-main);
 }
 
 .required {
-  color: #DC143C;
+  color: var(--btn-danger-bg);
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
   padding: 12px 16px;
-  border: 1px solid #E0E0E0;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--color-text-main);
   border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
@@ -605,7 +609,8 @@ loadTags()
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #B87333;
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus) 16%, transparent);
 }
 
 .form-group textarea {
@@ -615,7 +620,7 @@ loadTags()
 
 .hint {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-muted);
   margin-top: 4px;
 }
 
@@ -630,24 +635,25 @@ loadTags()
   justify-content: center;
   gap: 12px;
   padding: 40px;
-  border: 2px dashed #E0E0E0;
+  border: 2px dashed var(--input-border);
+  background: var(--input-bg);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .upload-area:hover {
-  border-color: #B87333;
-  background: #FFF8F0;
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
 }
 
 .upload-area i {
   font-size: 48px;
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 .upload-area span {
-  color: #999;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -702,23 +708,23 @@ loadTags()
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  background: #F5F0EB;
+  background: var(--tag-bg);
   border-radius: 20px;
   cursor: pointer;
   font-size: 13px;
-  color: #795548;
+  color: var(--tag-text);
   transition: all 0.3s;
   border: 2px solid transparent;
 }
 
 .tag-checkbox:hover {
-  background: #E8DED3;
+  background: var(--color-card-bg-hover);
 }
 
 .tag-checkbox.selected {
-  background: var(--tag-color, #B87333);
-  color: #fff;
-  border-color: var(--tag-color, #B87333);
+  background: var(--tag-color, var(--color-accent));
+  color: var(--color-text-light);
+  border-color: var(--tag-color, var(--color-accent));
 }
 
 .tag-checkbox input[type="checkbox"] {
@@ -750,44 +756,44 @@ loadTags()
 }
 
 .cancel-btn {
-  background: #F5F0EB;
-  color: #795548;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
   flex: 0.8;
 }
 
 .cancel-btn:hover {
-  background: #E8DED3;
+  background: var(--btn-secondary-hover);
 }
 
 .preview-btn {
-  background: #fff;
-  color: #5D4037;
-  border: 2px solid #E5D4C1;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
+  border: 2px solid var(--btn-outline-border);
   flex: 0.8;
 }
 
 .preview-btn:hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-border-hover);
+  color: var(--color-accent);
 }
 
 .draft-btn {
-  background: #fff;
-  color: #B87333;
-  border: 2px solid #B87333;
+  background: var(--color-panel-bg);
+  color: var(--color-accent);
+  border: 2px solid var(--color-accent);
 }
 
 .draft-btn:hover {
-  background: #FFF8F0;
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel-bg));
 }
 
 .publish-btn {
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .publish-btn:hover:not(:disabled) {
-  background: #A66629;
+  background: var(--btn-primary-hover);
 }
 
 .publish-btn:disabled,
@@ -813,7 +819,7 @@ loadTags()
   aspect-ratio: 1;
   border-radius: 12px;
   overflow: hidden;
-  background: #F5F0EB;
+  background: var(--color-card-bg);
 }
 
 .image-item img {
@@ -867,7 +873,8 @@ loadTags()
 
 .add-more-btn {
   aspect-ratio: 1;
-  border: 2px dashed #E0E0E0;
+  border: 2px dashed var(--input-border);
+  background: var(--input-bg);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -876,13 +883,13 @@ loadTags()
   gap: 8px;
   cursor: pointer;
   transition: all 0.3s;
-  color: #999;
+  color: var(--color-text-muted);
 }
 
 .add-more-btn:hover {
-  border-color: #B87333;
-  color: #B87333;
-  background: #FFF8F0;
+  border-color: var(--color-border-hover);
+  color: var(--color-accent);
+  background: var(--color-card-bg-hover);
 }
 
 .add-more-btn i {
@@ -919,7 +926,7 @@ loadTags()
   left: 0;
   right: 0;
   bottom: 0;
-  background: #E0E0E0;
+  background: var(--switch-inactive);
   border-radius: 26px;
   transition: 0.3s;
 }
@@ -931,14 +938,14 @@ loadTags()
   height: 20px;
   left: 3px;
   bottom: 3px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 50%;
   transition: 0.3s;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .toggle-switch input:checked + .slider {
-  background: #B87333;
+  background: var(--switch-active);
 }
 
 .toggle-switch input:checked + .slider:before {
@@ -947,6 +954,22 @@ loadTags()
 
 .toggle-label {
   font-size: 14px;
-  color: #5D4037;
+  color: var(--color-text-main);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+  color: var(--input-placeholder);
+}
+
+.back-btn:focus-visible,
+.upload-area:focus-visible,
+.add-more-btn:focus-visible,
+.cancel-btn:focus-visible,
+.preview-btn:focus-visible,
+.draft-btn:focus-visible,
+.publish-btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--input-focus) 34%, transparent);
+  outline-offset: 2px;
 }
 </style>

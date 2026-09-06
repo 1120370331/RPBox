@@ -235,6 +235,9 @@ export default {
       favorited: 'Favorited',
       favorite: 'Favorite',
       viewImportCode: 'View Import Code',
+      share: 'Share',
+      follow: 'Follow',
+      followed: 'Following',
     },
     importCode: {
       title: 'Import Code',
@@ -265,6 +268,12 @@ export default {
       codeCopied: 'Import code copied to clipboard',
       downloadStarted: 'Download started',
       downloadAllStarted: 'Downloading {count} images',
+      shareSuccess: 'Share sheet opened',
+      shareLinkCopied: 'Share link copied',
+      shareFailed: 'Failed to share. Please try again',
+      followed: 'Following. You will be notified about updates',
+      unfollowed: 'Unfollowed',
+      followFailed: 'Unable to update follow status. Please try again',
     },
     importTutorial: {
       title: 'How to Import In-Game',

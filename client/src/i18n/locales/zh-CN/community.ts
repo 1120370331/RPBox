@@ -66,6 +66,8 @@ export default {
     publish: '发布',
     favorites: '收藏夹',
     history: '历史记录',
+    follow: '关注',
+    followed: '已关注',
     myPosts: '我的帖子',
   },
   comment: {
@@ -256,6 +258,9 @@ export default {
     likeFailed: '点赞失败',
     shareSuccess: '已打开分享面板',
     shareLinkCopied: '分享链接已复制',
+    followed: '已关注，内容更新时会通知你',
+    unfollowed: '已取消关注',
+    followFailed: '关注操作失败，请稍后重试',
     shareFailed: '分享失败，请重试',
     replyTo: '回复 {name}',
     replyToLabel: '回复',

@@ -83,6 +83,8 @@ func GetNotifications(userID uint, notifType string, page, pageSize int) ([]mode
 			query = query.Where("type = ?", "system")
 		case "mention":
 			query = query.Where("type = ?", "mention")
+		case "follow":
+			query = query.Where("type = ?", "follow_update")
 		}
 	}
 

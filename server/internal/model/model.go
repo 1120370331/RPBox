@@ -468,6 +468,14 @@ type ItemFavorite struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ItemFollow subscribes a user to updates for a published item.
+type ItemFollow struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	ItemID    uint      `gorm:"uniqueIndex:idx_item_follow_user;index;not null" json:"item_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_item_follow_user;index;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // ItemView 道具浏览记录
 type ItemView struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
@@ -621,6 +629,14 @@ type PostFavorite struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// PostFollow subscribes a user to updates for a published post.
+type PostFollow struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	PostID    uint      `gorm:"uniqueIndex:idx_post_follow_user;index;not null" json:"post_id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_post_follow_user;index;not null" json:"user_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // PostView 帖子浏览记录
 type PostView struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
@@ -740,7 +756,7 @@ type DailyMetrics struct {
 type Notification struct {
 	ID         uint      `gorm:"primarykey" json:"id"`
 	UserID     uint      `gorm:"index;not null" json:"user_id"`      // 接收通知的用户ID
-	Type       string    `gorm:"size:20;index;not null" json:"type"` // 通知类型: post_like|post_comment_like|post_comment|item_like|item_comment|rpdb_like|rpdb_comment_like|mention|guild_application|guild_invite|system
+	Type       string    `gorm:"size:20;index;not null" json:"type"` // 通知类型包括点赞、评论、关注更新、提及、公会与系统通知
 	ActorID    *uint     `gorm:"index" json:"actor_id"`              // 触发通知的用户ID（可空，系统通知无actor）
 	TargetType string    `gorm:"size:20;index" json:"target_type"`   // 目标类型: post|item|comment|item_comment|rpdb_work|rpdb_comment|guild
 	TargetID   uint      `gorm:"index" json:"target_id"`             // 目标ID

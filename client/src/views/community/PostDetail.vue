@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, nextTick, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, deletePost, POST_CATEGORIES } from '@/api/post'
+import { getPost, likePost, unlikePost, favoritePost, unfavoritePost, followPost, unfollowPost, deletePost, POST_CATEGORIES } from '@/api/post'
 import { listComments, createComment, deleteComment, likeComment, unlikeComment, type CommentWithAuthor } from '@/api/post'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import EmoteEditor from '@/components/EmoteEditor.vue'
@@ -43,6 +43,7 @@ const authorAvatar = ref('')
 const comments = ref<CommentWithAuthor[]>([])
 const liked = ref(false)
 const favorited = ref(false)
+const followed = ref(false)
 const commentContent = ref('')
 const commentImageURL = ref('')
 const commentImageUploading = ref(false)
@@ -224,6 +225,7 @@ async function loadPost() {
     authorAvatar.value = resolveApiUrl(res.author_avatar)
     liked.value = res.liked
     favorited.value = res.favorited
+    followed.value = res.followed
   } catch (error: any) {
     console.error('加载帖子失败:', error)
     errorMessage.value = error.response?.data?.error || error.message || t('community.detail.loadFailed')
@@ -297,6 +299,27 @@ async function handleFavorite() {
     }
   } catch (error: any) {
     console.error('收藏失败:', error)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleFollow() {
+  if (actionLoading.value || !post.value) return
+  actionLoading.value = true
+  try {
+    if (followed.value) {
+      await unfollowPost(post.value.id)
+      followed.value = false
+      toast.success(t('community.detail.unfollowed'))
+    } else {
+      await followPost(post.value.id)
+      followed.value = true
+      toast.success(t('community.detail.followed'))
+    }
+  } catch (error: any) {
+    console.error('关注帖子失败:', error)
+    toast.error(error?.message || t('community.detail.followFailed'))
   } finally {
     actionLoading.value = false
   }
@@ -793,6 +816,17 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
               <button class="action-btn" :class="{ active: favorited }" @click="handleFavorite" :disabled="actionLoading">
                 <i :class="favorited ? 'ri-star-fill' : 'ri-star-line'"></i>
                 <span>{{ post.favorite_count }}</span>
+              </button>
+              <button
+                v-if="currentUserId && currentUserId !== post.author_id"
+                class="action-btn"
+                :class="{ active: followed }"
+                :disabled="actionLoading"
+                :title="followed ? t('community.action.followed') : t('community.action.follow')"
+                @click="handleFollow"
+              >
+                <i :class="followed ? 'ri-notification-3-fill' : 'ri-notification-3-line'"></i>
+                <span>{{ followed ? t('community.action.followed') : t('community.action.follow') }}</span>
               </button>
               <button
                 v-if="canSharePost"
