@@ -43,6 +43,10 @@ func TestContentFollowListsAndUpdateNotifications(t *testing.T) {
 			t.Fatalf("follow %s: expected 200, got %d body=%s", path, resp.Code, resp.Body.String())
 		}
 	}
+	selfFollow := performRequest(server.router, http.MethodPost, fmt.Sprintf("/api/v1/items/%d/follow", item.ID), nil, newTestToken(t, author))
+	if selfFollow.Code != http.StatusOK {
+		t.Fatalf("authors should be able to add their own item to following, got %d body=%s", selfFollow.Code, selfFollow.Body.String())
+	}
 
 	postList := performRequest(server.router, http.MethodGet, "/api/v1/posts/follows", nil, token)
 	if postList.Code != http.StatusOK {
