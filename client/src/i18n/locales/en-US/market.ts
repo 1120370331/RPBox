@@ -238,6 +238,7 @@ export default {
       share: 'Share',
       follow: 'Follow',
       followed: 'Following',
+      quickActions: 'Quick actions',
     },
     importCode: {
       title: 'Import Code',

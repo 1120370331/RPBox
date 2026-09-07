@@ -769,25 +769,64 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
         </div>
 
         <div class="item-header">
-          <h1>{{ item.name }}</h1>
-          <div class="item-meta">
-            <span class="type-badge">{{ getTypeText(item.type) }}</span>
-            <span class="author-label">{{ t('market.detail.author') }}:</span>
-            <span class="author" :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || t('market.detail.unknown') }}</span>
-            <UserLevelBadge
-              :level="author?.forum_level"
-              :name="author?.forum_level_name"
-              :color="author?.forum_level_color"
-              :bold="author?.forum_level_bold"
-              size="xs"
-            />
-            <span class="permission-badge" v-if="item.requires_permission && !isArtwork">
-              <i class="ri-shield-keyhole-line"></i> {{ t('market.detail.permission.badge') }}
-              <div class="permission-tooltip">
-                <p><strong>{{ t('market.detail.permission.itemAuthor') }}</strong><span :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || t('market.detail.unknown') }}</span></p>
-                <p>{{ t('market.detail.permission.tooltip') }}</p>
-              </div>
-            </span>
+          <div class="item-header__identity">
+            <h1>{{ item.name }}</h1>
+            <div class="item-meta">
+              <span class="type-badge">{{ getTypeText(item.type) }}</span>
+              <span class="author-label">{{ t('market.detail.author') }}:</span>
+              <span class="author" :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || t('market.detail.unknown') }}</span>
+              <UserLevelBadge
+                :level="author?.forum_level"
+                :name="author?.forum_level_name"
+                :color="author?.forum_level_color"
+                :bold="author?.forum_level_bold"
+                size="xs"
+              />
+              <span class="permission-badge" v-if="item.requires_permission && !isArtwork">
+                <i class="ri-shield-keyhole-line"></i> {{ t('market.detail.permission.badge') }}
+                <div class="permission-tooltip">
+                  <p><strong>{{ t('market.detail.permission.itemAuthor') }}</strong><span :style="buildNameStyle(author?.name_color, author?.name_bold)">{{ author?.username || t('market.detail.unknown') }}</span></p>
+                  <p>{{ t('market.detail.permission.tooltip') }}</p>
+                </div>
+              </span>
+            </div>
+          </div>
+
+          <div v-if="!isPreview" class="header-quick-actions" :aria-label="t('market.detail.actions.quickActions')">
+            <button
+              v-if="isArtwork"
+              type="button"
+              class="header-quick-action primary"
+              @click="downloadAllImages"
+            >
+              <i class="ri-download-line"></i>
+              <span>{{ t('market.detail.actions.downloadAllImages') }}</span>
+            </button>
+            <button
+              v-else
+              type="button"
+              class="header-quick-action primary"
+              @click="copyImportCode"
+            >
+              <i class="ri-file-copy-line"></i>
+              <span>{{ t('market.detail.actions.copyImportCode') }}</span>
+            </button>
+            <button type="button" class="header-quick-action" :class="{ active: isLiked }" @click="handleLike">
+              <i :class="isLiked ? 'ri-heart-fill' : 'ri-heart-line'"></i>
+              <span>{{ isLiked ? t('market.detail.actions.liked') : t('market.detail.actions.like') }}</span>
+            </button>
+            <button type="button" class="header-quick-action" :class="{ active: isFavorited }" @click="handleFavorite">
+              <i :class="isFavorited ? 'ri-bookmark-fill' : 'ri-bookmark-line'"></i>
+              <span>{{ isFavorited ? t('market.detail.actions.favorited') : t('market.detail.actions.favorite') }}</span>
+            </button>
+            <button type="button" class="header-quick-action" :class="{ active: isFollowed }" :disabled="submitting" @click="handleFollow">
+              <i :class="isFollowed ? 'ri-notification-3-fill' : 'ri-notification-3-line'"></i>
+              <span>{{ isFollowed ? t('market.detail.actions.followed') : t('market.detail.actions.follow') }}</span>
+            </button>
+            <button type="button" class="header-quick-action" @click="handleShare">
+              <i class="ri-share-forward-line"></i>
+              <span>{{ t('market.detail.actions.share') }}</span>
+            </button>
           </div>
         </div>
 
@@ -1389,6 +1428,12 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   opacity: 1;
 }
 
+.item-header {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
 .item-header h1 {
   font-size: 32px;
   color: var(--color-text-main);
@@ -1563,7 +1608,86 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .secondary-actions {
-  margin-bottom: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+
+.header-quick-actions {
+  display: grid;
+  grid-template-columns: minmax(210px, 2fr) repeat(4, minmax(96px, 1fr));
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+
+.header-quick-action {
+  min-width: 0;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, color .2s, transform .2s;
+}
+
+.header-quick-action span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-quick-action:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
+  color: var(--color-text-main);
+  transform: translateY(-1px);
+}
+
+.header-quick-action.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+  color: var(--btn-primary-text);
+}
+
+.header-quick-action.active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-card-bg));
+  color: var(--color-accent);
+}
+
+.header-quick-action:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.header-quick-action:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--input-focus) 30%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .header-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .header-quick-action.primary {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-quick-action {
+    transition: none;
+  }
 }
 
 .safety-actions {
