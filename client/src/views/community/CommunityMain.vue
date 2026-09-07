@@ -764,6 +764,17 @@ function setEventStatusFilter(filter: EventStatusFilter) {
             class="post-card standard"
             @click="goToPost(post.id)"
           >
+            <div class="cover-image small" :class="{ placeholder: !post.cover_image_url }">
+              <img
+                v-if="post.cover_image_url"
+                :src="getImageUrl('post-cover', post.id, { w: 520, q: 80, v: post.cover_image_updated_at || post.updated_at })"
+                :alt="post.title"
+                loading="lazy"
+              />
+              <div v-else class="cover-placeholder" aria-hidden="true">
+                <i class="ri-quill-pen-line"></i>
+              </div>
+            </div>
             <div class="card-content">
               <div class="card-tags">
                 <span class="category-tag" :class="getCategoryClass(post.category)">
@@ -780,9 +791,6 @@ function setEventStatusFilter(filter: EventStatusFilter) {
               </p>
               <h3 class="post-title">{{ post.title }}</h3>
               <p class="post-excerpt">{{ stripHtml(post.content).substring(0, 100) }}...</p>
-              <div v-if="post.cover_image_url" class="cover-image small">
-                <img :src="getImageUrl('post-cover', post.id, { w: 400, q: 80, v: post.cover_image_updated_at || post.updated_at })" alt="" loading="lazy" />
-              </div>
               <div class="card-footer">
                 <div class="author-info">
                   <UserAvatarPopover
@@ -1965,12 +1973,14 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 
 /* ========== Posts Grid ========== */
 .posts-grid {
-  column-count: 3;
-  column-gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 20px 24px;
 }
 
 @media (max-width: 1024px) {
-  .posts-grid { column-count: 2; }
+  .posts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .events-grid { grid-template-columns: 1fr; }
 }
 
@@ -2061,7 +2071,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 }
 
 @media (max-width: 600px) {
-  .posts-grid { column-count: 1; }
+  .posts-grid { grid-template-columns: 1fr; }
   .feed-tabs { width: 100%; }
   .feed-tab { flex: 1; justify-content: center; }
 }
@@ -2073,8 +2083,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   cursor: pointer;
   transition: all 0.3s;
   box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.08);
-  break-inside: avoid;
-  margin-bottom: 20px;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -2128,6 +2137,35 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 .cover-image.small {
   border-radius: 8px;
   margin-bottom: 10px;
+}
+
+.post-card > .cover-image.small {
+  aspect-ratio: 16 / 9;
+  margin: 0;
+  border-radius: 0;
+  background: linear-gradient(135deg, var(--color-primary-light), var(--color-card-bg));
+}
+
+.post-card > .cover-image.small img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--icon-color);
+  background:
+    radial-gradient(circle at 24% 20%, color-mix(in srgb, var(--color-accent) 20%, transparent), transparent 38%),
+    linear-gradient(135deg, var(--color-primary-light), var(--color-card-bg));
+}
+
+.cover-placeholder i {
+  font-size: 34px;
+  opacity: .72;
 }
 
 .card-footer {
@@ -2300,7 +2338,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 }
 
 .empty-state {
-  column-span: all;
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: center;

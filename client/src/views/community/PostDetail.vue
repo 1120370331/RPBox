@@ -39,6 +39,7 @@ const actionLoading = ref(false)
 
 const post = ref<any>(null)
 const sanitizedPostContent = computed(() => sanitizeRichHtml(post.value?.content || ''))
+const postCoverUrl = computed(() => resolveApiUrl(post.value?.cover_image || ''))
 const authorAvatar = ref('')
 const comments = ref<CommentWithAuthor[]>([])
 const liked = ref(false)
@@ -703,6 +704,13 @@ function openCommentImage(src: string) {
   showImageViewer.value = true
 }
 
+function openPostCover() {
+  if (!postCoverUrl.value) return
+  viewerImages.value = [postCoverUrl.value]
+  viewerStartIndex.value = 0
+  showImageViewer.value = true
+}
+
 function closeReportDialog() {
   showReportDialog.value = false
   reportContext.value = null
@@ -843,6 +851,17 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
               </span>
             </div>
           </div>
+
+          <button
+            v-if="postCoverUrl"
+            type="button"
+            class="article-cover"
+            :aria-label="t('community.detail.viewImage')"
+            @click="openPostCover"
+          >
+            <img :src="postCoverUrl" :alt="post.title" />
+            <span class="article-cover__overlay"><i class="ri-zoom-in-line"></i>{{ t('community.detail.viewImage') }}</span>
+          </button>
 
           <!-- 文章内容 -->
           <div class="article-body">
@@ -1316,6 +1335,65 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
 .action-btn i {
   font-size: 16px;
+}
+
+.article-cover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  max-height: 420px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-card-bg);
+  cursor: zoom-in;
+}
+
+.article-cover img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transition: transform .28s ease;
+}
+
+.article-cover__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--color-text-main) 52%, transparent);
+  color: var(--color-text-light);
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+
+.article-cover:hover img,
+.article-cover:focus-visible img {
+  transform: scale(1.025);
+}
+
+.article-cover:hover .article-cover__overlay,
+.article-cover:focus-visible .article-cover__overlay {
+  opacity: 1;
+}
+
+.article-cover:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--input-focus) 34%, transparent);
+  outline-offset: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .article-cover img,
+  .article-cover__overlay {
+    transition: none;
+  }
 }
 
 .action-btn--icon {
