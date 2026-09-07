@@ -143,6 +143,12 @@ interface ItemCommentReply extends ItemComment {
   replyToName?: string
 }
 
+function openItemPreview() {
+  const preview = item.value?.preview_image?.trim()
+  if (!preview) return
+  openContentViewer([preview], 0)
+}
+
 interface ItemCommentWithReplies extends ItemComment {
   replies: ItemCommentReply[]
   replyToName?: string
@@ -774,9 +780,16 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
         </div>
 
         <!-- 预览图（非画作类型） -->
-        <div v-else-if="item.preview_image" class="item-preview">
+        <button
+          v-else-if="item.preview_image"
+          type="button"
+          class="item-preview"
+          :aria-label="t('market.detail.viewImage')"
+          @click="openItemPreview"
+        >
           <img :src="item.preview_image" :alt="t('market.detail.previewImage')" />
-        </div>
+          <span class="item-preview__overlay"><i class="ri-zoom-in-line"></i>{{ t('market.detail.viewImage') }}</span>
+        </button>
 
         <div class="item-header">
           <div class="item-header__identity">
@@ -1284,15 +1297,61 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .item-preview {
-  margin-bottom: 24px;
-  text-align: center;
+  position: relative;
+  display: block;
+  max-width: 100%;
+  margin: 0 auto 24px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-card-bg);
+  cursor: zoom-in;
 }
 
 .item-preview img {
+  display: block;
   max-width: 100%;
   max-height: 400px;
-  border-radius: 12px;
   object-fit: cover;
+  transition: transform .24s ease;
+}
+
+.item-preview__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--color-text-main) 56%, transparent);
+  color: var(--color-text-light);
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+
+.item-preview:hover img,
+.item-preview:focus-visible img {
+  transform: scale(1.02);
+}
+
+.item-preview:hover .item-preview__overlay,
+.item-preview:focus-visible .item-preview__overlay {
+  opacity: 1;
+}
+
+.item-preview:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--input-focus) 34%, transparent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item-preview img,
+  .item-preview__overlay {
+    transition: none;
+  }
 }
 
 .item-detail-content {
