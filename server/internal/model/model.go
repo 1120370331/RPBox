@@ -390,7 +390,7 @@ type Item struct {
 	ID                    uint       `gorm:"primarykey" json:"id"`
 	AuthorID              uint       `gorm:"index;not null" json:"author_id"`
 	Name                  string     `gorm:"size:256;not null" json:"name"`
-	Type                  string     `gorm:"size:20;index" json:"type"` // item|document|campaign|artwork
+	Type                  string     `gorm:"size:20;index" json:"type"` // item|document|campaign|game|artwork
 	Icon                  string     `gorm:"size:128" json:"icon"`
 	PreviewImage          string     `gorm:"type:text" json:"preview_image"` // 预览图（URL或base64）
 	PreviewImageUpdatedAt *time.Time `json:"preview_image_updated_at,omitempty"`

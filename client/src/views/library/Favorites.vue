@@ -25,7 +25,9 @@ const searchText = ref('')
 
 const typeMap = computed(() => ({
   'item': t('library.favorites.itemTypes.item'),
+  'document': t('library.favorites.itemTypes.document'),
   'campaign': t('library.favorites.itemTypes.campaign'),
+  'game': t('library.favorites.itemTypes.game'),
   'artwork': t('library.favorites.itemTypes.artwork')
 }))
 

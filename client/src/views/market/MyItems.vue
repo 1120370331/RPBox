@@ -16,7 +16,7 @@ const items = ref<Item[]>([])
 const currentUserId = ref<number>(0)
 const filterStatus = ref<'all' | 'draft' | 'pending' | 'published'>('all')
 const searchKeyword = ref('')
-const typeFilter = ref<'all' | 'item' | 'campaign' | 'artwork'>('all')
+const typeFilter = ref<'all' | 'item' | 'document' | 'campaign' | 'game' | 'artwork'>('all')
 
 // 获取当前用户ID
 const userStr = localStorage.getItem('user')
@@ -269,7 +269,9 @@ function getTypeText(type: string) {
       <select v-model="typeFilter" class="type-select">
         <option value="all">{{ t('market.myItems.filter.allTypes') }}</option>
         <option value="item">{{ t('market.types.item') }}</option>
+        <option value="document">{{ t('market.types.document') }}</option>
         <option value="campaign">{{ t('market.types.campaign') }}</option>
+        <option value="game">{{ t('market.types.game') }}</option>
         <option value="artwork">{{ t('market.types.artwork') }}</option>
       </select>
     </div>

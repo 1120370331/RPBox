@@ -117,7 +117,7 @@ describe('Favorites category tabs', () => {
                 rpdb: '暂无 RP 数据库作品',
                 rpdbSearch: '没有匹配作品',
               },
-              itemTypes: { item: '道具', campaign: '战役', artwork: '作品' },
+              itemTypes: { item: '道具', document: '书籍', campaign: '战役', game: '游戏', artwork: '作品' },
               anonymous: '匿名',
               noDescription: '暂无描述',
               itemCount: '{count} 项',

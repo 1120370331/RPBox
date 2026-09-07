@@ -18,7 +18,7 @@ export interface Item {
   author_forum_level_color?: string
   author_forum_level_bold?: boolean
   name: string
-  type: 'item' | 'campaign' | 'artwork'  // item=道具, campaign=剧本, artwork=画作
+  type: 'item' | 'document' | 'campaign' | 'game' | 'artwork'
   icon: string
   preview_image: string    // 预览图（详情页使用）
   preview_image_url?: string  // 预览图缩略图 URL（列表页使用）
@@ -72,7 +72,7 @@ export interface ItemComment {
 
 export interface CreateItemRequest {
   name: string
-  type: 'item' | 'campaign' | 'artwork'
+  type: 'item' | 'document' | 'campaign' | 'game' | 'artwork'
   icon?: string
   preview_image?: string
   description?: string
@@ -102,7 +102,7 @@ export interface UpdateItemRequest {
 }
 
 export interface ListItemsParams {
-  type?: 'item' | 'campaign' | 'artwork'
+  type?: 'item' | 'document' | 'campaign' | 'game' | 'artwork'
   status?: string
   search?: string
   tag_id?: number

@@ -73,7 +73,7 @@ test('tracked iOS release stays independent from Android package version', () =>
 
   assert.equal(IOS_RELEASE_CONTRACT_PATH, 'mobile/ios/release.json')
   assert.deepEqual(releaseContract, { version: '1.1', buildNumber: 1000042 })
-  assert.equal(mobilePackage.version, '2.0.3', 'Android/mobile package version must remain independent')
+  assert.equal(mobilePackage.version, '2.0.4', 'Android/mobile package version must remain independent')
   assert.equal(normalizeNewlines(releaseNotes).trim(), EXPECTED_IOS_1_1_RELEASE_NOTES)
   assert.ok(releaseNotes.trim().length <= 4000, 'App Store What\'s New must fit the 4000-character limit')
   assert.equal(extractPreparedWhatsNew(prepareWorkflow), EXPECTED_IOS_1_1_RELEASE_NOTES)

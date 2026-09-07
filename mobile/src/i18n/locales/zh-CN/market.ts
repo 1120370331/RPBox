@@ -8,7 +8,9 @@ export default {
   types: {
     all: '全部',
     item: '道具',
+    document: '书籍',
     campaign: '战役',
+    game: '游戏',
     artwork: '美术',
   },
   sort: {
@@ -30,7 +32,9 @@ export default {
   shareImportCodeFailed: '转发失败，请稍后重试',
   typeBadge: {
     item: '道具',
+    document: '书籍',
     campaign: '战役',
+    game: '游戏',
     artwork: '美术',
   },
   editor: {
