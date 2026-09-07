@@ -99,6 +99,11 @@ const canUseSafetyActions = computed(() => {
   if (!item.value || !author.value?.id || !currentUserId.value) return false
   return author.value.id !== currentUserId.value
 })
+const canManageItem = computed(() => Boolean(
+  item.value &&
+  currentUserId.value &&
+  (item.value.author_id === currentUserId.value || currentUserRole.value === 'moderator' || currentUserRole.value === 'admin')
+))
 
 function canUseCommentSafetyActions(comment: ItemComment): boolean {
   if (!currentUserId.value) return false
@@ -435,6 +440,11 @@ function closeImportTutorial() {
 // 返回列表
 function goBack() {
   router.push('/market')
+}
+
+function goToEdit() {
+  if (!item.value || !canManageItem.value) return
+  router.push({ name: 'item-edit', params: { id: item.value.id } })
 }
 
 // 上一张图片
@@ -792,7 +802,12 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
             </div>
           </div>
 
-          <div v-if="!isPreview" class="header-quick-actions" :aria-label="t('market.detail.actions.quickActions')">
+          <div
+            v-if="!isPreview"
+            class="header-quick-actions"
+            :class="{ 'can-edit': canManageItem }"
+            :aria-label="t('market.detail.actions.quickActions')"
+          >
             <button
               v-if="isArtwork"
               type="button"
@@ -826,6 +841,10 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
             <button type="button" class="header-quick-action" @click="handleShare">
               <i class="ri-share-forward-line"></i>
               <span>{{ t('market.detail.actions.share') }}</span>
+            </button>
+            <button v-if="canManageItem" type="button" class="header-quick-action manage" @click="goToEdit">
+              <i class="ri-edit-line"></i>
+              <span>{{ t('market.detail.actions.edit') }}</span>
             </button>
           </div>
         </div>
@@ -1620,6 +1639,10 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   border-top: 1px solid var(--color-border);
 }
 
+.header-quick-actions.can-edit {
+  grid-template-columns: minmax(210px, 2fr) repeat(5, minmax(90px, 1fr));
+}
+
 .header-quick-action {
   min-width: 0;
   min-height: 42px;
@@ -1664,6 +1687,12 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   color: var(--color-accent);
 }
 
+.header-quick-action.manage {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  background: var(--color-primary-light);
+  color: var(--color-text-main);
+}
+
 .header-quick-action:disabled {
   opacity: .55;
   cursor: not-allowed;
@@ -1676,6 +1705,10 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
 @media (max-width: 760px) {
   .header-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .header-quick-actions.can-edit {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

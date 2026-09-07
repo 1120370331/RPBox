@@ -239,6 +239,7 @@ export default {
       follow: 'Follow',
       followed: 'Following',
       quickActions: 'Quick actions',
+      edit: 'Edit',
     },
     importCode: {
       title: 'Import Code',

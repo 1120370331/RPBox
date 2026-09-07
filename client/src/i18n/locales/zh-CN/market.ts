@@ -239,6 +239,7 @@ export default {
       follow: '关注',
       followed: '已关注',
       quickActions: '快捷操作',
+      edit: '编辑',
     },
     importCode: {
       title: '导入代码',
