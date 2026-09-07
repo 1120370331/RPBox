@@ -26,7 +26,9 @@ export default {
     },
     itemTypes: {
       item: 'Item',
+      document: 'Book',
       campaign: 'Campaign',
+      game: 'Game',
       artwork: 'Artwork',
     },
     anonymous: 'Anonymous',

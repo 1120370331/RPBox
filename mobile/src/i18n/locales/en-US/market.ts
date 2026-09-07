@@ -8,7 +8,9 @@ export default {
   types: {
     all: 'All',
     item: 'Item',
+    document: 'Book',
     campaign: 'Campaign',
+    game: 'Game',
     artwork: 'Artwork',
   },
   sort: {
@@ -30,7 +32,9 @@ export default {
   shareImportCodeFailed: 'Failed to share, please try again',
   typeBadge: {
     item: 'Item',
+    document: 'Book',
     campaign: 'Campaign',
+    game: 'Game',
     artwork: 'Artwork',
   },
   editor: {

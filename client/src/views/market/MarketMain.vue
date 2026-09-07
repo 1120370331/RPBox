@@ -16,7 +16,7 @@ const loading = ref(false)
 const items = ref<Item[]>([])
 const total = ref(0)
 const searchText = ref('')
-const activeType = ref<'item' | 'campaign' | 'artwork' | ''>('')
+const activeType = ref<'item' | 'document' | 'campaign' | 'game' | 'artwork' | ''>('')
 const sortBy = ref<'created_at' | 'downloads' | 'rating'>('downloads')
 const currentPage = ref(1)
 const authorName = ref('')
@@ -26,7 +26,9 @@ const activeTagId = ref<number | null>(null)
 const typeMap = computed(() => ({
   '': t('market.types.all'),
   'item': t('market.types.item'),
+  'document': t('market.types.document'),
   'campaign': t('market.types.campaign'),
+  'game': t('market.types.game'),
   'artwork': t('market.types.artwork')
 }))
 
@@ -88,7 +90,7 @@ async function loadItems() {
 }
 
 // 切换类型
-function changeType(type: '' | 'item' | 'campaign' | 'artwork') {
+function changeType(type: '' | 'item' | 'document' | 'campaign' | 'game' | 'artwork') {
   activeType.value = type
   currentPage.value = 1
   // 切换类型时清除标签筛选（因为标签只对道具和剧本有效）

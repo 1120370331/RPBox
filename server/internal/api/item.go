@@ -429,8 +429,8 @@ func (s *Server) createItem(c *gin.Context) {
 		return
 	}
 
-	// 验证类型：item（道具）、document（文档）、campaign（剧本）、artwork（画作）
-	validTypes := map[string]bool{"item": true, "document": true, "campaign": true, "artwork": true}
+	// 验证类型：item（道具）、document（书籍）、campaign（剧本）、game（游戏）、artwork（画作）
+	validTypes := map[string]bool{"item": true, "document": true, "campaign": true, "game": true, "artwork": true}
 	if !validTypes[req.Type] {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item type"})
 		return

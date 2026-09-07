@@ -4,12 +4,15 @@ export default {
     all: '全部',
     items: '道具',
     campaigns: '战役',
-    documents: '文档',
+    documents: '书籍',
+    games: '游戏',
   },
   types: {
     all: '全部',
     item: '道具',
+    document: '书籍',
     campaign: '剧本',
+    game: '游戏',
     artwork: '画作',
   },
   item: {

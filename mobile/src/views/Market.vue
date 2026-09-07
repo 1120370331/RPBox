@@ -40,7 +40,9 @@ let shouldRestoreInitialScroll = !!cachedState?.scrollTop
 const typeOptions = computed(() => [
   { key: '', label: t('market.types.all') },
   { key: 'item', label: t('market.types.item') },
+  { key: 'document', label: t('market.types.document') },
   { key: 'campaign', label: t('market.types.campaign') },
+  { key: 'game', label: t('market.types.game') },
   { key: 'artwork', label: t('market.types.artwork') },
 ])
 

@@ -16,7 +16,9 @@ const items = ref<Item[]>([])
 
 const typeMap = {
   'item': '道具',
+  'document': '书籍',
   'campaign': '剧本',
+  'game': '游戏',
   'artwork': '画作'
 }
 

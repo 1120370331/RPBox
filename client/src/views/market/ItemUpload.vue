@@ -30,7 +30,7 @@ const DRAFT_KEY = 'item_upload_draft'
 // 表单数据
 const form = ref({
   name: '',
-  type: 'item' as 'item' | 'campaign' | 'artwork',
+  type: 'item' as 'item' | 'document' | 'campaign' | 'game' | 'artwork',
   icon: '',
   preview_image: '',
   description: '',
@@ -328,7 +328,9 @@ loadTags()
           <label>{{ t('market.upload.form.type') }} <span class="required">*</span></label>
           <select v-model="form.type" required>
             <option value="item">{{ t('market.types.item') }}</option>
+            <option value="document">{{ t('market.types.document') }}</option>
             <option value="campaign">{{ t('market.types.campaign') }}</option>
+            <option value="game">{{ t('market.types.game') }}</option>
             <option value="artwork">{{ t('market.types.artwork') }}</option>
           </select>
         </div>

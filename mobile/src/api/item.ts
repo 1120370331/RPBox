@@ -13,7 +13,7 @@ export interface Item {
   author_forum_level_color?: string
   author_forum_level_bold?: boolean
   name: string
-  type: 'item' | 'campaign' | 'artwork'
+  type: 'item' | 'document' | 'campaign' | 'game' | 'artwork'
   icon: string
   preview_image?: string
   preview_image_url?: string
@@ -52,7 +52,7 @@ export interface ListItemsParams {
 
 export interface CreateItemRequest {
   name: string
-  type: 'item' | 'campaign' | 'artwork'
+  type: 'item' | 'document' | 'campaign' | 'game' | 'artwork'
   icon?: string
   preview_image?: string
   description?: string

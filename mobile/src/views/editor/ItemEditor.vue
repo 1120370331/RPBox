@@ -36,7 +36,7 @@ import {
 
 interface ItemEditorForm {
   name: string
-  type: 'item' | 'campaign' | 'artwork'
+  type: 'item' | 'document' | 'campaign' | 'game' | 'artwork'
   description: string
   detail_content: string
   import_code: string
@@ -430,7 +430,9 @@ onMounted(async () => {
             <span>{{ $t('market.editor.type') }}</span>
             <select v-model="form.type" :disabled="isEdit">
               <option value="item">{{ $t('market.types.item') }}</option>
+              <option value="document">{{ $t('market.types.document') }}</option>
               <option value="campaign">{{ $t('market.types.campaign') }}</option>
+              <option value="game">{{ $t('market.types.game') }}</option>
               <option value="artwork">{{ $t('market.types.artwork') }}</option>
             </select>
           </label>

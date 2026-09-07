@@ -5,11 +5,14 @@ export default {
     items: 'Items',
     campaigns: 'Campaigns',
     documents: 'Documents',
+    games: 'Games',
   },
   types: {
     all: 'All',
     item: 'Item',
+    document: 'Book',
     campaign: 'Campaign',
+    game: 'Game',
     artwork: 'Artwork',
   },
   item: {
