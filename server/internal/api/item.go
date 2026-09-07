@@ -677,9 +677,10 @@ func (s *Server) updateItem(c *gin.Context) {
 		return
 	}
 	wasPublished := item.Status == "published" && item.ReviewStatus == "approved"
+	isModerator := checkModerator(userID)
 
-	// 验证权限：只有作者可以编辑
-	if item.AuthorID != userID {
+	// 作者、版主或管理员可以编辑道具。
+	if item.AuthorID != userID && !isModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权编辑此道具"})
 		return
 	}
@@ -728,8 +729,6 @@ func (s *Server) updateItem(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Import code too large, max 10MB"})
 		return
 	}
-
-	isModerator := checkModerator(userID)
 
 	// 如果道具已发布且审核通过，普通用户编辑需要创建待审核记录
 	if item.Status == "published" && item.ReviewStatus == "approved" && !isModerator {
