@@ -14,6 +14,7 @@ import { useDialog } from '@/composables/useDialog'
 import { useToast } from '@/composables/useToast'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
 import RButton from '@/components/RButton.vue'
 import RCard from '@/components/RCard.vue'
 import RInput from '@/components/RInput.vue'
@@ -30,6 +31,7 @@ import StoryMusicManager from '@/components/StoryMusicManager.vue'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
 const { confirm, alert } = useDialog()
 const toast = useToast()
 const { t } = useI18n()
@@ -831,6 +833,117 @@ function getEntryColor(entry: StoryEntry): string {
     return normalizeCharacterCardHexForCSS(character.custom_color || character.color)
   }
   return ''
+}
+
+interface DisplayColor {
+  r: number
+  g: number
+  b: number
+  a: number
+}
+
+// Resolve stored RGB/RGBA colors for display without changing saved character or entry data.
+function parseDisplayColor(value: string): DisplayColor | null {
+  const named: Record<string, string> = { black: '#000000', white: '#ffffff', transparent: '#00000000' }
+  const color = named[value.trim().toLowerCase()] || value.trim()
+  const hex = color.match(/^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i)
+  if (hex) {
+    const digits = hex[1].length <= 4 ? [...hex[1]].map(digit => digit + digit).join('') : hex[1]
+    return {
+      r: parseInt(digits.slice(0, 2), 16),
+      g: parseInt(digits.slice(2, 4), 16),
+      b: parseInt(digits.slice(4, 6), 16),
+      a: digits.length === 8 ? parseInt(digits.slice(6), 16) / 255 : 1,
+    }
+  }
+  const rgb = color.match(/^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)$/i)
+  if (!rgb) return null
+  return {
+    r: Math.min(255, Number(rgb[1])),
+    g: Math.min(255, Number(rgb[2])),
+    b: Math.min(255, Number(rgb[3])),
+    a: Math.min(1, Number(rgb[4] ?? 1)),
+  }
+}
+
+function compositeDisplayColor(color: DisplayColor, background: DisplayColor): DisplayColor {
+  return {
+    r: Math.round(color.r * color.a + background.r * (1 - color.a)),
+    g: Math.round(color.g * color.a + background.g * (1 - color.a)),
+    b: Math.round(color.b * color.a + background.b * (1 - color.a)),
+    a: 1,
+  }
+}
+
+function displayLuminance(color: DisplayColor): number {
+  const channels = [color.r, color.g, color.b].map(value => {
+    const channel = value / 255
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  })
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+}
+
+const nativeColorScheme = computed(() => displayLuminance(parseDisplayColor(themeStore.currentTheme.colors.inputBg)!) < 0.5 ? 'dark' : 'light')
+
+function displayContrast(foreground: DisplayColor, background: DisplayColor): number {
+  const front = displayLuminance(foreground)
+  const back = displayLuminance(background)
+  return (Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05)
+}
+
+function displayColorCSS(color: DisplayColor): string {
+  return `rgb(${color.r}, ${color.g}, ${color.b})`
+}
+
+function getDisplayBackground(value: string, base = themeStore.currentTheme.colors.cardBg): DisplayColor {
+  const background = parseDisplayColor(base)!
+  const color = parseDisplayColor(value)
+  return color ? compositeDisplayColor(color, background) : background
+}
+
+// Preserve readable dyes; blend low-contrast ones toward the readable light/dark endpoint.
+function getReadableDisplayColor(value: string, background: DisplayColor): string {
+  const color = compositeDisplayColor(parseDisplayColor(value) || parseDisplayColor(themeStore.currentTheme.colors.textMain)!, background)
+  if (displayContrast(color, background) >= 4.5) return displayColorCSS(color)
+  const black = { r: 0, g: 0, b: 0, a: 1 }
+  const white = { r: 255, g: 255, b: 255, a: 1 }
+  const target = displayContrast(black, background) > displayContrast(white, background) ? black : white
+  let low = 0
+  let high = 1
+  let result = target
+  for (let step = 0; step < 16; step++) {
+    const amount = (low + high) / 2
+    const candidate = compositeDisplayColor({ ...target, a: amount }, color)
+    if (displayContrast(candidate, background) >= 4.5) {
+      high = amount
+      result = candidate
+    } else {
+      low = amount
+    }
+  }
+  return displayColorCSS(result)
+}
+
+function getTagDisplayStyle(color: string) {
+  const background = getDisplayBackground(`${normalizeCharacterCardHexForCSS(color)}20`, themeStore.currentTheme.colors.panelBg)
+  return { background: displayColorCSS(background), color: getReadableDisplayColor(normalizeCharacterCardHexForCSS(color), background) }
+}
+
+const displaySelectedCharacter = computed(() => {
+  const character = selectedCharacter.value && getEntryCharacter(selectedCharacter.value)
+  if (!character) return undefined
+  return { ...character, custom_color: getReadableDisplayColor(getEntryColor(selectedCharacter.value!), getDisplayBackground('')) }
+})
+
+const displaySelectedCharacterCard = computed(() => {
+  const card = selectedCharacter.value && getEntryCharacterCard(selectedCharacter.value)
+  if (!card) return undefined
+  return { ...card, name_color: getReadableDisplayColor(getCharacterCardDisplayColor(card), getDisplayBackground('')) }
+})
+
+function editSelectedCharacter() {
+  const character = selectedCharacter.value && getEntryCharacter(selectedCharacter.value)
+  if (character) handleEditCharacter(character)
 }
 
 // 判断是否是NPC
@@ -1771,6 +1884,7 @@ function getMusicEntryAnchorStyle(entryId: number) {
   const color = getMusicTrackColor(trackId)
   return {
     '--music-anchor-color': color,
+    '--music-anchor-text': getReadableDisplayColor(themeStore.currentTheme.colors.textMain, getDisplayBackground(color)),
     '--music-anchor-glow': getMusicColorWithAlpha(color, 0.24),
   }
 }
@@ -1908,9 +2022,14 @@ function toggleMusicDisabled() {
 }
 
 function getEntryItemStyle(entry: StoryEntry) {
-  const style: Record<string, string> = {}
-  if (entry.background_color) {
-    style.backgroundColor = entry.background_color
+  const colors = themeStore.currentTheme.colors
+  const background = getDisplayBackground(entry.background_color || (entry.type === 'narration' ? getMusicColorWithAlpha(colors.accent, 0.09) : ''))
+  const style: Record<string, string> = {
+    background: displayColorCSS(background),
+    '--entry-text': getReadableDisplayColor(getChannelTextColor(entry.channel) || colors.textMain, background),
+    '--entry-secondary': getReadableDisplayColor(colors.textSecondary, background),
+    '--entry-speaker': getReadableDisplayColor(getEntryColor(entry) || colors.textMain, background),
+    '--entry-channel': getReadableDisplayColor(getChannelTextColor(entry.channel) || colors.textSecondary, background),
   }
 
   if (musicEditMode.value) {
@@ -2411,7 +2530,7 @@ onBeforeUnmount(() => {
                     v-for="tag in storyTags"
                     :key="tag.id"
                     class="tag-item"
-                    :style="{ background: `#${tag.color}20`, color: `#${tag.color}` }"
+                    :style="getTagDisplayStyle(tag.color)"
                   >
                     {{ tag.name }}
                     <i v-if="canEdit" class="ri-close-line" @click.stop="handleRemoveTag(tag.id)"></i>
@@ -2619,7 +2738,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="entry-content">
               <div class="entry-header">
-                <span v-if="entry.type !== 'image'" class="speaker" :style="getEntryColor(entry) ? { color: getEntryColor(entry) } : {}">
+                <span v-if="entry.type !== 'image'" class="speaker">
                   {{ getEntrySpeakerName(entry) }}
                 </span>
                 <span v-if="entry.channel && entry.type !== 'narration' && entry.type !== 'image'" class="channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
@@ -2627,7 +2746,7 @@ onBeforeUnmount(() => {
               </div>
 
               <!-- 普通文本内容 -->
-              <div v-if="entry.type !== 'image'" class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
+              <div v-if="entry.type !== 'image'" class="entry-text">{{ entry.content }}</div>
 
               <!-- 图片内容 -->
               <div v-else-if="parseImageEntry(entry)" class="entry-image-content">
@@ -2674,7 +2793,7 @@ onBeforeUnmount(() => {
                 v-for="group in usedColorGroups"
                 :key="group.color"
                 class="color-group-btn"
-                :style="{ backgroundColor: group.color }"
+                :style="{ background: displayColorCSS(getDisplayBackground(group.color)), color: getReadableDisplayColor(themeStore.currentTheme.colors.textMain, getDisplayBackground(group.color)) }"
                 :title="`选择此组 (${group.count} 条)`"
                 @click="selectByColor(group.color)"
               >
@@ -3153,11 +3272,11 @@ onBeforeUnmount(() => {
     <!-- 角色信息卡片 -->
     <CharacterCard
       v-model:visible="showCharacterModal"
-      :character="selectedCharacter ? getEntryCharacter(selectedCharacter) : undefined"
-      :character-card="selectedCharacter ? getEntryCharacterCard(selectedCharacter) : undefined"
+      :character="displaySelectedCharacter"
+      :character-card="displaySelectedCharacterCard"
       :speaker="selectedCharacter ? getEntrySpeakerName(selectedCharacter) : undefined"
       :position="characterCardPosition"
-      @edit="handleEditCharacter"
+      @edit="editSelectedCharacter"
     />
 
     <!-- 编辑角色对话框 -->
@@ -3261,6 +3380,7 @@ onBeforeUnmount(() => {
     <!-- 标签选择对话框 -->
     <RModal v-model="showTagModal" title="管理标签" width="500px">
       <TagSelector
+        class="story-tag-selector"
         :selected-tags="storyTags"
         :all-tags="allTags"
         @add="handleAddTag"
@@ -3286,7 +3406,7 @@ onBeforeUnmount(() => {
             @click="handleArchiveToGuild(guild.id)"
           >
             <div class="guild-info">
-              <div class="guild-name" :style="{ color: `#${guild.color || 'B87333'}` }">
+              <div class="guild-name" :style="{ color: getReadableDisplayColor(normalizeCharacterCardHexForCSS(guild.color || 'B87333'), getDisplayBackground('', themeStore.currentTheme.colors.panelBg)) }">
                 {{ guild.name }}
               </div>
               <div class="guild-desc">{{ guild.description || '暂无描述' }}</div>
@@ -3614,6 +3734,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  color: var(--color-text-main);
 }
 
 .back-bar {
@@ -3623,7 +3744,7 @@ onBeforeUnmount(() => {
 .btn-back {
   background: transparent;
   border: none;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -3633,13 +3754,13 @@ onBeforeUnmount(() => {
 }
 
 .btn-back:hover {
-  color: var(--color-primary);
+  color: var(--color-text-main);
 }
 
 .loading-state {
   text-align: center;
   padding: 60px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .spinning {
@@ -3698,7 +3819,7 @@ onBeforeUnmount(() => {
 
 .header-info h1 {
   font-size: 24px;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   margin: 0 0 8px 0;
 }
 
@@ -3724,17 +3845,17 @@ onBeforeUnmount(() => {
   background: linear-gradient(
     135deg,
     var(--color-primary-light, rgba(75, 54, 33, 0.1)) 0%,
-    rgba(184, 115, 51, 0.12) 100%
+    var(--color-card-bg) 100%
   );
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 var(--color-border-light);
 }
 
 .story-location-icon {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: var(--color-primary, #4B3621);
-  color: var(--color-text-light, #FBF5EF);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3761,7 +3882,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--color-accent, #B87333);
+  color: var(--icon-color, #B87333);
 }
 
 .story-location-chip {
@@ -3769,8 +3890,8 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--color-primary, #4B3621);
+  background: var(--color-panel-bg);
+  color: var(--color-text-main, #4B3621);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3920,7 +4041,7 @@ onBeforeUnmount(() => {
 
 .icon-btn:hover {
   background: var(--btn-secondary-hover, #fff);
-  color: var(--color-accent, #B87333);
+  color: var(--icon-color, #B87333);
 }
 
 .icon-btn i {
@@ -3953,7 +4074,7 @@ onBeforeUnmount(() => {
 .form-field label {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-primary);
+  color: var(--color-text-main);
 }
 
 .form-field textarea,
@@ -3965,13 +4086,14 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-family: inherit;
   background: var(--input-bg, #fff);
-  color: var(--color-primary);
+  color-scheme: v-bind(nativeColorScheme);
+  color: var(--color-text-main);
 }
 
 .form-field textarea:focus,
 .form-field select:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--color-border-hover);
 }
 
 .checkbox-label {
@@ -3986,7 +4108,7 @@ onBeforeUnmount(() => {
 .checkbox-label input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--color-accent);
+  accent-color: var(--checkbox-active);
   cursor: pointer;
 }
 
@@ -4002,17 +4124,18 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-family: inherit;
   background: var(--input-bg, #fff);
-  color: var(--color-primary);
+  color-scheme: v-bind(nativeColorScheme);
+  color: var(--color-text-main);
 }
 
 .datetime-input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--color-border-hover);
 }
 
 .field-hint {
   font-size: 12px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
@@ -4024,13 +4147,13 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-family: inherit;
   background: var(--input-bg, #fff);
-  color: var(--color-primary);
+  color: var(--color-text-main);
   cursor: pointer;
 }
 
 .character-select:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--color-border-hover);
 }
 
 .edit-actions {
@@ -4065,7 +4188,7 @@ onBeforeUnmount(() => {
 
 .entries-section h2 {
   font-size: 18px;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -4089,8 +4212,8 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.8));
   border-radius: 999px;
-  background: rgba(184, 115, 51, 0.08);
-  color: var(--color-secondary);
+  background: var(--color-primary-light);
+  color: var(--color-text-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -4098,7 +4221,7 @@ onBeforeUnmount(() => {
 .empty-entries {
   text-align: center;
   padding: 40px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .entries-list {
@@ -4119,13 +4242,13 @@ onBeforeUnmount(() => {
 }
 
 .entry-item:hover {
-  border-color: rgba(184, 115, 51, 0.3);
+  border-color: var(--color-border-hover);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .entry-item.entry-selected {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.2);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .entry-item.music-covered {
@@ -4151,7 +4274,7 @@ onBeforeUnmount(() => {
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: var(--color-primary);
+  accent-color: var(--checkbox-active);
 }
 
 .entry-item.image {
@@ -4287,7 +4410,7 @@ onBeforeUnmount(() => {
   border: 2px solid var(--color-panel-bg, #fff);
   border-radius: 50%;
   background: var(--color-card-bg, #f5efe7);
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4300,13 +4423,13 @@ onBeforeUnmount(() => {
 .music-entry-anchor.active {
   border-color: var(--color-panel-bg, #fff);
   background: var(--music-anchor-color, var(--color-accent));
-  color: var(--btn-primary-text, #fff);
+  color: var(--music-anchor-text, var(--color-text-main));
   transform: scale(1.08);
 }
 
 .music-entry-anchor.marked {
   background: var(--music-anchor-color, var(--color-accent));
-  color: var(--btn-primary-text, #fff);
+  color: var(--music-anchor-text, var(--color-text-main));
   box-shadow: 0 0 0 3px var(--music-anchor-glow, rgba(184, 115, 51, 0.18)), 0 4px 12px rgba(44, 24, 16, 0.2);
 }
 
@@ -4331,8 +4454,8 @@ onBeforeUnmount(() => {
   height: 14px;
   padding: 0 3px;
   border-radius: 999px;
-  background: var(--color-primary, #4B3621);
-  color: var(--color-text-light, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 9px;
   line-height: 14px;
   text-align: center;
@@ -4341,18 +4464,18 @@ onBeforeUnmount(() => {
 
 .entry-header .speaker {
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--entry-speaker, var(--color-text-main));
 }
 
 .entry-header .timestamp {
   font-size: 12px;
-  color: var(--color-secondary);
+  color: var(--entry-secondary, var(--color-text-secondary));
   margin-left: auto;
 }
 
 .entry-text {
   font-size: 14px;
-  color: var(--color-text);
+  color: var(--entry-text, var(--color-text-main));
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -4376,7 +4499,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   background: rgba(44, 24, 16, 0.45);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4431,7 +4554,7 @@ onBeforeUnmount(() => {
 }
 
 .share-tip {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 14px;
   margin: 0;
 }
@@ -4448,12 +4571,12 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   font-size: 14px;
   background: var(--color-bg-secondary);
-  color: var(--color-primary);
+  color: var(--color-text-main);
 }
 
 .share-stats {
   font-size: 13px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -4466,7 +4589,7 @@ onBeforeUnmount(() => {
 }
 
 .entry-avatar.clickable:hover {
-  border-color: var(--color-accent);
+  border-color: var(--color-border-hover);
   box-shadow: var(--shadow-md);
 }
 
@@ -4479,7 +4602,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--color-text-secondary);
-  background: var(--color-card-bg-hover);
+  background: var(--color-card-bg);
   width: 100%;
   height: 100%;
   display: flex;
@@ -4492,7 +4615,7 @@ onBeforeUnmount(() => {
   font-size: 10px;
   font-weight: 600;
   color: var(--color-text-secondary);
-  background: var(--color-card-bg-hover);
+  background: var(--color-card-bg);
   width: 100%;
   height: 100%;
   display: flex;
@@ -4504,16 +4627,16 @@ onBeforeUnmount(() => {
 /* 频道标签 */
 .entry-header .channel {
   font-size: 12px;
-  color: var(--color-accent);
+  color: var(--entry-channel, var(--color-text-secondary));
 }
 
 .entry-header .channel.channel-yell {
-  color: var(--color-warning-dark, #e74c3c);
+  color: var(--entry-channel, var(--color-text-secondary));
   font-weight: bold;
 }
 
 .entry-header .channel.channel-whisper {
-  color: var(--link-color, #b39ddb);
+  color: var(--entry-channel, var(--color-text-secondary));
 }
 
 /* 角色信息弹窗 */
@@ -4539,29 +4662,29 @@ onBeforeUnmount(() => {
 .avatar-large {
   font-size: 32px;
   font-weight: 600;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .character-name {
   font-size: 20px;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-text-main);
 }
 
 .character-channel {
   font-size: 14px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .character-title {
   font-size: 14px;
-  color: var(--color-accent);
+  color: var(--icon-color);
   font-style: italic;
 }
 
 .character-race-class {
   font-size: 13px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 /* 编辑角色表单 */
@@ -4585,7 +4708,7 @@ onBeforeUnmount(() => {
 
 .original-info h4 {
   font-size: 13px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   margin: 0 0 8px 0;
   font-weight: 500;
 }
@@ -4603,18 +4726,48 @@ onBeforeUnmount(() => {
 }
 
 .info-row .label {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   min-width: 60px;
 }
 
 .info-row .ref-id {
   font-family: monospace;
   font-size: 12px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   word-break: break-all;
 }
 
 /* 标签区域 */
+.story-tag-selector :deep(.section-title),
+.story-tag-selector :deep(.empty-hint) {
+  color: var(--color-text-secondary);
+}
+
+.story-tag-selector :deep(.tag-item) {
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
+}
+
+.story-tag-selector :deep(.tag-item.selected),
+.story-tag-selector :deep(.tag-item.clickable:hover),
+.story-tag-selector :deep(.btn-create) {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.story-tag-selector :deep(.btn-create:hover) {
+  background: var(--btn-primary-hover);
+}
+
+.story-tag-selector :deep(.create-form input) {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+}
+
+.story-tag-selector :deep(.create-form input:focus) {
+  border-color: var(--input-focus);
+}
+
 .tags-section {
   margin-top: 12px;
 }
@@ -4657,16 +4810,16 @@ onBeforeUnmount(() => {
   border: 1px dashed var(--color-border);
   border-radius: 12px;
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .add-tag-btn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  background: rgba(184, 115, 51, 0.05);
+  border-color: var(--color-border-hover);
+  color: var(--icon-color);
+  background: var(--color-card-bg-hover);
 }
 
 /* 公会归档区域 */
@@ -4679,7 +4832,7 @@ onBeforeUnmount(() => {
 
 .guilds-label {
   font-size: 13px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .guilds-list {
@@ -4697,7 +4850,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   font-size: 13px;
   font-weight: 500;
-  background: rgba(184, 115, 51, 0.05);
+  background: var(--color-card-bg-hover);
   cursor: default;
 }
 
@@ -4720,7 +4873,7 @@ onBeforeUnmount(() => {
 .empty-tip {
   text-align: center;
   padding: 60px 20px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -4742,8 +4895,8 @@ onBeforeUnmount(() => {
 }
 
 .guild-item:hover {
-  border-color: var(--color-accent);
-  background: rgba(184, 115, 51, 0.05);
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
 }
 
 .guild-info {
@@ -4758,11 +4911,11 @@ onBeforeUnmount(() => {
 
 .guild-desc {
   font-size: 13px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .guild-item i {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 18px;
 }
 
@@ -4775,7 +4928,7 @@ onBeforeUnmount(() => {
 
 .import-tip {
   font-size: 14px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   margin: 0;
   line-height: 1.6;
 }
@@ -4808,18 +4961,18 @@ onBeforeUnmount(() => {
 }
 
 .file-input-wrapper:hover .file-input-display {
-  border-color: var(--color-accent);
-  background: rgba(184, 115, 51, 0.05);
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
 }
 
 .file-input-display i {
   font-size: 32px;
-  color: var(--color-accent);
+  color: var(--icon-color);
 }
 
 .file-input-display span {
   font-size: 14px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 /* 条目操作按钮 */
@@ -4844,10 +4997,10 @@ onBeforeUnmount(() => {
 .entry-action-btn {
   width: 24px;
   height: 24px;
-  border: none;
+  border: 1px solid var(--btn-outline-border);
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.6);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -4857,11 +5010,13 @@ onBeforeUnmount(() => {
 }
 
 .entry-action-btn:hover {
-  background: var(--color-accent, #B87333);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .entry-action-btn.delete:hover {
   background: var(--btn-danger-bg, #e74c3c);
+  color: var(--btn-danger-text);
 }
 
 /* 图片上传相关样式 */
@@ -4904,7 +5059,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.6);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -4916,6 +5071,7 @@ onBeforeUnmount(() => {
 
 .clear-image-btn:hover {
   background: var(--btn-danger-bg, #e74c3c);
+  color: var(--btn-danger-text);
   transform: scale(1.1);
 }
 
@@ -4943,7 +5099,7 @@ onBeforeUnmount(() => {
 }
 
 .batch-info {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -4967,7 +5123,7 @@ onBeforeUnmount(() => {
 
 .groups-label {
   font-size: 13px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .color-group-btn {
@@ -4980,7 +5136,6 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-light, #fff);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   transition: all 0.2s;
   border: 2px solid transparent;
@@ -5018,7 +5173,7 @@ onBeforeUnmount(() => {
 
 .color-preset.active {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(184, 115, 51, 0.3);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .color-preset.clear-color {
@@ -5026,7 +5181,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 18px;
 }
 
@@ -5038,7 +5193,7 @@ onBeforeUnmount(() => {
 
 .custom-color label {
   font-size: 14px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .custom-color .color-input {
@@ -5079,7 +5234,7 @@ onBeforeUnmount(() => {
 }
 
 .radio-option input[type="radio"] {
-  accent-color: var(--color-primary);
+  accent-color: var(--checkbox-active);
 }
 
 .radio-option span:first-of-type {
@@ -5088,7 +5243,7 @@ onBeforeUnmount(() => {
 
 .option-desc {
   font-size: 12px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   margin-left: auto;
 }
 
@@ -5145,7 +5300,7 @@ onBeforeUnmount(() => {
 .bookmarks-header h3 {
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   margin: 0;
   display: flex;
   align-items: center;
@@ -5174,24 +5329,24 @@ onBeforeUnmount(() => {
 .bookmark-time {
   margin-left: auto;
   font-size: 10px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   opacity: 0.7;
   flex-shrink: 0;
 }
 
 .bookmark-item:hover {
-  border-color: var(--color-accent);
-  border-left-color: var(--color-accent);
-  background: rgba(184, 115, 51, 0.05);
+  border-color: var(--color-border-hover);
+  border-left-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
 }
 
 .bookmark-item.is-auto {
-  background: rgba(184, 115, 51, 0.08);
-  border-left-color: var(--color-accent);
+  background: var(--color-primary-light);
+  border-left-color: var(--color-border-hover);
 }
 
 .bookmark-item.is-favorite {
-  background: rgba(255, 193, 7, 0.1);
+  background: var(--color-warning-light);
 }
 
 .bookmark-item.is-public {
@@ -5220,7 +5375,7 @@ onBeforeUnmount(() => {
   height: 18px;
   border: none;
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -5239,7 +5394,7 @@ onBeforeUnmount(() => {
 .bookmark-name {
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5247,7 +5402,7 @@ onBeforeUnmount(() => {
 
 .bookmark-preview {
   font-size: 11px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5273,7 +5428,7 @@ onBeforeUnmount(() => {
   height: 20px;
   border: none;
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -5283,8 +5438,8 @@ onBeforeUnmount(() => {
 }
 
 .bookmark-edit:hover {
-  background: rgba(184, 115, 51, 0.1);
-  color: var(--color-accent);
+  background: var(--btn-outline-hover);
+  color: var(--icon-color);
 }
 
 .bookmark-delete:hover {
@@ -5294,7 +5449,7 @@ onBeforeUnmount(() => {
 
 .bookmarks-empty {
   font-size: 13px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   text-align: center;
   padding: 16px 0;
 }
@@ -5321,7 +5476,7 @@ onBeforeUnmount(() => {
 
 .bookmark-color-picker .color-option.active {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(44, 24, 16, 0.2);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .bookmark-color-picker .color-option.color-none {
@@ -5330,7 +5485,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -5351,8 +5506,8 @@ onBeforeUnmount(() => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   cursor: pointer;
   display: flex;
@@ -5380,7 +5535,7 @@ onBeforeUnmount(() => {
   min-width: 18px;
   height: 18px;
   background: var(--btn-danger-bg, #e74c3c);
-  color: var(--color-text-light, #fff);
+  color: var(--btn-danger-text);
   font-size: 11px;
   font-weight: 600;
   border-radius: 9px;
@@ -5402,8 +5557,8 @@ onBeforeUnmount(() => {
   height: 48px;
   border: none;
   border-radius: 50%;
-  background: var(--color-primary, #4B3621);
-  color: var(--color-text-light, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -5420,11 +5575,15 @@ onBeforeUnmount(() => {
 }
 
 .story-bgm-fab.muted {
-  background: var(--color-secondary, #856a52);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--color-border);
 }
 
 .story-bgm-fab.disabled {
-  background: var(--color-text-muted, #9b8b7d);
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
   opacity: 0.82;
 }
 
@@ -5456,12 +5615,12 @@ onBeforeUnmount(() => {
 }
 
 .story-bgm-panel-head strong {
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 14px;
 }
 
 .story-bgm-panel-head span {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5480,13 +5639,13 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 12px;
 }
 
 .story-bgm-volume input {
   width: 100%;
-  accent-color: var(--color-accent);
+  accent-color: var(--checkbox-active);
 }
 
 .story-bgm-volume input:disabled {
@@ -5509,7 +5668,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.85));
   border-radius: 8px;
   background: var(--color-card-bg, #f5f0eb);
-  color: var(--color-primary);
+  color: var(--color-text-main);
   cursor: pointer;
   font-size: 12px;
 }
@@ -5520,8 +5679,8 @@ onBeforeUnmount(() => {
 }
 
 .story-bgm-actions button:not(:disabled):hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-border-hover);
+  color: var(--icon-color);
 }
 
 .story-bgm-actions button.danger:not(:disabled):hover {
@@ -5563,7 +5722,7 @@ onBeforeUnmount(() => {
 .bookmarks-panel-header h3 {
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   margin: 0;
   display: flex;
   align-items: center;
@@ -5651,7 +5810,7 @@ onBeforeUnmount(() => {
 }
 
 .music-bgm-tooltip-title strong {
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 13px;
   line-height: 1.3;
   overflow: hidden;
@@ -5661,7 +5820,7 @@ onBeforeUnmount(() => {
 
 .music-bgm-tooltip-title span,
 .music-bgm-tooltip-range {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -5670,7 +5829,7 @@ onBeforeUnmount(() => {
   padding: 2px 6px;
   border-radius: 999px;
   background: var(--color-card-bg, #f5f0eb);
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 10px;
   font-style: normal;
   font-weight: 700;
@@ -5691,7 +5850,7 @@ onBeforeUnmount(() => {
   padding: 3px 6px;
   border-radius: 999px;
   background: var(--color-card-bg, #f5f0eb);
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 11px;
   line-height: 1.2;
 }
@@ -5735,12 +5894,12 @@ onBeforeUnmount(() => {
 }
 
 .music-popover-header strong {
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 15px;
 }
 
 .music-popover-header span {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -5750,7 +5909,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
@@ -5773,15 +5932,15 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.85));
   border-radius: 8px;
   background: var(--color-card-bg, #f5f0eb);
-  color: var(--color-primary);
+  color: var(--color-text-main);
   text-align: left;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .music-popover-actions button:hover:not(:disabled) {
-  border-color: var(--color-accent);
-  background: rgba(184, 115, 51, 0.08);
+  border-color: var(--color-border-hover);
+  background: var(--color-primary-light);
 }
 
 .music-popover-actions button:disabled {
@@ -5790,7 +5949,7 @@ onBeforeUnmount(() => {
 }
 
 .music-popover-actions i {
-  color: var(--color-accent);
+  color: var(--icon-color);
   font-size: 18px;
   margin-top: 2px;
 }
@@ -5805,7 +5964,7 @@ onBeforeUnmount(() => {
 
 .music-popover-actions small,
 .music-popover-hint {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.4;
@@ -5828,7 +5987,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--input-bg, #fff);
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font: inherit;
 }
 
@@ -5888,7 +6047,7 @@ onBeforeUnmount(() => {
 
 .ai-pack-guide-header i {
   font-size: 24px;
-  color: var(--color-accent, #7C4DFF);
+  color: var(--icon-color, #7C4DFF);
 }
 
 .ai-pack-guide-header span {
@@ -5969,7 +6128,7 @@ onBeforeUnmount(() => {
 }
 
 .ai-pack-guide-footer .dont-show-again input[type="checkbox"] {
-  accent-color: var(--color-accent);
+  accent-color: var(--checkbox-active);
 }
 
 .ai-pack-guide-ok-btn {
@@ -5979,8 +6138,8 @@ onBeforeUnmount(() => {
   font-weight: 600;
   cursor: pointer;
   border: none;
-  background: var(--color-primary);
-  color: var(--color-text-light, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   transition: all 0.2s;
 }
 
