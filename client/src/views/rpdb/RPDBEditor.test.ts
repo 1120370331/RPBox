@@ -292,7 +292,7 @@ describe('RPDBEditor', () => {
     expect(wrapper.find('.generated-cover').exists()).toBe(false)
     expect(wrapper.text()).toContain('可不填，发布后会根据标题自动生成默认封面')
 
-    const coverInput = wrapper.find('[data-testid="cover-upload"] input')
+    const coverInput = wrapper.find<HTMLInputElement>('[data-testid="cover-upload"] input')
     const coverClick = vi.spyOn(coverInput.element, 'click')
     await wrapper.find('[data-testid="cover-upload"]').trigger('click')
     expect(coverClick).toHaveBeenCalledOnce()

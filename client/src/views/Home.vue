@@ -183,7 +183,7 @@ async function handleDailySignIn() {
 
 /* 欢迎面板 */
 .welcome-panel {
-  background: linear-gradient(135deg, var(--color-secondary, #804030) 0%, var(--color-primary, #4B3621) 100%);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   border-radius: 16px;
   padding: 32px;
   display: flex;
@@ -194,12 +194,12 @@ async function handleDailySignIn() {
 
 .welcome-content h1 {
   font-size: 28px;
-  color: var(--color-text-light, #FBF5EF);
+  color: var(--gradient-text);
   margin: 0 0 8px 0;
 }
 
 .welcome-content p {
-  color: var(--color-sidebar-text-muted, rgba(251, 245, 239, 0.7));
+  color: var(--gradient-text-muted);
   font-size: 15px;
   margin: 0;
 }
@@ -217,10 +217,10 @@ async function handleDailySignIn() {
   padding: 18px 20px;
   border-radius: 18px;
   background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.4), transparent 36%),
-    linear-gradient(135deg, #fff9f2 0%, #f7e7d3 100%);
+    linear-gradient(135deg, var(--color-panel-bg), var(--color-card-bg));
   border: 1px solid rgba(184, 115, 51, 0.18);
   box-shadow: var(--shadow-md, 0 4px 20px rgba(75, 54, 33, 0.05));
+  border-color: var(--color-border);
 }
 
 .sign-in-copy p {
@@ -235,8 +235,8 @@ async function handleDailySignIn() {
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(184, 115, 51, 0.12);
-  color: var(--color-accent, #B87333);
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -248,8 +248,8 @@ async function handleDailySignIn() {
   padding: 0 18px;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, #b87333 0%, #804030 100%);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;

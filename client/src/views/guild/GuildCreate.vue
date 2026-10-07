@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createGuild } from '@/api/guild'
@@ -15,6 +15,8 @@ const name = ref('')
 const description = ref('')
 const slogan = ref('')
 const server = ref('')
+const serverError = computed(() => Array.from(server.value.trim()).length > 128
+  ? t('common.validation.maxLength', { n: 128 }) : '')
 const faction = ref('')
 const color = ref('B87333')
 const bannerPreview = ref('')
@@ -56,7 +58,7 @@ function handleBannerCropperError(error: Error) {
 }
 
 async function handleCreate() {
-  if (!name.value.trim()) return
+  if (!name.value.trim() || serverError.value) return
   creating.value = true
   try {
     const guild = await createGuild({
@@ -71,6 +73,11 @@ async function handleCreate() {
     router.push(`/guild/${guild.id}`)
   } catch (e) {
     console.error('创建失败:', e)
+    await alert({
+      title: t('common.status.failed'),
+      message: e instanceof Error ? e.message : t('common.status.failed'),
+      type: 'error'
+    })
   } finally {
     creating.value = false
   }
@@ -128,7 +135,7 @@ async function handleCreate() {
       <div class="row">
         <div class="field">
           <label>{{ t('guild.create.server') }}</label>
-          <RInput v-model="server" :placeholder="t('guild.create.serverPlaceholder')" />
+          <RInput v-model="server" :placeholder="t('guild.create.serverPlaceholder')" :error="serverError" clearable />
         </div>
         <div class="field">
           <label>{{ t('guild.info.faction') }}</label>
@@ -159,17 +166,18 @@ async function handleCreate() {
   max-width: 600px;
   margin: 0 auto;
   padding: 24px;
+  color: var(--color-text-main);
 }
 
 .create-page h1 {
   font-size: 24px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin-bottom: 8px;
 }
 
 .tip {
   font-size: 13px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   margin-bottom: 24px;
 }
 
@@ -188,7 +196,7 @@ async function handleCreate() {
 .field label {
   font-size: 14px;
   font-weight: 500;
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 .banner-upload {
@@ -210,7 +218,10 @@ async function handleCreate() {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  color: rgba(255,255,255,0.8);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 12px 20px;
+  border-radius: 8px;
 }
 
 .upload-hint i {
@@ -229,12 +240,12 @@ async function handleCreate() {
 .field textarea,
 .field select {
   padding: 10px 12px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 14px;
   font-family: inherit;
-  background: #fff;
-  color: #4B3621;
+  background: var(--input-bg);
+  color: var(--color-text-main);
 }
 
 .field textarea {
@@ -244,9 +255,10 @@ async function handleCreate() {
 .field input[type="color"] {
   width: 60px;
   height: 36px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   cursor: pointer;
+  background: var(--input-bg);
 }
 
 .actions {
@@ -254,5 +266,22 @@ async function handleCreate() {
   gap: 12px;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.field textarea:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--input-focus);
+}
+
+.field textarea::placeholder {
+  color: var(--input-placeholder);
+}
+
+.field select {
+  color-scheme: light;
+}
+[data-theme="black-gold"] .field select {
+  color-scheme: dark;
 }
 </style>

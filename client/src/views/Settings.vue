@@ -971,7 +971,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   justify-content: center;
   font-size: 32px;
   font-weight: 700;
-  color: var(--btn-primary-text, var(--color-text-light));
+  color: var(--gradient-text);
 }
 
 .avatar-overlay {
@@ -1559,7 +1559,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   cursor: pointer;
   border-radius: 12px;
   padding: 8px;
-  background: #FDFBF9;
+  background: var(--color-card-bg);
   border: 2px solid transparent;
   transition: all 0.2s;
 }
@@ -1575,7 +1575,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 }
 
 .theme-preview-shell.locked .theme-item:hover {
-  background: #FDFBF9;
+  background: var(--color-card-bg);
   border-color: transparent;
 }
 

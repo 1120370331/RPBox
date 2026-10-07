@@ -932,7 +932,7 @@ button {
 }
 
 .eyebrow {
-  color: #155E91;
+  color: var(--link-color);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0;
@@ -1010,7 +1010,7 @@ h3 {
   min-width: 0;
   padding: 13px 14px;
   border-radius: 8px;
-  background: var(--color-bg-secondary, #F8EFE7);
+  background: var(--color-card-bg);
   border: 1px solid var(--color-border-light, #EBDCCB);
   display: flex;
   align-items: center;
@@ -1032,8 +1032,8 @@ h3 {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  background: rgba(21, 94, 145, 0.08);
-  color: #155E91;
+  background: var(--icon-bg);
+  color: var(--link-color);
   font-size: 21px;
 }
 
@@ -1069,6 +1069,7 @@ h3 {
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .primary-btn {
@@ -1099,7 +1100,7 @@ h3 {
 .danger-btn {
   min-height: 38px;
   padding: 9px 14px;
-  color: #9B1C31;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   background: rgba(155, 28, 49, 0.07);
   border-color: rgba(155, 28, 49, 0.2);
 }
@@ -1119,9 +1120,9 @@ h3 {
 }
 
 .icon-btn:hover:not(:disabled) {
-  color: #155E91;
-  border-color: rgba(21, 94, 145, 0.32);
-  background: rgba(21, 94, 145, 0.07);
+  color: var(--color-text-main);
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
 }
 
 .text-btn {
@@ -1131,7 +1132,7 @@ h3 {
 }
 
 .text-btn.danger {
-  color: #9B1C31;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .directory-actions .text-btn.danger {
@@ -1173,12 +1174,13 @@ h3 {
 
 .inline-error,
 .error-box {
-  color: #9B1C31;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .inline-error {
   font-size: 12px;
   line-height: 1.5;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .detected-grid {
@@ -1225,7 +1227,7 @@ h3 {
   display: inline-flex;
   align-items: center;
   color: var(--color-text-main, #2C1810);
-  background: var(--color-bg-secondary, #F8EFE7);
+  background: var(--color-card-bg);
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
@@ -1285,18 +1287,18 @@ h3 {
 }
 
 .state-pill.ready {
-  color: #2E7D32;
-  background: rgba(46, 125, 50, 0.1);
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
+  background: var(--color-success-light);
 }
 
 .state-pill.update,
 .state-pill.checking {
-  color: #155E91;
-  background: rgba(21, 94, 145, 0.09);
+  color: var(--link-color);
+  background: var(--tag-bg);
 }
 
 .state-pill.missing {
-  color: #9B1C31;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   background: rgba(220, 20, 60, 0.08);
 }
 
@@ -1316,7 +1318,7 @@ h3 {
   min-width: 0;
   padding: 9px 10px;
   border-radius: 8px;
-  background: var(--color-bg-secondary, #F8EFE7);
+  background: var(--color-card-bg);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1342,7 +1344,7 @@ h3 {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #155E91;
+  color: var(--link-color);
   font-size: 12px;
   font-weight: 800;
 }
@@ -1362,7 +1364,7 @@ h3 {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #155E91;
+  background: var(--color-accent);
   transition: width 0.18s ease;
 }
 
@@ -1392,17 +1394,20 @@ h3 {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.5;
+  background: var(--color-success-light);
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .notice-box {
-  color: #2E7D32;
-  background: rgba(46, 125, 50, 0.09);
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
+  background: var(--color-success-light);
   border: 1px solid rgba(46, 125, 50, 0.18);
 }
 
 .error-box {
   background: rgba(220, 20, 60, 0.08);
   border: 1px solid rgba(220, 20, 60, 0.16);
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .feature-grid {
@@ -1448,8 +1453,8 @@ h3 {
   padding: 9px 11px;
   border-radius: 8px;
   border: 1px solid rgba(21, 94, 145, 0.18);
-  background: rgba(255, 255, 255, 0.94);
-  color: #155E91;
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1457,6 +1462,7 @@ h3 {
   font-weight: 800;
   line-height: 1.4;
   box-shadow: var(--shadow-sm, 0 2px 10px rgba(75, 54, 33, 0.05));
+  border-color: var(--color-border);
 }
 
 .feature-lock {

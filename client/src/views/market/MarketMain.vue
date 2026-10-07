@@ -343,7 +343,7 @@ watch([sortBy], () => {
   gap: 6px;
   padding: 10px 20px;
   background: var(--color-panel-bg, #fff);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   border: 2px solid var(--color-accent, #B87333);
   border-radius: 8px;
   font-size: 14px;
@@ -365,8 +365,8 @@ watch([sortBy], () => {
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  background: var(--color-accent, #B87333);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -378,7 +378,8 @@ watch([sortBy], () => {
 }
 
 .upload-btn:hover {
-  background: var(--color-accent-hover, #A66629);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 .search-box {
@@ -466,9 +467,10 @@ watch([sortBy], () => {
 }
 
 .tag-item.active {
-  background: var(--tag-color, var(--color-accent, #B87333));
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
-  border-color: var(--tag-color, var(--color-accent, #B87333));
+  background: color-mix(in srgb, var(--tag-color, var(--color-accent)) 18%, var(--color-panel-bg));
+  color: var(--color-text-main);
+  border-color: color-mix(in srgb, var(--tag-color, var(--color-accent)) 55%, var(--color-text-main));
+  box-shadow: inset 0 0 0 1px var(--input-focus);
 }
 
 .author-input {
@@ -503,8 +505,8 @@ watch([sortBy], () => {
 }
 
 .tag.active {
-  background: var(--color-accent, #B87333);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .sort-select {
@@ -661,8 +663,8 @@ watch([sortBy], () => {
   height: 40px;
   border: none;
   border-radius: 10px;
-  background: var(--color-accent, #B87333);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -712,7 +714,7 @@ watch([sortBy], () => {
 .page-btn:hover:not(:disabled) {
   background: var(--color-card-bg, #FFF8F0);
   border-color: var(--color-accent, #B87333);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .page-btn:disabled {

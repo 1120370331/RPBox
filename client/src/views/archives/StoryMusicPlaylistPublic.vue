@@ -79,8 +79,8 @@ onMounted(loadPlaylist)
 .playlist-page {
   min-height: 100vh;
   padding: 40px 20px 80px;
-  background: #f5f0e8;
-  color: #4B3621;
+  background: var(--color-main-bg);
+  color: var(--color-text-main);
 }
 
 .state {
@@ -89,11 +89,11 @@ onMounted(loadPlaylist)
   justify-content: center;
   gap: 8px;
   min-height: 60vh;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .state.error {
-  color: #c0392b;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .spinning {
@@ -126,7 +126,7 @@ onMounted(loadPlaylist)
 
 .eyebrow {
   margin: 0 0 8px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -139,7 +139,7 @@ h1 {
 .description {
   max-width: 680px;
   margin: 12px 0 0;
-  color: #665242;
+  color: var(--color-text-secondary);
   line-height: 1.7;
 }
 
@@ -150,11 +150,12 @@ h1 {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+  color: var(--color-text-secondary);
 }
 
 .meta {
   margin-top: 14px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -171,7 +172,8 @@ h1 {
   padding: 14px;
   border: 1px solid #e5d4c1;
   border-radius: 8px;
-  background: #fff;
+  background: var(--color-panel-bg);
+  border-color: var(--color-border);
 }
 
 .track-color {
@@ -188,7 +190,7 @@ h1 {
 
 .track-meta {
   margin-top: 4px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 

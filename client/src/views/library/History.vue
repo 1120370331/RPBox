@@ -221,29 +221,30 @@ function getCategoryLabel(category: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 2px solid #E5D4C1;
   border-radius: 12px;
-  color: #4B3621;
+  color: var(--btn-outline-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  border-color: var(--btn-outline-border);
 }
 
 .back-btn:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .page-title {
   font-size: 32px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 4px 0;
 }
 
 .page-subtitle {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -257,20 +258,21 @@ function getCategoryLabel(category: string) {
   align-items: center;
   gap: 6px;
   padding: 10px 18px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 1px solid #E5D4C1;
   border-radius: 10px;
-  color: #4B3621;
+  color: var(--btn-outline-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .tab-btn.active {
-  background: #2C1810;
-  border-color: #2C1810;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .filter-bar {
@@ -283,18 +285,19 @@ function getCategoryLabel(category: string) {
   padding: 8px 16px;
   border-radius: 10px;
   border: 1px solid #E5D4C1;
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .filter-btn.active {
-  background: #B87333;
-  border-color: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .content {
@@ -304,13 +307,13 @@ function getCategoryLabel(category: string) {
 .loading-state {
   text-align: center;
   padding: 48px 0;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .empty-state {
   text-align: center;
   padding: 64px 0;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .empty-state i {
@@ -326,13 +329,14 @@ function getCategoryLabel(category: string) {
 }
 
 .post-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 1px solid #E5D4C1;
   border-radius: 14px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 4px 10px rgba(75, 54, 33, 0.06);
+  border-color: var(--color-border);
 }
 
 .post-card:hover {
@@ -355,21 +359,22 @@ function getCategoryLabel(category: string) {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
 .category-tag {
   padding: 2px 8px;
   border-radius: 12px;
-  background: #F6EFE6;
-  color: #6B4E36;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-weight: 600;
+  border-color: var(--color-border);
 }
 
 .post-title {
   font-size: 16px;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 12px 0;
 }
 
@@ -378,7 +383,7 @@ function getCategoryLabel(category: string) {
   flex-wrap: wrap;
   gap: 10px;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .post-stats i {
@@ -392,13 +397,14 @@ function getCategoryLabel(category: string) {
 }
 
 .item-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 1px solid #E5D4C1;
   border-radius: 16px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 4px 10px rgba(75, 54, 33, 0.06);
+  border-color: var(--color-border);
 }
 
 .item-card:hover {
@@ -418,7 +424,7 @@ function getCategoryLabel(category: string) {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: color-mix(in srgb, var(--color-accent-contrast, #fff) 72%, transparent);
+  color: var(--gradient-text-muted);
   font-size: 36px;
 }
 
@@ -428,7 +434,7 @@ function getCategoryLabel(category: string) {
 
 .item-title {
   font-size: 16px;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 10px 0;
 }
 
@@ -436,23 +442,24 @@ function getCategoryLabel(category: string) {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin-bottom: 10px;
 }
 
 .item-type {
   padding: 2px 8px;
   border-radius: 12px;
-  background: #F6EFE6;
-  color: #6B4E36;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-weight: 600;
+  border-color: var(--color-border);
 }
 
 .item-stats {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .item-stats i {

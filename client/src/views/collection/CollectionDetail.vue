@@ -5,14 +5,14 @@ import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../../stores/user'
 import { getCollection, deleteCollection, favoriteCollection, unfavoriteCollection, reorderCollectionPosts, reorderCollectionItems, type CollectionDetail } from '../../api/collection'
 import { useDialog } from '../../composables/useDialog'
-import { useToast } from '../../composables/useToast'
+import { useToastStore } from '@/stores/toast'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const userStore = useUserStore()
 const dialog = useDialog()
-const toast = useToast()
+const toast = useToastStore()
 
 const collection = ref<CollectionDetail | null>(null)
 const loading = ref(true)
@@ -406,7 +406,7 @@ onMounted(loadCollection)
 .btn-favorite.active {
   background: rgba(255, 193, 7, 0.1);
   border-color: #ffc107;
-  color: #ffc107;
+  color: color-mix(in srgb, #ffc107 40%, var(--color-text-main));
 }
 
 .btn-favorite:disabled {
@@ -434,9 +434,9 @@ onMounted(loadCollection)
 }
 
 .btn-reorder.active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-reorder:disabled {
@@ -452,7 +452,7 @@ onMounted(loadCollection)
   border: none;
   border-radius: 8px;
   background: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
@@ -541,8 +541,8 @@ onMounted(loadCollection)
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;

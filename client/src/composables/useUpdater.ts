@@ -170,7 +170,6 @@ export function useUpdater() {
       }
 
       console.log('[Updater] 开始下载版本:', update.version)
-      console.log('[Updater] 下载地址:', update.downloadUrl)
 
       await update.downloadAndInstall((event) => {
         if (event.event === 'Progress') {

@@ -178,13 +178,13 @@ const activeSection = ref('addon')
 
 .guide-header h1 {
   font-size: 28px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 8px 0;
 }
 
 .guide-header p {
   font-size: 14px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -192,7 +192,7 @@ const activeSection = ref('addon')
   display: flex;
   gap: 8px;
   margin-bottom: 24px;
-  background: #f5f0eb;
+  background: var(--color-card-bg);
   padding: 6px;
   border-radius: 12px;
 }
@@ -204,7 +204,7 @@ const activeSection = ref('addon')
   background: transparent;
   border-radius: 8px;
   font-size: 14px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -214,18 +214,18 @@ const activeSection = ref('addon')
 }
 
 .guide-nav button:hover {
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 .guide-nav button.active {
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 .guide-content {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 32px;
   box-shadow: 0 4px 20px rgba(75, 54, 33, 0.08);
@@ -233,7 +233,7 @@ const activeSection = ref('addon')
 
 .section h2 {
   font-size: 20px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 24px 0;
   display: flex;
   align-items: center;
@@ -241,7 +241,7 @@ const activeSection = ref('addon')
 }
 
 .section h2 i {
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 .step {
@@ -253,8 +253,8 @@ const activeSection = ref('addon')
 .step-number {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, #B87333, #a06028);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -270,13 +270,13 @@ const activeSection = ref('addon')
 
 .step-content h3 {
   font-size: 16px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 8px 0;
 }
 
 .step-content p {
   font-size: 14px;
-  color: #665242;
+  color: var(--color-text-main);
   line-height: 1.6;
   margin: 0 0 4px 0;
 }
@@ -292,22 +292,22 @@ const activeSection = ref('addon')
 
 .tip-box i {
   font-size: 20px;
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 .tip-box div {
   font-size: 14px;
-  color: #665242;
+  color: var(--color-text-main);
   line-height: 1.6;
 }
 
 .tip-box strong {
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 code {
-  background: rgba(184, 115, 51, 0.15);
-  color: #804030;
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
   padding: 2px 8px;
   border-radius: 4px;
   font-family: 'Consolas', monospace;

@@ -16,6 +16,9 @@ import RPDBContributionSection from '@/components/rpdb/RPDBContributionSection.v
 import CharacterCardWall from '@/components/character-cards/CharacterCardWall.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { useThemeStore } from '@/stores/theme'
+import { useArchiveDisplayColors } from '../archives/archiveDisplayColors'
 import {
   ACHIEVEMENT_CATEGORY_META,
   ACHIEVEMENT_RARITY_META,
@@ -33,6 +36,13 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const toast = useToastStore()
+const themeStore = useThemeStore()
+const { readableArchiveColor } = useArchiveDisplayColors()
+
+function guildIconStyle(color?: string) {
+  const background = normalizeCharacterCardHexForCSS(color || themeStore.currentTheme.colors.accent)
+  return { background, color: readableArchiveColor(themeStore.currentTheme.colors.textMain, background) }
+}
 
 const userId = computed(() => route.params.id as string)
 const isOwnProfile = computed(() => userStore.user?.id === Number(userId.value))
@@ -686,7 +696,7 @@ function previewAchievementNotification() {
                 class="guild-item"
                 :class="{ pending: guild.status === 'pending' }"
               >
-                <div class="guild-icon" :style="{ background: guild.color || 'var(--color-accent, #D4A373)' }">
+                <div class="guild-icon" :style="guildIconStyle(guild.color)">
                   {{ guild.name?.charAt(0) || 'G' }}
                 </div>
                 <div class="guild-info">
@@ -937,7 +947,7 @@ function previewAchievementNotification() {
   left: 0;
   width: 100%;
   height: 256px;
-  background: linear-gradient(to bottom, #fff, transparent);
+  background: linear-gradient(to bottom, var(--color-panel-bg), transparent);
   pointer-events: none;
   z-index: 0;
 }
@@ -945,7 +955,7 @@ function previewAchievementNotification() {
 .loading {
   text-align: center;
   padding: 80px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-size: 16px;
 }
 
@@ -968,7 +978,7 @@ function previewAchievementNotification() {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 2px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .back-btn {
@@ -977,7 +987,7 @@ function previewAchievementNotification() {
   gap: 4px;
   background: none;
   border: none;
-  color: #B87333;
+  color: var(--link-color);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -985,7 +995,7 @@ function previewAchievementNotification() {
 }
 
 .back-btn:hover {
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 .back-btn i {
@@ -1063,7 +1073,7 @@ function previewAchievementNotification() {
   justify-content: center;
   font-size: 36px;
   font-weight: 700;
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  color: var(--gradient-text);
   border: 4px solid var(--color-panel-bg, #fff);
   box-shadow: 0 8px 22px rgba(var(--shadow-base, 75, 54, 33), 0.16);
 }
@@ -1182,7 +1192,7 @@ function previewAchievementNotification() {
 .progress-help:hover {
   background: var(--color-card-bg-hover, rgba(184, 115, 51, 0.12));
   border-color: var(--color-border-hover, rgba(184, 115, 51, 0.32));
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .progress-help i {
@@ -1265,7 +1275,7 @@ function previewAchievementNotification() {
   padding: 4px 8px;
   border-radius: 999px;
   background: var(--color-primary-light, rgba(184, 115, 51, 0.14));
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
@@ -1406,7 +1416,7 @@ function previewAchievementNotification() {
 
 .role-badge.moderator {
   background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
-  color: var(--color-accent, #B87333);
+  color: var(--tag-text);
   border: 1px solid rgba(var(--shadow-base, 75, 54, 33), 0.2);
 }
 
@@ -1439,7 +1449,7 @@ function previewAchievementNotification() {
 .stat-value {
   font-size: 18px;
   font-weight: 700;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .stat-label {
@@ -1457,7 +1467,7 @@ function previewAchievementNotification() {
   background: var(--color-card-bg, #FBF5EF);
   border: 1px solid var(--color-border, #E8DCC8);
   border-radius: 4px;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1575,7 +1585,7 @@ function previewAchievementNotification() {
 .form-group label {
   font-size: 12px;
   font-weight: 600;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1583,19 +1593,20 @@ function previewAchievementNotification() {
 .field-hint {
   margin: 0;
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .sponsor-style {
   border: 1px dashed #E8DCC8;
   border-radius: 8px;
   padding: 12px;
-  background: rgba(251, 245, 239, 0.6);
+  background: var(--color-card-bg);
+  border-color: var(--color-border);
 }
 
 .sponsor-style.locked {
-  border-color: #E0D2C1;
-  background: rgba(244, 238, 230, 0.8);
+  border-color: var(--color-border);
+  background: var(--color-card-bg);
 }
 
 .sponsor-style-header {
@@ -1621,18 +1632,19 @@ function previewAchievementNotification() {
 .sponsor-style-tip {
   margin: 0;
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .sponsor-style-tip.locked {
-  color: #9C8E82;
+  color: var(--color-text-secondary);
 }
 
 .name-style-section {
   border: 1px solid #E8DCC8;
   border-radius: 8px;
   padding: 12px;
-  background: rgba(251, 245, 239, 0.55);
+  background: var(--color-card-bg);
+  border-color: var(--color-border);
 }
 
 .name-style-options {
@@ -1645,23 +1657,24 @@ function previewAchievementNotification() {
   padding: 8px 12px;
   border: 1px solid #E8DCC8;
   border-radius: 999px;
-  background: #fff;
-  color: #6F5B4B;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .name-style-btn:hover:not(:disabled) {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-border-hover);
+  color: var(--color-text-main);
 }
 
 .name-style-btn.active {
-  background: #4B3621;
-  border-color: #4B3621;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .name-style-btn:disabled {
@@ -1675,21 +1688,25 @@ function previewAchievementNotification() {
   border: 1px solid #E8DCC8;
   border-radius: 6px;
   font-size: 14px;
-  background: #FBF5EF;
-  color: #4B3621;
+  background: var(--input-bg);
+  color: var(--color-text-main);
   transition: all 0.2s;
+  border-color: var(--input-border);
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #B87333;
-  background: #fff;
+  border-color: var(--input-focus);
+  background: var(--input-bg);
 }
 
 .form-group textarea {
   resize: vertical;
   font-family: inherit;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  border-color: var(--input-border);
 }
 
 .form-actions {
@@ -1700,8 +1717,8 @@ function previewAchievementNotification() {
 
 .save-btn {
   padding: 10px 24px;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 4px;
   font-size: 12px;
@@ -1713,13 +1730,13 @@ function previewAchievementNotification() {
 }
 
 .save-btn:hover {
-  background: #4B3621;
+  background: var(--btn-primary-hover);
 }
 
 .cancel-btn {
   padding: 10px 24px;
-  background: #FBF5EF;
-  color: #8C7B70;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   border: 1px solid #E8DCC8;
   border-radius: 4px;
   font-size: 12px;
@@ -1728,10 +1745,11 @@ function previewAchievementNotification() {
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .cancel-btn:hover {
-  background: #F2E6D8;
+  background: var(--color-card-bg-hover);
 }
 
 /* 邮箱绑定样式 */
@@ -1739,7 +1757,8 @@ function previewAchievementNotification() {
   border: 1px solid #E8DCC8;
   border-radius: 8px;
   padding: 16px;
-  background: rgba(251, 245, 239, 0.5);
+  background: var(--color-card-bg);
+  border-color: var(--color-border);
 }
 
 .email-header {
@@ -1758,15 +1777,15 @@ function previewAchievementNotification() {
 }
 
 .email-status.verified {
-  color: #4ade80;
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
 }
 
 .email-status.warning {
-  color: #FF9800;
+  color: var(--color-warning-dark);
 }
 
 .email-status.error {
-  color: #f87171;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .email-status i {
@@ -1775,30 +1794,33 @@ function previewAchievementNotification() {
 
 .current-email {
   padding: 10px 12px;
-  background: #fff;
+  background: var(--color-card-bg);
   border: 1px solid #E8DCC8;
   border-radius: 6px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin-bottom: 12px;
+  border-color: var(--color-border);
 }
 
 .change-email-btn {
   width: 100%;
   padding: 8px;
-  background: #FBF5EF;
+  background: var(--color-panel-bg);
   border: 1px solid #D4A373;
   border-radius: 6px;
-  color: #B87333;
+  color: var(--btn-outline-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .change-email-btn:hover {
-  background: #F2E6D8;
-  border-color: #B87333;
+  background: var(--color-card-bg-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-text-main);
 }
 
 .email-binding-form {
@@ -1819,25 +1841,28 @@ function previewAchievementNotification() {
   border: 1px solid #E8DCC8;
   border-radius: 6px;
   font-size: 14px;
-  background: #fff;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  border-color: var(--input-border);
 }
 
 .btn-send-code {
   padding: 10px 16px;
   border: 1px solid #B87333;
   border-radius: 6px;
-  background: #fff;
-  color: #B87333;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .btn-send-code:hover:not(:disabled) {
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-send-code:disabled {
@@ -1853,8 +1878,8 @@ function previewAchievementNotification() {
 .bind-btn {
   flex: 1;
   padding: 8px;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 6px;
   font-size: 12px;
@@ -1864,24 +1889,25 @@ function previewAchievementNotification() {
 }
 
 .bind-btn:hover {
-  background: #4B3621;
+  background: var(--btn-primary-hover);
 }
 
 .cancel-bind-btn {
   flex: 1;
   padding: 8px;
-  background: #FBF5EF;
-  color: #8C7B70;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   border: 1px solid #E8DCC8;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .cancel-bind-btn:hover {
-  background: #F2E6D8;
+  background: var(--color-card-bg-hover);
 }
 
 .email-tip {
@@ -1894,11 +1920,11 @@ function previewAchievementNotification() {
 }
 
 .email-tip.error-tip {
-  color: #f87171;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .email-tip.warning-tip {
-  color: #FF9800;
+  color: var(--color-warning-dark);
 }
 
 .email-tip i {
@@ -1936,7 +1962,7 @@ function previewAchievementNotification() {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1959,7 +1985,7 @@ function previewAchievementNotification() {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -2073,12 +2099,13 @@ function previewAchievementNotification() {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  background: rgba(255, 152, 0, 0.1);
-  color: #FF9800;
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
   border: 1px solid rgba(255, 152, 0, 0.2);
   border-radius: 4px;
   font-size: 10px;
   font-weight: 700;
+  border-color: var(--color-warning-border);
 }
 
 .pending-tag i {
@@ -2088,11 +2115,11 @@ function previewAchievementNotification() {
 /* 4. 账户状态卡片 */
 .status-card {
   grid-column: span 12;
-  background: var(--color-primary, #4B3621);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   border-radius: 12px;
   box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(75, 54, 33, 0.2));
   padding: 24px;
-  color: var(--color-text-light, #fff);
+  color: var(--gradient-text);
   position: relative;
   overflow: visible;
   display: flex;
@@ -2128,7 +2155,7 @@ function previewAchievementNotification() {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 2px;
-  color: rgba(212, 163, 115, 0.8);
+  color: var(--gradient-text-muted);
   margin: 0 0 16px 0;
 }
 
@@ -2161,7 +2188,7 @@ function previewAchievementNotification() {
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--gradient-text-muted);
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -2173,7 +2200,7 @@ function previewAchievementNotification() {
 
 .status-row .mono {
   font-family: monospace;
-  color: var(--color-accent, #D4A373);
+  color: var(--gradient-text);
 }
 
 .settings-btn {
@@ -2182,10 +2209,10 @@ function previewAchievementNotification() {
   width: 100%;
   margin-top: 24px;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--gradient-surface);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
-  color: var(--color-text-light, #fff);
+  color: var(--gradient-text);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -2193,10 +2220,11 @@ function previewAchievementNotification() {
   cursor: pointer;
   backdrop-filter: blur(4px);
   transition: all 0.2s;
+  border-color: var(--gradient-border);
 }
 
 .settings-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--gradient-surface-hover);
 }
 
 /* 5. 成就陈列 */
@@ -2244,7 +2272,7 @@ function previewAchievementNotification() {
   font-weight: 800;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .achievements-hero h2 {
@@ -2274,7 +2302,7 @@ function previewAchievementNotification() {
 .achievements-score strong {
   font-size: 36px;
   line-height: 1;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .achievements-score span {
@@ -2311,8 +2339,7 @@ function previewAchievementNotification() {
   border-radius: 20px;
   padding: 16px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.28)),
-    radial-gradient(circle at 0% 50%, rgba(255, 178, 62, 0.14), transparent 34%);
+    var(--color-panel-bg);
   color: var(--color-text-main, #4B3621);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2330,8 +2357,7 @@ function previewAchievementNotification() {
   transform: translateY(-2px);
   border-color: rgba(184, 115, 51, 0.32);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.38)),
-    radial-gradient(circle at 0% 50%, rgba(255, 178, 62, 0.2), transparent 36%);
+    var(--color-panel-bg);
 }
 
 .achievement-featured__copy {
@@ -2342,7 +2368,7 @@ function previewAchievementNotification() {
 }
 
 .achievement-featured__copy small {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -2381,7 +2407,7 @@ function previewAchievementNotification() {
   border: 1px solid rgba(184, 115, 51, 0.12);
   border-radius: 16px;
   padding: 12px 8px 10px;
-  background: rgba(255, 255, 255, 0.38);
+  background: var(--color-panel-bg);
   color: var(--color-text-main, #4B3621);
   display: flex;
   flex-direction: column;
@@ -2392,18 +2418,18 @@ function previewAchievementNotification() {
     transform 0.2s ease,
     border-color 0.2s ease,
     background 0.2s ease;
+  border-color: var(--color-border);
 }
 
 .achievement-wall-medal:hover {
   transform: translateY(-2px);
-  border-color: rgba(184, 115, 51, 0.28);
-  background: rgba(255, 255, 255, 0.64);
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg);
 }
 
 .achievement-wall-medal.earned {
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 214, 135, 0.18), transparent 44%),
-    rgba(255, 255, 255, 0.54);
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 42%), var(--color-panel-bg);
 }
 
 .achievement-wall-medal span {
@@ -2437,7 +2463,7 @@ function previewAchievementNotification() {
   gap: 8px;
   padding: 7px 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--rarity-edge) 12%, rgba(255, 255, 255, 0.72));
+  background: color-mix(in srgb, var(--rarity-edge) 12%, var(--color-panel-bg));
   border: 1px solid color-mix(in srgb, var(--rarity-edge) 42%, transparent);
   color: var(--color-text-main, #4B3621);
   box-shadow: 0 8px 18px -16px var(--rarity-glow);
@@ -2445,7 +2471,7 @@ function previewAchievementNotification() {
 }
 
 .achievement-rarity-pill strong {
-  color: var(--rarity-edge);
+  color: color-mix(in srgb, var(--rarity-edge) 40%, var(--color-text-main));
 }
 
 .achievement-grid {
@@ -2461,7 +2487,7 @@ function previewAchievementNotification() {
   border: 1px solid rgba(184, 115, 51, 0.12);
   border-radius: 16px;
   padding: 16px 10px 12px;
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--color-panel-bg);
   color: var(--color-text-main, #4B3621);
   cursor: pointer;
   display: flex;
@@ -2472,19 +2498,19 @@ function previewAchievementNotification() {
     transform 0.2s ease,
     background 0.2s ease,
     border-color 0.2s ease;
+  border-color: var(--color-border);
 }
 
 .achievement-tile:hover {
   transform: translateY(-3px);
-  border-color: rgba(184, 115, 51, 0.28);
-  background: rgba(255, 255, 255, 0.7);
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg);
 }
 
 .achievement-tile.earned {
   border-color: rgba(184, 115, 51, 0.26);
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 214, 135, 0.18), transparent 42%),
-    rgba(255, 255, 255, 0.64);
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 42%), var(--color-panel-bg);
 }
 
 .achievement-tile__meta {
@@ -2537,7 +2563,7 @@ function previewAchievementNotification() {
   border-radius: 999px;
   border: 1px solid rgba(184, 115, 51, 0.28);
   background: rgba(75, 54, 33, 0.08);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -2545,8 +2571,8 @@ function previewAchievementNotification() {
 }
 
 .achievement-preview-btn:hover {
-  background: var(--color-accent, #B87333);
-  color: var(--color-accent-contrast, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .achievement-preview-btn.ghost {
@@ -2589,8 +2615,8 @@ function previewAchievementNotification() {
 
 .achievement-detail__rarity {
   --rarity-edge: #B87333;
-  background: color-mix(in srgb, var(--rarity-edge) 14%, #fff) !important;
-  color: var(--rarity-edge) !important;
+  background: color-mix(in srgb, var(--rarity-edge) 14%, var(--color-panel-bg)) !important;
+  color: var(--color-text-main) !important;
 }
 
 .achievement-detail h3 {
@@ -2619,7 +2645,7 @@ function previewAchievementNotification() {
 }
 
 .achievement-detail__progress-meta strong {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .achievement-detail__track {

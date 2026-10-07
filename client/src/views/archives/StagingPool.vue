@@ -6,6 +6,8 @@ import RButton from '@/components/RButton.vue'
 import RCheckbox from '@/components/RCheckbox.vue'
 import REmpty from '@/components/REmpty.vue'
 import WowIcon from '@/components/WowIcon.vue'
+import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { useArchiveDisplayColors } from './archiveDisplayColors'
 import type {
   AccountChatLogs,
   ChatRecord,
@@ -15,6 +17,7 @@ import type {
 } from '@/types/chatLog'
 
 const { t } = useI18n()
+const { readableArchiveColor } = useArchiveDisplayColors()
 
 interface Props {
   active?: boolean
@@ -1272,7 +1275,7 @@ defineExpose({
                           :size="18"
                           class="record-avatar"
                         />
-                        <strong :style="getSenderColor(record) ? { color: `#${getSenderColor(record)}` } : {}">
+                        <strong :style="getSenderColor(record) ? { color: readableArchiveColor(normalizeCharacterCardHexForCSS(getSenderColor(record))) } : {}">
                           {{ getSenderName(record) }}
                         </strong>
                         <span v-if="record.profile_snapshot?.pn" class="profile-name">
@@ -1486,9 +1489,9 @@ defineExpose({
 .date-presets button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 
 .date-presets button.active {
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
-  background: var(--archive-copper);
-  border-color: var(--archive-copper);
+  color: var(--btn-primary-text);
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
 }
 
 .date-grid label {
@@ -1508,7 +1511,7 @@ defineExpose({
 
 .filter-error {
   margin: 7px 0 0;
-  color: #9d3429;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   font-size: 10px;
   line-height: 1.35;
 }
@@ -1641,9 +1644,9 @@ defineExpose({
 
 .filter-chip.active,
 .profile-option.active {
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
-  background: var(--archive-copper);
-  border-color: var(--archive-copper);
+  color: var(--btn-primary-text);
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
 }
 
 .profile-option.active span,
@@ -1765,7 +1768,7 @@ defineExpose({
 .sync-error {
   margin: 10px 20px 0;
   padding: 8px 10px;
-  color: #8d2d22;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   background: rgba(180, 50, 40, 0.08);
   border-left: 2px solid #a33a2c;
   font-size: 12px;
@@ -1939,10 +1942,10 @@ input:focus-visible {
 }
 
 .channel-yell,
-.npc-yell { color: #a33127; }
+.npc-yell { color: color-mix(in srgb, #a33127 40%, var(--color-text-main)); }
 .channel-whisper,
-.npc-whisper { color: #775592; }
-.npc-say { color: #76518d; }
+.npc-whisper { color: color-mix(in srgb, #775592 40%, var(--color-text-main)); }
+.npc-say { color: color-mix(in srgb, #775592 40%, var(--color-text-main)); }
 
 .speaker-line {
   display: flex;

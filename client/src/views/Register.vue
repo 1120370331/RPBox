@@ -210,13 +210,13 @@ async function handleRegister() {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: #EED9C4;
+  background: var(--color-main-bg);
 }
 
 .register-card {
   width: 100%;
   max-width: 400px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 40px;
   box-shadow: 0 4px 20px rgba(75, 54, 33, 0.1);
@@ -238,13 +238,13 @@ async function handleRegister() {
 .logo {
   font-size: 32px;
   font-weight: 700;
-  color: #804030;
+  color: var(--color-text-main);
   margin-bottom: 8px;
 }
 
 .subtitle {
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .register-form {
@@ -259,14 +259,15 @@ async function handleRegister() {
   border: 1px solid #E8DCCF;
   border-radius: 8px;
   font-size: 15px;
-  background: #FFFCF9;
-  color: #2C1810;
+  background: var(--input-bg);
+  color: var(--color-text-main);
   transition: border-color 0.3s, box-shadow 0.3s, transform 0.2s;
+  border-color: var(--input-border);
 }
 
 .form-group .input:focus {
   outline: none;
-  border-color: #B87333;
+  border-color: var(--input-focus);
   transform: scale(1.02);
   box-shadow: 0 4px 12px rgba(184, 115, 51, 0.15);
 }
@@ -284,18 +285,19 @@ async function handleRegister() {
   padding: 12px 20px;
   border: 1px solid #B87333;
   border-radius: 8px;
-  background: #fff;
-  color: #B87333;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.3s;
+  border-color: var(--btn-outline-border);
 }
 
 .btn-send-code:hover:not(:disabled) {
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-send-code:disabled {
@@ -314,7 +316,7 @@ async function handleRegister() {
   align-items: flex-start;
   gap: 8px;
   font-size: 13px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .agreement-checkbox {
@@ -322,7 +324,7 @@ async function handleRegister() {
 }
 
 .agreement-link {
-  color: #B87333;
+  color: var(--link-color);
   text-decoration: none;
 }
 
@@ -334,8 +336,8 @@ async function handleRegister() {
   width: 100%;
   margin-top: 8px;
   padding: 12px;
-  background: #804030;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 15px;
@@ -361,7 +363,7 @@ async function handleRegister() {
 }
 
 .register-footer a {
-  color: #B87333;
+  color: var(--link-color);
   text-decoration: none;
 }
 

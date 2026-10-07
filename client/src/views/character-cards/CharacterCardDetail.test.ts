@@ -50,6 +50,7 @@ const card: CharacterCard = {
   residence: '',
   relationship_status: '',
   icon: '',
+  class_color: '',
   name_color: '80C9D5E7',
   summary: '',
   background_story: '<p>背景</p>',
@@ -388,7 +389,7 @@ describe('CharacterCardDetail tabs', () => {
 
     await wrapper.get('.character-portrait__frame').trigger('click')
     const viewer = wrapper.get('.image-viewer-stub')
-    expect(viewer.attributes('data-images').split('|')).toHaveLength(2)
+    expect((viewer.attributes('data-images') || '').split('|')).toHaveLength(2)
     expect(viewer.attributes('data-start')).toBe('0')
     wrapper.unmount()
   })

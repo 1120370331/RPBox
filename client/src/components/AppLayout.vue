@@ -5,8 +5,6 @@ import { useUserStore } from '../stores/user'
 import { useNotificationStore } from '../stores/notification'
 import { useSidebarBadgesStore } from '../stores/sidebarBadges'
 import { useRouter, useRoute } from 'vue-router'
-import RDialog from './RDialog.vue'
-import RToast from './RToast.vue'
 import UserLevelBadge from './UserLevelBadge.vue'
 import RPDBJumpPreview from './rpdb/RPDBJumpPreview.vue'
 import CharacterCardJumpPreview from './character-cards/CharacterCardJumpPreview.vue'
@@ -463,7 +461,7 @@ onBeforeUnmount(() => {
           <div class="user-info">
             <div class="user-name-row">
               <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
-                <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username }}</h4>
+                <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold, 'sidebarBg')">{{ userStore.user?.username }}</h4>
               </router-link>
               <UserLevelBadge
                 :level="userStore.user?.forum_level"
@@ -503,12 +501,6 @@ onBeforeUnmount(() => {
       </div>
       <router-view />
     </main>
-
-    <!-- 全局弹窗 -->
-    <RDialog />
-
-    <!-- 全局消息通知 -->
-    <RToast />
 
     <RPDBJumpPreview />
     <CharacterCardJumpPreview />
@@ -727,7 +719,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  color: var(--btn-primary-text, #FFF);
+  color: var(--gradient-text);
   border: 2px solid rgba(255,255,255,0.2);
   overflow: hidden;
 }

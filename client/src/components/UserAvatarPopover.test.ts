@@ -1,5 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { createPinia } from 'pinia'
+import { useThemeStore } from '@/stores/theme'
+import { displayContrast, parseDisplayColor } from '@/utils/displayColor'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n'
 import { clearUserPopoverDataCache } from '@/utils/userPopoverData'
@@ -28,6 +31,8 @@ describe('UserAvatarPopover', () => {
     mocks.getUserProfile.mockResolvedValue({
       id: 5,
       username: '月桂旅人',
+      name_color: '#000000',
+      name_bold: true,
       avatar: '',
       bio: '在艾泽拉斯记录旅途与角色故事。',
       location: '月光林地',
@@ -86,7 +91,7 @@ describe('UserAvatarPopover', () => {
         avatarUrl: '',
       },
       attrs: { class: 'author-avatar' },
-      global: { plugins: [router, i18n] },
+      global: { plugins: [createPinia(), router, i18n] },
     })
 
     await wrapper.get('.user-avatar-popover__trigger').trigger('mouseenter')
@@ -130,7 +135,7 @@ describe('UserAvatarPopover', () => {
         size: 20,
         showPopover: false,
       },
-      global: { plugins: [router, i18n] },
+      global: { plugins: [createPinia(), router, i18n] },
     })
 
     const trigger = wrapper.get('.user-avatar-popover__trigger')
@@ -145,6 +150,44 @@ describe('UserAvatarPopover', () => {
     await trigger.trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.fullPath).toBe('/user/5')
+    wrapper.unmount()
+  })
+
+  it('updates an open teleported dyed identity and TRP3 card name on theme changes without modifying API data', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        { path: '/user/:id', component: { template: '<div />' } },
+        { path: '/character-cards/:id', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/')
+    const pinia = createPinia()
+    const theme = useThemeStore(pinia)
+    theme.setTheme('classic')
+    const apiCard = Object.freeze({ id: 21, display_name: '黑色姓名', name_color: '80000000', class_color: '80000000' })
+    mocks.listUserCharacterCards.mockResolvedValue({ character_cards: [apiCard] })
+    const wrapper = mount(UserAvatarPopover, {
+      attachTo: document.body,
+      props: { userId: 5, username: '月桂旅人' },
+      global: { plugins: [pinia, router, i18n] },
+    })
+    await wrapper.get('.user-avatar-popover__trigger').trigger('mouseenter')
+    await flushPromises()
+    for (const id of ['classic', 'black-gold', 'dreamy-pink-blue', 'classic']) {
+      theme.setTheme(id)
+      await flushPromises()
+      const name = document.querySelector<HTMLElement>('.user-avatar-popover__identity strong')!
+      const cardName = document.querySelector<HTMLElement>('.user-avatar-popover__card-copy strong')!
+      for (const background of [theme.currentTheme.colors.gradientStart, theme.currentTheme.colors.gradientEnd]) {
+        expect(displayContrast(parseDisplayColor(name.style.color)!, parseDisplayColor(background)!)).toBeGreaterThanOrEqual(4.5)
+      }
+      expect(name.style.fontWeight).toBe('700')
+      expect(displayContrast(parseDisplayColor(cardName.style.color)!, parseDisplayColor(theme.currentTheme.colors.panelBg)!)).toBeGreaterThanOrEqual(4.5)
+    }
+    expect(apiCard.name_color).toBe('80000000')
+    expect(mocks.getUserProfile).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 })

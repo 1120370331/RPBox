@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ModeratorMain from './ModeratorMain.vue'
@@ -83,7 +84,7 @@ async function mountModerator() {
   await router.isReady()
   const wrapper = mount(ModeratorMain, {
     global: {
-      plugins: [router, i18n],
+      plugins: [router, i18n, createPinia()],
       stubs: {
         CharacterCardPortrait: true,
         ImageViewer: true,

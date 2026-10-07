@@ -447,7 +447,7 @@ watch(() => props.modelValue, (next) => {
 
 .emote-editor-input:empty::before {
   content: attr(data-placeholder);
-  color: rgba(141, 123, 104, 0.6);
+  color: var(--input-placeholder);
 }
 
 .emote-editor-input :deep(.comment-emote) {
@@ -462,8 +462,8 @@ watch(() => props.modelValue, (next) => {
   padding: 2px 8px;
   margin: 0 2px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-weight: 600;
   font-size: 0.9em;
 }
@@ -475,8 +475,8 @@ watch(() => props.modelValue, (next) => {
   margin-top: 6px;
   z-index: 20;
   min-width: 220px;
-  background: #fff;
-  border: 1px solid #E5D4C1;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   box-shadow: 0 10px 20px rgba(44, 24, 16, 0.12);
   padding: 8px;
@@ -497,16 +497,16 @@ watch(() => props.modelValue, (next) => {
 
 .mention-item:hover,
 .mention-item.active {
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--btn-outline-hover);
 }
 
 .mention-avatar {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid #E5D4C1;
-  background: #F5EFE7;
-  color: #804030;
+  border: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--tag-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -523,13 +523,13 @@ watch(() => props.modelValue, (next) => {
 
 .mention-name {
   font-size: 13px;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .mention-empty {
   padding: 8px;
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   text-align: center;
 }
 </style>

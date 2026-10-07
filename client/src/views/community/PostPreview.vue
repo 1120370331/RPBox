@@ -203,7 +203,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 .loading {
   text-align: center;
   padding: 80px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 16px;
 }
 
@@ -227,7 +227,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   gap: 12px;
   background: none;
   border: none;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
@@ -237,7 +237,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 }
 
 .back-btn:hover {
-  color: #804030;
+  color: var(--link-color);
 }
 
 .back-icon {
@@ -245,17 +245,19 @@ function handlePreviewContentClick(event: MouseEvent) {
   height: 40px;
   border: 1px solid #E5D4C1;
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-panel-bg);
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   transition: all 0.3s;
+  color: var(--btn-outline-text);
+  border-color: var(--btn-outline-border);
 }
 
 .back-btn:hover .back-icon {
-  border-color: #804030;
-  background: rgba(128, 64, 48, 0.05);
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
 }
 
 .back-icon i {
@@ -267,12 +269,13 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #FEF3C7;
+  background: var(--color-warning-light);
   border: 1px solid #FDE68A;
   border-radius: 20px;
-  color: #D97706;
+  color: var(--color-warning-dark);
   font-size: 13px;
   font-weight: 500;
+  border-color: var(--color-warning-border);
 }
 
 /* ========== 主内容区 ========== */
@@ -284,7 +287,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 /* ========== 文章卡片 ========== */
 .article-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
   position: relative;
 }
@@ -306,6 +309,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   padding: 20px 32px;
   border-bottom: 1px solid #F5EFE7;
+  border-bottom-color: var(--color-border);
 }
 
 .author-section {
@@ -318,7 +322,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #804030);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   border: 2px solid #fff;
   box-shadow: 0 2px 8px rgba(128, 64, 48, 0.2);
   display: flex;
@@ -326,8 +330,9 @@ function handlePreviewContentClick(event: MouseEvent) {
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--gradient-text);
   overflow: hidden;
+  border-color: var(--color-panel-bg);
 }
 
 .author-avatar img {
@@ -353,13 +358,13 @@ function handlePreviewContentClick(event: MouseEvent) {
   font-family: 'Merriweather', serif;
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
 }
 
 .post-date {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 /* ========== 操作按钮 ========== */
@@ -374,13 +379,14 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: #F5EFE7;
+  background: var(--color-panel-bg);
   border: 1px solid #E5D4C1;
   border-radius: 20px;
-  color: #8D7B68;
+  color: var(--btn-outline-text);
   font-size: 14px;
   cursor: not-allowed;
   opacity: 0.6;
+  border-color: var(--btn-outline-border);
 }
 
 .action-btn i {
@@ -391,7 +397,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 14px;
   opacity: 0.6;
 }
@@ -415,7 +421,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  background: #F5EFE7;
+  background: var(--color-card-bg);
   margin-bottom: 20px;
 }
 
@@ -429,7 +435,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 .category-badge span:last-child {
   font-size: 11px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -440,12 +446,13 @@ function handlePreviewContentClick(event: MouseEvent) {
   gap: 8px;
   padding: 10px 18px;
   margin-bottom: 20px;
-  background: linear-gradient(135deg, rgba(184, 115, 51, 0.1), rgba(128, 64, 48, 0.08));
+  background: var(--tag-bg);
   border: 1px solid rgba(184, 115, 51, 0.2);
   border-radius: 999px;
-  color: #804030;
+  color: var(--tag-text);
   font-size: 13px;
   font-weight: 600;
+  border-color: var(--color-border);
 }
 
 .location-badge i {
@@ -456,7 +463,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   font-family: 'Merriweather', serif;
   font-size: 32px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.4;
   margin: 0 0 20px 0;
 }
@@ -471,16 +478,17 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 .tag-item {
   padding: 4px 12px;
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--tag-bg);
   border: 1px solid rgba(128, 64, 48, 0.2);
   border-radius: 4px;
   font-size: 12px;
-  color: #804030;
+  color: var(--tag-text);
+  border-color: var(--color-border);
 }
 
 .zen-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, #E5D4C1, transparent);
+  background: linear-gradient(90deg, transparent, var(--color-border), transparent);
   margin: 32px 0;
 }
 
@@ -489,7 +497,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   font-family: 'Merriweather', serif;
   font-size: 16px;
   line-height: 1.9;
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 .article-content :deep(img) {
@@ -505,27 +513,29 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 .article-content :deep(h2),
 .article-content :deep(h3) {
-  color: #2C1810;
+  color: var(--color-text-main);
   font-weight: 700;
   margin-top: 2em;
   margin-bottom: 1em;
   padding-left: 16px;
   border-left: 3px solid #B87333;
+  border-left-color: var(--color-accent);
 }
 
 .article-content :deep(blockquote) {
-  background: #F5EFE7;
+  background: var(--color-card-bg);
   border: 1px solid #E5D4C1;
   padding: 24px;
   margin: 2em 0;
   font-style: italic;
   text-align: center;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-size: 18px;
+  border-color: var(--color-border);
 }
 
 .article-content :deep(strong) {
-  color: #804030;
+  color: inherit;
 }
 
 .article-content :deep(.mention) {
@@ -533,15 +543,16 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-weight: 600;
   margin: 0 2px;
+  border-color: var(--color-border);
 }
 
 /* ========== 评论区 ========== */
 .comments-section {
-  background: #fff;
+  background: var(--color-panel-bg);
   padding: 32px;
   box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
 }
@@ -550,7 +561,7 @@ function handlePreviewContentClick(event: MouseEvent) {
   font-family: 'Merriweather', serif;
   font-size: 20px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -561,8 +572,8 @@ function handlePreviewContentClick(event: MouseEvent) {
   font-family: 'Inter', sans-serif;
   font-size: 13px;
   font-weight: 400;
-  color: #8D7B68;
-  background: #F5EFE7;
+  color: var(--color-text-secondary);
+  background: var(--color-card-bg);
   padding: 4px 12px;
   border-radius: 20px;
 }
@@ -570,7 +581,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 .empty-comments {
   text-align: center;
   padding: 40px 16px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 

@@ -711,19 +711,19 @@ function escapeHtml(value: string) {
 .quick-jump__tabs button {
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid #E5D4C1;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-bg);
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .quick-jump__tabs button.active,
 .quick-jump__tabs button:hover {
-  border-color: #B87333;
-  color: #B87333;
-  background: rgba(184, 115, 51, 0.08);
+  border-color: var(--color-border-hover);
+  color: var(--icon-color);
+  background: var(--btn-secondary-bg);
 }
 
 .jump-search {
@@ -731,11 +731,11 @@ function escapeHtml(value: string) {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--color-panel-bg);
   margin-bottom: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .jump-search input {
@@ -743,7 +743,7 @@ function escapeHtml(value: string) {
   outline: none;
   font-size: 12px;
   width: 100%;
-  color: #4B3621;
+  color: var(--color-text-main);
   background: transparent;
 }
 
@@ -771,9 +771,9 @@ function escapeHtml(value: string) {
   justify-content: space-between;
   gap: 16px;
   padding: 10px 12px;
-  border: 1px solid #F1E6DB;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--color-panel-bg);
 }
 
 .jump-item--rpdb {
@@ -794,16 +794,16 @@ function escapeHtml(value: string) {
   min-height: 94px;
   overflow: hidden;
   padding: 0 12px 0 0;
-  border-color: #DEC5AD;
-  border-left: 3px solid #B87333;
-  background: linear-gradient(90deg, #FFF9F3, #FFF);
+  border-color: var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-card-bg);
 }
 
 .jump-character__portrait {
   align-self: stretch;
   min-height: 94px;
   overflow: hidden;
-  border-right: 1px solid #E3D3C3;
+  border-right: 1px solid var(--color-border);
   background: #302017;
 }
 
@@ -826,7 +826,7 @@ function escapeHtml(value: string) {
 }
 
 .jump-item__eyebrow--character {
-  color: #9A5A2D;
+  color: var(--icon-color);
 }
 
 .character-card-empty {
@@ -838,12 +838,12 @@ function escapeHtml(value: string) {
 
 .character-card-empty i {
   margin-bottom: 4px;
-  color: #B87333;
+  color: var(--icon-color);
   font-size: 26px;
 }
 
 .character-card-empty small {
-  color: #AA9684;
+  color: var(--color-text-secondary);
   font-size: 10px;
 }
 
@@ -854,7 +854,7 @@ function escapeHtml(value: string) {
 .jump-item__cover {
   align-self: stretch;
   min-height: 92px;
-  background: color-mix(in srgb, var(--rpdb-accent) 12%, #F5EFE7);
+  background: color-mix(in srgb, var(--rpdb-accent) 12%, var(--color-card-bg));
 }
 
 .jump-item__cover img {
@@ -887,7 +887,7 @@ function escapeHtml(value: string) {
 
 .jump-item__summary {
   overflow: hidden;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.45;
   white-space: nowrap;
@@ -912,10 +912,10 @@ function escapeHtml(value: string) {
   gap: 5px;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: #fff;
-  color: #8D7B68;
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
   font-size: 11px;
   white-space: nowrap;
   cursor: pointer;
@@ -923,9 +923,9 @@ function escapeHtml(value: string) {
 
 .rpdb-type-filter button:hover,
 .rpdb-type-filter button.active {
-  border-color: #B87333;
-  background: rgba(184, 115, 51, 0.08);
-  color: #804030;
+  border-color: var(--color-border-hover);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
 }
 
 .jump-item__info {
@@ -938,21 +938,21 @@ function escapeHtml(value: string) {
 .jump-item__title {
   font-size: 13px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .jump-item__meta {
   display: flex;
   gap: 8px;
   font-size: 11px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   flex-wrap: wrap;
 }
 
 .jump-loading,
 .jump-empty {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   padding: 12px 0;
   text-align: center;
 }

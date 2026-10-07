@@ -42,6 +42,7 @@ function hide() { visible.value = false }
   margin-top: 4px;
   min-width: 120px;
   background: var(--color-panel-bg);
+  color: var(--color-text-main);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 16px rgba(var(--shadow-base), 0.2);

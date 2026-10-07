@@ -3,8 +3,13 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
+import { useThemeStore } from '@/stores/theme'
+import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { useArchiveDisplayColors } from '../archives/archiveDisplayColors'
 
 const { t } = useI18n()
+const themeStore = useThemeStore()
+const { readableArchiveColor } = useArchiveDisplayColors()
 
 // 感情状态枚举
 const RelationshipStatusMap = computed<Record<number, string>>(() => ({
@@ -224,7 +229,7 @@ async function loadProfile() {
             </div>
             <div class="form-group">
               <label class="form-label">{{ $t('sync.detail.eyeColor') }}</label>
-              <div class="form-value" :class="{ empty: !profile.characteristics?.EC }" :style="profile.characteristics?.EH ? { color: '#' + profile.characteristics.EH } : {}">
+              <div class="form-value" :class="{ empty: !profile.characteristics?.EC }" :style="profile.characteristics?.EH ? { color: readableArchiveColor(normalizeCharacterCardHexForCSS(profile.characteristics.EH), themeStore.currentTheme.colors.cardBg) } : {}">
                 {{ profile.characteristics?.EC || '-' }}
               </div>
             </div>
@@ -348,7 +353,7 @@ async function loadProfile() {
 
 /* 顶部工具栏 */
 .top-toolbar {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   height: 72px;
   display: flex;
@@ -362,12 +367,12 @@ async function loadProfile() {
   display: flex;
   align-items: center;
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   gap: 8px;
 }
 
-.breadcrumbs .separator { color: #D4A373; }
-.breadcrumbs .current { color: #804030; font-weight: 600; }
+.breadcrumbs .separator { color: var(--icon-color); }
+.breadcrumbs .current { color: var(--color-text-main); font-weight: 600; }
 
 .toolbar-actions { display: flex; gap: 12px; }
 
@@ -389,7 +394,7 @@ async function loadProfile() {
 
 /* 角色头部 */
 .char-header {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 32px;
   display: flex;
@@ -402,42 +407,43 @@ async function loadProfile() {
   width: 100px;
   height: 100px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #D4A373, #8C7B70);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 48px;
-  color: #fff;
+  color: var(--gradient-text);
   flex-shrink: 0;
 }
 
 .char-info h1 {
   font-size: 32px;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 8px 0;
   font-weight: 700;
 }
 
 .char-title {
   font-size: 16px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin: 0 0 12px 0;
 }
 
 .char-meta { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .meta-badge {
-  background: rgba(128, 64, 48, 0.1);
-  color: #804030;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
+  border-color: var(--color-border);
 }
 
 /* 面板 */
 .panel {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(75, 54, 33, 0.05);
   overflow: hidden;
@@ -450,19 +456,20 @@ async function loadProfile() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #FFFCF9;
+  background: var(--color-card-bg);
+  border-color: var(--color-border);
 }
 
 .panel-title {
   font-size: 16px;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-weight: 600;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.panel-title i { color: #804030; }
+.panel-title i { color: var(--icon-color); }
 
 .panel-body { padding: 24px; }
 
@@ -478,16 +485,17 @@ async function loadProfile() {
 .form-label {
   font-size: 13px;
   font-weight: 600;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .form-value {
   font-size: 15px;
-  color: #2C1810;
+  color: var(--color-text-main);
   padding: 12px 16px;
-  background: #FFFCF9;
+  background: var(--color-card-bg);
   border: 1px solid #E8DCCF;
   border-radius: 8px;
+  border-color: var(--color-border);
 }
 
 /* RP状态标签 */
@@ -498,28 +506,29 @@ async function loadProfile() {
   font-weight: 600;
 }
 
-.rp-badge.ic { background: #e8f5e9; color: #2e7d32; }
-.rp-badge.ooc { background: #fff3e0; color: #ed6c02; }
+.rp-badge.ic { background: var(--color-success-light); color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main)); }
+.rp-badge.ooc { background: var(--color-warning-light); color: var(--color-warning-dark); border-color: var(--color-warning-border); }
 
 /* 模板标签 */
 .template-badge {
   padding: 4px 10px;
   border-radius: 12px;
   font-size: 12px;
-  background: rgba(128, 64, 48, 0.1);
-  color: #804030;
+  background: var(--tag-bg);
+  color: var(--tag-text);
+  border-color: var(--color-border);
 }
 
 /* 空值占位样式 */
 .empty {
-  color: #C4B5A8 !important;
+  color: var(--color-text-secondary) !important;
   font-style: italic;
 }
 
 /* 状态内容 */
 .status-content p {
   font-size: 15px;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.7;
   margin: 0;
   white-space: pre-wrap;
@@ -529,25 +538,26 @@ async function loadProfile() {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px dashed #E8DCCF;
+  border-top-color: var(--color-border);
 }
 
 .status-ooc label {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   display: block;
   margin-bottom: 6px;
 }
 
 .status-ooc p {
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
 /* 关于文本 */
 .about-text {
   font-size: 15px;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.8;
   white-space: pre-wrap;
 }
@@ -560,15 +570,16 @@ async function loadProfile() {
 
 .about-block {
   padding: 16px;
-  background: #FFFCF9;
+  background: var(--color-card-bg);
   border: 1px solid #E8DCCF;
   border-radius: 10px;
+  border-color: var(--color-border);
 }
 
 .about-block p {
   margin: 0;
   font-size: 15px;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.7;
   white-space: pre-wrap;
 }
@@ -581,7 +592,7 @@ async function loadProfile() {
 
 .about-section h4 {
   font-size: 14px;
-  color: #804030;
+  color: var(--icon-color);
   margin: 0 0 8px 0;
   font-weight: 600;
 }
@@ -589,7 +600,7 @@ async function loadProfile() {
 .about-section p {
   margin: 0;
   font-size: 15px;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.7;
   white-space: pre-wrap;
 }
@@ -603,29 +614,30 @@ async function loadProfile() {
 
 .trait-item {
   padding: 14px 16px;
-  background: #FFFCF9;
+  background: var(--color-card-bg);
   border: 1px solid #E8DCCF;
   border-radius: 10px;
+  border-color: var(--color-border);
 }
 
 .trait-labels {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
 .trait-bar {
   height: 8px;
-  background: rgba(128, 64, 48, 0.1);
+  background: var(--color-primary-light);
   border-radius: 8px;
   overflow: hidden;
 }
 
 .trait-fill {
   height: 100%;
-  background: linear-gradient(90deg, #D4A373, #804030);
+  background: var(--color-accent);
   border-radius: 8px;
 }
 
@@ -641,20 +653,21 @@ async function loadProfile() {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #FFFCF9;
+  background: var(--color-card-bg);
   border: 1px solid #E8DCCF;
   border-radius: 8px;
+  border-color: var(--color-border);
 }
 
 .misc-item label {
   font-size: 13px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-weight: 600;
 }
 
 .misc-item span {
   font-size: 14px;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 /* 加载状态 */
@@ -664,14 +677,14 @@ async function loadProfile() {
   align-items: center;
   justify-content: center;
   padding: 80px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .loader {
   width: 40px;
   height: 40px;
-  border: 3px solid #E8DCCF;
-  border-top-color: #804030;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

@@ -16,7 +16,7 @@ interface FilterValues {
   order: 'asc' | 'desc'
 }
 
-const props = defineProps<{
+defineProps<{
   tags: Tag[]
   guilds: Guild[]
 }>()

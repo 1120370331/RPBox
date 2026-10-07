@@ -3,6 +3,7 @@ import request from './request'
 export interface Guild {
   id: number
   name: string
+  server?: string
   description: string
   icon: string
   color: string
@@ -76,6 +77,7 @@ export function sortGuildMembers(members: GuildMember[]): GuildMember[] {
 
 export interface CreateGuildRequest {
   name: string
+  server?: string
   description?: string
   icon?: string
   color?: string
@@ -96,7 +98,7 @@ export async function listGuilds(): Promise<{ guilds: Guild[] }> {
 }
 
 export async function createGuild(data: CreateGuildRequest): Promise<Guild> {
-  return request.post('/guilds', data)
+  return request.post('/guilds', normalizeGuildServer(data))
 }
 
 export async function getGuild(id: number): Promise<{ guild: Guild; my_role: string }> {
@@ -104,7 +106,12 @@ export async function getGuild(id: number): Promise<{ guild: Guild; my_role: str
 }
 
 export async function updateGuild(id: number, data: Partial<CreateGuildRequest>): Promise<Guild> {
-  return request.put(`/guilds/${id}`, data)
+  return request.put(`/guilds/${id}`, normalizeGuildServer(data))
+}
+
+function normalizeGuildServer<T extends Partial<CreateGuildRequest>>(data: T): T {
+  // Omission preserves the saved value; an explicit empty string clears it.
+  return data.server === undefined ? data : { ...data, server: data.server.trim() }
 }
 
 export async function deleteGuild(id: number): Promise<void> {

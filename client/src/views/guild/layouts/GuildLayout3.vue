@@ -42,7 +42,7 @@ function getRoleLabel(role: string): string {
       </div>
 
       <div class="hero-content">
-        <div class="content-card">
+        <div class="hero-content-card">
           <div class="badges">
             <span v-if="guild.faction" class="faction-badge" :class="guild.faction">
               {{ factionLabel }}
@@ -123,7 +123,7 @@ function getRoleLabel(role: string): string {
       <div class="members-list">
         <div v-for="m in members" :key="m.id" class="member-row">
           <div class="member-info">
-            <div class="avatar">
+            <div class="member-fallback-avatar">
               <img v-if="m.avatar" :src="m.avatar" alt="" />
               <span v-else>{{ m.username?.charAt(0) || '?' }}</span>
             </div>
@@ -139,8 +139,9 @@ function getRoleLabel(role: string): string {
 <style scoped>
 .layout3 {
   min-height: 100vh;
-  background: #f8f1eb;
+  background: var(--color-background);
   padding: 24px;
+  color: var(--color-text-main);
 }
 
 /* Hero Section */
@@ -171,8 +172,8 @@ function getRoleLabel(role: string): string {
   right: 32px;
 }
 
-.content-card {
-  background: rgba(0, 0, 0, 0.2);
+.hero-content-card {
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 24px;
@@ -195,9 +196,9 @@ function getRoleLabel(role: string): string {
   color: #fff;
 }
 
-.faction-badge.alliance { background: linear-gradient(135deg, #1e5aa8, #3b82f6); }
+.faction-badge.alliance { background: linear-gradient(135deg, #1e5aa8, #2563eb); }
 .faction-badge.horde { background: linear-gradient(135deg, #991b1b, #dc2626); }
-.faction-badge.neutral { background: linear-gradient(135deg, #6b7280, #9ca3af); }
+.faction-badge.neutral { background: linear-gradient(135deg, #6b7280, #4b5563); }
 
 .online-badge {
   display: flex;
@@ -248,8 +249,8 @@ function getRoleLabel(role: string): string {
 }
 
 .btn-settings {
-  background: #fff;
-  color: #4B3621;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-settings:hover {
@@ -263,8 +264,8 @@ function getRoleLabel(role: string): string {
 }
 
 .btn-danger {
-  background: #dc2626;
-  color: #fff;
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
 }
 
 /* Info Grid */
@@ -276,11 +277,11 @@ function getRoleLabel(role: string): string {
 }
 
 .info-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 28px;
   padding: 24px;
-  box-shadow: 0 8px 16px -4px rgba(44, 24, 16, 0.1);
-  border: 1px solid #E8DCCF;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
 }
 
 .card-header {
@@ -293,14 +294,14 @@ function getRoleLabel(role: string): string {
 .card-header h3 {
   font-size: 18px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
 }
 
 .invite-code {
   font-size: 12px;
-  color: #8C7B70;
-  background: #f8f1eb;
+  color: var(--color-text-secondary);
+  background: var(--color-card-bg);
   padding: 4px 12px;
   border-radius: 8px;
 }
@@ -316,11 +317,11 @@ function getRoleLabel(role: string): string {
   align-items: center;
   gap: 10px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 .info-item i {
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 /* Members Card */
@@ -333,14 +334,14 @@ function getRoleLabel(role: string): string {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   font-size: 14px;
-  border: 2px solid #fff;
+  border: 2px solid var(--color-panel-bg);
   margin-left: -8px;
   transition: transform 0.2s;
   overflow: hidden;
@@ -362,32 +363,32 @@ function getRoleLabel(role: string): string {
 }
 
 .member-avatar.more {
-  background: #f8f1eb;
-  color: #8C7B70;
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
 /* Description */
 .description {
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
   line-height: 1.8;
   margin: 0;
 }
 
 /* Members Section */
 .members-section {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 28px;
   padding: 24px;
-  box-shadow: 0 8px 16px -4px rgba(44, 24, 16, 0.1);
-  border: 1px solid #E8DCCF;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
 }
 
 .members-section h3 {
   font-size: 18px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 16px 0;
 }
 
@@ -407,7 +408,7 @@ function getRoleLabel(role: string): string {
 }
 
 .member-row:hover {
-  background: #f8f1eb;
+  background: var(--color-card-bg-hover);
 }
 
 .member-info {
@@ -416,12 +417,12 @@ function getRoleLabel(role: string): string {
   gap: 12px;
 }
 
-.member-info .avatar {
+.member-info .member-fallback-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -430,7 +431,7 @@ function getRoleLabel(role: string): string {
   overflow: hidden;
 }
 
-.member-info .avatar img {
+.member-info .member-fallback-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -439,7 +440,7 @@ function getRoleLabel(role: string): string {
 .member-info .name {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .role {
@@ -450,17 +451,17 @@ function getRoleLabel(role: string): string {
 }
 
 .role.owner {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--badge-bg);
+  color: var(--btn-primary-text);
 }
 
 .role.admin {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--tag-bg);
+  color: var(--tag-text);
 }
 
 .role.member {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
 }
 </style>

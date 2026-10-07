@@ -1314,7 +1314,7 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
   border: 1px dashed var(--color-border);
   border-radius: 8px;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   background: var(--color-card-bg, #f5f0eb);
   cursor: pointer;
   font-size: 13px;
@@ -1348,7 +1348,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--input-bg, #fff);
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .music-search input {
@@ -1356,7 +1356,7 @@ onBeforeUnmount(() => {
   border: none;
   outline: none;
   background: transparent;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font: inherit;
 }
 
@@ -1375,7 +1375,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   padding: 8px 12px;
   cursor: pointer;
   font: inherit;
@@ -1383,7 +1383,7 @@ onBeforeUnmount(() => {
 }
 
 .music-tab.active {
-  color: var(--color-primary);
+  color: var(--color-text-main);
   background: var(--color-panel-bg, #fff);
   box-shadow: 0 1px 4px rgba(var(--shadow-base), 0.12);
 }
@@ -1395,8 +1395,8 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(184, 115, 51, 0.12);
-  color: var(--color-accent);
+  background: var(--btn-secondary-hover);
+  color: var(--btn-secondary-text);
   font-size: 12px;
 }
 
@@ -1471,7 +1471,7 @@ onBeforeUnmount(() => {
 }
 
 .music-title-line strong {
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 14px;
   min-width: 0;
   overflow: hidden;
@@ -1481,7 +1481,7 @@ onBeforeUnmount(() => {
 
 .music-title-line span,
 .music-meta {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -1507,8 +1507,8 @@ onBeforeUnmount(() => {
   padding: 5px 10px;
   border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.7));
   border-radius: 999px;
-  background: rgba(184, 115, 51, 0.08);
-  color: var(--color-secondary);
+  background: var(--btn-secondary-bg);
+  color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -1526,15 +1526,15 @@ onBeforeUnmount(() => {
 
 .field-chip:hover {
   border-color: var(--color-accent);
-  color: var(--color-primary);
-  background: rgba(184, 115, 51, 0.12);
+  color: var(--color-text-main);
+  background: var(--btn-secondary-hover);
 }
 
 .track-color-dot {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
-  border: 1px solid rgba(64, 59, 51, 0.18);
+  border: 1px solid var(--color-border-hover);
   border-radius: 50%;
 }
 
@@ -1559,6 +1559,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-panel-bg, #fff);
+  color: var(--color-text-main);
   box-shadow: 0 12px 30px rgba(var(--shadow-base), 0.18);
 }
 
@@ -1598,7 +1599,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -1610,7 +1611,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: 7px;
   background: var(--input-bg, #fff);
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font: inherit;
 }
 
@@ -1641,7 +1642,7 @@ onBeforeUnmount(() => {
   border-radius: 7px;
   padding: 6px 10px;
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -1659,20 +1660,20 @@ onBeforeUnmount(() => {
 
 .field-popover-actions button.primary,
 .volume-steps button:hover {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: white;
+  border-color: var(--btn-primary-bg);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .field-popover-actions button.primary:disabled {
   border-color: var(--color-border);
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
 }
 
 .volume-popover-title {
   margin-bottom: 8px;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 13px;
   font-weight: 600;
 }
@@ -1686,13 +1687,13 @@ onBeforeUnmount(() => {
 
 .playlist-picker-title {
   margin-bottom: 8px;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 13px;
   font-weight: 600;
 }
 
 .playlist-picker-empty {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1715,7 +1716,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.7));
   border-radius: 7px;
   background: transparent;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -1730,14 +1731,14 @@ onBeforeUnmount(() => {
 }
 
 .playlist-picker-list button small {
-  color: var(--color-tertiary, #8b8072);
+  color: var(--color-text-secondary);
   font-size: 11px;
 }
 
 .playlist-picker-list button.active {
   border-color: var(--color-accent);
-  background: rgba(184, 115, 51, 0.12);
-  color: var(--color-primary);
+  background: var(--btn-secondary-hover);
+  color: var(--color-text-main);
 }
 
 .preview-popover {
@@ -1760,7 +1761,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border-light, rgba(229, 212, 193, 0.7));
   border-radius: 7px;
   background: rgba(184, 115, 51, 0.1);
-  color: var(--color-primary);
+  color: var(--color-text-main);
   cursor: pointer;
   font-size: 18px;
 }
@@ -1785,7 +1786,7 @@ onBeforeUnmount(() => {
 .preview-popover-main strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-size: 13px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -1793,7 +1794,7 @@ onBeforeUnmount(() => {
 }
 
 .preview-popover-main span {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1825,7 +1826,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 44px 16px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   border: 1px dashed var(--color-border);
   border-radius: 8px;
   background: var(--color-card-bg, #f5f0eb);
@@ -1852,7 +1853,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -1916,15 +1917,15 @@ onBeforeUnmount(() => {
 }
 
 .playlist-track-row {
-  background: rgba(184, 115, 51, 0.04);
+  background: var(--color-card-bg);
 }
 
 .playlist-empty-inline {
   padding: 12px;
   border: 1px dashed var(--color-border-light, rgba(229, 212, 193, 0.7));
   border-radius: 8px;
-  background: rgba(184, 115, 51, 0.04);
-  color: var(--color-secondary);
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -1950,7 +1951,7 @@ onBeforeUnmount(() => {
 
 .playlist-desc {
   margin: 6px 0 0;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1960,7 +1961,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 

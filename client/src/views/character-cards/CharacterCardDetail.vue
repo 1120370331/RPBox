@@ -29,6 +29,8 @@ import {
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardCoverPortrait, normalizeCharacterCardPortraits } from '@/utils/characterCardPortraits'
 import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
+import { useThemeStore } from '@/stores/theme'
+import { useArchiveDisplayColors } from '../archives/archiveDisplayColors'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,6 +38,8 @@ const { t } = useI18n()
 const toast = useToastStore()
 const dialog = useDialog()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
+const { readableArchiveColor } = useArchiveDisplayColors()
 
 const cardId = computed(() => Number(route.params.id))
 const card = ref<CharacterCard | null>(null)
@@ -395,7 +399,7 @@ function goBack() {
             </button>
           </div>
           <div class="character-portrait__plaque">
-            <h1 :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</h1>
+            <h1 :style="displayNameColor ? { color: readableArchiveColor(displayNameColor, themeStore.currentTheme.colors.gradientEnd) } : undefined">{{ displayName }}</h1>
             <strong>{{ card.title || card.full_title || t('characterCards.detail.titleMissing') }}</strong>
             <span>{{ identityLine || t('characterCards.detail.identityMissing') }}</span>
           </div>
@@ -405,7 +409,7 @@ function goBack() {
           <header class="character-file__header">
             <div>
               <span class="character-file__kicker">{{ t('characterCards.detail.kicker') }}</span>
-              <h2 :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</h2>
+              <h2 :style="displayNameColor ? { color: readableArchiveColor(displayNameColor) } : undefined">{{ displayName }}</h2>
               <p>{{ card.summary || t('characterCards.detail.summaryMissing') }}</p>
             </div>
             <span v-if="isPublic" class="public-mark"><i class="ri-global-line" aria-hidden="true"></i>{{ t('characterCards.detail.publicRecord') }}</span>
