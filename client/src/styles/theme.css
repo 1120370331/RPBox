@@ -1,5 +1,5 @@
 /* RPBox 主题覆盖样式 */
-/* 全局仅提供主题默认值；局部组件状态和用户自定义颜色优先，不使用 !important。 */
+/* 全局提供主题默认值；仅启用输入控件的占位文字强制使用可读颜色。 */
 
 /* ========== 按钮样式 ========== */
 
@@ -112,6 +112,16 @@ select:focus,
 
 :where(input, textarea)::placeholder {
   color: var(--input-placeholder);
+}
+
+/* 保留禁用控件、选择器和图标使用的原占位色；兼容组件局部占位规则。 */
+:where(input:enabled, textarea:enabled) {
+  --input-placeholder: var(--input-placeholder-enabled);
+}
+
+:where(input:enabled, textarea:enabled)::placeholder {
+  color: var(--input-placeholder-enabled) !important;
+  opacity: 1 !important;
 }
 
 /* ========== 开关样式 ========== */

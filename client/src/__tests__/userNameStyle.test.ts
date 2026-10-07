@@ -24,6 +24,24 @@ describe('buildNameStyle', () => {
     expect(buildNameStyle('#fff', true, '#181818')).toEqual({ color: '#fff', fontWeight: '700' })
   })
 
+  it('falls back to panelBg when an optional theme background is absent', () => {
+    const theme = useThemeStore()
+    theme.setTheme('teal')
+    expect(theme.currentTheme.colors.inputPlaceholderEnabled).toBeUndefined()
+    const saved = Object.freeze({ name_color: 'rgba(0, 0, 0, 0.2)', name_bold: true })
+    const panel = buildNameStyle(saved.name_color, saved.name_bold, 'panelBg')
+    expect(buildNameStyle(saved.name_color, saved.name_bold, 'inputPlaceholderEnabled')).toEqual(panel)
+    expect(buildNameStyle(saved.name_color, saved.name_bold, 'invalid-background')).toEqual(panel)
+    try {
+      theme.currentTheme.colors.inputPlaceholderEnabled = undefined
+      expect(buildNameStyle(saved.name_color, saved.name_bold, 'inputPlaceholderEnabled')).toEqual(panel)
+    } finally {
+      delete theme.currentTheme.colors.inputPlaceholderEnabled
+    }
+    expect(contrast(panel.color!, theme.currentTheme.colors.panelBg)).toBeGreaterThanOrEqual(4.5)
+    expect(saved).toEqual({ name_color: 'rgba(0, 0, 0, 0.2)', name_bold: true })
+  })
+
   it('adapts extreme and alpha dyes to actual panel, card, hover, sidebar and gradient backgrounds', () => {
     const theme = useThemeStore()
     const saved = Object.freeze({ name_color: '#000000', name_bold: true, trp3: '80000000' })
