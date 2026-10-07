@@ -696,6 +696,7 @@ func (s *Server) getUserGuilds(c *gin.Context) {
 		guilds = append(guilds, gin.H{
 			"id":           guild.ID,
 			"name":         guild.Name,
+			"server":       guild.Server,
 			"icon":         guild.Icon,
 			"color":        guild.Color,
 			"member_count": guild.MemberCount,

@@ -24,6 +24,7 @@ import (
 // CreateGuildRequest 创建公会请求
 type CreateGuildRequest struct {
 	Name        string `json:"name" binding:"required"`
+	Server      string `json:"server"`
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 	Color       string `json:"color"`
@@ -36,20 +37,21 @@ type CreateGuildRequest struct {
 
 // UpdateGuildRequest 更新公会请求
 type UpdateGuildRequest struct {
-	Name                  string `json:"name"`
-	Description           string `json:"description"`
-	Icon                  string `json:"icon"`
-	Color                 string `json:"color"`
-	Banner                string `json:"banner"`
-	Slogan                string `json:"slogan"`
-	Lore                  string `json:"lore"`
-	Faction               string `json:"faction"`
-	Layout                int    `json:"layout"`
-	VisitorCanViewStories *bool  `json:"visitor_can_view_stories"` // 访客可查看剧情
-	VisitorCanViewPosts   *bool  `json:"visitor_can_view_posts"`   // 访客可查看帖子
-	MemberCanViewStories  *bool  `json:"member_can_view_stories"`  // 成员可查看剧情
-	MemberCanViewPosts    *bool  `json:"member_can_view_posts"`    // 成员可查看帖子
-	AutoApprove           *bool  `json:"auto_approve"`             // 自动审核（无需审核直接加入）
+	Name                  string  `json:"name"`
+	Server                *string `json:"server"` // nil 保持原值，空字符串清空
+	Description           string  `json:"description"`
+	Icon                  string  `json:"icon"`
+	Color                 string  `json:"color"`
+	Banner                string  `json:"banner"`
+	Slogan                string  `json:"slogan"`
+	Lore                  string  `json:"lore"`
+	Faction               string  `json:"faction"`
+	Layout                int     `json:"layout"`
+	VisitorCanViewStories *bool   `json:"visitor_can_view_stories"` // 访客可查看剧情
+	VisitorCanViewPosts   *bool   `json:"visitor_can_view_posts"`   // 访客可查看帖子
+	MemberCanViewStories  *bool   `json:"member_can_view_stories"`  // 成员可查看剧情
+	MemberCanViewPosts    *bool   `json:"member_can_view_posts"`    // 成员可查看帖子
+	AutoApprove           *bool   `json:"auto_approve"`             // 自动审核（无需审核直接加入）
 }
 
 // JoinGuildRequest 加入公会请求
@@ -161,6 +163,10 @@ func validateGuildCommonFields(nameRequired bool, name, description, icon, color
 
 func normalizeCreateGuildRequest(req *CreateGuildRequest) error {
 	trimGuildRequestFields(&req.Name, &req.Description, &req.Icon, &req.Color, &req.Slogan, &req.Faction)
+	req.Server = strings.TrimSpace(req.Server)
+	if utf8.RuneCountInString(req.Server) > 128 {
+		return fmt.Errorf("服务器名称不能超过128个字符")
+	}
 
 	if err := validateGuildCommonFields(true, req.Name, req.Description, req.Icon, req.Color, req.Slogan, req.Lore, req.Faction); err != nil {
 		return err
@@ -175,6 +181,12 @@ func normalizeCreateGuildRequest(req *CreateGuildRequest) error {
 
 func normalizeUpdateGuildRequest(req *UpdateGuildRequest) error {
 	trimGuildRequestFields(&req.Name, &req.Description, &req.Icon, &req.Color, &req.Slogan, &req.Faction)
+	if req.Server != nil {
+		*req.Server = strings.TrimSpace(*req.Server)
+		if utf8.RuneCountInString(*req.Server) > 128 {
+			return fmt.Errorf("服务器名称不能超过128个字符")
+		}
+	}
 
 	if err := validateGuildCommonFields(false, req.Name, req.Description, req.Icon, req.Color, req.Slogan, req.Lore, req.Faction); err != nil {
 		return err
@@ -240,7 +252,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 	if len(guildIDs) > 0 {
 		// 列表查询排除大字段（banner）以提高性能
 		// banner 通过独立的图片 API 访问
-		database.DB.Select("id, name, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
+		database.DB.Select("id, name, server, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
 	}
 
 	// 获取有 banner 的公会 ID 列表
@@ -351,6 +363,7 @@ func (s *Server) createGuild(c *gin.Context) {
 
 	guild := model.Guild{
 		Name:        req.Name,
+		Server:      req.Server,
 		Description: req.Description,
 		Icon:        req.Icon,
 		Color:       req.Color,
@@ -403,7 +416,7 @@ func (s *Server) getGuild(c *gin.Context) {
 
 	var guild model.Guild
 	if err := database.DB.Model(&model.Guild{}).
-		Select("id, name, description, icon, color, slogan, lore, faction, layout, owner_id, member_count, story_count, is_public, invite_code, status, reviewer_id, review_comment, reviewed_at, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").
+		Select("id, name, server, description, icon, color, slogan, lore, faction, layout, owner_id, member_count, story_count, is_public, invite_code, status, reviewer_id, review_comment, reviewed_at, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").
 		First(&guild, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
 		return
@@ -500,52 +513,72 @@ func (s *Server) updateGuild(c *gin.Context) {
 		req.Banner = normalizedBanner
 	}
 
+	updates := make(map[string]interface{})
+	if req.Server != nil {
+		updates["server"] = *req.Server
+	}
 	if req.Name != "" {
-		guild.Name = req.Name
+		updates["name"] = req.Name
 	}
 	if req.Description != "" {
-		guild.Description = req.Description
+		updates["description"] = req.Description
 	}
 	if req.Icon != "" {
-		guild.Icon = req.Icon
+		updates["icon"] = req.Icon
 	}
 	if req.Color != "" {
-		guild.Color = req.Color
+		updates["color"] = req.Color
 	}
 	if req.Banner != "" {
-		guild.Banner = req.Banner
+		updates["banner"] = req.Banner
 		now := time.Now()
-		guild.BannerUpdatedAt = &now
+		updates["banner_updated_at"] = &now
 	}
 	if req.Slogan != "" {
-		guild.Slogan = req.Slogan
+		updates["slogan"] = req.Slogan
 	}
 	if req.Lore != "" {
-		guild.Lore = req.Lore
+		updates["lore"] = req.Lore
 	}
 	if req.Faction != "" {
-		guild.Faction = req.Faction
+		updates["faction"] = req.Faction
 	}
 	if req.Layout >= 1 && req.Layout <= 4 {
-		guild.Layout = req.Layout
+		updates["layout"] = req.Layout
 	}
 	if req.VisitorCanViewStories != nil {
-		guild.VisitorCanViewStories = *req.VisitorCanViewStories
+		updates["visitor_can_view_stories"] = *req.VisitorCanViewStories
 	}
 	if req.VisitorCanViewPosts != nil {
-		guild.VisitorCanViewPosts = *req.VisitorCanViewPosts
+		updates["visitor_can_view_posts"] = *req.VisitorCanViewPosts
 	}
 	if req.MemberCanViewStories != nil {
-		guild.MemberCanViewStories = *req.MemberCanViewStories
+		updates["member_can_view_stories"] = *req.MemberCanViewStories
 	}
 	if req.MemberCanViewPosts != nil {
-		guild.MemberCanViewPosts = *req.MemberCanViewPosts
+		updates["member_can_view_posts"] = *req.MemberCanViewPosts
 	}
 	if req.AutoApprove != nil {
-		guild.AutoApprove = *req.AutoApprove
+		updates["auto_approve"] = *req.AutoApprove
 	}
 
-	database.DB.Save(&guild)
+	// Update only requested columns so omitted server values cannot be overwritten
+	// by a stale whole-row save. Maps also persist an explicit empty string.
+	if len(updates) > 0 {
+		result := database.DB.Model(&model.Guild{}).Where("id = ?", id).Updates(updates)
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+			return
+		}
+		if result.RowsAffected == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "公会不存在"})
+			return
+		}
+	}
+	if err := database.DB.First(&guild, id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取更新后的公会失败"})
+		return
+	}
 	ensureGuildBannerUpdatedAt(&guild)
 	ensureGuildAvatarUpdatedAt(&guild)
 	guild.Banner = guildBannerURL(guild)
@@ -1255,7 +1288,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 
 	// 列表查询排除大字段（banner）以提高性能
 	// banner 通过独立的图片 API 访问
-	query.Select("id, name, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+	query.Select("id, name, server, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
 	visibleGuilds := make([]model.Guild, 0, len(guilds))
 	for _, guild := range guilds {
 		if !exclusions.excludes(reportTargetGuild, guild.ID, guild.OwnerID) {

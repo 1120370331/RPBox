@@ -267,6 +267,10 @@ func Init(cfg *config.DatabaseConfig) error {
 		return err
 	}
 
+	if err := migrateGuildServer(db); err != nil {
+		return fmt.Errorf("migrate guild server: %w", err)
+	}
+
 	if err := hardenRPDBDemoAccounts(db); err != nil {
 		return fmt.Errorf("harden RPDB demo accounts: %w", err)
 	}

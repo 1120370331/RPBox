@@ -1,9 +1,44 @@
 package api
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func TestNormalizeGuildServerContract(t *testing.T) {
+	for _, tc := range []struct {
+		name, value, want string
+		invalid           bool
+	}{
+		{"empty", "", "", false},
+		{"trim", " \t 月神 服 \n", "月神 服", false},
+		{"whitespace", " \t\n", "", false},
+		{"128 unicode characters", strings.Repeat("服", 128), strings.Repeat("服", 128), false},
+		{"129 unicode characters", strings.Repeat("服", 129), "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			create := CreateGuildRequest{Name: "Guild", Server: tc.value}
+			err := normalizeCreateGuildRequest(&create)
+			if (err != nil) != tc.invalid || (!tc.invalid && create.Server != tc.want) {
+				t.Fatalf("create server=%q err=%v", create.Server, err)
+			}
+			value := tc.value
+			update := UpdateGuildRequest{Server: &value}
+			err = normalizeUpdateGuildRequest(&update)
+			if (err != nil) != tc.invalid || (!tc.invalid && *update.Server != tc.want) {
+				t.Fatalf("update server=%q err=%v", *update.Server, err)
+			}
+		})
+	}
+	var omitted UpdateGuildRequest
+	if err := json.Unmarshal([]byte(`{"name":"Changed"}`), &omitted); err != nil {
+		t.Fatal(err)
+	}
+	if err := normalizeUpdateGuildRequest(&omitted); err != nil || omitted.Server != nil {
+		t.Fatalf("omitted server must remain nil: %#v err=%v", omitted, err)
+	}
+}
 
 func TestNormalizeCreateGuildRequestRejectsOversizedName(t *testing.T) {
 	req := CreateGuildRequest{
