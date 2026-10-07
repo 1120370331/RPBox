@@ -321,6 +321,7 @@ type StoryTag struct {
 type Guild struct {
 	ID              uint       `gorm:"primarykey" json:"id"`
 	Name            string     `gorm:"size:128;not null" json:"name"`
+	Server          string     `gorm:"size:128;default:''" json:"server"` // 可选的服务器名称，旧记录为空
 	Description     string     `gorm:"type:text" json:"description"`
 	Icon            string     `gorm:"size:128" json:"icon"`
 	Color           string     `gorm:"size:8" json:"color"`
