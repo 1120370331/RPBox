@@ -1133,6 +1133,7 @@ func (s *Server) getItemComments(c *gin.Context) {
 
 	var result []CommentWithUser
 	for _, comment := range comments {
+		comment.Content = compatibleCommentContent(comment.Content, comment.ImageURL, comment.ImageReviewStatus)
 		var user model.User
 		database.DB.Select("id", "username", "avatar", "avatar_review_status", "role", "is_sponsor", "sponsor_level", "sponsor_color", "sponsor_bold", "name_style_preference", "activity_experience", "updated_at").First(&user, comment.UserID)
 		nameColor, nameBold := userDisplayStyle(user)

@@ -1,146 +1,42 @@
-name: CI
-
+name: TA6 Public Candidate Build Only
 on:
   workflow_dispatch:
-  push:
-    branches: [main, master]
-
-env:
-  GO_VERSION: '1.25.13'
-
+permissions:
+  contents: read
+concurrency:
+  group: ta6-public-server-delivery
+  cancel-in-progress: false
 jobs:
-  # 后端构建
   server:
-    name: Server Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - name: Assert task branch
+        run: test "$GITHUB_REF_NAME" = task/ta6-public-beta-20261007-13
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.25.13'
           cache-dependency-path: server/go.sum
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Build
-        run: go build -o rpbox-server cmd/server/main.go
-
-  # 部署
-  deploy:
-    name: Deploy to Server
-    runs-on: ubuntu-latest
-    needs: [server]
-
-    steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Focused compatibility checks and standard Linux build
+        working-directory: server
+        run: |
+          go test ./internal/api -run '^(TestPostCommentCompatibilityPreservesVisibilityAndStoredContent|TestItemCommentCompatibilityPreservesVisibilityAndStoredContent)$' -count=1
+          go build -o rpbox-server cmd/server/main.go
+      - name: Freeze deployment identity
+        run: |
+          mkdir delivery
+          cp server/rpbox-server delivery/
+          cp scripts/ta6-deploy-server.sh delivery/deploy-server.sh
+          cd delivery
+          sha256sum rpbox-server > binary.sha256
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          paths=['comment.go','item.go','comment_compatibility.go','comment_compatibility_test.go','item_comment_compatibility_test.go']
+          hashes={p:hashlib.sha256((pathlib.Path('../server/internal/api')/p).read_bytes()).hexdigest() for p in paths}
+          record={'sourceCommit':os.environ['GITHUB_SHA'],'baseline':'37331934509b9f385fdc3ec71550aaeef851cbb2','serverBaseline':'eb9462c06af755e2548b1365222fa56f9ba07248','serverFileHashes':hashes,'buildCommand':'go build -o rpbox-server cmd/server/main.go','goVersion':'1.25.13','target':'linux/amd64','apiBase':'https://ksxvodevhonx.sealosbja.site/api/v1'}
+          pathlib.Path('manifest.json').write_text(json.dumps(record,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 2233
-          script: |
-            set -e
-            cd ~/RPBox
-
-            # 备份 storage 目录中的运行时数据（不受 git 管理）
-            echo "Backing up storage data..."
-            if [ -d server/storage/addons ]; then
-              cp -r server/storage/addons /tmp/rpbox_addons_backup
-            fi
-
-            git fetch origin main
-            git reset --hard origin/main
-
-            # 恢复 storage 备份
-            echo "Restoring storage data..."
-            if [ -d /tmp/rpbox_addons_backup ]; then
-              mkdir -p server/storage/addons
-              cp -r /tmp/rpbox_addons_backup/* server/storage/addons/
-              rm -rf /tmp/rpbox_addons_backup
-            fi
-
-            # Preserve the explicit proxy trust boundary introduced by the
-            # server security middleware. The production ingress terminates
-            # TLS locally before forwarding to RPBox.
-            if [ -f server/config.yaml ]; then
-              if ! grep -Eq '^[[:space:]]+trusted_proxies:' server/config.yaml; then
-                grep -Eq '^server:[[:space:]]*$' server/config.yaml
-                sed -i '/^server:[[:space:]]*$/a\  trusted_proxies:' server/config.yaml
-              fi
-              for trusted_proxy in \
-                '127.0.0.0/8' '::1/128' \
-                '10.0.0.0/8' '100.64.0.0/10' '172.16.0.0/12' '192.168.0.0/16' \
-                'fc00::/7' 'fe80::/10'; do
-                if ! grep -Fq -- "- \"$trusted_proxy\"" server/config.yaml; then
-                  sed -i "/^[[:space:]]*trusted_proxies:[[:space:]]*$/a\\    - \"$trusted_proxy\"" server/config.yaml
-                fi
-              done
-            fi
-
-            # 写入生产后端运行时密钥。文件不进仓库，config.Load 会在启动时读取。
-            tmp_env="$(mktemp)"
-            cat > "$tmp_env" <<'RPBOX_ENV'
-            TRP3_ADDONS_PROXY_URL=${{ secrets.TRP3_ADDONS_PROXY_URL }}
-            GITHUB_TOKEN=${{ secrets.TRP3_GITHUB_TOKEN }}
-            RPBOX_ENV
-            mkdir -p server
-            sed -e 's/^[[:space:]]*//' "$tmp_env" | grep -v -E '^[A-Z0-9_]+=$' > server/.env || true
-            chmod 600 server/.env
-            rm -f "$tmp_env"
-
-            cd server
-            echo "Building server..."
-            GOTOOLCHAIN=go${{ env.GO_VERSION }} go build -o rpbox-server cmd/server/main.go
-            chmod 755 rpbox-server
-            if [ ! -x rpbox-server ]; then
-              echo "Build failed: rpbox-server is missing or not executable"
-              exit 1
-            fi
-
-            echo "Stopping any stale startup backup before restart..."
-            pgrep -af '^pg_dump ' | awk '/storage\/backups/ { print $1 }' | xargs -r kill -TERM
-
-            echo "Build successful, restarting service..."
-            if ! sudo supervisorctl status >/dev/null 2>&1; then
-              echo "supervisorctl is unavailable, clearing stale supervisor sockets and starting supervisord..."
-              sudo rm -f /run/supervisor.sock /var/run/supervisor.sock /run/supervisord.pid /var/run/supervisord.pid
-              sudo supervisord -c /etc/supervisor/supervisord.conf
-              sleep 3
-            fi
-            sudo supervisorctl restart rpbox || sudo supervisorctl start rpbox
-
-            echo "Waiting for local health check..."
-            server_port="$(awk '/^server:/{in_server=1; next} in_server && /^[^[:space:]]/{exit} in_server && /^[[:space:]]+port:/{print $2; exit}' config.yaml | tr -d '"')"
-            server_port="${server_port:-8080}"
-            for i in $(seq 1 30); do
-              health_status="$(curl -sS -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' "http://127.0.0.1:${server_port}/api/v1/updater/windows/x86_64/0.0.0" || true)"
-              if [ "$health_status" = "200" ]; then
-                break
-              fi
-              if [ "$i" -eq 30 ]; then
-                echo "Health check failed"
-                sudo supervisorctl status || true
-                sudo supervisorctl tail -200 rpbox stderr || true
-                exit 1
-              fi
-              sleep 2
-            done
-
-            api_host="$(awk -F': ' '/^[[:space:]]+api_host:/{print $2; exit}' config.yaml | tr -d '"' | xargs)"
-            if [ -n "$api_host" ]; then
-              public_health_status="$(curl -sS --max-redirs 0 -o /dev/null -w '%{http_code}' "${api_host%/}/api/v1/updater/windows/x86_64/0.0.0" || true)"
-              if [ "$public_health_status" != "200" ]; then
-                echo "Public health check failed with HTTP $public_health_status"
-                exit 1
-              fi
-            fi
-            sudo supervisorctl status rpbox
+          name: ta6-linux-server-delivery
+          path: delivery/

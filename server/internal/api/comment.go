@@ -257,6 +257,7 @@ func (s *Server) listComments(c *gin.Context) {
 	}
 	result := make([]CommentWithAuthor, len(comments))
 	for i, comment := range comments {
+		comment.Content = compatibleCommentContent(comment.Content, comment.ImageURL, comment.ImageReviewStatus)
 		author := userMap[comment.AuthorID]
 		nameColor, nameBold := userDisplayStyle(author)
 		levelInfo := resolveForumLevelInfo(author.ActivityExperience)
