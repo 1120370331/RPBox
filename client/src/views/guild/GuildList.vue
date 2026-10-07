@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { guildColorStyle } from './guildColorStyle'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listGuilds, joinGuild, listPublicGuilds, applyGuild, listMyApplications, cancelApplication, type Guild, type GuildApplication } from '@/api/guild'
@@ -185,7 +186,7 @@ function getGuildBannerStyle(guild: Guild) {
 }
 
 function getGuildIconStyle(guild: Guild) {
-  return guild.color ? { background: `#${guild.color}` } : {}
+  return guildColorStyle(guild.color)
 }
 
 onMounted(loadData)
@@ -442,7 +443,7 @@ onMounted(loadData)
 .loading {
   text-align: center;
   padding: 40px;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .guild-grid {
@@ -487,7 +488,7 @@ onMounted(loadData)
 }
 
 .faction-badge.alliance {
-  background: linear-gradient(135deg, #1e5aa8, #3b82f6);
+  background: linear-gradient(135deg, #1e5aa8, #2563eb);
 }
 
 .faction-badge.horde {
@@ -495,7 +496,7 @@ onMounted(loadData)
 }
 
 .faction-badge.neutral {
-  background: linear-gradient(135deg, #6b7280, #9ca3af);
+  background: linear-gradient(135deg, #6b7280, #4b5563);
 }
 
 .card-body {
@@ -507,16 +508,14 @@ onMounted(loadData)
 .guild-icon {
   width: 48px;
   height: 48px;
-  background:
-    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.7), transparent 34%),
-    linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #4B3621));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
   font-weight: 600;
-  color: #fff;
+  color: var(--gradient-text);
   flex-shrink: 0;
   margin-top: -32px;
   position: relative;

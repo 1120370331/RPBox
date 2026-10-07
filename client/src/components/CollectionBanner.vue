@@ -14,7 +14,7 @@ import {
   type CollectionInfo,
   type Collection,
 } from '../api/collection'
-import { useToast } from '../composables/useToast'
+import { useToastStore } from '@/stores/toast'
 
 const props = defineProps<{
   type: 'post' | 'item'
@@ -28,7 +28,7 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const { t } = useI18n()
-const toast = useToast()
+const toast = useToastStore()
 
 const collectionInfo = ref<CollectionInfo | null>(null)
 const loading = ref(false)

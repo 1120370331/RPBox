@@ -2,6 +2,7 @@
 /* 注意：主题颜色由 theme store 动态设置，这里只定义默认值 */
 
 :root {
+  color-scheme: light;
   /* 主色调 */
   --color-primary: #4B3621;
   --color-primary-hover: #3D2C1B;
@@ -102,6 +103,10 @@
 }
 
 /* 全局重置 */
+:root[data-theme="black-gold"] {
+  color-scheme: dark;
+}
+
 * {
   margin: 0;
   padding: 0;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { createTag, type Tag } from '@/api/tag'
+import { contrastingTextColor } from '@/utils/displayColor'
 
 const props = defineProps<{
   selectedTags: Tag[]
@@ -22,6 +23,15 @@ const availableTags = computed(() => {
   const selectedIds = props.selectedTags.map(t => t.id)
   return props.allTags.filter(t => !selectedIds.includes(t.id))
 })
+
+// Keep the saved dye intact; only choose the foreground for a filled tag.
+function tagStyle(tag: Tag) {
+  const color = tag.color || 'B87333'
+  return {
+    '--tag-color': '#' + color,
+    '--tag-contrast': contrastingTextColor('#' + color),
+  }
+}
 
 function handleAdd(tagId: number) {
   emit('add', tagId)
@@ -57,7 +67,7 @@ async function handleCreate() {
           v-for="tag in selectedTags"
           :key="tag.id"
           class="tag-item selected"
-          :style="{ '--tag-color': '#' + (tag.color || 'B87333') }"
+          :style="tagStyle(tag)"
         >
           {{ tag.name }}
           <i class="ri-close-line" @click="handleRemove(tag.id)"></i>
@@ -73,7 +83,7 @@ async function handleCreate() {
           v-for="tag in availableTags"
           :key="tag.id"
           class="tag-item clickable"
-          :style="{ '--tag-color': '#' + (tag.color || 'B87333') }"
+          :style="tagStyle(tag)"
           @click="handleAdd(tag.id)"
         >
           <i class="ri-add-line"></i> {{ tag.name }}
@@ -120,7 +130,7 @@ async function handleCreate() {
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .tag-list {
@@ -133,8 +143,8 @@ async function handleCreate() {
   padding: 6px 12px;
   border-radius: 16px;
   font-size: 13px;
-  background: rgba(0,0,0,0.05);
-  color: var(--tag-color);
+  background: color-mix(in srgb, var(--tag-color) 10%, var(--color-panel-bg));
+  color: var(--color-text-main);
   border: 1.5px solid var(--tag-color);
   transition: all 0.2s;
   display: flex;
@@ -148,12 +158,14 @@ async function handleCreate() {
 
 .tag-item.clickable:hover {
   background: var(--tag-color);
-  color: #fff;
+  color: var(--tag-contrast);
+  border-color: var(--color-border-hover);
 }
 
 .tag-item.selected {
   background: var(--tag-color);
-  color: #fff;
+  color: var(--tag-contrast);
+  border-color: var(--color-border-hover);
 }
 
 .tag-item.selected i {
@@ -167,7 +179,7 @@ async function handleCreate() {
 
 .empty-hint {
   font-size: 13px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .create-form {
@@ -178,7 +190,9 @@ async function handleCreate() {
 
 .create-form input {
   padding: 8px 12px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--color-text-main);
   border-radius: 6px;
   font-size: 13px;
   flex: 1;
@@ -186,14 +200,14 @@ async function handleCreate() {
 
 .create-form input:focus {
   outline: none;
-  border-color: #B87333;
+  border-color: var(--input-focus);
 }
 
 .create-form .color-picker {
   width: 36px;
   height: 36px;
   padding: 2px;
-  border: 1px solid #d1bfa8;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   cursor: pointer;
   flex: none;
@@ -205,12 +219,12 @@ async function handleCreate() {
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-weight: 500;
 }
 
 .btn-create:hover {
-  background: #a06028;
+  background: var(--btn-primary-hover);
 }
 </style>

@@ -310,7 +310,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 .hero-copy span {
   display: inline-flex;
   margin-bottom: 8px;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.18em;
@@ -344,7 +344,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 .hero-score strong {
   font-size: 44px;
   line-height: 1;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .hero-score span {
@@ -375,8 +375,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
   border-radius: 20px;
   padding: 16px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.3)),
-    radial-gradient(circle at 10% 50%, rgba(255, 178, 62, 0.15), transparent 38%);
+    radial-gradient(circle at 10% 50%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 38%), var(--color-panel-bg);
   color: var(--color-text-main, #4B3621);
   display: flex;
   align-items: center;
@@ -391,8 +390,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 
 .feature-card.next {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.26)),
-    radial-gradient(circle at 10% 50%, rgba(90, 183, 255, 0.15), transparent 38%);
+    var(--color-panel-bg);
 }
 
 .feature-card:hover {
@@ -408,7 +406,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 }
 
 .feature-card small {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -443,7 +441,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
   gap: 8px;
   padding: 7px 11px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--rarity-edge) 12%, rgba(255, 255, 255, 0.72));
+  background: color-mix(in srgb, var(--rarity-edge) 12%, var(--color-panel-bg));
   border: 1px solid color-mix(in srgb, var(--rarity-edge) 42%, transparent);
   color: var(--color-text-main, #4B3621);
   box-shadow: 0 8px 18px -16px var(--rarity-glow);
@@ -451,7 +449,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 }
 
 .rarity-pill strong {
-  color: var(--rarity-edge);
+  color: color-mix(in srgb, var(--rarity-edge) 40%, var(--color-text-main));
 }
 
 .achievement-grid {
@@ -466,7 +464,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
   border: 1px solid rgba(184, 115, 51, 0.12);
   border-radius: 18px;
   padding: 16px 10px 13px;
-  background: rgba(255, 255, 255, 0.38);
+  background: var(--color-panel-bg);
   color: var(--color-text-main, #4B3621);
   display: flex;
   flex-direction: column;
@@ -477,18 +475,18 @@ function openAchievementDetail(achievement: AchievementDefinition) {
     transform 0.2s ease,
     border-color 0.2s ease,
     background 0.2s ease;
+  border-color: var(--color-border);
 }
 
 .achievement-tile:hover {
   transform: translateY(-3px);
-  border-color: rgba(184, 115, 51, 0.28);
-  background: rgba(255, 255, 255, 0.66);
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg);
 }
 
 .achievement-tile.earned {
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 214, 135, 0.18), transparent 42%),
-    rgba(255, 255, 255, 0.58);
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 42%), var(--color-panel-bg);
 }
 
 .achievement-tile__copy {
@@ -537,7 +535,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-weight: 800;
 }
 
@@ -570,8 +568,8 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 
 .achievement-detail__rarity {
   --rarity-edge: #B87333;
-  background: color-mix(in srgb, var(--rarity-edge) 14%, #fff) !important;
-  color: var(--rarity-edge) !important;
+  background: color-mix(in srgb, var(--rarity-edge) 14%, var(--color-panel-bg)) !important;
+  color: var(--color-text-main) !important;
 }
 
 .achievement-detail h3 {
@@ -600,7 +598,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 }
 
 .achievement-detail__progress-meta strong {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .achievement-detail__track {
@@ -657,6 +655,7 @@ function openAchievementDetail(achievement: AchievementDefinition) {
 
   .feature-card {
     align-items: flex-start;
+    background: radial-gradient(circle at 10% 50%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 38%), var(--color-panel-bg);
   }
 
   .achievement-grid {

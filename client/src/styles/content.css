@@ -269,7 +269,7 @@
   position: relative;
   height: 200px;
   overflow: hidden;
-  color: var(--btn-primary-text, #fff);
+  color: var(--color-text-light);
   background: var(--color-text-main, #2C1810);
 }
 
@@ -322,7 +322,7 @@
 
 .jump-card--post-public .jump-card__title {
   font-size: 22px;
-  color: var(--btn-primary-text, #fff);
+  color: var(--color-text-light);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -447,7 +447,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(251, 245, 239, 0.7);
+  background: var(--color-card-bg);
   padding: 0 8px;
 }
 
@@ -478,14 +478,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary, #4B3621);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 18px;
   transition: background 0.2s ease;
 }
 
 .jump-card--guild-home:hover .jump-card__action {
-  background: var(--color-accent, #B87333);
+  background: var(--btn-primary-hover);
 }
 
 .jump-card:not(.jump-card--story-mine):not(.jump-card--story-guild):not(.jump-card--post-public):not(.jump-card--guild-home):not(.jump-card--rpdb-item):not(.jump-card--rpdb-transmog):not(.jump-card--rpdb-home):not(.jump-card--rpdb-musician-midi):not(.jump-card--character-card) {
@@ -527,7 +527,7 @@
   min-height: 122px;
   overflow: hidden;
   margin: 16px 0;
-  border-color: #D9B997;
+  border-color: var(--color-border-hover);
   border-radius: 6px;
   background:
     linear-gradient(90deg, rgba(184, 115, 51, 0.08), transparent 36%),
@@ -551,7 +551,7 @@
   place-items: center;
   padding: 16px;
   background: var(--color-panel-bg, #fff);
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -609,7 +609,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #9A5A2D;
+  color: var(--icon-color);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -618,7 +618,7 @@
 
 .jump-card--character-card .jump-card__title {
   overflow: hidden;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-family: Georgia, 'Noto Serif SC', serif;
   font-size: 18px;
   font-weight: 600;
@@ -628,7 +628,7 @@
 
 .jump-card__character-subtitle {
   overflow: hidden;
-  color: #804030;
+  color: var(--color-text-secondary);
   font-size: 10px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -647,9 +647,9 @@
 .jump-card__character-open {
   display: grid;
   place-items: center;
-  border-left: 1px solid #E2D1C0;
-  background: #F8F0E8;
-  color: #9A5A2D;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-card-bg);
+  color: var(--icon-color);
   font-size: 16px;
 }
 

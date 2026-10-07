@@ -8,6 +8,7 @@ import {
 } from '@/api/characterCard'
 import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
+import { buildNameStyle } from '@/utils/userNameStyle'
 import CharacterCardPortrait from './CharacterCardPortrait.vue'
 
 const props = defineProps<{
@@ -158,7 +159,7 @@ function statusIcon(card: CharacterCardSummary) {
           </span>
         </span>
         <span class="portrait-card__plaque">
-          <strong :style="displayNameColor(card) ? { color: displayNameColor(card) } : undefined">{{ displayName(card) }}</strong>
+          <strong :style="buildNameStyle(displayNameColor(card), false, ['gradientStart', 'gradientEnd'])">{{ displayName(card) }}</strong>
           <span>{{ secondaryLine(card) }}</span>
         </span>
       </RouterLink>

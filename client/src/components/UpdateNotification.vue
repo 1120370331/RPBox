@@ -11,7 +11,6 @@ const {
   downloadProgress,
   checkForUpdate,
   downloadAndInstall,
-  lastError,
 } = useUpdater()
 
 const showModal = ref(false)
@@ -89,12 +88,12 @@ async function handleInstall() {
 
           <!-- 操作按钮 -->
           <div class="update-actions">
-            <RButton v-if="!downloading" size="large" @click="handleClose">
+            <RButton v-if="!downloading" size="lg" @click="handleClose">
               稍后再说
             </RButton>
             <RButton
               type="primary"
-              size="large"
+              size="lg"
               :loading="downloading"
               :disabled="downloading"
               @click="handleInstall"
@@ -125,7 +124,7 @@ async function handleInstall() {
 }
 
 .update-modal {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 20px;
   padding: 40px 48px;
   max-width: 420px;
@@ -137,7 +136,7 @@ async function handleInstall() {
 .update-icon {
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, #B87333, #D4A373);
+  background: var(--btn-primary-bg);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -147,13 +146,13 @@ async function handleInstall() {
 
 .update-icon i {
   font-size: 40px;
-  color: #fff;
+  color: var(--btn-primary-text);
 }
 
 .update-title {
   font-size: 24px;
   font-weight: 700;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 12px;
 }
 
@@ -164,22 +163,22 @@ async function handleInstall() {
 .version-badge {
   display: inline-block;
   padding: 6px 16px;
-  background: rgba(184, 115, 51, 0.1);
-  color: #B87333;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   border-radius: 20px;
   font-size: 16px;
   font-weight: 600;
 }
 
 .version-badge.beta {
-  background: rgba(32, 110, 108, 0.12);
-  color: #206e6c;
+  background: var(--color-success-light);
+  color: var(--color-text-main);
 }
 
 .update-notes {
   margin-bottom: 24px;
   padding: 16px;
-  background: #f9f6f3;
+  background: var(--color-card-bg);
   border-radius: 12px;
   max-height: 150px;
   overflow-y: auto;
@@ -187,7 +186,7 @@ async function handleInstall() {
 
 .notes-content {
   font-size: 14px;
-  color: #665242;
+  color: var(--color-text-main);
   line-height: 1.6;
   text-align: left;
   white-space: pre-wrap;
@@ -200,7 +199,7 @@ async function handleInstall() {
 .progress-bar {
   width: 100%;
   height: 8px;
-  background: #f0e6dc;
+  background: var(--color-border);
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -208,13 +207,13 @@ async function handleInstall() {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #B87333, #D4A373);
+  background: var(--btn-primary-bg);
   transition: width 0.3s;
 }
 
 .progress-text {
   font-size: 13px;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .error-message {
@@ -223,10 +222,10 @@ async function handleInstall() {
   justify-content: center;
   gap: 8px;
   padding: 12px;
-  background: #fff5f5;
-  border: 1px solid #ffccc7;
+  background: color-mix(in srgb, var(--btn-danger-bg) 10%, var(--color-panel-bg));
+  border: 1px solid var(--btn-danger-bg);
   border-radius: 8px;
-  color: #cf1322;
+  color: var(--color-text-main);
   font-size: 13px;
   margin-bottom: 20px;
 }

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { guildTagStyle } from './guildColorStyle'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listStories, type Story, type StoryFilterParams } from '@/api/story'
-import { getGuild, listGuildMembers, removeStoryFromGuild, sortGuildMembers, type Guild, type GuildMember, type GuildStoryWithUploader } from '@/api/guild'
+import { getGuild, listGuildMembers, removeStoryFromGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
 import { listGuildTags, listTags, type Tag } from '@/api/tag'
 import { useDialog } from '@/composables/useDialog'
-import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
@@ -39,7 +39,7 @@ const showFilter = ref(false)
 const filteredStories = computed(() => {
   if (!searchKeyword.value) return stories.value
   const keyword = searchKeyword.value.toLowerCase()
-  return stories.value.filter((story: GuildStoryWithUploader) =>
+  return stories.value.filter(story =>
     story.title.toLowerCase().includes(keyword) ||
     story.description?.toLowerCase().includes(keyword)
   )
@@ -313,7 +313,7 @@ onMounted(async () => {
             :key="tag.id"
             class="filter-tag"
             :class="{ active: selectedTagIds.includes(tag.id) }"
-            :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: 'var(--btn-primary-text, #fff)' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+            :style="guildTagStyle(tag.color, selectedTagIds.includes(tag.id))"
             @click="toggleTag(tag.id)"
           >
             {{ tag.name }}
@@ -409,7 +409,7 @@ onMounted(async () => {
             v-for="tag in getTagChips(story)"
             :key="tag.name"
             class="story-tag"
-            :style="tag.color ? { background: `#${tag.color}20`, color: `#${tag.color}` } : {}"
+            :style="guildTagStyle(tag.color)"
           >
             {{ tag.name }}
           </span>
@@ -504,7 +504,7 @@ onMounted(async () => {
 }
 
 .back-btn:hover {
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .back-btn:hover i {
@@ -560,7 +560,7 @@ onMounted(async () => {
 
 .nav-btn:hover {
   border-color: var(--color-accent, #B87333);
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   background: var(--color-card-bg, #F5EFE7);
 }
 
@@ -618,12 +618,12 @@ onMounted(async () => {
 }
 
 .search-input:hover i {
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .story-count {
   font-size: 11px;
-  color: var(--color-accent, #B87333);
+  color: var(--color-primary);
   white-space: nowrap;
   font-weight: 600;
   font-family: monospace;
@@ -650,7 +650,7 @@ onMounted(async () => {
 
 .filter-toggle-btn:hover {
   border-color: var(--color-accent, #B87333);
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   background: var(--color-card-bg, #F5EFE7);
 }
 
@@ -691,7 +691,7 @@ onMounted(async () => {
 .filter-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -705,23 +705,30 @@ onMounted(async () => {
 
 .filter-tag {
   padding: 6px 14px;
-  border: 2px solid;
+  border: 2px solid var(--color-border);
   border-radius: 16px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .filter-tag:hover {
-  opacity: 0.8;
+  opacity: 1;
   transform: translateY(-1px);
+  border-color: var(--color-border-hover);
 }
 
 .filter-tag.active {
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-color: var(--color-text-main);
 }
 
 .empty-hint {
@@ -748,6 +755,7 @@ onMounted(async () => {
   font-family: inherit;
   outline: none;
   transition: all 0.2s ease;
+  color-scheme: light;
 }
 
 .date-input:focus {
@@ -779,6 +787,7 @@ onMounted(async () => {
   outline: none;
   cursor: pointer;
   transition: all 0.2s ease;
+  color-scheme: light;
 }
 
 .filter-select:focus {
@@ -795,7 +804,7 @@ onMounted(async () => {
   background: var(--input-bg, #F5EFE7);
   border: 1px solid var(--input-border, #E5D4C1);
   border-radius: 8px;
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   font-size: 18px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -836,7 +845,7 @@ onMounted(async () => {
 
 .reset-btn:hover {
   background: var(--btn-secondary-hover, #E5D4C1);
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .apply-btn {
@@ -937,7 +946,7 @@ onMounted(async () => {
 
 .story-date {
   font-size: 12px;
-  color: var(--color-accent, #B87333);
+  color: var(--color-primary);
   white-space: nowrap;
   font-weight: 600;
 }
@@ -965,9 +974,12 @@ onMounted(async () => {
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
-  background: var(--color-primary-light, rgba(184, 115, 51, 0.15));
-  color: var(--color-accent, #B87333);
+  background: var(--tag-bg);
+  color: var(--color-text-main);
   letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .story-meta {
@@ -999,8 +1011,8 @@ onMounted(async () => {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1048,5 +1060,21 @@ onMounted(async () => {
 
 .remove-archive-btn i {
   font-size: 14px;
+}
+
+.filter-tag::before,
+.story-tag::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--guild-tag-color, var(--color-primary));
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+[data-theme="black-gold"] .date-input,
+[data-theme="black-gold"] .filter-select {
+  color-scheme: dark;
 }
 </style>

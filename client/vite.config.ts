@@ -1,10 +1,11 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type UserConfig } from 'vite'
+import type { TestUserConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
 const devApiTarget = process.env.RPBOX_DEV_API_TARGET || 'http://127.0.0.1:9010'
 
-export default defineConfig({
+const config: UserConfig & { test: TestUserConfig } = {
   plugins: [vue()],
   resolve: {
     alias: {
@@ -40,4 +41,6 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
   },
-})
+}
+
+export default defineConfig(config)

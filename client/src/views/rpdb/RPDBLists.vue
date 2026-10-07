@@ -35,12 +35,7 @@ const guideWork = ref<RPDBWork | null>(null)
 const activeList = computed(() => lists.value[active.value])
 const guideSteps = computed(() => guideWork.value?.guide_steps || [])
 const guideModalTitle = computed(() => guideWork.value?.title || guideEntry.value?.work.title || '获取攻略')
-const statusLabels: Record<RPDBListStatus, string> = {
-  wanted: '未收集',
-  farming: '未收集',
-  owned: '已收集',
-  paused: '未收集',
-}
+
 const collectedCount = computed(() => activeList.value?.entries.filter(entry => entry.status === 'owned').length || 0)
 const pendingCount = computed(() => activeList.value?.entries.filter(entry => entry.status !== 'owned').length || 0)
 
@@ -333,10 +328,10 @@ onMounted(load)
 .lists-page{max-width:1280px;margin:auto;color:var(--color-text-main)}
 .minimal-lists-shell{--rpdb-surface:color-mix(in srgb,var(--color-panel-bg) 88%,#fff 12%);--rpdb-muted:color-mix(in srgb,var(--color-card-bg) 84%,#fff 16%);--rpdb-line:color-mix(in srgb,var(--color-border) 72%,transparent);--rpdb-soft:color-mix(in srgb,var(--color-accent) 8%,transparent)}
 .lists-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;padding-bottom:16px;border-bottom:1px solid var(--rpdb-line)}
-.lists-heading span{color:var(--color-accent);font-size:11px;font-weight:800;letter-spacing:.06em}
+.lists-heading span{color:var(--link-color);font-size:11px;font-weight:800;letter-spacing:.06em}
 .lists-heading h1{margin:6px 0 4px;font:700 30px/1.2 system-ui,'Microsoft YaHei',sans-serif}
 .lists-heading p{margin:0;color:var(--color-text-secondary)}
-.lists-heading a{display:inline-flex;align-items:center;gap:6px;color:var(--color-accent);text-decoration:none}
+.lists-heading a{display:inline-flex;align-items:center;gap:6px;color:var(--link-color);text-decoration:none}
 .lists-layout{display:grid;gap:14px;margin-top:16px}
 .list-switcher,.list-workspace{border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .list-switcher{display:grid;gap:12px;padding:14px}
@@ -344,7 +339,7 @@ onMounted(load)
 .switcher-head>div{display:flex;min-width:0;flex-direction:column;gap:3px}
 .switcher-head b{font-size:15px}
 .switcher-head span{color:var(--color-text-secondary);font-size:12px}
-.create-open{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:6px;padding:0 14px;border:0;border-radius:10px;background:var(--color-accent);color:#fff;font-weight:800;box-shadow:var(--shadow-sm)}
+.create-open{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:6px;padding:0 14px;border:0;border-radius:10px;background:var(--btn-primary-bg);color:var(--btn-primary-text);font-weight:800;box-shadow:var(--shadow-sm)}
 .list-select-row{display:grid;grid-template-columns:minmax(260px,380px) minmax(0,1fr);align-items:end;gap:12px}
 .list-select{display:grid;gap:7px;color:var(--color-text-secondary);font-size:13px;font-weight:800}
 .list-select select{height:42px;padding:0 38px 0 12px;border:1px solid var(--input-border);border-radius:10px;background:var(--input-bg);color:var(--color-text-main);font:inherit;font-weight:700}
@@ -360,10 +355,10 @@ onMounted(load)
 .toolbar p{margin:5px 0 0;color:var(--color-text-secondary)}
 .toolbar>div:last-child{display:flex;flex-wrap:wrap;gap:7px}
 .toolbar button{min-height:34px;padding:0 11px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main)}
-.toolbar .tomtom-export{display:inline-flex;align-items:center;gap:6px;border-color:color-mix(in srgb,var(--color-accent) 48%,var(--rpdb-line));color:var(--color-accent);font-weight:800}.toolbar .tomtom-export i{font-size:15px}
+.toolbar .tomtom-export{display:inline-flex;align-items:center;gap:6px;border-color:color-mix(in srgb,var(--color-accent) 48%,var(--rpdb-line));color:var(--link-color);font-weight:800}.toolbar .tomtom-export i{font-size:15px}
 .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}
 .summary span{padding:13px;border:1px solid var(--rpdb-line);border-radius:12px;background:var(--rpdb-muted);color:var(--color-text-secondary)}
-.summary b{display:block;margin-bottom:3px;font-size:22px;color:var(--color-accent)}
+.summary b{display:block;margin-bottom:3px;font-size:22px;color:var(--link-color)}
 .entries{display:grid;gap:8px}
 .entries article{display:grid;grid-template-columns:68px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px;border:1px solid var(--rpdb-line);border-radius:12px;background:var(--color-panel-bg)}
 .cover{display:grid;width:68px;height:52px;place-items:center;overflow:hidden;border-radius:10px;background:#211914;color:#fff}
@@ -374,10 +369,10 @@ onMounted(load)
 .entries article.collected .entry-copy a,.entries article.collected .entry-copy p{color:var(--color-text-tertiary,var(--color-text-secondary));text-decoration:line-through;text-decoration-thickness:1px;text-decoration-color:currentColor}
 .entry-actions{display:grid;grid-template-columns:118px 88px 78px 38px;align-items:center;gap:10px}
 .collect-toggle{display:inline-flex;min-height:36px;align-items:center;justify-content:center;gap:6px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-text-main);white-space:nowrap;font-weight:800}
-.collect-toggle.collected{border-color:var(--color-accent);background:var(--rpdb-soft);color:var(--color-accent)}
+.collect-toggle.collected{border-color:var(--color-accent);background:var(--rpdb-soft);color:var(--link-color)}
 .remove{height:36px;border:1px solid var(--rpdb-line);border-radius:10px;background:transparent;color:#a33}
-.open-guide,.open-work{display:inline-flex;min-height:34px;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--color-accent)!important;text-decoration:none;white-space:nowrap;font-weight:800}
-.open-guide{cursor:pointer;font:inherit}
+.open-guide,.open-work{display:inline-flex;min-height:34px;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-muted);color:var(--link-color)!important;text-decoration:none;white-space:nowrap;font-weight:800}
+.open-guide{cursor:pointer;font:inherit;color:var(--link-color)}
 .empty{display:grid;min-height:360px;place-items:center;align-content:center;color:var(--color-text-secondary);text-align:center}
 .empty i{font-size:40px;color:var(--color-accent)}
 .create-modal{display:grid;gap:16px}
@@ -386,9 +381,9 @@ onMounted(load)
 .create-modal input{height:40px;padding:0 12px}
 .create-modal textarea{resize:vertical;min-height:100px;padding:10px 12px}
 .create-modal input:focus,.create-modal textarea:focus{border-color:var(--input-focus);outline:0;box-shadow:0 0 0 3px rgba(var(--shadow-base),.1)}
-.modal-secondary,.modal-primary{min-height:36px;padding:0 14px;border-radius:10px;font-weight:800}
+.modal-secondary,.modal-primary{min-height:36px;padding:0 14px;border-radius:10px;font-weight:800;color:var(--btn-primary-text);background:var(--btn-primary-bg)}
 .modal-secondary{border:1px solid var(--rpdb-line);background:var(--color-panel-bg);color:var(--color-text-main)}
-.modal-primary{border:0;background:var(--color-accent);color:#fff}
+.modal-primary{border:0;background:var(--btn-primary-bg);color:var(--btn-primary-text)}
 .modal-primary:disabled{cursor:not-allowed;opacity:.45}
 .open-detail{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
 .guide-modal :deep(.guide-section){padding:0;border-top:0}

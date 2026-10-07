@@ -131,7 +131,7 @@ async function handleDelete(item: Item) {
     message: t('market.myItems.deleteConfirm.message', { name: item.name }),
     confirmText: t('market.myItems.deleteConfirm.confirm'),
     cancelText: t('market.myItems.deleteConfirm.cancel'),
-    type: 'danger'
+    type: 'error'
   })
 
   if (!confirmed) return
@@ -381,23 +381,24 @@ function getTypeText(type: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 2px solid #E5D4C1;
   border-radius: 12px;
-  color: #4B3621;
+  color: var(--btn-outline-text);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  border-color: var(--btn-outline-border);
 }
 
 .back-btn:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .page-title {
   font-size: 42px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -406,8 +407,8 @@ function getTypeText(type: string) {
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 12px;
   font-size: 16px;
@@ -417,7 +418,7 @@ function getTypeText(type: string) {
 }
 
 .create-btn:hover {
-  background: #A66629;
+  background: var(--btn-primary-hover);
   transform: translateY(-2px);
 }
 
@@ -428,7 +429,7 @@ function getTypeText(type: string) {
 }
 
 .stat-item {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 12px;
   padding: 24px;
   text-align: center;
@@ -438,13 +439,13 @@ function getTypeText(type: string) {
 .stat-value {
   font-size: 36px;
   font-weight: 700;
-  color: #B87333;
+  color: var(--color-text-main);
   margin-bottom: 8px;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .filters {
@@ -465,16 +466,17 @@ function getTypeText(type: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 2px solid #E5D4C1;
   border-radius: 12px;
   flex: 1;
   min-width: 220px;
+  border-color: var(--color-border);
 }
 
 .filter-search i {
   font-size: 16px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .filter-search input {
@@ -482,50 +484,52 @@ function getTypeText(type: string) {
   border: none;
   outline: none;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
   background: transparent;
 }
 
 .filter-search input::placeholder {
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .type-select {
   padding: 10px 14px;
   border: 2px solid #E5D4C1;
   border-radius: 12px;
-  background: #fff;
+  background: var(--input-bg);
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
   min-width: 120px;
+  border-color: var(--input-border);
 }
 
 .filter-btn {
   padding: 10px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 2px solid #E5D4C1;
   border-radius: 12px;
-  color: #4B3621;
+  color: var(--btn-outline-text);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  border-color: var(--btn-outline-border);
 }
 
 .filter-btn:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .filter-btn.active {
-  background: #B87333;
-  border-color: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .loading {
   text-align: center;
   padding: 60px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 18px;
 }
 
@@ -535,21 +539,21 @@ function getTypeText(type: string) {
   align-items: center;
   justify-content: center;
   padding: 80px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
 }
 
 .empty i {
   font-size: 64px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   opacity: 0.3;
   margin-bottom: 16px;
 }
 
 .empty p {
   font-size: 16px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin-bottom: 24px;
 }
 
@@ -558,8 +562,8 @@ function getTypeText(type: string) {
   align-items: center;
   gap: 8px;
   padding: 14px 28px;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 12px;
   font-size: 16px;
@@ -569,7 +573,7 @@ function getTypeText(type: string) {
 }
 
 .create-btn-large:hover {
-  background: #A66629;
+  background: var(--btn-primary-hover);
   transform: translateY(-2px);
 }
 
@@ -580,7 +584,7 @@ function getTypeText(type: string) {
 }
 
 .item-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
@@ -609,23 +613,24 @@ function getTypeText(type: string) {
 .item-name {
   font-size: 22px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
   cursor: pointer;
   transition: color 0.3s;
 }
 
 .item-name:hover {
-  color: #B87333;
+  color: var(--link-color);
 }
 
 .item-type {
   padding: 4px 10px;
-  background: #F5EFE7;
-  color: #8D7B68;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
+  border-color: var(--color-border);
 }
 
 .status-badge {
@@ -641,8 +646,9 @@ function getTypeText(type: string) {
 }
 
 .status-badge.pending {
-  background: #FFA500;
-  color: #fff;
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
+  border-color: var(--color-warning-border);
 }
 
 .status-badge.published {
@@ -675,7 +681,7 @@ function getTypeText(type: string) {
 .item-content {
   font-size: 15px;
   line-height: 1.6;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin-bottom: 16px;
 }
 
@@ -685,6 +691,7 @@ function getTypeText(type: string) {
   align-items: center;
   padding-top: 16px;
   border-top: 2px solid #F5EFE7;
+  border-top-color: var(--color-border);
 }
 
 .item-meta {
@@ -697,7 +704,7 @@ function getTypeText(type: string) {
   align-items: center;
   gap: 4px;
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .meta-item i {
@@ -720,21 +727,23 @@ function getTypeText(type: string) {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  border-color: var(--color-border);
 }
 
 .action-btn.edit {
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
+  border-color: var(--btn-outline-border);
 }
 
 .action-btn.edit:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .action-btn.delete {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-color: #C44536;
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .action-btn.delete:hover {
@@ -743,12 +752,13 @@ function getTypeText(type: string) {
 }
 
 .action-btn.visibility {
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
+  border-color: var(--btn-outline-border);
 }
 
 .action-btn.visibility:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .action-btn.visibility.is-private {

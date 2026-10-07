@@ -136,6 +136,7 @@ const card: CharacterCard = {
   residence: '',
   relationship_status: '',
   icon: '',
+  class_color: '',
   name_color: '',
   summary: '',
   background_story: '<p>旧背景</p>',

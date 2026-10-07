@@ -870,7 +870,7 @@ function handleViewStory(id: number) {
                 :key="tag.id"
                 class="tag-option"
                 :class="{ selected: selectedTagIds.includes(tag.id) }"
-                :style="selectedTagIds.includes(tag.id) ? { background: `#${tag.color}`, color: 'var(--color-text-light)' } : { borderColor: `#${tag.color}`, color: `#${tag.color}` }"
+                :style="{ '--archive-tag-color': `#${tag.color}` }"
                 :aria-disabled="archiveTargetLocked"
                 @click="toggleArchiveTag(tag.id)"
               >
@@ -1055,8 +1055,8 @@ function handleViewStory(id: number) {
 }
 
 .btn-create {
-  background: var(--color-secondary, #804030);
-  color: var(--color-text-light, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   padding: 12px 24px;
   border-radius: 8px;
@@ -1139,7 +1139,7 @@ function handleViewStory(id: number) {
 .card-date {
   display: inline-block;
   background: var(--color-primary-light, rgba(184,115,51,0.1));
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 13px;
@@ -1180,7 +1180,7 @@ function handleViewStory(id: number) {
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-light, #fff);
+  color: var(--gradient-text);
 }
 .avatar:nth-child(1) { background: var(--color-accent, #D4A373); margin-left: 0; }
 .avatar:nth-child(2) { background: var(--avatar-color-2, #A98467); }
@@ -1188,7 +1188,7 @@ function handleViewStory(id: number) {
 .avatar:nth-child(4) { background: var(--avatar-color-4, #A9D6E5); }
 
 .view-detail {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 13px;
   font-weight: 600;
   display: flex;
@@ -1263,7 +1263,7 @@ function handleViewStory(id: number) {
 }
 
 .manifest-heading b {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-family: ui-monospace, 'Consolas', monospace;
   font-size: 15px;
 }
@@ -1386,7 +1386,7 @@ function handleViewStory(id: number) {
 
 .pending-info {
   font-size: 13px;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
   padding: 8px 12px;
   border-radius: 6px;
@@ -1482,7 +1482,7 @@ function handleViewStory(id: number) {
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .tips-close-btn {
@@ -1492,7 +1492,7 @@ function handleViewStory(id: number) {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: var(--color-accent, #BF8040);
+  color: var(--link-color);
   font-size: 18px;
   cursor: pointer;
   display: flex;
@@ -1554,7 +1554,7 @@ function handleViewStory(id: number) {
 .clear-filter-btn:hover {
   background: var(--color-card-bg, #FFF5E6);
   border-color: var(--color-accent, #B87333);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .clear-filter-btn i {
@@ -1568,6 +1568,9 @@ function handleViewStory(id: number) {
 }
 
 .tag-option {
+  background: color-mix(in srgb, var(--archive-tag-color) 10%, var(--color-panel-bg));
+  border-color: var(--archive-tag-color);
+  color: var(--color-text-main);
   padding: 6px 12px;
   border: 1.5px solid;
   border-radius: 16px;
@@ -1583,6 +1586,8 @@ function handleViewStory(id: number) {
 }
 
 .tag-option.selected {
+  background: color-mix(in srgb, var(--archive-tag-color) 24%, var(--color-panel-bg));
+  box-shadow: inset 0 0 0 1px var(--input-focus);
   font-weight: 600;
 }
 
@@ -1617,13 +1622,13 @@ function handleViewStory(id: number) {
 
 .mode-btn:hover {
   border-color: var(--color-accent, #B87333);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .mode-btn.active {
-  background: var(--color-secondary, #804030);
-  border-color: var(--color-secondary, #804030);
-  color: var(--color-text-light, #fff);
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .mode-btn:disabled {
@@ -1685,7 +1690,7 @@ function handleViewStory(id: number) {
   padding: 2px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-accent, #B87333) 13%, transparent);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 10px;
   font-style: normal;
   font-weight: 700;

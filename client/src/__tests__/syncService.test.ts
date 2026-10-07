@@ -4,7 +4,7 @@ describe('syncService', () => {
   describe('uploadProfile', () => {
     it('should retry on failure', async () => {
       let attempts = 0
-      const mockFn = vi.fn().mockImplementation(() => {
+      const mockFn = vi.fn<() => Promise<{ id: string; version: number }>>().mockImplementation(() => {
         attempts++
         if (attempts < 3) throw new Error('Network error')
         return Promise.resolve({ id: '1', version: 1 })

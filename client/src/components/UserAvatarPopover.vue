@@ -35,7 +35,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const t = i18n.global.t
-const triggerRef = ref<InstanceType<typeof RouterLink> | null>(null)
+const triggerRef = ref<{ $el: unknown } | null>(null)
 const popoverRef = ref<HTMLElement | null>(null)
 const visible = ref(false)
 const loading = ref(false)
@@ -54,6 +54,7 @@ const displayInitial = computed(() => displayName.value.trim().charAt(0).toUpper
 const displayNameStyle = computed(() => buildNameStyle(
   profile.value?.name_color || props.nameColor,
   profile.value?.name_bold ?? props.nameBold,
+  ['gradientStart', 'gradientEnd'],
 ))
 const triggerStyle = computed(() => {
   const size = `${Math.max(1, props.size)}px`
@@ -69,7 +70,8 @@ const triggerStyle = computed(() => {
 })
 
 function triggerElement(): HTMLElement | null {
-  return (triggerRef.value as any)?.$el || null
+  const element: unknown = triggerRef.value?.$el
+  return element instanceof HTMLElement ? element : null
 }
 
 function clearCloseTimer() {
@@ -289,7 +291,7 @@ onBeforeUnmount(() => {
                   <i v-else class="ri-user-star-line" aria-hidden="true"></i>
                 </span>
                 <span class="user-avatar-popover__card-copy">
-                  <strong :style="{ color: getCharacterCardDisplayColor(characterCard) }">
+                  <strong :style="buildNameStyle(getCharacterCardDisplayColor(characterCard))">
                     {{ getCharacterCardDisplayName(characterCard) }}
                   </strong>
                   <small>{{ characterCard.title || characterCard.race || t('common.userPopover.cardFallback') }}</small>
@@ -316,8 +318,8 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
-  color: inherit;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   cursor: pointer;
   font-weight: 700;
   line-height: 1;
@@ -368,9 +370,7 @@ onBeforeUnmount(() => {
   min-height: 88px;
   padding: 16px;
   border-bottom: 1px solid var(--gradient-border);
-  background:
-    radial-gradient(circle at 88% 0%, var(--gradient-surface-hover), transparent 42%),
-    linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   color: var(--gradient-text);
 }
 

@@ -103,16 +103,16 @@ onUnmounted(() => {
 }
 
 body {
-  background-color: var(--color-background);
-  color: var(--text-dark);
+  background-color: var(--color-main-bg);
+  color: var(--color-text-main);
   min-height: 100vh;
 }
 
 /* 通用按钮 */
 .btn-primary {
   padding: 12px 24px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-accent-contrast));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-sm);
   font-weight: 600;
@@ -135,21 +135,21 @@ body {
 /* 通用输入框 */
 .input {
   padding: 12px 16px;
-  background: #fff;
-  border: 2px solid rgba(75, 54, 33, 0.2);
+  background: var(--input-bg);
+  border: 2px solid var(--input-border);
   border-radius: var(--radius-sm);
   font-size: 14px;
-  color: var(--text-dark);
+  color: var(--color-text-main);
   transition: border-color 0.3s;
 }
 
 .input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--input-focus);
 }
 
 .input::placeholder {
-  color: rgba(75, 54, 33, 0.5);
+  color: var(--input-placeholder);
 }
 
 /* 玻璃效果 */

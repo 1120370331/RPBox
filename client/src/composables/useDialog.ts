@@ -1,4 +1,4 @@
-import { ref, createApp, h } from 'vue'
+import { ref } from 'vue'
 
 interface DialogOptions {
   title?: string

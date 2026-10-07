@@ -1,49 +1,49 @@
 /* RPBox 主题覆盖样式 */
-/* 此文件使用 CSS 变量覆盖全局组件样式，实现主题切换 */
+/* 全局仅提供主题默认值；局部组件状态和用户自定义颜色优先，不使用 !important。 */
 
 /* ========== 按钮样式 ========== */
 
 /* 主要按钮 */
 .btn-primary {
-  background: var(--btn-primary-bg) !important;
-  color: var(--btn-primary-text) !important;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--btn-primary-hover) !important;
-  box-shadow: 0 4px 12px rgba(var(--shadow-base), 0.3) !important;
+  background: var(--btn-primary-hover);
+  box-shadow: 0 4px 12px rgba(var(--shadow-base), 0.3);
 }
 
 /* 次要按钮 */
 .btn-secondary {
-  background: var(--btn-secondary-bg) !important;
-  color: var(--btn-secondary-text) !important;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--btn-secondary-hover) !important;
+  background: var(--btn-secondary-hover);
 }
 
 /* 轮廓按钮 */
 .btn-outline {
-  background: transparent !important;
-  border-color: var(--btn-outline-border) !important;
-  color: var(--btn-outline-text) !important;
+  background: transparent;
+  border-color: var(--btn-outline-border);
+  color: var(--btn-outline-text);
 }
 
 .btn-outline:hover:not(:disabled) {
-  background: var(--btn-outline-hover) !important;
-  border-color: var(--color-border-hover) !important;
+  background: var(--btn-outline-hover);
+  border-color: var(--color-border-hover);
 }
 
 /* 危险按钮 */
 .btn-danger {
-  background: var(--btn-danger-bg) !important;
-  color: var(--btn-danger-text, #FFFFFF) !important;
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text, #FFFFFF);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: var(--btn-danger-hover) !important;
+  background: var(--btn-danger-hover);
 }
 
 /* ========== 卡片样式 ========== */
@@ -55,66 +55,73 @@
 .item-card,
 .post-card,
 .profile-card {
-  background: var(--color-panel-bg) !important;
-  box-shadow: var(--shadow-md) !important;
+  background: var(--color-panel-bg);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
-  border-bottom-color: var(--color-border) !important;
+  border-bottom-color: var(--color-border);
 }
 
 .card-icon {
-  background: var(--icon-bg) !important;
+  background: var(--icon-bg);
 }
 
 .card-icon i {
-  color: var(--icon-color) !important;
+  color: var(--icon-color);
 }
 
 .card-title h3 {
-  color: var(--color-text-main) !important;
+  color: var(--color-text-main);
 }
 
 .card-title p {
-  color: var(--color-text-secondary) !important;
+  color: var(--color-text-secondary);
 }
 
 /* ========== 输入框样式 ========== */
 
+:where(input:not([type]),
+input[type="url"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
 input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="search"],
 input[type="number"],
 textarea,
+select,
 .input,
-.path-input {
-  background: var(--input-bg) !important;
-  border-color: var(--input-border) !important;
-  color: var(--color-text-main) !important;
+.path-input) {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--color-text-main);
 }
 
-input:focus,
+:where(input:focus,
 textarea:focus,
+select:focus,
 .input:focus,
-.path-input:focus {
-  border-color: var(--input-focus) !important;
-  box-shadow: 0 0 0 3px rgba(var(--shadow-base), 0.1) !important;
+.path-input:focus) {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(var(--shadow-base), 0.1);
 }
 
-input::placeholder,
-textarea::placeholder {
-  color: var(--input-placeholder) !important;
+:where(input, textarea)::placeholder {
+  color: var(--input-placeholder);
 }
 
 /* ========== 开关样式 ========== */
 
 .switch {
-  background: var(--switch-inactive) !important;
+  background: var(--switch-inactive);
 }
 
 .switch.active {
-  background: var(--switch-active) !important;
+  background: var(--switch-active);
 }
 
 /* ========== 标签/徽章样式 ========== */
@@ -122,12 +129,12 @@ textarea::placeholder {
 .tag,
 .flavor-tag,
 .category-tag {
-  background: var(--tag-bg) !important;
-  color: var(--tag-text) !important;
+  background: var(--tag-bg);
+  color: var(--tag-text);
 }
 
 .badge {
-  background: var(--badge-bg) !important;
+  background: var(--badge-bg);
 }
 
 /* ========== 列表项样式 ========== */
@@ -135,35 +142,35 @@ textarea::placeholder {
 .path-item,
 .list-item,
 .switch-item {
-  background: var(--color-card-bg) !important;
-  border-color: var(--color-border) !important;
+  background: var(--color-card-bg);
+  border-color: var(--color-border);
 }
 
 .path-item:hover,
 .list-item:hover,
 .switch-item:hover {
-  background: var(--color-card-bg-hover) !important;
-  border-color: var(--color-border-hover) !important;
+  background: var(--color-card-bg-hover);
+  border-color: var(--color-border-hover);
 }
 
 .path-item.selected,
 .list-item.selected {
-  background: var(--color-primary-light) !important;
-  border-color: var(--color-secondary) !important;
+  background: var(--color-primary-light);
+  border-color: var(--color-secondary);
 }
 
 /* ========== 文字颜色 ========== */
 
 .text-main {
-  color: var(--color-text-main) !important;
+  color: var(--color-text-main);
 }
 
 .text-secondary {
-  color: var(--color-text-secondary) !important;
+  color: var(--color-text-secondary);
 }
 
 .text-muted {
-  color: var(--color-text-muted) !important;
+  color: var(--color-text-muted);
 }
 
 /* ========== 链接样式 ========== */
@@ -180,60 +187,60 @@ a:hover {
 
 .top-toolbar,
 .toolbar {
-  background-color: var(--color-panel-bg) !important;
-  box-shadow: var(--shadow-md) !important;
+  background-color: var(--color-panel-bg);
+  box-shadow: var(--shadow-md);
 }
 
 .breadcrumbs i {
-  color: var(--icon-color) !important;
+  color: var(--icon-color);
 }
 
 .breadcrumbs .current {
-  color: var(--icon-color) !important;
+  color: var(--icon-color);
 }
 
 /* ========== 图标样式 ========== */
 
 .path-info i,
 .status-icon.installed {
-  color: var(--icon-color) !important;
+  color: var(--icon-color);
 }
 
 /* ========== 关于卡片渐变 ========== */
 
 .about-card {
-  background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%) !important;
+  background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
 }
 
 .about-logo {
-  background: var(--gradient-surface) !important;
-  border-color: var(--gradient-border) !important;
+  background: var(--gradient-surface);
+  border-color: var(--gradient-border);
 }
 
 /* ========== 更新日志样式 ========== */
 
 .changelog-entry {
-  background: var(--color-card-bg) !important;
-  border-color: var(--color-border) !important;
+  background: var(--color-card-bg);
+  border-color: var(--color-border);
 }
 
 .changelog-tag {
-  background: var(--badge-bg) !important;
-  color: var(--btn-primary-text, #FFFFFF) !important;
+  background: var(--badge-bg);
+  color: var(--btn-primary-text, #FFFFFF);
 }
 
 .changelog-content {
-  color: var(--color-primary) !important;
+  color: var(--color-primary);
 }
 
 /* ========== 插件状态样式 ========== */
 
 .addon-info {
-  background: var(--color-card-bg) !important;
+  background: var(--color-card-bg);
 }
 
 .status-version {
-  color: var(--icon-color) !important;
+  color: var(--icon-color);
 }
 
 /* ========== 头像渐变 ========== */
@@ -242,5 +249,5 @@ a:hover {
 .avatar {
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%),
-    linear-gradient(135deg, var(--gradient-start), var(--gradient-end)) !important;
+    linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
 }

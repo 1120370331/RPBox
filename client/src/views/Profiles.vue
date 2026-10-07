@@ -19,7 +19,7 @@ const profiles = ref<any[]>([])
   padding: 2rem;
 }
 .empty {
-  color: #888;
+  color: var(--color-text-secondary);
   margin-top: 2rem;
 }
 </style>

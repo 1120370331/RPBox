@@ -60,6 +60,7 @@ function onMaskClick() {
   width: var(--r-modal-width, 480px);
   max-width: calc(100vw - 24px);
   background: var(--color-panel-bg);
+  color: var(--color-text-main);
   border-radius: var(--radius-lg);
   max-height: calc(100vh - 24px);
   display: flex;
@@ -78,7 +79,7 @@ function onMaskClick() {
 .r-modal__title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-text-main);
 }
 
 .r-modal__close {
@@ -88,7 +89,7 @@ function onMaskClick() {
   background: transparent;
   font-size: 24px;
   cursor: pointer;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   border-radius: 50%;
   transition: all 0.2s;
 }

@@ -104,6 +104,7 @@ const baseCharacterCard: CharacterCardSummary = {
   residence: '',
   relationship_status: '',
   icon: '',
+  class_color: '',
   name_color: '',
   summary: '在月神殿保存远行者的旧信。',
   portrait_image_url: '/api/v1/images/character-card-portrait/27',

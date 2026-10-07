@@ -8,7 +8,7 @@ describe('RPDBWorkContent Musician MIDI', () => {
     const wrapper = mount(RPDBWorkContent, {
       props: {
         work: {
-          type: 'item',
+          type: 'item_showcase',
           title: 'Unsafe work',
           content: '<p>Safe copy</p><img src="/safe.png" onerror="alert(1)"><svg onload="alert(2)"></svg><a href="javascript:alert(3)">unsafe link</a>',
         },

@@ -1261,7 +1261,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #E65100;
+  color: var(--color-warning-dark);
   font-size: 15px;
   font-weight: 600;
 }
@@ -1275,8 +1275,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -1286,7 +1286,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .back-edit-btn:hover {
-  background: var(--color-secondary);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 .item-info {
@@ -1452,8 +1453,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   align-items: center;
   gap: 4px;
   padding: 8px 14px;
-  background: var(--color-secondary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -1527,8 +1528,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
 .type-badge {
   padding: 6px 16px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 20px;
   font-size: 14px;
 }
@@ -1549,8 +1550,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  background: #FFF3E0;
-  color: #E65100;
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
   border-radius: 20px;
   font-size: 13px;
   cursor: help;
@@ -1743,7 +1744,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 .header-quick-action.active {
   border-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-card-bg));
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .header-quick-action.manage {
@@ -1805,7 +1806,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .safety-btn.danger {
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   border-color: rgba(196, 69, 54, 0.26);
   background: rgba(196, 69, 54, 0.06);
 }
@@ -1828,7 +1829,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
 .download-btn:hover {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .like-btn, .favorite-btn, .follow-btn, .share-btn {
@@ -1855,9 +1856,9 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .like-btn.active {
-  background: #FFF0F0;
+  background: color-mix(in srgb, #FF6B6B 10%, var(--color-panel-bg));
   border-color: #FF6B6B;
-  color: #FF6B6B;
+  color: var(--color-text-main);
 }
 
 .favorite-btn:hover {
@@ -1866,9 +1867,9 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .favorite-btn.active {
-  background: #FFF8E1;
+  background: color-mix(in srgb, #FFB300 10%, var(--color-panel-bg));
   border-color: #FFB300;
-  color: #FFB300;
+  color: var(--color-text-main);
 }
 
 .import-code-section {
@@ -1896,8 +1897,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 13px;
@@ -1906,7 +1907,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .copy-btn:hover {
-  background: var(--color-secondary);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 .import-code-textarea {
@@ -1983,7 +1985,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
 .rating-value {
   font-size: 14px;
-  color: #FFB300;
+  color: var(--color-text-main);
   font-weight: 600;
 }
 
@@ -2042,7 +2044,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
 .emoji-btn:hover {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .emoji-btn i {
@@ -2060,8 +2062,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 
 .submit-review-btn {
   padding: 10px 24px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -2103,13 +2105,13 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 .follow-btn:hover,
 .follow-btn.active {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel-bg));
 }
 
 .share-btn:hover {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel-bg));
 }
 
@@ -2251,7 +2253,7 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .comment-safety-btn.danger {
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .comment-safety-btn.danger:hover {
@@ -2580,8 +2582,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -2591,7 +2593,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
 }
 
 .viewer-download:hover {
-  background: var(--color-secondary);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 /* 导入教程弹窗 */
@@ -2640,9 +2643,9 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: #E8F5E9;
+  background: var(--color-success-light);
   border-radius: 8px;
-  color: #2E7D32;
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 16px;
@@ -2692,8 +2695,8 @@ async function handleBlockCommentAuthor(comment: ItemComment) {
   font-weight: 600;
   cursor: pointer;
   border: none;
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   transition: all 0.2s;
 }
 

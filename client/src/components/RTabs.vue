@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, provide, watch, reactive, onMounted } from 'vue'
+import { ref, provide, watch, reactive } from 'vue'
 
 interface Props {
   modelValue?: string

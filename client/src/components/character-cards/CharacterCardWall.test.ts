@@ -41,6 +41,7 @@ const publicCard: CharacterCardSummary = {
   residence: '',
   relationship_status: '',
   icon: '',
+  class_color: '',
   name_color: '',
   summary: '记录荒野道路与失落营地。',
   portrait_image_url: '',
@@ -77,7 +78,7 @@ describe('CharacterCardWall', () => {
     expect(mocks.listMyCharacterCards).toHaveBeenCalledOnce()
     expect(wrapper.find('.character-wall').exists()).toBe(true)
     expect(wrapper.text()).toContain('为你的第一个角色留下正式档案')
-    expect(wrapper.get('a[href="/character-cards/new"]').exists()).toBe(true)
+    expect(wrapper.find('a[href="/character-cards/new"]').exists()).toBe(true)
   })
 
   it('does not expose an empty management section on another user profile', async () => {
@@ -98,7 +99,7 @@ describe('CharacterCardWall', () => {
 
     expect(wrapper.text()).toContain('米拉·铜枝')
     expect(wrapper.text()).toContain('远行制图师')
-    expect(wrapper.get('a[href="/character-cards/51"]').exists()).toBe(true)
+    expect(wrapper.find('a[href="/character-cards/51"]').exists()).toBe(true)
     expect(wrapper.find('a[href="/character-cards/new"]').exists()).toBe(false)
   })
 })

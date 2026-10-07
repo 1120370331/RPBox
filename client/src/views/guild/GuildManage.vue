@@ -343,7 +343,7 @@ onMounted(async () => {
       </header>
 
       <div class="avatar-panel">
-        <div class="avatar-preview" :class="{ editable: isAdmin }" @click="isAdmin && triggerAvatarUpload()">
+        <div class="guild-avatar-preview" :class="{ editable: isAdmin }" @click="isAdmin && triggerAvatarUpload()">
           <img v-if="guildAvatarUrl" :src="guildAvatarUrl" :alt="t('guild.manage.avatarAlt', { name: guild.name })" />
           <span v-else>{{ guild.name?.charAt(0) || 'G' }}</span>
           <div v-if="isAdmin" class="avatar-overlay">
@@ -599,7 +599,7 @@ onMounted(async () => {
   margin-bottom: 24px;
 }
 
-.avatar-preview {
+.guild-avatar-preview {
   width: 72px;
   height: 72px;
   border-radius: 16px;
@@ -616,11 +616,11 @@ onMounted(async () => {
   box-shadow: var(--shadow-md);
 }
 
-.avatar-preview.editable {
+.guild-avatar-preview.editable {
   cursor: pointer;
 }
 
-.avatar-preview img {
+.guild-avatar-preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -640,7 +640,7 @@ onMounted(async () => {
   font-size: 18px;
 }
 
-.avatar-preview.editable:hover .avatar-overlay {
+.guild-avatar-preview.editable:hover .avatar-overlay {
   opacity: 1;
 }
 
@@ -795,13 +795,13 @@ onMounted(async () => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
-  color: var(--color-accent-contrast);
+  color: var(--gradient-text);
   flex-shrink: 0;
 }
 
@@ -859,13 +859,13 @@ onMounted(async () => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
-  color: var(--color-accent-contrast);
+  color: var(--gradient-text);
   flex-shrink: 0;
 }
 
@@ -910,8 +910,8 @@ onMounted(async () => {
 }
 
 .role-badge.owner {
-  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
-  color: var(--color-accent-contrast);
+  background: var(--badge-bg);
+  color: var(--btn-primary-text);
 }
 
 .role-badge.admin {
@@ -943,7 +943,7 @@ onMounted(async () => {
 
 .status-badge.approved {
   background: var(--color-success-light);
-  color: var(--color-success);
+  color: var(--color-text-main);
   border: 1px solid var(--color-success);
 }
 
@@ -985,7 +985,7 @@ onMounted(async () => {
 .danger-zone__eyebrow {
   display: block;
   margin-bottom: 3px;
-  color: var(--btn-danger-bg);
+  color: var(--color-text-main);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
