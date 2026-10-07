@@ -1,341 +1,76 @@
-name: Release Client
-
+name: TA6 Local Client Package
 on:
-  push:
-    tags:
-      - 'v*'  # 触发条件：推送 v 开头的 tag，如 v0.2.0
-      - 'beta-v*'  # 测试版 tag，如 beta-v0.2.1-1
   workflow_dispatch:
     inputs:
       version:
-        description: 'Client version, for example 0.2.1 or 0.2.1-1'
+        description: Frozen task version
         required: true
         type: string
       channel:
-        description: 'Release channel'
-        required: true
-        default: 'stable'
+        description: Task only, no release deployment
+        default: beta
         type: choice
-        options:
-          - stable
-          - beta
-
-env:
-  NODE_VERSION: '20'
-
+        options: [beta]
+permissions:
+  contents: read
 jobs:
-  release-meta:
-    name: Resolve Release Metadata
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.meta.outputs.version }}
-      channel: ${{ steps.meta.outputs.channel }}
-      metadata_file: ${{ steps.meta.outputs.metadata_file }}
-    steps:
-      - name: Resolve version and channel
-        id: meta
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-            CHANNEL="${{ inputs.channel }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
-            CHANNEL="stable"
-
-            if [[ "$TAG" == beta-v* ]]; then
-              VERSION="${TAG#beta-v}"
-              CHANNEL="beta"
-            else
-              VERSION="${TAG#v}"
-            fi
-
-            if [[ "$VERSION" == *"-beta"* || "$VERSION" == *"-alpha"* || "$VERSION" == *"-rc"* ]]; then
-              CHANNEL="beta"
-            fi
-          fi
-
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid version: $VERSION" >&2
-            exit 1
-          fi
-
-          if [ "$CHANNEL" != "stable" ] && [ "$CHANNEL" != "beta" ]; then
-            echo "Invalid channel: $CHANNEL" >&2
-            exit 1
-          fi
-
-          if [ "$CHANNEL" = "beta" ] && [[ "$VERSION" != *"-"* ]]; then
-            echo "Beta client releases must use a numeric prerelease version for MSI, for example 0.2.1-1" >&2
-            exit 1
-          fi
-
-          if [ "$CHANNEL" = "beta" ] && ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
-            echo "Beta client releases must use numeric-only prerelease identifiers for MSI, for example 0.2.1-1" >&2
-            exit 1
-          fi
-
-          METADATA_FILE="latest.json"
-          if [ "$CHANNEL" = "beta" ]; then
-            METADATA_FILE="latest-beta.json"
-          fi
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "metadata_file=$METADATA_FILE" >> "$GITHUB_OUTPUT"
-          echo "Resolved client release: version=$VERSION channel=$CHANNEL metadata_file=$METADATA_FILE"
-
   build-windows:
-    name: Build Windows Client
     runs-on: windows-latest
-    needs: release-meta
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          node-version: '20'
+          cache: npm
           cache-dependency-path: client/package-lock.json
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: client
-
-      - name: Sync client version files
-        run: node scripts/sync-client-version.mjs "${{ needs.release-meta.outputs.version }}"
-
-      - name: Show synced versions
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Assert task configuration
         shell: pwsh
         run: |
-          Write-Host "tauri.conf.json version:"
-          (Get-Content client/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          Write-Host "Cargo.toml package version:"
-          (Select-String -Path client/src-tauri/Cargo.toml -Pattern '^version = ".*"$' | Select-Object -First 1).Line
-          Write-Host "package.json version:"
-          (Get-Content client/package.json -Raw | ConvertFrom-Json).version
-
-      - name: Build Tauri app
-        run: npm run tauri build
+          $config = Get-Content -Raw client/src-tauri/tauri.conf.json | ConvertFrom-Json
+          if ($config.version -ne '${{ inputs.version }}') { throw 'Version mismatch' }
+          if ($config.identifier -ne 'app.rpbox.ta6.localtest') { throw 'Identity mismatch' }
+          if ($config.plugins.updater.endpoints[0] -notlike 'http://127.0.0.1:19265/*') { throw 'Unexpected updater target' }
+      - name: Locked dependencies
         working-directory: client
+        run: npm ci
+      - name: Build and sign
+        working-directory: client
+        run: npm run tauri build -- --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          VITE_API_BASE: https://ksxvodevhonx.sealosbja.site/api/v1
-
-      - name: List bundle outputs
+          VITE_API_BASE: http://127.0.0.1:19262/api/v1
+          VITE_UPDATER_ENDPOINT: http://127.0.0.1:19265/updater
+      - name: Package evidence
         shell: pwsh
         run: |
-          Get-ChildItem -Recurse -Force client/src-tauri/target/release/bundle
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+          New-Item -ItemType Directory -Force task-evidence | Out-Null
+          $files = @(Get-ChildItem client/src-tauri/target/release/bundle/nsis -File)
+          if (-not ($files | Where-Object Extension -eq '.sig')) { throw 'Missing signature' }
+          $native = Get-Item client/src-tauri/target/release/rpbox-ta6-localtest.exe
+          $config = Get-Content -Raw client/src-tauri/tauri.conf.json | ConvertFrom-Json
+          [ordered]@{
+            commit = '${{ github.sha }}'
+            version = $config.version
+            apiBase = 'http://127.0.0.1:19262/api/v1'
+            identifier = $config.identifier
+            productName = $config.productName
+            publicUpdaterKey = $config.plugins.updater.pubkey
+            nativeProductVersion = $native.VersionInfo.ProductVersion
+            nativeSHA256 = (Get-FileHash $native.FullName).Hash
+            files = @($files | ForEach-Object { [ordered]@{ name=$_.Name; bytes=$_.Length; sha256=(Get-FileHash $_.FullName).Hash } })
+            localOnly = $true
+            globalMetadataWritten = $false
+          } | ConvertTo-Json -Depth 6 | Set-Content task-evidence/package-manifest.json
+          Copy-Item client/src-tauri/tauri.conf.json task-evidence/tauri.conf.json
+          Copy-Item $native.FullName task-evidence/
+      - uses: actions/upload-artifact@v4
         with:
-          name: windows-artifacts
-          path: client/src-tauri/target/release/bundle/**
+          name: ta6-local-client-package
+          path: |
+            client/src-tauri/target/release/bundle/nsis/**
+            client/dist/**
+            task-evidence/**
           if-no-files-found: error
-
-  deploy:
-    name: Deploy to Server
-    runs-on: ubuntu-latest
-    needs:
-      - release-meta
-      - build-windows
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-artifacts
-          path: artifacts
-
-      - name: List downloaded artifacts
-        run: |
-          echo "=== Artifacts directory structure ==="
-          find artifacts -type f | head -50
-          echo "=== Looking for EXE files ==="
-          find artifacts -name "*.exe" -type f
-          echo "=== Looking for SIG files ==="
-          find artifacts -name "*.sig" -type f
-
-      - name: Prepare updater metadata
-        env:
-          VERSION: ${{ needs.release-meta.outputs.version }}
-          CHANNEL: ${{ needs.release-meta.outputs.channel }}
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          DEFAULT_NOTES="修复若干已知问题，优化使用体验并提升稳定性。"
-          NOTES_FILE="client/release-notes/${VERSION}.txt"
-          if [ "$CHANNEL" = "beta" ] && [ -f "client/release-notes/beta/${VERSION}.txt" ]; then
-            NOTES_FILE="client/release-notes/beta/${VERSION}.txt"
-          fi
-          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          NOTES_FROM_FILE=""
-          if [ -f "$NOTES_FILE" ]; then
-            NOTES_FROM_FILE="$(cat "$NOTES_FILE")"
-          fi
-
-          TAG_NOTES="$(git for-each-ref "refs/tags/${TAG_NAME}" --format='%(contents)')"
-          if [ -z "$TAG_NOTES" ] && [ -z "$NOTES_FROM_FILE" ]; then
-            TAG_NOTES="$DEFAULT_NOTES"
-          fi
-
-          export VERSION PUB_DATE NOTES_FROM_FILE TAG_NOTES
-          export CHANNEL
-          python3 - <<'PY'
-          import json
-          import os
-
-          version = os.environ["VERSION"]
-          channel = os.environ["CHANNEL"]
-          pub_date = os.environ["PUB_DATE"]
-          notes = (os.environ.get("NOTES_FROM_FILE") or "").strip()
-          if not notes:
-              notes = (os.environ.get("TAG_NOTES") or "").strip()
-
-          notes = notes.replace("\r\n", "\n").replace("\r", "\n")
-
-          data = {
-              "latest_version": version,
-              "notes": notes,
-              "pub_date": pub_date,
-              "channel": channel,
-          }
-
-          with open("latest.json", "w", encoding="utf-8") as f:
-              json.dump(data, f, ensure_ascii=False)
-          PY
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known_hosts
-        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Upload to server
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          VERSION="${{ needs.release-meta.outputs.version }}"
-          CHANNEL="${{ needs.release-meta.outputs.channel }}"
-          METADATA_FILE="${{ needs.release-meta.outputs.metadata_file }}"
-          REMOTE_BASE="${{ secrets.RELEASE_PATH }}"
-          REMOTE_DIR="$REMOTE_BASE/$VERSION"
-
-          # 查找构建产物
-          EXE_PATH=$(find artifacts -type f -path "*/nsis/*" -name "RPBox_*_x64-setup.exe" | head -n1)
-          [ -z "$EXE_PATH" ] && EXE_PATH=$(find artifacts -type f -name "RPBox_*_x64-setup.exe" | head -n1)
-          [ -z "$EXE_PATH" ] && { echo "ERROR: setup exe not found"; exit 1; }
-          SIG_PATH="${EXE_PATH}.sig"
-          [ ! -f "$SIG_PATH" ] && { echo "ERROR: signature not found"; exit 1; }
-
-          SSH_HOST="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
-          SSH_OPTS=(-p 2233 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=30)
-          SCP_OPTS=(-P 2233 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=30)
-
-          upload_with_retry() {
-            local src="$1"
-            local dest="$2"
-            local attempt
-            for attempt in 1 2 3; do
-              if scp "${SCP_OPTS[@]}" "$src" "${SSH_HOST}:$dest"; then
-                return 0
-              fi
-
-              if [ "$attempt" -lt 3 ]; then
-                echo "Upload failed for $src (attempt $attempt), retrying..."
-                sleep $((attempt * 15))
-              fi
-            done
-
-            echo "ERROR: failed to upload $src after 3 attempts"
-            return 1
-          }
-
-          run_ssh_with_retry() {
-            local command="$1"
-            local attempt
-            for attempt in 1 2 3; do
-              if ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$command"; then
-                return 0
-              fi
-
-              if [ "$attempt" -lt 3 ]; then
-                echo "Remote command failed (attempt $attempt), retrying..."
-                sleep $((attempt * 15))
-              fi
-            done
-
-            echo "ERROR: remote command failed after 3 attempts"
-            return 1
-          }
-
-          run_ssh_with_retry "mkdir -p '$REMOTE_DIR' '$REMOTE_BASE'"
-
-          REMOTE_EXE_FINAL="$REMOTE_DIR/$(basename "$EXE_PATH")"
-          REMOTE_EXE_TMP="$REMOTE_EXE_FINAL.part"
-          REMOTE_SIG_FINAL="$REMOTE_DIR/$(basename "$SIG_PATH")"
-          REMOTE_SIG_TMP="$REMOTE_SIG_FINAL.part"
-          REMOTE_META_VER_FINAL="$REMOTE_DIR/latest.json"
-          REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
-          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/$METADATA_FILE"
-          REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
-
-          upload_with_retry "$EXE_PATH" "$REMOTE_EXE_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_EXE_TMP' '$REMOTE_EXE_FINAL'"
-
-          upload_with_retry "$SIG_PATH" "$REMOTE_SIG_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_SIG_TMP' '$REMOTE_SIG_FINAL'"
-
-          upload_with_retry latest.json "$REMOTE_META_VER_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
-
-          upload_with_retry latest.json "$REMOTE_META_LATEST_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
-
-          echo "Uploaded $CHANNEL client release metadata to $REMOTE_META_LATEST_FINAL"
-
-  update-pages:
-    name: Update GitHub Pages
-    runs-on: ubuntu-latest
-    needs:
-      - release-meta
-      - deploy
-    if: needs.release-meta.outputs.channel == 'stable'
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Update fallback version in download.html
-        run: |
-          VERSION=${{ needs.release-meta.outputs.version }}
-          sed -i "s/var fallbackVersion = '.*'/var fallbackVersion = '${VERSION}'/" shared/download.html
-          echo "Updated fallbackVersion to ${VERSION}"
-          grep fallbackVersion shared/download.html
-
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add shared/download.html
-          git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: update download page fallback version to v${{ needs.release-meta.outputs.version }}"
-          git push origin main
+          retention-days: 14

@@ -1,6 +1,6 @@
 [package]
-name = "rpbox"
-version = "1.0.5-12"
+name = "rpbox-ta6-localtest"
+version = "1.0.5-ta6.20261007.1"
 edition = "2021"
 
 [lib]
