@@ -59,6 +59,7 @@
   --input-border: #E8DCCF;
   --input-focus: #804030;
   --input-placeholder: #8C7B70;
+  --input-placeholder-enabled: #7A695E;
 
   /* 开关/选中状态 */
   --switch-active: #804030;

@@ -11,7 +11,7 @@ export function readableNameColor(color: string, background: NameBackground = ['
   const surfaces = typeof background === 'string' ? [background] : background
   const backgrounds = surfaces.flatMap(surface => {
     const value = Object.prototype.hasOwnProperty.call(colors, surface) ? colors[surface as keyof ThemeColors] : surface
-    const front = parseDisplayColor(value) || base
+    const front = value === undefined ? base : parseDisplayColor(value) || base
     const backdrops = surface === 'cardBgHover' ? [base, parseDisplayColor(colors.cardBg)!] : [base]
     return backdrops.map(backdrop => compositeDisplayColor(front, backdrop))
   })
