@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "RPBox",
-  "version": "1.0.5-12",
-  "identifier": "com.rpbox.app",
+  "productName": "RPBox TA6 Local Test",
+  "version": "1.0.5-ta6.20261007.1",
+  "identifier": "app.rpbox.ta6.localtest",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "RPBox",
+        "title": "RPBox TA-6 本机测试",
         "width": 1200,
         "height": 800
       }
@@ -22,10 +22,10 @@
         "default-src": "'self'",
         "script-src": "'self' 'unsafe-eval'",
         "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "img-src": "'self' https: data: blob:",
+        "img-src": "'self' https: data: blob: http://127.0.0.1:19262",
         "font-src": "'self' data: https://fonts.gstatic.com",
-        "connect-src": "'self' ipc: http://ipc.localhost https://api.rpbox.app https://ksxvodevhonx.sealosbja.site wss://api.rpbox.app",
-        "media-src": "'self' https: data: blob:",
+        "connect-src": "'self' ipc: http://ipc.localhost https://api.rpbox.app https://ksxvodevhonx.sealosbja.site wss://api.rpbox.app http://127.0.0.1:19262 ws://127.0.0.1:19262 http://127.0.0.1:19265",
+        "media-src": "'self' https: data: blob: http://127.0.0.1:19262",
         "object-src": "'none'",
         "frame-src": "'none'",
         "worker-src": "'self' blob:",
@@ -35,10 +35,10 @@
         "default-src": "'self'",
         "script-src": "'self' 'unsafe-eval'",
         "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "img-src": "'self' https: data: blob: http://localhost:8080 http://127.0.0.1:8080 http://localhost:9010 http://127.0.0.1:9010",
+        "img-src": "'self' https: data: blob: http://localhost:8080 http://127.0.0.1:8080 http://localhost:9010 http://127.0.0.1:9010 http://127.0.0.1:19262",
         "font-src": "'self' data: https://fonts.gstatic.com",
-        "connect-src": "'self' ipc: http://ipc.localhost https://api.rpbox.app https://ksxvodevhonx.sealosbja.site wss://api.rpbox.app http://localhost:8080 http://127.0.0.1:8080 http://localhost:9010 http://127.0.0.1:9010 ws://localhost:3102 ws://127.0.0.1:3102 ws://localhost:8080 ws://127.0.0.1:8080 ws://localhost:9010 ws://127.0.0.1:9010",
-        "media-src": "'self' https: data: blob: http://localhost:8080 http://127.0.0.1:8080 http://localhost:9010 http://127.0.0.1:9010",
+        "connect-src": "'self' ipc: http://ipc.localhost https://api.rpbox.app https://ksxvodevhonx.sealosbja.site wss://api.rpbox.app http://localhost:8080 http://127.0.0.1:8080 http://localhost:9010 http://127.0.0.1:9010 ws://localhost:3102 ws://127.0.0.1:3102 ws://localhost:8080 ws://127.0.0.1:8080 ws://localhost:9010 ws://127.0.0.1:9010 http://127.0.0.1:19262 ws://127.0.0.1:19262 http://127.0.0.1:19265",
+        "media-src": "'self' https: data: blob: http://localhost:8080 http://127.0.0.1:8080 http://localhost:9010 http://127.0.0.1:9010 http://127.0.0.1:19262",
         "object-src": "'none'",
         "frame-src": "'none'",
         "worker-src": "'self' blob:",
@@ -48,7 +48,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -64,8 +66,11 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "installerHooks": "nsis-hooks.nsh",
-        "languages": ["SimpChinese"],
-        "displayLanguageSelector": false
+        "languages": [
+          "SimpChinese"
+        ],
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
       }
     }
   },
@@ -73,7 +78,9 @@
     "dialog": null,
     "deep-link": {
       "desktop": {
-        "schemes": ["rpbox"]
+        "schemes": [
+          "rpbox-ta6-localtest"
+        ]
       }
     },
     "shell": {
@@ -81,10 +88,10 @@
     },
     "updater": {
       "endpoints": [
-        "https://ksxvodevhonx.sealosbja.site/api/v1/updater/{{target}}/{{arch}}/{{current_version}}"
+        "http://127.0.0.1:19265/updater/{{target}}/{{arch}}/{{current_version}}"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM1RTVDQzg2NjEyMEFBQjYKUldTMnFpQmhoc3pseFd1clRjalJsTjNEV2pFdTErNnJEa2ZBRHNzRGtSRkhGMEViclNuUVFocFcK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM1RTVDQzg2NjEyMEFBQjYKUldTMnFpQmhoc3pseFd1clRjalJsTjNEV2pFdTErNnJEa2ZBRHNzRGtSRkhGMEViclNuUVFocFcK",
+      "dangerousInsecureTransportProtocol": true
     }
   }
 }
-

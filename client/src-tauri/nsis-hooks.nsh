@@ -20,7 +20,7 @@ rpbox_use_exe_icon:
 
 rpbox_refresh_shortcuts:
   WriteRegStr SHCTX "${UNINSTKEY}" "DisplayIcon" "$\"$R9$\""
-  WriteRegStr SHCTX "Software\Classes\rpbox\DefaultIcon" "" "$\"$R9$\",0"
+  WriteRegStr SHCTX "Software\Classes\rpbox-ta6-localtest\DefaultIcon" "" "$\"$R9$\",0"
   !insertmacro RPBOX_REFRESH_SHORTCUT "$DESKTOP\${PRODUCTNAME}.lnk"
   !insertmacro RPBOX_REFRESH_SHORTCUT "$DESKTOP\${MAINBINARYNAME}.lnk"
   !insertmacro RPBOX_REFRESH_SHORTCUT "$SMPROGRAMS\${PRODUCTNAME}.lnk"
