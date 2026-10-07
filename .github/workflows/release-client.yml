@@ -1,4 +1,4 @@
-name: TA6 Signed Public Candidate Build Only
+name: TA6 Beta Publish Only
 
 on:
   workflow_dispatch:
@@ -10,15 +10,20 @@ on:
       channel:
         description: 'Release channel'
         required: true
-        default: 'stable'
+        default: 'beta'
         type: choice
         options:
-          - stable
           - beta
 
 env:
   NODE_VERSION: '20'
 
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ta6-beta-publish
+  cancel-in-progress: false
 jobs:
   release-meta:
     name: Resolve Release Metadata
@@ -33,6 +38,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test '${{ inputs.channel }}' = beta
+          test '${{ inputs.version }}' = 1.0.5-14
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.version }}"
@@ -138,3 +145,36 @@ jobs:
           name: windows-artifacts
           path: client/src-tauri/target/release/bundle/**
           if-no-files-found: error
+
+  deploy-beta:
+    name: Publish only beta installers and metadata
+    runs-on: ubuntu-latest
+    needs: [release-meta, build-windows]
+    if: needs.release-meta.outputs.channel == 'beta'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: artifacts
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Reuse existing release SSH endpoint
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: ssh-keyscan -H -p 2233 "$SERVER_HOST" >> ~/.ssh/known_hosts
+      - name: Publish beta with occupancy and stable preservation guards
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          RELEASE_PATH: ${{ secrets.RELEASE_PATH }}
+          VERSION: ${{ needs.release-meta.outputs.version }}
+        run: python3 scripts/ta6-beta-publish.py
+      - name: Preserve publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-publication-evidence
+          path: beta-publication-*.json
+          if-no-files-found: warn
