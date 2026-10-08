@@ -9,6 +9,7 @@ const work: RPDBWork = {
   author_name: '守望者',
   author_avatar: '/uploads/users/2/avatar/watch.jpg',
   type: 'item_showcase',
+  visibility: 'public',
   title: '月光灯笼',
   slug: 'moon-lantern',
   summary: '适合夜间巡逻与酒馆场景。',

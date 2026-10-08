@@ -306,7 +306,7 @@ function getTypeBadge(type: string): string {
 .page-header h1 {
   font-size: 28px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 8px 0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -314,7 +314,7 @@ function getTypeBadge(type: string): string {
 
 .subtitle {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin: 0;
   font-family: 'Courier New', monospace;
   opacity: 0.8;
@@ -333,8 +333,8 @@ function getTypeBadge(type: string): string {
   justify-content: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #fff;
-  color: #2C1810;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   border: 2px solid #2C1810;
   font-size: 12px;
   font-weight: 700;
@@ -344,6 +344,7 @@ function getTypeBadge(type: string): string {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   box-shadow: 4px 4px 0px 0px rgba(44, 24, 16, 0.1);
+  border-color: var(--btn-outline-border);
 }
 
 .mark-all-btn:hover,
@@ -378,7 +379,7 @@ function getTypeBadge(type: string): string {
   background: transparent;
   border: none;
   border-left: 4px solid transparent;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -387,15 +388,15 @@ function getTypeBadge(type: string): string {
 }
 
 .tab-btn:hover {
-  background: #fff;
-  border-left-color: #D4A373;
+  background: var(--color-card-bg-hover);
+  border-left-color: var(--color-border-hover);
   transform: translateX(4px);
 }
 
 .tab-btn.active {
-  background: #804030;
-  color: #fff;
-  border-left-color: #2C1810;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-left-color: var(--btn-primary-bg);
   box-shadow: 4px 4px 0px 0px rgba(44, 24, 16, 0.1);
 }
 
@@ -405,7 +406,7 @@ function getTypeBadge(type: string): string {
 
 /* 消息列表 */
 .notifications-list {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 12px;
   box-shadow: 0 4px 20px -2px rgba(75, 54, 33, 0.05);
   min-height: 400px;
@@ -417,7 +418,7 @@ function getTypeBadge(type: string): string {
   align-items: center;
   justify-content: center;
   padding: 80px 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   gap: 12px;
 }
 
@@ -440,7 +441,7 @@ function getTypeBadge(type: string): string {
   align-items: center;
   justify-content: center;
   padding: 80px 20px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .empty-state i {
@@ -461,24 +462,25 @@ function getTypeBadge(type: string): string {
 
 .notification-item {
   position: relative;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 1px solid rgba(44, 24, 16, 0.2);
   padding: 20px;
   margin-bottom: 12px;
   transition: all 0.2s;
+  border-color: var(--color-border);
 }
 
 .notification-item:hover {
-  border-color: #804030;
+  border-color: var(--color-border-hover);
 }
 
 .notification-item.unread {
-  background: #FFF9F0;
-  border-color: rgba(44, 24, 16, 0.2);
+  background: var(--color-card-bg);
+  border-color: var(--color-border);
 }
 
 .notification-item.unread:hover {
-  border-color: #804030;
+  border-color: var(--color-border-hover);
 }
 
 /* 未读标记三角形 */
@@ -509,14 +511,15 @@ function getTypeBadge(type: string): string {
   min-width: 48px;
   border: 1px solid #2C1810;
   border-radius: 50%;
-  background: linear-gradient(135deg, #B87333, #804030);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--gradient-text);
   font-weight: 600;
   font-size: 16px;
   overflow: hidden;
+  border-color: var(--color-border);
 }
 
 .notification-avatar img {
@@ -554,19 +557,19 @@ function getTypeBadge(type: string): string {
 
 .notification-title {
   font-size: 14px;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.5;
   margin: 0;
 }
 
 .username {
   font-weight: 600;
-  color: #804030;
+  color: var(--link-color);
 }
 
 .notification-time {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
@@ -594,23 +597,24 @@ function getTypeBadge(type: string): string {
 }
 
 .action-btn.primary {
-  background: #804030;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .action-btn.primary:hover {
-  background: #6B3426;
+  background: var(--btn-primary-hover);
 }
 
 .action-btn.secondary {
   background: transparent;
-  color: #804030;
+  color: var(--btn-secondary-text);
   border: 1px solid #E5D4C1;
+  border-color: var(--color-border);
 }
 
 .action-btn.secondary:hover {
-  background: rgba(128, 64, 48, 0.05);
-  border-color: #804030;
+  background: var(--color-card-bg-hover);
+  border-color: var(--color-border-hover);
 }
 
 /* 加载更多 */
@@ -626,7 +630,7 @@ function getTypeBadge(type: string): string {
   padding: 12px 0;
   background: transparent;
   border: none;
-  color: #804030;
+  color: var(--link-color);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -634,18 +638,18 @@ function getTypeBadge(type: string): string {
 }
 
 .load-more-btn:hover {
-  color: #6B3426;
+  color: var(--link-hover);
 }
 
 .load-more-btn .line {
   width: 60px;
   height: 1px;
-  background: #E5D4C1;
+  background: var(--color-border);
   transition: all 0.3s;
 }
 
 .load-more-btn:hover .line {
-  background: #804030;
+  background: var(--color-border-hover);
   width: 80px;
 }
 

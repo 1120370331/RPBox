@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import i18n from '@/i18n'
@@ -94,7 +95,7 @@ describe('ModeratorMain RPDB review integration', () => {
     await router.push('/moderator')
     const wrapper = mount(ModeratorMain, {
       global: {
-        plugins: [router, i18n],
+        plugins: [router, i18n, createPinia()],
         stubs: {
           ImageViewer: true,
           RModal: true,
@@ -131,7 +132,7 @@ describe('ModeratorMain RPDB review integration', () => {
     })
     await router.push('/moderator')
     const wrapper = mount(ModeratorMain, {
-      global: { plugins: [router, i18n], stubs: { ImageViewer: true, RModal: true } },
+      global: { plugins: [router, i18n, createPinia()], stubs: { ImageViewer: true, RModal: true } },
     })
     await flushPromises()
 

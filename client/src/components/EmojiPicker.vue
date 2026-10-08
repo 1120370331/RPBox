@@ -207,9 +207,9 @@ onBeforeUnmount(() => {
   max-height: var(--picker-max-height, 460px);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #FFFDF9 0%, #FFF8F0 100%);
+  background: var(--color-panel-bg);
   border-radius: 18px;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   box-shadow: 0 18px 44px rgba(75, 54, 33, 0.18);
   overflow: hidden;
 }
@@ -218,7 +218,7 @@ onBeforeUnmount(() => {
   content: '';
   display: block;
   height: 4px;
-  background: linear-gradient(90deg, transparent, #B87333, transparent);
+  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
 }
 
 .emoji-header {
@@ -226,19 +226,19 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px 10px;
-  background: rgba(255, 255, 255, 0.8);
-  border-bottom: 1px solid #F5EFE7;
+  background: var(--color-panel-bg);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .emoji-title {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .emoji-subtitle {
   font-size: 11px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin-top: 2px;
 }
 
@@ -246,7 +246,7 @@ onBeforeUnmount(() => {
   border: none;
   background: none;
   font-size: 18px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   cursor: pointer;
   padding: 2px;
 }
@@ -256,23 +256,23 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-bottom: 1px solid #F5EFE7;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .emoji-search i {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .emoji-search input {
   flex: 1;
-  border: 1px solid #E5D4C1;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
   padding: 6px 10px;
   outline: none;
   font-size: 13px;
-  color: #4B3621;
-  background: #fff;
+  color: var(--color-text-main);
+  background: var(--color-panel-bg);
 }
 
 .emoji-body {
@@ -285,8 +285,8 @@ onBeforeUnmount(() => {
 
 .emoji-categories {
   padding: 12px 8px;
-  background: rgba(250, 245, 238, 0.9);
-  border-right: 1px solid #F5EFE7;
+  background: var(--color-card-bg);
+  border-right: 1px solid var(--color-border);
   overflow-y: auto;
 }
 
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   border: 1px solid transparent;
   background: transparent;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -307,22 +307,22 @@ onBeforeUnmount(() => {
 }
 
 .emoji-category.active {
-  background: #2C1810;
-  color: #fff;
-  border-color: #2C1810;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-color: var(--btn-primary-bg);
 }
 
 .pack-icon {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid rgba(229, 212, 193, 0.6);
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel-bg);
   object-fit: cover;
 }
 
 .emoji-category.active .pack-icon {
-  border-color: #fff;
+  border-color: var(--btn-primary-text);
 }
 
 .emoji-panel {
@@ -338,13 +338,13 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   font-size: 12px;
   font-weight: 600;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin-bottom: 10px;
 }
 
 .emoji-count {
   font-size: 11px;
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 .emoji-grid {
@@ -358,12 +358,12 @@ onBeforeUnmount(() => {
 
 .emoji-btn {
   border: none;
-  background: #fff;
+  background: var(--color-panel-bg);
   padding: 6px;
   border-radius: 12px;
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
-  box-shadow: inset 0 0 0 1px rgba(229, 212, 193, 0.6);
+  box-shadow: inset 0 0 0 1px var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -378,13 +378,13 @@ onBeforeUnmount(() => {
 }
 
 .emoji-btn:hover {
-  background: rgba(184, 115, 51, 0.12);
+  background: var(--btn-outline-hover);
   transform: translateY(-1px);
 }
 
 .emoji-empty {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   padding: 12px 0;
 }
 
@@ -397,7 +397,7 @@ onBeforeUnmount(() => {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(184, 115, 51, 0.4);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 

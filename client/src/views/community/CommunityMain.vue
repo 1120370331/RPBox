@@ -1024,7 +1024,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 .clear-filter-btn:hover {
   background: var(--color-card-bg-hover, #FFF5E6);
   border-color: var(--color-accent, #B87333);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .header-actions {
@@ -1107,8 +1107,8 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   justify-content: center;
   gap: 8px;
   padding: 8px 20px;
-  background: var(--color-secondary, #804030);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 6px;
   font-size: 14px;
@@ -1136,7 +1136,8 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 }
 
 .create-btn:hover {
-  background: var(--color-secondary-hover, #6B3528);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 .banner-empty-action {
@@ -1572,13 +1573,13 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 }
 
 .feed-tab:hover {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   background: var(--color-card-bg-hover, #FFF5E6);
 }
 
 .feed-tab.active {
-  background: var(--color-secondary, #804030);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   box-shadow: 0 6px 16px rgba(128, 64, 48, 0.2);
 }
 
@@ -1628,13 +1629,13 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 
 .category-filter button:hover {
   border-color: var(--color-accent, #B87333);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .category-filter button.active {
-  background: var(--color-accent, #B87333);
+  background: var(--btn-primary-bg);
   border-color: var(--color-accent, #B87333);
-  color: var(--btn-primary-text, #fff);
+  color: var(--btn-primary-text);
   box-shadow: 0 2px 6px rgba(44, 24, 16, 0.2);
 }
 
@@ -1698,8 +1699,8 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 .pinned-tag {
   flex-shrink: 0;
   padding: 2px 6px;
-  background: var(--color-secondary, #804030);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 10px;
   font-weight: 600;
   border-radius: 3px;
@@ -1778,9 +1779,9 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 }
 
 .event-status-filters button.active {
-  background: var(--color-secondary, #804030);
-  border-color: var(--color-secondary, #804030);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .event-status-filters button.active span {
@@ -1801,13 +1802,13 @@ function setEventStatusFilter(filter: EventStatusFilter) {
 
 .filter-chip:hover {
   border-color: var(--color-accent, #B87333);
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .filter-chip.active {
-  background: var(--color-accent, #B87333);
+  background: var(--btn-primary-bg);
   border-color: var(--color-accent, #B87333);
-  color: var(--btn-primary-text, #fff);
+  color: var(--btn-primary-text);
 }
 
 .events-grid {
@@ -1870,8 +1871,8 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   min-width: 64px;
   padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.97);
-  color: #2C1810;
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
   text-align: center;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
@@ -1881,7 +1882,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--event-color, #B87333) 58%, #2C1810);
+  color: var(--color-text-secondary);
 }
 
 .event-date-badge .day {
@@ -1890,7 +1891,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   font-size: 28px;
   font-weight: 700;
   line-height: 1;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .event-card-body {
@@ -2102,7 +2103,7 @@ function setEventStatusFilter(filter: EventStatusFilter) {
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;

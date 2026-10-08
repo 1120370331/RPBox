@@ -193,8 +193,8 @@ const guildMaster = computed(() => {
 
 .layout2 {
   min-height: 100vh;
-  background: #F2EBE5;
-  color: #1A110D;
+  background: var(--color-background);
+  color: var(--color-text-main);
   position: relative;
   overflow-x: hidden;
 }
@@ -205,7 +205,7 @@ const guildMaster = computed(() => {
   right: 0;
   width: 33%;
   height: 100%;
-  background: #E8DCCF;
+  background: var(--color-border);
   opacity: 0.3;
   pointer-events: none;
 }
@@ -216,7 +216,7 @@ const guildMaster = computed(() => {
   right: 80px;
   font-size: 200px;
   font-family: 'Playfair Display', serif;
-  color: #804030;
+  color: var(--color-primary);
   opacity: 0.05;
   pointer-events: none;
   user-select: none;
@@ -248,8 +248,8 @@ const guildMaster = computed(() => {
 
 .rank-badge {
   padding: 4px 12px;
-  border: 1px solid #804030;
-  color: #804030;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -258,12 +258,12 @@ const guildMaster = computed(() => {
 .divider {
   width: 48px;
   height: 1px;
-  background: rgba(128, 64, 48, 0.3);
+  background: var(--color-border);
 }
 
 .est-date {
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-style: italic;
   font-family: 'Playfair Display', serif;
 }
@@ -274,11 +274,11 @@ const guildMaster = computed(() => {
   font-weight: 400;
   line-height: 0.9;
   margin: 0;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .guild-title .accent {
-  color: #804030;
+  color: var(--color-primary);
   font-style: italic;
 }
 
@@ -292,10 +292,10 @@ const guildMaster = computed(() => {
 .guild-motto {
   text-align: right;
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   max-width: 200px;
   line-height: 1.6;
-  border-right: 1px solid rgba(128, 64, 48, 0.3);
+  border-right: 1px solid var(--color-border);
   padding-right: 16px;
   margin: 0;
 }
@@ -317,31 +317,31 @@ const guildMaster = computed(() => {
 }
 
 .btn-primary {
-  background: #2C1810;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-primary:hover {
-  background: #804030;
+  background: var(--btn-primary-hover);
 }
 
 .btn-outline {
   background: transparent;
-  border: 1px solid #2C1810;
-  color: #2C1810;
+  border: 1px solid var(--btn-outline-border);
+  color: var(--btn-outline-text);
 }
 
 .btn-danger {
-  background: #804030;
-  color: #fff;
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
 }
 
 /* Hero Section */
 .hero-section {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  border-top: 1px solid rgba(26, 17, 13, 0.1);
-  border-bottom: 1px solid rgba(26, 17, 13, 0.1);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: 48px;
 }
 
@@ -387,9 +387,9 @@ const guildMaster = computed(() => {
 }
 
 .hero-stats {
-  background: #fff;
+  background: var(--color-panel-bg);
   padding: 32px;
-  border-left: 1px solid rgba(26, 17, 13, 0.1);
+  border-left: 1px solid var(--color-border);
   position: relative;
 }
 
@@ -400,7 +400,7 @@ const guildMaster = computed(() => {
   writing-mode: vertical-rl;
   font-size: 32px;
   font-family: 'Playfair Display', serif;
-  color: rgba(140, 123, 112, 0.2);
+  color: color-mix(in srgb, var(--color-text-secondary) 20%, transparent);
   user-select: none;
 }
 
@@ -420,7 +420,7 @@ const guildMaster = computed(() => {
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .stat-value {
@@ -432,12 +432,12 @@ const guildMaster = computed(() => {
 .stat-value .number {
   font-size: 48px;
   font-family: 'Playfair Display', serif;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .stat-value .sub {
   font-size: 16px;
-  color: #804030;
+  color: var(--color-text-secondary);
 }
 
 .master-info {
@@ -450,8 +450,8 @@ const guildMaster = computed(() => {
 .master-avatar {
   width: 40px;
   height: 40px;
-  background: #2C1810;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -468,26 +468,26 @@ const guildMaster = computed(() => {
 .master-name {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .master-role {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .stat-footer {
   padding-top: 24px;
-  border-top: 1px dashed rgba(26, 17, 13, 0.2);
+  border-top: 1px dashed var(--color-border);
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .invite-code {
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-family: monospace;
 }
 
@@ -503,7 +503,7 @@ const guildMaster = computed(() => {
   font-size: 18px;
   font-family: 'Playfair Display', serif;
   font-style: italic;
-  border-bottom: 2px solid #804030;
+  border-bottom: 2px solid var(--color-primary);
   display: inline-block;
   padding-right: 32px;
   padding-bottom: 8px;
@@ -520,42 +520,42 @@ const guildMaster = computed(() => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
 .dot {
   width: 8px;
   height: 8px;
-  background: #804030;
+  background: var(--color-primary);
 }
 
 .dot.gray {
-  background: #ccc;
+  background: var(--color-border);
 }
 
 .notice-item h4 {
   font-size: 18px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 8px 0;
   transition: color 0.2s;
 }
 
 .notice-item:hover h4 {
-  color: #804030;
+  color: var(--color-primary);
 }
 
 .notice-item p {
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   line-height: 1.6;
   margin: 0;
 }
 
 .hairline {
   height: 1px;
-  background: linear-gradient(90deg, transparent, #8C7B70, transparent);
+  background: linear-gradient(90deg, transparent, var(--color-border), transparent);
   margin: 24px 0;
 }
 
@@ -567,13 +567,13 @@ const guildMaster = computed(() => {
   font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #804030;
+  color: var(--color-primary);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .view-archive:hover {
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .view-archive span {
@@ -586,7 +586,7 @@ const guildMaster = computed(() => {
   justify-content: space-between;
   align-items: flex-end;
   margin-bottom: 24px;
-  border-bottom: 1px solid rgba(26, 17, 13, 0.1);
+  border-bottom: 1px solid var(--color-border);
   padding-bottom: 8px;
 }
 
@@ -603,9 +603,9 @@ const guildMaster = computed(() => {
 }
 
 .member-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   padding: 20px;
-  box-shadow: 4px 4px 0 rgba(75, 54, 33, 0.1);
+  box-shadow: 4px 4px 0 var(--color-border);
   border: 1px solid transparent;
   transition: all 0.2s;
   cursor: pointer;
@@ -613,16 +613,16 @@ const guildMaster = computed(() => {
 }
 
 .member-card:hover {
-  box-shadow: 6px 6px 0 rgba(128, 64, 48, 0.2);
-  border-color: rgba(128, 64, 48, 0.2);
+  box-shadow: 6px 6px 0 var(--color-border);
+  border-color: var(--color-border-hover);
 }
 
 .member-badge {
   position: absolute;
   top: 12px;
   left: 12px;
-  background: #2C1810;
-  color: #fff;
+  background: var(--badge-bg);
+  color: var(--btn-primary-text);
   font-size: 10px;
   padding: 2px 8px;
   letter-spacing: 0.5px;
@@ -632,8 +632,8 @@ const guildMaster = computed(() => {
 .member-card .member-avatar {
   width: 40px;
   height: 40px;
-  background: #E8DCCF;
-  color: #4B3621;
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -659,17 +659,17 @@ const guildMaster = computed(() => {
   font-family: 'Playfair Display', serif;
   font-weight: 600;
   margin: 0 0 4px 0;
-  color: #2C1810;
+  color: var(--color-text-main);
   transition: color 0.2s;
 }
 
 .member-card:hover .member-details h4 {
-  color: #804030;
+  color: var(--color-primary);
 }
 
 .member-details p {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin: 0 0 12px 0;
 }
 
@@ -679,23 +679,23 @@ const guildMaster = computed(() => {
 
 .progress-bar {
   height: 4px;
-  background: #f0f0f0;
+  background: var(--color-border);
 }
 
 .progress-fill {
   height: 100%;
-  background: #804030;
+  background: var(--color-primary);
 }
 
 /* Footer */
 .editorial-footer {
-  border-top: 1px solid rgba(26, 17, 13, 0.1);
+  border-top: 1px solid var(--color-border);
   padding-top: 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 14px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .footer-brand {
@@ -709,12 +709,12 @@ const guildMaster = computed(() => {
 }
 
 .footer-links a {
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .footer-links a:hover {
-  color: #804030;
+  color: var(--color-primary);
 }
 </style>

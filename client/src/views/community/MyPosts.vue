@@ -371,23 +371,24 @@ function stripHtml(html: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 2px solid #E5D4C1;
   border-radius: 12px;
-  color: #4B3621;
+  color: var(--btn-outline-text);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  border-color: var(--btn-outline-border);
 }
 
 .back-btn:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .page-title {
   font-size: 42px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -396,8 +397,8 @@ function stripHtml(html: string) {
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: #804030;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 12px;
   font-size: 16px;
@@ -407,7 +408,7 @@ function stripHtml(html: string) {
 }
 
 .create-btn:hover {
-  background: #6B3528;
+  background: var(--btn-primary-hover);
   transform: translateY(-2px);
 }
 
@@ -418,7 +419,7 @@ function stripHtml(html: string) {
 }
 
 .stat-item {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 12px;
   padding: 24px;
   text-align: center;
@@ -428,13 +429,13 @@ function stripHtml(html: string) {
 .stat-value {
   font-size: 36px;
   font-weight: 700;
-  color: #804030;
+  color: var(--color-text-main);
   margin-bottom: 8px;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .filters {
@@ -455,16 +456,17 @@ function stripHtml(html: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 2px solid #E5D4C1;
   border-radius: 12px;
   flex: 1;
   min-width: 220px;
+  border-color: var(--color-border);
 }
 
 .filter-search i {
   font-size: 16px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .filter-search input {
@@ -472,50 +474,52 @@ function stripHtml(html: string) {
   border: none;
   outline: none;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
   background: transparent;
 }
 
 .filter-search input::placeholder {
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .category-select {
   padding: 10px 14px;
   border: 2px solid #E5D4C1;
   border-radius: 12px;
-  background: #fff;
+  background: var(--input-bg);
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
   min-width: 120px;
+  border-color: var(--input-border);
 }
 
 .filter-btn {
   padding: 10px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border: 2px solid #E5D4C1;
   border-radius: 12px;
-  color: #4B3621;
+  color: var(--btn-outline-text);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  border-color: var(--btn-outline-border);
 }
 
 .filter-btn:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .filter-btn.active {
-  background: #804030;
-  border-color: #804030;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .loading {
   text-align: center;
   padding: 60px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   font-size: 18px;
 }
 
@@ -525,21 +529,21 @@ function stripHtml(html: string) {
   align-items: center;
   justify-content: center;
   padding: 80px 20px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
 }
 
 .empty i {
   font-size: 64px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   opacity: 0.3;
   margin-bottom: 16px;
 }
 
 .empty p {
   font-size: 16px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
   margin-bottom: 24px;
 }
 
@@ -548,8 +552,8 @@ function stripHtml(html: string) {
   align-items: center;
   gap: 8px;
   padding: 14px 28px;
-  background: #804030;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 12px;
   font-size: 16px;
@@ -559,7 +563,7 @@ function stripHtml(html: string) {
 }
 
 .create-btn-large:hover {
-  background: #6B3528;
+  background: var(--btn-primary-hover);
   transform: translateY(-2px);
 }
 
@@ -570,7 +574,7 @@ function stripHtml(html: string) {
 }
 
 .post-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(75,54,33,0.05);
@@ -592,7 +596,7 @@ function stripHtml(html: string) {
 .post-title {
   font-size: 22px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
   cursor: pointer;
   transition: color 0.3s;
@@ -600,7 +604,7 @@ function stripHtml(html: string) {
 }
 
 .post-title:hover {
-  color: #804030;
+  color: var(--link-color);
 }
 
 .pending-badge {
@@ -625,16 +629,17 @@ function stripHtml(html: string) {
   display: flex;
   align-items: center;
   padding: 4px 8px;
-  background: #F0F0F0;
-  color: #909399;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   border-radius: 6px;
   font-size: 14px;
+  border-color: var(--color-border);
 }
 
 .post-content {
   font-size: 15px;
   line-height: 1.6;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin-bottom: 16px;
 }
 
@@ -646,15 +651,16 @@ function stripHtml(html: string) {
   margin-bottom: 16px;
   border-radius: 999px;
   border: 1px solid #F0E0CF;
-  background: rgba(184, 115, 51, 0.12);
+  background: var(--tag-bg);
   font-size: 13px;
   font-weight: 600;
-  color: #804030;
+  color: var(--tag-text);
+  border-color: var(--color-border);
 }
 
 .post-location i {
   font-size: 15px;
-  color: #B87333;
+  color: var(--link-color);
 }
 
 .post-footer {
@@ -663,6 +669,7 @@ function stripHtml(html: string) {
   align-items: center;
   padding-top: 16px;
   border-top: 2px solid #F5EFE7;
+  border-top-color: var(--color-border);
 }
 
 .post-meta {
@@ -675,7 +682,7 @@ function stripHtml(html: string) {
   align-items: center;
   gap: 4px;
   font-size: 14px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .meta-item i {
@@ -698,21 +705,23 @@ function stripHtml(html: string) {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  border-color: var(--color-border);
 }
 
 .action-btn.edit {
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
+  border-color: var(--btn-outline-border);
 }
 
 .action-btn.edit:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .action-btn.delete {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-color: #C44536;
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .action-btn.delete:hover {
@@ -721,12 +730,13 @@ function stripHtml(html: string) {
 }
 
 .action-btn.visibility {
-  background: #fff;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
+  border-color: var(--btn-outline-border);
 }
 
 .action-btn.visibility:hover {
-  background: #F5EFE7;
+  background: var(--color-card-bg-hover);
 }
 
 .action-btn.visibility.is-private {

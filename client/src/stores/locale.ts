@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { ref } from 'vue'
 
 export type LocaleType = 'zh-CN' | 'en-US'
 

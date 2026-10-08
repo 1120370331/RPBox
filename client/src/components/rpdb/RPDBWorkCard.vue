@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import type { RPDBWork } from '@/api/rpdb'
 import { resolveRPDBMediaURL } from '@/api/rpdb'
 import { sortRPDBStyleTags } from '@/constants/rpdbStyles'
+import { buildNameStyle } from '@/utils/userNameStyle'
+import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
 
 const props = withDefaults(defineProps<{
   work: RPDBWork
@@ -98,7 +100,7 @@ function formatCount(value?: number) {
               @error="($event.currentTarget as HTMLImageElement).hidden = true"
             >
           </span>
-          <b :style="{ color: work.author_name_color ? `#${work.author_name_color}` : undefined }">{{ work.author_name || '匿名贡献者' }}</b>
+          <b :style="buildNameStyle(normalizeCharacterCardHexForCSS(work.author_name_color))">{{ work.author_name || '匿名贡献者' }}</b>
         </div>
         <div v-if="work.recommendation_reasons?.length" class="work-card__recommendation" data-testid="rpdb-recommendation-reasons">
           <span v-for="reason in work.recommendation_reasons.slice(0, 2)" :key="reason">{{ reason }}</span>

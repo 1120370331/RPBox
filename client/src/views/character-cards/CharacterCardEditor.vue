@@ -46,6 +46,8 @@ import {
 } from '@/utils/characterCardDraft'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardCoverPortrait, normalizeCharacterCardPortraits } from '@/utils/characterCardPortraits'
+import { useThemeStore } from '@/stores/theme'
+import { useArchiveDisplayColors } from '../archives/archiveDisplayColors'
 
 interface EditorHandle {
   insertContent: (html: string) => void
@@ -71,6 +73,8 @@ const { t } = useI18n()
 const toast = useToastStore()
 const dialog = useDialog()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
+const { readableArchiveColor } = useArchiveDisplayColors()
 
 const cardId = computed(() => Number(route.params.id))
 const card = ref<CharacterCard | null>(null)
@@ -984,7 +988,7 @@ async function goBack() {
         </button>
         <div class="editor-header__identity">
           <span>{{ t('characterCards.editor.fileKicker', { id: card.id }) }}</span>
-          <h1 :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</h1>
+          <h1 :style="displayNameColor ? { color: readableArchiveColor(displayNameColor) } : undefined">{{ displayName }}</h1>
         </div>
         <div class="editor-header__actions">
           <span class="save-sync" :class="`save-sync--${saveStatus}`" role="status">
@@ -1069,7 +1073,7 @@ async function goBack() {
           <p class="portrait-film__hint">{{ t('characterCards.editor.filmHint') }}</p>
 
           <div class="portrait-editor__plaque">
-            <strong :style="displayNameColor ? { color: displayNameColor } : undefined">{{ displayName }}</strong>
+            <strong :style="displayNameColor ? { color: readableArchiveColor(displayNameColor, themeStore.currentTheme.colors.gradientEnd) } : undefined">{{ displayName }}</strong>
             <span>{{ form.title || form.full_title || t('characterCards.editor.titlePending') }}</span>
             <small>{{ [form.race, form.class].filter(Boolean).join(' · ') || t('characterCards.editor.identityPending') }}</small>
           </div>
@@ -1619,7 +1623,7 @@ async function goBack() {
 
 .save-sync { display: inline-flex; align-items: center; gap: 5px; color: var(--color-success); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .save-sync--waiting { color: var(--color-warning-dark); }
-.save-sync--saving { color: var(--color-accent); }
+.save-sync--saving { color: var(--link-color); }
 .save-sync--failed { color: var(--btn-danger-bg); }
 
 .button {
@@ -1909,7 +1913,7 @@ async function goBack() {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  color: var(--color-accent);
+  color: var(--link-color);
   font: 800 8px/1 ui-monospace, Consolas, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;

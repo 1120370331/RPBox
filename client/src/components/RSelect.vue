@@ -60,13 +60,14 @@ function select(opt: Option) {
   align-items: center;
   padding: 10px 14px;
   background: var(--input-bg);
+  color: var(--color-text-main);
   border: 2px solid var(--input-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
 }
 .r-select__placeholder { color: var(--input-placeholder); }
-.r-select__arrow { font-size: 10px; color: var(--color-secondary); }
+.r-select__arrow { font-size: 10px; color: var(--color-text-secondary); }
 .r-select__dropdown {
   position: absolute;
   top: 100%;
@@ -74,6 +75,7 @@ function select(opt: Option) {
   right: 0;
   margin-top: 4px;
   background: var(--color-panel-bg);
+  color: var(--color-text-main);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 16px rgba(var(--shadow-base), 0.2);
@@ -87,7 +89,8 @@ function select(opt: Option) {
   font-size: 14px;
 }
 .r-select__option:hover { background: var(--btn-outline-hover); }
-.r-select__option--active { color: var(--color-accent); background: var(--color-primary-light); }
+.r-select__option--active,
+.r-select__option--active:hover { color: var(--btn-secondary-text); background: var(--btn-secondary-bg); }
 .r-select--disabled { opacity: 0.5; pointer-events: none; }
 .r-select-enter-active, .r-select-leave-active { transition: all 0.2s; }
 .r-select-enter-from, .r-select-leave-to { opacity: 0; transform: translateY(-8px); }

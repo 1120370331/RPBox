@@ -1,4 +1,5 @@
 import { mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import i18n from '@/i18n'
 import type { Character } from '@/api/character'
@@ -82,7 +83,7 @@ function mountCard(props: Record<string, unknown>) {
     attachTo: document.body,
     props: { visible: true, position: { x: 100, y: 80 }, ...props },
     global: {
-      plugins: [i18n],
+      plugins: [createPinia(), i18n],
       stubs: {
         CharacterCardPortrait: {
           template: '<img data-testid="portrait" alt="" />',

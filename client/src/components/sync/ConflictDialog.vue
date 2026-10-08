@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import type { ConflictInfo, ConflictResolution } from '../../utils/conflict'
 
-const props = defineProps<{
+defineProps<{
   conflict: ConflictInfo
 }>()
 
@@ -11,7 +10,6 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const showDiff = ref(false)
 
 function useLocal() {
   emit('resolve', 'local')
@@ -93,8 +91,8 @@ function useCloud() {
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  background: var(--color-primary);
-  color: white;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn.secondary {

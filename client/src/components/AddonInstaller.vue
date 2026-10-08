@@ -178,8 +178,8 @@ onMounted(() => {
 
 .addon-installer__tips {
   padding: 14px 16px;
-  background: linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%);
-  border: 1px solid #FFE0B2;
+  background: var(--color-warning-light);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
 
@@ -190,7 +190,7 @@ onMounted(() => {
   margin: 0 0 10px 0;
   font-size: 14px;
   font-weight: 600;
-  color: #E65100;
+  color: var(--color-warning-dark);
 }
 
 .addon-installer__tips h4 i {
@@ -201,16 +201,16 @@ onMounted(() => {
   margin: 0;
   padding-left: 18px;
   font-size: 13px;
-  color: #5D4037;
+  color: var(--color-text-main);
   line-height: 1.7;
 }
 
 .addon-installer__tips code {
   padding: 2px 6px;
-  background: rgba(184, 115, 51, 0.15);
+  background: var(--tag-bg);
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
-  color: #B87333;
+  color: var(--tag-text);
 }
 </style>

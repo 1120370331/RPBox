@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listUserCollections, createCollection, type Collection } from '../api/collection'
-import { useToast } from '../composables/useToast'
+import { useToastStore } from '@/stores/toast'
 
 const props = defineProps<{
   modelValue?: number | null
@@ -14,7 +14,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const toast = useToast()
+const toast = useToastStore()
 
 const collections = ref<Collection[]>([])
 const selectedId = ref<number | null>(props.modelValue ?? null)
@@ -184,8 +184,8 @@ onMounted(loadCollections)
 }
 
 .selector-btn:hover {
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-color: var(--color-primary);
 }
 
@@ -317,17 +317,17 @@ onMounted(loadCollections)
 }
 
 .btn-cancel {
-  background: rgba(128, 64, 48, 0.08);
+  background: var(--btn-secondary-bg);
   color: var(--color-text-main);
 }
 
 .btn-cancel:hover {
-  background: rgba(128, 64, 48, 0.15);
+  background: var(--btn-secondary-hover);
 }
 
 .btn-confirm {
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-confirm:hover:not(:disabled) {

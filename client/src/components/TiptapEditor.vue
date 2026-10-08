@@ -11,6 +11,8 @@ import { mergeAttributes, Node } from '@tiptap/core'
 import { uploadAttachment, uploadImage } from '@/api/item'
 import { useToast } from '@/composables/useToast'
 import { searchUsers, type UserMentionItem } from '@/api/user'
+import { useThemeStore } from '@/stores/theme'
+import { buildNameStyle } from '@/utils/userNameStyle'
 
 const props = defineProps<{
   modelValue: string
@@ -25,6 +27,7 @@ const emit = defineEmits<{
 const imageInputRef = ref<HTMLInputElement | null>(null)
 const attachmentInputRef = ref<HTMLInputElement | null>(null)
 const toast = useToast()
+const themeStore = useThemeStore()
 const uploadCacheKey = 'tiptap_image_upload_cache'
 const uploadCache = new Map<string, string>()
 const maxAttachmentBytes = 25 * 1024 * 1024
@@ -68,6 +71,12 @@ type MentionSuggestionItem = Omit<UserMentionItem, 'id'> & {
 }
 
 let mentionPopup: HTMLDivElement | null = null
+
+watch(() => themeStore.currentThemeId, () => {
+  mentionPopup?.querySelectorAll<HTMLElement>('.mention-suggestion__name').forEach(name => {
+    Object.assign(name.style, buildNameStyle(name.dataset.nameColor, name.dataset.nameBold === 'true'))
+  })
+})
 
 async function fetchMentionItems(query: string): Promise<MentionSuggestionItem[]> {
   try {
@@ -792,12 +801,9 @@ const editor = useEditor({
                 const name = document.createElement('span')
                 name.className = 'mention-suggestion__name'
                 name.textContent = item.username
-                if (item.name_color) {
-                  name.style.color = item.name_color
-                }
-                if (item.name_bold) {
-                  name.style.fontWeight = '700'
-                }
+                name.dataset.nameColor = item.name_color || ''
+                name.dataset.nameBold = String(Boolean(item.name_bold))
+                Object.assign(name.style, buildNameStyle(item.name_color, item.name_bold))
                 button.appendChild(name)
 
                 button.addEventListener('click', () => {
@@ -905,7 +911,7 @@ onBeforeUnmount(() => {
 
 watch(() => props.modelValue, (value) => {
   if (editor.value && editor.value.getHTML() !== value) {
-    editor.value.commands.setContent(value, false)
+    editor.value.commands.setContent(value, { emitUpdate: false })
   }
 })
 
@@ -976,19 +982,6 @@ function insertImageByUrl() {
   if (url) {
     editor.value?.chain().focus().setImage({ src: url }).run()
   }
-}
-
-function insertAttachmentLink(url: string, name: string, size: number = 0) {
-  if (!url) return
-  const filename = name.trim() || url.split('/').pop() || '未知文件'
-  editor.value?.chain().focus().insertContent({
-    type: 'attachmentCard',
-    attrs: {
-      href: url,
-      filename: filename,
-      filesize: size,
-    },
-  }).run()
 }
 
 function triggerAttachmentUpload() {
@@ -1637,8 +1630,8 @@ defineExpose({
   align-items: center;
   gap: 4px;
   padding: 8px 14px;
-  background: var(--color-secondary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -1648,7 +1641,7 @@ defineExpose({
 }
 
 .editor-content :deep(.attachment-card__download:hover) {
-  background: var(--color-secondary-dark, #6B3528);
+  background: var(--btn-primary-hover);
   transform: translateY(-1px);
 }
 

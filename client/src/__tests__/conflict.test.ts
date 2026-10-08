@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import type { ConflictInfo } from '../utils/conflict'
 
 describe('conflict detection', () => {
   it('should detect conflict when checksums differ', () => {

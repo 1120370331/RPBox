@@ -115,7 +115,7 @@ export async function getAccountBackupVersion(
     `/account-backups/${encodeURIComponent(accountId)}/versions/${versionId}`,
   )
   const unwrapped = unwrapData(response)
-  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && unwrapped.version) {
+  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && typeof unwrapped.version === 'object' && unwrapped.version) {
     return unwrapped.version
   }
   return unwrapped as AccountBackupVersion
@@ -131,7 +131,7 @@ export async function renameAccountBackupVersion(
     { name },
   )
   const unwrapped = unwrapData(response)
-  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && unwrapped.version) {
+  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && typeof unwrapped.version === 'object' && unwrapped.version) {
     return unwrapped.version
   }
   return unwrapped as AccountBackupVersion

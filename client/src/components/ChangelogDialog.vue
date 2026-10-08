@@ -145,7 +145,7 @@ defineExpose({
 }
 
 .changelog-dialog {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   width: 90%;
   max-width: 600px;
@@ -172,7 +172,7 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 24px;
-  border-bottom: 1px solid #E0E0E0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .header-content {
@@ -183,12 +183,12 @@ defineExpose({
 
 .header-content i {
   font-size: 28px;
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 .changelog-header h2 {
   font-size: 20px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -206,12 +206,12 @@ defineExpose({
 }
 
 .close-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--btn-outline-hover);
 }
 
 .close-btn i {
   font-size: 20px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .changelog-body {
@@ -237,15 +237,15 @@ defineExpose({
 
 .version-tag {
   padding: 6px 12px;
-  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 20px;
   font-size: 14px;
   font-weight: 600;
 }
 
 .version-date {
-  color: #999;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -260,35 +260,35 @@ defineExpose({
   align-items: flex-start;
   gap: 10px;
   padding: 12px;
-  background: #F5F0EB;
+  background: var(--color-card-bg);
   border-radius: 8px;
   line-height: 1.6;
 }
 
 .feature-item i {
   font-size: 18px;
-  color: #4CAF50;
+  color: var(--color-success);
   flex-shrink: 0;
   margin-top: 2px;
 }
 
 .feature-item span {
-  color: #5D4037;
+  color: var(--color-text-main);
   font-size: 14px;
   white-space: pre-wrap;
 }
 
 .changelog-footer {
   padding: 20px 24px;
-  border-top: 1px solid #E0E0E0;
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: center;
 }
 
 .btn-primary {
   padding: 12px 32px;
-  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 15px;

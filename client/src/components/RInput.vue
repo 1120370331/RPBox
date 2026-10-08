@@ -13,7 +13,7 @@ interface Props {
   rows?: number
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   modelValue: '',
   type: 'text',
   size: 'md',
@@ -82,7 +82,7 @@ function handleClear() {
   border-color: var(--input-focus);
   box-shadow: 0 0 0 3px rgba(var(--shadow-base), 0.12);
 }
-.r-input--error { border-color: var(--btn-danger-bg); }
+.r-input--error, .r-input--error:focus-within { border-color: var(--btn-danger-bg); }
 .r-input--disabled { opacity: 0.6; background: var(--color-card-bg); }
 
 .r-input--sm { padding: 6px 12px; font-size: 12px; }
@@ -95,7 +95,7 @@ function handleClear() {
   outline: none;
   background: transparent;
   font-size: inherit;
-  color: var(--text-dark);
+  color: var(--color-text-main);
   font-family: inherit;
 }
 
@@ -103,7 +103,7 @@ function handleClear() {
 .r-input__textarea { resize: vertical; min-height: 80px; }
 
 .r-input__prefix, .r-input__suffix {
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 .r-input__prefix { margin-right: 8px; }
@@ -112,10 +112,10 @@ function handleClear() {
 .r-input__clear {
   margin-left: 8px;
   cursor: pointer;
-  color: var(--color-secondary);
+  color: var(--color-text-secondary);
   font-size: 16px;
 }
-.r-input__clear:hover { color: var(--color-primary); }
+.r-input__clear:hover { color: var(--color-text-main); }
 
 .r-input__error {
   color: var(--btn-danger-bg);

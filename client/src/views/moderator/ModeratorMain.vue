@@ -12,6 +12,7 @@ import { getGuild } from '@/api/guild'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
 import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
+import { useArchiveDisplayColors } from '../archives/archiveDisplayColors'
 import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 import ImageViewer from '@/components/ImageViewer.vue'
 import CharacterCardPortrait from '@/components/character-cards/CharacterCardPortrait.vue'
@@ -112,6 +113,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const userStore = useUserStore()
 const toast = useToast()
+const { readableArchiveColor } = useArchiveDisplayColors()
 const mounted = ref(false)
 
 // 权限检查
@@ -185,7 +187,7 @@ const trp3MirrorUploadOptions = computed(() => (
     ? trp3MirrorAddons.value.map(addon => ({ id: addon.id, name: addon.name }))
     : fallbackTRP3MirrorOptions
 ))
-const selectedTRP3MirrorAddon = computed(() => trp3MirrorAddons.value.find(addon => addon.id === trp3MirrorForm.value.addonId))
+
 const trp3MirrorCanUpload = computed(() => (
   !!trp3MirrorForm.value.addonId
   && !!trp3MirrorForm.value.version.trim()
@@ -1932,13 +1934,6 @@ async function quickReviewEdit(type: 'post' | 'item', id: number, action: 'appro
   }
 }
 
-function openReviewModal(type: 'post' | 'item' | 'guild', id: number, title: string) {
-  reviewTarget.value = { type, id, title }
-  reviewAction.value = 'approve'
-  reviewComment.value = ''
-  showReviewModal.value = true
-}
-
 async function submitReview() {
   if (!reviewTarget.value) return
 
@@ -2067,7 +2062,7 @@ async function handleHidePost(id: number) {
   }
 }
 
-async function handlePinPost(id: number, isPinned: boolean) {
+async function handlePinPost(id: number, _isPinned: boolean) {
   try {
     await pinPost(id)
     await loadAllPosts()
@@ -2077,7 +2072,7 @@ async function handlePinPost(id: number, isPinned: boolean) {
   }
 }
 
-async function handleFeaturePost(id: number, isFeatured: boolean) {
+async function handleFeaturePost(id: number, _isFeatured: boolean) {
   try {
     await featurePost(id)
     await loadAllPosts()
@@ -3050,7 +3045,7 @@ function formatBanTime(dateStr: string | null) {
             <div class="character-review-card__body">
               <div class="item-header">
                 <div class="title-with-tags">
-                  <span class="item-title" :style="getCharacterCardDisplayColor(characterCard) ? { color: getCharacterCardDisplayColor(characterCard) } : undefined">{{ moderatorCharacterCardName(characterCard) }}</span>
+                  <span class="item-title" :style="getCharacterCardDisplayColor(characterCard) ? { color: readableArchiveColor(getCharacterCardDisplayColor(characterCard)) } : undefined">{{ moderatorCharacterCardName(characterCard) }}</span>
                   <span class="permission-warning-tag">{{ [characterCard.race, characterCard.class].filter(Boolean).join(' · ') || t('characterCards.moderation.identityMissing') }}</span>
                 </div>
                 <span class="status-badge pending">{{ t('characterCards.moderation.pending') }}</span>
@@ -5410,9 +5405,9 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .sub-tab-container button.active {
-  background: var(--color-secondary, #804030);
+  background: var(--btn-primary-bg);
   border-color: var(--color-secondary, #804030);
-  color: var(--btn-primary-text, #fff);
+  color: var(--btn-primary-text);
 }
 
 .review-badge {
@@ -5517,7 +5512,7 @@ function formatBanTime(dateStr: string | null) {
 
 .status-badge.archived {
   background: rgba(100, 116, 139, 0.12);
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .item-meta {
@@ -5635,7 +5630,7 @@ function formatBanTime(dateStr: string | null) {
   border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 8px;
   font-size: 13px;
-  color: var(--btn-primary-text, var(--color-primary, #4B3621));
+  color: var(--color-text-main);
   resize: vertical;
   background: var(--color-panel-bg, #fff);
 }
@@ -6192,8 +6187,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: var(--color-secondary, #9C27B0);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -6202,7 +6197,8 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-pin:hover {
-  background: var(--color-secondary, #7B1FA2);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 .btn-pin.active {
@@ -6360,10 +6356,10 @@ function formatBanTime(dateStr: string | null) {
 
 .btn-submit {
   padding: 10px 20px;
-  background: var(--color-secondary, #804030);
+  background: var(--btn-primary-bg);
   border: none;
   border-radius: 8px;
-  color: var(--btn-primary-text, #fff);
+  color: var(--btn-primary-text);
   font-weight: 600;
   cursor: pointer;
 }
@@ -6416,8 +6412,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: var(--color-secondary, #2196F3);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -6426,7 +6422,8 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-edit:hover {
-  background: var(--color-secondary-hover, #1976D2);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 /* 警告按钮 */
@@ -6510,7 +6507,7 @@ function formatBanTime(dateStr: string | null) {
 
 .role-tag.user {
   background: var(--color-primary-light, #E3F2FD);
-  color: var(--color-accent, #1565C0);
+  color: var(--tag-text);
 }
 
 .role-tag.moderator {
@@ -6520,7 +6517,7 @@ function formatBanTime(dateStr: string | null) {
 
 .role-tag.admin {
   background: var(--color-primary-light, #FCE4EC);
-  color: var(--color-accent, #C2185B);
+  color: var(--tag-text);
 }
 
 /* 角色设置弹窗样式 */
@@ -6683,8 +6680,8 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .tab-item.admin-tab.active {
-  background: var(--color-accent, #C2185B);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 /* 禁用按钮 */
@@ -6699,8 +6696,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: var(--color-secondary, #7C4DFF);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -6709,7 +6706,8 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-preview:hover {
-  background: var(--color-secondary-hover, #651FFF);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 .btn-preview:disabled {
@@ -6723,8 +6721,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   gap: 4px;
   padding: 8px 16px;
-  background: var(--color-success, #2F855A);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -6733,7 +6731,8 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .btn-edit:hover {
-  background: var(--color-success, #276749);
+  background: var(--btn-primary-hover);
+  color: var(--btn-primary-text);
 }
 
 /* 预览弹窗 */
@@ -7186,9 +7185,9 @@ function formatBanTime(dateStr: string | null) {
 }
 
 .report-scope-tabs button.active {
-  border-color: rgba(154, 52, 18, 0.26);
-  background: rgba(251, 146, 60, 0.12);
-  color: #9A3412;
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
 }
 
 .report-batch-toolbar {
@@ -7235,7 +7234,7 @@ function formatBanTime(dateStr: string | null) {
 .report-select-toggle input {
   width: 16px;
   height: 16px;
-  accent-color: #9A3412;
+  accent-color: var(--switch-active);
 }
 
 .report-select-toggle.card-toggle {
@@ -7257,14 +7256,16 @@ function formatBanTime(dateStr: string | null) {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--color-card-bg, #FAF7F2);
-  color: var(--color-text-muted, #7B6B5A);
+  background: var(--color-warning-light);
+  color: var(--color-warning-dark);
   font-size: 12px;
+  border-color: var(--color-warning-border);
 }
 
 .report-count-tag {
-  color: #9A3412;
-  background: rgba(251, 146, 60, 0.12);
+  color: var(--color-warning-dark);
+  background: var(--color-warning-light);
+  border-color: var(--color-warning-border);
 }
 
 .report-preview-card {
@@ -7382,8 +7383,8 @@ function formatBanTime(dateStr: string | null) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
-  color: #fff;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   font-size: 12px;
   font-weight: 800;
 }
@@ -7417,6 +7418,8 @@ function formatBanTime(dateStr: string | null) {
   border-radius: 12px;
   font-size: 13px;
   line-height: 1.7;
+  background: var(--color-success-light);
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
 }
 
 .report-reason-time {
@@ -7524,8 +7527,8 @@ function formatBanTime(dateStr: string | null) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(34, 197, 94, 0.08);
-  color: #166534;
+  background: var(--color-success-light);
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
 }
 
 /* 数据统计样式 */

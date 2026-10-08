@@ -398,7 +398,7 @@ async function saveProfile() {
 }
 
 .section {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 12px;
   padding: 1.25rem;
   border: 1px solid var(--color-border, #E8DCCF);
@@ -438,13 +438,17 @@ async function saveProfile() {
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 8px;
-  background: #fffcf9;
+  background: var(--input-bg);
   color: var(--color-text-main);
   font-family: inherit;
+  border-color: var(--input-border);
 }
 
 .form-item textarea {
   resize: vertical;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  border-color: var(--input-border);
 }
 
 .radio-row {
@@ -464,7 +468,7 @@ async function saveProfile() {
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 10px;
   padding: 10px;
-  background: #fffdfb;
+  background: var(--color-card-bg);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -502,7 +506,7 @@ async function saveProfile() {
   border: 1px solid var(--color-border, #E8DCCF);
   border-radius: 10px;
   padding: 10px;
-  background: #fffdfb;
+  background: var(--color-card-bg);
 }
 
 .trait-head {
@@ -545,8 +549,8 @@ async function saveProfile() {
 }
 
 .btn-primary {
-  background: var(--color-primary);
-  color: white;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-secondary {
@@ -560,8 +564,9 @@ async function saveProfile() {
 }
 
 .ghost {
-  background: rgba(128, 64, 48, 0.06);
+  background: var(--btn-secondary-bg);
   border: 1px solid rgba(128, 64, 48, 0.15);
+  border-color: var(--color-border);
 }
 
 .loading {

@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n'
 import type { AccountChatLogs, ChatRecord } from '@/types/chatLog'
@@ -35,7 +36,7 @@ async function mountPool(records: ChatRecord[], accountLogs = logs(records)) {
   const wrapper = mount(StagingPool, {
     props: { active: true },
     global: {
-      plugins: [i18n],
+      plugins: [i18n, createPinia()],
       stubs: {
         RouterLink: { template: '<a><slot /></a>' },
         Teleport: true,

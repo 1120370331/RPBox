@@ -205,7 +205,7 @@ async function handleLogin() {
 .login-card {
   width: 100%;
   max-width: 400px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
   padding: 40px;
   box-shadow: 0 4px 20px rgba(75, 54, 33, 0.1);
@@ -238,7 +238,7 @@ async function handleLogin() {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
-  color: #7A5C46;
+  color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -254,7 +254,7 @@ async function handleLogin() {
 }
 
 .use-other-btn:hover {
-  color: #4B3621;
+  color: var(--color-text-main);
   text-decoration: underline;
 }
 
@@ -271,14 +271,15 @@ async function handleLogin() {
   min-height: 56px;
   border: 1px solid #E5D4C1;
   border-radius: 8px;
-  background: #FFF9F2;
+  background: var(--color-card-bg);
   transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+  border-color: var(--color-border);
 }
 
 .account-item:hover,
 .account-item.active {
-  border-color: #B87333;
-  background: #FFF4E8;
+  border-color: var(--input-focus);
+  background: var(--color-card-bg-hover);
   box-shadow: 0 6px 18px rgba(75, 54, 33, 0.08);
 }
 
@@ -318,7 +319,7 @@ async function handleLogin() {
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.72), transparent 34%),
     linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #8C7B70));
-  color: #fff;
+  color: var(--gradient-text);
   font-weight: 700;
 }
 
@@ -338,7 +339,7 @@ async function handleLogin() {
 .account-name {
   font-size: 14px;
   font-weight: 700;
-  color: #3B2418;
+  color: var(--color-text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -347,7 +348,7 @@ async function handleLogin() {
 
 .account-hint {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -363,7 +364,7 @@ async function handleLogin() {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #A68A79;
+  color: var(--color-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -372,8 +373,8 @@ async function handleLogin() {
 }
 
 .remove-account-btn:hover {
-  background: rgba(184, 115, 51, 0.12);
-  color: #7A3E1D;
+  background: var(--color-card-bg-hover);
+  color: var(--color-text-main);
 }
 
 .login-form {
@@ -400,7 +401,7 @@ async function handleLogin() {
 }
 
 .forgot-password-link:hover {
-  color: #4B3621;
+  color: var(--color-text-main);
   text-decoration: underline;
 }
 
@@ -448,6 +449,7 @@ async function handleLogin() {
   opacity: 0;
   transform: scale(0.95);
   transition: opacity 0.4s ease, transform 0.4s ease;
+  background: var(--color-panel-bg);
 }
 
 .login-card.animate-in {

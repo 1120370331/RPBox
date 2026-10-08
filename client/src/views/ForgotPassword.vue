@@ -180,7 +180,7 @@ function goBack() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #FBF5EF 0%, #F2E6D8 100%);
+  background: var(--color-main-bg);
   padding: 24px;
 }
 
@@ -198,11 +198,12 @@ function goBack() {
   z-index: 10;
   width: 100%;
   max-width: 420px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(75, 54, 33, 0.12);
   border: 1px solid #E8DCC8;
   padding: 32px;
+  border-color: var(--color-border);
 }
 
 .header {
@@ -215,7 +216,7 @@ function goBack() {
 .header h1 {
   font-size: 24px;
   font-weight: 700;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -225,7 +226,7 @@ function goBack() {
   gap: 4px;
   background: none;
   border: none;
-  color: #B87333;
+  color: var(--link-color);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -234,7 +235,7 @@ function goBack() {
 }
 
 .back-btn:hover {
-  color: #4B3621;
+  color: var(--color-text-main);
 }
 
 .form-group {
@@ -245,7 +246,7 @@ function goBack() {
   display: block;
   font-size: 13px;
   font-weight: 600;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -257,24 +258,25 @@ function goBack() {
   border: 1px solid #E8DCC8;
   border-radius: 6px;
   font-size: 14px;
-  background: #FBF5EF;
-  color: #4B3621;
+  background: var(--input-bg);
+  color: var(--color-text-main);
   transition: all 0.2s;
   box-sizing: border-box;
+  border-color: var(--input-border);
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #B87333;
-  background: #fff;
+  border-color: var(--input-focus);
+  background: var(--input-bg);
 }
 
 .email-display {
   padding: 12px 16px;
-  background: #F2E6D8;
+  background: var(--color-card-bg);
   border-radius: 6px;
   font-size: 14px;
-  color: #4B3621;
+  color: var(--color-text-main);
   font-weight: 500;
 }
 
@@ -291,18 +293,19 @@ function goBack() {
   padding: 12px 16px;
   border: 1px solid #D4A373;
   border-radius: 6px;
-  background: #fff;
-  color: #B87333;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .btn-resend:hover:not(:disabled) {
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-resend:disabled {
@@ -363,7 +366,7 @@ function goBack() {
 .hint {
   margin-top: 16px;
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   text-align: center;
   line-height: 1.5;
 }
