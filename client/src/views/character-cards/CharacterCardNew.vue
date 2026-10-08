@@ -533,7 +533,7 @@ function goBack() {
   font-weight: 700;
 }
 
-.source-action--blank { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-text-light); }
+.source-action--blank { background: var(--btn-primary-bg); border-color: var(--btn-primary-bg); color: var(--btn-primary-text); }
 .source-action:disabled { cursor: not-allowed; opacity: 0.48; }
 
 .blank-ledger {

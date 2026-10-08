@@ -109,8 +109,8 @@ async function confirmRollback() {
 }
 
 .version-item.selected {
-  background: var(--color-primary);
-  color: white;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .version-num {
@@ -126,8 +126,8 @@ async function confirmRollback() {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
-  background: var(--color-primary);
-  color: white;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   cursor: pointer;
 }
 

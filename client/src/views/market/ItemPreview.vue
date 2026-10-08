@@ -149,17 +149,19 @@ function handlePreviewContentClick(event: MouseEvent) {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+  background: var(--color-warning-light);
   border: 2px solid #FFB74D;
   border-radius: 12px;
   margin-bottom: 24px;
+  color: var(--color-warning-dark);
+  border-color: var(--color-warning-border);
 }
 
 .preview-info {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #E65100;
+  color: var(--color-warning-dark);
   font-size: 15px;
   font-weight: 600;
 }
@@ -173,8 +175,8 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -184,11 +186,11 @@ function handlePreviewContentClick(event: MouseEvent) {
 }
 
 .back-edit-btn:hover {
-  background: #A66629;
+  background: var(--btn-primary-hover);
 }
 
 .item-info {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 32px;
   box-shadow: 0 8px 20px rgba(93,64,55,0.05);
@@ -208,7 +210,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 .item-header h1 {
   font-size: 32px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 12px;
 }
 
@@ -221,14 +223,14 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 .type-badge {
   padding: 6px 16px;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 20px;
   font-size: 14px;
 }
 
 .author {
-  color: #999;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
@@ -238,18 +240,19 @@ function handlePreviewContentClick(event: MouseEvent) {
   margin-bottom: 24px;
   padding-bottom: 24px;
   border-bottom: 1px solid #f0f0f0;
+  border-bottom-color: var(--color-border);
 }
 
 .stat-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 15px;
 }
 
 .stat-item i {
-  color: #B87333;
+  color: var(--icon-color);
   font-size: 18px;
 }
 
@@ -259,12 +262,12 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 .item-description h3 {
   font-size: 18px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 12px;
 }
 
 .item-description p {
-  color: #666;
+  color: var(--color-text-secondary);
   line-height: 1.6;
   font-size: 15px;
 }
@@ -273,17 +276,18 @@ function handlePreviewContentClick(event: MouseEvent) {
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid #E0E0E0;
+  border-top-color: var(--color-border);
 }
 
 .item-detail-content h3 {
   font-size: 18px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 16px;
 }
 
 .rich-content {
   line-height: 1.8;
-  color: #5D4037;
+  color: var(--color-text-main);
 }
 
 .rich-content :deep(.mention) {
@@ -291,10 +295,11 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(128, 64, 48, 0.12);
-  color: #804030;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-weight: 600;
   margin: 0 2px;
+  border-color: var(--color-border);
 }
 
 /* 附件卡片 */
@@ -304,14 +309,15 @@ function handlePreviewContentClick(event: MouseEvent) {
   gap: 12px;
   padding: 12px 16px;
   margin: 12px 0;
-  background: #FDFBF9;
+  background: var(--color-card-bg);
   border: 1px solid #E5D4C1;
   border-radius: 10px;
   transition: all 0.2s;
+  border-color: var(--color-border);
 }
 
 .rich-content :deep(.attachment-card:hover) {
-  border-color: #804030;
+  border-color: var(--color-border-hover);
   box-shadow: 0 2px 8px rgba(75, 54, 33, 0.08);
 }
 
@@ -321,14 +327,14 @@ function handlePreviewContentClick(event: MouseEvent) {
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: rgba(128, 64, 48, 0.08);
+  background: var(--icon-bg);
   border-radius: 8px;
   flex-shrink: 0;
 }
 
 .rich-content :deep(.attachment-card__icon i) {
   font-size: 20px;
-  color: #804030;
+  color: var(--icon-color);
 }
 
 .rich-content :deep(.attachment-card__info) {
@@ -342,7 +348,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 .rich-content :deep(.attachment-card__name) {
   font-size: 14px;
   font-weight: 500;
-  color: #2C1810;
+  color: var(--color-text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -350,7 +356,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 
 .rich-content :deep(.attachment-card__size) {
   font-size: 12px;
-  color: #8D7B68;
+  color: var(--color-text-secondary);
 }
 
 .rich-content :deep(.attachment-card__download) {
@@ -358,8 +364,8 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   gap: 4px;
   padding: 8px 14px;
-  background: #804030;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -369,7 +375,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 }
 
 .rich-content :deep(.attachment-card__download:hover) {
-  background: #6B3528;
+  background: var(--btn-primary-hover);
   transform: translateY(-1px);
 }
 
@@ -388,8 +394,8 @@ function handlePreviewContentClick(event: MouseEvent) {
   height: 48px;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -404,8 +410,8 @@ function handlePreviewContentClick(event: MouseEvent) {
   height: 48px;
   border: 1px solid #E0E0E0;
   border-radius: 12px;
-  background: #fff;
-  color: #666;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -413,26 +419,27 @@ function handlePreviewContentClick(event: MouseEvent) {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  border-color: var(--btn-outline-border);
 }
 
 .comments-section {
   margin-top: 32px;
   padding: 24px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   box-shadow: 0 8px 20px rgba(93,64,55,0.05);
 }
 
 .comments-section h3 {
   font-size: 18px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin-bottom: 20px;
 }
 
 .empty-comments {
   text-align: center;
   padding: 40px 20px;
-  color: #999;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 </style>

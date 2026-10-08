@@ -52,7 +52,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 .r-checkbox__check,
 .r-checkbox__indeterminate {
   position: absolute;
-  color: var(--color-text-light);
+  color: var(--btn-primary-text);
   opacity: 0;
   transform: scale(0);
   transition: all 0.2s;

@@ -307,8 +307,8 @@ onMounted(() => {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--thanks-primary), var(--thanks-highlight));
-  color: #fff;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -334,8 +334,8 @@ onMounted(() => {
 }
 
 .featured-badge {
-  background: var(--thanks-highlight);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 11px;
   font-weight: 700;
   padding: 4px 10px;
@@ -529,8 +529,8 @@ onMounted(() => {
   padding: 10px 22px;
   border-radius: 999px;
   border: none;
-  background: var(--thanks-primary);
-  color: var(--thanks-btn-text);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;

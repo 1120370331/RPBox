@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { guildColorStyle } from '../guildColorStyle'
 import type { Guild, GuildMember } from '@/api/guild'
 import { buildNameStyle } from '@/utils/userNameStyle'
 
@@ -14,13 +15,6 @@ const emit = defineEmits<{
   (e: 'delete'): void
   (e: 'settings'): void
 }>()
-
-const bannerStyle = computed(() => {
-  if (props.guild.banner) {
-    return { backgroundImage: `url(${props.guild.banner})` }
-  }
-  return { background: `linear-gradient(135deg, #${props.guild.color || 'B87333'}, #4B3621)` }
-})
 
 const factionLabel = computed(() => {
   const map: Record<string, string> = { alliance: '联盟', horde: '部落', neutral: '中立' }
@@ -38,7 +32,7 @@ function getRoleLabel(role: string): string {
     <!-- Header -->
     <header class="header">
       <div class="guild-identity">
-        <div class="guild-icon" :style="{ background: '#' + (guild.color || 'B87333') }">
+        <div class="guild-icon" :style="guildColorStyle(guild.color || 'B87333')">
           {{ guild.name.charAt(0) }}
         </div>
         <div class="guild-info">
@@ -81,7 +75,7 @@ function getRoleLabel(role: string): string {
     <!-- Main Grid -->
     <div class="notion-grid">
       <!-- Bulletin Board -->
-      <div class="panel bulletin-panel">
+      <div class="guild-panel bulletin-panel">
         <div class="panel-header">
           <h2><i class="ri-newspaper-line"></i> 公告板</h2>
         </div>
@@ -94,7 +88,7 @@ function getRoleLabel(role: string): string {
       </div>
 
       <!-- Members Panel -->
-      <div class="panel members-panel">
+      <div class="guild-panel members-panel">
         <div class="panel-header">
           <h2>成员列表</h2>
         </div>
@@ -113,12 +107,12 @@ function getRoleLabel(role: string): string {
       </div>
 
       <!-- Leaderboard -->
-      <div class="panel leaderboard-panel">
+      <div class="guild-panel leaderboard-panel">
         <h2>本周贡献榜</h2>
         <ul class="leaderboard">
           <li v-for="(m, i) in members.slice(0, 3)" :key="m.id">
             <span class="rank" :class="{ gold: i === 0 }">{{ i + 1 }}</span>
-            <span class="name" :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</span>
+            <span class="name" :style="buildNameStyle(m.name_color, m.name_bold, ['gradientStart', 'gradientEnd'])">{{ m.username }}</span>
             <span class="score">{{ 2400 - i * 450 }}</span>
           </li>
         </ul>
@@ -153,8 +147,9 @@ function getRoleLabel(role: string): string {
 <style scoped>
 .layout1 {
   min-height: 100vh;
-  background: #EED9C4;
+  background: var(--color-background);
   padding: 32px;
+  color: var(--color-text-main);
 }
 
 /* Header */
@@ -164,7 +159,7 @@ function getRoleLabel(role: string): string {
   align-items: flex-start;
   margin-bottom: 32px;
   padding-bottom: 24px;
-  border-bottom: 1px solid #DCC8B8;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .guild-identity {
@@ -183,19 +178,19 @@ function getRoleLabel(role: string): string {
   font-size: 40px;
   font-weight: 700;
   color: #fff;
-  box-shadow: 0 4px 20px rgba(75, 54, 33, 0.2);
-  border: 3px solid #fff;
+  box-shadow: var(--shadow-md);
+  border: 3px solid var(--color-panel-bg);
 }
 
 .guild-info h1 {
   font-size: 36px;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 8px 0;
   font-weight: 700;
 }
 
 .guild-info p {
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-size: 14px;
   max-width: 400px;
 }
@@ -207,8 +202,8 @@ function getRoleLabel(role: string): string {
 }
 
 .level-badge {
-  background: #804030;
-  color: #fff;
+  background: var(--badge-bg);
+  color: var(--btn-primary-text);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
@@ -218,7 +213,7 @@ function getRoleLabel(role: string): string {
 
 .server-info {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -240,22 +235,22 @@ function getRoleLabel(role: string): string {
 }
 
 .btn-secondary {
-  background: #fff;
-  color: #2C1810;
-  border: 1px solid #E8DCCF;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--btn-outline-border);
 }
 
 .btn-secondary:hover {
-  background: #FAF6F2;
+  background: var(--btn-secondary-hover);
 }
 
 .btn-danger {
-  background: #804030;
-  color: #fff;
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
 }
 
 .btn-danger:hover {
-  background: #6B3626;
+  background: var(--btn-danger-hover);
 }
 
 /* Stats Row */
@@ -267,17 +262,17 @@ function getRoleLabel(role: string): string {
 }
 
 .stat-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   padding: 20px;
   border-radius: 4px;
-  border: 1px solid rgba(75, 54, 33, 0.08);
-  box-shadow: 0 1px 2px rgba(75, 54, 33, 0.05);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
   position: relative;
 }
 
 .stat-label {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
@@ -286,12 +281,12 @@ function getRoleLabel(role: string): string {
 .stat-value {
   font-size: 32px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .stat-sub {
   font-size: 16px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin-left: 4px;
 }
 
@@ -324,12 +319,12 @@ function getRoleLabel(role: string): string {
   margin-bottom: 24px;
 }
 
-.panel {
-  background: #fff;
+.guild-panel {
+  background: var(--color-panel-bg);
   border-radius: 4px;
   padding: 24px;
-  border: 1px solid rgba(75, 54, 33, 0.08);
-  box-shadow: 0 1px 2px rgba(75, 54, 33, 0.05);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {
@@ -341,7 +336,7 @@ function getRoleLabel(role: string): string {
 
 .panel-header h2 {
   font-size: 16px;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
   display: flex;
   align-items: center;
@@ -349,8 +344,8 @@ function getRoleLabel(role: string): string {
 }
 
 .callout {
-  background: rgba(212, 163, 115, 0.15);
-  border-left: 4px solid #804030;
+  background: var(--color-primary-light);
+  border-left: 4px solid var(--color-primary);
   padding: 16px;
   border-radius: 0 4px 4px 0;
 }
@@ -361,7 +356,7 @@ function getRoleLabel(role: string): string {
 
 .callout-title {
   font-weight: 600;
-  color: #804030;
+  color: var(--color-primary);
   font-size: 14px;
   display: flex;
   align-items: center;
@@ -370,7 +365,7 @@ function getRoleLabel(role: string): string {
 
 .callout p {
   font-size: 14px;
-  color: #2C1810;
+  color: var(--color-text-main);
   line-height: 1.6;
   margin: 0;
 }
@@ -398,15 +393,15 @@ function getRoleLabel(role: string): string {
 }
 
 .member-item:hover {
-  background: #F9F4EF;
+  background: var(--color-card-bg-hover);
 }
 
 .member-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #EED9C4;
-  color: #4B3621;
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -427,23 +422,23 @@ function getRoleLabel(role: string): string {
 .member-name {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .member-role {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 /* Leaderboard */
 .leaderboard-panel {
-  background: #4B3621;
-  color: #fff;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
 }
 
 .leaderboard-panel h2 {
   font-size: 14px;
-  color: #EED9C4;
+  color: var(--gradient-text);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0 0 16px 0;
@@ -459,7 +454,7 @@ function getRoleLabel(role: string): string {
   display: flex;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--gradient-border);
 }
 
 .leaderboard li:last-child {
@@ -469,27 +464,27 @@ function getRoleLabel(role: string): string {
 .leaderboard .rank {
   width: 24px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--gradient-text-muted);
 }
 
 .leaderboard .rank.gold {
-  color: #D4A373;
+  color: var(--gradient-text);
 }
 
 .leaderboard .name {
   flex: 1;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--gradient-text);
 }
 
 .leaderboard .score {
   font-family: monospace;
-  color: #EED9C4;
+  color: var(--gradient-text);
 }
 
 /* Quick Links */
 .quick-links h3 {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0 0 16px 4px;
@@ -502,8 +497,8 @@ function getRoleLabel(role: string): string {
 }
 
 .link-card {
-  background: #fff;
-  border: 1px dashed #E8DCCF;
+  background: var(--color-panel-bg);
+  border: 1px dashed var(--color-border);
   border-radius: 4px;
   padding: 24px;
   display: flex;
@@ -515,18 +510,18 @@ function getRoleLabel(role: string): string {
 }
 
 .link-card:hover {
-  border-color: #D4A373;
-  background: #fff;
+  border-color: var(--color-border-hover);
+  background: var(--color-card-bg-hover);
 }
 
 .link-card i {
   font-size: 24px;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .link-card span {
   font-size: 14px;
-  color: #2C1810;
+  color: var(--color-text-main);
   font-weight: 500;
 }
 </style>

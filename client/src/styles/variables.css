@@ -2,6 +2,7 @@
 /* 注意：主题颜色由 theme store 动态设置，这里只定义默认值 */
 
 :root {
+  color-scheme: light;
   /* 主色调 */
   --color-primary: #4B3621;
   --color-primary-hover: #3D2C1B;
@@ -58,6 +59,7 @@
   --input-border: #E8DCCF;
   --input-focus: #804030;
   --input-placeholder: #8C7B70;
+  --input-placeholder-enabled: #7A695E;
 
   /* 开关/选中状态 */
   --switch-active: #804030;
@@ -102,6 +104,10 @@
 }
 
 /* 全局重置 */
+:root[data-theme="black-gold"] {
+  color-scheme: dark;
+}
+
 * {
   margin: 0;
   padding: 0;

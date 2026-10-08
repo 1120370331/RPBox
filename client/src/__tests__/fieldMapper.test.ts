@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapCharacteristics, mapAbout } from '../utils/fieldMapper'
+import { mapCharacteristics } from '../utils/fieldMapper'
 
 describe('fieldMapper', () => {
   describe('mapCharacteristics', () => {

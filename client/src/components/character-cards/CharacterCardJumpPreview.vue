@@ -7,6 +7,7 @@ import {
   type CharacterCard,
 } from '@/api/characterCard'
 import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
+import { buildNameStyle } from '@/utils/userNameStyle'
 import CharacterCardPortrait from './CharacterCardPortrait.vue'
 
 const CARD_SELECTOR = '[data-jump-type="character_card"]'
@@ -272,7 +273,7 @@ onBeforeUnmount(() => {
             <span><i class="ri-id-card-line" aria-hidden="true"></i>{{ t('characterCards.jumpPreview.card') }}</span>
             <small>{{ t(loading ? 'characterCards.jumpPreview.reading' : 'characterCards.jumpPreview.public') }}</small>
           </div>
-          <h3 :style="nameColor ? { color: nameColor } : undefined">{{ name }}</h3>
+          <h3 :style="buildNameStyle(nameColor)">{{ name }}</h3>
           <strong>{{ loading ? t('characterCards.jumpPreview.readingLatest') : title }}</strong>
           <span v-if="!loading && identity" class="character-preview__identity">{{ identity }}</span>
           <p>{{ loading ? t('characterCards.jumpPreview.checking') : summary }}</p>

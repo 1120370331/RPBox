@@ -12,7 +12,7 @@ export function attachImagePreview(
 
   const urls = entries.map(entry => entry.src)
 
-  entries.forEach(({ img, src }, index) => {
+  entries.forEach(({ img }, index) => {
     if (img.closest('.image-preview')) return
 
     const wrapper = document.createElement('span')

@@ -70,6 +70,7 @@ const typeColors = {
 
 .r-dialog {
   background: var(--color-panel-bg);
+  color: var(--color-text-main);
   border-radius: 16px;
   width: 400px;
   max-width: 90vw;

@@ -126,12 +126,12 @@ function fetchCharacterCard(id: number): Promise<CharacterCardResult> {
   if (pending) return pending
 
   const request: Promise<CharacterCardResult> = getCharacterCard(id)
-    .then((characterCard) => (
+    .then((characterCard): CharacterCardResult => (
       characterCard.status === 'published' && characterCard.visibility === 'public'
         ? characterCard
         : 'unavailable'
     ))
-    .catch((error) => {
+    .catch((error): CharacterCardResult => {
       const status = typeof error === 'object' && error ? (error as { status?: number }).status : undefined
       if (status !== 403 && status !== 404) console.error('获取人物卡嵌入信息失败:', error)
       return 'unavailable'

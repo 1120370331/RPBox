@@ -132,9 +132,12 @@ function canDeleteComment(comment: CommentWithAuthor): boolean {
 }
 
 // 将评论组织成树形结构
-interface CommentWithReplies extends CommentWithAuthor {
-  replies: CommentWithAuthor[]
+interface DisplayReply extends CommentWithAuthor {
   replyToName?: string  // 回复的目标用户名
+}
+
+interface CommentWithReplies extends DisplayReply {
+  replies: DisplayReply[]
 }
 
 const organizedComments = computed(() => {
@@ -175,10 +178,10 @@ const organizedComments = computed(() => {
     }
 
     if (topLevelParent) {
-      topLevelParent.replies.push({ ...reply, replyToName } as any)
+      topLevelParent.replies.push({ ...reply, replyToName })
     } else {
       // 如果找不到父评论，作为顶级评论显示
-      topLevel.push({ ...reply, replies: [], replyToName } as any)
+      topLevel.push({ ...reply, replies: [], replyToName })
     }
   })
 
@@ -1143,7 +1146,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   flex-direction: column;
   align-items: center;
   padding: 60px;
-  color: #C53030;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .error-message i {
@@ -1319,7 +1322,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
 .action-btn:hover {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .action-btn.active {
@@ -1478,8 +1481,8 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: var(--color-primary, #4B3621);
-  color: var(--color-text-light, #FBF5EF);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1506,7 +1509,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   font-weight: 600;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
 }
 
 .article-location-chip {
@@ -1514,8 +1517,8 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--color-primary, #4B3621);
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1721,8 +1724,8 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   align-items: center;
   gap: 4px;
   padding: 8px 14px;
-  background: var(--color-secondary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -1766,11 +1769,11 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
 .owner-btn:hover {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .owner-btn.delete {
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   border-color: rgba(196, 69, 54, 0.3);
   background: rgba(196, 69, 54, 0.05);
 }
@@ -1805,7 +1808,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 }
 
 .safety-btn.danger {
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   border-color: rgba(196, 69, 54, 0.26);
   background: rgba(196, 69, 54, 0.06);
 }
@@ -1922,7 +1925,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 .emoji-btn:hover {
   background: var(--color-card-bg);
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .emoji-btn i {
@@ -2100,7 +2103,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 }
 
 .comment-safety-btn.danger {
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .comment-safety-btn.danger:hover {
@@ -2169,7 +2172,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
   padding: 4px 8px;
   background: none;
   border: none;
-  color: #C44536;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
@@ -2284,7 +2287,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
 .comments-pagination .page-btn:hover:not(:disabled) {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .comments-pagination .page-btn:disabled {

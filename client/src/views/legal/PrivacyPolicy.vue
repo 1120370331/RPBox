@@ -102,13 +102,13 @@ const effectiveDate = '2026-03-25'
 .legal-page {
   min-height: 100vh;
   padding: 24px;
-  background: #eed9c4;
+  background: var(--color-main-bg);
 }
 
 .legal-card {
   max-width: 860px;
   margin: 0 auto;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   padding: 28px;
   box-shadow: 0 6px 24px rgba(75, 54, 33, 0.12);
@@ -120,12 +120,13 @@ const effectiveDate = '2026-03-25'
 
 .back-btn {
   border: 1px solid #e8dccf;
-  background: #fff;
-  color: #6b4a32;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   border-radius: 8px;
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
+  border-color: var(--btn-outline-border);
 }
 
 .back-btn i {
@@ -135,11 +136,11 @@ const effectiveDate = '2026-03-25'
 h1 {
   margin: 14px 0 8px;
   font-size: 28px;
-  color: #4b3621;
+  color: var(--color-text-main);
 }
 
 .meta {
-  color: #8c7b70;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -150,13 +151,13 @@ section {
 h2 {
   margin: 0 0 8px;
   font-size: 18px;
-  color: #4b3621;
+  color: var(--color-text-main);
 }
 
 p {
   margin: 0;
   line-height: 1.75;
-  color: #5f4a38;
+  color: var(--color-text-main);
   font-size: 14px;
 }
 

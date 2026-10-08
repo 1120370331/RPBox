@@ -17,7 +17,7 @@ const toast = useToast()
 const userStore = useUserStore()
 const loading = ref(false)
 const uploadingImage = ref(false)
-const uploadingArtwork = ref(false)
+
 const itemTags = ref<Tag[]>([])
 const previewImageInput = ref<HTMLInputElement | null>(null)
 const artworkImagesInput = ref<HTMLInputElement | null>(null)
@@ -311,7 +311,7 @@ loadTags()
       </div>
 
       <!-- 上传表单 -->
-      <form class="upload-form" @submit.prevent="handleSubmit">
+      <form class="upload-form" @submit.prevent="handleSubmit('published')">
         <!-- 作品名称 -->
         <div class="form-group">
           <label>{{ t('market.upload.form.name') }} <span class="required">*</span></label>
@@ -724,9 +724,9 @@ loadTags()
 }
 
 .tag-checkbox.selected {
-  background: var(--tag-color, var(--color-accent));
-  color: var(--color-text-light);
-  border-color: var(--tag-color, var(--color-accent));
+  background: color-mix(in srgb, var(--tag-color, var(--color-accent)) 18%, var(--color-panel-bg));
+  color: var(--color-text-main);
+  border-color: color-mix(in srgb, var(--tag-color, var(--color-accent)) 55%, var(--color-text-main));
 }
 
 .tag-checkbox input[type="checkbox"] {
@@ -755,6 +755,7 @@ loadTags()
   align-items: center;
   justify-content: center;
   gap: 8px;
+  color: var(--link-color);
 }
 
 .cancel-btn {
@@ -776,12 +777,12 @@ loadTags()
 
 .preview-btn:hover {
   border-color: var(--color-border-hover);
-  color: var(--color-accent);
+  color: var(--link-color);
 }
 
 .draft-btn {
   background: var(--color-panel-bg);
-  color: var(--color-accent);
+  color: var(--link-color);
   border: 2px solid var(--color-accent);
 }
 
@@ -890,7 +891,7 @@ loadTags()
 
 .add-more-btn:hover {
   border-color: var(--color-border-hover);
-  color: var(--color-accent);
+  color: var(--link-color);
   background: var(--color-card-bg-hover);
 }
 

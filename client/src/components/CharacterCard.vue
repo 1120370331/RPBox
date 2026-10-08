@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import type { Character } from '@/api/character'
 import type { CharacterCardSummary } from '@/api/characterCard'
 import { getCharacterCardDisplayColor, normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { buildNameStyle } from '@/utils/userNameStyle'
 import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
 import CharacterCardImpressionMark from './character-cards/CharacterCardImpressionMark.vue'
 import CharacterCardPortrait from './character-cards/CharacterCardPortrait.vue'
@@ -226,7 +227,7 @@ onBeforeUnmount(() => {
               <i :class="isRPBoxCard ? 'ri-id-card-line' : 'ri-gamepad-line'" aria-hidden="true"></i>
               {{ t(isRPBoxCard ? 'archives.characterPopover.rpbox' : 'archives.characterPopover.trp3') }}
             </span>
-            <h3 :style="displayColor ? { color: displayColor } : undefined">{{ displayName }}</h3>
+            <h3 :style="buildNameStyle(displayColor, false, 'cardBg')">{{ displayName }}</h3>
             <p v-if="title">{{ title }}</p>
             <small v-if="fullTitle">{{ fullTitle }}</small>
           </div>
@@ -324,9 +325,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 16px 12px 16px 18px;
   border-bottom: 1px solid var(--color-border);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 9%, transparent), transparent 58%),
-    var(--color-card-bg);
+  background: var(--color-card-bg);
 }
 
 .avatar {

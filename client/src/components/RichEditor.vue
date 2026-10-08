@@ -122,7 +122,7 @@ onMounted(() => {
   border: 1px solid var(--color-border, #d1bfa8);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: var(--color-panel-bg);
 }
 
 .toolbar {
@@ -154,7 +154,7 @@ onMounted(() => {
 }
 
 .toolbar button:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--btn-outline-hover);
 }
 
 .divider {

@@ -56,6 +56,7 @@ export interface ThemeColors {
   inputBorder: string
   inputFocus: string
   inputPlaceholder: string
+  inputPlaceholderEnabled?: string
 
   // 开关/选中状态
   switchActive: string
@@ -162,6 +163,7 @@ const classicTheme: Theme = {
     inputBorder: '#E8DCCF',
     inputFocus: '#804030',
     inputPlaceholder: '#8C7B70',
+    inputPlaceholderEnabled: '#7A695E',
 
     // 开关/选中状态
     switchActive: '#804030',
@@ -366,6 +368,7 @@ const blackGoldTheme: Theme = {
     inputBorder: '#333333',
     inputFocus: '#D4AF37',
     inputPlaceholder: 'rgba(229, 193, 88, 0.45)',
+    inputPlaceholderEnabled: 'rgba(229, 193, 88, 0.65)',
 
     // 开关/选中状态
     switchActive: '#D4AF37',
@@ -469,6 +472,7 @@ const dreamyPinkBlueTheme: Theme = {
     inputBorder: '#D8EEFB',
     inputFocus: '#78C2F4',
     inputPlaceholder: '#89AFCB',
+    inputPlaceholderEnabled: '#4C728E',
 
     // 开关/选中状态
     switchActive: '#8FD0FF',
@@ -601,6 +605,7 @@ export const useThemeStore = defineStore('theme', () => {
     root.style.setProperty('--input-border', c.inputBorder)
     root.style.setProperty('--input-focus', c.inputFocus)
     root.style.setProperty('--input-placeholder', c.inputPlaceholder)
+    root.style.setProperty('--input-placeholder-enabled', c.inputPlaceholderEnabled ?? c.inputPlaceholder)
 
     // 开关/选中状态
     root.style.setProperty('--switch-active', c.switchActive)

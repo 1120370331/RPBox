@@ -52,7 +52,7 @@ const currentDraftId = ref<number | null>(null)
 const editingWorkId = ref<number | null>(null)
 const drafts = ref<RPDBDraft[]>([])
 const showDraftBox = ref(false)
-let autoSaveTimer: ReturnType<typeof window.setTimeout> | null = null
+let autoSaveTimer: number | null = null
 let draftSaveQueue: Promise<boolean> = Promise.resolve(true)
 let editorSessionVersion = 0
 const rpStyleTags = ref<Tag[]>([])
@@ -167,7 +167,8 @@ const itemTypeOptions = computed(() => ['item', 'equipment', 'toy', 'quest_item'
   hint: t(`rpdb.editor.options.itemType.${value}.hint`),
 })))
 const bindOptions = computed(() => ['no', 'yes'].map(value => ({
-  value,  label: t(`rpdb.editor.options.bind.${value}.label`),
+  value,
+  label: t(`rpdb.editor.options.bind.${value}.label`),
   hint: t(`rpdb.editor.options.bind.${value}.hint`),
 })))
 const factionOptions = computed(() => ['neutral', 'alliance', 'horde'].map(value => ({
@@ -225,7 +226,7 @@ const primaryTransmogReference = computed(() => {
 const styleOptions = computed(() => {
   return sortRPDBStyleTags(rpStyleTags.value.length ? rpStyleTags.value : RPDB_STYLE_PRESETS)
 })
-const selectedStyleTags = computed(() => {
+const selectedStyleTags = computed<Array<Pick<Tag, 'id' | 'name' | 'color'> & { custom?: boolean }>>(() => {
   const selectedIds = new Set(form.tag_ids || [])
   const systemTags = styleOptions.value.filter(tag => tag.id && selectedIds.has(tag.id))
   const selectedSystemIds = new Set(systemTags.map(tag => tag.id))
@@ -345,18 +346,6 @@ function addFurnitureReference() {
 
 function ensureHomeFurniture() {
   if (!form.references?.length) addFurnitureReference()
-}
-
-function addMedia() {
-  const media = Array.isArray(form.media) ? form.media : (form.media = [])
-  media.push({ type: 'image', url: '', caption: '' })
-}
-
-function addSlot() {
-  const slots = Array.isArray(form.transmog_slots) ? form.transmog_slots : (form.transmog_slots = [])
-  const usedSlots = new Set(slots.map(slot => slot.slot))
-  const nextSlot = slotOptions.value.find(option => !usedSlots.has(option.value)) || slotOptions.value[0]
-  slots.push({ slot: nextSlot.value, role: 'required', name: '', description: '', source: '', wowhead_url: '', variant: '', note: '', sort_order: slots.length + 1 })
 }
 
 function ensureTransmogSlots() {
@@ -1822,21 +1811,21 @@ watch([form, homeDetails, transmogDetails, musicianMIDIDetails, customStyleTags]
 .editor-page{max-width:1380px;margin:auto;color:var(--color-text-main)}
 .minimal-editor-shell{--rpdb-surface:color-mix(in srgb,var(--color-panel-bg) 88%,var(--color-main-bg) 12%);--rpdb-muted:color-mix(in srgb,var(--color-card-bg) 82%,var(--color-main-bg) 18%);--rpdb-line:color-mix(in srgb,var(--color-border) 72%,transparent);--rpdb-soft:color-mix(in srgb,var(--color-accent) 8%,transparent)}
 .editor-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--rpdb-line)}
-.editor-heading>div:first-child>span,.writing-heading>div>span,.section-heading>div>span{color:var(--color-accent);font-size:11px;font-weight:800;letter-spacing:.06em}
+.editor-heading>div:first-child>span,.writing-heading>div>span,.section-heading>div>span{color:var(--link-color);font-size:11px;font-weight:800;letter-spacing:.06em}
 .editor-heading h1{margin:6px 0 4px;color:var(--color-text-main);font:700 30px/1.2 system-ui,'Microsoft YaHei',sans-serif}
 .editor-heading p{margin:0;color:var(--color-text-secondary)}
 .heading-actions{display:flex;align-items:center;gap:10px}
 .heading-actions>button{display:grid;width:36px;height:36px;place-items:center;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--rpdb-surface);color:var(--color-text-main)}
-.draft-box-button{position:relative}.draft-box-button b{position:absolute;top:-6px;right:-6px;display:grid;min-width:18px;height:18px;place-items:center;padding:0 4px;border:2px solid var(--color-main-bg);border-radius:9px;background:var(--color-accent);color:#fff;font-size:9px}
+.draft-box-button{position:relative}.draft-box-button b{position:absolute;top:-6px;right:-6px;display:grid;min-width:18px;height:18px;place-items:center;padding:0 4px;border:2px solid var(--color-main-bg);border-radius:9px;background:var(--btn-primary-bg);color:var(--btn-primary-text);font-size:9px}
 .saved-status{display:inline-flex;align-items:center;gap:6px;color:var(--color-success);font-size:12px}
 .draft-box-mask{position:fixed;z-index:1200;inset:0;display:grid;place-items:center;padding:20px;background:rgba(18,16,14,.58)}
 .draft-box-panel{width:min(620px,100%);max-height:min(720px,86vh);overflow:hidden;border:1px solid var(--rpdb-line);border-radius:8px;background:var(--color-panel-bg);box-shadow:0 22px 70px rgba(0,0,0,.3)}
 .draft-box-panel>header{display:flex;align-items:center;justify-content:space-between;padding:18px;border-bottom:1px solid var(--rpdb-line)}.draft-box-panel h2{margin:0;font-size:20px}.draft-box-panel p{margin:4px 0 0;color:var(--color-text-secondary);font-size:12px}.draft-box-panel>header button{display:grid;width:34px;height:34px;place-items:center;border:0;background:transparent;color:var(--color-text-main);font-size:20px}
-.draft-box-new{display:flex;width:calc(100% - 36px);min-height:42px;align-items:center;justify-content:center;gap:6px;margin:14px 18px;border:1px dashed var(--color-accent);border-radius:6px;background:var(--rpdb-soft);color:var(--color-accent);font-weight:800}
+.draft-box-new{display:flex;width:calc(100% - 36px);min-height:42px;align-items:center;justify-content:center;gap:6px;margin:14px 18px;border:1px dashed var(--color-accent);border-radius:6px;background:var(--rpdb-soft);color:var(--link-color);font-weight:800}
 .draft-box-list{max-height:520px;overflow:auto;border-top:1px solid var(--rpdb-line)}.draft-box-list article{display:grid;grid-template-columns:minmax(0,1fr) 44px;border-bottom:1px solid var(--rpdb-line)}.draft-box-list article.active{background:var(--rpdb-soft)}.draft-box-main{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:0;background:transparent;color:var(--color-text-main);text-align:left}.draft-box-main span{display:grid;min-width:0;gap:5px}.draft-box-main b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.draft-box-main small{color:var(--color-text-secondary)}.draft-box-main>i{font-size:20px}.draft-box-delete{border:0;border-left:1px solid var(--rpdb-line);background:transparent;color:var(--color-text-secondary);font-size:16px}.draft-box-delete:hover{color:var(--color-danger,#b83232)}.draft-box-empty{display:grid;min-height:180px;place-items:center;align-content:center;gap:10px;color:var(--color-text-secondary)}.draft-box-empty i{font-size:32px}
 .media-strip{display:grid;grid-template-columns:220px minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px;padding:16px;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .media-strip__heading{display:flex;min-width:0;flex-direction:column;justify-content:center}
-.media-strip__heading span{color:var(--color-accent);font-size:11px;font-weight:800}
+.media-strip__heading span{color:var(--link-color);font-size:11px;font-weight:800}
 .media-strip__heading h2{margin:6px 0;color:var(--color-text-main);font-size:18px}
 .media-strip__heading p{margin:0;color:var(--color-text-secondary);font-size:12px;line-height:1.55}
 .media-upload-card{min-width:0;padding:12px;border:1px solid var(--rpdb-line);border-radius:13px;background:var(--rpdb-muted)}
@@ -1849,7 +1838,7 @@ watch([form, homeDetails, transmogDetails, musicianMIDIDetails, customStyleTags]
 .preview-gallery-panel :deep(.thumbs button){border-color:var(--rpdb-line);background:var(--color-panel-bg)}
 .preview-gallery-panel :deep(.thumbs button.active){border-color:var(--color-accent)}
 .preview-remove-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.preview-remove-list button{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:1px solid color-mix(in srgb,#c2410c 42%,var(--rpdb-line));border-radius:999px;background:color-mix(in srgb,#c2410c 8%,var(--color-panel-bg));color:#c2410c;font-size:11px;font-weight:800;cursor:pointer}
+.preview-remove-list button{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:1px solid color-mix(in srgb,#c2410c 42%,var(--rpdb-line));border-radius:999px;background:color-mix(in srgb,#c2410c 8%,var(--color-panel-bg));color:color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));font-size:11px;font-weight:800;cursor:pointer}
 .preview-remove-list button:hover{border-color:#c2410c;background:color-mix(in srgb,#c2410c 14%,var(--color-panel-bg))}
 .editor-upper{display:grid;grid-template-columns:minmax(0,1fr);overflow:hidden;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .metadata-panel,.publish-panel{min-width:0;padding:16px}
@@ -1857,7 +1846,7 @@ watch([form, homeDetails, transmogDetails, musicianMIDIDetails, customStyleTags]
 .publish-panel{border-left:1px solid var(--rpdb-line)}
 .panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
 .panel-heading>div{display:flex;align-items:center;gap:8px}
-.panel-heading>div>span{color:var(--color-accent);font-size:11px;font-weight:800}
+.panel-heading>div>span{color:var(--link-color);font-size:11px;font-weight:800}
 .panel-heading h2{margin:0;color:var(--color-text-main);font-size:15px}
 .panel-heading small{color:var(--color-text-secondary);font-size:11px;text-align:right}
 .media-upload{position:relative;display:grid;height:184px;place-items:center;overflow:hidden;border:1px dashed color-mix(in srgb,var(--color-accent) 48%,var(--rpdb-line));border-radius:12px;background:var(--rpdb-soft);cursor:pointer}
@@ -1872,7 +1861,7 @@ watch([form, homeDetails, transmogDetails, musicianMIDIDetails, customStyleTags]
   border:0;
 }
 .media-upload img{width:100%;height:100%;object-fit:cover}
-.media-upload>span{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--color-accent);text-align:center}
+.media-upload>span{display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--link-color);text-align:center}
 .media-upload>span i{font-size:30px}
 .media-upload>span small{max-width:210px;color:var(--color-text-secondary);line-height:1.5}
 .media-upload em{position:absolute;inset:auto 8px 8px;padding:5px 8px;border-radius:999px;background:rgba(25,17,12,.68);color:#fff;font-size:10px;font-style:normal}
@@ -1899,18 +1888,18 @@ watch([form, homeDetails, transmogDetails, musicianMIDIDetails, customStyleTags]
   .topic-input input{min-height:36px}
   .style-options{display:flex;flex-wrap:wrap;gap:7px}
   .style-options button{display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border:1px solid color-mix(in srgb,var(--tag-color) 52%,var(--rpdb-line));border-radius:999px;background:color-mix(in srgb,var(--tag-color) 9%,transparent);color:var(--color-text-main);font-size:12px;font-weight:700}
-  .style-options button.selected{background:var(--tag-color);border-color:var(--tag-color);color:var(--btn-primary-text)}
+  .style-options button.selected{background:color-mix(in srgb, var(--tag-color) 18%, var(--color-panel-bg));border-color:color-mix(in srgb, var(--tag-color) 55%, var(--color-text-main));color:var(--color-text-main);box-shadow:inset 0 0 0 1px var(--input-focus)}
   .style-options button.disabled{opacity:.55;cursor:not-allowed}
 label{display:grid;gap:6px;color:var(--color-text-main);font-weight:700}
 label>span{font-size:12px}
 input,textarea,select{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main);font:inherit}
 textarea{min-height:70px;resize:vertical}
 .transmog-code-field textarea{min-height:92px;font:11px/1.55 Consolas,'SFMono-Regular',monospace;overflow-wrap:anywhere}
-.musician-midi-type-form{display:grid;gap:14px}.musician-code-flow{display:grid;gap:12px;padding:16px;border:1px solid color-mix(in srgb,var(--color-accent) 38%,var(--rpdb-line));border-radius:12px;background:var(--rpdb-soft)}.musician-code-flow__intro{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}.musician-code-flow__intro>span,.musician-midi-optional>span{padding:3px 7px;border-radius:999px;background:var(--color-accent);color:#fff;font-size:10px;font-weight:800}.musician-code-flow__intro>div{display:grid;gap:3px}.musician-code-flow__intro small{color:var(--color-text-secondary);font-weight:500;line-height:1.5}.musician-code-flow__intro>a,.musician-code-flow__actions button{display:inline-flex;min-height:34px;align-items:center;justify-content:center;gap:5px;padding:0 10px;border:1px solid var(--rpdb-line);border-radius:8px;background:var(--color-panel-bg);color:var(--color-accent);font-weight:700;text-decoration:none}.musician-code-flow ol{display:grid;gap:5px;margin:0;padding-left:22px;color:var(--color-text-secondary);font-size:11px;line-height:1.5}.musician-code-flow textarea{min-height:128px;font:11px/1.5 Consolas,'SFMono-Regular',monospace;overflow-wrap:anywhere}.musician-code-flow__actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.musician-code-flow__actions small{color:var(--color-text-secondary)}.musician-code-flow__actions button:disabled{cursor:not-allowed;opacity:.5}.musician-midi-optional{display:flex;align-items:center;gap:7px;color:var(--color-text-secondary);font-size:11px;font-weight:700}
+.musician-midi-type-form{display:grid;gap:14px}.musician-code-flow{display:grid;gap:12px;padding:16px;border:1px solid color-mix(in srgb,var(--color-accent) 38%,var(--rpdb-line));border-radius:12px;background:var(--rpdb-soft)}.musician-code-flow__intro{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}.musician-code-flow__intro>span,.musician-midi-optional>span{padding:3px 7px;border-radius:999px;background:var(--btn-primary-bg);color:var(--btn-primary-text);font-size:10px;font-weight:800}.musician-code-flow__intro>div{display:grid;gap:3px}.musician-code-flow__intro small{color:var(--color-text-secondary);font-weight:500;line-height:1.5}.musician-code-flow__intro>a,.musician-code-flow__actions button{display:inline-flex;min-height:34px;align-items:center;justify-content:center;gap:5px;padding:0 10px;border:1px solid var(--rpdb-line);border-radius:8px;background:var(--color-panel-bg);color:var(--link-color);font-weight:700;text-decoration:none}.musician-code-flow ol{display:grid;gap:5px;margin:0;padding-left:22px;color:var(--color-text-secondary);font-size:11px;line-height:1.5}.musician-code-flow textarea{min-height:128px;font:11px/1.5 Consolas,'SFMono-Regular',monospace;overflow-wrap:anywhere}.musician-code-flow__actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.musician-code-flow__actions small{color:var(--color-text-secondary)}.musician-code-flow__actions button:disabled{cursor:not-allowed;opacity:.5}.musician-midi-optional{display:flex;align-items:center;gap:7px;color:var(--color-text-secondary);font-size:11px;font-weight:700}
 .musician-midi-upload{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:18px;border:1px dashed color-mix(in srgb,var(--color-accent) 55%,var(--rpdb-line));border-radius:12px;background:var(--rpdb-soft)}
 .musician-midi-upload>i{font-size:34px;color:var(--color-accent)}
 .musician-midi-upload>div{display:grid;gap:4px;min-width:0}.musician-midi-upload>div b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.musician-midi-upload>div small{color:var(--color-text-secondary)}
-.musician-midi-upload label{cursor:pointer}.musician-midi-upload label input{display:none}.musician-midi-upload label span,.musician-midi-upload>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:9px;background:var(--color-panel-bg);color:var(--color-accent);font-weight:700}.musician-midi-upload>button{color:var(--color-danger,#b83232)}
+.musician-midi-upload label{cursor:pointer}.musician-midi-upload label input{display:none}.musician-midi-upload label span,.musician-midi-upload>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:9px;background:var(--color-panel-bg);color:var(--link-color);font-weight:700}.musician-midi-upload>button{color:var(--link-color)}
 .musician-midi-checklist{display:flex;align-items:center;gap:10px;padding:12px}.musician-midi-checklist>i{font-size:24px;color:var(--color-accent)}.musician-midi-checklist>span{display:grid;gap:3px;min-width:0}.musician-midi-checklist b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.musician-midi-checklist small{color:var(--color-text-secondary)}
 .check-list{display:grid;gap:4px;margin-bottom:12px}
 .check-list>div{display:grid;grid-template-columns:20px 1fr auto;gap:7px;align-items:center;padding:8px 0;color:var(--color-text-secondary)}
@@ -1919,8 +1908,8 @@ textarea{min-height:70px;resize:vertical}
 .check-list .done i,.check-list .done b{color:var(--color-success)}
 .change-summary textarea{min-height:58px}
 .publish-actions{display:grid;gap:8px;margin-top:12px}
-.publish-actions button,.section-heading button,.add-button,.remove{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--color-text-main)}
-.publish-actions .primary{border-color:var(--color-accent);background:var(--color-accent);color:var(--btn-primary-text)}
+.publish-actions button,.section-heading button,.add-button,.remove{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg);color:var(--link-color)}
+.publish-actions .primary{border-color:var(--color-accent);background:var(--btn-primary-bg);color:var(--btn-primary-text)}
 .editor-lower{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;margin-top:14px;align-items:start}
 .writing-workspace,.content-inspector details{min-width:0;overflow:hidden;border:1px solid var(--rpdb-line);border-radius:14px;background:var(--rpdb-surface)}
 .writing-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid var(--rpdb-line)}
@@ -1934,25 +1923,25 @@ textarea{min-height:70px;resize:vertical}
 .context-fields textarea{min-height:92px;background:var(--color-panel-bg)}
 .guide-editor,.home-editor{padding:22px 20px}
 .section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:14px}
-.section-heading button{border-color:color-mix(in srgb,var(--color-accent) 70%,var(--rpdb-line));color:var(--color-accent)}
+.section-heading button{border-color:color-mix(in srgb,var(--color-accent) 70%,var(--rpdb-line));color:var(--link-color)}
 .tomtom-import{display:grid;grid-template-columns:150px minmax(0,1fr) auto;align-items:end;gap:12px;margin-bottom:14px;padding:12px;border:1px solid color-mix(in srgb,var(--color-accent) 32%,var(--rpdb-line));border-radius:10px;background:color-mix(in srgb,var(--color-accent) 6%,var(--color-panel-bg))}
 .tomtom-import__mark{display:flex;align-self:stretch;align-items:center;gap:9px;padding-right:12px;border-right:1px solid var(--rpdb-line)}
 .tomtom-import__mark>i{color:var(--color-accent);font-size:23px}.tomtom-import__mark>span{display:flex;min-width:0;flex-direction:column}.tomtom-import__mark b{font-size:12px}.tomtom-import__mark small{margin-top:4px;color:var(--color-text-secondary);font:10px/1.35 Consolas,monospace}
 .tomtom-import label{display:grid;min-width:0;gap:5px}.tomtom-import label>span{font-size:11px;font-weight:800}.tomtom-import label>small{color:var(--color-text-secondary);font-size:10px;font-weight:500;line-height:1.5}.tomtom-import textarea{min-height:82px;font:11px/1.55 Consolas,'SFMono-Regular',monospace;resize:vertical}
-.tomtom-import>button{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--color-accent);border-radius:9px;background:var(--color-accent);color:var(--btn-primary-text);font-weight:800;white-space:nowrap}
+.tomtom-import>button{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:6px;padding:0 13px;border:1px solid var(--color-accent);border-radius:9px;background:var(--btn-primary-bg);color:var(--btn-primary-text);font-weight:800;white-space:nowrap}
 .guide-step-list{display:grid;gap:10px}
 .guide-step-list article{display:grid;grid-template-columns:34px minmax(0,1fr) 200px;gap:12px;padding:13px;border:1px solid var(--rpdb-line);border-radius:12px;background:var(--rpdb-muted)}
-.step-number{display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:var(--rpdb-soft);color:var(--color-accent);font-weight:800}
+.step-number{display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:var(--rpdb-soft);color:var(--link-color);font-weight:800}
 .step-main{display:grid;gap:8px}
 .step-grid{display:grid;grid-template-columns:1fr 180px;gap:8px}
 .step-coordinate{display:flex;flex-direction:column;gap:7px;padding-left:12px;border-left:1px solid var(--rpdb-line)}
 .step-coordinate>div{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.step-coordinate code{overflow-wrap:anywhere;padding:8px;border-radius:9px;background:var(--rpdb-soft);color:var(--color-accent);font:10px/1.5 Consolas,monospace}
+.step-coordinate code{overflow-wrap:anywhere;padding:8px;border-radius:9px;background:var(--rpdb-soft);color:var(--link-color);font:10px/1.5 Consolas,monospace}
 .remove{min-height:30px;color:var(--btn-danger-bg)}
 .empty-guide{display:grid;min-height:140px;place-items:center;align-content:center;color:var(--color-text-secondary);text-align:center}
 .empty-guide i{font-size:34px;color:var(--color-accent)}
 .guide-bottom-actions{display:flex;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--rpdb-line)}
-.guide-bottom-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border:1px solid color-mix(in srgb,var(--color-accent) 70%,var(--rpdb-line));border-radius:10px;background:var(--color-panel-bg);color:var(--color-accent);font-weight:700}
+.guide-bottom-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border:1px solid color-mix(in srgb,var(--color-accent) 70%,var(--rpdb-line));border-radius:10px;background:var(--color-panel-bg);color:var(--link-color);font-weight:700}
 .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .content-inspector{display:grid;gap:10px}
 .content-inspector summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:13px 14px;cursor:pointer;list-style:none;color:var(--color-text-main);font-weight:800}
@@ -1962,7 +1951,7 @@ textarea{min-height:70px;resize:vertical}
 .content-inspector summary b{color:var(--color-text-secondary);font-size:11px}
 .inspector-body{display:grid;gap:8px;padding:10px;border-top:1px solid var(--rpdb-line);background:var(--rpdb-muted)}
 .compact-card{display:grid;gap:7px;padding:9px;border:1px solid var(--rpdb-line);border-radius:10px;background:var(--color-panel-bg)}
-.add-button{border-style:dashed;border-color:color-mix(in srgb,var(--color-accent) 70%,var(--rpdb-line));background:transparent;color:var(--color-accent)}
+.add-button{border-style:dashed;border-color:color-mix(in srgb,var(--color-accent) 70%,var(--rpdb-line));background:transparent;color:var(--link-color)}
 .restriction-grid{display:grid;gap:9px}
 .checklist-stack{display:grid;gap:8px}
 .transmog-slot-checklist{display:grid;grid-template-columns:1fr;gap:8px;max-height:680px;overflow:auto;padding-right:2px}
@@ -2006,6 +1995,7 @@ textarea{min-height:70px;resize:vertical}
 }
 .editor-heading>div:first-child>span{
   display:none;
+  color:var(--link-color);
 }
 .editor-heading h1{
   margin:0;
@@ -2079,6 +2069,7 @@ textarea{min-height:70px;resize:vertical}
 }
 .media-upload>span{
   gap:3px;
+  color:var(--link-color);
 }
 .media-upload>span i{
   font-size:20px;
@@ -2100,7 +2091,7 @@ textarea{min-height:70px;resize:vertical}
   border:1px solid color-mix(in srgb,var(--color-accent) 55%,var(--rpdb-line));
   border-radius:6px;
   background:color-mix(in srgb,var(--color-panel-bg) 92%,transparent);
-  color:var(--color-accent);
+  color:var(--link-color);
   font:inherit;
   font-size:10px;
   font-weight:800;
@@ -2146,6 +2137,7 @@ textarea{min-height:70px;resize:vertical}
 .writing-heading>div>span,
 .section-heading>div>span{
   letter-spacing:0;
+  color:var(--link-color);
 }
 .panel-heading>small b{
   margin-right:2px;
@@ -2218,7 +2210,7 @@ textarea{min-height:70px;resize:vertical}
 .style-options button.style-options-toggle{
   border-style:dashed;
   border-color:var(--rpdb-line);
-  color:var(--color-accent);
+  color:var(--link-color);
 }
 .style-options button.style-options-toggle::before{
   display:none;
@@ -2294,7 +2286,7 @@ textarea{min-height:70px;resize:vertical}
   display:grid;
   justify-items:center;
   gap:5px;
-  color:var(--color-accent);
+  color:var(--link-color);
   text-align:center;
 }
 .home-code-upload i{
@@ -2619,7 +2611,7 @@ label>span{
 }
 .floating-submit-toolbar button.primary{
   border-color:var(--color-accent);
-  background:var(--color-accent);
+  background:var(--btn-primary-bg);
   color:var(--btn-primary-text);
   box-shadow:0 5px 12px color-mix(in srgb,var(--color-accent) 22%,transparent);
 }

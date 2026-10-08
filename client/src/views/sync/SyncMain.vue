@@ -268,9 +268,6 @@ const toSyncList = computed(() =>
   currentProfiles.value.filter(p => getStatus(p.id) !== 'synced')
 )
 
-// 云端账号备份列表
-const cloudBackupsList = computed(() => Array.from(cloudBackups.value.values()))
-
 // 当前账号的云端人物卡列表（从 profiles_data 解析）
 interface CloudProfileItem {
   id: string
@@ -489,16 +486,6 @@ function goToDetail(id: string) {
     return
   }
   router.push(`/sync/profile/${id}`)
-}
-
-function openSettings() {
-  router.push('/settings')
-}
-
-// 打开删除确认弹窗
-function openDeleteModal(accountId: string) {
-  pendingDeleteAccount.value = accountId
-  showDeleteModal.value = true
 }
 
 // 确认删除云端备份（账号级别）
@@ -1323,11 +1310,13 @@ const workflowSteps = computed(() => [
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-primary {
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .btn-secondary {
@@ -1359,9 +1348,9 @@ const workflowSteps = computed(() => [
 }
 
 .tab-btn.active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-color: var(--btn-primary-bg);
 }
 
 .auth-tip {
@@ -1452,7 +1441,7 @@ const workflowSteps = computed(() => [
 
 .pill.danger {
   background: rgba(211, 47, 47, 0.12);
-  color: #d32f2f;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .pill.warning {
@@ -1477,9 +1466,9 @@ const workflowSteps = computed(() => [
   color: var(--color-text-secondary);
 }
 
-.stat-card.synced .stat-value { color: #2e7d32; }
-.stat-card.pending .stat-value { color: #ed6c02; }
-.stat-card.conflict .stat-value { color: #e65100; }
+.stat-card.synced .stat-value { color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main)); }
+.stat-card.pending .stat-value { color: var(--color-warning-dark); }
+.stat-card.conflict .stat-value { color: var(--color-warning-dark); }
 
 .workspace {
   display: flex;
@@ -1625,7 +1614,7 @@ const workflowSteps = computed(() => [
 }
 
 .extra-item i {
-  color: #2e7d32;
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
   font-size: 14px;
 }
 
@@ -1785,7 +1774,7 @@ const workflowSteps = computed(() => [
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--gradient-text);
   font-weight: 700;
 }
 
@@ -1846,8 +1835,8 @@ const workflowSteps = computed(() => [
 }
 
 .status.pending { background: var(--color-warning-light, #fff3e0); color: var(--color-warning-dark, #ed6c02); }
-.status.synced { background: var(--color-success-light, #e8f5e9); color: var(--color-success, #2e7d32); }
-.status.conflict { background: rgba(211, 47, 47, 0.12); color: #d32f2f; }
+.status.synced { background: var(--color-success-light, #e8f5e9); color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main)); }
+.status.conflict { background: rgba(211, 47, 47, 0.12); color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main)); }
 
 .hint {
   font-size: 11px;
@@ -2126,8 +2115,8 @@ const workflowSteps = computed(() => [
 }
 
 .confirm-row .status.pending { background: var(--color-warning-light, #fff3e0); color: var(--color-warning-dark, #ed6c02); }
-.confirm-row .status.synced { background: var(--color-success-light, #e8f5e9); color: var(--color-success, #2e7d32); }
-.confirm-row .status.conflict { background: rgba(211, 47, 47, 0.12); color: #d32f2f; }
+.confirm-row .status.synced { background: var(--color-success-light, #e8f5e9); color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main)); }
+.confirm-row .status.conflict { background: rgba(211, 47, 47, 0.12); color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main)); }
 
 .modal-actions {
   display: flex;
@@ -2234,7 +2223,7 @@ const workflowSteps = computed(() => [
   border: 1px solid rgba(46, 125, 50, 0.3);
   border-radius: 8px;
   font-size: 12px;
-  color: #2e7d32;
+  color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main));
 }
 
 .extra-tag i {
@@ -2330,7 +2319,7 @@ const workflowSteps = computed(() => [
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--gradient-text);
   font-size: 20px;
 }
 
@@ -2388,7 +2377,7 @@ const workflowSteps = computed(() => [
 }
 
 .btn-icon.danger {
-  color: #d32f2f;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   border-color: rgba(211, 47, 47, 0.3);
 }
 
@@ -2450,9 +2439,9 @@ const workflowSteps = computed(() => [
   font-weight: 500;
 }
 
-.confirm-info .value.status.synced { color: #2e7d32; }
-.confirm-info .value.status.pending { color: #ed6c02; }
-.confirm-info .value.status.conflict { color: #d32f2f; }
+.confirm-info .value.status.synced { color: color-mix(in srgb, var(--color-success) 40%, var(--color-text-main)); }
+.confirm-info .value.status.pending { color: var(--color-warning-dark); }
+.confirm-info .value.status.conflict { color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main)); }
 
 .btn-danger {
   padding: 10px 14px;
@@ -2490,7 +2479,7 @@ const workflowSteps = computed(() => [
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #b8860b;
+  color: var(--color-warning-dark);
   font-weight: 700;
   margin-bottom: 8px;
 }
@@ -2503,7 +2492,7 @@ const workflowSteps = computed(() => [
   margin: 0 0 8px 0;
   padding-left: 24px;
   font-size: 13px;
-  color: #8b6914;
+  color: var(--color-warning-dark);
 }
 
 .warning-list li {
@@ -2513,7 +2502,7 @@ const workflowSteps = computed(() => [
 .warning-tip {
   margin: 0;
   font-size: 13px;
-  color: #b8860b;
+  color: var(--color-warning-dark);
   font-weight: 600;
 }
 

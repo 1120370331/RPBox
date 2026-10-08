@@ -38,7 +38,7 @@ function getRoleLabel(role: string): string {
     <!-- Header -->
     <header class="bento-header">
       <div class="breadcrumb">
-        <span class="server">SERVER: {{ guild.server || 'UNKNOWN' }}</span>
+        <span class="server">SERVER: {{ guild.server ?? '' }}</span>
         <span class="sep">/</span>
         <span class="name">{{ guild.name.toUpperCase() }}</span>
       </div>
@@ -62,8 +62,8 @@ function getRoleLabel(role: string): string {
         <div class="hero-overlay"></div>
         <div class="hero-content">
           <div class="hero-badges">
-            <span v-if="guild.faction" class="badge faction" :class="guild.faction">{{ factionLabel }}</span>
-            <span class="badge date">Founded 2024</span>
+            <span v-if="guild.faction" class="hero-badge faction" :class="guild.faction">{{ factionLabel }}</span>
+            <span class="hero-badge date">Founded 2024</span>
           </div>
           <h1>{{ guild.name }}</h1>
           <p>{{ guild.slogan || guild.description || '暂无描述' }}</p>
@@ -116,7 +116,7 @@ function getRoleLabel(role: string): string {
         <div class="contributors-list">
           <div v-for="(m, i) in members.slice(0, 4)" :key="m.id" class="contributor-item">
             <span class="rank" :class="{ gold: i === 0 }">{{ i + 1 }}</span>
-            <div class="avatar">
+            <div class="member-fallback-avatar">
               <img v-if="m.avatar" :src="m.avatar" alt="" />
               <span v-else>{{ m.username?.charAt(0) }}</span>
             </div>
@@ -190,9 +190,10 @@ function getRoleLabel(role: string): string {
 <style scoped>
 .layout4 {
   min-height: 100vh;
-  background: #EED9C4;
-  background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(128, 64, 48, 0.03) 10px, rgba(128, 64, 48, 0.03) 12px);
+  background: var(--color-background);
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, var(--color-primary-light) 10px, var(--color-primary-light) 12px);
   padding: 40px;
+  color: var(--color-text-main);
 }
 
 /* Header */
@@ -211,9 +212,9 @@ function getRoleLabel(role: string): string {
   font-family: monospace;
 }
 
-.breadcrumb .server { color: #8C7B70; }
-.breadcrumb .sep { color: #804030; }
-.breadcrumb .name { color: #2C1810; font-weight: 600; }
+.breadcrumb .server { color: var(--color-text-secondary); }
+.breadcrumb .sep { color: var(--color-text-secondary); }
+.breadcrumb .name { color: var(--color-text-main); font-weight: 600; }
 
 .header-actions {
   display: flex;
@@ -222,8 +223,8 @@ function getRoleLabel(role: string): string {
 
 /* Neo Buttons */
 .neo-btn {
-  background: #EED9C4;
-  box-shadow: 5px 5px 10px #cabaa8, -5px -5px 10px #ffffff;
+  background: var(--color-card-bg);
+  box-shadow: 5px 5px 10px rgba(var(--shadow-base), 0.16), -5px -5px 10px var(--color-panel-bg);
   border: none;
   border-radius: 2px;
   cursor: pointer;
@@ -231,7 +232,7 @@ function getRoleLabel(role: string): string {
 }
 
 .neo-btn:active {
-  box-shadow: inset 3px 3px 6px #cabaa8, inset -3px -3px 6px #ffffff;
+  box-shadow: inset 3px 3px 6px rgba(var(--shadow-base), 0.16), inset -3px -3px 6px var(--color-panel-bg);
 }
 
 .icon-btn {
@@ -240,14 +241,14 @@ function getRoleLabel(role: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #804030;
+  color: var(--icon-color);
   font-size: 18px;
 }
 
 .primary-btn {
   padding: 10px 24px;
-  background: #804030;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 2px;
   font-weight: 600;
@@ -256,13 +257,13 @@ function getRoleLabel(role: string): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 4px 12px rgba(128, 64, 48, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 .danger-btn {
   padding: 10px 24px;
-  background: #dc2626;
-  color: #fff;
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
   border: none;
   border-radius: 2px;
   font-weight: 600;
@@ -283,10 +284,10 @@ function getRoleLabel(role: string): string {
 
 /* Neo Panel Base */
 .neo-panel {
-  background: linear-gradient(145deg, #fff3e3, #d6c3b0);
-  box-shadow: 8px 8px 20px #cabaa8, -8px -8px 20px #ffffff;
+  background: linear-gradient(145deg, var(--color-panel-bg), var(--color-card-bg));
+  box-shadow: 8px 8px 20px rgba(var(--shadow-base), 0.16), -8px -8px 20px color-mix(in srgb, var(--color-panel-bg) 70%, transparent);
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--color-border);
   transition: all 0.3s;
   position: relative;
   overflow: hidden;
@@ -294,7 +295,7 @@ function getRoleLabel(role: string): string {
 
 .neo-panel:hover {
   transform: translateY(-4px);
-  box-shadow: 12px 12px 30px #cabaa8, -12px -12px 30px #ffffff;
+  box-shadow: 12px 12px 30px rgba(var(--shadow-base), 0.2), -12px -12px 30px color-mix(in srgb, var(--color-panel-bg) 70%, transparent);
 }
 
 /* Hero Panel */
@@ -327,7 +328,7 @@ function getRoleLabel(role: string): string {
   margin-bottom: 12px;
 }
 
-.badge {
+.hero-badge {
   padding: 4px 12px;
   border-radius: 2px;
   font-size: 11px;
@@ -336,18 +337,19 @@ function getRoleLabel(role: string): string {
   letter-spacing: 0.5px;
 }
 
-.badge.faction {
+.hero-badge.faction {
   background: #D4A373;
   color: #4B3621;
 }
 
-.badge.faction.alliance { background: #3b82f6; color: #fff; }
-.badge.faction.horde { background: #dc2626; color: #fff; }
+.hero-badge.faction.alliance { background: #1e5aa8; color: #fff; }
+.hero-badge.faction.horde { background: #dc2626; color: #fff; }
 
-.badge.date {
+.hero-badge.date {
   color: rgba(255, 255, 255, 0.8);
   font-family: monospace;
   letter-spacing: 1px;
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .hero-content h1 {
@@ -370,6 +372,9 @@ function getRoleLabel(role: string): string {
   right: 32px;
   text-align: right;
   z-index: 10;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 12px;
+  border-radius: 4px;
 }
 
 .level-label {
@@ -389,7 +394,7 @@ function getRoleLabel(role: string): string {
   grid-column: span 4;
   grid-row: span 2;
   padding: 24px;
-  background: #fff;
+  background: var(--color-panel-bg);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -403,7 +408,7 @@ function getRoleLabel(role: string): string {
 
 .panel-header h3 {
   font-size: 11px;
-  color: #804030;
+  color: var(--color-primary);
   text-transform: uppercase;
   letter-spacing: 1px;
   margin: 0;
@@ -425,18 +430,18 @@ function getRoleLabel(role: string): string {
 .status-title {
   font-size: 28px;
   font-weight: 700;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .status-sub {
   font-size: 13px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
 .capacity-bar {
   height: 4px;
-  background: #e5e7eb;
+  background: var(--color-border);
   border-radius: 2px;
   overflow: hidden;
   margin-top: 16px;
@@ -444,14 +449,14 @@ function getRoleLabel(role: string): string {
 
 .bar-fill {
   height: 100%;
-  background: #804030;
+  background: var(--color-primary);
 }
 
 .capacity-info {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-family: monospace;
   margin-top: 4px;
 }
@@ -467,19 +472,19 @@ function getRoleLabel(role: string): string {
 
 .event-date {
   width: 96px;
-  background: #804030;
+  background: var(--btn-primary-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--btn-primary-text);
   flex-shrink: 0;
 }
 
 .event-date .month {
   font-size: 11px;
   font-weight: 600;
-  opacity: 0.6;
+  opacity: 1;
 }
 
 .event-date .day {
@@ -490,13 +495,13 @@ function getRoleLabel(role: string): string {
 .event-date .time {
   font-size: 11px;
   font-weight: 600;
-  opacity: 0.6;
+  opacity: 1;
 }
 
 .event-content {
   flex: 1;
   padding: 20px;
-  background: #FDFBF9;
+  background: var(--color-card-bg);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -505,13 +510,13 @@ function getRoleLabel(role: string): string {
 .event-content h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 8px 0;
 }
 
 .event-content p {
   font-size: 12px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   margin: 0;
   line-height: 1.5;
 }
@@ -519,7 +524,7 @@ function getRoleLabel(role: string): string {
 .text-btn {
   background: none;
   border: none;
-  color: #804030;
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -535,7 +540,7 @@ function getRoleLabel(role: string): string {
   grid-column: span 4;
   grid-row: span 4;
   padding: 24px;
-  background: #F8F4F0;
+  background: var(--color-card-bg);
 }
 
 .contributors-panel .panel-header {
@@ -545,14 +550,14 @@ function getRoleLabel(role: string): string {
 .contributors-panel h3 {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
 }
 
 .icon-btn-sm {
   background: none;
   border: none;
-  color: #804030;
+  color: var(--icon-color);
   cursor: pointer;
   padding: 4px;
 }
@@ -573,29 +578,29 @@ function getRoleLabel(role: string): string {
   width: 16px;
   font-size: 16px;
   font-weight: 800;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .contributor-item .rank.gold {
-  color: #D4A373;
+  color: var(--color-primary);
 }
 
-.contributor-item .avatar {
+.contributor-item .member-fallback-avatar {
   width: 40px;
   height: 40px;
   border-radius: 2px;
-  background: linear-gradient(135deg, #B87333, #4B3621);
-  color: #fff;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  border: 1px solid #fff;
+  border: 1px solid var(--color-border);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   overflow: hidden;
 }
 
-.contributor-item .avatar img {
+.contributor-item .member-fallback-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -608,12 +613,12 @@ function getRoleLabel(role: string): string {
 .contributor-item .name {
   font-size: 13px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
 }
 
 .contributor-item .role {
   font-size: 11px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
 }
 
 .contributor-item .crown {
@@ -633,7 +638,7 @@ function getRoleLabel(role: string): string {
 
 .resources-panel h3 {
   font-size: 11px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 1px;
   margin: 0 0 16px 0;
@@ -647,21 +652,21 @@ function getRoleLabel(role: string): string {
 
 .resource-icon {
   aspect-ratio: 1;
-  background: rgba(75, 54, 33, 0.05);
+  background: var(--icon-bg);
   border-radius: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #804030;
+  color: var(--icon-color);
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid transparent;
 }
 
 .resource-icon:hover {
-  background: #804030;
-  color: #fff;
-  border-color: rgba(75, 54, 33, 0.2);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-color: var(--color-border-hover);
 }
 
 .resource-stats {
@@ -674,13 +679,13 @@ function getRoleLabel(role: string): string {
 .stat-main .value {
   font-size: 24px;
   font-weight: 800;
-  color: #2C1810;
+  color: var(--color-text-main);
   display: block;
 }
 
 .stat-main .label {
   font-size: 11px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-family: monospace;
 }
 
@@ -693,7 +698,7 @@ function getRoleLabel(role: string): string {
 }
 
 .stat-trend.up {
-  color: #16a34a;
+  color: var(--color-text-main);
 }
 
 /* Activity Panel */
@@ -709,14 +714,14 @@ function getRoleLabel(role: string): string {
   top: 24px;
   right: 24px;
   font-size: 48px;
-  color: #804030;
+  color: var(--icon-color);
   opacity: 0.1;
 }
 
 .activity-panel h3 {
   font-size: 14px;
   font-weight: 600;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0 0 16px 0;
 }
 
@@ -731,29 +736,29 @@ function getRoleLabel(role: string): string {
   gap: 12px;
   align-items: flex-start;
   padding-left: 12px;
-  border-left: 2px solid #e5e7eb;
+  border-left: 2px solid var(--color-border);
 }
 
 .activity-item.featured {
-  border-left-color: #D4A373;
+  border-left-color: var(--color-primary);
 }
 
 .activity-item .time {
   font-size: 11px;
-  color: #8C7B70;
+  color: var(--color-text-secondary);
   font-family: monospace;
   min-width: 60px;
 }
 
 .activity-item p {
   font-size: 13px;
-  color: #2C1810;
+  color: var(--color-text-main);
   margin: 0;
   line-height: 1.4;
 }
 
 .activity-item .highlight {
-  color: #804030;
+  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -789,27 +794,27 @@ function getRoleLabel(role: string): string {
 }
 
 .action-btn.discord {
-  background: #4B3621;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(75, 54, 33, 0.3);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  box-shadow: var(--shadow-sm);
 }
 
 .action-btn.discord:hover {
-  background: #804030;
+  background: var(--btn-primary-hover);
 }
 
 .action-btn.neo {
-  background: #EED9C4;
-  color: #2C1810;
-  box-shadow: 5px 5px 10px #cabaa8, -5px -5px 10px #ffffff;
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
+  box-shadow: 5px 5px 10px rgba(var(--shadow-base), 0.16), -5px -5px 10px var(--color-panel-bg);
 }
 
 .checkin-btn {
   width: 100%;
   height: 48px;
-  border: 2px dashed rgba(128, 64, 48, 0.3);
+  border: 2px dashed var(--color-border-hover);
   background: transparent;
-  color: #804030;
+  color: var(--color-primary);
   font-weight: 600;
   font-size: 13px;
   border-radius: 2px;
@@ -822,6 +827,6 @@ function getRoleLabel(role: string): string {
 }
 
 .checkin-btn:hover {
-  background: rgba(128, 64, 48, 0.05);
+  background: var(--color-card-bg-hover);
 }
 </style>

@@ -207,7 +207,7 @@ function complete() {
 }
 
 .setup-card {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: var(--radius-lg);
   padding: 48px;
   width: 100%;
@@ -223,7 +223,7 @@ function complete() {
 .logo {
   font-size: 24px;
   font-weight: 700;
-  color: var(--color-accent);
+  color: var(--link-color);
   margin-bottom: 8px;
 }
 
@@ -253,8 +253,8 @@ function complete() {
 }
 
 .steps span.active {
-  background: var(--color-accent);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .steps .line {
@@ -295,7 +295,7 @@ function complete() {
 }
 
 .error {
-  color: #d32f2f;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   font-size: 13px;
   margin-bottom: 12px;
 }
@@ -303,8 +303,8 @@ function complete() {
 .btn-primary {
   width: 100%;
   padding: 14px;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-accent-contrast, var(--color-primary)));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-sm);
   font-size: 15px;
@@ -365,7 +365,7 @@ function complete() {
 
 .path-option.selected {
   border-color: var(--color-accent);
-  background: #fff;
+  background: var(--color-primary-light);
 }
 
 .path-name {
@@ -388,8 +388,8 @@ function complete() {
 .btn-browse {
   width: 100%;
   padding: 14px;
-  background: var(--color-primary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-sm);
   font-size: 15px;
@@ -399,6 +399,7 @@ function complete() {
 
 .btn-browse:hover {
   opacity: 0.9;
+  background: var(--btn-primary-hover);
 }
 
 .manual-row {
@@ -408,8 +409,8 @@ function complete() {
 
 .btn-small {
   padding: 10px 16px;
-  background: var(--color-secondary);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -417,7 +418,7 @@ function complete() {
 
 .selected-hint {
   font-size: 13px;
-  color: var(--color-accent);
+  color: var(--link-color);
   margin-bottom: 16px;
 }
 

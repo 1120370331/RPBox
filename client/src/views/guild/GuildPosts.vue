@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import { listPosts, type PostWithAuthor, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
 import { getGuild, type Guild } from '@/api/guild'
 import { resolveApiUrl } from '@/api/item'
-import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -357,7 +356,7 @@ onMounted(async () => {
 }
 
 .back-btn:hover {
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .back-btn:hover i {
@@ -413,7 +412,7 @@ onMounted(async () => {
 
 .nav-btn:hover {
   border-color: var(--color-accent, #B87333);
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   background: var(--color-card-bg, #F5EFE7);
 }
 
@@ -463,7 +462,7 @@ onMounted(async () => {
 
 .category-filter button:hover {
   border-color: var(--color-accent, #B87333);
-  color: var(--color-accent, #B87333);
+  color: var(--color-primary);
 }
 
 .category-filter button.active {
@@ -493,7 +492,7 @@ onMounted(async () => {
 
 .sort-label {
   font-size: 11px;
-  color: var(--color-accent, #B87333);
+  color: var(--color-primary);
   font-family: monospace;
   font-weight: 600;
 }
@@ -508,6 +507,7 @@ onMounted(async () => {
   outline: none;
   padding: 8px 32px 8px 12px;
   border-radius: 8px;
+  color-scheme: light;
 }
 
 /* 搜索栏 */
@@ -529,7 +529,7 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--input-bg);
   border: 1px solid var(--color-border, #E5D4C1);
   border-radius: 2px 24px 2px 24px; /* leaf-shape */
   transition: all 0.3s ease;
@@ -561,7 +561,7 @@ onMounted(async () => {
 
 .post-count {
   font-size: 11px;
-  color: var(--color-accent, #B87333);
+  color: var(--color-primary);
   white-space: nowrap;
   font-weight: 600;
   font-family: monospace;
@@ -713,8 +713,8 @@ onMounted(async () => {
 .featured-tag {
   display: inline-block;
   padding: 4px 12px;
-  background: linear-gradient(135deg, var(--color-accent, #E6A23C), var(--color-secondary, #D97706));
-  color: var(--btn-primary-text, #fff);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   border-radius: 2px;
   font-size: 11px;
   font-weight: 700;
@@ -732,7 +732,7 @@ onMounted(async () => {
 }
 
 .post-card:hover .post-title {
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .post-excerpt {
@@ -757,12 +757,12 @@ onMounted(async () => {
   background: var(--color-primary-light, rgba(184, 115, 51, 0.12));
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .post-location i {
   font-size: 14px;
-  color: var(--color-accent, #B87333);
+  color: var(--color-primary);
 }
 
 .post-footer {
@@ -784,8 +784,8 @@ onMounted(async () => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-secondary, #804030));
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -809,7 +809,7 @@ onMounted(async () => {
 
 .post-time {
   font-size: 10px;
-  color: var(--color-accent, #B87333);
+  color: var(--color-primary);
 }
 
 .post-stats {
@@ -871,5 +871,9 @@ onMounted(async () => {
   font-size: 18px;
   color: var(--color-text-main, #2C1810);
   font-weight: 400;
+}
+
+[data-theme="black-gold"] .sort-select select {
+  color-scheme: dark;
 }
 </style>

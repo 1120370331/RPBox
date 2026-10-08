@@ -173,7 +173,7 @@ defineExpose({
 }
 
 .addon-update-dialog {
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 16px;
   width: 90%;
   max-width: 500px;
@@ -197,7 +197,7 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 24px;
-  border-bottom: 1px solid #E0E0E0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .header-content {
@@ -208,12 +208,12 @@ defineExpose({
 
 .header-content i {
   font-size: 28px;
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 .dialog-header h2 {
   font-size: 20px;
-  color: #3E2723;
+  color: var(--color-text-main);
   margin: 0;
 }
 
@@ -231,12 +231,12 @@ defineExpose({
 }
 
 .close-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--btn-outline-hover);
 }
 
 .close-btn i {
   font-size: 20px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .dialog-body {
@@ -250,7 +250,7 @@ defineExpose({
   gap: 20px;
   margin-bottom: 24px;
   padding: 20px;
-  background: #F5F0EB;
+  background: var(--color-card-bg);
   border-radius: 12px;
 }
 
@@ -263,7 +263,7 @@ defineExpose({
 
 .label {
   font-size: 13px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .version {
@@ -274,37 +274,37 @@ defineExpose({
 }
 
 .version.current {
-  background: #E0E0E0;
-  color: #666;
+  background: var(--btn-secondary-bg);
+  color: var(--color-text-secondary);
 }
 
 .version.latest {
-  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .arrow-icon {
   font-size: 24px;
-  color: #B87333;
+  color: var(--icon-color);
 }
 
 .changelog-section {
   margin-bottom: 20px;
   padding: 16px;
-  background: #FFF8E1;
+  background: var(--color-warning-light);
   border-radius: 8px;
-  border-left: 4px solid #FFB300;
+  border-left: 4px solid var(--color-warning-dark);
 }
 
 .changelog-section h3 {
   margin: 0 0 12px 0;
   font-size: 15px;
-  color: #F57C00;
+  color: var(--color-warning-dark);
   font-weight: 600;
 }
 
 .changelog-content {
-  color: #5D4037;
+  color: var(--color-text-main);
   font-size: 14px;
   line-height: 1.8;
   white-space: pre-wrap;
@@ -314,21 +314,21 @@ defineExpose({
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: #E3F2FD;
+  background: var(--color-primary-light);
   border-radius: 8px;
-  border-left: 4px solid #2196F3;
+  border-left: 4px solid var(--link-color);
 }
 
 .update-message i {
   font-size: 20px;
-  color: #2196F3;
+  color: var(--link-color);
   flex-shrink: 0;
   margin-top: 2px;
 }
 
 .update-message p {
   margin: 0;
-  color: #1565C0;
+  color: var(--color-text-main);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -337,22 +337,22 @@ defineExpose({
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: #FFEBEE;
+  background: color-mix(in srgb, var(--btn-danger-bg) 10%, var(--color-panel-bg));
   border-radius: 8px;
-  border-left: 4px solid #F44336;
+  border-left: 4px solid var(--btn-danger-bg);
   margin-top: 16px;
 }
 
 .error-message i {
   font-size: 20px;
-  color: #F44336;
+  color: var(--btn-danger-bg);
   flex-shrink: 0;
   margin-top: 2px;
 }
 
 .error-message p {
   margin: 0;
-  color: #C62828;
+  color: var(--color-text-main);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -372,7 +372,7 @@ defineExpose({
 
 .dialog-footer {
   padding: 20px 24px;
-  border-top: 1px solid #E0E0E0;
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -380,9 +380,9 @@ defineExpose({
 
 .btn-secondary {
   padding: 10px 20px;
-  background: #fff;
-  color: #666;
-  border: 1px solid #E0E0E0;
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
@@ -391,15 +391,15 @@ defineExpose({
 }
 
 .btn-secondary:hover {
-  background: #F5F5F5;
-  border-color: #B87333;
-  color: #B87333;
+  background: var(--btn-secondary-hover);
+  border-color: var(--color-border-hover);
+  color: var(--icon-color);
 }
 
 .btn-primary {
   padding: 10px 20px;
-  background: linear-gradient(135deg, #B87333 0%, #D4A373 100%);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 14px;

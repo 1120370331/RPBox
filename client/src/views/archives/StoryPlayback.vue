@@ -13,11 +13,13 @@ import RModal from '@/components/RModal.vue'
 import WowIcon from '@/components/WowIcon.vue'
 import CharacterCard from '@/components/CharacterCard.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
+import { useArchiveDisplayColors } from './archiveDisplayColors'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const toast = useToast()
+const { readableArchiveColor } = useArchiveDisplayColors()
 
 const loading = ref(true)
 const error = ref('')
@@ -796,12 +798,12 @@ onUnmounted(() => {
           </div>
           <div class="entry-body">
             <div v-if="entry.type !== 'image'" class="entry-speaker">
-              <span :style="entry.type !== 'narration' && getEntryColor(entry) ? { color: getEntryColor(entry) } : {}">
+              <span :style="entry.type !== 'narration' && getEntryColor(entry) ? { color: readableArchiveColor(getEntryColor(entry)) } : {}">
                 {{ getEntrySpeakerName(entry) }}
               </span>
-              <span v-if="entry.channel && entry.type !== 'narration'" class="entry-channel" :class="getChannelClass(entry.channel)">[{{ getChannelLabel(entry.channel) }}]</span>
+              <span v-if="entry.channel && entry.type !== 'narration'" class="entry-channel" :class="getChannelClass(entry.channel)" :style="getChannelTextColor(entry.channel) ? { color: readableArchiveColor(getChannelTextColor(entry.channel)) } : {}">[{{ getChannelLabel(entry.channel) }}]</span>
             </div>
-            <div v-if="entry.type !== 'image'" class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: getChannelTextColor(entry.channel) } : {}">{{ entry.content }}</div>
+            <div v-if="entry.type !== 'image'" class="entry-text" :style="getChannelTextColor(entry.channel) ? { color: readableArchiveColor(getChannelTextColor(entry.channel)) } : {}">{{ entry.content }}</div>
             <div v-else-if="parseImageEntry(entry)" class="entry-image-content">
               <div class="entry-image-wrapper" @click="openImageViewer(entry.id)" title="查看图像">
                 <img :src="parseImageEntry(entry)!.image" alt="剧情图片" class="entry-image" />
@@ -973,15 +975,16 @@ onUnmounted(() => {
 <style scoped>
 .playback-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f5f0e8 0%, #e8dfd3 100%);
+  background: var(--color-main-bg);
   padding: 40px 20px;
+  color: var(--color-text-main);
 }
 
 .loading-state,
 .error-state {
   text-align: center;
   padding: 80px 20px;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .error-state i {
@@ -1008,7 +1011,7 @@ onUnmounted(() => {
 
 .playback-header h1 {
   font-size: 32px;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin: 0 0 12px 0;
 }
 
@@ -1020,8 +1023,8 @@ onUnmounted(() => {
   padding: 0 12px;
   border: 1px solid rgba(133, 106, 82, 0.32);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
-  color: #6f5846;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1030,11 +1033,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
+  border-color: var(--btn-outline-border);
 }
 
 .story-report-button:hover {
-  background: #fff;
-  color: #b42318;
+  background: var(--color-card-bg-hover);
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
   border-color: rgba(180, 35, 24, 0.32);
 }
 
@@ -1043,13 +1047,13 @@ onUnmounted(() => {
   justify-content: center;
   gap: 20px;
   font-size: 14px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   margin-bottom: 16px;
 }
 
 .story-desc {
   font-size: 15px;
-  color: #665242;
+  color: var(--color-text-main);
   line-height: 1.6;
   margin: 0;
 }
@@ -1064,7 +1068,7 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: #fff;
+  background: var(--color-panel-bg);
   border-radius: 12px;
   margin-bottom: 12px;
   box-shadow: 0 2px 8px rgba(75, 54, 33, 0.08);
@@ -1169,20 +1173,20 @@ onUnmounted(() => {
 
 .entry-speaker {
   font-weight: 600;
-  color: #4B3621;
+  color: var(--color-text-main);
   margin-bottom: 4px;
 }
 
 .entry-type {
   font-size: 12px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-weight: normal;
   margin-left: 8px;
 }
 
 .entry-channel {
   font-size: 12px;
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-weight: normal;
   margin-left: 8px;
 }
@@ -1198,7 +1202,7 @@ onUnmounted(() => {
 
 .entry-text {
   font-size: 15px;
-  color: #665242;
+  color: var(--color-text-main);
   line-height: 1.6;
 }
 
@@ -1244,24 +1248,27 @@ onUnmounted(() => {
   border-radius: 12px;
   border: 2px solid #e5d4c1;
   display: block;
+  border-color: var(--color-border);
 }
 
 .image-description {
   font-size: 14px;
-  color: #665242;
+  color: var(--color-text-main);
   line-height: 1.6;
   margin: 0;
   padding: 8px 12px;
-  background: #f5f0eb;
+  background: var(--color-card-bg);
   border-radius: 6px;
   border-left: 3px solid #d4a373;
   overflow-wrap: anywhere;
   word-break: break-word;
+  border-left-color: var(--color-accent);
 }
 
 .entry-item.narration {
-  background: rgba(184, 115, 51, 0.08);
+  background: var(--color-card-bg);
   border-left: 3px solid #B87333;
+  border-left-color: var(--color-accent);
 }
 
 .story-report-form {
@@ -1305,7 +1312,7 @@ onUnmounted(() => {
 }
 
 .story-report-hint.error {
-  color: #b45309;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .story-report-modal-btn {
@@ -1325,8 +1332,8 @@ onUnmounted(() => {
 
 .story-report-modal-btn.primary {
   border-color: var(--color-secondary);
-  background: var(--color-secondary);
-  color: var(--btn-primary-text, #fff);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .story-report-modal-btn:disabled {
@@ -1339,7 +1346,7 @@ onUnmounted(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
+  background: var(--color-panel-bg);
   padding: 16px 24px;
   display: flex;
   align-items: center;
@@ -1355,8 +1362,8 @@ onUnmounted(() => {
   max-width: 180px;
   padding: 8px 10px;
   border-radius: 999px;
-  background: #f5f0e8;
-  color: #665242;
+  background: var(--color-card-bg);
+  color: var(--color-text-main);
   font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
@@ -1382,8 +1389,8 @@ onUnmounted(() => {
   height: 48px;
   border: none;
   border-radius: 50%;
-  background: #4B3621;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1400,12 +1407,14 @@ onUnmounted(() => {
 }
 
 .story-bgm-fab.muted {
-  background: #856a52;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
 }
 
 .story-bgm-fab.disabled {
-  background: #9b8b7d;
+  background: var(--btn-secondary-bg);
   opacity: 0.82;
+  color: var(--btn-secondary-text);
 }
 
 .story-bgm-panel {
@@ -1416,8 +1425,9 @@ onUnmounted(() => {
   padding: 12px;
   border: 1px solid #e5d4c1;
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-panel-bg);
   box-shadow: 0 12px 36px rgba(75, 54, 33, 0.22);
+  border-color: var(--color-border);
 }
 
 .story-bgm-panel-head {
@@ -1436,12 +1446,12 @@ onUnmounted(() => {
 }
 
 .story-bgm-panel-head strong {
-  color: #4B3621;
+  color: var(--color-text-main);
   font-size: 14px;
 }
 
 .story-bgm-panel-head span {
-  color: #856a52;
+  color: var(--color-text-secondary);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1460,13 +1470,13 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: #4B3621;
+  color: var(--color-text-main);
   font-size: 12px;
 }
 
 .story-bgm-volume input {
   width: 100%;
-  accent-color: #B87333;
+  accent-color: var(--switch-active);
 }
 
 .story-bgm-volume input:disabled {
@@ -1488,10 +1498,11 @@ onUnmounted(() => {
   min-height: 32px;
   border: 1px solid #e5d4c1;
   border-radius: 8px;
-  background: #f5f0e8;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   cursor: pointer;
   font-size: 12px;
+  border-color: var(--btn-outline-border);
 }
 
 .story-bgm-actions button:disabled {
@@ -1500,19 +1511,19 @@ onUnmounted(() => {
 }
 
 .story-bgm-actions button:not(:disabled):hover {
-  border-color: #B87333;
-  color: #B87333;
+  border-color: var(--color-border-hover);
+  color: var(--color-text-main);
 }
 
 .story-bgm-actions button.primary:not(:disabled) {
-  border-color: #B87333;
-  background: #B87333;
-  color: #fff;
+  border-color: var(--btn-primary-bg);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .story-bgm-actions button.danger:not(:disabled):hover {
   border-color: #dc3545;
-  color: #dc3545;
+  color: color-mix(in srgb, var(--btn-danger-bg) 40%, var(--color-text-main));
 }
 
 .story-bgm-panel-enter-active,
@@ -1531,24 +1542,25 @@ onUnmounted(() => {
   height: 44px;
   border: none;
   border-radius: 50%;
-  background: #f5f0e8;
-  color: #4B3621;
+  background: var(--color-panel-bg);
+  color: var(--btn-outline-text);
   font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-color: var(--btn-outline-border);
 }
 
 .ctrl-btn:hover {
-  background: #e8dfd3;
+  background: var(--color-card-bg-hover);
 }
 
 .ctrl-btn.play-btn {
   width: 56px;
   height: 56px;
-  background: #B87333;
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-size: 24px;
 }
 
@@ -1557,19 +1569,21 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 .speed-control select {
   padding: 6px 10px;
   border: 1px solid #d1bfa8;
   border-radius: 6px;
-  background: #fff;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  border-color: var(--input-border);
 }
 
 .progress-info {
   font-size: 14px;
-  color: #856a52;
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 640px) {

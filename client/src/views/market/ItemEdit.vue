@@ -26,7 +26,11 @@ const previewCropperOpen = ref(false)
 const previewCropperFile = ref<File | null>(null)
 const PREVIEW_IMAGE_MAX_BYTES = 20 * 1024 * 1024
 
-const form = ref<UpdateItemRequest>({
+interface ItemEditForm extends UpdateItemRequest {
+  detail_content: string
+}
+
+const form = ref<ItemEditForm>({
   name: '',
   description: '',
   detail_content: '',
@@ -672,6 +676,7 @@ function getTypeText(type: string) {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
+  color: var(--link-color);
 }
 
 .cancel-btn {
@@ -690,12 +695,12 @@ function getTypeText(type: string) {
 
 .preview-btn:hover {
   border-color: #B87333;
-  color: #B87333;
+  color: var(--link-color);
 }
 
 .draft-btn {
   background: #fff;
-  color: #B87333;
+  color: var(--link-color);
   border: 2px solid #B87333;
 }
 
@@ -1139,8 +1144,8 @@ function getTypeText(type: string) {
 .item-edit-page { color: var(--color-text-main); }
 .cancel-btn { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); }
 .preview-btn { background: var(--color-panel-bg); color: var(--btn-outline-text); border-color: var(--btn-outline-border); }
-.preview-btn:hover { border-color: var(--color-border-hover); color: var(--color-accent); }
-.draft-btn { background: var(--color-panel-bg); color: var(--color-accent); border-color: var(--color-accent); }
+.preview-btn:hover { border-color: var(--color-border-hover); color: var(--link-color); }
+.draft-btn { background: var(--color-panel-bg); color: var(--link-color); border-color: var(--color-accent); }
 .publish-btn { background: var(--btn-primary-bg); color: var(--btn-primary-text); }
 .publish-btn:hover { background: var(--btn-primary-hover); }
 .pending-notice { background: var(--color-warning-light); border-color: var(--color-warning-border); color: var(--color-warning-dark); }

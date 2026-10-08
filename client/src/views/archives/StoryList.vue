@@ -19,7 +19,7 @@ const props = defineProps<{
   initialFilter?: StoryFilterParams
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   create: []
   view: [id: number]
 }>()
@@ -434,7 +434,7 @@ defineExpose({
                 v-for="tag in getTagChips(story)"
                 :key="tag.name"
                 class="tag"
-                :style="tag.color ? { background: `#${tag.color}20`, color: `#${tag.color}` } : {}"
+                :style="tag.color ? { '--archive-tag-color': `#${tag.color}` } : {}"
               >
                 {{ tag.name }}
               </span>
@@ -488,7 +488,7 @@ defineExpose({
             v-for="tag in getTagChips(story)"
             :key="tag.name"
             class="tag"
-            :style="tag.color ? { background: `#${tag.color}20`, color: `#${tag.color}` } : {}"
+              :style="tag.color ? { '--archive-tag-color': `#${tag.color}` } : {}"
           >
             {{ tag.name }}
           </span>
@@ -729,8 +729,8 @@ defineExpose({
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
-  background: rgba(184, 115, 51, 0.1);
-  color: var(--color-accent, #B87333);
+  background: color-mix(in srgb, var(--archive-tag-color, var(--color-accent)) 12%, var(--color-panel-bg));
+  color: var(--color-text-main);
 }
 
 .story-footer {
@@ -748,8 +748,8 @@ defineExpose({
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -890,7 +890,7 @@ defineExpose({
 .card-date {
   display: inline-block;
   background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 12px;
@@ -923,8 +923,8 @@ defineExpose({
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
-  background: var(--color-primary-light, rgba(184, 115, 51, 0.1));
-  color: var(--color-accent, #B87333);
+  background: color-mix(in srgb, var(--archive-tag-color, var(--color-accent)) 12%, var(--color-panel-bg));
+  color: var(--color-text-main);
 }
 
 .card-footer {
@@ -940,7 +940,7 @@ defineExpose({
   height: 28px;
   border-radius: 50%;
   background: var(--color-accent, #D4A373);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -955,7 +955,7 @@ defineExpose({
 }
 
 .view-link {
-  color: var(--color-accent, #B87333);
+  color: var(--link-color);
   font-size: 13px;
   font-weight: 500;
   display: flex;

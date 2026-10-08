@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
+import { getGuild, leaveGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
 import { useDialog } from '@/composables/useDialog'
 import RModal from '@/components/RModal.vue'
@@ -32,6 +32,7 @@ const showLoreModal = ref(false)
 const saving = ref(false)
 const editForm = ref({
   name: '',
+  server: '',
   slogan: '',
   description: '',
   lore: '',
@@ -43,6 +44,8 @@ const editForm = ref({
   member_can_view_posts: true,
   auto_approve: false
 })
+const serverError = computed(() => Array.from(editForm.value.server.trim()).length > 128
+  ? t('common.validation.maxLength', { n: 128 }) : '')
 const bannerFile = ref<File | null>(null)
 const bannerPreview = ref('')
 const heroBannerInput = ref<HTMLInputElement | null>(null)
@@ -131,25 +134,11 @@ async function handleApply() {
   }
 }
 
-async function handleDelete() {
-  const confirmed = await confirm({
-    title: t('guild.disband.title'),
-    message: t('guild.disband.message'),
-    type: 'error'
-  })
-  if (!confirmed) return
-  try {
-    await deleteGuild(guildId)
-    router.push('/guild')
-  } catch (e: any) {
-    await alert({ title: t('guild.disband.failed'), message: e.message || t('guild.disband.failed'), type: 'error' })
-  }
-}
-
 function openSettings() {
   if (!guild.value) return
   editForm.value = {
     name: guild.value.name,
+    server: guild.value.server ?? '',
     slogan: guild.value.slogan || '',
     description: guild.value.description || '',
     lore: guild.value.lore || '',
@@ -321,7 +310,7 @@ function handleImageCropperError(error: Error) {
 }
 
 async function saveSettings() {
-  if (!guild.value) return
+  if (!guild.value || serverError.value) return
   saving.value = true
   try {
     if (avatarFile.value) {
@@ -339,6 +328,7 @@ async function saveSettings() {
     // 更新其他信息
     await updateGuild(guildId, {
       name: editForm.value.name,
+      server: editForm.value.server,
       slogan: editForm.value.slogan,
       description: editForm.value.description,
       lore: editForm.value.lore,
@@ -434,10 +424,10 @@ onMounted(loadGuild)
                     </div>
                   </div>
                   <div class="badges">
-                    <span v-if="guild.faction" class="badge faction" :class="guild.faction">
+                    <span v-if="guild.faction" class="hero-badge faction" :class="guild.faction">
                       {{ getFactionLabel(guild.faction) }}
                     </span>
-                    <span class="badge members">
+                    <span class="hero-badge members">
                       <i class="ri-user-line"></i> {{ guild.member_count }} {{ t('guild.info.members') }}
                     </span>
                   </div>
@@ -446,17 +436,17 @@ onMounted(loadGuild)
 
                   <div class="hero-actions">
                     <div v-if="!myRole" class="apply-action">
-                      <button class="btn-outline guild-join-btn" @click="handleApply">
+                      <button class="hero-outline-btn guild-join-btn" @click="handleApply">
                         {{ t('guild.action.applyJoin') }}
                       </button>
                       <span v-if="guild.auto_approve" class="auto-approve-hint">
                         <i class="ri-check-line"></i> {{ t('guild.detail.autoApprove') }}
                       </span>
                     </div>
-                    <button v-else-if="myRole !== 'owner'" class="btn-outline guild-leave-btn" @click="handleLeave">
+                    <button v-else-if="myRole !== 'owner'" class="hero-outline-btn guild-leave-btn" @click="handleLeave">
                       {{ t('guild.action.leave') }}
                     </button>
-                    <button v-if="isAdmin" class="btn-outline" @click="triggerBannerUpload">
+                    <button v-if="isAdmin" class="hero-outline-btn" @click="triggerBannerUpload">
                       <i class="ri-image-edit-line"></i> {{ t('guild.action.changeBanner') }}
                     </button>
                   </div>
@@ -496,6 +486,10 @@ onMounted(loadGuild)
                 <span class="tag">INFO</span>
               </div>
               <ul class="info-list">
+                <li>
+                  <span class="label">{{ t('guild.info.server') }}</span>
+                  <span class="value guild-server">{{ guild.server ?? '' }}</span>
+                </li>
                 <li v-if="isAdmin">
                   <span class="label">{{ t('guild.info.inviteCode') }}</span>
                   <span class="value code">{{ guild.invite_code }}</span>
@@ -537,7 +531,7 @@ onMounted(loadGuild)
               </div>
               <div class="member-list">
                 <div v-for="m in members" :key="m.id" class="member-item">
-                  <div class="avatar">
+                  <div class="member-fallback-avatar">
                     <img v-if="m.avatar" :src="m.avatar" alt="" loading="lazy" />
                     <span v-else>{{ m.username?.charAt(0) || '?' }}</span>
                   </div>
@@ -619,6 +613,11 @@ onMounted(loadGuild)
         <div class="form-section">
           <label>{{ t('guild.settings.slogan') }}</label>
           <RInput v-model="editForm.slogan" :placeholder="t('guild.settings.sloganPlaceholder')" />
+        </div>
+
+        <div class="form-section">
+          <label>{{ t('guild.create.server') }}</label>
+          <RInput v-model="editForm.server" :placeholder="t('guild.create.serverPlaceholder')" :error="serverError" clearable />
         </div>
 
         <div class="form-section">
@@ -767,7 +766,7 @@ onMounted(loadGuild)
 }
 
 .breadcrumb .sep {
-  color: var(--color-accent, #D4A373);
+  color: var(--color-primary);
 }
 
 .breadcrumb .current {
@@ -797,7 +796,7 @@ onMounted(loadGuild)
 
 .icon-btn:hover {
   background: color-mix(in srgb, var(--color-card-bg, #f5f0eb) 70%, transparent);
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .primary-btn {
@@ -805,8 +804,8 @@ onMounted(loadGuild)
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--color-secondary, #804030);
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: 8px;
   font-size: 14px;
@@ -816,7 +815,7 @@ onMounted(loadGuild)
 }
 
 .primary-btn:hover {
-  background: var(--color-secondary-hover, #6B3626);
+  background: var(--btn-primary-hover);
 }
 
 .manage-btn {
@@ -827,8 +826,8 @@ onMounted(loadGuild)
   position: absolute;
   top: -6px;
   right: -6px;
-  background: #FF9800;
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: var(--badge-bg);
+  color: var(--btn-primary-text);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
@@ -938,29 +937,29 @@ onMounted(loadGuild)
   margin-bottom: 12px;
 }
 
-.badge {
+.hero-badge {
   padding: 4px 12px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
 }
 
-.badge.faction {
+.hero-badge.faction {
   background: #D4A373;
   color: #4B3621;
 }
 
-.badge.faction.alliance {
-  background: #3b82f6;
+.hero-badge.faction.alliance {
+  background: #1e5aa8;
   color: #fff;
 }
 
-.badge.faction.horde {
+.hero-badge.faction.horde {
   background: #dc2626;
   color: #fff;
 }
 
-.badge.members {
+.hero-badge.members {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
   display: flex;
@@ -1011,7 +1010,7 @@ onMounted(loadGuild)
   font-size: 14px;
 }
 
-.btn-outline {
+.hero-outline-btn {
   padding: 10px 20px;
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.4);
@@ -1023,7 +1022,7 @@ onMounted(loadGuild)
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.btn-outline:hover {
+.hero-outline-btn:hover {
   background: rgba(0, 0, 0, 0.65);
 }
 
@@ -1081,7 +1080,7 @@ onMounted(loadGuild)
 .announcement-card .tag {
   font-size: 10px;
   font-weight: 700;
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   background: var(--color-primary-light, rgba(128, 64, 48, 0.1));
   padding: 4px 8px;
   border-radius: 4px;
@@ -1117,7 +1116,7 @@ onMounted(loadGuild)
 }
 
 .info-list .value.role {
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 /* Bento Grid */
@@ -1142,7 +1141,7 @@ onMounted(loadGuild)
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   font-size: 20px;
   margin-bottom: 16px;
 }
@@ -1262,12 +1261,12 @@ onMounted(loadGuild)
   gap: 12px;
 }
 
-.member-item .avatar {
+.member-item .member-fallback-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-accent, #B87333), var(--color-primary, #4B3621));
-  color: var(--btn-primary-text, var(--color-text-light, #fff));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: var(--gradient-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1276,7 +1275,7 @@ onMounted(loadGuild)
   overflow: hidden;
 }
 
-.member-item .avatar img {
+.member-item .member-fallback-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1298,11 +1297,11 @@ onMounted(loadGuild)
 }
 
 .member-item .role.owner {
-  color: var(--color-accent, #D4A373);
+  color: var(--color-primary);
 }
 
 .member-item .role.admin {
-  color: #3b82f6;
+  color: var(--color-primary);
 }
 
 /* Actions Card */
@@ -1335,7 +1334,7 @@ onMounted(loadGuild)
 
 .action-btn i {
   font-size: 24px;
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .action-btn span {
@@ -1364,37 +1363,42 @@ onMounted(loadGuild)
 
 .form-section textarea {
   padding: 12px;
-  border: 1px solid var(--color-border, #E8DCCF);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 14px;
   resize: vertical;
   font-family: inherit;
+  background: var(--input-bg);
+  color: var(--color-text-main);
 }
 
 .form-section textarea:focus {
   outline: none;
-  border-color: var(--color-secondary, #804030);
+  border-color: var(--input-focus);
 }
 
 .form-section select {
   padding: 12px;
-  border: 1px solid var(--color-border, #E8DCCF);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 14px;
-  background: var(--color-panel-bg, #fff);
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  color-scheme: light;
 }
 
 .form-section select:focus {
   outline: none;
-  border-color: var(--color-secondary, #804030);
+  border-color: var(--input-focus);
 }
 
 .form-section input[type="color"] {
   width: 60px;
   height: 36px;
-  border: 1px solid var(--color-border, #E8DCCF);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   cursor: pointer;
+  background: var(--input-bg);
 }
 
 .form-row {
@@ -1490,7 +1494,7 @@ onMounted(loadGuild)
 .avatar-upload .upload-hint {
   opacity: 1;
   background: var(--color-primary-light, rgba(128, 64, 48, 0.08));
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
 }
 
 .avatar-upload img + .upload-hint {
@@ -1551,7 +1555,7 @@ onMounted(loadGuild)
 }
 
 .article-content :deep(a) {
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   text-decoration: underline;
 }
 
@@ -1635,7 +1639,7 @@ onMounted(loadGuild)
 .toggle-group-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-secondary, #804030);
+  color: var(--color-primary);
   margin-bottom: 4px;
 }
 
@@ -1669,7 +1673,7 @@ onMounted(loadGuild)
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--color-border, #E8DCCF);
+  background-color: var(--switch-inactive);
   transition: 0.3s;
   border-radius: 26px;
 }
@@ -1688,10 +1692,18 @@ onMounted(loadGuild)
 }
 
 input:checked + .slider {
-  background-color: var(--color-secondary, #804030);
+  background-color: var(--switch-active);
 }
 
 input:checked + .slider:before {
   transform: translateX(22px);
+}
+
+[data-theme="black-gold"] .form-section select {
+  color-scheme: dark;
+}
+
+.form-section textarea::placeholder {
+  color: var(--input-placeholder);
 }
 </style>

@@ -32,6 +32,7 @@ const card: CharacterCard = {
   residence: '',
   relationship_status: '',
   icon: '',
+  class_color: '',
   name_color: '',
   summary: '常年巡守灰港以北的林地。',
   background_story: '',
