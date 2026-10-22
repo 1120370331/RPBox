@@ -6,6 +6,7 @@ import { useNotificationStore } from '../stores/notification'
 import { useSidebarBadgesStore } from '../stores/sidebarBadges'
 import { useRouter, useRoute } from 'vue-router'
 import UserLevelBadge from './UserLevelBadge.vue'
+import AppNavigation from './AppNavigation.vue'
 import RPDBJumpPreview from './rpdb/RPDBJumpPreview.vue'
 import CharacterCardJumpPreview from './character-cards/CharacterCardJumpPreview.vue'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -214,6 +215,7 @@ function handleReturnToPost() {
 const menuItems = computed(() => [
   { id: 'home', icon: 'ri-home-4-line', label: t('nav.menu.home'), route: '/' },
   { id: 'warcraft', icon: 'ri-gamepad-line', label: t('nav.menu.warcraft'), route: '/warcraft' },
+  { id: 'toolbox', icon: 'ri-tools-line', label: t('nav.menu.toolbox'), route: '/tools' },
   { id: 'market', icon: 'ri-sword-line', label: t('nav.menu.market'), route: '/market' },
   { id: 'rpdb', icon: 'ri-archive-drawer-line', label: t('nav.menu.rpdb'), route: '/rpdb' },
   { id: 'community', icon: 'ri-chat-smile-2-line', label: t('nav.menu.community'), route: '/community' },
@@ -232,6 +234,7 @@ const moderatorMenuItem = computed(() => {
 const lastMainMenu = ref<string>('home')
 
 function resolveMenu(path: string): string | null {
+  if (path.startsWith('/tools')) return 'toolbox'
   if (path.startsWith('/warcraft') || path.startsWith('/sync') || path.startsWith('/archives')) return 'warcraft'
   if (path.startsWith('/market')) return 'market'
   if (path.startsWith('/rpdb')) return 'rpdb'
@@ -499,6 +502,7 @@ onBeforeUnmount(() => {
 
     <!-- 主内容区 -->
     <main ref="mainContentRef" class="main-content" @scroll.passive="handleMainContentScroll">
+      <AppNavigation />
       <div v-if="jumpReturn?.type === 'post'" class="jump-return-bar">
         <button class="jump-return-btn" type="button" @click="handleReturnToPost">
           <i class="ri-arrow-left-line"></i>

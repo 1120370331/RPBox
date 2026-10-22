@@ -295,6 +295,19 @@ func buildTRP3ProfileFromCharacterCard(card model.CharacterCard, impressions []m
 	misc["PE"] = pe
 	misc["v"] = nextCharacterCardTRP3Version(misc["v"])
 	player["misc"] = misc
+	if card.TRP3AboutJSON != "" {
+		var about map[string]interface{}
+		if err := json.Unmarshal([]byte(card.TRP3AboutJSON), &about); err != nil {
+			return nil, fmt.Errorf("人物卡关于模板无效: %w", err)
+		}
+		existingAbout, _ := player["about"].(map[string]interface{})
+		if existingAbout != nil {
+			about["v"] = nextCharacterCardTRP3Version(existingAbout["v"])
+		} else {
+			about["v"] = nextCharacterCardTRP3Version(nil)
+		}
+		player["about"] = about
+	}
 	profile["player"] = player
 	return profile, nil
 }

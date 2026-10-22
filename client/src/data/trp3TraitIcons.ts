@@ -1,0 +1,47 @@
+// Icon pairs follow Total RP 3 InterfaceIcons.lua (Apache-2.0; see public/licenses).
+export const trp3TraitIcons: [string, string][] = [
+  [
+    "ability_rogue_wrongfullyaccused",
+    "ability_paladin_sanctifiedwrath"
+  ],
+  [
+    "inv_belt_27",
+    "spell_shadow_summonsuccubus"
+  ],
+  [
+    "inv_rosebouquet01",
+    "ability_hunter_snipershot"
+  ],
+  [
+    "inv_misc_gift_02",
+    "inv_misc_coin_02"
+  ],
+  [
+    "inv_misc_toy_07",
+    "ability_rogue_disguise"
+  ],
+  [
+    "inv_valentinescandysack",
+    "ability_warrior_trauma"
+  ],
+  [
+    "spell_holy_holyguidance",
+    "inv_gizmo_02"
+  ],
+  [
+    "ability_rogue_honoramongstthieves",
+    "inv_misc_groupneedmore"
+  ],
+  [
+    "spell_shadow_brainwash",
+    "achievement_bg_captureflag_eos"
+  ],
+  [
+    "inv_misc_food_pinenut",
+    "inv_misc_food_99"
+  ],
+  [
+    "ability_paladin_beaconoflight",
+    "ability_druid_cower"
+  ]
+]

@@ -34,6 +34,7 @@ import LocalTRP3VersionHistory from '@/components/sync/LocalTRP3VersionHistory.v
 import PostQuickJump from '@/components/PostQuickJump.vue'
 import RModal from '@/components/RModal.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
+import TRP3AboutPreview from '@/components/tools/TRP3AboutPreview.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
@@ -1286,7 +1287,11 @@ async function goBack() {
               <div><span>{{ t('characterCards.editor.backgroundKicker') }}</span><h2>{{ t('characterCards.editor.backgroundTitle') }}</h2></div>
               <p>{{ t('characterCards.editor.backgroundBody') }}</p>
             </header>
-            <TiptapEditor ref="backgroundEditor" v-model="form.background_story" :placeholder="t('characterCards.editor.backgroundPlaceholder')">
+            <template v-if="card?.trp3_about">
+              <p><RouterLink :to="`/tools/trp3/${card.id}`">此档案使用 TRP3 原生模板，前往在线人物卡编辑器修改</RouterLink></p>
+              <TRP3AboutPreview :about="card.trp3_about" />
+            </template>
+            <TiptapEditor v-else ref="backgroundEditor" v-model="form.background_story" :placeholder="t('characterCards.editor.backgroundPlaceholder')">
               <template #toolbar>
                 <button type="button" class="internal-link-button" :title="t('characterCards.editor.insertInternal')" @mousedown.prevent @click="openQuickJump('background')">
                   <i class="ri-links-line"></i><span>{{ t('characterCards.editor.internalLink') }}</span>

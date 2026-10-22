@@ -49,6 +49,7 @@ type characterCardSnapshotCard struct {
 	NameColor              string `json:"name_color"`
 	TRP3AdditionalInfoJSON string `json:"trp3_additional_info_json"`
 	TRP3PersonalityJSON    string `json:"trp3_personality_json"`
+	TRP3AboutJSON          string `json:"trp3_about_json,omitempty"`
 
 	Summary         string `json:"summary"`
 	BackgroundStory string `json:"background_story"`
@@ -109,7 +110,8 @@ func characterCardSnapshotFromModels(card model.CharacterCard, impressions []mod
 			Residence: card.Residence, RelationshipStatus: card.RelationshipStatus,
 			Icon: card.Icon, ClassColor: color, NameColor: color,
 			TRP3AdditionalInfoJSON: card.TRP3AdditionalInfoJSON, TRP3PersonalityJSON: card.TRP3PersonalityJSON,
-			Summary: card.Summary, BackgroundStory: card.BackgroundStory,
+			TRP3AboutJSON: card.TRP3AboutJSON,
+			Summary:       card.Summary, BackgroundStory: card.BackgroundStory,
 			FirstImpression: card.FirstImpression, OtherContent: card.OtherContent,
 			PortraitImage: card.PortraitImage, PortraitImageUpdatedAt: card.PortraitImageUpdatedAt,
 			SortOrder: card.SortOrder, CreatedAt: card.CreatedAt, UpdatedAt: card.UpdatedAt,
@@ -150,7 +152,8 @@ func (snapshot characterCardSnapshot) models() (model.CharacterCard, []model.Cha
 		Residence: data.Residence, RelationshipStatus: data.RelationshipStatus,
 		Icon: data.Icon, ClassColor: data.ClassColor, NameColor: data.NameColor,
 		TRP3AdditionalInfoJSON: data.TRP3AdditionalInfoJSON, TRP3PersonalityJSON: data.TRP3PersonalityJSON,
-		Summary: data.Summary, BackgroundStory: data.BackgroundStory,
+		TRP3AboutJSON: data.TRP3AboutJSON,
+		Summary:       data.Summary, BackgroundStory: data.BackgroundStory,
 		FirstImpression: data.FirstImpression, OtherContent: data.OtherContent,
 		PortraitImage: data.PortraitImage, PortraitImageUpdatedAt: data.PortraitImageUpdatedAt,
 		Status: model.CharacterCardStatusPublished, Visibility: model.CharacterCardVisibilityPublic,

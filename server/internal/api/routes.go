@@ -102,6 +102,8 @@ func (s *Server) setupRoutes() {
 		auth := v1.Group("")
 		auth.Use(middleware.JWTAuth())
 		{
+			auth.GET("/home/featured", s.getHomeFeatured)
+			auth.GET("/home/recommendations", s.getHomeRecommendations)
 			auth.GET("/profiles", s.listProfiles)
 			auth.POST("/profiles", s.createProfile)
 			auth.GET("/profiles/:id", s.getProfile)

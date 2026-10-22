@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { signInDaily } from '@/api/user'
+import { getHomeFeatured, getHomeRecommendations, homeContentKey, type HomeContent } from '@/api/home'
+import HomeContentRow from '@/components/HomeContentRow.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -12,17 +14,79 @@ const mounted = ref(false)
 const userStore = useUserStore()
 const toast = useToastStore()
 const signingIn = ref(false)
+const featured = ref<HomeContent[]>([])
+const recommendations = ref<HomeContent[]>([])
+const featuredLoading = ref(false)
+const recommendationsLoading = ref(false)
+const featuredError = ref('')
+const recommendationsError = ref('')
+const hasMoreRecommendations = ref(false)
+let servedKeys: string[] = []
+let feedGeneration = 0
+
+watch([() => userStore.token, () => userStore.user?.id], () => {
+  feedGeneration++
+  featured.value = []
+  recommendations.value = []
+  servedKeys = []
+  featuredError.value = ''
+  recommendationsError.value = ''
+  featuredLoading.value = false
+  recommendationsLoading.value = false
+  hasMoreRecommendations.value = false
+  if (!userStore.token) return
+  void loadFeatured()
+  void loadRecommendations()
+}, { immediate: true })
+
+onBeforeUnmount(() => { feedGeneration++ })
+
+async function loadFeatured() {
+  if (featuredLoading.value) return
+  const generation = feedGeneration
+  featuredLoading.value = true
+  featuredError.value = ''
+  try {
+    const response = await getHomeFeatured()
+    if (generation === feedGeneration) featured.value = response.entries
+  } catch {
+    if (generation === feedGeneration) featuredError.value = t('home.feed.loadFailed')
+  } finally {
+    if (generation === feedGeneration) featuredLoading.value = false
+  }
+}
+
+async function loadRecommendations(refresh = false) {
+  if (recommendationsLoading.value) return
+  const generation = feedGeneration
+  recommendationsLoading.value = true
+  recommendationsError.value = ''
+  try {
+    let response = await getHomeRecommendations(refresh ? servedKeys : [])
+    if (generation !== feedGeneration) return
+    if (refresh && response.entries.length === 0 && response.has_more) {
+      response = await getHomeRecommendations(recommendations.value.map(homeContentKey))
+      if (generation !== feedGeneration) return
+      servedKeys = recommendations.value.map(homeContentKey)
+    }
+    if (refresh && response.entries.length === 0 && recommendations.value.length > 0) {
+      toast.info(t('home.feed.noMore'))
+      hasMoreRecommendations.value = false
+      return
+    }
+    recommendations.value = response.entries
+    hasMoreRecommendations.value = response.has_more
+    servedKeys = [...new Set([...servedKeys, ...response.entries.map(homeContentKey)])].slice(-36)
+  } catch {
+    if (generation === feedGeneration) recommendationsError.value = t('home.feed.loadFailed')
+  } finally {
+    if (generation === feedGeneration) recommendationsLoading.value = false
+  }
+}
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
 })
-
-const quickActions = computed(() => [
-  { icon: 'ri-user-star-line', label: t('nav.menu.sync'), desc: t('home.quickActions.syncDesc'), route: '/sync' },
-  { icon: 'ri-book-open-line', label: t('nav.menu.archives'), desc: t('home.quickActions.archivesDesc'), route: '/archives' },
-  { icon: 'ri-sword-line', label: t('nav.menu.market'), desc: t('home.quickActions.marketDesc'), route: '/market' },
-  { icon: 'ri-settings-3-line', label: t('nav.menu.settings'), desc: t('home.quickActions.settingsDesc'), route: '/settings' },
-])
 
 const signInHint = computed(() => (
   userStore.user?.signed_in_today
@@ -96,24 +160,8 @@ async function handleDailySignIn() {
       </button>
     </section>
 
-    <!-- 快捷入口 -->
-    <div class="quick-grid anim-item" style="--delay: 2">
-      <div
-        v-for="action in quickActions"
-        :key="action.route"
-        class="quick-card"
-        @click="router.push(action.route)"
-      >
-        <div class="card-icon">
-          <i :class="action.icon"></i>
-        </div>
-        <div class="card-info">
-          <span class="card-label">{{ action.label }}</span>
-          <span class="card-desc">{{ action.desc }}</span>
-        </div>
-        <i class="ri-arrow-right-s-line card-arrow"></i>
-      </div>
-    </div>
+    <HomeContentRow featured :entries="featured" :loading="featuredLoading" :error="featuredError" @retry="loadFeatured" />
+    <HomeContentRow :entries="recommendations" :loading="recommendationsLoading" :error="recommendationsError" :has-more="hasMoreRecommendations" @refresh="loadRecommendations(true)" @retry="loadRecommendations(false)" />
 
   </div>
 </template>
@@ -274,73 +322,8 @@ async function handleDailySignIn() {
   background: linear-gradient(135deg, #5b8c5a 0%, #437347 100%);
 }
 
-/* 快捷入口 */
-.quick-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
 @media (max-width: 900px) {
-  .sign-in-panel {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-.quick-card {
-  background: var(--color-panel-bg, #FFFFFF);
-  border-radius: 16px;
-  padding: 20px 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: var(--shadow-md, 0 4px 20px rgba(75, 54, 33, 0.05));
-}
-
-.quick-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg, 0 8px 30px rgba(75, 54, 33, 0.1));
-}
-
-.card-icon {
-  width: 48px;
-  height: 48px;
-  background: var(--btn-secondary-bg, rgba(128, 64, 48, 0.1));
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.card-icon i {
-  font-size: 24px;
-  color: var(--color-secondary, #804030);
-}
-
-.card-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.card-label {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--color-text-main, #2C1810);
-}
-
-.card-desc {
-  font-size: 13px;
-  color: var(--color-text-secondary, #8C7B70);
-}
-
-.card-arrow {
-  font-size: 20px;
-  color: var(--color-accent, #D4A373);
+  .sign-in-panel { flex-direction: column; align-items: stretch; }
 }
 
 .anim-item {
@@ -355,5 +338,9 @@ async function handleDailySignIn() {
 
 @keyframes fadeUp {
   to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-item { opacity: 1; transform: none; }
+  .animate-in .anim-item { animation: none; }
 }
 </style>

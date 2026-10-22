@@ -36,7 +36,7 @@ const config: UserConfig & { test: TestUserConfig } = {
       },
     },
   },
-  envPrefix: ['VITE_', 'TAURI_'],
+  envPrefix: ['VITE_'],
   test: {
     globals: true,
     environment: 'happy-dom',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { open as openExternal } from '@tauri-apps/plugin-shell'
@@ -89,6 +89,8 @@ interface NativeAddonInstallProgress {
 }
 
 const router = useRouter()
+const currentRoute = useRoute()
+defineProps<{ pageTitle?: string }>()
 const toast = useToastStore()
 let progressUnlisten: UnlistenFn | null = null
 
@@ -430,7 +432,7 @@ function clearWowPath() {
 }
 
 function goToSetup() {
-  router.push({ path: '/sync/setup', query: { redirect: '/warcraft' } })
+  router.push({ path: '/sync/setup', query: { redirect: currentRoute.fullPath } })
 }
 
 function goToFeature(route: string) {
@@ -714,7 +716,7 @@ async function openAddonFolder() {
 
 <template>
   <div class="warcraft-page" :class="{ 'animate-in': mounted }">
-    <h1 class="page-title anim-item" style="--delay: 0">魔兽功能</h1>
+    <h1 class="page-title anim-item" style="--delay: 0">{{ pageTitle || '魔兽功能' }}</h1>
 
     <section class="directory-row anim-item" style="--delay: 1">
       <div class="row-heading">

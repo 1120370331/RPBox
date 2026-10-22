@@ -4,6 +4,17 @@ export default {
   slogan: '艾泽拉斯的故事，由你书写',
   help: '帮助',
   thanks: '特别鸣谢',
+  feed: {
+    featured: '今日精选', recommended: '为您推荐',
+    featuredHint: '近七天浏览、点赞与收藏综合人气前三',
+    recommendedHint: '从你近期浏览、点赞和收藏的内容中发现更多',
+    refresh: '换一批', retry: '重新加载', loading: '正在加载内容',
+    empty: '还没有可展示的公开内容，去社区看看吧。',
+    loadFailed: '内容加载失败，请重试。', noMore: '暂时没有更多推荐内容',
+    rank: '七日人气第 {rank} 名', weeklyScore: '七日人气 {score}',
+    interestReason: '与你的兴趣相近', popularReason: '近期热门内容',
+    kinds: { post: '社区帖子', rpdb: 'RP 数据库', item: '创意市场' },
+  },
   quickActions: {
     syncDesc: '管理你的RP角色',
     archivesDesc: '记录精彩故事',

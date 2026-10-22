@@ -4,7 +4,10 @@ import { useUserStore } from './stores/user'
 
 const router = createRouter({
   history: createWebHistory(),
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, from, savedPosition) {
+    if (!savedPosition && to.name === 'tool-trp3' && from.name === 'tool-trp3' && window.history.state?.keepToolEditorScroll) {
+      return false
+    }
     if (savedPosition) {
       requestAnimationFrame(() => {
         const mainContent = document.querySelector<HTMLElement>('.main-content')
@@ -42,6 +45,10 @@ const router = createRouter({
       children: [
         { path: '', name: 'home', component: () => import('./views/Home.vue') },
         { path: 'warcraft', name: 'warcraft', component: () => import('./views/WarcraftFeatures.vue') },
+        { path: 'tools', name: 'toolbox', component: () => import('./views/tools/Toolbox.vue') },
+        { path: 'tools/rpbox', name: 'tool-rpbox', component: () => import('./views/tools/RPBoxTool.vue') },
+        { path: 'tools/rpbox/install', name: 'tool-rpbox-install', component: () => import('./views/WarcraftFeatures.vue'), props: { pageTitle: 'RPBox · 插件安装' } },
+        { path: 'tools/trp3/:id?', name: 'tool-trp3', component: () => import('./views/tools/TRP3Editor.vue') },
         { path: 'sync', name: 'sync', component: () => import('./views/sync/SyncMain.vue') },
         { path: 'sync/setup', name: 'sync-setup', component: () => import('./views/sync/SetupWizard.vue') },
         { path: 'sync/profile/:id', name: 'profile-detail', component: () => import('./views/sync/ProfileDetail.vue') },

@@ -4,6 +4,7 @@ export default {
     sync: 'Profile Backup',
     archives: 'Story Archives',
     warcraft: 'Warcraft Tools',
+    toolbox: 'Toolbox',
     market: 'Creative Market',
     rpdb: 'RP Database',
     community: 'Community',
