@@ -193,21 +193,18 @@ func TestRPDBModerationApprovesTitleOnlyRevision(t *testing.T) {
 		t.Fatalf("create reference: %v", err)
 	}
 
-	authorToken := newTestToken(t, author)
-	updateResp := performRequest(
-		server.router,
-		http.MethodPut,
-		"/api/v1/rpdb/works/"+strconv.FormatUint(uint64(work.ID), 10),
-		map[string]interface{}{"title": "修订后的标题", "change_summary": "修正标题"},
-		authorToken,
-	)
-	if updateResp.Code != http.StatusAccepted {
-		t.Fatalf("expected revision creation 202, got %d body=%s", updateResp.Code, updateResp.Body.String())
+	// Moderation consumes pending revisions; published works are edited through
+	// linked drafts rather than the retired direct-update authoring endpoint.
+	revision := model.RPDBRevision{
+		WorkID:        work.ID,
+		ProposerID:    author.ID,
+		BaseVersion:   work.Version,
+		Payload:       `{"title":"修订后的标题"}`,
+		ChangeSummary: "修正标题",
+		Status:        model.RPDBReviewPending,
 	}
-
-	var revision model.RPDBRevision
-	if err := database.DB.Where("work_id = ?", work.ID).First(&revision).Error; err != nil {
-		t.Fatalf("load revision: %v", err)
+	if err := database.DB.Create(&revision).Error; err != nil {
+		t.Fatalf("create pending title revision: %v", err)
 	}
 	reviewResp := performRequest(
 		server.router,
