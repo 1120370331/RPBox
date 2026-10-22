@@ -1,6 +1,25 @@
 export default {
   title: 'Settings',
   back: 'Back',
+  tabs: {
+    general: 'General Settings',
+    account: 'Account Settings',
+  },
+  deleteAccount: {
+    title: 'Delete Account',
+    description: 'Permanently delete your account and cloud data. All your posts will become unavailable. This cannot be undone.',
+    message: 'Deletion removes cloud backups, stories, posts, items and related personal data. Approved, published and public RP Database knowledge works remain anonymized under the Privacy Policy.',
+    confirmMessage: 'Permanently delete this account? All posts will be deleted and their detail links will stop working. Your personal cloud data cannot be recovered.',
+    passwordLabel: 'Current password',
+    passwordPlaceholder: 'Enter your current password',
+    passwordRequired: 'Please enter your current password',
+    continue: 'Continue',
+    confirm: 'Permanently Delete Account',
+    cancel: 'Cancel',
+    deleting: 'Deleting...',
+    success: 'Account deleted',
+    failed: 'Failed to delete account',
+  },
   sections: {
     account: 'Account',
     appearance: 'Appearance',
@@ -119,6 +138,11 @@ export default {
     removeFailed: 'Failed to unblock user',
   },
   addon: {
+    autoUpdate: 'Automatic addon updates',
+    autoUpdateDesc: 'Automatically update installed RPBox, TRP3, Extended and Musician addons in the selected game directory when a newer version is detected.',
+    autoUpdateSuccess: '{name} automatically updated to v{version}',
+    autoUpdateFailed: 'Could not automatically update {name}. Retry later or update manually.',
+    busy: 'This addon is busy. Please try again later.',
     title: 'Addon Manager',
     description: 'Manage RPBox Addon plugin version',
     installed: 'Installed',

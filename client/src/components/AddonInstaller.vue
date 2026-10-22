@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonLatest, getAddonDownloadUrl } from '@/api/addon'
+import { runAddonOperation } from '@/services/addonAutoUpdate'
 import RModal from './RModal.vue'
 import RButton from './RButton.vue'
 import RSelect from './RSelect.vue'
@@ -76,11 +77,11 @@ async function installAddon() {
     const arrayBuffer = await response.arrayBuffer()
     const zipData = Array.from(new Uint8Array(arrayBuffer))
 
-    await invoke('install_addon', {
+    await runAddonOperation({ wowPath: props.wowPath, flavor: selectedFlavor.value }, 'rpbox', 'install', () => invoke('install_addon', {
       wowPath: props.wowPath,
       flavor: selectedFlavor.value,
       zipData,
-    })
+    }))
 
     await checkInstalled()
     emit('installed')

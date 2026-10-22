@@ -53,6 +53,7 @@ export default {
     blankTitle: 'Create an RPBox card from scratch', blankBody: 'Start an independent character archive without TRP3.', blankSheetTitle: 'A clean record page', blankSheetBody: 'For original characters, profiles that do not use TRP3, or settings you want to maintain separately from in-game data.', blankFeaturePortrait: 'Independent artwork and summary', blankFeatureTabs: 'Save all four sections together', blankFeaturePrivate: 'Private draft by default', createBlank: 'Create from scratch',
   },
   wall: {
+    previous: 'Previous character cards', next: 'Next character cards', pagination: 'Character card pages', page: 'Character cards page {page}',
     loadFailed: 'Could not load the character wall', noIdentity: 'Identity not recorded', kicker: 'Adventurer archive', title: 'Character wall', ownDescription: 'Organize your characters and choose which records the community can see.', visitorDescription: 'Public character records displayed by this adventurer.', create: 'New character card', errorTitle: 'Could not open the character wall', emptyKicker: 'The archive shelf is empty', emptyTitle: 'Create a formal record for your first character', emptyBody: 'Bring in basic identity from an existing TRP3 cloud backup or begin with a blank character card.', viewAria: 'View character card: {name}', portraitPending: 'Portrait not archived', summaryEmpty: 'This character record has no summary yet.', readFull: 'Read full record', addTitle: 'Register a new character', addBody: 'Start from a backup or blank record',
   },
   detail: {

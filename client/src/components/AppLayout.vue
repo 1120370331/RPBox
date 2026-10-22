@@ -12,6 +12,7 @@ import { buildNameStyle } from '@/utils/userNameStyle'
 import { handleJumpLinkClick, handleJumpLinkKeydown, getJumpReturn, clearJumpReturn, type JumpReturnInfo } from '@/utils/jumpLink'
 import { getUserInfo } from '@/api/user'
 import { getModeratorStats } from '@/api/moderator'
+import { addonAutoUpdateEnabled } from '@/services/addonAutoUpdate'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -62,6 +63,7 @@ function startSidebarBadgeRefresh() {
   stopSidebarBadgeRefresh()
   sidebarBadgeRefreshTimer = setInterval(() => {
     if (userStore.token) void sidebarBadgesStore.refreshContent()
+    if (userStore.token && addonAutoUpdateEnabled.value) void sidebarBadgesStore.refreshAddonUpdates()
   }, 2 * 60 * 1000)
 }
 
@@ -96,6 +98,10 @@ watch(() => userStore.token, (token) => {
 
 watch(() => userStore.user?.id, (id) => {
   if (userStore.token && id) void sidebarBadgesStore.initialize(id)
+})
+
+watch(addonAutoUpdateEnabled, (enabled) => {
+  if (enabled && userStore.token) void sidebarBadgesStore.refreshAddonUpdates()
 })
 
 watch(() => userStore.isModerator, (isModerator) => {

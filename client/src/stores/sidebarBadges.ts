@@ -6,6 +6,7 @@ import { listItems } from '@/api/item'
 import { listEvents, listPosts } from '@/api/post'
 import { listRPDBWorks } from '@/api/rpdb'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
+import { autoUpdateAddons, type AddonUpdateCandidate } from '@/services/addonAutoUpdate'
 
 export type SidebarContentBadge = 'community' | 'events' | 'market' | 'rpdb'
 export type SidebarMenuBadge = SidebarContentBadge | 'warcraft' | 'settings'
@@ -170,6 +171,7 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
       ])
 
       const updates: string[] = []
+      const candidates: AddonUpdateCandidate[] = []
       if (trp3Local.status === 'fulfilled' && trp3Latest.status === 'fulfilled') {
         const latestById = new Map(trp3Latest.value.addons.map(addon => [addon.id, addon]))
         for (const addon of trp3Local.value.addons || []) {
@@ -178,6 +180,7 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
           const latestVersion = latest?.latestVersion?.trim() || ''
           if (addon.installed && localVersion && latestVersion && isAddonVersionNewer(latestVersion, localVersion)) {
             updates.push(`${addon.id}:${localVersion}>${latestVersion}`)
+            candidates.push({ id: addon.id, installed: true, currentVersion: localVersion, latestVersion, downloadUrl: latest?.downloadUrl })
           }
         }
       }
@@ -187,10 +190,13 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
         const latestVersion = rpboxLatest.value.version?.trim() || ''
         if (rpboxLocal.value.installed && localVersion && latestVersion && isAddonVersionNewer(latestVersion, localVersion)) {
           updates.push(`rpbox:${localVersion}>${latestVersion}`)
+          candidates.push({ id: 'rpbox', installed: true, currentVersion: localVersion, latestVersion })
         }
       }
 
-      const signature = updates.sort().join('|')
+      const updated = await autoUpdateAddons({ wowPath, flavor }, candidates)
+      const remainingUpdates = updates.filter(update => !updated.includes(update.split(':')[0]!))
+      const signature = remainingUpdates.sort().join('|')
       addonUpdateSignature.value = signature
       if (!signature) {
         addonUpdateCount.value = 0
@@ -198,7 +204,7 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
       }
 
       const readState = readStorage(storageKey.value)
-      addonUpdateCount.value = readState.addonSignature === signature ? 0 : updates.length
+      addonUpdateCount.value = readState.addonSignature === signature ? 0 : remainingUpdates.length
     })().finally(() => {
       addonLoading.value = false
       addonRefreshPromise = null

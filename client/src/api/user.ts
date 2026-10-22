@@ -1,6 +1,11 @@
 import request from './request'
 import type { UserActivityInfo, UserData } from '@/types/user'
 
+// 注销当前账号，服务端校验当前密码并清理账号数据。
+export function deleteAccount(password: string) {
+  return request.delete<{ message: string }>('/user/account', { password })
+}
+
 export interface UserInfo extends UserData {
   email: string
   avatar: string

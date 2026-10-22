@@ -1,0 +1,262 @@
+{
+  "revision": 52,
+  "instructionId": "d16e134f-30b3-44cd-b557-35d1cd0e49b8",
+  "head": "8e73130faa429af6de100eaa540768f77b4ee9d5",
+  "baseline": "Worker start worktree, including prior Worker changes; incremental patch excludes them",
+  "sourceFiles": [
+    {
+      "path": "client/src/__tests__/conflict.test.ts",
+      "sha256": "b5c264471b0eb22ecec99afad2f899b4107e392ece857ea5719fd37a52f9eee1"
+    },
+    {
+      "path": "client/src/__tests__/fieldMapper.test.ts",
+      "sha256": "e630b4e2f89230b3726068f9117ad206f6e3ae739792989115d3977cb1c128f8"
+    },
+    {
+      "path": "client/src/__tests__/syncService.test.ts",
+      "sha256": "4c552156858739e3403a0f79e0a86930b24164d192278c59476d7e18b77f8f7e"
+    },
+    {
+      "path": "client/src/__tests__/userNameStyle.test.ts",
+      "sha256": "df3a3d5d25b06bb1ff6099590ad615fca027cff5f47b13d02bfd2567aefbad49"
+    },
+    {
+      "path": "client/src/api/accountBackup.ts",
+      "sha256": "79af007a9592cbf1bb7efd612d450e5667d3a0499884d974ea6d660f38a19174"
+    },
+    {
+      "path": "client/src/components/AppLayout.vue",
+      "sha256": "979c1b99d3c72c85cac49e7f1792366dcf86aa2a35b4b7446f4db34da18d5ff9"
+    },
+    {
+      "path": "client/src/components/CharacterCard.test.ts",
+      "sha256": "c1399ea1d24922e4e556ad069d01307999878b6e8ed94ebd43765b9c4ba2ed8c"
+    },
+    {
+      "path": "client/src/components/CharacterCard.vue",
+      "sha256": "dea83b32a080f38d4ba542cb0bde454c8588ce88f2dc6db8c05843f3d9b19dea"
+    },
+    {
+      "path": "client/src/components/CollectionBanner.vue",
+      "sha256": "a2e0f7200212e61bbf35aee27cfc74e8936ec2bafd8ac29c849ad2d06259cf90"
+    },
+    {
+      "path": "client/src/components/CollectionSelector.vue",
+      "sha256": "839e7ac46b0697732858faa787d0cd307d048979eae6658c41c210ff9a4861bf"
+    },
+    {
+      "path": "client/src/components/PostQuickJump.test.ts",
+      "sha256": "a16acb28e60285beea5862cfe1fe934233af4692c3ff820f111c5463ffb49c76"
+    },
+    {
+      "path": "client/src/components/RInput.vue",
+      "sha256": "d10c3b84fb8d1ec286bf596a77d2ec8b8fec584b354fbc3a467460581af366a9"
+    },
+    {
+      "path": "client/src/components/RTabs.vue",
+      "sha256": "8744c937c4c08d7676b3103816e9f52ba06a449d42809a907e623e9937b549ed"
+    },
+    {
+      "path": "client/src/components/StoryFilter.vue",
+      "sha256": "353038fc7aeacbef3cf719ecb0cb4dea3788a5006ee3062e655e1563e464bbe8"
+    },
+    {
+      "path": "client/src/components/TagSelector.vue",
+      "sha256": "f1a4d948fe78b78b02c30bc2ca486e3f51d81e8010a780658ed1d78ce4bb9edb"
+    },
+    {
+      "path": "client/src/components/TiptapEditor.vue",
+      "sha256": "926a41ee9fc58eea89e0826ed96535063e05dc95a7eb4803434375240d67dadd"
+    },
+    {
+      "path": "client/src/components/UpdateNotification.vue",
+      "sha256": "83ab79d46da6335ed97e49080e8c5cd8a7068584e250397a4a107d0cb804ccb9"
+    },
+    {
+      "path": "client/src/components/UserAvatarPopover.test.ts",
+      "sha256": "8341c890dad65fe5ed08f61dbc71696d245a287efac006bf7babc74e8e422e38"
+    },
+    {
+      "path": "client/src/components/UserAvatarPopover.vue",
+      "sha256": "6d7921c8378725159532bd4ae0b880a2972ae4191fc9efff68d2593d3753a0b7"
+    },
+    {
+      "path": "client/src/components/character-cards/CharacterCardJumpPreview.test.ts",
+      "sha256": "79b65719e5b832efbe4af2f3f6c11439975dcfc052ddaab1c3e7ec7f5419d3cc"
+    },
+    {
+      "path": "client/src/components/character-cards/CharacterCardJumpPreview.vue",
+      "sha256": "83c09062fe942442f27c3afd50048e46250c0cc397cb334b2877a8d6c0f81d5d"
+    },
+    {
+      "path": "client/src/components/character-cards/CharacterCardWall.test.ts",
+      "sha256": "fac93b2acefd711906b12e3e5c243dfa493c518024dd60f850299b69bbbd921e"
+    },
+    {
+      "path": "client/src/components/character-cards/CharacterCardWall.vue",
+      "sha256": "7f46d7f90990a9ea1c413ea689bec895d77077b33c4a4dfc1254a2eafdac0681"
+    },
+    {
+      "path": "client/src/components/rpdb/RPDBWorkCard.test.ts",
+      "sha256": "97c89cce477c6e83ae44bfbb47bc15db0d6f281ee2976eadad6c0098944556a1"
+    },
+    {
+      "path": "client/src/components/rpdb/RPDBWorkCard.vue",
+      "sha256": "eb7378e79ea99c289d1bb02dd5d5d7ec7cff6b9d5cdcb5b9034fd35153283906"
+    },
+    {
+      "path": "client/src/components/rpdb/RPDBWorkContent.test.ts",
+      "sha256": "e9d61d1df41cc19e87813e9590c600561c334094d545e49d9456800d7b555feb"
+    },
+    {
+      "path": "client/src/components/sync/ConflictDialog.vue",
+      "sha256": "da2ddb9fb641b103d5c483f0b651e6e5b97046b3df15475da67d5f20c466cbee"
+    },
+    {
+      "path": "client/src/composables/useDialog.ts",
+      "sha256": "ff2fbfa541e78d96334b89ef23f68a4eb24e30b6637a4262ef9d4714bb0ba3c1"
+    },
+    {
+      "path": "client/src/composables/useUpdater.ts",
+      "sha256": "36d48ecf2f7ba2929edcd3254434c8ba9595f0e9bac516ac3d1c167a9f090a06"
+    },
+    {
+      "path": "client/src/stores/locale.ts",
+      "sha256": "31eed155a85402d4b8f0d1cb12f37369ad8b87874d698962d9f2a12f2d25dbf6"
+    },
+    {
+      "path": "client/src/utils/displayColor.ts",
+      "sha256": "e5a8fe47695ab4afda577ebdc8cbb8847ff652d4898ecacc595261ddc5fbd25b"
+    },
+    {
+      "path": "client/src/utils/forumLevel.ts",
+      "sha256": "26d232ebf983055f6ceacdf3f95ba64fda6308028bfb0995c9f6dffe81440138"
+    },
+    {
+      "path": "client/src/utils/imagePreview.ts",
+      "sha256": "cfd084b9aadf30441dbcba92978da0b5b2e3b9faa1ad06ef3a49c5168212dd6d"
+    },
+    {
+      "path": "client/src/utils/jumpLink.ts",
+      "sha256": "92bcf797943c63ee5b71c65d528ac382e8988a0b0f8826de4a51053c5497afc3"
+    },
+    {
+      "path": "client/src/utils/userNameStyle.ts",
+      "sha256": "e996a3d6eed91d0b18d6392bcd4491099812a28d92da3befbec83f045e1f7f49"
+    },
+    {
+      "path": "client/src/views/Settings.vue",
+      "sha256": "c6063a0e62bdb111b89de02d05462f1abbb1beb7159661c0b44bda60c9fdec46"
+    },
+    {
+      "path": "client/src/views/archives/StoryDetail.vue",
+      "sha256": "4fd839a8ef27c0687f48da367127eb9465f8cc465352394c07fb892803c3fdf4"
+    },
+    {
+      "path": "client/src/views/archives/StoryList.vue",
+      "sha256": "4e36923c9903509d03ad9082fff90c2aab9ef18b33486e92d4239eed053c4e1d"
+    },
+    {
+      "path": "client/src/views/archives/archiveDisplayColors.ts",
+      "sha256": "915ac04b9695f366774e4612f846c6dc3f1e699ef820eb5b029c7073433b8e04"
+    },
+    {
+      "path": "client/src/views/character-cards/CharacterCardDetail.test.ts",
+      "sha256": "4feeb48a2046a3feb0ce651372924ba59ea7199d9c51f78a439ee44f61db8f7a"
+    },
+    {
+      "path": "client/src/views/character-cards/CharacterCardEditor.test.ts",
+      "sha256": "17a99b67c6a2c86e65c775ec8374fdbaaa960cf876b3ebe83fd0d75d0a27f926"
+    },
+    {
+      "path": "client/src/views/collection/CollectionDetail.vue",
+      "sha256": "f33c4fda504086dc6c9e846c42edecc1ad85e32bb9ceff4b52f2ac2dd3c6f673"
+    },
+    {
+      "path": "client/src/views/community/PostDetail.vue",
+      "sha256": "40472ae41f0bac4b122bfc108521a6a6f5b6136af9d33e32646def38331d8df8"
+    },
+    {
+      "path": "client/src/views/community/PostEdit.vue",
+      "sha256": "4f717932abe4867b568bf9230977cac83b085ed2bba27de9963a640afc92731a"
+    },
+    {
+      "path": "client/src/views/guild/GuildDetail.vue",
+      "sha256": "9e9aa3c87002535d0cf3947f2ea7cb40d39176b3279b1cf9d43c3ecfe2dea0a2"
+    },
+    {
+      "path": "client/src/views/guild/GuildPosts.vue",
+      "sha256": "3f6cd04aaee0b0858b52dc75c2eeb0ea4c0875bae33e29cd3132d666685f7500"
+    },
+    {
+      "path": "client/src/views/guild/GuildStories.vue",
+      "sha256": "a2a17af062edb737d548e6c6b5a88cda475345d10169e29f675469debbb0e9cd"
+    },
+    {
+      "path": "client/src/views/guild/guildColorStyle.ts",
+      "sha256": "b34c85ae1b32c389fa4b1e2c5ee5558c82d9ea77070722e041a60104456ae28e"
+    },
+    {
+      "path": "client/src/views/guild/layouts/GuildLayout1.vue",
+      "sha256": "d2cf67dff2c2e648194c8a9dc2ad6777fb0aea5cff865adaa71715e2310641fb"
+    },
+    {
+      "path": "client/src/views/market/ItemEdit.vue",
+      "sha256": "1f03a483bf1e51e9aeeb635067e4ca30bcc325d8b2a555f058c03ac3e8847cc4"
+    },
+    {
+      "path": "client/src/views/market/ItemUpload.vue",
+      "sha256": "90047530f42d4c1a4ef1d73df64861ec218281cd70fc8fbb21a46b56a5584313"
+    },
+    {
+      "path": "client/src/views/market/MyItems.vue",
+      "sha256": "9fba5196d705287069454f3ab6d0c9d0c1268f7d6d4cd96625cfaf9696cb20ef"
+    },
+    {
+      "path": "client/src/views/moderator/ModeratorMain.vue",
+      "sha256": "15dc2d9dcd25f6f858388503b8fac61d81399a9e8ce1a007a0ac8315f2b17494"
+    },
+    {
+      "path": "client/src/views/rpdb/RPDBDetail.vue",
+      "sha256": "d7f201fa191a56952996e4efbf5706a8719ceb3bec662eb5c3e0c0b050a16efd"
+    },
+    {
+      "path": "client/src/views/rpdb/RPDBEditor.test.ts",
+      "sha256": "87c7c3f262fb3f88b695cec6e28a048b66e87575024e7437219742d18bc9253d"
+    },
+    {
+      "path": "client/src/views/rpdb/RPDBEditor.vue",
+      "sha256": "842e23c7fb43de8261f859896b23d526a6e8d2ff22b4b1ef1aed5d3d851e4ead"
+    },
+    {
+      "path": "client/src/views/rpdb/RPDBLists.vue",
+      "sha256": "f64c47b6c5d0e03fd0b2f2eb281f428fc6608912657c4ced210fe624b0a3e5e0"
+    },
+    {
+      "path": "client/src/views/sync/SyncMain.vue",
+      "sha256": "02446a81ad5948f116335e72ff17d8ad0079781cb39352ff73550a23b173ec1a"
+    }
+  ],
+  "configurationReadOnly": [
+    {
+      "path": "client/tsconfig.json",
+      "sha256": "d0bcb9e19d23552b6de8411d14fcf524719bdb3c05a8855c9f5dcde0562526b2"
+    },
+    {
+      "path": "client/tsconfig.node.json",
+      "sha256": "9e2abb169ea87b7190613a1d4da57ca608463a453bd4231fa3aeee5e308370dd"
+    },
+    {
+      "path": "client/vite.config.ts",
+      "sha256": "c6fc3be19462a2ab64f4c35c026d707a8206cb11b025ffbac938d3c9484ed331"
+    },
+    {
+      "path": "client/package.json",
+      "sha256": "494940a8f8c0e9f3eb468fa1dfcfd3f32ff7aead9c8a6104caa4ce2b8d2e8db2"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "d2c1286cdfaee6b729b14cb7a52692077d28ac2894f6d491c92ee998b900bd30"
+    }
+  ]
+}

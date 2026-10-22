@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	miniredis "github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+	internalcache "github.com/rpbox/server/internal/cache"
 	"github.com/rpbox/server/internal/database"
 	"github.com/rpbox/server/internal/model"
 	"github.com/rpbox/server/internal/testutil"
@@ -111,12 +114,23 @@ func TestDeleteAccount(t *testing.T) {
 	}
 
 	otherPost := model.Post{AuthorID: otherUser.ID, Title: "Other Post", Content: "body", CommentCount: 1, LikeCount: 1, FavoriteCount: 1, ViewCount: 1}
-	ownedPost := model.Post{AuthorID: user.ID, Title: "Owned Post", Content: "owned"}
+	ownedPost := model.Post{AuthorID: user.ID, Title: "Owned Post", Content: "owned", Status: "published", ReviewStatus: "approved", IsPublic: true, IsPinned: true}
 	if err := db.Create(&otherPost).Error; err != nil {
 		t.Fatalf("create other post: %v", err)
 	}
 	if err := db.Create(&ownedPost).Error; err != nil {
 		t.Fatalf("create owned post: %v", err)
+	}
+	otherOwnedPosts := []model.Post{
+		{AuthorID: user.ID, Title: "Owned Draft", Content: "draft", Status: "draft"},
+		{AuthorID: user.ID, Title: "Owned Pending", Content: "pending", Status: "pending"},
+		{AuthorID: user.ID, Title: "Owned Private", Content: "private", Status: "published", ReviewStatus: "approved"},
+	}
+	if err := db.Create(&otherOwnedPosts).Error; err != nil {
+		t.Fatalf("create other owned posts: %v", err)
+	}
+	if err := db.Model(&otherOwnedPosts[2]).Update("is_public", false).Error; err != nil {
+		t.Fatalf("make owned post private: %v", err)
 	}
 
 	otherComment := model.Comment{PostID: otherPost.ID, AuthorID: otherUser.ID, Content: "other comment", LikeCount: 1}
@@ -573,6 +587,10 @@ func TestDeleteAccount(t *testing.T) {
 	}
 
 	server := newTestServer(t, db)
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	server.cache = internalcache.NewRedisCache(redisClient, internalcache.Options{})
+	t.Cleanup(func() { _ = server.cache.Close() })
 	portraitPath := writeCharacterCardTestPNG(t, server, fmt.Sprintf("character-cards/%d/portrait/account.png", user.ID))
 	iconPath := writeCharacterCardTestPNG(t, server, fmt.Sprintf("character-cards/%d/impression-icon/account.png", user.ID))
 	imagePath := writeCharacterCardTestPNG(t, server, fmt.Sprintf("character-cards/%d/impression-image/account.png", user.ID))
@@ -612,6 +630,28 @@ func TestDeleteAccount(t *testing.T) {
 		t.Fatalf("set impression images: %v", err)
 	}
 	token := newTestToken(t, user)
+	otherToken := newTestToken(t, otherUser)
+	postListQueries := []string{"", fmt.Sprintf("author_id=%d", user.ID), "search=Owned"}
+	for _, query := range postListQueries {
+		warmResp := performRequest(server.router, http.MethodGet, "/api/v1/posts?"+query, nil, otherToken)
+		if warmResp.Code != http.StatusOK {
+			t.Fatalf("warm post list (%s): %d: %s", query, warmResp.Code, warmResp.Body.String())
+		}
+		assertPostListContains(t, warmResp, ownedPost.ID, true)
+	}
+	wrongPasswordResp := performRequest(server.router, http.MethodDelete, "/api/v1/user/account", map[string]string{
+		"password": "incorrect-password",
+	}, token)
+	if wrongPasswordResp.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for wrong deletion password, got %d: %s", wrongPasswordResp.Code, wrongPasswordResp.Body.String())
+	}
+	var postsBeforeDeletion int64
+	if err := db.Model(&model.Post{}).Where("author_id = ?", user.ID).Count(&postsBeforeDeletion).Error; err != nil || postsBeforeDeletion != 4 {
+		t.Fatalf("wrong password must preserve all posts: count=%d err=%v", postsBeforeDeletion, err)
+	}
+	if authResp := performRequest(server.router, http.MethodGet, "/api/v1/user/info", nil, token); authResp.Code != http.StatusOK {
+		t.Fatalf("wrong deletion password must preserve login, got %d: %s", authResp.Code, authResp.Body.String())
+	}
 
 	resp := performRequest(server.router, http.MethodDelete, "/api/v1/user/account", map[string]string{
 		"password": "secret123",
@@ -654,6 +694,27 @@ func TestDeleteAccount(t *testing.T) {
 	assertCount("character_cards", &model.CharacterCard{}, 0, "user_id = ?", user.ID)
 	assertCount("character_card_impressions", &model.CharacterCardImpression{}, 0, "character_card_id = ?", characterCard.ID)
 	assertCount("owned_posts", &model.Post{}, 0, "author_id = ?", user.ID)
+	for _, post := range append(otherOwnedPosts, ownedPost) {
+		for _, suffix := range []string{"", "?embed=1"} {
+			postResp := performRequest(server.router, http.MethodGet, fmt.Sprintf("/api/v1/posts/%d%s", post.ID, suffix), nil, otherToken)
+			if postResp.Code != http.StatusNotFound {
+				t.Fatalf("deleted author's post %d must be unavailable (%s), got %d: %s", post.ID, suffix, postResp.Code, postResp.Body.String())
+			}
+		}
+	}
+	for _, query := range postListQueries {
+		listResp := performRequest(server.router, http.MethodGet, "/api/v1/posts?"+query, nil, otherToken)
+		if listResp.Code != http.StatusOK {
+			t.Fatalf("list deleted author's posts (%s): %d: %s", query, listResp.Code, listResp.Body.String())
+		}
+		var list struct {
+			Posts []model.Post `json:"posts"`
+			Total int64        `json:"total"`
+		}
+		if err := json.Unmarshal(listResp.Body.Bytes(), &list); err != nil || len(list.Posts) != 0 || list.Total != 0 {
+			t.Fatalf("deleted author's posts must not be listed (%s): %s err=%v", query, listResp.Body.String(), err)
+		}
+	}
 	assertCount("owned_items", &model.Item{}, 0, "author_id = ?", user.ID)
 	assertCount("stories", &model.Story{}, 0, "user_id = ?", user.ID)
 	assertCount("collections", &model.Collection{}, 0, "author_id = ?", user.ID)

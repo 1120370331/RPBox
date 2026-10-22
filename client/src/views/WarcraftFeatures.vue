@@ -13,6 +13,7 @@ import {
 import { dialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
+import { ADDONS_UPDATED_EVENT, autoUpdateAddons, isAddonBusy, runAddonOperation, type AddonUpdateCandidate } from '@/services/addonAutoUpdate'
 
 interface WowInstallation {
   path: string
@@ -157,6 +158,7 @@ const pluginCards = computed<PluginCard[]>(() => [
 ])
 
 onMounted(async () => {
+  window.addEventListener(ADDONS_UPDATED_EVENT, handleAddonsUpdated)
   setTimeout(() => mounted.value = true, 50)
   await bindProgressEvents()
   if (wowPath.value) {
@@ -167,6 +169,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener(ADDONS_UPDATED_EVENT, handleAddonsUpdated)
   if (progressUnlisten) {
     progressUnlisten()
     progressUnlisten = null
@@ -270,7 +273,7 @@ function getActionIcon(card: PluginCard) {
 }
 
 function isPluginInstalling(id: PluginCardId) {
-  return installingPluginIds.value.includes(id)
+  return installingPluginIds.value.includes(id) || isAddonBusy({ wowPath: wowPath.value, flavor: selectedFlavor.value }, id)
 }
 
 function startPluginInstall(id: PluginCardId) {
@@ -454,7 +457,25 @@ async function refreshPluginStatus() {
   if (errors.length) {
     pluginError.value = errors.join('；')
   }
+  const candidates: AddonUpdateCandidate[] = (trp3Status.value?.addons || []).map(addon => ({
+    id: addon.id, installed: addon.installed, currentVersion: addon.version,
+    latestVersion: addon.latestVersion, downloadUrl: addon.downloadUrl,
+  }))
+  candidates.push({ id: 'rpbox', installed: !!rpboxInstalledInfo.value?.installed,
+    currentVersion: rpboxInstalledInfo.value?.version, latestVersion: rpboxLatestVersion.value })
+  const updated = await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, candidates)
+  if (updated.length) await Promise.allSettled([checkTrp3Addons(), checkRpboxAddon()])
   checkingPlugins.value = false
+}
+
+async function handleAddonsUpdated() {
+  if (!wowPath.value) return
+  const results = await Promise.allSettled([
+    invoke<Trp3AddonCheckResult>('check_trp3_addons', { wowPath: wowPath.value }),
+    invoke<InstalledAddonInfo>('check_addon_installed', { wowPath: wowPath.value, flavor: selectedFlavor.value }),
+  ])
+  if (results[0].status === 'fulfilled') trp3Status.value = mergeTrp3Latest(results[0].value, trp3Latest.value)
+  if (results[1].status === 'fulfilled') rpboxInstalledInfo.value = results[1].value
 }
 
 async function checkTrp3Addons() {
@@ -510,7 +531,7 @@ async function uninstallPlugin(card: PluginCard) {
     confirmText: '卸载',
     cancelText: '取消',
   })
-  if (!confirmed) return
+  if (!confirmed || isPluginInstalling(card.id)) return
 
   startPluginInstall(card.id)
   pluginError.value = ''
@@ -526,16 +547,16 @@ async function uninstallPlugin(card: PluginCard) {
     })
 
     if (card.id === 'rpbox') {
-      await invoke('uninstall_addon', {
+      await runAddonOperation({ wowPath: wowPath.value, flavor: selectedFlavor.value }, card.id, 'uninstall', () => invoke('uninstall_addon', {
         wowPath: wowPath.value,
         flavor: selectedFlavor.value,
-      })
+      }))
       await checkRpboxAddon()
     } else {
-      const localStatus = await invoke<Trp3AddonCheckResult>('uninstall_trp3_addon', {
+      const localStatus = await runAddonOperation({ wowPath: wowPath.value, flavor: selectedFlavor.value }, card.id, 'uninstall', () => invoke<Trp3AddonCheckResult>('uninstall_trp3_addon', {
         wowPath: wowPath.value,
         addonId: card.id,
-      })
+      }))
       trp3Status.value = mergeTrp3Latest(localStatus, trp3Latest.value)
     }
 
@@ -578,11 +599,11 @@ async function installTrp3Addon(addon: Trp3AddonInfo) {
       totalBytes: null,
     })
 
-    const localStatus = await invoke<Trp3AddonCheckResult>('install_trp3_addon_with_progress', {
+    const localStatus = await runAddonOperation({ wowPath: wowPath.value, flavor: selectedFlavor.value }, addon.id, 'install', () => invoke<Trp3AddonCheckResult>('install_trp3_addon_with_progress', {
       wowPath: wowPath.value,
       addonId: addon.id,
       downloadUrl: addon.downloadUrl,
-    })
+    }))
     setPluginProgress(addon.id, {
       label: '检测中',
       detail: '正在确认本地插件版本',
@@ -635,12 +656,12 @@ async function installRpboxAddon() {
       totalBytes: null,
     })
 
-    await invoke('install_addon_from_url', {
+    await runAddonOperation({ wowPath: wowPath.value, flavor: selectedFlavor.value }, 'rpbox', 'install', () => invoke('install_addon_from_url', {
       wowPath: wowPath.value,
       flavor: selectedFlavor.value,
       downloadUrl: getAddonDownloadUrl(latestVersion),
       pluginId: 'rpbox',
-    })
+    }))
 
     setPluginProgress('rpbox', {
       label: '检测中',
@@ -693,13 +714,7 @@ async function openAddonFolder() {
 
 <template>
   <div class="warcraft-page" :class="{ 'animate-in': mounted }">
-    <section class="title-row anim-item" style="--delay: 0">
-      <div class="title-copy">
-        <span class="eyebrow">Warcraft</span>
-        <h1>魔兽功能</h1>
-        <p>选择游戏目录后，可直接进入人物卡备份与剧情故事，也可在下方管理插件。</p>
-      </div>
-    </section>
+    <h1 class="page-title anim-item" style="--delay: 0">魔兽功能</h1>
 
     <section class="directory-row anim-item" style="--delay: 1">
       <div class="row-heading">
@@ -906,7 +921,6 @@ button {
   font-family: inherit;
 }
 
-.title-row,
 .directory-row,
 .plugin-row,
 .feature-row {
@@ -916,27 +930,8 @@ button {
   box-shadow: var(--shadow-sm, 0 2px 10px rgba(75, 54, 33, 0.05));
 }
 
-.title-row {
-  padding: 20px 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.title-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.eyebrow {
-  color: var(--link-color);
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0;
-  text-transform: uppercase;
+.page-title {
+  font-weight: 700;
 }
 
 h1 {
@@ -954,7 +949,6 @@ h3 {
   line-height: 1.3;
 }
 
-.title-copy p,
 .row-heading p,
 .path-hint,
 .directory-copy small,
@@ -1522,7 +1516,6 @@ h3 {
 }
 
 @media (max-width: 760px) {
-  .title-row,
   .row-heading {
     flex-direction: column;
     align-items: stretch;

@@ -1,0 +1,1658 @@
+--- a/client/src/api/accountBackup.ts
++++ b/client/src/api/accountBackup.ts
+@@ -115,7 +115,7 @@
+     `/account-backups/${encodeURIComponent(accountId)}/versions/${versionId}`,
+   )
+   const unwrapped = unwrapData(response)
+-  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && unwrapped.version) {
++  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && typeof unwrapped.version === 'object' && unwrapped.version) {
+     return unwrapped.version
+   }
+   return unwrapped as AccountBackupVersion
+@@ -131,7 +131,7 @@
+     { name },
+   )
+   const unwrapped = unwrapData(response)
+-  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && unwrapped.version) {
++  if (unwrapped && typeof unwrapped === 'object' && 'version' in unwrapped && typeof unwrapped.version === 'object' && unwrapped.version) {
+     return unwrapped.version
+   }
+   return unwrapped as AccountBackupVersion
+
+--- a/client/src/components/AppLayout.vue
++++ b/client/src/components/AppLayout.vue
+@@ -6,7 +6,6 @@
+ import { useSidebarBadgesStore } from '../stores/sidebarBadges'
+ import { useRouter, useRoute } from 'vue-router'
+ import RDialog from './RDialog.vue'
+-import RToast from './RToast.vue'
+ import UserLevelBadge from './UserLevelBadge.vue'
+ import RPDBJumpPreview from './rpdb/RPDBJumpPreview.vue'
+ import CharacterCardJumpPreview from './character-cards/CharacterCardJumpPreview.vue'
+@@ -463,7 +462,7 @@
+           <div class="user-info">
+             <div class="user-name-row">
+               <router-link :to="`/user/${userStore.user?.id}`" class="username-link">
+-                <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username }}</h4>
++                <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold, 'sidebarBg')">{{ userStore.user?.username }}</h4>
+               </router-link>
+               <UserLevelBadge
+                 :level="userStore.user?.forum_level"
+@@ -507,9 +506,6 @@
+     <!-- 全局弹窗 -->
+     <RDialog />
+ 
+-    <!-- 全局消息通知 -->
+-    <RToast />
+-
+     <RPDBJumpPreview />
+     <CharacterCardJumpPreview />
+   </div>
+@@ -727,7 +723,7 @@
+   align-items: center;
+   justify-content: center;
+   font-weight: bold;
+-  color: var(--btn-primary-text, #FFF);
++  color: var(--gradient-text);
+   border: 2px solid rgba(255,255,255,0.2);
+   overflow: hidden;
+ }
+
+--- a/client/src/components/CharacterCard.test.ts
++++ b/client/src/components/CharacterCard.test.ts
+@@ -1,4 +1,5 @@
+ import { mount, type VueWrapper } from '@vue/test-utils'
++import { createPinia } from 'pinia'
+ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+ import i18n from '@/i18n'
+ import type { Character } from '@/api/character'
+@@ -82,7 +83,7 @@
+     attachTo: document.body,
+     props: { visible: true, position: { x: 100, y: 80 }, ...props },
+     global: {
+-      plugins: [i18n],
++      plugins: [createPinia(), i18n],
+       stubs: {
+         CharacterCardPortrait: {
+           template: '<img data-testid="portrait" alt="" />',
+
+--- a/client/src/components/CharacterCard.vue
++++ b/client/src/components/CharacterCard.vue
+@@ -4,6 +4,7 @@
+ import type { Character } from '@/api/character'
+ import type { CharacterCardSummary } from '@/api/characterCard'
+ import { getCharacterCardDisplayColor, normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
++import { buildNameStyle } from '@/utils/userNameStyle'
+ import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
+ import CharacterCardImpressionMark from './character-cards/CharacterCardImpressionMark.vue'
+ import CharacterCardPortrait from './character-cards/CharacterCardPortrait.vue'
+@@ -226,7 +227,7 @@
+               <i :class="isRPBoxCard ? 'ri-id-card-line' : 'ri-gamepad-line'" aria-hidden="true"></i>
+               {{ t(isRPBoxCard ? 'archives.characterPopover.rpbox' : 'archives.characterPopover.trp3') }}
+             </span>
+-            <h3 :style="displayColor ? { color: displayColor } : undefined">{{ displayName }}</h3>
++            <h3 :style="buildNameStyle(displayColor, false, 'cardBg')">{{ displayName }}</h3>
+             <p v-if="title">{{ title }}</p>
+             <small v-if="fullTitle">{{ fullTitle }}</small>
+           </div>
+@@ -324,9 +325,7 @@
+   gap: 12px;
+   padding: 16px 12px 16px 18px;
+   border-bottom: 1px solid var(--color-border);
+-  background:
+-    linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 9%, transparent), transparent 58%),
+-    var(--color-card-bg);
++  background: var(--color-card-bg);
+ }
+ 
+ .avatar {
+
+--- a/client/src/components/CollectionBanner.vue
++++ b/client/src/components/CollectionBanner.vue
+@@ -14,7 +14,7 @@
+   type CollectionInfo,
+   type Collection,
+ } from '../api/collection'
+-import { useToast } from '../composables/useToast'
++import { useToastStore } from '@/stores/toast'
+ 
+ const props = defineProps<{
+   type: 'post' | 'item'
+@@ -28,7 +28,7 @@
+ 
+ const router = useRouter()
+ const { t } = useI18n()
+-const toast = useToast()
++const toast = useToastStore()
+ 
+ const collectionInfo = ref<CollectionInfo | null>(null)
+ const loading = ref(false)
+
+--- a/client/src/components/CollectionSelector.vue
++++ b/client/src/components/CollectionSelector.vue
+@@ -2,7 +2,7 @@
+ import { ref, onMounted, watch } from 'vue'
+ import { useI18n } from 'vue-i18n'
+ import { listUserCollections, createCollection, type Collection } from '../api/collection'
+-import { useToast } from '../composables/useToast'
++import { useToastStore } from '@/stores/toast'
+ 
+ const props = defineProps<{
+   modelValue?: number | null
+@@ -14,7 +14,7 @@
+ }>()
+ 
+ const { t } = useI18n()
+-const toast = useToast()
++const toast = useToastStore()
+ 
+ const collections = ref<Collection[]>([])
+ const selectedId = ref<number | null>(props.modelValue ?? null)
+
+--- a/client/src/components/PostQuickJump.test.ts
++++ b/client/src/components/PostQuickJump.test.ts
+@@ -104,6 +104,7 @@
+   residence: '',
+   relationship_status: '',
+   icon: '',
++  class_color: '',
+   name_color: '',
+   summary: '在月神殿保存远行者的旧信。',
+   portrait_image_url: '/api/v1/images/character-card-portrait/27',
+
+--- a/client/src/components/RInput.vue
++++ b/client/src/components/RInput.vue
+@@ -13,7 +13,7 @@
+   rows?: number
+ }
+ 
+-const props = withDefaults(defineProps<Props>(), {
++withDefaults(defineProps<Props>(), {
+   modelValue: '',
+   type: 'text',
+   size: 'md',
+
+--- a/client/src/components/RTabs.vue
++++ b/client/src/components/RTabs.vue
+@@ -1,5 +1,5 @@
+ <script setup lang="ts">
+-import { ref, provide, watch, reactive, onMounted } from 'vue'
++import { ref, provide, watch, reactive } from 'vue'
+ 
+ interface Props {
+   modelValue?: string
+
+--- a/client/src/components/StoryFilter.vue
++++ b/client/src/components/StoryFilter.vue
+@@ -16,7 +16,7 @@
+   order: 'asc' | 'desc'
+ }
+ 
+-const props = defineProps<{
++defineProps<{
+   tags: Tag[]
+   guilds: Guild[]
+ }>()
+
+--- a/client/src/components/TagSelector.vue
++++ b/client/src/components/TagSelector.vue
+@@ -1,6 +1,7 @@
+ <script setup lang="ts">
+ import { ref, computed } from 'vue'
+ import { createTag, type Tag } from '@/api/tag'
++import { contrastingTextColor } from '@/utils/displayColor'
+ 
+ const props = defineProps<{
+   selectedTags: Tag[]
+@@ -26,16 +27,9 @@
+ // Keep the saved dye intact; only choose the foreground for a filled tag.
+ function tagStyle(tag: Tag) {
+   const color = tag.color || 'B87333'
+-  const channels = /^[0-9a-f]{6}$/i.test(color)
+-    ? [0, 2, 4].map(offset => {
+-      const value = parseInt(color.slice(offset, offset + 2), 16) / 255
+-      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+-    })
+-    : [0, 0, 0]
+-  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+   return {
+     '--tag-color': '#' + color,
+-    '--tag-contrast': luminance > 0.179 ? '#000000' : '#FFFFFF',
++    '--tag-contrast': contrastingTextColor('#' + color),
+   }
+ }
+ 
+
+--- a/client/src/components/TiptapEditor.vue
++++ b/client/src/components/TiptapEditor.vue
+@@ -11,6 +11,8 @@
+ import { uploadAttachment, uploadImage } from '@/api/item'
+ import { useToast } from '@/composables/useToast'
+ import { searchUsers, type UserMentionItem } from '@/api/user'
++import { useThemeStore } from '@/stores/theme'
++import { buildNameStyle } from '@/utils/userNameStyle'
+ 
+ const props = defineProps<{
+   modelValue: string
+@@ -25,6 +27,7 @@
+ const imageInputRef = ref<HTMLInputElement | null>(null)
+ const attachmentInputRef = ref<HTMLInputElement | null>(null)
+ const toast = useToast()
++const themeStore = useThemeStore()
+ const uploadCacheKey = 'tiptap_image_upload_cache'
+ const uploadCache = new Map<string, string>()
+ const maxAttachmentBytes = 25 * 1024 * 1024
+@@ -68,6 +71,12 @@
+ }
+ 
+ let mentionPopup: HTMLDivElement | null = null
++
++watch(() => themeStore.currentThemeId, () => {
++  mentionPopup?.querySelectorAll<HTMLElement>('.mention-suggestion__name').forEach(name => {
++    Object.assign(name.style, buildNameStyle(name.dataset.nameColor, name.dataset.nameBold === 'true'))
++  })
++})
+ 
+ async function fetchMentionItems(query: string): Promise<MentionSuggestionItem[]> {
+   try {
+@@ -792,12 +801,9 @@
+                 const name = document.createElement('span')
+                 name.className = 'mention-suggestion__name'
+                 name.textContent = item.username
+-                if (item.name_color) {
+-                  name.style.color = item.name_color
+-                }
+-                if (item.name_bold) {
+-                  name.style.fontWeight = '700'
+-                }
++                name.dataset.nameColor = item.name_color || ''
++                name.dataset.nameBold = String(Boolean(item.name_bold))
++                Object.assign(name.style, buildNameStyle(item.name_color, item.name_bold))
+                 button.appendChild(name)
+ 
+                 button.addEventListener('click', () => {
+@@ -905,7 +911,7 @@
+ 
+ watch(() => props.modelValue, (value) => {
+   if (editor.value && editor.value.getHTML() !== value) {
+-    editor.value.commands.setContent(value, false)
++    editor.value.commands.setContent(value, { emitUpdate: false })
+   }
+ })
+ 
+@@ -976,19 +982,6 @@
+   if (url) {
+     editor.value?.chain().focus().setImage({ src: url }).run()
+   }
+-}
+-
+-function insertAttachmentLink(url: string, name: string, size: number = 0) {
+-  if (!url) return
+-  const filename = name.trim() || url.split('/').pop() || '未知文件'
+-  editor.value?.chain().focus().insertContent({
+-    type: 'attachmentCard',
+-    attrs: {
+-      href: url,
+-      filename: filename,
+-      filesize: size,
+-    },
+-  }).run()
+ }
+ 
+ function triggerAttachmentUpload() {
+
+--- a/client/src/components/UpdateNotification.vue
++++ b/client/src/components/UpdateNotification.vue
+@@ -11,7 +11,6 @@
+   downloadProgress,
+   checkForUpdate,
+   downloadAndInstall,
+-  lastError,
+ } = useUpdater()
+ 
+ const showModal = ref(false)
+@@ -89,12 +88,12 @@
+ 
+           <!-- 操作按钮 -->
+           <div class="update-actions">
+-            <RButton v-if="!downloading" size="large" @click="handleClose">
++            <RButton v-if="!downloading" size="lg" @click="handleClose">
+               稍后再说
+             </RButton>
+             <RButton
+               type="primary"
+-              size="large"
++              size="lg"
+               :loading="downloading"
+               :disabled="downloading"
+               @click="handleInstall"
+
+--- a/client/src/components/UserAvatarPopover.test.ts
++++ b/client/src/components/UserAvatarPopover.test.ts
+@@ -1,5 +1,8 @@
+ import { flushPromises, mount } from '@vue/test-utils'
+ import { createMemoryHistory, createRouter } from 'vue-router'
++import { createPinia } from 'pinia'
++import { useThemeStore } from '@/stores/theme'
++import { displayContrast, parseDisplayColor } from '@/utils/displayColor'
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+ import i18n from '@/i18n'
+ import { clearUserPopoverDataCache } from '@/utils/userPopoverData'
+@@ -28,6 +31,8 @@
+     mocks.getUserProfile.mockResolvedValue({
+       id: 5,
+       username: '月桂旅人',
++      name_color: '#000000',
++      name_bold: true,
+       avatar: '',
+       bio: '在艾泽拉斯记录旅途与角色故事。',
+       location: '月光林地',
+@@ -86,7 +91,7 @@
+         avatarUrl: '',
+       },
+       attrs: { class: 'author-avatar' },
+-      global: { plugins: [router, i18n] },
++      global: { plugins: [createPinia(), router, i18n] },
+     })
+ 
+     await wrapper.get('.user-avatar-popover__trigger').trigger('mouseenter')
+@@ -130,7 +135,7 @@
+         size: 20,
+         showPopover: false,
+       },
+-      global: { plugins: [router, i18n] },
++      global: { plugins: [createPinia(), router, i18n] },
+     })
+ 
+     const trigger = wrapper.get('.user-avatar-popover__trigger')
+@@ -147,4 +152,42 @@
+     expect(router.currentRoute.value.fullPath).toBe('/user/5')
+     wrapper.unmount()
+   })
++
++  it('updates an open teleported dyed identity and TRP3 card name on theme changes without modifying API data', async () => {
++    const router = createRouter({
++      history: createMemoryHistory(),
++      routes: [
++        { path: '/', component: { template: '<div />' } },
++        { path: '/user/:id', component: { template: '<div />' } },
++        { path: '/character-cards/:id', component: { template: '<div />' } },
++      ],
++    })
++    await router.push('/')
++    const pinia = createPinia()
++    const theme = useThemeStore(pinia)
++    theme.setTheme('classic')
++    const apiCard = Object.freeze({ id: 21, display_name: '黑色姓名', name_color: '80000000', class_color: '80000000' })
++    mocks.listUserCharacterCards.mockResolvedValue({ character_cards: [apiCard] })
++    const wrapper = mount(UserAvatarPopover, {
++      attachTo: document.body,
++      props: { userId: 5, username: '月桂旅人' },
++      global: { plugins: [pinia, router, i18n] },
++    })
++    await wrapper.get('.user-avatar-popover__trigger').trigger('mouseenter')
++    await flushPromises()
++    for (const id of ['classic', 'black-gold', 'dreamy-pink-blue', 'classic']) {
++      theme.setTheme(id)
++      await flushPromises()
++      const name = document.querySelector<HTMLElement>('.user-avatar-popover__identity strong')!
++      const cardName = document.querySelector<HTMLElement>('.user-avatar-popover__card-copy strong')!
++      for (const background of [theme.currentTheme.colors.gradientStart, theme.currentTheme.colors.gradientEnd]) {
++        expect(displayContrast(parseDisplayColor(name.style.color)!, parseDisplayColor(background)!)).toBeGreaterThanOrEqual(4.5)
++      }
++      expect(name.style.fontWeight).toBe('700')
++      expect(displayContrast(parseDisplayColor(cardName.style.color)!, parseDisplayColor(theme.currentTheme.colors.panelBg)!)).toBeGreaterThanOrEqual(4.5)
++    }
++    expect(apiCard.name_color).toBe('80000000')
++    expect(mocks.getUserProfile).toHaveBeenCalledTimes(1)
++    wrapper.unmount()
++  })
+ })
+
+--- a/client/src/components/UserAvatarPopover.vue
++++ b/client/src/components/UserAvatarPopover.vue
+@@ -35,7 +35,7 @@
+ })
+ 
+ const t = i18n.global.t
+-const triggerRef = ref<InstanceType<typeof RouterLink> | null>(null)
++const triggerRef = ref<{ $el: unknown } | null>(null)
+ const popoverRef = ref<HTMLElement | null>(null)
+ const visible = ref(false)
+ const loading = ref(false)
+@@ -54,6 +54,7 @@
+ const displayNameStyle = computed(() => buildNameStyle(
+   profile.value?.name_color || props.nameColor,
+   profile.value?.name_bold ?? props.nameBold,
++  ['gradientStart', 'gradientEnd'],
+ ))
+ const triggerStyle = computed(() => {
+   const size = `${Math.max(1, props.size)}px`
+@@ -69,7 +70,8 @@
+ })
+ 
+ function triggerElement(): HTMLElement | null {
+-  return (triggerRef.value as any)?.$el || null
++  const element: unknown = triggerRef.value?.$el
++  return element instanceof HTMLElement ? element : null
+ }
+ 
+ function clearCloseTimer() {
+@@ -289,7 +291,7 @@
+                   <i v-else class="ri-user-star-line" aria-hidden="true"></i>
+                 </span>
+                 <span class="user-avatar-popover__card-copy">
+-                  <strong :style="{ color: getCharacterCardDisplayColor(characterCard) }">
++                  <strong :style="buildNameStyle(getCharacterCardDisplayColor(characterCard))">
+                     {{ getCharacterCardDisplayName(characterCard) }}
+                   </strong>
+                   <small>{{ characterCard.title || characterCard.race || t('common.userPopover.cardFallback') }}</small>
+@@ -316,8 +318,8 @@
+   flex: 0 0 auto;
+   place-items: center;
+   overflow: hidden;
+-  background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+-  color: inherit;
++  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
++  color: var(--gradient-text);
+   cursor: pointer;
+   font-weight: 700;
+   line-height: 1;
+@@ -368,9 +370,7 @@
+   min-height: 88px;
+   padding: 16px;
+   border-bottom: 1px solid var(--gradient-border);
+-  background:
+-    radial-gradient(circle at 88% 0%, var(--gradient-surface-hover), transparent 42%),
+-    linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
++  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+   color: var(--gradient-text);
+ }
+ 
+
+--- a/client/src/composables/useDialog.ts
++++ b/client/src/composables/useDialog.ts
+@@ -1,4 +1,4 @@
+-import { ref, createApp, h } from 'vue'
++import { ref } from 'vue'
+ 
+ interface DialogOptions {
+   title?: string
+
+--- a/client/src/composables/useUpdater.ts
++++ b/client/src/composables/useUpdater.ts
+@@ -170,7 +170,6 @@
+       }
+ 
+       console.log('[Updater] 开始下载版本:', update.version)
+-      console.log('[Updater] 下载地址:', update.downloadUrl)
+ 
+       await update.downloadAndInstall((event) => {
+         if (event.event === 'Progress') {
+
+--- a/client/src/stores/locale.ts
++++ b/client/src/stores/locale.ts
+@@ -1,6 +1,5 @@
+ import { defineStore } from 'pinia'
+-import { ref, watch } from 'vue'
+-import { useI18n } from 'vue-i18n'
++import { ref } from 'vue'
+ 
+ export type LocaleType = 'zh-CN' | 'en-US'
+ 
+
+--- /dev/null
++++ b/client/src/utils/displayColor.ts
+@@ -0,0 +1,84 @@
++export interface DisplayColor {
++  r: number
++  g: number
++  b: number
++  a: number
++}
++
++/** Parses CSS RGB/RGBA dyes. TRP3 ARGB must be normalized by the caller first. */
++export function parseDisplayColor(value: string): DisplayColor | null {
++  const named: Record<string, string> = { black: '#000000', white: '#ffffff', transparent: '#00000000' }
++  const color = named[value.trim().toLowerCase()] || value.trim()
++  const hex = color.match(/^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i)
++  if (hex) {
++    const digits = hex[1]!.length <= 4 ? [...hex[1]!].map(digit => digit + digit).join('') : hex[1]!
++    return {
++      r: parseInt(digits.slice(0, 2), 16), g: parseInt(digits.slice(2, 4), 16),
++      b: parseInt(digits.slice(4, 6), 16), a: digits.length === 8 ? parseInt(digits.slice(6), 16) / 255 : 1,
++    }
++  }
++  const rgb = color.match(/^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d*(?:\.\d+)?))?\s*\)$/i)
++  if (!rgb) return null
++  return { r: Math.min(255, Number(rgb[1])), g: Math.min(255, Number(rgb[2])), b: Math.min(255, Number(rgb[3])), a: Math.min(1, Number(rgb[4] ?? 1)) }
++}
++
++/** Composites a display color over an opaque background. */
++export function compositeDisplayColor(color: DisplayColor, background: DisplayColor): DisplayColor {
++  return {
++    r: Math.round(color.r * color.a + background.r * (1 - color.a)),
++    g: Math.round(color.g * color.a + background.g * (1 - color.a)),
++    b: Math.round(color.b * color.a + background.b * (1 - color.a)), a: 1,
++  }
++}
++
++/** Returns WCAG relative luminance. */
++export function displayLuminance(color: DisplayColor): number {
++  const channel = (value: number) => {
++    const normalized = value / 255
++    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
++  }
++  return channel(color.r) * 0.2126 + channel(color.g) * 0.7152 + channel(color.b) * 0.0722
++}
++
++/** Returns the contrast ratio of opaque display colors. */
++export function displayContrast(front: DisplayColor, back: DisplayColor): number {
++  const a = displayLuminance(front)
++  const b = displayLuminance(back)
++  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
++}
++
++/** Serializes an opaque display color. */
++export function displayColorCSS(color: DisplayColor): string {
++  return `rgb(${color.r}, ${color.g}, ${color.b})`
++}
++
++/** Chooses the higher-contrast foreground for a filled saved-color swatch. */
++export function contrastingTextColor(background: string): string {
++  const color = parseDisplayColor(background)
++  return color && displayLuminance(color) > 0.179 ? '#000000' : '#ffffff'
++}
++
++/** Adjusts only the display value; backgrounds are alternate surfaces/gradient endpoints. */
++export function readableDisplayColor(value: string, backgrounds: readonly DisplayColor[], fallback: string): string {
++  const firstBackground = backgrounds[0]
++  if (!firstBackground) return fallback
++  const parsed = parseDisplayColor(value) || parseDisplayColor(fallback)
++  if (!parsed) return fallback
++  const worstContrast = (color: DisplayColor) => Math.min(...backgrounds.map(back => displayContrast(compositeDisplayColor(color, back), back)))
++  if (worstContrast(parsed) >= 4.5) return value && parseDisplayColor(value) ? value : fallback
++
++  const front = compositeDisplayColor(parsed, firstBackground)
++  const black = { r: 0, g: 0, b: 0, a: 1 }
++  const white = { r: 255, g: 255, b: 255, a: 1 }
++  const target = worstContrast(black) > worstContrast(white) ? black : white
++  let low = 0
++  let high = 1
++  let result = target
++  for (let step = 0; step < 16; step++) {
++    const amount = (low + high) / 2
++    const candidate = compositeDisplayColor({ ...target, a: amount }, front)
++    if (worstContrast(candidate) >= 4.5) { high = amount; result = candidate }
++    else low = amount
++  }
++  return displayColorCSS(result)
++}
+
+--- a/client/src/utils/forumLevel.ts
++++ b/client/src/utils/forumLevel.ts
+@@ -2,7 +2,7 @@
+   level: number
+ }
+ 
+-export interface ForumLevelGuideEntry<T extends ForumLevelDefinition> extends T {
++export type ForumLevelGuideEntry<T extends ForumLevelDefinition> = T & {
+   currentBase: number
+   nextBase: number | null
+   stepExperience: number
+
+--- a/client/src/utils/imagePreview.ts
++++ b/client/src/utils/imagePreview.ts
+@@ -12,7 +12,7 @@
+ 
+   const urls = entries.map(entry => entry.src)
+ 
+-  entries.forEach(({ img, src }, index) => {
++  entries.forEach(({ img }, index) => {
+     if (img.closest('.image-preview')) return
+ 
+     const wrapper = document.createElement('span')
+
+--- a/client/src/utils/jumpLink.ts
++++ b/client/src/utils/jumpLink.ts
+@@ -126,12 +126,12 @@
+   if (pending) return pending
+ 
+   const request: Promise<CharacterCardResult> = getCharacterCard(id)
+-    .then((characterCard) => (
++    .then((characterCard): CharacterCardResult => (
+       characterCard.status === 'published' && characterCard.visibility === 'public'
+         ? characterCard
+         : 'unavailable'
+     ))
+-    .catch((error) => {
++    .catch((error): CharacterCardResult => {
+       const status = typeof error === 'object' && error ? (error as { status?: number }).status : undefined
+       if (status !== 403 && status !== 404) console.error('获取人物卡嵌入信息失败:', error)
+       return 'unavailable'
+
+--- a/client/src/utils/userNameStyle.ts
++++ b/client/src/utils/userNameStyle.ts
+@@ -1,7 +1,28 @@
+-export function buildNameStyle(color?: string, bold?: boolean) {
++import { getActivePinia } from 'pinia'
++import { getThemeById, useThemeStore, type ThemeColors } from '@/stores/theme'
++import { compositeDisplayColor, parseDisplayColor, readableDisplayColor } from './displayColor'
++
++export type NameBackground = keyof ThemeColors | string | readonly string[]
++
++/** Adapts a saved dye to current display surfaces without modifying the saved value. */
++export function readableNameColor(color: string, background: NameBackground = ['panelBg', 'cardBg', 'cardBgHover', 'primaryLight', 'btnOutlineHover']): string {
++  const colors = getActivePinia() ? useThemeStore().currentTheme.colors : getThemeById('classic').colors
++  const base = parseDisplayColor(colors.panelBg)!
++  const surfaces = typeof background === 'string' ? [background] : background
++  const backgrounds = surfaces.flatMap(surface => {
++    const value = Object.prototype.hasOwnProperty.call(colors, surface) ? colors[surface as keyof ThemeColors] : surface
++    const front = parseDisplayColor(value) || base
++    const backdrops = surface === 'cardBgHover' ? [base, parseDisplayColor(colors.cardBg)!] : [base]
++    return backdrops.map(backdrop => compositeDisplayColor(front, backdrop))
++  })
++  return readableDisplayColor(color, backgrounds, colors.textMain)
++}
++
++/** Builds display-only name styling; the optional third argument describes the actual background. */
++export function buildNameStyle(color?: string, bold?: boolean, background?: NameBackground) {
+   const style: Record<string, string> = {}
+   if (color) {
+-    style.color = color
++    style.color = readableNameColor(color, background)
+   }
+   if (bold) {
+     style.fontWeight = '700'
+
+--- a/client/src/views/Settings.vue
++++ b/client/src/views/Settings.vue
+@@ -971,7 +971,7 @@
+   justify-content: center;
+   font-size: 32px;
+   font-weight: 700;
+-  color: var(--btn-primary-text, var(--color-text-light));
++  color: var(--gradient-text);
+ }
+ 
+ .avatar-overlay {
+
+--- a/client/src/__tests__/conflict.test.ts
++++ b/client/src/__tests__/conflict.test.ts
+@@ -1,5 +1,4 @@
+ import { describe, it, expect } from 'vitest'
+-import type { ConflictInfo } from '../utils/conflict'
+ 
+ describe('conflict detection', () => {
+   it('should detect conflict when checksums differ', () => {
+
+--- a/client/src/__tests__/fieldMapper.test.ts
++++ b/client/src/__tests__/fieldMapper.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, it, expect } from 'vitest'
+-import { mapCharacteristics, mapAbout } from '../utils/fieldMapper'
++import { mapCharacteristics } from '../utils/fieldMapper'
+ 
+ describe('fieldMapper', () => {
+   describe('mapCharacteristics', () => {
+
+--- a/client/src/__tests__/syncService.test.ts
++++ b/client/src/__tests__/syncService.test.ts
+@@ -4,7 +4,7 @@
+   describe('uploadProfile', () => {
+     it('should retry on failure', async () => {
+       let attempts = 0
+-      const mockFn = vi.fn().mockImplementation(() => {
++      const mockFn = vi.fn<() => Promise<{ id: string; version: number }>>().mockImplementation(() => {
+         attempts++
+         if (attempts < 3) throw new Error('Network error')
+         return Promise.resolve({ id: '1', version: 1 })
+
+--- a/client/src/__tests__/userNameStyle.test.ts
++++ b/client/src/__tests__/userNameStyle.test.ts
+@@ -1,12 +1,64 @@
+-import { describe, it, expect } from 'vitest'
++import { beforeEach, describe, it, expect } from 'vitest'
++import { createPinia, setActivePinia } from 'pinia'
++import { computed } from 'vue'
+ import { buildNameStyle } from '../utils/userNameStyle'
++import { themes, useThemeStore } from '../stores/theme'
++import { compositeDisplayColor, displayContrast, parseDisplayColor } from '../utils/displayColor'
++import { normalizeCharacterCardHexForCSS } from '../utils/characterCardColor'
++
++function contrast(color: string, background: string, base = background) {
++  const back = compositeDisplayColor(parseDisplayColor(background)!, parseDisplayColor(base)!)
++  return displayContrast(compositeDisplayColor(parseDisplayColor(color)!, back), back)
++}
+ 
+ describe('buildNameStyle', () => {
++  beforeEach(() => {
++    localStorage.clear()
++    setActivePinia(createPinia())
++  })
+   it('returns empty style when no args', () => {
+     expect(buildNameStyle()).toEqual({})
+   })
+ 
+   it('applies color and bold', () => {
+-    expect(buildNameStyle('#fff', true)).toEqual({ color: '#fff', fontWeight: '700' })
++    expect(buildNameStyle('#fff', true, '#181818')).toEqual({ color: '#fff', fontWeight: '700' })
++  })
++
++  it('adapts extreme and alpha dyes to actual panel, card, hover, sidebar and gradient backgrounds', () => {
++    const theme = useThemeStore()
++    const saved = Object.freeze({ name_color: '#000000', name_bold: true, trp3: '80000000' })
++    const surfaces = ['panelBg', 'cardBg', 'cardBgHover', 'sidebarBg', 'gradientStart', 'gradientEnd'] as const
++    const dyes = ['#000000', '#FFFFFF', '#FFF468', '#804030', '#B87333', '#69CCF0', '#FF7D0A', 'rgba(0, 0, 0, 0.2)', normalizeCharacterCardHexForCSS(saved.trp3)]
++    for (const preset of themes) {
++      theme.setTheme(preset.id)
++      for (const dye of dyes) {
++        for (const surface of surfaces) {
++          const style = buildNameStyle(dye, saved.name_bold, surface)
++          expect(contrast(style.color!, preset.colors[surface], preset.colors.panelBg)).toBeGreaterThanOrEqual(4.5)
++          expect(style.fontWeight).toBe('700')
++        }
++        const panel = buildNameStyle(dye).color!
++        for (const surface of surfaces.slice(0, 3)) {
++          expect(contrast(panel, preset.colors[surface], preset.colors.panelBg)).toBeGreaterThanOrEqual(4.5)
++        }
++        const gradient = buildNameStyle(dye, false, ['gradientStart', 'gradientEnd']).color!
++        for (const surface of ['gradientStart', 'gradientEnd'] as const) {
++          expect(contrast(gradient, preset.colors[surface])).toBeGreaterThanOrEqual(4.5)
++        }
++      }
++    }
++    expect(saved).toEqual({ name_color: '#000000', name_bold: true, trp3: '80000000' })
++  })
++
++  it('updates existing computed display styles when the theme changes while preserving readable dyes', () => {
++    const theme = useThemeStore()
++    const name = computed(() => buildNameStyle('#000000', true))
++    expect(name.value.color).toBe('#000000')
++    theme.setTheme('black-gold')
++    expect(name.value.color).not.toBe('#000000')
++    expect(contrast(name.value.color!, theme.currentTheme.colors.panelBg)).toBeGreaterThanOrEqual(4.5)
++    expect(buildNameStyle('#FFFFFF', true).color).toBe('#FFFFFF')
++    theme.setTheme('classic')
++    expect(name.value).toEqual({ color: '#000000', fontWeight: '700' })
+   })
+ })
+
+--- a/client/src/components/character-cards/CharacterCardJumpPreview.test.ts
++++ b/client/src/components/character-cards/CharacterCardJumpPreview.test.ts
+@@ -32,6 +32,7 @@
+   residence: '',
+   relationship_status: '',
+   icon: '',
++  class_color: '',
+   name_color: '',
+   summary: '常年巡守灰港以北的林地。',
+   background_story: '',
+
+--- a/client/src/components/character-cards/CharacterCardJumpPreview.vue
++++ b/client/src/components/character-cards/CharacterCardJumpPreview.vue
+@@ -7,6 +7,7 @@
+   type CharacterCard,
+ } from '@/api/characterCard'
+ import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
++import { buildNameStyle } from '@/utils/userNameStyle'
+ import CharacterCardPortrait from './CharacterCardPortrait.vue'
+ 
+ const CARD_SELECTOR = '[data-jump-type="character_card"]'
+@@ -272,7 +273,7 @@
+             <span><i class="ri-id-card-line" aria-hidden="true"></i>{{ t('characterCards.jumpPreview.card') }}</span>
+             <small>{{ t(loading ? 'characterCards.jumpPreview.reading' : 'characterCards.jumpPreview.public') }}</small>
+           </div>
+-          <h3 :style="nameColor ? { color: nameColor } : undefined">{{ name }}</h3>
++          <h3 :style="buildNameStyle(nameColor)">{{ name }}</h3>
+           <strong>{{ loading ? t('characterCards.jumpPreview.readingLatest') : title }}</strong>
+           <span v-if="!loading && identity" class="character-preview__identity">{{ identity }}</span>
+           <p>{{ loading ? t('characterCards.jumpPreview.checking') : summary }}</p>
+
+--- a/client/src/components/character-cards/CharacterCardWall.test.ts
++++ b/client/src/components/character-cards/CharacterCardWall.test.ts
+@@ -41,6 +41,7 @@
+   residence: '',
+   relationship_status: '',
+   icon: '',
++  class_color: '',
+   name_color: '',
+   summary: '记录荒野道路与失落营地。',
+   portrait_image_url: '',
+@@ -77,7 +78,7 @@
+     expect(mocks.listMyCharacterCards).toHaveBeenCalledOnce()
+     expect(wrapper.find('.character-wall').exists()).toBe(true)
+     expect(wrapper.text()).toContain('为你的第一个角色留下正式档案')
+-    expect(wrapper.get('a[href="/character-cards/new"]').exists()).toBe(true)
++    expect(wrapper.find('a[href="/character-cards/new"]').exists()).toBe(true)
+   })
+ 
+   it('does not expose an empty management section on another user profile', async () => {
+@@ -98,7 +99,7 @@
+ 
+     expect(wrapper.text()).toContain('米拉·铜枝')
+     expect(wrapper.text()).toContain('远行制图师')
+-    expect(wrapper.get('a[href="/character-cards/51"]').exists()).toBe(true)
++    expect(wrapper.find('a[href="/character-cards/51"]').exists()).toBe(true)
+     expect(wrapper.find('a[href="/character-cards/new"]').exists()).toBe(false)
+   })
+ })
+
+--- a/client/src/components/character-cards/CharacterCardWall.vue
++++ b/client/src/components/character-cards/CharacterCardWall.vue
+@@ -8,6 +8,7 @@
+ } from '@/api/characterCard'
+ import { getCharacterCardDisplayName } from '@/utils/characterCardDraft'
+ import { getCharacterCardDisplayColor } from '@/utils/characterCardColor'
++import { buildNameStyle } from '@/utils/userNameStyle'
+ import CharacterCardPortrait from './CharacterCardPortrait.vue'
+ 
+ const props = defineProps<{
+@@ -158,7 +159,7 @@
+           </span>
+         </span>
+         <span class="portrait-card__plaque">
+-          <strong :style="displayNameColor(card) ? { color: displayNameColor(card) } : undefined">{{ displayName(card) }}</strong>
++          <strong :style="buildNameStyle(displayNameColor(card), false, ['gradientStart', 'gradientEnd'])">{{ displayName(card) }}</strong>
+           <span>{{ secondaryLine(card) }}</span>
+         </span>
+       </RouterLink>
+
+--- a/client/src/components/rpdb/RPDBWorkCard.test.ts
++++ b/client/src/components/rpdb/RPDBWorkCard.test.ts
+@@ -9,6 +9,7 @@
+   author_name: '守望者',
+   author_avatar: '/uploads/users/2/avatar/watch.jpg',
+   type: 'item_showcase',
++  visibility: 'public',
+   title: '月光灯笼',
+   slug: 'moon-lantern',
+   summary: '适合夜间巡逻与酒馆场景。',
+
+--- a/client/src/components/rpdb/RPDBWorkCard.vue
++++ b/client/src/components/rpdb/RPDBWorkCard.vue
+@@ -3,6 +3,8 @@
+ import type { RPDBWork } from '@/api/rpdb'
+ import { resolveRPDBMediaURL } from '@/api/rpdb'
+ import { sortRPDBStyleTags } from '@/constants/rpdbStyles'
++import { buildNameStyle } from '@/utils/userNameStyle'
++import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+ 
+ const props = withDefaults(defineProps<{
+   work: RPDBWork
+@@ -98,7 +100,7 @@
+               @error="($event.currentTarget as HTMLImageElement).hidden = true"
+             >
+           </span>
+-          <b :style="{ color: work.author_name_color ? `#${work.author_name_color}` : undefined }">{{ work.author_name || '匿名贡献者' }}</b>
++          <b :style="buildNameStyle(normalizeCharacterCardHexForCSS(work.author_name_color))">{{ work.author_name || '匿名贡献者' }}</b>
+         </div>
+         <div v-if="work.recommendation_reasons?.length" class="work-card__recommendation" data-testid="rpdb-recommendation-reasons">
+           <span v-for="reason in work.recommendation_reasons.slice(0, 2)" :key="reason">{{ reason }}</span>
+
+--- a/client/src/components/rpdb/RPDBWorkContent.test.ts
++++ b/client/src/components/rpdb/RPDBWorkContent.test.ts
+@@ -8,7 +8,7 @@
+     const wrapper = mount(RPDBWorkContent, {
+       props: {
+         work: {
+-          type: 'item',
++          type: 'item_showcase',
+           title: 'Unsafe work',
+           content: '<p>Safe copy</p><img src="/safe.png" onerror="alert(1)"><svg onload="alert(2)"></svg><a href="javascript:alert(3)">unsafe link</a>',
+         },
+
+--- a/client/src/components/sync/ConflictDialog.vue
++++ b/client/src/components/sync/ConflictDialog.vue
+@@ -1,8 +1,7 @@
+ <script setup lang="ts">
+-import { ref } from 'vue'
+ import type { ConflictInfo, ConflictResolution } from '../../utils/conflict'
+ 
+-const props = defineProps<{
++defineProps<{
+   conflict: ConflictInfo
+ }>()
+ 
+@@ -11,7 +10,6 @@
+   cancel: []
+ }>()
+ 
+-const showDiff = ref(false)
+ 
+ function useLocal() {
+   emit('resolve', 'local')
+
+--- a/client/src/views/archives/archiveDisplayColors.ts
++++ b/client/src/views/archives/archiveDisplayColors.ts
+@@ -1,53 +1,6 @@
+ import { useThemeStore } from '@/stores/theme'
+ 
+-interface DisplayColor {
+-  r: number
+-  g: number
+-  b: number
+-  a: number
+-}
+-
+-function parseColor(value: string): DisplayColor | null {
+-  const named: Record<string, string> = { black: '#000000', white: '#ffffff', transparent: '#00000000' }
+-  const color = named[value.trim().toLowerCase()] || value.trim()
+-  const hex = color.match(/^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i)
+-  if (hex) {
+-    const digits = hex[1].length <= 4 ? [...hex[1]].map(digit => digit + digit).join('') : hex[1]
+-    return {
+-      r: parseInt(digits.slice(0, 2), 16), g: parseInt(digits.slice(2, 4), 16),
+-      b: parseInt(digits.slice(4, 6), 16), a: digits.length === 8 ? parseInt(digits.slice(6), 16) / 255 : 1,
+-    }
+-  }
+-  const rgb = color.match(/^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)$/i)
+-  if (!rgb) return null
+-  return { r: Math.min(255, Number(rgb[1])), g: Math.min(255, Number(rgb[2])), b: Math.min(255, Number(rgb[3])), a: Math.min(1, Number(rgb[4] ?? 1)) }
+-}
+-
+-function composite(color: DisplayColor, background: DisplayColor): DisplayColor {
+-  return {
+-    r: Math.round(color.r * color.a + background.r * (1 - color.a)),
+-    g: Math.round(color.g * color.a + background.g * (1 - color.a)),
+-    b: Math.round(color.b * color.a + background.b * (1 - color.a)), a: 1,
+-  }
+-}
+-
+-function luminance(color: DisplayColor): number {
+-  const channels = [color.r, color.g, color.b].map(value => {
+-    const channel = value / 255
+-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+-  })
+-  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+-}
+-
+-function contrast(front: DisplayColor, back: DisplayColor): number {
+-  const a = luminance(front)
+-  const b = luminance(back)
+-  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+-}
+-
+-function cssColor(color: DisplayColor): string {
+-  return `rgb(${color.r}, ${color.g}, ${color.b})`
+-}
++import { compositeDisplayColor, displayColorCSS, parseDisplayColor, readableDisplayColor } from '@/utils/displayColor'
+ 
+ /** Display-only archive dyes; never write adjusted colors into saved records. */
+ export function useArchiveDisplayColors() {
+@@ -55,23 +8,10 @@
+ 
+   function readableArchiveColor(value: string, background?: string): string {
+     const colors = theme.currentTheme.colors
+-    const base = parseColor(colors.panelBg)!
+-    const back = composite(parseColor(background || colors.panelBg) || base, base)
+-    const front = composite(parseColor(value) || parseColor(colors.textMain)!, back)
+-    if (contrast(front, back) >= 4.5) return cssColor(front)
+-    const black = { r: 0, g: 0, b: 0, a: 1 }
+-    const white = { r: 255, g: 255, b: 255, a: 1 }
+-    const target = contrast(black, back) > contrast(white, back) ? black : white
+-    let low = 0
+-    let high = 1
+-    let result = target
+-    for (let step = 0; step < 16; step++) {
+-      const amount = (low + high) / 2
+-      const candidate = composite({ ...target, a: amount }, front)
+-      if (contrast(candidate, back) >= 4.5) { high = amount; result = candidate }
+-      else low = amount
+-    }
+-    return cssColor(result)
++    const base = parseDisplayColor(colors.panelBg)!
++    const back = compositeDisplayColor(parseDisplayColor(background || colors.panelBg) || base, base)
++    const display = readableDisplayColor(value, [back], colors.textMain)
++    return displayColorCSS(compositeDisplayColor(parseDisplayColor(display)!, back))
+   }
+ 
+   return { readableArchiveColor }
+
+--- a/client/src/views/archives/StoryDetail.vue
++++ b/client/src/views/archives/StoryDetail.vue
+@@ -1,9 +1,10 @@
+ <script setup lang="ts">
++import { compositeDisplayColor, displayColorCSS, displayLuminance, parseDisplayColor, readableDisplayColor, type DisplayColor } from '@/utils/displayColor'
+ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import { invoke } from '@tauri-apps/api/core'
+ import { save } from '@tauri-apps/plugin-dialog'
+-import { getStory, updateStory, addStoryEntries, publishStory, updateStoryEntry, deleteStoryEntry, updateEntriesBackgroundColor, batchDeleteEntries, archiveEntriesToStory, listStories, listBookmarks, createBookmark, updateBookmark, deleteBookmark, updateLastViewBookmark, getStoryMusic, createStoryMusicSegment, updateStoryMusicSegment, deleteStoryMusicSegment, type Story, type StoryEntry, type StoryBookmark, type StoryMusicSegment, type StoryMusicTrack, type StoryMusicPlaylist } from '@/api/story'
++import { getStory, updateStory, addStoryEntries, updateStoryEntry, deleteStoryEntry, updateEntriesBackgroundColor, batchDeleteEntries, archiveEntriesToStory, listStories, listBookmarks, createBookmark, updateBookmark, deleteBookmark, updateLastViewBookmark, getStoryMusic, createStoryMusicSegment, updateStoryMusicSegment, deleteStoryMusicSegment, type Story, type StoryEntry, type StoryBookmark, type StoryMusicSegment, type StoryMusicTrack, type StoryMusicPlaylist } from '@/api/story'
+ import { getCharacter, updateCharacter, listCharacters, type Character } from '@/api/character'
+ import { listMyCharacterCards, type CharacterCardSummary } from '@/api/characterCard'
+ import { getCharacterCardDisplayColor, normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+@@ -69,7 +70,6 @@
+ const characterCardsMap = ref<Map<number, CharacterCardSummary>>(new Map())
+ 
+ // 发布分享
+-const publishing = ref(false)
+ const showShareModal = ref(false)
+ 
+ // 角色信息弹窗
+@@ -763,22 +763,6 @@
+   return `${window.location.origin}/story/${story.value.share_code}`
+ })
+ 
+-async function togglePublish() {
+-  if (!story.value) return
+-  publishing.value = true
+-  try {
+-    const updated = await publishStory(storyId.value, !story.value.is_public)
+-    story.value = updated
+-    if (updated.is_public) {
+-      showShareModal.value = true
+-    }
+-  } catch (e) {
+-    console.error('发布失败:', e)
+-  } finally {
+-    publishing.value = false
+-  }
+-}
+-
+ function copyShareLink() {
+   navigator.clipboard.writeText(shareUrl.value)
+ }
+@@ -835,65 +819,7 @@
+   return ''
+ }
+ 
+-interface DisplayColor {
+-  r: number
+-  g: number
+-  b: number
+-  a: number
+-}
+-
+-// Resolve stored RGB/RGBA colors for display without changing saved character or entry data.
+-function parseDisplayColor(value: string): DisplayColor | null {
+-  const named: Record<string, string> = { black: '#000000', white: '#ffffff', transparent: '#00000000' }
+-  const color = named[value.trim().toLowerCase()] || value.trim()
+-  const hex = color.match(/^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i)
+-  if (hex) {
+-    const digits = hex[1].length <= 4 ? [...hex[1]].map(digit => digit + digit).join('') : hex[1]
+-    return {
+-      r: parseInt(digits.slice(0, 2), 16),
+-      g: parseInt(digits.slice(2, 4), 16),
+-      b: parseInt(digits.slice(4, 6), 16),
+-      a: digits.length === 8 ? parseInt(digits.slice(6), 16) / 255 : 1,
+-    }
+-  }
+-  const rgb = color.match(/^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)$/i)
+-  if (!rgb) return null
+-  return {
+-    r: Math.min(255, Number(rgb[1])),
+-    g: Math.min(255, Number(rgb[2])),
+-    b: Math.min(255, Number(rgb[3])),
+-    a: Math.min(1, Number(rgb[4] ?? 1)),
+-  }
+-}
+-
+-function compositeDisplayColor(color: DisplayColor, background: DisplayColor): DisplayColor {
+-  return {
+-    r: Math.round(color.r * color.a + background.r * (1 - color.a)),
+-    g: Math.round(color.g * color.a + background.g * (1 - color.a)),
+-    b: Math.round(color.b * color.a + background.b * (1 - color.a)),
+-    a: 1,
+-  }
+-}
+-
+-function displayLuminance(color: DisplayColor): number {
+-  const channels = [color.r, color.g, color.b].map(value => {
+-    const channel = value / 255
+-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+-  })
+-  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+-}
+-
+ const nativeColorScheme = computed(() => displayLuminance(parseDisplayColor(themeStore.currentTheme.colors.inputBg)!) < 0.5 ? 'dark' : 'light')
+-
+-function displayContrast(foreground: DisplayColor, background: DisplayColor): number {
+-  const front = displayLuminance(foreground)
+-  const back = displayLuminance(background)
+-  return (Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05)
+-}
+-
+-function displayColorCSS(color: DisplayColor): string {
+-  return `rgb(${color.r}, ${color.g}, ${color.b})`
+-}
+ 
+ function getDisplayBackground(value: string, base = themeStore.currentTheme.colors.cardBg): DisplayColor {
+   const background = parseDisplayColor(base)!
+@@ -903,25 +829,8 @@
+ 
+ // Preserve readable dyes; blend low-contrast ones toward the readable light/dark endpoint.
+ function getReadableDisplayColor(value: string, background: DisplayColor): string {
+-  const color = compositeDisplayColor(parseDisplayColor(value) || parseDisplayColor(themeStore.currentTheme.colors.textMain)!, background)
+-  if (displayContrast(color, background) >= 4.5) return displayColorCSS(color)
+-  const black = { r: 0, g: 0, b: 0, a: 1 }
+-  const white = { r: 255, g: 255, b: 255, a: 1 }
+-  const target = displayContrast(black, background) > displayContrast(white, background) ? black : white
+-  let low = 0
+-  let high = 1
+-  let result = target
+-  for (let step = 0; step < 16; step++) {
+-    const amount = (low + high) / 2
+-    const candidate = compositeDisplayColor({ ...target, a: amount }, color)
+-    if (displayContrast(candidate, background) >= 4.5) {
+-      high = amount
+-      result = candidate
+-    } else {
+-      low = amount
+-    }
+-  }
+-  return displayColorCSS(result)
++  const display = readableDisplayColor(value, [background], themeStore.currentTheme.colors.textMain)
++  return displayColorCSS(compositeDisplayColor(parseDisplayColor(display)!, background))
+ }
+ 
+ function getTagDisplayStyle(color: string) {
+@@ -1688,15 +1597,6 @@
+     await loadBookmarks()
+   } catch (e) {
+     console.error('更新书签失败:', e)
+-  }
+-}
+-
+-async function updateBookmarkColor(bookmark: StoryBookmark, color: string) {
+-  try {
+-    await updateBookmark(storyId.value, bookmark.id, { color })
+-    await loadBookmarks()
+-  } catch (e) {
+-    console.error('更新书签颜色失败:', e)
+   }
+ }
+ 
+
+--- a/client/src/views/archives/StoryList.vue
++++ b/client/src/views/archives/StoryList.vue
+@@ -19,7 +19,7 @@
+   initialFilter?: StoryFilterParams
+ }>()
+ 
+-const emit = defineEmits<{
++defineEmits<{
+   create: []
+   view: [id: number]
+ }>()
+
+--- a/client/src/views/character-cards/CharacterCardDetail.test.ts
++++ b/client/src/views/character-cards/CharacterCardDetail.test.ts
+@@ -50,6 +50,7 @@
+   residence: '',
+   relationship_status: '',
+   icon: '',
++  class_color: '',
+   name_color: '80C9D5E7',
+   summary: '',
+   background_story: '<p>背景</p>',
+@@ -388,7 +389,7 @@
+ 
+     await wrapper.get('.character-portrait__frame').trigger('click')
+     const viewer = wrapper.get('.image-viewer-stub')
+-    expect(viewer.attributes('data-images').split('|')).toHaveLength(2)
++    expect((viewer.attributes('data-images') || '').split('|')).toHaveLength(2)
+     expect(viewer.attributes('data-start')).toBe('0')
+     wrapper.unmount()
+   })
+
+--- a/client/src/views/character-cards/CharacterCardEditor.test.ts
++++ b/client/src/views/character-cards/CharacterCardEditor.test.ts
+@@ -136,6 +136,7 @@
+   residence: '',
+   relationship_status: '',
+   icon: '',
++  class_color: '',
+   name_color: '',
+   summary: '',
+   background_story: '<p>旧背景</p>',
+
+--- a/client/src/views/collection/CollectionDetail.vue
++++ b/client/src/views/collection/CollectionDetail.vue
+@@ -5,14 +5,14 @@
+ import { useUserStore } from '../../stores/user'
+ import { getCollection, deleteCollection, favoriteCollection, unfavoriteCollection, reorderCollectionPosts, reorderCollectionItems, type CollectionDetail } from '../../api/collection'
+ import { useDialog } from '../../composables/useDialog'
+-import { useToast } from '../../composables/useToast'
++import { useToastStore } from '@/stores/toast'
+ 
+ const route = useRoute()
+ const router = useRouter()
+ const { t } = useI18n()
+ const userStore = useUserStore()
+ const dialog = useDialog()
+-const toast = useToast()
++const toast = useToastStore()
+ 
+ const collection = ref<CollectionDetail | null>(null)
+ const loading = ref(true)
+
+--- a/client/src/views/community/PostDetail.vue
++++ b/client/src/views/community/PostDetail.vue
+@@ -132,9 +132,12 @@
+ }
+ 
+ // 将评论组织成树形结构
+-interface CommentWithReplies extends CommentWithAuthor {
+-  replies: CommentWithAuthor[]
++interface DisplayReply extends CommentWithAuthor {
+   replyToName?: string  // 回复的目标用户名
++}
++
++interface CommentWithReplies extends DisplayReply {
++  replies: DisplayReply[]
+ }
+ 
+ const organizedComments = computed(() => {
+@@ -175,10 +178,10 @@
+     }
+ 
+     if (topLevelParent) {
+-      topLevelParent.replies.push({ ...reply, replyToName } as any)
++      topLevelParent.replies.push({ ...reply, replyToName })
+     } else {
+       // 如果找不到父评论，作为顶级评论显示
+-      topLevel.push({ ...reply, replies: [], replyToName } as any)
++      topLevel.push({ ...reply, replies: [], replyToName })
+     }
+   })
+ 
+
+--- a/client/src/views/community/PostEdit.vue
++++ b/client/src/views/community/PostEdit.vue
+@@ -13,7 +13,6 @@
+   type SavePostDraftRequest,
+   type UpdatePostRequest,
+   POST_CATEGORIES,
+-  type PostCategory,
+ } from '@/api/post'
+ import { uploadImage } from '@/api/item'
+ import { listTags, type Tag } from '@/api/tag'
+@@ -24,14 +23,14 @@
+ import PostDraftBox from '@/components/PostDraftBox.vue'
+ import CollectionSelector from '@/components/CollectionSelector.vue'
+ import { getPostCollection, addPostToCollection, removePostFromCollection } from '@/api/collection'
+-import { useToast } from '@/composables/useToast'
++import { useToastStore } from '@/stores/toast'
+ import { useDialog } from '@/composables/useDialog'
+ import { useUserStore } from '@/stores/user'
+ import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
+ 
+ const router = useRouter()
+ const { t } = useI18n()
+-const toast = useToast()
++const toast = useToastStore()
+ const dialog = useDialog()
+ const userStore = useUserStore()
+ const route = useRoute()
+@@ -42,7 +41,12 @@
+ // 草稿必须绑定到明确的帖子 ID，避免路由复用时把旧帖内容写进新帖草稿。
+ const draftKeyForPost = (postId: number) => `post_edit_draft_${postId}`
+ 
+-function createEmptyForm(): UpdatePostRequest {
++interface PostEditForm extends UpdatePostRequest {
++  content: string
++  updated_at?: string
++}
++
++function createEmptyForm(): PostEditForm {
+   return {
+     title: '',
+     content: '',
+@@ -60,7 +64,7 @@
+   }
+ }
+ 
+-const form = ref<UpdatePostRequest>(createEmptyForm())
++const form = ref<PostEditForm>(createEmptyForm())
+ 
+ // 封面图相关
+ const coverImagePreview = ref('')
+@@ -407,7 +411,8 @@
+       region: res.post.region || '',
+       address: res.post.address || '',
+       guild_id: res.post.guild_id,
+-      status: res.post.status,
++      // Pending is a server review state; the edit form uses draft/publish intent.
++      status: res.post.status === 'draft' ? 'draft' : 'published',
+       is_public: res.post.is_public ?? true,
+       cover_image: res.post.cover_image || '',
+       event_type: res.post.event_type,
+@@ -415,7 +420,7 @@
+       event_end_time: res.post.event_end_time ? res.post.event_end_time.slice(0, 16) : undefined,
+       event_color: res.post.event_color || '#D97706',
+     }
+-    ;(form.value as any).updated_at = res.post.updated_at
++    form.value.updated_at = res.post.updated_at
+     coverImagePreview.value = form.value.cover_image || ''
+     return true
+   } catch (error) {
+
+--- a/client/src/views/guild/guildColorStyle.ts
++++ b/client/src/views/guild/guildColorStyle.ts
+@@ -1,16 +1,13 @@
++import { contrastingTextColor } from '@/utils/displayColor'
++
+ // Display-only styles for saved guild colors; never normalize the saved value.
+ export function guildColorStyle(value?: string) {
+   const hex = value?.replace(/^#/, '') || ''
+   if (!/^[\da-f]{6}$/i.test(hex)) return {}
+ 
+-  const channels = [0, 2, 4].map(offset => {
+-    const channel = parseInt(hex.slice(offset, offset + 2), 16) / 255
+-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+-  })
+-  const luminance = channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722
+   return {
+     background: `#${hex}`,
+-    color: luminance > 0.179 ? '#000000' : '#ffffff',
++    color: contrastingTextColor(`#${hex}`),
+   }
+ }
+ 
+
+--- a/client/src/views/guild/GuildDetail.vue
++++ b/client/src/views/guild/GuildDetail.vue
+@@ -2,7 +2,7 @@
+ import { ref, onMounted, computed } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import { useI18n } from 'vue-i18n'
+-import { getGuild, leaveGuild, deleteGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
++import { getGuild, leaveGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
+ import { getImageUrl } from '@/api/item'
+ import { useDialog } from '@/composables/useDialog'
+ import RModal from '@/components/RModal.vue'
+@@ -128,21 +128,6 @@
+     await loadGuild() // 重新加载公会信息
+   } catch (e: any) {
+     await alert({ title: t('guild.apply.failed'), message: e.message || t('guild.apply.failed'), type: 'error' })
+-  }
+-}
+-
+-async function handleDelete() {
+-  const confirmed = await confirm({
+-    title: t('guild.disband.title'),
+-    message: t('guild.disband.message'),
+-    type: 'error'
+-  })
+-  if (!confirmed) return
+-  try {
+-    await deleteGuild(guildId)
+-    router.push('/guild')
+-  } catch (e: any) {
+-    await alert({ title: t('guild.disband.failed'), message: e.message || t('guild.disband.failed'), type: 'error' })
+   }
+ }
+ 
+
+--- a/client/src/views/guild/GuildPosts.vue
++++ b/client/src/views/guild/GuildPosts.vue
+@@ -5,7 +5,6 @@
+ import { listPosts, type PostWithAuthor, type ListPostsParams, POST_CATEGORIES, type PostCategory } from '@/api/post'
+ import { getGuild, type Guild } from '@/api/guild'
+ import { resolveApiUrl } from '@/api/item'
+-import RButton from '@/components/RButton.vue'
+ import REmpty from '@/components/REmpty.vue'
+ import UserAvatarPopover from '@/components/UserAvatarPopover.vue'
+ import { buildNameStyle } from '@/utils/userNameStyle'
+
+--- a/client/src/views/guild/GuildStories.vue
++++ b/client/src/views/guild/GuildStories.vue
+@@ -4,10 +4,9 @@
+ import { useRoute, useRouter } from 'vue-router'
+ import { useI18n } from 'vue-i18n'
+ import { listStories, type Story, type StoryFilterParams } from '@/api/story'
+-import { getGuild, listGuildMembers, removeStoryFromGuild, sortGuildMembers, type Guild, type GuildMember, type GuildStoryWithUploader } from '@/api/guild'
++import { getGuild, listGuildMembers, removeStoryFromGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
+ import { listGuildTags, listTags, type Tag } from '@/api/tag'
+ import { useDialog } from '@/composables/useDialog'
+-import RButton from '@/components/RButton.vue'
+ import REmpty from '@/components/REmpty.vue'
+ import { buildNameStyle } from '@/utils/userNameStyle'
+ 
+@@ -40,7 +39,7 @@
+ const filteredStories = computed(() => {
+   if (!searchKeyword.value) return stories.value
+   const keyword = searchKeyword.value.toLowerCase()
+-  return stories.value.filter((story: GuildStoryWithUploader) =>
++  return stories.value.filter(story =>
+     story.title.toLowerCase().includes(keyword) ||
+     story.description?.toLowerCase().includes(keyword)
+   )
+
+--- a/client/src/views/market/ItemEdit.vue
++++ b/client/src/views/market/ItemEdit.vue
+@@ -26,7 +26,11 @@
+ const previewCropperFile = ref<File | null>(null)
+ const PREVIEW_IMAGE_MAX_BYTES = 20 * 1024 * 1024
+ 
+-const form = ref<UpdateItemRequest>({
++interface ItemEditForm extends UpdateItemRequest {
++  detail_content: string
++}
++
++const form = ref<ItemEditForm>({
+   name: '',
+   description: '',
+   detail_content: '',
+
+--- a/client/src/views/market/ItemUpload.vue
++++ b/client/src/views/market/ItemUpload.vue
+@@ -17,7 +17,7 @@
+ const userStore = useUserStore()
+ const loading = ref(false)
+ const uploadingImage = ref(false)
+-const uploadingArtwork = ref(false)
++
+ const itemTags = ref<Tag[]>([])
+ const previewImageInput = ref<HTMLInputElement | null>(null)
+ const artworkImagesInput = ref<HTMLInputElement | null>(null)
+@@ -311,7 +311,7 @@
+       </div>
+ 
+       <!-- 上传表单 -->
+-      <form class="upload-form" @submit.prevent="handleSubmit">
++      <form class="upload-form" @submit.prevent="handleSubmit('published')">
+         <!-- 作品名称 -->
+         <div class="form-group">
+           <label>{{ t('market.upload.form.name') }} <span class="required">*</span></label>
+
+--- a/client/src/views/market/MyItems.vue
++++ b/client/src/views/market/MyItems.vue
+@@ -131,7 +131,7 @@
+     message: t('market.myItems.deleteConfirm.message', { name: item.name }),
+     confirmText: t('market.myItems.deleteConfirm.confirm'),
+     cancelText: t('market.myItems.deleteConfirm.cancel'),
+-    type: 'danger'
++    type: 'error'
+   })
+ 
+   if (!confirmed) return
+
+--- a/client/src/views/moderator/ModeratorMain.vue
++++ b/client/src/views/moderator/ModeratorMain.vue
+@@ -187,7 +187,7 @@
+     ? trp3MirrorAddons.value.map(addon => ({ id: addon.id, name: addon.name }))
+     : fallbackTRP3MirrorOptions
+ ))
+-const selectedTRP3MirrorAddon = computed(() => trp3MirrorAddons.value.find(addon => addon.id === trp3MirrorForm.value.addonId))
++
+ const trp3MirrorCanUpload = computed(() => (
+   !!trp3MirrorForm.value.addonId
+   && !!trp3MirrorForm.value.version.trim()
+@@ -1934,13 +1934,6 @@
+   }
+ }
+ 
+-function openReviewModal(type: 'post' | 'item' | 'guild', id: number, title: string) {
+-  reviewTarget.value = { type, id, title }
+-  reviewAction.value = 'approve'
+-  reviewComment.value = ''
+-  showReviewModal.value = true
+-}
+-
+ async function submitReview() {
+   if (!reviewTarget.value) return
+ 
+@@ -2069,7 +2062,7 @@
+   }
+ }
+ 
+-async function handlePinPost(id: number, isPinned: boolean) {
++async function handlePinPost(id: number, _isPinned: boolean) {
+   try {
+     await pinPost(id)
+     await loadAllPosts()
+@@ -2079,7 +2072,7 @@
+   }
+ }
+ 
+-async function handleFeaturePost(id: number, isFeatured: boolean) {
++async function handleFeaturePost(id: number, _isFeatured: boolean) {
+   try {
+     await featurePost(id)
+     await loadAllPosts()
+
+--- a/client/src/views/rpdb/RPDBDetail.vue
++++ b/client/src/views/rpdb/RPDBDetail.vue
+@@ -523,9 +523,12 @@
+   }
+ }
+ 
+-function setReplyEditorRef(instance: { insertToken?: (token: string) => void } | null, commentId: number) {
++function setReplyEditorRef(instance: unknown, commentId: number) {
+   if (replyingTo.value?.id === commentId) {
+-    replyEditorRef.value = instance
++    const insertToken = instance && typeof instance === 'object' && 'insertToken' in instance
++      ? instance.insertToken : undefined
++    replyEditorRef.value = typeof insertToken === 'function'
++      ? { insertToken: (token: string) => insertToken.call(instance, token) } : null
+   }
+ }
+ 
+
+--- a/client/src/views/rpdb/RPDBEditor.test.ts
++++ b/client/src/views/rpdb/RPDBEditor.test.ts
+@@ -292,7 +292,7 @@
+     expect(wrapper.find('.generated-cover').exists()).toBe(false)
+     expect(wrapper.text()).toContain('可不填，发布后会根据标题自动生成默认封面')
+ 
+-    const coverInput = wrapper.find('[data-testid="cover-upload"] input')
++    const coverInput = wrapper.find<HTMLInputElement>('[data-testid="cover-upload"] input')
+     const coverClick = vi.spyOn(coverInput.element, 'click')
+     await wrapper.find('[data-testid="cover-upload"]').trigger('click')
+     expect(coverClick).toHaveBeenCalledOnce()
+
+--- a/client/src/views/rpdb/RPDBEditor.vue
++++ b/client/src/views/rpdb/RPDBEditor.vue
+@@ -52,7 +52,7 @@
+ const editingWorkId = ref<number | null>(null)
+ const drafts = ref<RPDBDraft[]>([])
+ const showDraftBox = ref(false)
+-let autoSaveTimer: ReturnType<typeof window.setTimeout> | null = null
++let autoSaveTimer: number | null = null
+ let draftSaveQueue: Promise<boolean> = Promise.resolve(true)
+ let editorSessionVersion = 0
+ const rpStyleTags = ref<Tag[]>([])
+@@ -226,7 +226,7 @@
+ const styleOptions = computed(() => {
+   return sortRPDBStyleTags(rpStyleTags.value.length ? rpStyleTags.value : RPDB_STYLE_PRESETS)
+ })
+-const selectedStyleTags = computed(() => {
++const selectedStyleTags = computed<Array<Pick<Tag, 'id' | 'name' | 'color'> & { custom?: boolean }>>(() => {
+   const selectedIds = new Set(form.tag_ids || [])
+   const systemTags = styleOptions.value.filter(tag => tag.id && selectedIds.has(tag.id))
+   const selectedSystemIds = new Set(systemTags.map(tag => tag.id))
+@@ -346,18 +346,6 @@
+ 
+ function ensureHomeFurniture() {
+   if (!form.references?.length) addFurnitureReference()
+-}
+-
+-function addMedia() {
+-  const media = Array.isArray(form.media) ? form.media : (form.media = [])
+-  media.push({ type: 'image', url: '', caption: '' })
+-}
+-
+-function addSlot() {
+-  const slots = Array.isArray(form.transmog_slots) ? form.transmog_slots : (form.transmog_slots = [])
+-  const usedSlots = new Set(slots.map(slot => slot.slot))
+-  const nextSlot = slotOptions.value.find(option => !usedSlots.has(option.value)) || slotOptions.value[0]
+-  slots.push({ slot: nextSlot.value, role: 'required', name: '', description: '', source: '', wowhead_url: '', variant: '', note: '', sort_order: slots.length + 1 })
+ }
+ 
+ function ensureTransmogSlots() {
+
+--- a/client/src/views/rpdb/RPDBLists.vue
++++ b/client/src/views/rpdb/RPDBLists.vue
+@@ -35,12 +35,7 @@
+ const activeList = computed(() => lists.value[active.value])
+ const guideSteps = computed(() => guideWork.value?.guide_steps || [])
+ const guideModalTitle = computed(() => guideWork.value?.title || guideEntry.value?.work.title || '获取攻略')
+-const statusLabels: Record<RPDBListStatus, string> = {
+-  wanted: '未收集',
+-  farming: '未收集',
+-  owned: '已收集',
+-  paused: '未收集',
+-}
++
+ const collectedCount = computed(() => activeList.value?.entries.filter(entry => entry.status === 'owned').length || 0)
+ const pendingCount = computed(() => activeList.value?.entries.filter(entry => entry.status !== 'owned').length || 0)
+ 
+
+--- a/client/src/views/sync/SyncMain.vue
++++ b/client/src/views/sync/SyncMain.vue
+@@ -267,9 +267,6 @@
+ const toSyncList = computed(() =>
+   currentProfiles.value.filter(p => getStatus(p.id) !== 'synced')
+ )
+-
+-// 云端账号备份列表
+-const cloudBackupsList = computed(() => Array.from(cloudBackups.value.values()))
+ 
+ // 当前账号的云端人物卡列表（从 profiles_data 解析）
+ interface CloudProfileItem {
+@@ -489,16 +486,6 @@
+     return
+   }
+   router.push(`/sync/profile/${id}`)
+-}
+-
+-function openSettings() {
+-  router.push('/settings')
+-}
+-
+-// 打开删除确认弹窗
+-function openDeleteModal(accountId: string) {
+-  pendingDeleteAccount.value = accountId
+-  showDeleteModal.value = true
+ }
+ 
+ // 确认删除云端备份（账号级别）
+
+--- a/client/src/views/guild/layouts/GuildLayout1.vue
++++ b/client/src/views/guild/layouts/GuildLayout1.vue
+@@ -15,13 +15,6 @@
+   (e: 'delete'): void
+   (e: 'settings'): void
+ }>()
+-
+-const bannerStyle = computed(() => {
+-  if (props.guild.banner) {
+-    return { backgroundImage: `url(${props.guild.banner})` }
+-  }
+-  return { background: `linear-gradient(135deg, #${props.guild.color || 'B87333'}, #4B3621)` }
+-})
+ 
+ const factionLabel = computed(() => {
+   const map: Record<string, string> = { alliance: '联盟', horde: '部落', neutral: '中立' }
+@@ -119,7 +112,7 @@
+         <ul class="leaderboard">
+           <li v-for="(m, i) in members.slice(0, 3)" :key="m.id">
+             <span class="rank" :class="{ gold: i === 0 }">{{ i + 1 }}</span>
+-            <span class="name" :style="buildNameStyle(m.name_color, m.name_bold)">{{ m.username }}</span>
++            <span class="name" :style="buildNameStyle(m.name_color, m.name_bold, ['gradientStart', 'gradientEnd'])">{{ m.username }}</span>
+             <span class="score">{{ 2400 - i * 450 }}</span>
+           </li>
+         </ul>

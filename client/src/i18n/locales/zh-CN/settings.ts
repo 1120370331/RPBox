@@ -1,6 +1,25 @@
 export default {
   title: '系统设置',
   back: '返回',
+  tabs: {
+    general: '通用设置',
+    account: '账号设置',
+  },
+  deleteAccount: {
+    title: '注销账号',
+    description: '永久注销当前账号，清理云端数据，所有帖子将不再对外显示。此操作不可恢复。',
+    message: '注销将删除账号的云端备份、剧情、帖子、道具及相关个人数据。已公开发布并审核通过的 RP 数据库知识作品将按隐私政策匿名保留。',
+    confirmMessage: '确定永久注销当前账号吗？所有帖子将被删除，原详情链接也将失效，云端个人数据无法恢复。',
+    passwordLabel: '当前登录密码',
+    passwordPlaceholder: '请输入当前登录密码',
+    passwordRequired: '请输入当前登录密码',
+    continue: '继续注销',
+    confirm: '确认永久注销',
+    cancel: '取消',
+    deleting: '注销中...',
+    success: '账号已注销',
+    failed: '注销账号失败',
+  },
   sections: {
     account: '账号设置',
     appearance: '外观设置',
@@ -119,6 +138,11 @@ export default {
     removeFailed: '移除屏蔽失败',
   },
   addon: {
+    autoUpdate: '插件自动更新',
+    autoUpdateDesc: '检测到新版本时，自动更新当前游戏目录中已安装的 RPBox、TRP3、Extended 和 Musician 插件。',
+    autoUpdateSuccess: '{name} 已自动更新至 v{version}',
+    autoUpdateFailed: '{name} 自动更新失败，请稍后重试或手动更新',
+    busy: '插件正在处理中，请稍后重试',
     title: '插件管理',
     description: '管理 RPBox Addon 插件版本',
     installed: '已安装',

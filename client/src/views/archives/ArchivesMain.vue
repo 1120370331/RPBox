@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
@@ -16,6 +16,8 @@ import StoryList from './StoryList.vue'
 import { createStory, addStoryEntries, getExistingStoryEntrySourceIds, listStories, type CreateStoryEntryRequest, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
 import { getAddonManifest } from '@/api/addon'
+import { ADDONS_UPDATED_EVENT, autoUpdateAddons, addonAutoUpdateEnabled } from '@/services/addonAutoUpdate'
+import { isAddonVersionNewer } from '@/utils/addonVersion'
 import { getGuild, type Guild } from '@/api/guild'
 import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
@@ -211,13 +213,20 @@ async function checkAddonUpdate() {
 
     if (!latestVersion || !currentVersion) return
 
-    if (currentVersion === latestVersion) {
+    if (!isAddonVersionNewer(latestVersion, currentVersion)) {
       localStorage.setItem('addon_last_checked_version', latestVersion)
       localStorage.removeItem('addon_update_prompt_key')
       return
     }
 
     const promptKey = `${currentVersion}->${latestVersion}`
+    if (addonAutoUpdateEnabled.value) {
+      await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, [{
+        id: 'rpbox', installed: true, currentVersion, latestVersion,
+      }])
+      await checkAddonStatus()
+      return
+    }
     if (localStorage.getItem('addon_update_prompt_key') === promptKey) return
 
     // 查找最新版本的详细信息（包括 changelog）
@@ -246,10 +255,17 @@ async function handleCheckAddonUpdate() {
     const manifest = await getAddonManifest()
     const latestVersion = normalizeAddonVersion(manifest.latest)
 
-    if (currentVersion === latestVersion) {
+    if (!isAddonVersionNewer(latestVersion, currentVersion)) {
       // 使用 toast 提示（需要导入 toast）
       console.log('当前已是最新版本')
     } else {
+      if (addonAutoUpdateEnabled.value) {
+        await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, [{
+          id: 'rpbox', installed: true, currentVersion, latestVersion,
+        }])
+        await checkAddonStatus()
+        return
+      }
       const latestVersionInfo = manifest.versions.find(v => normalizeAddonVersion(v.version) === latestVersion)
       const changelog = latestVersionInfo?.changelog || '暂无更新说明'
       addonUpdateDialogRef.value?.show(currentVersion, latestVersion, changelog, wowPath.value, selectedFlavor.value)
@@ -262,6 +278,7 @@ async function handleCheckAddonUpdate() {
 }
 
 onMounted(() => {
+  window.addEventListener(ADDONS_UPDATED_EVENT, handleAddonUpdated)
   loadTags()
   // 从 URL query 读取公会筛选
   if (route.query.guild_id) {
@@ -281,6 +298,12 @@ onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
   checkAddonUpdate()  // 检查插件更新
 })
+
+function handleAddonUpdated() {
+  void checkAddonStatus()
+}
+
+onBeforeUnmount(() => window.removeEventListener(ADDONS_UPDATED_EVENT, handleAddonUpdated))
 
 // 监听路由变化
 watch(() => route.query.guild_id, async (newGuildId) => {

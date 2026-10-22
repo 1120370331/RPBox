@@ -70,7 +70,7 @@ func (s *Server) deleteAccount(c *gin.Context) {
 		return
 	}
 	if !authpkg.CheckPassword(req.Password, user.PassHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "密码错误"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "密码错误"})
 		return
 	}
 
