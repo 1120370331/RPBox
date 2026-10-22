@@ -69,6 +69,32 @@ afterEach(() => {
 })
 
 describe('CharacterCardWall', () => {
+  it('moves between horizontal pages with arrows and dots and resets after resizing', async () => {
+    mocks.listMyCharacterCards.mockResolvedValue({ character_cards: Array.from({ length: 7 }, (_, index) => ({ ...publicCard, id: index + 1 })) })
+    const wrapper = mountWall(true)
+    await flushPromises()
+    const viewport = wrapper.get<HTMLElement>('.character-wall__viewport')
+    Object.defineProperty(viewport.element, 'clientWidth', { configurable: true, value: 660 })
+    const scrollTo = vi.fn()
+    viewport.element.scrollTo = scrollTo
+    window.dispatchEvent(new Event('resize'))
+    await flushPromises()
+    expect(wrapper.findAll('.character-wall__dot')).toHaveLength(3)
+    await wrapper.get('[aria-label="下一页人物卡"]').trigger('click')
+    expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ left: 660 }))
+    expect(wrapper.findAll('.character-wall__dot')[1]!.attributes('aria-current')).toBe('page')
+    await wrapper.findAll('.character-wall__dot')[2]!.trigger('click')
+    expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ left: 1320 }))
+    expect(wrapper.get('[aria-label="下一页人物卡"]').attributes('disabled')).toBeDefined()
+    Object.defineProperty(viewport.element, 'clientWidth', { configurable: true, value: 430 })
+    window.dispatchEvent(new Event('resize'))
+    await flushPromises()
+    expect(wrapper.findAll('.character-wall__dot')).toHaveLength(4)
+    expect(wrapper.findAll('.character-wall__dot')[0]!.attributes('aria-current')).toBe('page')
+    expect(viewport.element.scrollLeft).toBe(0)
+    wrapper.unmount()
+  })
+
   it('keeps the management empty state visible on the owner profile', async () => {
     mocks.listMyCharacterCards.mockResolvedValue({ character_cards: [] })
 

@@ -10,6 +10,7 @@ const notificationStore = useNotificationStore()
 const mounted = ref(false)
 const activeTab = ref('all')
 const notifications = ref<Notification[]>([])
+const pendingReadIds = new Set<number>()
 const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
@@ -63,14 +64,19 @@ function handleTabChange(tabId: string) {
 }
 
 async function handleMarkAsRead(notification: Notification) {
-  if (notification.is_read) return
+  if (notification.is_read || pendingReadIds.has(notification.id)) return
 
+  pendingReadIds.add(notification.id)
   try {
     await markNotificationAsRead(notification.id)
-    notification.is_read = true
-    notificationStore.decrementUnreadCount()
+    if (!notification.is_read) {
+      notification.is_read = true
+      notificationStore.decrementUnreadCount()
+    }
   } catch (error) {
     console.error('标记已读失败:', error)
+  } finally {
+    pendingReadIds.delete(notification.id)
   }
 }
 
@@ -231,6 +237,7 @@ function getTypeBadge(type: string): string {
           :key="notification.id"
           class="notification-item"
           :class="{ unread: !notification.is_read }"
+          @mouseenter="handleMarkAsRead(notification)"
         >
           <!-- 未读标记三角形 -->
           <div v-if="!notification.is_read" class="unread-corner"></div>

@@ -12,7 +12,7 @@ import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RModal from '@/components/RModal.vue'
 import UserLevelBadge from '@/components/UserLevelBadge.vue'
 import AchievementMedal from '@/components/AchievementMedal.vue'
-import RPDBContributionSection from '@/components/rpdb/RPDBContributionSection.vue'
+import UserContributionSection from '@/components/user/UserContributionSection.vue'
 import CharacterCardWall from '@/components/character-cards/CharacterCardWall.vue'
 import { buildForumLevelGuide, computeLevelProgressPercent } from '@/utils/forumLevel'
 import { buildNameStyle } from '@/utils/userNameStyle'
@@ -296,11 +296,7 @@ function handleAvatarCropperError(error: Error) {
   toast.error(error.message || '头像处理失败')
 }
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short' })
-}
+
 
 function getRoleLabel(role: string) {
   const map: Record<string, string> = { owner: '会长', admin: '管理员', member: '成员' }
@@ -720,37 +716,10 @@ function previewAchievementNotification() {
           :is-own-profile="isOwnProfile"
         />
 
-        <RPDBContributionSection
+        <UserContributionSection
           :user-id="Number(userId)"
           :is-own-profile="isOwnProfile"
         />
-
-        <!-- 4. 账户状态卡片 -->
-        <div class="status-card">
-          <div class="status-bg"></div>
-          <div class="status-content">
-            <h2 class="status-title">账户状态</h2>
-            <div class="status-indicator">
-              <span class="status-dot"></span>
-              <span>正常</span>
-            </div>
-
-            <div class="status-info">
-              <div class="status-row">
-                <span>角色</span>
-                <span class="mono">{{ userProfile.role === 'admin' ? '管理员' : userProfile.role === 'moderator' ? '版主' : '用户' }}</span>
-              </div>
-              <div class="status-row">
-                <span>注册时间</span>
-                <span class="mono">{{ formatDate(userProfile.created_at) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <button v-if="isOwnProfile" class="settings-btn" @click="$router.push('/settings')">
-            设置
-          </button>
-        </div>
 
         <!-- 5. 成就墙 -->
         <div class="achievements-card achievement-wall-card">
@@ -2110,121 +2079,6 @@ function previewAchievementNotification() {
 
 .pending-tag i {
   font-size: 12px;
-}
-
-/* 4. 账户状态卡片 */
-.status-card {
-  grid-column: span 12;
-  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-  border-radius: 12px;
-  box-shadow: var(--shadow-md, 0 4px 20px -2px rgba(75, 54, 33, 0.2));
-  padding: 24px;
-  color: var(--gradient-text);
-  position: relative;
-  overflow: visible;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-@media (min-width: 768px) {
-  .status-card {
-    grid-column: span 4;
-  }
-}
-
-.status-bg {
-  position: absolute;
-  top: -32px;
-  right: -32px;
-  width: 128px;
-  height: 128px;
-  background: var(--color-accent, #B87333);
-  border-radius: 50%;
-  opacity: 0.2;
-  filter: blur(40px);
-}
-
-.status-content {
-  position: relative;
-  z-index: 10;
-}
-
-.status-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  color: var(--gradient-text-muted);
-  margin: 0 0 16px 0;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-}
-
-.status-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--color-success, #4ade80);
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
-}
-
-.status-info {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.status-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: var(--gradient-text-muted);
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.status-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.status-row .mono {
-  font-family: monospace;
-  color: var(--gradient-text);
-}
-
-.settings-btn {
-  position: relative;
-  z-index: 10;
-  width: 100%;
-  margin-top: 24px;
-  padding: 10px;
-  background: var(--gradient-surface);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  color: var(--gradient-text);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  backdrop-filter: blur(4px);
-  transition: all 0.2s;
-  border-color: var(--gradient-border);
-}
-
-.settings-btn:hover {
-  background: var(--gradient-surface-hover);
 }
 
 /* 5. 成就陈列 */

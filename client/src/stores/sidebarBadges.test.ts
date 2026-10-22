@@ -22,6 +22,7 @@ vi.mock('@/api/rpdb', () => ({ listRPDBWorks: mocks.listRPDBWorks }))
 vi.mock('@/api/addon', () => ({
   getAddonLatest: mocks.getAddonLatest,
   getTRP3Latest: mocks.getTRP3Latest,
+  getAddonDownloadUrl: (version: string) => `https://rpbox.test/addon/${version}`,
 }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }))
 
@@ -119,6 +120,28 @@ describe('sidebar badge store', () => {
     await store.initialize(42)
 
     expect(store.addonUpdateCount).toBe(0)
+  })
+
+  it('automatically installs a detected update at startup and clears its badge', async () => {
+    localStorage.setItem('wow_path', 'C:\\Games\\World of Warcraft')
+    localStorage.setItem('addon_auto_update', 'true')
+    let installedVersion = '1.0.0'
+    mocks.invoke.mockImplementation(async (command: string) => {
+      if (command === 'check_trp3_addons') return { addons: [] }
+      if (command === 'check_addon_installed') return { installed: true, version: installedVersion }
+      if (command === 'install_addon_from_url') installedVersion = '1.1.0'
+      return undefined
+    })
+    mocks.getTRP3Latest.mockResolvedValue({ addons: [] })
+    mocks.getAddonLatest.mockResolvedValue({ version: '1.1.0' })
+    const store = useSidebarBadgesStore()
+    await store.initialize(42)
+    expect(mocks.invoke).toHaveBeenCalledWith('install_addon_from_url', {
+      wowPath: 'C:\\Games\\World of Warcraft', flavor: '_retail_', pluginId: 'rpbox', downloadUrl: 'https://rpbox.test/addon/1.1.0',
+    })
+    expect(store.addonUpdateCount).toBe(0)
+    await store.refreshAddonUpdates()
+    expect(mocks.invoke.mock.calls.filter(([command]) => command === 'install_addon_from_url')).toHaveLength(1)
   })
 
   it('shows each RPBox system update once until a newer version is available', () => {

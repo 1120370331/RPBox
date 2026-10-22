@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
 import { useToastStore } from '@/stores/toast'
+import { runAddonOperation } from '@/services/addonAutoUpdate'
 
 const toast = useToastStore()
 const visible = ref(false)
@@ -57,12 +58,12 @@ async function handleDownload() {
     const url = getAddonDownloadUrl(latestVersion.value)
     console.log('[AddonUpdateDialog] 下载 URL:', url)
 
-    await invoke('install_addon_from_url', {
+    await runAddonOperation({ wowPath: wowPath.value, flavor: flavor.value }, 'rpbox', 'install', () => invoke('install_addon_from_url', {
       wowPath: wowPath.value,
       flavor: flavor.value,
       downloadUrl: url,
       pluginId: 'rpbox',
-    })
+    }))
     console.log('[AddonUpdateDialog] 安装成功')
     localStorage.setItem('addon_last_checked_version', latestVersion.value)
     localStorage.removeItem('addon_update_prompt_key')

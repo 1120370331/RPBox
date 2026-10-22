@@ -305,6 +305,7 @@ func (s *Server) setupRoutes() {
 			auth.GET("/users/search", s.searchUsers)
 			auth.GET("/users/:id", s.getUserProfile)
 			auth.GET("/users/:id/guilds", s.getUserGuilds)
+			auth.GET("/users/:id/contributions", s.listUserContributions)
 
 			// 通知中心
 			auth.GET("/notifications", s.listNotifications)

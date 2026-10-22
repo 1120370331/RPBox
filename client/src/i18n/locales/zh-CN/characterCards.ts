@@ -80,6 +80,7 @@ export default {
     createBlank: '从零创建',
   },
   wall: {
+    previous: '上一页人物卡', next: '下一页人物卡', pagination: '人物卡分页', page: '第 {page} 页人物卡',
     loadFailed: '人物卡展示墙加载失败',
     noIdentity: '身份尚待记录',
     kicker: 'Adventurer archive',

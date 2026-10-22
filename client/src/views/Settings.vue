@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
@@ -9,11 +9,14 @@ import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { useThemeStore, themes, type Theme } from '@/stores/theme'
 import { useLocaleStore, type LocaleType } from '@/stores/locale'
-import { redeemSponsorCode, uploadAvatar } from '@/api/user'
+import { deleteAccount, redeemSponsorCode, uploadAvatar } from '@/api/user'
+import { dialog } from '@/composables/useDialog'
 import { useUpdater } from '@/composables/useUpdater'
 import { getAddonManifest } from '@/api/addon'
 import { bumpImageCacheVersion } from '@/utils/imageCache'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { isAddonVersionNewer } from '@/utils/addonVersion'
+import { ADDONS_UPDATED_EVENT, addonAutoUpdateEnabled, setAddonAutoUpdateEnabled, autoUpdateAddons } from '@/services/addonAutoUpdate'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RModal from '@/components/RModal.vue'
@@ -57,6 +60,65 @@ const sponsorLevel = computed(() => {
 const canUseTheme = computed(() => sponsorLevel.value >= 3)
 
 const mounted = ref(false)
+const activeTab = ref<'general' | 'account'>('general')
+const settingsTabs = ['general', 'account'] as const
+const showDeleteAccountModal = ref(false)
+const deletePassword = ref('')
+const deletingAccount = ref(false)
+
+function handleTabKeydown(event: KeyboardEvent, index: number) {
+  let nextIndex: number
+  if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+    nextIndex = (index + 1) % settingsTabs.length
+  } else if (event.key === 'Home') {
+    nextIndex = 0
+  } else if (event.key === 'End') {
+    nextIndex = settingsTabs.length - 1
+  } else {
+    return
+  }
+  event.preventDefault()
+  activeTab.value = settingsTabs[nextIndex]!
+  document.getElementById(`settings-tab-${activeTab.value}`)?.focus()
+}
+
+function openDeleteAccountModal() {
+  deletePassword.value = ''
+  showDeleteAccountModal.value = true
+}
+
+async function handleDeleteAccount() {
+  if (deletingAccount.value || !userStore.user) return
+  if (!deletePassword.value) {
+    toast.warning(t('settings.deleteAccount.passwordRequired'))
+    return
+  }
+
+  const accountId = userStore.user.id
+  const password = deletePassword.value
+  deletingAccount.value = true
+  try {
+    const confirmed = await dialog.confirm({
+      title: t('settings.deleteAccount.title'),
+      message: t('settings.deleteAccount.confirmMessage'),
+      type: 'error',
+      confirmText: t('settings.deleteAccount.confirm'),
+      cancelText: t('settings.deleteAccount.cancel'),
+    })
+    if (!confirmed) return
+    await deleteAccount(password)
+    userStore.removeAccountHistoryItem(accountId)
+    userStore.logout()
+    showDeleteAccountModal.value = false
+    toast.success(t('settings.deleteAccount.success'))
+    await router.replace({ name: 'login' })
+  } catch (error: any) {
+    toast.error(error?.message || t('settings.deleteAccount.failed'))
+  } finally {
+    deletePassword.value = ''
+    deletingAccount.value = false
+  }
+}
 const wowPath = ref('')
 const detectedPaths = ref<WowInstallation[]>([])
 const isScanning = ref(false)
@@ -93,6 +155,7 @@ const changelogEntries = computed(() => {
 })
 
 onMounted(async () => {
+  window.addEventListener(ADDONS_UPDATED_EVENT, handleAddonUpdated)
   wowPath.value = localStorage.getItem('wow_path') || ''
   autoSync.value = localStorage.getItem('auto_sync') === 'true'
   syncOnStartup.value = localStorage.getItem('sync_on_startup') !== 'false'
@@ -114,6 +177,12 @@ onMounted(async () => {
   // 检查系统开机启动状态
   await loadLaunchOnStartup()
 })
+
+onBeforeUnmount(() => window.removeEventListener(ADDONS_UPDATED_EVENT, handleAddonUpdated))
+
+function handleAddonUpdated() {
+  void checkAddonInstalled()
+}
 
 async function detectPaths() {
   isScanning.value = true
@@ -333,9 +402,16 @@ async function handleCheckAddonUpdate() {
     console.log('[Settings] 获取到 manifest:', manifest)
     const latestVersion = manifest.latest
 
-    if (addonVersion.value === latestVersion) {
+    if (!isAddonVersionNewer(latestVersion, addonVersion.value)) {
       toast.success(t('settings.addon.alreadyLatest'))
     } else {
+      if (addonAutoUpdateEnabled.value) {
+        await autoUpdateAddons({ wowPath: wowPath.value, flavor: localStorage.getItem('selected_flavor') || '_retail_' }, [{
+          id: 'rpbox', installed: true, currentVersion: addonVersion.value, latestVersion,
+        }])
+        await checkAddonInstalled()
+        return
+      }
       console.log('[Settings] 发现新版本:', latestVersion)
       const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
       const changelog = latestVersionInfo?.changelog || t('settings.addon.noChangelog')
@@ -394,78 +470,27 @@ watch(() => localeStore.currentLocale, (newLocale) => {
       </div>
     </div>
 
-    <!-- 设置内容区 -->
-    <div class="settings-content">
-      <!-- 个人资料 -->
-      <div class="setting-card anim-item" style="--delay: 1">
-        <div class="card-header">
-          <div class="card-icon">
-            <i class="ri-user-line"></i>
-          </div>
-          <div class="card-title">
-            <h3>{{ $t('settings.profile.title') }}</h3>
-            <p>{{ $t('settings.profile.description') }}</p>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="avatar-section">
-            <div class="avatar-preview" @click="triggerAvatarUpload">
-              <img v-if="userStore.user?.avatar" :src="userStore.user.avatar" alt="avatar" />
-              <span v-else class="avatar-placeholder">
-                {{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}
-              </span>
-              <div class="avatar-overlay">
-                <i :class="avatarUploading ? 'ri-loader-4-line spin' : 'ri-camera-line'"></i>
-              </div>
-            </div>
-            <div class="avatar-info">
-              <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || $t('settings.profile.notLoggedIn') }}</h4>
-              <p>{{ $t('settings.profile.avatarHint') }}</p>
-            </div>
-            <input
-              ref="avatarInputRef"
-              type="file"
-              accept="image/*"
-              style="display: none"
-              @change="handleAvatarChange"
-            />
-            <ImageCropperDialog
-              v-model="avatarCropperOpen"
-              :file="avatarCropperFile"
-              :aspect-ratio="1"
-              :output-width="512"
-              :output-height="512"
-              :max-size-k-b="512"
-              title="调整头像"
-              round-preview
-              @cropped="handleAvatarCropped"
-              @error="handleAvatarCropperError"
-            />
-          </div>
-        </div>
-      </div>
+    <div class="settings-tabs" role="tablist" :aria-label="$t('settings.title')">
+      <button
+        v-for="(tab, index) in settingsTabs"
+        :id="`settings-tab-${tab}`"
+        :key="tab"
+        type="button"
+        role="tab"
+        class="settings-tab"
+        :class="{ active: activeTab === tab }"
+        :aria-selected="activeTab === tab"
+        :aria-controls="`settings-panel-${tab}`"
+        :tabindex="activeTab === tab ? 0 : -1"
+        @click="activeTab = tab"
+        @keydown="handleTabKeydown($event, index)"
+      >
+        <i :class="tab === 'general' ? 'ri-settings-3-line' : 'ri-user-settings-line'"></i>
+        {{ $t(`settings.tabs.${tab}`) }}
+      </button>
+    </div>
 
-      <div class="setting-card anim-item" style="--delay: 1.2">
-        <div class="card-header">
-          <div class="card-icon">
-            <i class="ri-forbid-2-line"></i>
-          </div>
-          <div class="card-title">
-            <h3>{{ $t('settings.blocks.title') }}</h3>
-            <p>{{ $t('settings.blocks.description') }}</p>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="setting-inline-action">
-            <p class="setting-inline-desc">{{ $t('settings.blocks.description') }}</p>
-            <button class="btn btn-primary" @click="router.push({ name: 'settings-blocked-users' })">
-              <i class="ri-arrow-right-line"></i>
-              {{ $t('settings.blocks.manageAction') }}
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <div v-show="activeTab === 'general'" id="settings-panel-general" class="settings-content" role="tabpanel" aria-labelledby="settings-tab-general">
       <!-- 主题设置 -->
       <div class="setting-card anim-item" style="--delay: 1.5">
         <div class="card-header">
@@ -662,26 +687,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
               <div class="switch-thumb"></div>
             </div>
           </label>
-          <form class="redeem-code-box" @submit.prevent="handleRedeemSponsorCode">
-            <div class="redeem-code-info">
-              <span class="switch-label">{{ $t('settings.system.redeemCodeTitle') }}</span>
-              <span class="switch-desc">{{ $t('settings.system.redeemCodeDesc') }}</span>
-            </div>
-            <div class="redeem-code-row">
-              <input
-                v-model="sponsorRedeemCode"
-                class="redeem-code-input"
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                :placeholder="$t('settings.system.redeemCodePlaceholder')"
-              />
-              <button class="btn btn-primary" type="submit" :disabled="sponsorRedeeming || !sponsorRedeemCodeTrimmed">
-                <i :class="sponsorRedeeming ? 'ri-loader-4-line spin' : 'ri-coupon-3-line'"></i>
-                {{ sponsorRedeeming ? $t('settings.system.redeemCodeRedeeming') : $t('settings.system.redeemCodeAction') }}
-              </button>
-            </div>
-          </form>
+
         </div>
       </div>
 
@@ -726,6 +732,21 @@ watch(() => localeStore.currentLocale, (newLocale) => {
           </div>
         </div>
         <div class="card-body">
+          <button
+            type="button"
+            role="switch"
+            class="switch-item addon-auto-update"
+            :aria-checked="addonAutoUpdateEnabled"
+            @click="setAddonAutoUpdateEnabled(!addonAutoUpdateEnabled)"
+          >
+            <span class="switch-info">
+              <span class="switch-label">{{ $t('settings.addon.autoUpdate') }}</span>
+              <span class="switch-desc">{{ $t('settings.addon.autoUpdateDesc') }}</span>
+            </span>
+            <span class="switch" :class="{ active: addonAutoUpdateEnabled }" aria-hidden="true">
+              <span class="switch-thumb"></span>
+            </span>
+          </button>
           <div v-if="addonVersion" class="addon-info">
             <div class="addon-status">
               <i class="ri-checkbox-circle-fill status-icon installed"></i>
@@ -820,6 +841,155 @@ watch(() => localeStore.currentLocale, (newLocale) => {
       </div>
     </div>
 
+    <div v-show="activeTab === 'account'" id="settings-panel-account" class="settings-content" role="tabpanel" aria-labelledby="settings-tab-account">
+      <!-- 个人资料 -->
+      <div class="setting-card anim-item" style="--delay: 1">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-user-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>{{ $t('settings.profile.title') }}</h3>
+            <p>{{ $t('settings.profile.description') }}</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="avatar-section">
+            <div class="avatar-preview" @click="triggerAvatarUpload">
+              <img v-if="userStore.user?.avatar" :src="userStore.user.avatar" alt="avatar" />
+              <span v-else class="avatar-placeholder">
+                {{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}
+              </span>
+              <div class="avatar-overlay">
+                <i :class="avatarUploading ? 'ri-loader-4-line spin' : 'ri-camera-line'"></i>
+              </div>
+            </div>
+            <div class="avatar-info">
+              <h4 :style="buildNameStyle(userStore.user?.name_color, userStore.user?.name_bold)">{{ userStore.user?.username || $t('settings.profile.notLoggedIn') }}</h4>
+              <p>{{ $t('settings.profile.avatarHint') }}</p>
+            </div>
+            <input
+              ref="avatarInputRef"
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleAvatarChange"
+            />
+            <ImageCropperDialog
+              v-model="avatarCropperOpen"
+              :file="avatarCropperFile"
+              :aspect-ratio="1"
+              :output-width="512"
+              :output-height="512"
+              :max-size-k-b="512"
+              title="调整头像"
+              round-preview
+              @cropped="handleAvatarCropped"
+              @error="handleAvatarCropperError"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-card anim-item" style="--delay: 1.2">
+        <div class="card-header">
+          <div class="card-icon">
+            <i class="ri-forbid-2-line"></i>
+          </div>
+          <div class="card-title">
+            <h3>{{ $t('settings.blocks.title') }}</h3>
+            <p>{{ $t('settings.blocks.description') }}</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="setting-inline-action">
+            <p class="setting-inline-desc">{{ $t('settings.blocks.description') }}</p>
+            <button class="btn btn-primary" @click="router.push({ name: 'settings-blocked-users' })">
+              <i class="ri-arrow-right-line"></i>
+              {{ $t('settings.blocks.manageAction') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-card anim-item" style="--delay: 1.4">
+        <div class="card-header">
+          <div class="card-icon"><i class="ri-coupon-3-line"></i></div>
+          <div class="card-title">
+            <h3>{{ $t('settings.system.redeemCodeTitle') }}</h3>
+            <p>{{ $t('settings.system.redeemCodeDesc') }}</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <form class="redeem-code-box" @submit.prevent="handleRedeemSponsorCode">
+            <div class="redeem-code-info">
+              <span class="switch-label">{{ $t('settings.system.redeemCodeTitle') }}</span>
+              <span class="switch-desc">{{ $t('settings.system.redeemCodeDesc') }}</span>
+            </div>
+            <div class="redeem-code-row">
+              <input
+                v-model="sponsorRedeemCode"
+                class="redeem-code-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                :placeholder="$t('settings.system.redeemCodePlaceholder')"
+              />
+              <button class="btn btn-primary" type="submit" :disabled="sponsorRedeeming || !sponsorRedeemCodeTrimmed">
+                <i :class="sponsorRedeeming ? 'ri-loader-4-line spin' : 'ri-coupon-3-line'"></i>
+                {{ sponsorRedeeming ? $t('settings.system.redeemCodeRedeeming') : $t('settings.system.redeemCodeAction') }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="setting-card danger-zone anim-item" style="--delay: 1.6">
+        <div class="card-header">
+          <div class="card-icon"><i class="ri-error-warning-line"></i></div>
+          <div class="card-title">
+            <h3>{{ $t('settings.deleteAccount.title') }}</h3>
+            <p>{{ $t('settings.deleteAccount.description') }}</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-danger" :disabled="!userStore.user" @click="openDeleteAccountModal">
+          <i class="ri-user-unfollow-line"></i>
+          {{ $t('settings.deleteAccount.title') }}
+        </button>
+      </div>
+    </div>
+
+    <RModal
+      v-model="showDeleteAccountModal"
+      :title="$t('settings.deleteAccount.title')"
+      :closable="!deletingAccount"
+      :mask-closable="!deletingAccount"
+      @close="deletePassword = ''"
+    >
+      <form id="delete-account-form" class="delete-account-form" @submit.prevent="handleDeleteAccount">
+        <p>{{ $t('settings.deleteAccount.message') }}</p>
+        <p class="delete-account-warning">{{ $t('settings.deleteAccount.description') }}</p>
+        <label for="delete-account-password">{{ $t('settings.deleteAccount.passwordLabel') }}</label>
+        <input
+          id="delete-account-password"
+          v-model="deletePassword"
+          type="password"
+          autocomplete="current-password"
+          required
+          :disabled="deletingAccount"
+          :placeholder="$t('settings.deleteAccount.passwordPlaceholder')"
+        />
+      </form>
+      <template #footer>
+        <button type="button" class="btn btn-secondary" :disabled="deletingAccount" @click="showDeleteAccountModal = false; deletePassword = ''">
+          {{ $t('settings.deleteAccount.cancel') }}
+        </button>
+        <button type="submit" form="delete-account-form" class="btn btn-danger" :disabled="deletingAccount || !deletePassword">
+          {{ deletingAccount ? $t('settings.deleteAccount.deleting') : $t('settings.deleteAccount.continue') }}
+        </button>
+      </template>
+    </RModal>
+
     <!-- 插件更新对话框 -->
     <AddonUpdateDialog ref="addonUpdateDialogRef" @installed="checkAddonInstalled" />
     <RModal v-model="showChangelogModal" :title="$t('settings.about.clientChangelog')" width="640px">
@@ -882,6 +1052,80 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 .toolbar-actions {
   display: flex;
   gap: 12px;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  max-width: 720px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-tab.active {
+  color: var(--color-text-main);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.settings-tab:hover {
+  background: var(--color-card-bg-hover);
+}
+
+.settings-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.danger-zone {
+  border: 1px solid var(--btn-danger-bg);
+}
+
+.danger-zone .card-icon {
+  background: color-mix(in srgb, var(--btn-danger-bg) 10%, transparent);
+}
+
+.danger-zone .card-icon i,
+.delete-account-warning {
+  color: var(--btn-danger-bg);
+}
+
+.delete-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  line-height: 1.6;
+}
+
+.delete-account-form p {
+  margin: 0;
+}
+
+.delete-account-form input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  font: inherit;
+}
+
+.delete-account-form input:focus-visible {
+  outline: 2px solid var(--input-focus);
 }
 
 /* 设置内容区 */
@@ -1199,6 +1443,14 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 }
 
 /* 开关组件 */
+.addon-auto-update {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
 .switch {
   width: 44px;
   height: 24px;

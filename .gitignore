@@ -294,6 +294,9 @@ server/data/icons/
 .worktrees/
 /output/
 
+# Local build, release and acceptance artifacts (existing tracked assets remain tracked)
+/artifacts/
+
 # Local code retrieval and language-server state
 /.search-index/
 /.serena/

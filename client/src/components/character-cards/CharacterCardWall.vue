@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   listMyCharacterCards,
@@ -21,6 +21,56 @@ const cards = ref<CharacterCardSummary[]>([])
 const loading = ref(false)
 const errorMessage = ref('')
 let requestToken = 0
+const viewport = ref<HTMLElement | null>(null)
+const columns = ref(4)
+const page = ref(0)
+let resizeObserver: ResizeObserver | undefined
+const entries = computed(() => props.isOwnProfile ? [...cards.value, null] : cards.value)
+const pages = computed(() => Array.from(
+  { length: Math.ceil(entries.value.length / columns.value) },
+  (_, index) => entries.value.slice(index * columns.value, (index + 1) * columns.value),
+))
+
+function measure() {
+  if (!viewport.value) return
+  const next = Math.max(1, Math.floor((viewport.value.clientWidth + 16) / 216))
+  if (columns.value !== next) {
+    columns.value = next
+    page.value = 0
+    viewport.value.scrollLeft = 0
+  }
+}
+
+watch(viewport, (element) => {
+  resizeObserver?.disconnect()
+  if (element) {
+    measure()
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(measure)
+      resizeObserver.observe(element)
+    }
+  }
+})
+onMounted(() => window.addEventListener('resize', measure))
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  window.removeEventListener('resize', measure)
+  requestToken++
+})
+
+function goToPage(index: number) {
+  if (!viewport.value) return
+  page.value = Math.max(0, Math.min(pages.value.length - 1, index))
+  viewport.value.scrollTo({
+    left: page.value * viewport.value.clientWidth,
+    behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+  })
+}
+
+function syncPage() {
+  if (!viewport.value?.clientWidth) return
+  page.value = Math.round(viewport.value.scrollLeft / viewport.value.clientWidth)
+}
 
 const shouldRender = computed(() => (
   props.isOwnProfile || loading.value || Boolean(errorMessage.value) || cards.value.length > 0
@@ -35,6 +85,7 @@ watch(
 async function loadCards() {
   const token = ++requestToken
   loading.value = true
+  page.value = 0
   errorMessage.value = ''
   try {
     const response = props.isOwnProfile
@@ -47,7 +98,11 @@ async function loadCards() {
     cards.value = []
     errorMessage.value = error instanceof Error ? error.message : t('characterCards.wall.loadFailed')
   } finally {
-    if (token === requestToken) loading.value = false
+    if (token === requestToken) {
+      loading.value = false
+      await nextTick()
+      measure()
+    }
   }
 }
 
@@ -80,15 +135,10 @@ function statusIcon(card: CharacterCardSummary) {
 
 <template>
   <section v-if="shouldRender" class="character-wall" aria-labelledby="character-wall-title">
-    <div class="character-wall__rail" aria-hidden="true">
-      <span></span><span></span><span></span><span></span><span></span>
-    </div>
-
     <header class="character-wall__header">
-      <div>
-        <span class="character-wall__kicker">{{ t('characterCards.wall.kicker') }}</span>
+      <div class="character-wall__heading">
         <h2 id="character-wall-title">{{ t('characterCards.wall.title') }}</h2>
-        <p>{{ t(isOwnProfile ? 'characterCards.wall.ownDescription' : 'characterCards.wall.visitorDescription') }}</p>
+        <span v-if="cards.length" class="character-wall__count">{{ cards.length }}</span>
       </div>
       <RouterLink v-if="isOwnProfile && cards.length" class="character-wall__new" to="/character-cards/new">
         <i class="ri-add-line" aria-hidden="true"></i>
@@ -126,485 +176,127 @@ function statusIcon(card: CharacterCardSummary) {
       </RouterLink>
     </div>
 
-    <div v-else class="character-wall__grid">
-      <RouterLink
-        v-for="(card, index) in cards"
-        :key="card.id"
-        class="portrait-card"
-        :to="`/character-cards/${card.id}`"
-        :aria-label="t('characterCards.wall.viewAria', { name: displayName(card) })"
-      >
-        <span class="portrait-card__folio" aria-hidden="true">CC · {{ String(index + 1).padStart(2, '0') }}</span>
-        <span class="portrait-card__frame">
-          <CharacterCardPortrait
-            v-if="card.portrait_image_url"
-            class="portrait-card__image"
-            :card="card"
-            :alt="t('characterCards.common.portraitAlt', { name: displayName(card) })"
-            :width="560"
-            :quality="86"
-          />
-          <span v-else class="portrait-card__placeholder" aria-hidden="true">
-            <i class="ri-user-star-line"></i>
-            <small>{{ t('characterCards.wall.portraitPending') }}</small>
-          </span>
-          <span class="portrait-card__shade"></span>
-          <span v-if="isOwnProfile && statusLabel(card)" class="portrait-card__status">
-            <i :class="statusIcon(card)" aria-hidden="true"></i>
-            {{ statusLabel(card) }}
-          </span>
-          <span class="portrait-card__reveal">
-            <span>{{ card.summary || t('characterCards.wall.summaryEmpty') }}</span>
-            <b>{{ t('characterCards.wall.readFull') }} <i class="ri-arrow-right-line" aria-hidden="true"></i></b>
-          </span>
-        </span>
-        <span class="portrait-card__plaque">
-          <strong :style="buildNameStyle(displayNameColor(card), false, ['gradientStart', 'gradientEnd'])">{{ displayName(card) }}</strong>
-          <span>{{ secondaryLine(card) }}</span>
-        </span>
-      </RouterLink>
-
-      <RouterLink v-if="isOwnProfile" class="portrait-card portrait-card--add" to="/character-cards/new">
-        <span class="portrait-card__add-mark" aria-hidden="true"><i class="ri-add-line"></i></span>
-        <strong>{{ t('characterCards.wall.addTitle') }}</strong>
-        <span>{{ t('characterCards.wall.addBody') }}</span>
-      </RouterLink>
-    </div>
+    <template v-else>
+      <div class="character-wall__carousel">
+        <button class="character-wall__arrow character-wall__arrow--prev" type="button" :disabled="page === 0" :aria-label="t('characterCards.wall.previous')" aria-controls="character-wall-viewport" @click="goToPage(page - 1)">
+          <i class="ri-arrow-left-s-line" aria-hidden="true"></i>
+        </button>
+        <div id="character-wall-viewport" ref="viewport" class="character-wall__viewport" role="region" :aria-label="t('characterCards.wall.title')" tabindex="0" @scroll.passive="syncPage" @keydown.left.prevent="goToPage(page - 1)" @keydown.right.prevent="goToPage(page + 1)">
+          <div v-for="(group, pageIndex) in pages" :key="pageIndex" class="character-wall__grid" :style="{ '--columns': columns }" :inert="pageIndex !== page || undefined">
+            <template v-for="card in group" :key="card?.id || 'add'">
+              <RouterLink
+                v-if="card"
+                class="portrait-card"
+                :to="`/character-cards/${card.id}`"
+                :aria-label="t('characterCards.wall.viewAria', { name: displayName(card) })"
+              >
+                <span class="portrait-card__frame">
+                  <CharacterCardPortrait
+                    v-if="card.portrait_image_url"
+                    class="portrait-card__image"
+                    :card="card"
+                    :alt="t('characterCards.common.portraitAlt', { name: displayName(card) })"
+                    :width="560"
+                    :quality="86"
+                  />
+                  <span v-else class="portrait-card__placeholder" aria-hidden="true">
+                    <i class="ri-user-star-line"></i>
+                    <small>{{ t('characterCards.wall.portraitPending') }}</small>
+                  </span>
+                  <span class="portrait-card__shade"></span>
+                  <span v-if="isOwnProfile && statusLabel(card)" class="portrait-card__status">
+                    <i :class="statusIcon(card)" aria-hidden="true"></i>
+                    {{ statusLabel(card) }}
+                  </span>
+                  <span class="portrait-card__reveal">
+                    <span>{{ card.summary || t('characterCards.wall.summaryEmpty') }}</span>
+                    <b>{{ t('characterCards.wall.readFull') }} <i class="ri-arrow-right-line" aria-hidden="true"></i></b>
+                  </span>
+                </span>
+                <span class="portrait-card__plaque">
+                  <strong :style="buildNameStyle(displayNameColor(card), false, 'cardBg')">{{ displayName(card) }}</strong>
+                  <span>{{ secondaryLine(card) }}</span>
+                </span>
+              </RouterLink>
+              <RouterLink v-else class="portrait-card portrait-card--add" to="/character-cards/new">
+                <span class="portrait-card__add-mark" aria-hidden="true"><i class="ri-add-line"></i></span>
+                <strong>{{ t('characterCards.wall.addTitle') }}</strong>
+                <span>{{ t('characterCards.wall.addBody') }}</span>
+              </RouterLink>
+            </template>
+          </div>
+        </div>
+        <button class="character-wall__arrow character-wall__arrow--next" type="button" :disabled="page >= pages.length - 1" :aria-label="t('characterCards.wall.next')" aria-controls="character-wall-viewport" @click="goToPage(page + 1)">
+          <i class="ri-arrow-right-s-line" aria-hidden="true"></i>
+        </button>
+      </div>
+      <nav class="character-wall__pagination" :aria-label="t('characterCards.wall.pagination')">
+        <button v-for="(_, index) in pages" :key="index" type="button" class="character-wall__dot" :class="{ active: page === index }" :aria-label="t('characterCards.wall.page', { page: index + 1 })" :aria-current="page === index ? 'page' : undefined" @click="goToPage(index)"></button>
+        <span class="character-wall__page-status" aria-live="polite">{{ page + 1 }} / {{ pages.length }}</span>
+      </nav>
+    </template>
   </section>
 </template>
 
 <style scoped>
-.character-wall {
-  position: relative;
-  grid-column: 1 / -1;
-  min-width: 0;
-  overflow: hidden;
-  padding: 28px;
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 5%, transparent) 1px, transparent 1px) 0 0 / 42px 42px,
-    linear-gradient(var(--color-panel-bg), var(--color-card-bg));
-  box-shadow: var(--shadow-md);
-}
-
-.character-wall__rail {
-  position: absolute;
-  top: 0;
-  left: 28px;
-  right: 28px;
-  display: flex;
-  height: 8px;
-  align-items: center;
-  justify-content: space-around;
-  border-radius: 0 0 8px 8px;
-  background: linear-gradient(90deg, var(--gradient-start), var(--color-accent) 45%, var(--gradient-start));
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--color-primary) 22%, transparent);
-}
-
-.character-wall__rail span {
-  width: 3px;
-  height: 12px;
-  border-radius: 2px;
-  background: var(--color-main-bg);
-  transform: translateY(4px);
-}
-
-.character-wall__header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-}
-
-.character-wall__kicker,
-.portrait-card__folio {
-  color: var(--color-accent);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.character-wall h2 {
-  margin: 4px 0 5px;
-  color: var(--color-text-main);
-  font-family: Georgia, 'Noto Serif SC', serif;
-  font-size: clamp(24px, 3vw, 34px);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.character-wall__header p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-
-.character-wall__new,
-.character-wall__primary {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 16px;
-  border: 1px solid var(--btn-primary-bg);
-  border-radius: 8px;
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
-  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
-}
-
-.character-wall__new:hover,
-.character-wall__primary:hover {
-  background: var(--btn-primary-hover);
-  box-shadow: 0 7px 16px color-mix(in srgb, var(--color-primary) 22%, transparent);
-  transform: translateY(-1px);
-}
-
-.character-wall__new:focus-visible,
-.character-wall__primary:focus-visible,
-.portrait-card:focus-visible,
-.character-wall__state button:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--color-accent) 38%, transparent);
-  outline-offset: 3px;
-}
-
-.character-wall__state {
-  display: flex;
-  min-height: 180px;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--color-text-secondary);
-}
-
-.character-wall__spinner {
-  animation: archive-spin 900ms linear infinite;
-}
-
-.character-wall__state--error {
-  flex-wrap: wrap;
-  align-content: center;
-}
-
-.character-wall__state--error > i {
-  color: var(--btn-danger-bg);
-  font-size: 28px;
-}
-
-.character-wall__state--error div {
-  display: grid;
-  gap: 2px;
-}
-
-.character-wall__state--error strong {
-  color: var(--color-primary);
-}
-
-.character-wall__state--error span {
-  font-size: 12px;
-}
-
-.character-wall__state button {
-  padding: 8px 12px;
-  border: 1px solid var(--color-accent);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--btn-outline-text);
-  cursor: pointer;
-}
-
-.character-wall__empty {
-  display: grid;
-  min-height: 230px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 28px;
-  padding: 28px clamp(24px, 5vw, 56px);
-  border: 1px dashed var(--color-border-hover);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--color-card-bg) 82%, transparent);
-}
-
-.character-wall__empty-mark {
-  position: relative;
-  display: grid;
-  width: 96px;
-  height: 96px;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  color: var(--color-accent);
-  font-size: 48px;
-}
-
-.character-wall__empty-mark::before,
-.character-wall__empty-mark::after {
-  position: absolute;
-  width: 118px;
-  height: 1px;
-  background: var(--color-border);
-  content: '';
-}
-
-.character-wall__empty-mark::after { transform: rotate(90deg); }
-
-.character-wall__empty-plus {
-  position: absolute;
-  right: -2px;
-  bottom: 4px;
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border: 3px solid var(--color-panel-bg);
-  border-radius: 50%;
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
-  font-size: 16px;
-}
-
-.character-wall__empty-copy > span {
-  color: var(--color-accent);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
-.character-wall__empty-copy h3 {
-  margin: 5px 0 8px;
-  color: var(--color-text-main);
-  font-family: Georgia, 'Noto Serif SC', serif;
-  font-size: 22px;
-}
-
-.character-wall__empty-copy p {
-  max-width: 580px;
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 1.75;
-}
-
-.character-wall__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 20px;
-}
-
-.portrait-card {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  padding: 7px;
-  border: 1px solid var(--gradient-border);
-  border-radius: 7px;
-  background: var(--gradient-end);
-  box-shadow: 0 7px 17px color-mix(in srgb, var(--color-primary) 24%, transparent);
-  color: inherit;
-  text-decoration: none;
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-}
-
-.portrait-card:hover,
-.portrait-card:focus-visible {
-  border-color: var(--color-accent);
-  box-shadow: 0 13px 27px color-mix(in srgb, var(--color-primary) 30%, transparent), 0 0 0 2px color-mix(in srgb, var(--color-accent) 18%, transparent);
-  transform: translateY(-4px);
-}
-
-.portrait-card__folio {
-  position: absolute;
-  z-index: 4;
-  top: 15px;
-  left: 15px;
-  color: var(--gradient-text-muted);
-}
-
-.portrait-card__frame {
-  position: relative;
-  display: block;
-  overflow: hidden;
-  aspect-ratio: 3 / 4;
-  border: 1px solid var(--gradient-border);
-  border-radius: 3px 3px 0 0;
-  background: var(--gradient-end);
-}
-
-.portrait-card__image {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  transition: transform 300ms ease, filter 300ms ease;
-}
-
-.portrait-card:hover .portrait-card__image,
-.portrait-card:focus-visible .portrait-card__image {
-  filter: saturate(0.92) contrast(1.03);
-  transform: scale(1.025);
-}
-
-.portrait-card__placeholder {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-content: center;
-  gap: 10px;
-  background:
-    radial-gradient(circle, color-mix(in srgb, var(--color-accent) 20%, transparent), transparent 48%),
-    linear-gradient(145deg, var(--gradient-start), var(--gradient-end));
-  color: var(--gradient-text);
-  text-align: center;
-}
-
-.portrait-card__placeholder i { font-size: 48px; }
+.character-wall { grid-column: 1 / -1; min-width: 0; padding: 24px; border: 1px solid var(--color-border); border-radius: 22px; background: var(--color-panel-bg); box-shadow: var(--shadow-sm); }
+.character-wall__header, .character-wall__heading { display: flex; align-items: center; gap: 12px; }
+.character-wall__header { justify-content: space-between; margin-bottom: 20px; }
+.character-wall h2 { margin: 0; color: var(--color-text-main); font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
+.character-wall__count { color: var(--color-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.character-wall__new, .character-wall__primary { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-card-bg); color: var(--color-text-main); font-size: 12px; font-weight: 600; text-decoration: none; }
+.character-wall__new:hover, .character-wall__primary:hover { background: var(--color-card-bg-hover); }
+.character-wall__carousel { position: relative; padding: 0 22px; }
+.character-wall__viewport { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 16px; }
+.character-wall__viewport::-webkit-scrollbar { display: none; }
+.character-wall__grid { display: grid; flex: 0 0 100%; min-width: 0; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); gap: 16px; scroll-snap-align: start; scroll-snap-stop: always; padding: 4px 0 10px; box-sizing: border-box; }
+.character-wall__arrow { position: absolute; z-index: 5; top: 50%; display: grid; width: 38px; height: 38px; place-items: center; padding: 0; border: 1px solid var(--color-border); border-radius: 50%; background: color-mix(in srgb, var(--color-panel-bg) 90%, transparent); color: var(--color-text-main); box-shadow: var(--shadow-sm); backdrop-filter: blur(12px); font-size: 24px; cursor: pointer; transform: translateY(-50%); transition: background 160ms ease, opacity 160ms ease; }
+.character-wall__arrow--prev { left: -6px; }
+.character-wall__arrow--next { right: -6px; }
+.character-wall__arrow:hover:not(:disabled) { background: var(--color-card-bg-hover); }
+.character-wall__arrow:disabled { opacity: .3; cursor: default; }
+.character-wall__pagination { position: relative; display: flex; min-height: 24px; align-items: center; justify-content: center; gap: 2px; margin-top: 6px; flex-wrap: wrap; }
+.character-wall__dot { display: grid; width: 24px; height: 24px; place-items: center; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.character-wall__dot::after { width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-secondary); opacity: .35; content: ''; transition: opacity 180ms ease, transform 180ms ease; }
+.character-wall__dot.active::after { background: var(--color-text-main); opacity: 1; transform: scale(1.25); }
+.character-wall__page-status { position: absolute; right: 22px; color: var(--color-text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.portrait-card { position: relative; display: flex; min-width: 0; flex-direction: column; overflow: hidden; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-card-bg); color: inherit; text-decoration: none; transition: border-color 180ms ease, box-shadow 180ms ease; }
+.portrait-card:hover { border-color: var(--color-border-hover); box-shadow: var(--shadow-sm); }
+.portrait-card__frame { position: relative; display: block; overflow: hidden; height: 210px; background: var(--gradient-end); }
+.portrait-card__image { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 300ms ease; }
+.portrait-card:hover .portrait-card__image { transform: scale(1.035); }
+.portrait-card__placeholder { display: grid; width: 100%; height: 100%; place-content: center; gap: 10px; background: linear-gradient(145deg, var(--gradient-start), var(--gradient-end)); color: var(--gradient-text); text-align: center; }
+.portrait-card__placeholder i { font-size: 42px; }
 .portrait-card__placeholder small { color: var(--gradient-text-muted); font-size: 11px; }
-
-.portrait-card__shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, color-mix(in srgb, var(--gradient-end) 92%, transparent), transparent 52%);
-  pointer-events: none;
-}
-
-.portrait-card__status {
-  position: absolute;
-  z-index: 3;
-  top: 13px;
-  right: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 7px;
-  border: 1px solid var(--gradient-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--gradient-end) 78%, transparent);
-  color: var(--gradient-text);
-  font-size: 10px;
-  backdrop-filter: blur(6px);
-}
-
-.portrait-card__reveal {
-  position: absolute;
-  z-index: 2;
-  right: 14px;
-  bottom: 14px;
-  left: 14px;
-  display: grid;
-  gap: 10px;
-  color: var(--gradient-text);
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 180ms ease, transform 180ms ease;
-}
-
-.portrait-card__reveal > span {
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.55;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.portrait-card__reveal b {
-  color: var(--color-accent);
-  font-size: 11px;
-}
-
-.portrait-card:hover .portrait-card__reveal,
-.portrait-card:focus-visible .portrait-card__reveal {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.portrait-card__plaque {
-  display: grid;
-  min-height: 66px;
-  place-content: center;
-  gap: 3px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--color-accent);
-  background: linear-gradient(90deg, var(--gradient-end), var(--gradient-start) 50%, var(--gradient-end));
-  text-align: center;
-}
-
-.portrait-card__plaque strong {
-  overflow: hidden;
-  color: var(--gradient-text);
-  font-family: Georgia, 'Noto Serif SC', serif;
-  font-size: 18px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.portrait-card__plaque span {
-  overflow: hidden;
-  color: var(--gradient-text-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.portrait-card--add {
-  min-height: 330px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-style: dashed;
-  background: var(--color-card-bg-hover);
-  box-shadow: none;
-  color: var(--color-secondary);
-  text-align: center;
-}
-
+.portrait-card__shade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in srgb, var(--gradient-end) 85%, transparent), transparent 55%); pointer-events: none; }
+.portrait-card__status { position: absolute; z-index: 3; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--gradient-border); border-radius: 999px; background: color-mix(in srgb, var(--gradient-end) 78%, transparent); color: var(--gradient-text); font-size: 10px; backdrop-filter: blur(6px); }
+.portrait-card__reveal { position: absolute; right: 14px; bottom: 14px; left: 14px; display: grid; gap: 8px; color: var(--gradient-text); opacity: 0; transform: translateY(6px); transition: opacity 180ms ease, transform 180ms ease; }
+.portrait-card__reveal > span { display: -webkit-box; overflow: hidden; font-size: 12px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.portrait-card__reveal b { color: var(--gradient-text); font-size: 11px; }
+.portrait-card:hover .portrait-card__reveal, .portrait-card:focus-visible .portrait-card__reveal { opacity: 1; transform: translateY(0); }
+.portrait-card__plaque { display: grid; min-width: 0; gap: 5px; padding: 14px; }
+.portrait-card__plaque strong { overflow: hidden; color: var(--color-text-main); font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.portrait-card__plaque > span { overflow: hidden; color: var(--color-text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.portrait-card--add { min-height: 280px; align-items: center; justify-content: center; gap: 10px; border-style: dashed; background: var(--color-card-bg); color: var(--color-text-main); text-align: center; }
+.portrait-card--add > strong { font-size: 14px; }
 .portrait-card--add > span:last-child { color: var(--color-text-secondary); font-size: 11px; }
-
-.portrait-card__add-mark {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  margin-bottom: 6px;
-  place-items: center;
-  border: 1px solid var(--color-accent);
-  border-radius: 50%;
-  font-size: 26px;
-}
-
+.portrait-card__add-mark { display: grid; width: 48px; height: 48px; place-items: center; margin-bottom: 4px; border-radius: 50%; background: var(--color-card-bg-hover); color: var(--color-text-secondary); font-size: 24px; }
+.character-wall__state { display: flex; min-height: 160px; align-items: center; justify-content: center; gap: 10px; color: var(--color-text-secondary); }
+.character-wall__state--error { flex-wrap: wrap; }
+.character-wall__state--error div { display: grid; gap: 4px; }
+.character-wall__state--error strong { color: var(--color-text-main); }
+.character-wall__state--error span { font-size: 12px; }
+.character-wall__state button { padding: 8px 14px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-card-bg); color: var(--color-text-main); cursor: pointer; }
+.character-wall__empty { display: flex; min-height: 180px; align-items: center; gap: 24px; padding: 24px; border: 1px dashed var(--color-border); border-radius: 16px; }
+.character-wall__empty-mark { position: relative; color: var(--color-accent); font-size: 44px; }
+.character-wall__empty-plus { position: absolute; right: -4px; bottom: 0; font-size: 20px; }
+.character-wall__empty-copy { flex: 1; }
+.character-wall__empty-copy > span { color: var(--color-text-secondary); font-size: 11px; }
+.character-wall__empty-copy h3 { margin: 6px 0; color: var(--color-text-main); font-size: 18px; }
+.character-wall__empty-copy p { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.7; }
+.character-wall :is(a, button, [tabindex]):focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.character-wall__spinner { animation: archive-spin 900ms linear infinite; }
 @keyframes archive-spin { to { transform: rotate(360deg); } }
-
-@media (max-width: 760px) {
-  .character-wall { padding: 24px 18px; }
-  .character-wall__rail { right: 18px; left: 18px; }
-  .character-wall__header { align-items: flex-start; flex-direction: column; }
-  .character-wall__empty { grid-template-columns: 1fr; text-align: center; }
-  .character-wall__empty-mark { margin: 0 auto; }
-  .character-wall__primary { justify-self: center; }
-  .character-wall__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .portrait-card__plaque strong { font-size: 15px; }
-}
-
-@media (max-width: 460px) {
-  .character-wall__grid { grid-template-columns: 1fr; }
-  .portrait-card--add { min-height: 180px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .portrait-card,
-  .portrait-card__image,
-  .portrait-card__reveal,
-  .character-wall__new,
-  .character-wall__primary { transition: none; }
-  .character-wall__spinner { animation: none; }
-}
+@media (max-width: 760px) { .character-wall { padding: 18px 14px; } .character-wall__empty { flex-direction: column; align-items: flex-start; padding: 20px; } .character-wall__page-status { right: 0; } }
+@media (prefers-reduced-motion: reduce) { .character-wall *, .character-wall *::after { transition: none; animation: none; scroll-behavior: auto; } }
 </style>
