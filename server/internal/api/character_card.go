@@ -75,6 +75,7 @@ type characterCardDTO struct {
 
 	Summary         string                       `json:"summary"`
 	BackgroundStory string                       `json:"background_story,omitempty"`
+	TRP3About       json.RawMessage              `json:"trp3_about,omitempty"`
 	FirstImpression string                       `json:"first_impression,omitempty"`
 	OtherContent    string                       `json:"other_content,omitempty"`
 	Impressions     []characterCardImpressionDTO `json:"impressions"`
@@ -110,9 +111,11 @@ type characterCardSourceDTO struct {
 }
 
 type createCharacterCardRequest struct {
-	SourceType      string `json:"source_type"`
-	SourceBackupID  *uint  `json:"source_backup_id"`
-	SourceProfileID string `json:"source_profile_id"`
+	SourceType      string          `json:"source_type"`
+	SourceBackupID  *uint           `json:"source_backup_id"`
+	SourceProfileID string          `json:"source_profile_id"`
+	SourceAccountID string          `json:"source_account_id"`
+	LocalProfile    json.RawMessage `json:"local_profile"`
 }
 
 type updateCharacterCardRequest struct {
@@ -141,6 +144,7 @@ type updateCharacterCardRequest struct {
 
 	Summary         *string                           `json:"summary"`
 	BackgroundStory *string                           `json:"background_story"`
+	TRP3About       json.RawMessage                   `json:"trp3_about"`
 	FirstImpression *string                           `json:"first_impression"`
 	OtherContent    *string                           `json:"other_content"`
 	Impressions     *[]characterCardImpressionRequest `json:"impressions"`
@@ -358,6 +362,17 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 	var impressions []model.CharacterCardImpression
 
 	switch sourceType {
+	case "local":
+		var err error
+		card, impressions, err = createLocalCharacterCard(database.DB, userID, req)
+		if err != nil {
+			if failure, ok := err.(*apiError); ok {
+				c.JSON(failure.status, gin.H{"error": failure.message})
+				return
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	case "blank":
 		if req.SourceBackupID != nil || req.SourceProfileID != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "空白人物卡不能指定备份来源"})
@@ -423,7 +438,7 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 		}
 
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "source_type 仅支持 blank 或 backup"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source_type 仅支持 blank、backup 或 local"})
 		return
 	}
 
@@ -591,6 +606,19 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 	}
 	applyCharacterCardStringUpdate(req.Summary, &candidate.Summary, "summary", updates, true)
 	applyCharacterCardStringUpdate(req.BackgroundStory, &candidate.BackgroundStory, "background_story", updates, false)
+	if len(req.TRP3About) > 0 {
+		about, err := normalizeCharacterCardTRP3About(req.TRP3About)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		candidate.TRP3AboutJSON = about
+		updates["trp3_about_json"] = about
+	} else if req.BackgroundStory != nil && *req.BackgroundStory != card.BackgroundStory {
+		// A native rich-text edit supersedes the previous TRP3 template snapshot.
+		candidate.TRP3AboutJSON = ""
+		updates["trp3_about_json"] = ""
+	}
 	applyCharacterCardStringUpdate(req.FirstImpression, &candidate.FirstImpression, "first_impression", updates, false)
 	applyCharacterCardStringUpdate(req.OtherContent, &candidate.OtherContent, "other_content", updates, false)
 	if req.AdditionalInfo != nil {
@@ -1154,6 +1182,9 @@ func (s *Server) buildCharacterCardDTO(card model.CharacterCard, impressions []m
 		dto.ReviewedAt = card.ReviewedAt
 	}
 	if includeRichText {
+		if card.TRP3AboutJSON != "" {
+			dto.TRP3About = json.RawMessage(card.TRP3AboutJSON)
+		}
 		dto.BackgroundStory = card.BackgroundStory
 		dto.FirstImpression = card.FirstImpression
 		dto.OtherContent = card.OtherContent

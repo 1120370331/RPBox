@@ -4,6 +4,7 @@ export default {
     sync: '人物卡备份',
     archives: '剧情故事',
     warcraft: '魔兽功能',
+    toolbox: '工具箱',
     market: '创意市场',
     rpdb: 'RP 数据库',
     community: '社区广场',

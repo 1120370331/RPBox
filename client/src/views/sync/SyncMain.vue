@@ -350,7 +350,7 @@ watch([viewMode, selectedAccount], ([mode]) => {
 onMounted(async () => {
   const savedPath = localStorage.getItem('wow_path')
   if (!savedPath) {
-    router.push({ path: '/sync/setup', query: { redirect: '/sync' } })
+    router.replace({ path: '/sync/setup', query: { redirect: '/sync', required: '1' } })
     return
   }
   if (!isAuthed.value) {

@@ -63,7 +63,7 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			// 如果用户已有连接，先关闭旧连接
-			if oldClient, exists := h.clients[client.UserID]; exists {
+			if oldClient, exists := h.clients[client.UserID]; exists && oldClient != client {
 				close(oldClient.Send)
 				oldClient.Conn.Close()
 			}
@@ -73,7 +73,7 @@ func (h *Hub) Run() {
 
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if _, exists := h.clients[client.UserID]; exists {
+			if current, exists := h.clients[client.UserID]; exists && current == client {
 				delete(h.clients, client.UserID)
 				close(client.Send)
 				client.Conn.Close()
@@ -96,15 +96,6 @@ func (h *Hub) Unregister(client *Client) {
 
 // SendToUser 发送消息给指定用户
 func (h *Hub) SendToUser(userID uint, msgType MessageType, data interface{}) error {
-	h.mu.RLock()
-	client, exists := h.clients[userID]
-	h.mu.RUnlock()
-
-	if !exists {
-		// 用户不在线，不是错误
-		return nil
-	}
-
 	msg := Message{
 		Type: msgType,
 		Data: data,
@@ -114,11 +105,21 @@ func (h *Hub) SendToUser(userID uint, msgType MessageType, data interface{}) err
 	if err != nil {
 		return err
 	}
+	// Keep the read lock through the non-blocking send so Run cannot close the
+	// selected client's channel between lookup and enqueue.
+	h.mu.RLock()
+	client, exists := h.clients[userID]
+	if !exists {
+		h.mu.RUnlock()
+		return nil
+	}
 
 	select {
 	case client.Send <- msgBytes:
+		h.mu.RUnlock()
 		return nil
 	default:
+		h.mu.RUnlock()
 		// 发送缓冲区满，关闭连接
 		h.Unregister(client)
 		return nil

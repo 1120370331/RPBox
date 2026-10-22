@@ -51,6 +51,7 @@ type CharacterCard struct {
 	// through typed API fields instead of leaking storage JSON to clients.
 	TRP3AdditionalInfoJSON string `gorm:"type:text;not null;default:'[]'" json:"-"`
 	TRP3PersonalityJSON    string `gorm:"type:text;not null;default:'[]'" json:"-"`
+	TRP3AboutJSON          string `gorm:"type:text;not null;default:''" json:"-"`
 
 	Summary         string `gorm:"size:1000" json:"summary"`
 	BackgroundStory string `gorm:"type:text" json:"background_story"`

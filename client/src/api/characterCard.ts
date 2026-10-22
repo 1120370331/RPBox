@@ -4,7 +4,23 @@ import request from './request'
 export type CharacterCardStatus = 'draft' | 'published'
 export type CharacterCardVisibility = 'private' | 'public'
 export type CharacterCardReviewStatus = 'pending' | 'approved' | 'rejected'
-export type CharacterCardSourceType = 'blank' | 'backup'
+export type CharacterCardSourceType = 'blank' | 'backup' | 'local'
+export interface TRP3AboutSection {
+  TX: string
+  IC?: string
+  BK?: number
+  [key: string]: unknown
+}
+
+export interface TRP3About {
+  TE: 1 | 2 | 3
+  BK?: number
+  MU?: number
+  T1: TRP3AboutSection
+  T2: TRP3AboutSection[]
+  T3: { PH: TRP3AboutSection; PS: TRP3AboutSection; HI: TRP3AboutSection }
+  [key: string]: unknown
+}
 export type CharacterCardImpressionImageKind = 'icon' | 'image'
 
 export interface CharacterCardTRP3Color {
@@ -112,6 +128,7 @@ export interface CharacterCardSummary {
 }
 
 export interface CharacterCard extends CharacterCardSummary {
+  trp3_about?: TRP3About | null
   background_story: string
   first_impression: string
   impressions: CharacterCardImpression[]
@@ -129,9 +146,12 @@ export interface CreateCharacterCardRequest {
   source_type: CharacterCardSourceType
   source_backup_id?: number
   source_profile_id?: string
+  source_account_id?: string
+  local_profile?: Record<string, unknown>
 }
 
 export interface UpdateCharacterCardRequest {
+  trp3_about?: TRP3About | null
   first_name: string
   last_name: string
   display_name: string

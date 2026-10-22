@@ -16,6 +16,8 @@ import ImageViewer from '@/components/ImageViewer.vue'
 import CharacterCardImpressionMark from '@/components/character-cards/CharacterCardImpressionMark.vue'
 import CharacterCardGalleryImage from '@/components/character-cards/CharacterCardGalleryImage.vue'
 import CharacterCardShareDialog from '@/components/character-cards/CharacterCardShareDialog.vue'
+import TRP3AboutPreview from '@/components/tools/TRP3AboutPreview.vue'
+import { renderTRP3Markup } from '@/utils/trp3Markup'
 import { useDialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
@@ -329,6 +331,9 @@ function goBack() {
             {{ t('characterCards.detail.share') }}
           </button>
           <template v-if="isOwner">
+            <RouterLink class="toolbar-button" :to="`/tools/trp3/${card.id}`">
+              <i class="ri-tools-line" aria-hidden="true"></i>TRP3 在线编辑
+            </RouterLink>
             <button v-if="wantsPublic" type="button" class="toolbar-button" :disabled="actionLoading" @click="togglePublicAccess">
               <i class="ri-lock-line" aria-hidden="true"></i>
               {{ t('characterCards.detail.makePrivate') }}
@@ -472,7 +477,8 @@ function goBack() {
             role="tabpanel"
             aria-labelledby="character-detail-tab-background"
           >
-            <div v-if="card.background_story" ref="backgroundRef" class="character-rich" v-html="sanitizedBackgroundStory"></div>
+            <TRP3AboutPreview v-if="card.trp3_about" :about="card.trp3_about" />
+            <div v-else-if="card.background_story" ref="backgroundRef" class="character-rich" v-html="sanitizedBackgroundStory"></div>
             <div v-else class="empty-chapter"><i class="ri-book-open-line" aria-hidden="true"></i><span>{{ t('characterCards.detail.backgroundMissing') }}</span></div>
           </section>
 
@@ -517,7 +523,8 @@ function goBack() {
                   <div class="impression-entry__copy">
                     <span class="impression-entry__index">{{ t('characterCards.detail.observation', { slot: String(impression.slot).padStart(2, '0') }) }}</span>
                     <h3>{{ impression.title || t('characterCards.detail.observationUnnamed') }}</h3>
-                    <p>{{ impression.text || t('characterCards.detail.observationEmpty') }}</p>
+                    <div v-if="impression.text" class="character-rich" v-html="renderTRP3Markup(impression.text)"></div>
+                    <p v-else>{{ t('characterCards.detail.observationEmpty') }}</p>
                   </div>
 
                   <figure
