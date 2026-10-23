@@ -68,17 +68,22 @@ try {
             $registrationJson = $null
         }
         Write-Host 'Ready for one trusted Release Client job with builder=local; the runner exits after that job.'
-        # Do not pass the launcher GitHub credentials to workflow processes.
-        $savedTokens = @{}
-        foreach ($name in @('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN')) {
-            $savedTokens[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        # Do not inherit developer URL rewrites, credential helpers or GitHub tokens.
+        $savedEnvironment = @{}
+        foreach ($name in @('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN',
+            'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT')) {
+            $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             [Environment]::SetEnvironmentVariable($name, $null, 'Process')
         }
+        $env:GIT_CONFIG_GLOBAL = Join-Path $runnerRoot 'ci.gitconfig'
+        "[core]`n    autocrlf = false`n    longpaths = true`n" | Set-Content -LiteralPath $env:GIT_CONFIG_GLOBAL -Encoding utf8NoBOM
+        $env:GIT_CONFIG_NOSYSTEM = '1'
+        $env:GIT_TERMINAL_PROMPT = '0'
         try {
             & ./run.cmd
             if ($LASTEXITCODE -ne 0) { throw "Runner exited with code $LASTEXITCODE." }
         } finally {
-            foreach ($name in $savedTokens.Keys) { [Environment]::SetEnvironmentVariable($name, $savedTokens[$name], 'Process') }
+            foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
         }
     } finally {
         # Also unregister after Ctrl+C or a failed job, retaining only build caches.
