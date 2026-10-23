@@ -110,6 +110,7 @@ mv -f '$staging/$metadataFile.ready' '$remoteBase/$metadataFile'
     # Cleanup failure must not turn a successfully published release into a failed release.
     & ssh -p $ServerPort @common $target "rm -f '$staging/$fileName' '$staging/$fileName.sig' '$staging/latest.json' '$staging/SHA256SUMS' && rmdir '$staging'"
     if ($LASTEXITCODE -ne 0) { Write-Warning "Published successfully; staging cleanup remains: $staging" }
+    $global:LASTEXITCODE = 0
     if ($VerifyOnly) { Write-Host "Verified upload for $Channel client $Version; no update published." }
     else { Write-Host "Published $Channel client $Version." }
 } finally {
