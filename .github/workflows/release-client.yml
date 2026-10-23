@@ -162,7 +162,10 @@ jobs:
           if ($env:SSH_KNOWN_HOSTS) {
             $env:SSH_KNOWN_HOSTS | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
           } else {
-            $keys = & ssh-keyscan -4 -T 15 -p 2233 $env:SERVER_HOST
+            # Windows OpenSSH 9.5 keyscan has KEX bugs; use Git for Windows' scanner.
+            $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
+            if (-not (Test-Path -LiteralPath $keyscan)) { $keyscan = (Get-Command ssh-keyscan).Source }
+            $keys = & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST
             if ($LASTEXITCODE -ne 0 -or -not $keys) { throw 'SSH host-key scan failed before build.' }
             $keys | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
           }
@@ -228,7 +231,6 @@ jobs:
             ${{ env.RELEASE_ARTIFACT_DIR }}/SHA256SUMS
           if-no-files-found: error
           compression-level: 0
-          retention-days: 14
 
       - name: Upload directly from the builder (verify only when build_only)
         env:
