@@ -63,6 +63,7 @@ try {
     $actions = [regex]::Matches($workflow, 'uses:\s*([\w.-]+/[\w.-]+)@([\w.-]+)') |
         ForEach-Object { "$($_.Groups[1].Value)@$($_.Groups[2].Value)" } | Sort-Object -Unique
     foreach ($action in $actions) {
+        try {
         $actionRepository, $actionRef = $action.Split('@')
         $actionSha = & gh api "repos/$actionRepository/commits/$actionRef" --jq .sha
         if ($LASTEXITCODE -ne 0 -or $actionSha -notmatch '^[a-f0-9]{40}$') {
@@ -79,6 +80,9 @@ try {
                 if ($zip.Entries.Count -eq 0) { throw "Empty Action archive: $action" }
             } finally { $zip.Dispose() }
             Move-Item -LiteralPath "$cachedArchive.part" -Destination $cachedArchive
+        }
+        } catch {
+            Write-Warning "Could not pre-cache $action; the runner will download it normally. $($_.Exception.Message)"
         }
     }
     if ($InstallOnly) { return }
