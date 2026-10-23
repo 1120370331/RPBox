@@ -69,8 +69,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Failed to restrict deployment key permissions.' }
     }
     # Optional pinned host key; otherwise preserve the existing workflow's keyscan behavior.
-    $hostKeys = if ($env:SSH_KNOWN_HOSTS) { $env:SSH_KNOWN_HOSTS } else {
-        $scanned = & ssh-keyscan -T 15 -p $ServerPort $ServerHost 2>$null
+    $hostKeys = if ($env:SSH_KNOWN_HOSTS) { $env:SSH_KNOWN_HOSTS }
+    elseif ($env:SSH_KNOWN_HOSTS_FILE) { Get-Content -LiteralPath $env:SSH_KNOWN_HOSTS_FILE -Raw }
+    else {
+        $scanned = & ssh-keyscan -4 -T 15 -p $ServerPort $ServerHost
         if ($LASTEXITCODE -ne 0 -or -not $scanned) { throw 'Could not obtain the server SSH host key.' }
         $scanned -join "`n"
     }
