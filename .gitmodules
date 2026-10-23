@@ -1,0 +1,6 @@
+[submodule "refs/Total-RP-3"]
+	path = refs/Total-RP-3
+	url = https://github.com/Total-RP/Total-RP-3.git
+[submodule "refs/Total-RP-3-Extended"]
+	path = refs/Total-RP-3-Extended
+	url = https://github.com/Total-RP/Total-RP-3-Extended.git
