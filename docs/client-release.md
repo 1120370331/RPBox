@@ -32,6 +32,8 @@ Runner 默认安装在 `%LOCALAPPDATA%\RPBox\actions-runner`，工作副本在 `
 
 若终端没有显式代理环境变量，启动脚本会将 Windows 当前系统代理传给 Runner 的 Git/Node 子进程，退出时恢复环境；不修改系统代理设置。使用系统代理时须在发包期间保持代理软件运行。
 
+NSIS 工具独立缓存在 Cargo target 的 `.tauri` 目录，不与日常开发使用的其他 Tauri CLI 版本混用。准备步骤按已安装 CLI 的官方 release 源码获取工具 URL 和校验值，用 PowerShell 下载并核验，避开旧 Tauri 下载器与 Windows 代理的兼容问题；工具下载失败会在编译之前报错。
+
 签名和部署使用现有 GitHub Secrets，脚本不读取开发目录 `.env`，SSH 私钥只在上传期间写入受限临时目录并在结束时删除。Runner 使用独立 `ci.gitconfig`，不继承开发账号的 Git URL 改写和凭据助手；不传入启动终端的 GitHub Token。可选 `SSH_KNOWN_HOSTS` Secret 固定服务器主机公钥；未设置时沿用原流程的 `ssh-keyscan`。不修改本机的 Git/SSH 配置或 `known_hosts`。
 
 上传前后都校验 SHA256，只有安装包、签名和版本元数据就绪后才切换 `latest.json` / `latest-beta.json`。失败时旧的渠道指针保留，服务器可能留下 `.upload-*` 排错目录。发布互斥执行，避免两个版本同时修改指针。`build_only=true` 适合验证新 Runner：使用正式签名密钥并上传到独立临时目录，校验后清理，不创建正式版本目录、不切换渠道指针、不更新下载页。
