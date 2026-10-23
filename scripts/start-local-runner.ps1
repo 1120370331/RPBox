@@ -55,6 +55,32 @@ try {
         $package.sha256_checksum | Set-Content -LiteralPath $marker -Encoding utf8NoBOM
     }
     Write-Host "Runner installed: $runnerRoot"
+    # Runner's supported archive cache is keyed by resolved Action commit SHA.
+    # It survives the runner clearing _work/_actions between jobs.
+    $actionCache = Join-Path $runnerRoot 'action-cache'
+    New-Item -ItemType Directory -Force -Path $actionCache | Out-Null
+    $workflow = Get-Content -LiteralPath (Join-Path $repositoryRoot '.github/workflows/release-client.yml') -Raw
+    $actions = [regex]::Matches($workflow, 'uses:\s*([\w.-]+/[\w.-]+)@([\w.-]+)') |
+        ForEach-Object { "$($_.Groups[1].Value)@$($_.Groups[2].Value)" } | Sort-Object -Unique
+    foreach ($action in $actions) {
+        $actionRepository, $actionRef = $action.Split('@')
+        $actionSha = & gh api "repos/$actionRepository/commits/$actionRef" --jq .sha
+        if ($LASTEXITCODE -ne 0 -or $actionSha -notmatch '^[a-f0-9]{40}$') {
+            throw "Cannot resolve Action: $action"
+        }
+        $cacheDirectory = Join-Path $actionCache $actionRepository.Replace('/', '_')
+        New-Item -ItemType Directory -Force -Path $cacheDirectory | Out-Null
+        $cachedArchive = Join-Path $cacheDirectory "$actionSha.zip"
+        if (-not (Test-Path -LiteralPath $cachedArchive)) {
+            Write-Host "Caching $action..."
+            Invoke-WebRequest -Uri "https://api.github.com/repos/$actionRepository/zipball/$actionSha" -OutFile "$cachedArchive.part"
+            $zip = [IO.Compression.ZipFile]::OpenRead("$cachedArchive.part")
+            try {
+                if ($zip.Entries.Count -eq 0) { throw "Empty Action archive: $action" }
+            } finally { $zip.Dispose() }
+            Move-Item -LiteralPath "$cachedArchive.part" -Destination $cachedArchive
+        }
+    }
     if ($InstallOnly) { return }
 
     Push-Location $runnerRoot
@@ -74,7 +100,8 @@ try {
         # Do not inherit developer URL rewrites, credential helpers or GitHub tokens.
         $savedEnvironment = @{}
         foreach ($name in @('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN',
-            'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT', 'GIT_ALTERNATE_OBJECT_DIRECTORIES')) {
+            'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+            'ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE')) {
             $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             [Environment]::SetEnvironmentVariable($name, $null, 'Process')
         }
@@ -85,6 +112,7 @@ try {
         # Read committed objects locally, while checkout still verifies the exact remote SHA.
         # This does not copy working-tree files or change the development repository.
         $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = $localObjects.Replace('\', '/')
+        $env:ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE = $actionCache
         try {
             & ./run.cmd
             if ($LASTEXITCODE -ne 0) { throw "Runner exited with code $LASTEXITCODE." }
