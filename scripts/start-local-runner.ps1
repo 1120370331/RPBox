@@ -22,6 +22,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Install the stable MSVC Rust toolchain first: 
 
 $runnerRoot = [IO.Path]::GetFullPath($RunnerDirectory).TrimEnd('\', '/')
 $repositoryRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd('\', '/')
+$commonGitDirectory = & git -C $repositoryRoot rev-parse --path-format=absolute --git-common-dir
+if ($LASTEXITCODE -ne 0) { throw 'Start this script from an RPBox Git checkout.' }
+$localObjects = Join-Path $commonGitDirectory 'objects'
 if ($runnerRoot -eq $repositoryRoot -or $runnerRoot.StartsWith($repositoryRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'RunnerDirectory must be outside the development checkout.'
 }
@@ -71,7 +74,7 @@ try {
         # Do not inherit developer URL rewrites, credential helpers or GitHub tokens.
         $savedEnvironment = @{}
         foreach ($name in @('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN',
-            'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT')) {
+            'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT', 'GIT_ALTERNATE_OBJECT_DIRECTORIES')) {
             $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             [Environment]::SetEnvironmentVariable($name, $null, 'Process')
         }
@@ -79,6 +82,9 @@ try {
         "[core]`n    autocrlf = false`n    longpaths = true`n" | Set-Content -LiteralPath $env:GIT_CONFIG_GLOBAL -Encoding utf8NoBOM
         $env:GIT_CONFIG_NOSYSTEM = '1'
         $env:GIT_TERMINAL_PROMPT = '0'
+        # Read committed objects locally, while checkout still verifies the exact remote SHA.
+        # This does not copy working-tree files or change the development repository.
+        $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = $localObjects.Replace('\', '/')
         try {
             & ./run.cmd
             if ($LASTEXITCODE -ne 0) { throw "Runner exited with code $LASTEXITCODE." }
