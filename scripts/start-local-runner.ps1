@@ -107,7 +107,7 @@ try {
             'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
             'ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE')) {
             $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
-            [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+            Remove-Item "Env:$name" -ErrorAction SilentlyContinue
         }
         $env:GIT_CONFIG_GLOBAL = Join-Path $runnerRoot 'ci.gitconfig'
         "[core]`n    autocrlf = false`n    longpaths = true`n" | Set-Content -LiteralPath $env:GIT_CONFIG_GLOBAL -Encoding utf8NoBOM
@@ -123,7 +123,7 @@ try {
             $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             # ureq 3 (used by Tauri's bundler) panics on a present-but-empty proxy.
             if ([string]::IsNullOrWhiteSpace($savedEnvironment[$name])) {
-                [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+                Remove-Item "Env:$name" -ErrorAction SilentlyContinue
             }
         }
         $githubUri = [uri]'https://github.com'
@@ -138,7 +138,10 @@ try {
             & ./run.cmd
             if ($LASTEXITCODE -ne 0) { throw "Runner exited with code $LASTEXITCODE." }
         } finally {
-            foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
+            foreach ($name in $savedEnvironment.Keys) {
+                if ($null -eq $savedEnvironment[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
+                else { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
+            }
         }
     } finally {
         # Also unregister after Ctrl+C or a failed job, retaining only build caches.

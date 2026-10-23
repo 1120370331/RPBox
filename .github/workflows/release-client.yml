@@ -175,6 +175,10 @@ jobs:
       - name: Sync client version files
         run: node scripts/sync-client-version.mjs $env:RELEASE_VERSION
 
+      - name: Prepare isolated NSIS tools
+        run: |
+          ./scripts/prepare-windows-bundler.ps1 -TargetDirectory $env:CARGO_TARGET_DIR -ConfigPath (Join-Path $env:RUNNER_TEMP 'tauri-ci-config.json')
+
       - name: Build signed NSIS installer
         working-directory: client
         env:
@@ -188,7 +192,7 @@ jobs:
           foreach ($file in @($installer, "$installer.sig")) {
             if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
           }
-          npm run tauri -- build --ci --bundles nsis -- --locked
+          npm run tauri -- build --ci --bundles nsis --config (Join-Path $env:RUNNER_TEMP 'tauri-ci-config.json') -- --locked
           if ($LASTEXITCODE -ne 0) { throw 'Tauri build failed.' }
 
       - name: Prepare exact release artifacts
