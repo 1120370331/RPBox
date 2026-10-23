@@ -26,7 +26,7 @@ gh workflow run release-client.yml --ref main -f version=1.0.7-1 -f channel=beta
 
 每份任务都要重新启动 Runner；正式版使用 `channel=stable` 和正式版本号。`--ref` 指定的是要构建的**远端分支/tag**，本地未提交文件不会被打包。不要同时推同一版本 tag 再手动发布，以免重复运行。本机未开机时选择 `builder=hosted`，本地任务不会自动转到云端；已经排队的本地任务需取消后重新选择 hosted。
 
-Runner 默认安装在 `%LOCALAPPDATA%\RPBox\actions-runner`，工作副本在 `_work`，编译缓存位于 `_work\_rpbox-cache\cargo-target`，均独立于开发仓库。checkout 仍清理工作副本，避免旧源码混入。此流程只用于本人审核过的发布源码，不配置 PR 触发器；ephemeral 代表只接一份任务，并非虚拟机隔离。可按需先执行 `rustup update stable`，升级编译器后首次构建会重建相关缓存。
+Runner 默认安装在 `%LOCALAPPDATA%\RPBox\actions-runner`，工作副本在 `_work`，编译缓存位于 `_work\_rpbox-cache\cargo-target`，均独立于开发仓库。通过 Git alternates 只读复用开发仓库已提交的对象，减少首次下载；运行期间请保留该开发仓库。checkout 仍按远端 SHA 清理并检出工作副本，避免旧源码或未提交文件混入。此流程只用于本人审核过的发布源码，不配置 PR 触发器；ephemeral 代表只接一份任务，并非虚拟机隔离。可按需先执行 `rustup update stable`，升级编译器后首次构建会重建相关缓存。
 
 签名和部署使用现有 GitHub Secrets，脚本不读取开发目录 `.env`，SSH 私钥只在上传期间写入受限临时目录并在结束时删除。Runner 使用独立 `ci.gitconfig`，不继承开发账号的 Git URL 改写和凭据助手；不传入启动终端的 GitHub Token。可选 `SSH_KNOWN_HOSTS` Secret 固定服务器主机公钥；未设置时沿用原流程的 `ssh-keyscan`。不修改本机的 Git/SSH 配置或 `known_hosts`。
 
