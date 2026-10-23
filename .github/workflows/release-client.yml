@@ -149,7 +149,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          # The local npm cache already persists; do not archive the user's global cache.
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: client/package-lock.json
 
       - name: Check deployment connection before compiling

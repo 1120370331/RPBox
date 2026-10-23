@@ -30,6 +30,8 @@ Runner 默认安装在 `%LOCALAPPDATA%\RPBox\actions-runner`，工作副本在 `
 
 安装和启动时还会按 Action 的实际 commit SHA 缓存官方下载包到 `action-cache`，供 Runner 的 `ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE` 使用，避免每次初始化重新下载。Action 标签升级后会按新 SHA 补充缓存，远端 workflow 使用其他版本时仍由 Runner 正常下载。仓库 `.gitmodules` 补齐已有的两个参考子模块定义；桌面构建不初始化或下载它们。
 
+本机 npm 缓存直接复用本地目录，不上传整份用户缓存到 Actions；云端 Windows 仍启用 npm 和 Rust 的 Actions 缓存。
+
 若终端没有显式代理环境变量，启动脚本会将 Windows 当前系统代理传给 Runner 的 Git/Node 子进程，退出时恢复环境；不修改系统代理设置。使用系统代理时须在发包期间保持代理软件运行。
 
 NSIS 工具独立缓存在 Cargo target 的 `.tauri` 目录，不与日常开发使用的其他 Tauri CLI 版本混用。准备步骤按已安装 CLI 的官方 release 源码获取工具 URL 和校验值，用 PowerShell 下载并核验，避开旧 Tauri 下载器与 Windows 代理的兼容问题；工具下载失败会在编译之前报错。
