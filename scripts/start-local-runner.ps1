@@ -119,8 +119,12 @@ try {
         $env:ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE = $actionCache
         # Git/Node do not consistently inherit Windows Internet Settings, unlike PowerShell.
         # Respect explicit proxy env settings, otherwise reuse the existing system proxy.
-        foreach ($name in @('HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY')) {
+        foreach ($name in @('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY')) {
             $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+            # ureq 3 (used by Tauri's bundler) panics on a present-but-empty proxy.
+            if ([string]::IsNullOrWhiteSpace($savedEnvironment[$name])) {
+                [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+            }
         }
         $githubUri = [uri]'https://github.com'
         $systemProxy = [Net.WebRequest]::DefaultWebProxy
