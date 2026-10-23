@@ -129,6 +129,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # Avoid downloading mobile screenshots, marketing assets and reference repos.
+          sparse-checkout: |
+            client
+            shared
+            scripts
 
       - name: Configure persistent local build cache
         run: |

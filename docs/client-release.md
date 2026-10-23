@@ -6,7 +6,7 @@
 
 `Release Client` 支持 `builder=local`。本机完成签名 NSIS 构建和直接上传，Actions 保留日志、签名密钥和安装包归档；版本元数据和下载页仍按原有 stable/beta 渠道更新。普通 tag 发布、`builder=hosted` 继续使用 GitHub Windows。
 
-已观察到的基线：[2026-10-22 的发布](https://github.com/1120370331/RPBox/actions/runs/39779144074) 总计约 21 分 50 秒，Tauri 构建 7 分 34 秒，服务器上传 12 分 46 秒。新的流程去掉 MSI、整目录归档和 Ubuntu 中转，并将上传合为一次 SCP；本机 Rust 产物持续缓存。实际提速以运行记录为准，第一次冷构建仍需下载依赖。
+已观察到的基线：[2026-10-22 的发布](https://github.com/1120370331/RPBox/actions/runs/39779144074) 总计约 21 分 50 秒，Tauri 构建 7 分 34 秒，服务器上传 12 分 46 秒。新的流程只检出客户端、共享源码和脚本，跳过手机截图、营销资源和参考仓库；去掉 MSI、整目录归档和 Ubuntu 中转，将上传合为一次 SCP，本机 Rust 产物持续缓存。实际提速以运行记录为准，第一次冷构建仍需下载依赖。
 
 前提：本次 workflow 和脚本已推送到要构建的分支；本机安装 PowerShell 7、Git、Node、stable MSVC Rust、Visual Studio C++ 工具链、Windows SDK 和 OpenSSH，`gh` 已登录且可管理本仓库 Runner。
 
