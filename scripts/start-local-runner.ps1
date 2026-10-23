@@ -117,6 +117,19 @@ try {
         # This does not copy working-tree files or change the development repository.
         $env:GIT_ALTERNATE_OBJECT_DIRECTORIES = $localObjects.Replace('\', '/')
         $env:ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE = $actionCache
+        # Git/Node do not consistently inherit Windows Internet Settings, unlike PowerShell.
+        # Respect explicit proxy env settings, otherwise reuse the existing system proxy.
+        foreach ($name in @('HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY')) {
+            $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        }
+        $githubUri = [uri]'https://github.com'
+        $systemProxy = [Net.WebRequest]::DefaultWebProxy
+        if (-not $systemProxy.IsBypassed($githubUri)) {
+            $proxyUri = $systemProxy.GetProxy($githubUri).AbsoluteUri
+            if (-not $env:HTTPS_PROXY) { $env:HTTPS_PROXY = $proxyUri }
+            if (-not $env:HTTP_PROXY) { $env:HTTP_PROXY = $proxyUri }
+            if (-not $env:NO_PROXY) { $env:NO_PROXY = 'localhost,127.0.0.1,::1' }
+        }
         try {
             & ./run.cmd
             if ($LASTEXITCODE -ne 0) { throw "Runner exited with code $LASTEXITCODE." }
