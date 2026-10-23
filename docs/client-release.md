@@ -28,7 +28,7 @@ gh workflow run release-client.yml --ref main -f version=1.0.7-1 -f channel=beta
 
 Runner 默认安装在 `%LOCALAPPDATA%\RPBox\actions-runner`，工作副本在 `_work`，编译缓存位于 `_work\_rpbox-cache\cargo-target`，均独立于开发仓库。checkout 仍清理工作副本，避免旧源码混入。此流程只用于本人审核过的发布源码，不配置 PR 触发器；ephemeral 代表只接一份任务，并非虚拟机隔离。可按需先执行 `rustup update stable`，升级编译器后首次构建会重建相关缓存。
 
-签名和部署使用现有 GitHub Secrets，脚本不读取开发目录 `.env`，SSH 私钥只在上传期间写入受限临时目录并在结束时删除。可选 `SSH_KNOWN_HOSTS` Secret 固定服务器主机公钥；未设置时沿用原流程的 `ssh-keyscan`。不修改本机的 SSH 配置或 `known_hosts`。
+签名和部署使用现有 GitHub Secrets，脚本不读取开发目录 `.env`，SSH 私钥只在上传期间写入受限临时目录并在结束时删除。Runner 使用独立 `ci.gitconfig`，不继承开发账号的 Git URL 改写和凭据助手；不传入启动终端的 GitHub Token。可选 `SSH_KNOWN_HOSTS` Secret 固定服务器主机公钥；未设置时沿用原流程的 `ssh-keyscan`。不修改本机的 Git/SSH 配置或 `known_hosts`。
 
 上传前后都校验 SHA256，只有安装包、签名和版本元数据就绪后才切换 `latest.json` / `latest-beta.json`。失败时旧的渠道指针保留，服务器可能留下 `.upload-*` 排错目录。发布互斥执行，避免两个版本同时修改指针。`build_only=true` 适合验证新 Runner：使用正式签名密钥并上传到独立临时目录，校验后清理，不创建正式版本目录、不切换渠道指针、不更新下载页。
 
