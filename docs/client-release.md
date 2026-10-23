@@ -2,6 +2,40 @@
 
 本文档介绍如何构建、发布客户端更新，以及自动更新机制的工作原理。
 
+## 推荐：按需使用本机加速 Actions
+
+`Release Client` 支持 `builder=local`。本机完成签名 NSIS 构建和直接上传，Actions 保留日志、签名密钥和安装包归档；版本元数据和下载页仍按原有 stable/beta 渠道更新。普通 tag 发布、`builder=hosted` 继续使用 GitHub Windows。
+
+已观察到的基线：[2026-10-22 的发布](https://github.com/1120370331/RPBox/actions/runs/39779144074) 总计约 21 分 50 秒，Tauri 构建 7 分 34 秒，服务器上传 12 分 46 秒。新的流程去掉 MSI、整目录归档和 Ubuntu 中转，并将上传合为一次 SCP；本机 Rust 产物持续缓存。实际提速以运行记录为准，第一次冷构建仍需下载依赖。
+
+前提：本次 workflow 和脚本已推送到要构建的分支；本机安装 PowerShell 7、Git、Node、stable MSVC Rust、Visual Studio C++ 工具链、Windows SDK 和 OpenSSH，`gh` 已登录且可管理本仓库 Runner。
+
+```powershell
+# 第一次安装；下载官方 Runner 并核对 GitHub 返回的 SHA256
+pwsh -NoProfile -File scripts/start-local-runner.ps1 -InstallOnly
+
+# 每次发包前，在终端 A 启动（前台运行，一份任务完成后自动注销退出）
+pwsh -NoProfile -File scripts/start-local-runner.ps1
+
+# 终端 B：构建、归档并验证临时上传，不发布更新、不更新下载页
+gh workflow run release-client.yml --ref main -f version=1.0.7-1 -f channel=beta -f builder=local -F build_only=true
+
+# 正式发布测试版；版本应为尚未发布的新版本
+gh workflow run release-client.yml --ref main -f version=1.0.7-1 -f channel=beta -f builder=local -F build_only=false
+```
+
+每份任务都要重新启动 Runner；正式版使用 `channel=stable` 和正式版本号。`--ref` 指定的是要构建的**远端分支/tag**，本地未提交文件不会被打包。不要同时推同一版本 tag 再手动发布，以免重复运行。本机未开机时选择 `builder=hosted`，本地任务不会自动转到云端；已经排队的本地任务需取消后重新选择 hosted。
+
+Runner 默认安装在 `%LOCALAPPDATA%\RPBox\actions-runner`，工作副本在 `_work`，编译缓存位于 `_work\_rpbox-cache\cargo-target`，均独立于开发仓库。checkout 仍清理工作副本，避免旧源码混入。此流程只用于本人审核过的发布源码，不配置 PR 触发器；ephemeral 代表只接一份任务，并非虚拟机隔离。可按需先执行 `rustup update stable`，升级编译器后首次构建会重建相关缓存。
+
+签名和部署使用现有 GitHub Secrets，脚本不读取开发目录 `.env`，SSH 私钥只在上传期间写入受限临时目录并在结束时删除。可选 `SSH_KNOWN_HOSTS` Secret 固定服务器主机公钥；未设置时沿用原流程的 `ssh-keyscan`。不修改本机的 SSH 配置或 `known_hosts`。
+
+上传前后都校验 SHA256，只有安装包、签名和版本元数据就绪后才切换 `latest.json` / `latest-beta.json`。失败时旧的渠道指针保留，服务器可能留下 `.upload-*` 排错目录。发布互斥执行，避免两个版本同时修改指针。`build_only=true` 适合验证新 Runner：使用正式签名密钥并上传到独立临时目录，校验后清理，不创建正式版本目录、不切换渠道指针、不更新下载页。
+
+脚本验证：`pwsh -NoProfile -File scripts/tests/client-release.tests.ps1`。此验证用临时目录及本机 Git Bash 检查远端发布命令，拦截 SSH/SCP，不连接生产环境。
+
+以下旧手动发布脚本说明保留供历史维护参考，新发布优先使用上述 Actions 流程。
+
 ## 目录
 
 - [前置准备](#前置准备)
