@@ -152,6 +152,22 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
 
+      - name: Check deployment connection before compiling
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          if (-not $env:SERVER_HOST) { throw 'Missing deployment host.' }
+          $knownHosts = Join-Path $env:RUNNER_TEMP 'rpbox-known-hosts'
+          if ($env:SSH_KNOWN_HOSTS) {
+            $env:SSH_KNOWN_HOSTS | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
+          } else {
+            $keys = & ssh-keyscan -4 -T 15 -p 2233 $env:SERVER_HOST
+            if ($LASTEXITCODE -ne 0 -or -not $keys) { throw 'SSH host-key scan failed before build.' }
+            $keys | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
+          }
+          "SSH_KNOWN_HOSTS_FILE=$knownHosts" >> $env:GITHUB_ENV
+
       - name: Setup Rust on hosted Windows
         if: runner.environment == 'github-hosted'
         uses: dtolnay/rust-toolchain@stable
