@@ -72,7 +72,12 @@ try {
     $hostKeys = if ($env:SSH_KNOWN_HOSTS) { $env:SSH_KNOWN_HOSTS }
     elseif ($env:SSH_KNOWN_HOSTS_FILE) { Get-Content -LiteralPath $env:SSH_KNOWN_HOSTS_FILE -Raw }
     else {
-        $scanned = & ssh-keyscan -4 -T 15 -p $ServerPort $ServerHost
+        $keyscan = (Get-Command ssh-keyscan).Source
+        if ($IsWindows) {
+            $gitKeyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
+            if (Test-Path -LiteralPath $gitKeyscan) { $keyscan = $gitKeyscan }
+        }
+        $scanned = & $keyscan -4 -T 30 -p $ServerPort $ServerHost
         if ($LASTEXITCODE -ne 0 -or -not $scanned) { throw 'Could not obtain the server SSH host key.' }
         $scanned -join "`n"
     }
