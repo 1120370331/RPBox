@@ -15,6 +15,13 @@ pub struct WowInstallation {
     pub flavor: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct GameDirectoryInspection {
+    pub path: PathBuf,
+    pub flavor: Option<String>,
+    pub accounts: Vec<String>,
+}
+
 const COMMON_PATHS: &[&str] = &[
     "C:\\Program Files (x86)\\World of Warcraft",
     "C:\\Program Files\\World of Warcraft",
@@ -83,11 +90,40 @@ fn client_flavor(path: &std::path::Path) -> Option<String> {
 // Inspect a client directory or all installed editions under a Battle.net root.
 // Folder edition names are preferred; client executables identify renamed installations.
 pub fn inspect_wow_installations(input: &str) -> Vec<WowInstallation> {
+    inspect_game_directories(input)
+        .into_iter()
+        .filter_map(|candidate| {
+            let flavor = candidate.flavor?;
+            Some(WowInstallation {
+                version: if flavor.contains("classic") {
+                    WowVersion::Classic
+                } else {
+                    WowVersion::Retail
+                },
+                accounts: candidate.accounts,
+                path: candidate.path,
+                flavor,
+            })
+        })
+        .collect()
+}
+
+// Inspect the selected directory before asking the user to confirm its edition.
+// A valid client with an unknown edition is returned with no guessed flavor.
+pub fn inspect_game_directories(input: &str) -> Vec<GameDirectoryInspection> {
     let mut base = PathBuf::from(input);
-    if base.ends_with("Account") {
+    if base
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("Account"))
+    {
         base.pop();
     }
-    if base.ends_with("WTF") {
+    if base
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("WTF"))
+    {
         base.pop();
     }
     let mut candidates = vec![base.clone()];
@@ -100,27 +136,30 @@ pub fn inspect_wow_installations(input: &str) -> Vec<WowInstallation> {
             }
             let name = path.file_name()?.to_str()?;
             let flavor = if FLAVORS.contains(&name) {
-                name.to_string()
+                Some(name.to_string())
             } else if let Some(flavor) = client_flavor(&path) {
-                flavor
+                Some(flavor)
             } else if path.join("Wow.exe").exists() || path.join("World of Warcraft.app").exists() {
-                "_retail_".into()
+                Some("_retail_".into())
             } else {
-                return None;
+                None
             };
-            if !path.join("WTF").join("Account").is_dir()
-                && !path.join("Wow.exe").is_file()
-                && !path.join("WowClassic.exe").is_file()
-                && !path.join("World of Warcraft.app").exists()
-            {
+            let has_client = [
+                "Wow.exe",
+                "WowClassic.exe",
+                "WowT.exe",
+                "WowB.exe",
+                "WowClassicT.exe",
+                "WowClassicB.exe",
+            ]
+            .iter()
+            .any(|name| path.join(name).is_file())
+                || path.join("World of Warcraft.app").is_dir()
+                || path.join("World of Warcraft Classic.app").is_dir();
+            if !path.join("WTF").join("Account").is_dir() && !has_client {
                 return None;
             }
-            Some(WowInstallation {
-                version: if flavor.contains("classic") {
-                    WowVersion::Classic
-                } else {
-                    WowVersion::Retail
-                },
+            Some(GameDirectoryInspection {
                 accounts: get_accounts(&path).unwrap_or_default(),
                 path,
                 flavor,
@@ -166,6 +205,36 @@ mod tests {
         .unwrap();
         let detected = inspect_wow_installations(&temp.path().to_string_lossy());
         assert_eq!(detected[0].flavor, "_classic_era_");
+    }
+
+    #[test]
+    fn inspection_keeps_unknown_clients_for_manual_confirmation_and_rejects_empty_folders() {
+        let temp = tempfile::tempdir().unwrap();
+        assert!(inspect_game_directories(&temp.path().to_string_lossy()).is_empty());
+        std::fs::write(temp.path().join("WowClassic.exe"), "").unwrap();
+        let candidates = inspect_game_directories(&temp.path().to_string_lossy());
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].flavor, None);
+        assert!(inspect_wow_installations(&temp.path().to_string_lossy()).is_empty());
+    }
+
+    #[test]
+    fn inspection_resolves_wtf_paths_and_fresh_beta_clients_without_saved_variables() {
+        let temp = tempfile::tempdir().unwrap();
+        let retail = temp.path().join("_retail_");
+        std::fs::create_dir_all(retail.join("WTF/Account/WOW1")).unwrap();
+        let candidates = inspect_game_directories(&retail.join("WTF/Account").to_string_lossy());
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].path, retail);
+        let beta = temp.path().join("_beta_");
+        std::fs::create_dir_all(&beta).unwrap();
+        std::fs::write(beta.join("WowB.exe"), "").unwrap();
+        assert_eq!(
+            inspect_game_directories(&beta.to_string_lossy())[0]
+                .flavor
+                .as_deref(),
+            Some("_beta_")
+        );
     }
 }
 

@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSidebarBadgesStore } from './sidebarBadges'
+import { registerGameInstallation } from '@/utils/gameInstallations'
 
 const mocks = vi.hoisted(() => ({
   listPosts: vi.fn(),
@@ -123,7 +124,7 @@ describe('sidebar badge store', () => {
   })
 
   it('automatically installs a detected update at startup and clears its badge', async () => {
-    localStorage.setItem('wow_path', 'C:\\Games\\World of Warcraft')
+    registerGameInstallation({ path: 'C:\\Games\\World of Warcraft', flavor: '_retail_' })
     localStorage.setItem('addon_auto_update', 'true')
     let installedVersion = '1.0.0'
     mocks.invoke.mockImplementation(async (command: string) => {

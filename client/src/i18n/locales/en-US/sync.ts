@@ -1,4 +1,9 @@
 export default {
+  target: {
+    gameVersion: 'Game version',
+    gamePath: 'Game path',
+    configurePath: 'Configure game path',
+  },
   title: 'Profile Backup',
   tabs: {
     profiles: 'Profiles',

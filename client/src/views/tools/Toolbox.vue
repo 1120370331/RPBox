@@ -3,15 +3,16 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { filterRPTools, rpTools } from '../../data/rpTools'
 const route = useRoute(), router = useRouter()
+const tools = rpTools.filter(tool => !tool.desktopOnly || (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window))
 function updateFilters(values: Record<string, string | string[] | undefined>) {
   void router.replace({ path: route.path, query: { ...route.query, ...values } })
 }
 const search = computed({ get: () => typeof route.query.q === 'string' ? route.query.q : '', set: value => updateFilters({ q: value || undefined }) })
 const feature = computed({ get: () => typeof route.query.feature === 'string' ? route.query.feature : '', set: value => updateFilters({ feature: value || undefined }) })
 const tags = computed(() => [route.query.tag].flat().filter((value): value is string => typeof value === 'string'))
-const features = [...new Set(rpTools.flatMap(tool => tool.features))]
-const availableTags = [...new Set(rpTools.flatMap(tool => tool.tags))]
-const filtered = computed(() => filterRPTools(rpTools, search.value, feature.value, tags.value))
+const features = [...new Set(tools.flatMap(tool => tool.features))]
+const availableTags = [...new Set(tools.flatMap(tool => tool.tags))]
+const filtered = computed(() => filterRPTools(tools, search.value, feature.value, tags.value))
 function toggleTag(tag: string) { updateFilters({ tag: tags.value.includes(tag) ? tags.value.filter(value => value !== tag) : [...tags.value, tag] }) }
 function reset() { updateFilters({ q: undefined, feature: undefined, tag: undefined }) }
 </script>

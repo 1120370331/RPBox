@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getGameInstallations, selectGameInstallation, removeGameInstallation, inferGameFlavor, gameFlavors, gameFlavorLabel } from '@/utils/gameInstallations'
+import { getGameInstallations, selectGameInstallation, sameGamePath, gameFlavors, gameFlavorLabel } from '@/utils/gameInstallations'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
@@ -15,13 +15,6 @@ import { dialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
 import { ADDONS_UPDATED_EVENT, autoUpdateAddons, isAddonBusy, runAddonOperation, type AddonUpdateCandidate } from '@/services/addonAutoUpdate'
-
-interface WowInstallation {
-  path: string
-  version: string | Record<string, null>
-  accounts: string[]
-  flavor?: string
-}
 
 interface Trp3AddonInfo {
   id: Trp3PluginId
@@ -97,20 +90,18 @@ const toast = useToastStore()
 let progressUnlisten: UnlistenFn | null = null
 
 const desktop = '__TAURI_INTERNALS__' in window
-const installations = ref(getGameInstallations())
+const installations = ref(getGameInstallations().filter(item => gameFlavors.some(flavor => flavor.value === item.flavor)))
 const mounted = ref(false)
-const wowPath = ref(localStorage.getItem('wow_path') || '')
-const detectedPaths = ref<WowInstallation[]>([])
+const wowPath = ref(installations.value.find(item => sameGamePath(item.path, localStorage.getItem('wow_path') || ''))?.path || installations.value[0]?.path || '')
 const trp3Status = ref<Trp3AddonCheckResult | null>(null)
 const trp3Latest = ref<TRP3LatestResponse | null>(null)
 const rpboxInstalledInfo = ref<InstalledAddonInfo | null>(null)
 const rpboxLatestVersion = ref('')
-const selectedFlavor = ref(inferGameFlavor(wowPath.value) || localStorage.getItem('selected_flavor') || '_retail_')
-const checkingPaths = ref(false)
+const downloadFlavor = ref('_retail_')
+const selectedFlavor = computed(() => desktop ? installations.value.find(item => sameGamePath(item.path, wowPath.value))?.flavor || '' : downloadFlavor.value)
 const checkingPlugins = ref(false)
 const installingPluginIds = ref<PluginCardId[]>([])
 const pluginProgresses = ref<Partial<Record<PluginCardId, PluginProgress>>>({})
-const pathError = ref('')
 const pluginError = ref('')
 const installNotice = ref('')
 
@@ -129,7 +120,7 @@ const featureEntries = [
   },
 ]
 
-const hasWowPath = computed(() => !!wowPath.value)
+const hasWowPath = computed(() => desktop && !!wowPath.value && !!selectedFlavor.value)
 
 const trp3AddonsById = computed(() => {
   const entries = (trp3Status.value?.addons || []).map(addon => [addon.id, addon] as const)
@@ -171,10 +162,9 @@ onMounted(async () => {
     return
   }
   await bindProgressEvents()
-  if (wowPath.value) {
+  if (hasWowPath.value) {
+    selectGameInstallation({ path: wowPath.value, flavor: selectedFlavor.value })
     await refreshPluginStatus()
-  } else {
-    await detectPaths()
   }
 })
 
@@ -406,40 +396,18 @@ function getRpboxState(): PluginState {
   return 'ready'
 }
 
-async function detectPaths() {
-  checkingPaths.value = true
-  pathError.value = ''
-  try {
-    detectedPaths.value = await invoke<WowInstallation[]>('detect_wow_paths')
-  } catch (e: any) {
-    pathError.value = getNativeErrorMessage(e, '扫描魔兽世界目录失败')
-    detectedPaths.value = []
-  } finally {
-    checkingPaths.value = false
-  }
-}
-
 async function selectWowPath(path: string) {
-  wowPath.value = path
-  const flavor = detectedPaths.value.find(item => item.path === path)?.flavor || installations.value.find(item => item.path === path)?.flavor || inferGameFlavor(path)
-  selectedFlavor.value = flavor
-  selectGameInstallation({ path, flavor })
-  installations.value = getGameInstallations()
-  detectedPaths.value = []
-  pathError.value = ''
+  const installation = installations.value.find(item => sameGamePath(item.path, path))
+  if (!installation || checkingPlugins.value || pluginCards.value.some(card => card.busy)) return
+  wowPath.value = installation.path
+  selectGameInstallation(installation)
+  trp3Status.value = null
+  rpboxInstalledInfo.value = null
   await refreshPluginStatus()
 }
 
-async function clearWowPath() {
-  if (installations.value.length <= 1) { toast.warning('至少保留一个游戏目录，请先添加新目录。'); return }
-  if (!(await dialog.confirm({ title: '移除目录', message: '仅移除此目录配置，游戏文件与云端存档不会删除。', type: 'warning' }))) return
-  removeGameInstallation(wowPath.value)
-  installations.value = getGameInstallations()
-  await selectWowPath(localStorage.getItem('wow_path') || '')
-}
-
 function goToSetup() {
-  router.push({ path: '/sync/setup', query: { redirect: currentRoute.fullPath } })
+  router.push({ path: '/tools/directories', query: { redirect: currentRoute.fullPath } })
 }
 
 function goToFeature(route: string) {
@@ -728,8 +696,8 @@ async function openAddonFolder() {
     <section class="directory-row anim-item" style="--delay: 1">
       <div class="row-heading">
         <div class="heading-copy">
-          <h2>选择游戏目录</h2>
-          <p>需要定位到包含 WTF/Account 的魔兽世界版本目录。</p>
+          <h2>安装目录</h2>
+          <p>选择已登记的游戏目录。</p>
         </div>
         <div class="directory-actions">
           <button v-if="hasWowPath" type="button" class="icon-btn" title="打开 AddOns 目录" @click="openAddonFolder">
@@ -745,49 +713,18 @@ async function openAddonFolder() {
             <i :class="checkingPlugins ? 'ri-loader-4-line spinning' : 'ri-refresh-line'"></i>
             {{ checkingPlugins ? '检测中' : '重新检测' }}
           </button>
-          <button v-if="hasWowPath" type="button" class="text-btn danger" @click="clearWowPath">清除</button>
-          <button type="button" class="primary-btn" @click="goToSetup">
+          <button type="button" class="ghost-btn" @click="goToSetup">
             <i class="ri-folder-settings-line"></i>
-            {{ hasWowPath ? '添加目录' : '设置目录' }}
+            管理游戏目录
           </button>
         </div>
       </div>
 
-      <div class="directory-current" :class="{ empty: !hasWowPath }">
-        <span class="directory-icon">
-          <i :class="hasWowPath ? 'ri-hard-drive-3-line' : 'ri-lock-line'"></i>
-        </span>
-        <span class="directory-copy">
-          <small>当前游戏目录 · {{ gameFlavorLabel(selectedFlavor) }}</small>
-          <select v-if="installations.length > 1" :value="wowPath" :disabled="checkingPlugins || installingPluginIds.length > 0" aria-label="切换游戏目录" @change="selectWowPath(($event.target as HTMLSelectElement).value)"><option v-for="item in installations" :key="item.path" :value="item.path">{{ gameFlavorLabel(item.flavor) }} · {{ item.path }}</option></select>
-          <strong>{{ trp3Status?.wowPath || wowPath || '本机尚未设置目录' }}</strong>
-        </span>
+      <div v-if="desktop && installations.length" class="installation-target">
+        <label>游戏路径<select :value="wowPath" :disabled="checkingPlugins || pluginCards.some(card => card.busy)" aria-label="安装游戏目录" @change="selectWowPath(($event.target as HTMLSelectElement).value)"><option v-for="item in installations" :key="item.path" :value="item.path">{{ item.path }}</option></select></label>
+        <div class="installation-version"><span>游戏版本</span><strong>{{ gameFlavorLabel(selectedFlavor) }}</strong></div>
       </div>
-
-      <div v-if="!hasWowPath" class="path-tools">
-        <button type="button" class="ghost-btn" :disabled="checkingPaths" @click="detectPaths">
-          <i :class="checkingPaths ? 'ri-loader-4-line spinning' : 'ri-search-line'"></i>
-          {{ checkingPaths ? '扫描中' : '自动扫描' }}
-        </button>
-        <span v-if="pathError" class="inline-error">{{ pathError }}</span>
-        <span v-else class="path-hint">选择目录后，插件安装和快捷入口会自动解锁。</span>
-      </div>
-
-      <div v-if="!hasWowPath && detectedPaths.length" class="detected-grid">
-        <button
-          v-for="install in detectedPaths"
-          :key="install.path"
-          type="button"
-          class="detected-path"
-          @click="selectWowPath(install.path)"
-        >
-          <span>
-            <strong>{{ install.path }}</strong>
-            <small>{{ install.accounts?.length || 0 }} 个账号</small>
-          </span>
-          <i class="ri-arrow-right-line"></i>
-        </button>
-      </div>
+      <p v-else class="path-hint">{{ desktop ? '请先在游戏目录页面登记目录并确认版本。' : '请在桌面客户端选择已登记的游戏目录。' }}</p>
     </section>
 
     <section class="feature-row anim-item" style="--delay: 2">
@@ -821,10 +758,10 @@ async function openAddonFolder() {
       </div>
     </section>
 
-    <section class="directory-row edition-downloads">
+    <section v-if="!desktop || hasWowPath" class="directory-row edition-downloads">
       <h2>按游戏版本下载插件</h2>
-      <label>游戏版本 <select v-model="selectedFlavor" aria-label="插件下载游戏版本" :disabled="desktop && hasWowPath"><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
-      <p>当前选择：{{ gameFlavorLabel(selectedFlavor) }}。桌面端以所选目录的版本为准。</p>
+      <label v-if="!desktop">游戏版本 <select v-model="downloadFlavor" aria-label="游戏版本"><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
+      <p>游戏版本：{{ gameFlavorLabel(selectedFlavor) }}</p>
       <a :href="`https://www.curseforge.com/wow/addons/total-rp-3/files/all?gameVersionTypeId=${selectedFlavor === '_retail_' ? 1 : selectedFlavor === '_classic_era_' ? 2 : 0}`" target="_blank" rel="noopener">Total RP 3 · 版本下载页 ↗</a>
       <a href="https://www.curseforge.com/wow/addons/total-rp-3-extended/files/all" target="_blank" rel="noopener">TRP3 Extended · 版本下载页 ↗</a>
       <a v-if="selectedFlavor === '_retail_' && rpboxLatestVersion" :href="getAddonDownloadUrl(rpboxLatestVersion)" target="_blank" rel="noopener">RPBox Addon · 正式服下载 ↗</a>
@@ -1581,9 +1518,13 @@ h3 {
 </style>
 
 <style scoped>
-.edition-downloads{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.edition-downloads h2,.edition-downloads p{flex-basis:100%}.edition-downloads a{color:var(--color-accent)}.directory-copy select,.edition-downloads select{max-width:100%;padding:8px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--color-text-main)}
+.installation-target { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, auto); gap: 20px; align-items: end; }
+.installation-target label, .installation-version { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
+.installation-target select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--input-text); font: inherit; }
+.installation-version strong { display: flex; align-items: center; min-height: 44px; font-weight: 500; }
+.edition-downloads{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.edition-downloads h2,.edition-downloads p{flex-basis:100%}.edition-downloads a{color:var(--color-accent)}.edition-downloads select{max-width:100%;padding:8px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--color-text-main)}
 </style>
 
 <style scoped>
-@media(max-width:600px){.plugin-grid{grid-template-columns:minmax(0,1fr)}.directory-copy select{width:100%;min-width:0;font-size:16px;min-height:44px}.edition-downloads{gap:12px}.edition-downloads label{display:grid;gap:8px;flex-basis:100%;min-width:0}.edition-downloads select{width:100%;min-width:0;font-size:16px;min-height:44px}.edition-downloads a{display:flex;align-items:center;min-height:44px;line-height:1.6;overflow-wrap:anywhere}.directory-actions button{min-height:44px}.feature-card{padding:16px}}
+@media(max-width:600px){.plugin-grid{grid-template-columns:minmax(0,1fr)}.installation-target{grid-template-columns:minmax(0,1fr)}.installation-target select{font-size:16px}.edition-downloads{gap:12px}.edition-downloads label{display:grid;gap:8px;flex-basis:100%;min-width:0}.edition-downloads select{width:100%;min-width:0;font-size:16px;min-height:44px}.edition-downloads a{display:flex;align-items:center;min-height:44px;line-height:1.6;overflow-wrap:anywhere}.directory-actions button{min-height:44px}.feature-card{padding:16px}}
 </style>

@@ -26,7 +26,7 @@ onMounted(() => { if (!desktop) void loadVersion() })
     </section>
     <section class="install-guide">
       <div class="guide-heading"><div><span>从游戏内开始</span><h2>安装 RPBox 配套插件</h2></div><RouterLink v-if="desktop" class="primary" to="/tools/rpbox/install">打开插件安装器 <i class="ri-arrow-right-line" aria-hidden="true"></i></RouterLink><a v-else-if="version" class="primary" :href="getAddonDownloadUrl(version)" download>下载 RPBox 插件 {{ version }} <i class="ri-download-2-line" aria-hidden="true"></i></a><button v-else-if="downloadError" type="button" @click="loadVersion">{{ downloadError }}</button><span v-else role="status">获取插件版本…</span></div>
-      <ol><li><strong>选择你的魔兽世界版本</strong><p>找到游戏版本目录，例如 <code>World of Warcraft/_retail_</code>。经典服请选择对应的版本目录。</p></li><li><strong>安装并启用插件</strong><p>退出游戏后，将压缩包中的 <code>RPBox_Addon</code> 文件夹放入 <code>Interface/AddOns</code>。进入角色选择界面，在插件列表启用 RPBox Addon 和 Total RP 3。</p></li><li><strong>开始记录，然后同步</strong><p>进入游戏使用插件记录 RP 对话；退出游戏或执行 <code>/reload</code> 使数据写入磁盘，再通过人物卡备份和剧情归档入口导入。</p></li></ol>
+      <ol><li><strong>登记游戏目录</strong><p>先选择游戏目录，确认识别到的游戏版本后保存；需要时可手动修改。</p><RouterLink v-if="desktop" to="/tools/directories">管理游戏目录</RouterLink></li><li><strong>安装并启用插件</strong><p>退出游戏后，将压缩包中的 <code>RPBox_Addon</code> 文件夹放入 <code>Interface/AddOns</code>。进入角色选择界面，在插件列表启用 RPBox Addon 和 Total RP 3。</p></li><li><strong>开始记录，然后同步</strong><p>进入游戏使用插件记录 RP 对话；退出游戏或执行 <code>/reload</code> 使数据写入磁盘，再通过人物卡备份和剧情归档入口导入。</p></li></ol>
       <p class="guide-note">{{ desktop ? '桌面版可以扫描游戏目录并一键安装、更新插件。' : '网页版可编辑云端档案；自动扫描游戏目录、安装插件和读取本地游戏数据需要 RPBox 桌面客户端。' }}</p>
       <RouterLink v-if="!desktop" class="installer-link" to="/tools/rpbox/install">查看桌面版安装流程 <i class="ri-arrow-right-up-line" aria-hidden="true"></i></RouterLink>
     </section>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonLatest, getAddonDownloadUrl } from '@/api/addon'
 import { runAddonOperation } from '@/services/addonAutoUpdate'
+import { getGameInstallations, gameFlavorLabel, sameGamePath } from '@/utils/gameInstallations'
 import RModal from './RModal.vue'
 import RButton from './RButton.vue'
-import RSelect from './RSelect.vue'
 
 interface Props {
   modelValue: boolean
@@ -29,13 +29,9 @@ const checking = ref(false)
 const error = ref('')
 const installedInfo = ref<InstalledAddonInfo | null>(null)
 const latestVersion = ref('')
-const selectedFlavor = ref('_retail_')
-
-const flavorOptions = [
-  { label: '正式服 (_retail_)', value: '_retail_' },
-  { label: '怀旧服 (_classic_)', value: '_classic_' },
-  { label: '经典旧世 (_classic_era_)', value: '_classic_era_' },
-]
+const installations = ref(getGameInstallations())
+const selectedInstallation = computed(() => installations.value.find(item => sameGamePath(item.path, props.wowPath)))
+const selectedFlavor = computed(() => selectedInstallation.value?.flavor || '')
 
 const needsUpdate = computed(() => {
   if (!installedInfo.value?.installed || !latestVersion.value) return false
@@ -51,6 +47,9 @@ const statusText = computed(() => {
 })
 
 async function checkInstalled() {
+  installedInfo.value = null
+  if (!selectedInstallation.value || !selectedFlavor.value) { error.value = '请先在游戏目录页登记并确认目录。'; return }
+  if (selectedFlavor.value !== '_retail_') { error.value = 'RPBox Addon 当前仅提供正式服安装包。'; return }
   checking.value = true
   error.value = ''
   try {
@@ -68,6 +67,7 @@ async function checkInstalled() {
 }
 
 async function installAddon() {
+  if (!selectedInstallation.value || selectedFlavor.value !== '_retail_') return
   loading.value = true
   error.value = ''
   try {
@@ -96,9 +96,12 @@ function close() {
   emit('update:modelValue', false)
 }
 
-onMounted(() => {
-  if (props.wowPath) checkInstalled()
-})
+watch(() => [props.modelValue, props.wowPath], ([visible]) => {
+  if (visible) {
+    installations.value = getGameInstallations()
+    void checkInstalled()
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -107,9 +110,14 @@ onMounted(() => {
       <p class="addon-installer__desc">需要安装配套插件才能使用剧情记录功能</p>
 
       <div class="addon-installer__field">
-        <label>游戏版本</label>
-        <RSelect v-model="selectedFlavor" :options="flavorOptions" @change="checkInstalled" />
+        <label>游戏路径</label>
+        <span class="addon-installer__path">{{ selectedInstallation?.path || '未登记' }}</span>
       </div>
+      <div class="addon-installer__field">
+        <label>游戏版本</label>
+        <span>{{ selectedFlavor ? gameFlavorLabel(selectedFlavor) : '未设置' }}</span>
+      </div>
+      <RouterLink to="/tools/directories" @click="close">管理游戏目录</RouterLink>
 
       <div class="addon-installer__status" :class="{ 'addon-installer__status--error': error }">
         {{ error || statusText }}
@@ -133,7 +141,7 @@ onMounted(() => {
         v-if="!installedInfo?.installed || needsUpdate"
         type="primary"
         :loading="loading"
-        :disabled="checking || !latestVersion"
+        :disabled="checking || !latestVersion || !selectedInstallation || selectedFlavor !== '_retail_'"
         @click="installAddon"
       >
         {{ installedInfo?.installed ? '更新插件' : '安装插件' }}
@@ -143,6 +151,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.addon-installer__path { overflow-wrap: anywhere; font-size: 13px; color: var(--color-text-secondary); }
 .addon-installer {
   display: flex;
   flex-direction: column;

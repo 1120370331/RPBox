@@ -21,12 +21,6 @@ import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RModal from '@/components/RModal.vue'
 
-interface WowInstallation {
-  path: string
-  version: string
-  flavor: string
-}
-
 const router = useRouter()
 const { t, locale } = useI18n()
 const userStore = useUserStore()
@@ -120,8 +114,6 @@ async function handleDeleteAccount() {
   }
 }
 const wowPath = ref('')
-const detectedPaths = ref<WowInstallation[]>([])
-const isScanning = ref(false)
 const autoSync = ref(false)
 const syncOnStartup = ref(true)
 const launchOnStartup = ref(false)
@@ -184,22 +176,7 @@ function handleAddonUpdated() {
   void checkAddonInstalled()
 }
 
-async function detectPaths() {
-  isScanning.value = true
-  try {
-    detectedPaths.value = await invoke<WowInstallation[]>('detect_wow_paths')
-  } finally {
-    isScanning.value = false
-  }
-}
-
-function selectPath(path: string) {
-  wowPath.value = path
-  saveSettings()
-}
-
 function saveSettings() {
-  localStorage.setItem('wow_path', wowPath.value)
   localStorage.setItem('auto_sync', String(autoSync.value))
   localStorage.setItem('sync_on_startup', String(syncOnStartup.value))
 }
@@ -284,8 +261,7 @@ function clearImageCache() {
 }
 
 function resetSetup() {
-  localStorage.removeItem('wow_path')
-  router.push({ path: '/sync/setup', query: { redirect: '/warcraft' } })
+  router.push({ path: '/tools/directories', query: { redirect: '/settings' } })
 }
 
 async function handleCheckUpdate() {
@@ -580,30 +556,16 @@ watch(() => localeStore.currentLocale, (newLocale) => {
         <div class="card-body">
           <div class="path-input-group">
             <input
-              v-model="wowPath"
+              :value="wowPath"
+              readonly
               type="text"
               :placeholder="$t('settings.game.wowPathPlaceholder')"
               class="path-input"
             />
-            <button class="btn btn-primary" @click="detectPaths" :disabled="isScanning">
-              <i :class="isScanning ? 'ri-loader-4-line spin' : 'ri-search-line'"></i>
-              {{ isScanning ? $t('settings.game.scanning') : $t('settings.game.autoDetect') }}
+            <button class="btn btn-primary" @click="resetSetup">
+              <i class="ri-folder-settings-line"></i>
+              {{ $t('settings.game.manageDirectories') }}
             </button>
-          </div>
-          <div v-if="detectedPaths.length > 0" class="detected-paths">
-            <div
-              v-for="p in detectedPaths"
-              :key="p.path"
-              class="path-item"
-              :class="{ selected: wowPath === p.path }"
-              @click="selectPath(p.path)"
-            >
-              <div class="path-info">
-                <i class="ri-gamepad-line"></i>
-                <span class="path-text">{{ p.path }}</span>
-              </div>
-              <span class="flavor-tag">{{ p.flavor }} · {{ p.version }}</span>
-            </div>
           </div>
         </div>
       </div>

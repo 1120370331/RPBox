@@ -7,9 +7,17 @@ export interface RPTool {
   route: string
   features: string[]
   tags: string[]
+  desktopOnly?: boolean
 }
 
 export const rpTools: RPTool[] = [
+  {
+    id: 'game-directories', name: '游戏目录', subtitle: '管理本机的魔兽世界客户端',
+    description: '选择游戏目录，确认自动识别的游戏版本。已登记目录供人物卡备份和插件安装使用，版本可以随时修改。',
+    icon: 'ri-folder-settings-line', route: '/tools/directories',
+    desktopOnly: true,
+    features: ['目录登记', '游戏版本管理'], tags: ['魔兽世界', '桌面工具'],
+  },
   {
     id: 'rpbox', name: 'RPBox', subtitle: '连接游戏内外的 RP 工具',
     description: '安装配套插件，备份人物卡，将游戏里的对话整理成可以再次翻阅的剧情。',
