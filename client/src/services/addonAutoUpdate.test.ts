@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ADDONS_UPDATED_EVENT, addonAutoUpdateEnabled, autoUpdateAddons, isAddonBusy, runAddonOperation, setAddonAutoUpdateEnabled, type AddonUpdateCandidate } from './addonAutoUpdate'
+import { registerGameInstallation } from '@/utils/gameInstallations'
 
 const mocks = vi.hoisted(() => ({ invoke: vi.fn(), success: vi.fn(), error: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }))
@@ -17,7 +18,7 @@ function installations() {
 
 beforeEach(() => {
   localStorage.clear()
-  localStorage.setItem('wow_path', target.wowPath)
+  registerGameInstallation({ path: target.wowPath, flavor: target.flavor })
   setAddonAutoUpdateEnabled(true)
   vi.resetAllMocks()
   mocks.invoke.mockImplementation(async (command: string) => {
@@ -33,6 +34,25 @@ afterEach(() => {
 })
 
 describe('automatic addon updates', () => {
+  it('rejects installs for unregistered directories and mismatched confirmed editions', async () => {
+    const operation = vi.fn()
+    await expect(runAddonOperation({ wowPath: 'D:/Unregistered', flavor: '_retail_' }, 'rpbox', 'install', operation)).rejects.toThrow('登记目录')
+    registerGameInstallation({ path: target.wowPath, flavor: '_classic_era_' })
+    await expect(runAddonOperation(target, 'rpbox', 'install', operation)).rejects.toThrow('确认游戏版本')
+    expect(operation).not.toHaveBeenCalled()
+  })
+
+  it('keeps physical-directory operations exclusive across root/WTF aliases and edition edits', async () => {
+    let finish!: () => void
+    const pending = runAddonOperation(target, 'rpbox', 'install', () => new Promise<void>(resolve => { finish = resolve }))
+    await Promise.resolve()
+    const alias = { wowPath: target.wowPath + '/WTF', flavor: '_classic_era_' }
+    expect(isAddonBusy(alias, 'rpbox')).toBe(true)
+    await expect(runAddonOperation(alias, 'rpbox', 'uninstall', vi.fn())).rejects.toThrow()
+    finish()
+    await pending
+    expect(isAddonBusy(alias, 'rpbox')).toBe(false)
+  })
   it('persists the switch and performs no automatic work when disabled', async () => {
     setAddonAutoUpdateEnabled(false)
     expect(addonAutoUpdateEnabled.value).toBe(false)

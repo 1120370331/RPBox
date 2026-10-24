@@ -66,10 +66,11 @@ export default {
     enUS: 'English',
   },
   game: {
+    manageDirectories: 'Manage game directories',
     title: 'WoW Installation Path',
     description: 'Configure World of Warcraft installation directory',
     wowPath: 'World of Warcraft Path',
-    wowPathPlaceholder: 'Enter or select WoW installation path',
+    wowPathPlaceholder: 'Register a path in Game directories',
     browse: 'Browse',
     autoDetect: 'Auto Detect',
     scanning: 'Scanning...',

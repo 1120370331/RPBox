@@ -40,18 +40,18 @@ const activeSection = ref('addon')
         <div class="step">
           <div class="step-number">1</div>
           <div class="step-content">
-            <h3>下载插件</h3>
-            <p>进入「剧情记录」页面，如果未安装插件会自动提示下载。</p>
-            <p>点击「安装插件」按钮即可自动下载并安装。</p>
+            <h3>登记游戏目录</h3>
+            <p>打开「游戏目录」，先选择目录，再确认自动识别的游戏版本。</p>
+            <p>可以手动修改识别结果，也可以之后在目录列表中修改版本。</p>
           </div>
         </div>
 
         <div class="step">
           <div class="step-number">2</div>
           <div class="step-content">
-            <h3>选择游戏版本</h3>
-            <p>选择你的魔兽世界版本（正式服 / 怀旧服 / 经典旧世）。</p>
-            <p>插件会自动安装到对应的 AddOns 目录。</p>
+            <h3>选择已登记目录并安装</h3>
+            <p>在「插件安装」选择已经登记的目录，游戏版本随目录自动带入。</p>
+            <p>核对插件支持的游戏版本后，安装到对应的 AddOns 目录。</p>
           </div>
         </div>
 

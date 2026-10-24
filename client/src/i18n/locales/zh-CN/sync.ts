@@ -1,5 +1,10 @@
 export default {
   title: '人物卡备份',
+  target: {
+    gameVersion: '游戏版本',
+    gamePath: '游戏路径',
+    configurePath: '设置游戏路径',
+  },
   tabs: {
     profiles: '人物卡',
     companions: '伙伴',

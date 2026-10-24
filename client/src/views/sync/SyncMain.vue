@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { gameFlavors, gameFlavorLabel, getGameInstallations, configuredGameFlavor, selectGameInstallation } from '@/utils/gameInstallations'
+import { gameFlavors, getGameInstallations, configuredGameFlavor, sameGamePath, selectGameInstallation } from '@/utils/gameInstallations'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { dialog } from '../../composables/useDialog'
@@ -60,25 +60,45 @@ const router = useRouter()
 const route = useRoute()
 const desktop = '__TAURI_INTERNALS__' in window
 const installations = ref(getGameInstallations())
-const selectedFlavor = ref(typeof route.query.flavor === 'string' ? route.query.flavor : configuredGameFlavor(localStorage.getItem('wow_path') || ''))
-const canUseLocal = computed(() => desktop && !!wowPath.value && !!selectedFlavor.value && configuredGameFlavor(wowPath.value) === selectedFlavor.value)
-async function changeInstallation(event: Event) {
- const path = (event.target as HTMLSelectElement).value
- const installation = installations.value.find(item => item.path === path)
- if (!installation) return
- selectGameInstallation(installation); wowPath.value = installation.path; selectedFlavor.value = installation.flavor
- selectedAccount.value = ''; fullBackupData.value = null
- await loadProfiles()
-}
-async function changeFlavor() { selectedAccount.value = ''; fullBackupData.value = null; await loadProfiles() }
+const savedPath = localStorage.getItem('wow_path') || ''
+const requestedFlavor = gameFlavors.find(item => item.value === route.query.flavor)?.value
+const selectedFlavor = ref(requestedFlavor || configuredGameFlavor(savedPath) || installations.value.find(item => item.flavor)?.flavor || '_retail_')
+const matchingInstallations = computed(() => installations.value.filter(item => configuredGameFlavor(item.path) === selectedFlavor.value))
+const wowPath = ref(pathForFlavor())
+const canUseLocal = computed(() => desktop && !!wowPath.value && configuredGameFlavor(wowPath.value) === selectedFlavor.value)
+let fullBackupRequest = 0
 
-const legacyFlavor = ref('_retail_')
-async function labelLegacy() {
- if (!selectedAccount.value || selectedFlavor.value) return
- const target = legacyFlavor.value
- if (!(await dialog.confirm({ title: '标记旧存档版本', message: `将 ${selectedAccount.value} 标记为${gameFlavorLabel(target)}。请确认其真实来源；不同版本的数据不会自动合并。`, type: 'warning' }))) return
- try { await accountBackupApi.labelLegacyAccountBackup(selectedAccount.value, target); selectedFlavor.value = target; await loadProfiles() }
- catch (e) { await dialog.alert({ title: '未能标记', message: e instanceof Error ? e.message : String(e), type: 'error' }) }
+function pathForFlavor() {
+  return matchingInstallations.value.find(item => sameGamePath(item.path, localStorage.getItem('wow_path') || ''))?.path
+    || matchingInstallations.value.at(-1)?.path
+    || ''
+}
+
+async function reloadTarget() {
+  fullBackupRequest++
+  selectedAccount.value = ''
+  accounts.value = []
+  cloudBackups.value = new Map()
+  fullBackupData.value = null
+  isLoadingCloudData.value = false
+  if (wowPath.value) {
+    selectGameInstallation({ path: wowPath.value, flavor: selectedFlavor.value })
+    installations.value = getGameInstallations()
+  }
+  await loadProfiles()
+}
+
+async function changeInstallation(event: Event) {
+  const path = (event.target as HTMLSelectElement).value
+  const installation = matchingInstallations.value.find(item => item.path === path)
+  if (!installation) return
+  wowPath.value = installation.path
+  await reloadTarget()
+}
+
+async function changeFlavor() {
+  wowPath.value = pathForFlavor()
+  await reloadTarget()
 }
 const { t } = useI18n()
 const accounts = ref<AccountInfo[]>([])
@@ -95,7 +115,6 @@ try {
 } catch { /* A missing receipt only means the two checksums must be compared again. */ }
 function appliedBackupKey() { return JSON.stringify([wowPath.value.replace(/\\/g, '/').toLowerCase(), selectedFlavor.value, selectedAccount.value]) }
 
-const wowPath = ref('')
 const search = ref('')
 const isAuthed = ref(!!localStorage.getItem('token'))
 const authMessage = ref('')
@@ -213,6 +232,8 @@ const hasCloudData = computed(() => cloudBackups.value.size > 0)
 
 // 当前账号的同步状态
 const currentBackup = computed(() => cloudBackups.value.get(selectedAccount.value))
+// Preserve the storage key of pre-edition backups without requiring a labeling step.
+const currentBackupFlavor = computed(() => currentBackup.value ? currentBackup.value.game_flavor || '' : selectedFlavor.value)
 const accountSyncStatus = computed<'synced' | 'pending' | 'conflict'>(() => {
   if (!selectedAccount.value) return 'pending'
   const backup = currentBackup.value
@@ -360,17 +381,21 @@ function isDoneStep(stepKey: WorkflowStep) {
 
 // 加载完整的云端备份数据
 async function loadFullBackup() {
-  if (!selectedAccount.value || !currentBackup.value) {
+  const request = ++fullBackupRequest
+  const backup = currentBackup.value
+  if (!selectedAccount.value || !backup) {
     fullBackupData.value = null
+    isLoadingCloudData.value = false
     return
   }
   isLoadingCloudData.value = true
   try {
-    fullBackupData.value = await accountBackupApi.getAccountBackup(selectedAccount.value, selectedFlavor.value)
+    const result = await accountBackupApi.getAccountBackup(backup.account_id, backup.game_flavor || '')
+    if (request === fullBackupRequest && currentBackup.value?.id === backup.id) fullBackupData.value = result
   } catch {
-    fullBackupData.value = null
+    if (request === fullBackupRequest) fullBackupData.value = null
   } finally {
-    isLoadingCloudData.value = false
+    if (request === fullBackupRequest) isLoadingCloudData.value = false
   }
 }
 
@@ -382,13 +407,12 @@ watch([viewMode, selectedAccount], ([mode]) => {
 }, { immediate: false })
 
 onMounted(async () => {
-  const savedPath = localStorage.getItem('wow_path')
   if (!isAuthed.value) {
     authMessage.value = t('sync.tip.authRequired')
     router.push('/login?redirect=/sync')
     return
   }
-  wowPath.value = savedPath || ''
+  if (wowPath.value) selectGameInstallation({ path: wowPath.value, flavor: selectedFlavor.value })
   await loadProfiles()
   setTimeout(() => mounted.value = true, 50)
 })
@@ -412,7 +436,13 @@ async function loadProfiles() {
       checksum: b.checksum
     })))
 
-    const matchingBackups = backupList.filter(backup => (backup.game_flavor || '') === selectedFlavor.value)
+    // Exact edition matches take priority. Older backups remain usable through their
+    // existing key; no automatic reassignment or merging of archive data is performed.
+    const byAccount = new Map(backupList.filter(backup => !backup.game_flavor).map(backup => [backup.account_id, backup]))
+    for (const backup of backupList) {
+      if (backup.game_flavor === selectedFlavor.value) byAccount.set(backup.account_id, backup)
+    }
+    const matchingBackups = [...byAccount.values()]
     accounts.value = [...localResult.accounts]
     for (const backup of matchingBackups) {
       if (!accounts.value.some(account => account.account_id === backup.account_id)) accounts.value.push({ account_id: backup.account_id, profiles: [] })
@@ -492,7 +522,7 @@ async function confirmUpload() {
   try {
     await accountBackupApi.upsertAccountBackup({
       account_id: selectedAccount.value,
-      game_flavor: selectedFlavor.value,
+      game_flavor: currentBackupFlavor.value,
       profiles_data: JSON.stringify(profilesData),
       profiles_count: currentProfiles.value.length,
       tools_data: toolsDb?.raw_data,
@@ -530,7 +560,8 @@ async function confirmDelete() {
   if (!pendingDeleteAccount.value) return
   isDeleting.value = true
   try {
-    await accountBackupApi.deleteAccountBackup(pendingDeleteAccount.value, selectedFlavor.value)
+    const backup = cloudBackups.value.get(pendingDeleteAccount.value)
+    await accountBackupApi.deleteAccountBackup(pendingDeleteAccount.value, backup?.game_flavor || '')
     cloudBackups.value.delete(pendingDeleteAccount.value)
     await dialog.alert({ title: t('sync.dialog.success'), message: t('sync.dialog.deleteSuccess'), type: 'success' })
   } catch (e: any) {
@@ -568,7 +599,7 @@ async function restoreAll() {
   isRestoring.value = true
   try {
     // 获取完整备份数据
-    const fullBackup = await accountBackupApi.getAccountBackup(selectedAccount.value, selectedFlavor.value)
+    const fullBackup = await accountBackupApi.getAccountBackup(selectedAccount.value, currentBackupFlavor.value)
     if (!fullBackup.profiles_data) {
       await dialog.alert({ title: t('sync.dialog.error'), message: t('sync.dialog.cloudDataEmpty'), type: 'error' })
       return
@@ -601,7 +632,7 @@ async function restoreAll() {
 }
 
 async function handleCloudVersionRestored(backup: accountBackupApi.AccountBackup) {
-  if ((backup.game_flavor || '') !== selectedFlavor.value) return
+  if (cloudBackups.value.get(backup.account_id)?.id !== backup.id) return
   cloudBackups.value.set(backup.account_id, backup)
   if (backup.account_id === selectedAccount.value) await loadFullBackup()
 }
@@ -622,11 +653,22 @@ const workflowSteps = computed(() => [
 <template>
   <div class="sync-page" :class="{ 'animate-in': mounted }">
     <section class="sync-target-settings">
-      <label>云端游戏版本 <select v-model="selectedFlavor" :disabled="isLoading || isSyncing || isRestoring" @change="changeFlavor"><option value="">旧存档（版本未标记）</option><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
-      <label v-if="desktop && installations.length">本机写回目录 <select :value="wowPath" :disabled="isLoading || isSyncing || isRestoring" @change="changeInstallation"><option v-for="item in installations" :key="item.path" :value="item.path">{{ gameFlavorLabel(item.flavor) }} · {{ item.path }}</option></select></label>
-      <RouterLink to="/tools/rpbox/install">管理游戏目录</RouterLink>
-      <div v-if="!selectedFlavor && currentBackup"><select v-model="legacyFlavor" aria-label="旧存档所属版本"><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select><button type="button" @click="labelLegacy">标记旧存档版本</button></div>
-      <p v-if="!canUseLocal">可以查看和管理云端存档。本地写回需在桌面客户端设置至少一个匹配版本的游戏目录；未标记版本的旧存档不会自动写入。</p>
+      <label class="game-version-field">
+        <span>{{ $t('sync.target.gameVersion') }}</span>
+        <select v-model="selectedFlavor" :aria-label="$t('sync.target.gameVersion')" :disabled="isLoading || isSyncing || isRestoring" @change="changeFlavor">
+          <option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option>
+        </select>
+      </label>
+      <div class="game-path-field">
+        <label for="sync-game-path">{{ $t('sync.target.gamePath') }}</label>
+        <div class="game-path-control">
+          <select id="sync-game-path" :value="wowPath" :title="wowPath" :disabled="!matchingInstallations.length || isLoading || isSyncing || isRestoring" @change="changeInstallation">
+            <option v-if="!matchingInstallations.length" value="">{{ $t('sync.toolbar.notConfigured') }}</option>
+            <option v-for="item in matchingInstallations" :key="item.path" :value="item.path">{{ item.path }}</option>
+          </select>
+          <RouterLink class="configure-game-path" :to="{ path: '/tools/directories', query: { redirect: '/sync' } }" :aria-label="$t('sync.target.configurePath')" :title="$t('sync.target.configurePath')"><i class="ri-folder-settings-line" aria-hidden="true"></i></RouterLink>
+        </div>
+      </div>
     </section>
     <div v-if="!isAuthed" class="auth-tip anim-item" style="--delay: 0">
       <i class="ri-information-line"></i>
@@ -671,15 +713,11 @@ const workflowSteps = computed(() => [
         </div>
       </div>
       <div class="toolbar-actions">
-        <div class="path-info">
-          <span class="label">{{ $t('sync.toolbar.wowPath') }}</span>
-          <span class="value">{{ wowPath || $t('sync.toolbar.notConfigured') }}</span>
-        </div>
         <div class="account-info">
           <span class="label">{{ $t('sync.toolbar.selectAccount') }}</span>
           <select v-model="selectedAccount" class="account-select" :disabled="isLoading || isSyncing || isRestoring">
             <option v-for="acc in accounts" :key="acc.account_id" :value="acc.account_id">
-              {{ acc.account_id }} · {{ gameFlavorLabel(selectedFlavor) }}
+              {{ acc.account_id }}
             </option>
           </select>
         </div>
@@ -1101,7 +1139,7 @@ const workflowSteps = computed(() => [
           </div>
           <div v-if="selectedAccount && currentBackup" class="card version-history-card">
             <AccountBackupVersionHistory
-              :account-id="selectedAccount" :game-flavor="selectedFlavor"
+              :account-id="selectedAccount" :game-flavor="currentBackupFlavor"
               @restored="handleCloudVersionRestored"
             />
           </div>
@@ -1134,7 +1172,7 @@ const workflowSteps = computed(() => [
           <div v-else class="cloud-content">
             <div class="cloud-section version-history-card">
               <AccountBackupVersionHistory
-                :account-id="selectedAccount" :game-flavor="selectedFlavor"
+                :account-id="selectedAccount" :game-flavor="currentBackupFlavor"
                 @restored="handleCloudVersionRestored"
               />
             </div>
@@ -1222,6 +1260,8 @@ const workflowSteps = computed(() => [
 <style scoped>
 .sync-page {
   padding: 24px;
+  min-width: 0;
+  container: sync-page / inline-size;
   min-height: 100vh;
   background: var(--color-background);
   display: flex;
@@ -1234,19 +1274,25 @@ const workflowSteps = computed(() => [
   border-radius: 16px;
   padding: 12px 16px;
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
   box-shadow: var(--shadow-md, 0 4px 20px rgba(75, 54, 33, 0.05));
 }
 
 .breadcrumbs {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   color: var(--color-text-secondary);
 }
 
 .top-left {
+  flex: 1 1 310px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1258,9 +1304,21 @@ const workflowSteps = computed(() => [
 }
 
 .toolbar-actions {
+  flex: 1 1 350px;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.toolbar-actions > .btn-primary {
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-height: 42px;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .btn-icon {
@@ -1276,19 +1334,12 @@ const workflowSteps = computed(() => [
   font-size: 18px;
 }
 
-.path-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: rgba(128, 64, 48, 0.08);
-  padding: 8px 10px;
-  border-radius: 10px;
-}
-
 .account-info {
+  flex: 1 1 180px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
 }
 
 .account-info .label {
@@ -1297,32 +1348,25 @@ const workflowSteps = computed(() => [
 }
 
 .refresh-info {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
 }
+
+.refresh-info .btn-icon { width: 42px; height: 42px; }
 
 .refresh-info .label {
   font-size: 12px;
   color: var(--color-text-secondary);
 }
 
-.path-info .label {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.path-info .value {
-  font-size: 12px;
-  color: var(--color-text-main);
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .account-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 42px;
   padding: 10px 12px;
   border: 1px solid var(--input-border, rgba(75, 54, 33, 0.2));
   border-radius: 10px;
@@ -1364,10 +1408,15 @@ const workflowSteps = computed(() => [
 
 .mode-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .tab-btn {
+  flex: 0 0 auto;
+  min-height: 40px;
+  max-width: 100%;
+  white-space: nowrap;
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--color-border, #E8DCCF);
@@ -1414,11 +1463,12 @@ const workflowSteps = computed(() => [
 
 .overview-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
 .overview-card {
+  min-width: 0;
   background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 16px;
@@ -1426,6 +1476,7 @@ const workflowSteps = computed(() => [
 }
 
 .overview-card .title {
+  overflow-wrap: anywhere;
   color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
@@ -1438,6 +1489,7 @@ const workflowSteps = computed(() => [
 
 .progress-bar {
   flex: 1;
+  min-width: 0;
   height: 10px;
   background: rgba(128, 64, 48, 0.1);
   border-radius: 8px;
@@ -1452,6 +1504,7 @@ const workflowSteps = computed(() => [
 }
 
 .progress-text {
+  flex-shrink: 0;
   font-weight: 700;
   color: var(--color-primary);
 }
@@ -1482,6 +1535,7 @@ const workflowSteps = computed(() => [
 }
 
 .stat-card {
+  min-width: 0;
   background: var(--color-panel-bg, #fff);
   border-radius: 16px;
   padding: 16px;
@@ -2539,17 +2593,88 @@ const workflowSteps = computed(() => [
 }
 
 @media (max-width: 1280px) {
-  .overview-grid { grid-template-columns: repeat(2, 1fr); }
   .workspace { flex-direction: column; }
   .left-panel { width: 100%; min-width: auto; }
   .divider-handle { display: none; }
 }
+
+@container sync-page (max-width: 720px) {
+  .overview-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .overview-card { grid-column: 1 / -1; }
+}
 </style>
 
 <style scoped>
-.sync-target-settings{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:20px;padding:16px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-card-bg);font-size:13px}.sync-target-settings label{display:flex;gap:8px;align-items:center;min-width:0}.sync-target-settings select{max-width:430px;padding:8px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--color-text-main)}.sync-target-settings p{flex-basis:100%;font-size:12px;color:var(--color-text-secondary);margin:0}.sync-target-settings a{color:var(--color-accent)}
+.sync-target-settings {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(0, 3fr);
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-card-bg);
+  font-size: 13px;
+}
+
+.game-version-field,
+.game-path-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.game-path-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.game-path-control select { flex: 1; }
+
+.sync-target-settings select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--color-text-main);
+  font: inherit;
+}
+
+.configure-game-path {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-accent);
+  text-decoration: none;
+  font-size: 18px;
+}
+
+@container sync-page (max-width: 540px) {
+  .sync-target-settings { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
 </style>
 
 <style scoped>
-@media(max-width:600px){.sync-page{padding:12px 6px}.sync-target-settings{padding:14px;gap:12px}.sync-target-settings label{display:grid;flex-basis:100%;gap:8px}.sync-target-settings select{width:100%;max-width:100%;min-width:0;min-height:44px;font-size:16px}.sync-target-settings>div{width:100%;display:grid;gap:8px}.sync-target-settings button{min-height:44px}.topbar{flex-direction:column;align-items:stretch;gap:16px}.breadcrumbs{flex-wrap:wrap;font-size:12px}.mode-tabs{display:flex;flex-wrap:wrap;gap:6px}.mode-tabs button{min-height:44px;flex:1;padding:8px}.toolbar-actions{flex-direction:column;align-items:stretch;gap:12px}.account-info{min-width:0;width:100%}.account-select{width:100%;min-width:0;min-height:44px;font-size:16px}.path-info .value{overflow-wrap:anywhere;white-space:normal}.panel-header{flex-wrap:wrap;gap:8px;padding:14px}.right-body{padding:12px}.cloud-summary,.cloud-list{grid-template-columns:minmax(0,1fr)}.cloud-card{min-width:0}.cloud-header{flex-wrap:wrap;gap:8px}.version-history-card{min-width:0;max-width:100%}.modal{width:calc(100vw - 24px);max-height:calc(100dvh - 32px);overflow-y:auto;padding:16px}.confirm-table{overflow-x:auto}.btn-primary,.btn-secondary{min-height:44px}.sync-target-settings a{display:flex;align-items:center;min-height:44px}}
+@media (max-width: 600px) {
+  .sync-page { padding: 12px 6px; }
+  .sync-target-settings { padding: 14px; }
+  .sync-target-settings select { min-height: 44px; font-size: 16px; }
+  .breadcrumbs { font-size: 12px; }
+  .mode-tabs { gap: 6px; }
+  .mode-tabs button { min-height: 44px; padding: 8px; }
+  .account-select { min-height: 44px; font-size: 16px; }
+  .panel-header { flex-wrap: wrap; gap: 8px; padding: 14px; }
+  .right-body { padding: 12px; }
+  .cloud-summary, .cloud-list { grid-template-columns: minmax(0, 1fr); }
+  .cloud-card { min-width: 0; }
+  .cloud-header { flex-wrap: wrap; gap: 8px; }
+  .version-history-card { min-width: 0; max-width: 100%; }
+  .modal { width: calc(100vw - 24px); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 16px; }
+  .confirm-table { overflow-x: auto; }
+  .btn-primary, .btn-secondary { min-height: 44px; }
+}
 </style>

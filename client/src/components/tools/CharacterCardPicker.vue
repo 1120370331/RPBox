@@ -73,7 +73,7 @@ onBeforeUnmount(() => { generation++ })
       <div class="character-picker__filters"><label class="character-picker__search"><i class="ri-search-line" aria-hidden="true"></i><input ref="searchInput" v-model="query" type="search" aria-label="人物卡名称" placeholder="按人物卡名称搜索…" /></label></div>
       <p class="character-picker__count" role="status">{{ filtered.length }} 张人物卡<span v-if="loading"> · 正在加载人物卡…</span></p>
       <p v-if="!desktop" class="character-picker__note">本地游戏人物卡需要在 RPBox 桌面客户端读取。已导入的本地档案仍可在这里选择。</p>
-      <p v-else-if="!hasWowPath" class="character-picker__note">请先设置游戏目录，再读取本地人物卡。<RouterLink to="/tools/rpbox/install">设置游戏目录</RouterLink></p>
+      <p v-else-if="!hasWowPath" class="character-picker__note">请先登记游戏目录，再读取本地人物卡。<RouterLink to="/tools/directories">管理游戏目录</RouterLink></p>
       <p v-if="cloudError" class="character-picker__error" role="alert">云端：{{ cloudError }} <button type="button" @click="loadCloud(generation)">重试</button></p>
       <p v-if="localError" class="character-picker__error" role="alert">本地：{{ localError }} <button type="button" @click="loadLocal(generation)">重新读取</button></p>
       <div class="character-picker__list">

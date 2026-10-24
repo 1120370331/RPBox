@@ -66,10 +66,11 @@ export default {
     enUS: 'English',
   },
   game: {
+    manageDirectories: '管理游戏目录',
     title: 'WoW 安装路径',
     description: '配置魔兽世界的安装目录',
     wowPath: '魔兽世界路径',
-    wowPathPlaceholder: '请输入或选择魔兽世界安装路径',
+    wowPathPlaceholder: '请先在游戏目录页登记路径',
     browse: '浏览',
     autoDetect: '自动检测',
     scanning: '扫描中...',

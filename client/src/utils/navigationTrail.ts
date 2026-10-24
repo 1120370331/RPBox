@@ -6,6 +6,7 @@ const roots: Record<string, string> = {
 }
 const labels: Record<string, string> = {
   ...roots, '/tools/rpbox': 'RPBox', '/tools/rpbox/install': '插件安装', '/tools/trp3': '在线人物卡编辑器',
+  '/tools/directories': '游戏目录',
   '/sync': '人物卡备份', '/sync/setup': '设置游戏目录', '/archives': '剧情归档', '/character-cards/new': '新建人物卡',
   '/market/upload': '上传道具', '/market/my-items': '我的道具', '/market/preview': '道具预览',
   '/community/create': '发布帖子', '/community/my-posts': '我的帖子', '/community/preview': '帖子预览',
@@ -63,11 +64,11 @@ export function advanceNavigationTrail(previous: NavigationStep[], fullPath: str
   const path = navigationPath(fullPath)
   if (!safeNavigationPath(fullPath)) return []
   const current = { path: fullPath, label: navigationLabel(fullPath) }
-  if (path === '/sync/setup' && new URLSearchParams(fullPath.split('?')[1]).get('required') === '1') {
+  if (['/sync/setup', '/tools/directories'].includes(path) && new URLSearchParams(fullPath.split('?')[1]).get('required') === '1') {
     previous = previous.filter(step => navigationPath(step.path) !== '/sync')
   }
   const last = previous.at(-1)?.path || ''
-  if (navigationPath(last) === '/sync/setup') {
+  if (['/sync/setup', '/tools/directories'].includes(navigationPath(last))) {
     const destination = new URLSearchParams(last.split('?')[1]).get('redirect')
     if (destination && navigationPath(destination) === path) previous = previous.slice(0, -1)
   }
