@@ -3344,7 +3344,7 @@ dependencies = [
 
 [[package]]
 name = "rpbox"
-version = "1.0.6-4"
+version = "1.0.6-5"
 dependencies = [
  "chrono",
  "encoding_rs",

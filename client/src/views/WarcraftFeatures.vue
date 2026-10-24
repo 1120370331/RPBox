@@ -97,8 +97,7 @@ const trp3Status = ref<Trp3AddonCheckResult | null>(null)
 const trp3Latest = ref<TRP3LatestResponse | null>(null)
 const rpboxInstalledInfo = ref<InstalledAddonInfo | null>(null)
 const rpboxLatestVersion = ref('')
-const downloadFlavor = ref('_retail_')
-const selectedFlavor = computed(() => desktop ? installations.value.find(item => sameGamePath(item.path, wowPath.value))?.flavor || '' : downloadFlavor.value)
+const selectedFlavor = computed(() => installations.value.find(item => sameGamePath(item.path, wowPath.value))?.flavor || '')
 const checkingPlugins = ref(false)
 const installingPluginIds = ref<PluginCardId[]>([])
 const pluginProgresses = ref<Partial<Record<PluginCardId, PluginProgress>>>({})
@@ -758,15 +757,6 @@ async function openAddonFolder() {
       </div>
     </section>
 
-    <section v-if="!desktop || hasWowPath" class="directory-row edition-downloads">
-      <h2>按游戏版本下载插件</h2>
-      <label v-if="!desktop">游戏版本 <select v-model="downloadFlavor" aria-label="游戏版本"><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
-      <p>游戏版本：{{ gameFlavorLabel(selectedFlavor) }}</p>
-      <a :href="`https://www.curseforge.com/wow/addons/total-rp-3/files/all?gameVersionTypeId=${selectedFlavor === '_retail_' ? 1 : selectedFlavor === '_classic_era_' ? 2 : 0}`" target="_blank" rel="noopener">Total RP 3 · 版本下载页 ↗</a>
-      <a href="https://www.curseforge.com/wow/addons/total-rp-3-extended/files/all" target="_blank" rel="noopener">TRP3 Extended · 版本下载页 ↗</a>
-      <a v-if="selectedFlavor === '_retail_' && rpboxLatestVersion" :href="getAddonDownloadUrl(rpboxLatestVersion)" target="_blank" rel="noopener">RPBox Addon · 正式服下载 ↗</a>
-      <p v-if="selectedFlavor !== '_retail_'">请在发布页核对版本兼容性。RPBox 插件目前仅有正式服安装包，其他版本不会自动安装正式服包。</p>
-    </section>
     <section class="plugin-row lockable anim-item" :class="{ locked: !hasWowPath }" style="--delay: 3">
       <div class="row-heading">
         <div class="heading-copy">
@@ -1522,9 +1512,8 @@ h3 {
 .installation-target label, .installation-version { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
 .installation-target select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--input-text); font: inherit; }
 .installation-version strong { display: flex; align-items: center; min-height: 44px; font-weight: 500; }
-.edition-downloads{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.edition-downloads h2,.edition-downloads p{flex-basis:100%}.edition-downloads a{color:var(--color-accent)}.edition-downloads select{max-width:100%;padding:8px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--color-text-main)}
 </style>
 
 <style scoped>
-@media(max-width:600px){.plugin-grid{grid-template-columns:minmax(0,1fr)}.installation-target{grid-template-columns:minmax(0,1fr)}.installation-target select{font-size:16px}.edition-downloads{gap:12px}.edition-downloads label{display:grid;gap:8px;flex-basis:100%;min-width:0}.edition-downloads select{width:100%;min-width:0;font-size:16px;min-height:44px}.edition-downloads a{display:flex;align-items:center;min-height:44px;line-height:1.6;overflow-wrap:anywhere}.directory-actions button{min-height:44px}.feature-card{padding:16px}}
+@media(max-width:600px){.plugin-grid{grid-template-columns:minmax(0,1fr)}.installation-target{grid-template-columns:minmax(0,1fr)}.installation-target select{font-size:16px}.directory-actions button{min-height:44px}.feature-card{padding:16px}}
 </style>
