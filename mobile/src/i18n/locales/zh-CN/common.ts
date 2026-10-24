@@ -1,5 +1,7 @@
 export default {
   button: {
+    confirm: '确定',
+    cancel: '取消',
     back: '返回',
     prev: '上一页',
     next: '下一页',

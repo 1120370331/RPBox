@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TRP3AboutPreview from '../../../../client/src/components/tools/TRP3AboutPreview.vue'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -428,6 +429,7 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else>
+        <RouterLink class="online-editor-link" :to="`/tools/trp3/${card.id}`">在线编辑器 / 保存到游戏子账号 →</RouterLink>
         <section class="portrait-dossier" :aria-label="t('characterCards.editor.portraitEditorAria')">
           <div class="portrait-frame">
             <CachedImage
@@ -636,7 +638,8 @@ onBeforeUnmount(() => {
           aria-labelledby="character-card-tab-background"
         >
           <header class="panel-heading"><span>{{ t('characterCards.editor.backgroundKicker') }}</span><h2>{{ t('characterCards.editor.backgroundTitle') }}</h2><p>{{ t('characterCards.editor.backgroundBody') }}</p></header>
-          <MobileRichEditor v-model="form.background_story" :placeholder="t('characterCards.editor.backgroundPlaceholder')" />
+          <template v-if="card.trp3_about"><RouterLink class="online-editor-link" :to="`/tools/trp3/${card.id}`">编辑 TRP3 模板与格式 →</RouterLink><TRP3AboutPreview :about="card.trp3_about" /></template>
+          <MobileRichEditor v-else v-model="form.background_story" :placeholder="t('characterCards.editor.backgroundPlaceholder')" />
         </section>
 
         <section
@@ -841,4 +844,8 @@ onBeforeUnmount(() => {
   .spin { animation: none; }
   .toggle-field > span::after { transition: none; }
 }
+</style>
+
+<style scoped>
+.online-editor-link{display:flex;align-items:center;min-height:44px;padding:12px;color:var(--color-accent);font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 </style>

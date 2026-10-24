@@ -11,8 +11,8 @@ export default {
     refresh: '换一批', retry: '重新加载', loading: '正在加载内容',
     empty: '还没有可展示的公开内容，去社区看看吧。',
     loadFailed: '内容加载失败，请重试。', noMore: '暂时没有更多推荐内容',
-    rank: '七日人气第 {rank} 名', weeklyScore: '七日人气 {score}',
-    interestReason: '与你的兴趣相近', popularReason: '近期热门内容',
+    rank: '七日人气第 {rank} 名',
+    metrics: { label: '内容数据', views: '浏览', likes: '点赞', favorites: '收藏', comments: '评论', lists: '加入清单', downloads: '下载' },
     kinds: { post: '社区帖子', rpdb: 'RP 数据库', item: '创意市场' },
   },
   quickActions: {

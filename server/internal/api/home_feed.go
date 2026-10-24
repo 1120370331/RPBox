@@ -22,6 +22,12 @@ type homeContent struct {
 	Title          string     `json:"title"`
 	AuthorID       uint       `json:"-"`
 	AuthorName     string     `json:"author_name"`
+	ViewCount      *int       `json:"view_count,omitempty"`
+	LikeCount      int        `json:"like_count"`
+	FavoriteCount  int        `json:"favorite_count"`
+	CommentCount   *int       `json:"comment_count,omitempty"`
+	ListCount      *int       `json:"list_count,omitempty"`
+	Downloads      *int       `json:"downloads,omitempty"`
 	Category       string     `json:"-"`
 	HasCover       bool       `json:"has_cover"`
 	CoverURL       string     `json:"cover_url"`
@@ -150,6 +156,15 @@ func buildHomeFeed(db *gorm.DB, viewerID uint, personalized bool, excluded map[s
 			coverURL = "CASE WHEN content.cover_image LIKE 'https://%' OR content.cover_image LIKE 'http://%' OR content.cover_image LIKE '/uploads/%' OR content.cover_image LIKE 'uploads/%' THEN content.cover_image ELSE '' END"
 		}
 		selectSQL := fmt.Sprintf("content.id, ? AS kind, content.%s AS title, content.author_id, author.username AS author_name, content.%s AS category, (COALESCE(content.%s, '') <> '') AS has_cover, %s AS cover_url, content.%s AS cover_updated_at, content.updated_at, content.created_at, COALESCE(activity.score, 0) AS weekly_score", source.title, source.category, source.cover, coverURL, source.coverUpdated)
+		selectSQL += ", COALESCE(content.like_count, 0) AS like_count, COALESCE(content.favorite_count, 0) AS favorite_count"
+		switch source.kind {
+		case "item":
+			selectSQL += ", COALESCE(content.downloads, 0) AS downloads, NULL AS view_count, NULL AS comment_count, NULL AS list_count"
+		case "rpdb":
+			selectSQL += ", COALESCE(content.view_count, 0) AS view_count, COALESCE(content.comment_count, 0) AS comment_count, COALESCE(content.list_count, 0) AS list_count, NULL AS downloads"
+		default:
+			selectSQL += ", COALESCE(content.view_count, 0) AS view_count, COALESCE(content.comment_count, 0) AS comment_count, NULL AS list_count, NULL AS downloads"
+		}
 		args := []interface{}{source.kind}
 		if personalized {
 			categorySQL, categoryArgs := homePreferenceCase("content."+source.category, preferences.categories, source.kind+":")

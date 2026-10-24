@@ -697,165 +697,22 @@ describe('CharacterCardEditor tabs', () => {
     wrapper.unmount()
   })
 
-  it('writes a blank card to a local profile without requiring or mutating a cloud backup', async () => {
-    mocks.getCharacterCard.mockResolvedValue(card)
-    mocks.updateCharacterCard.mockImplementation(async (_id: number, payload: Partial<CharacterCard>) => ({
-      ...card,
-      ...payload,
-    }))
-    mocks.listAccountBackups.mockResolvedValue([])
-    mocks.getCharacterCardTRP3Lua.mockResolvedValue({
-      profile_id: 'rpbox-12',
-      profile: {
-        profileName: '伊莉娅·星语',
-        player: {
-          characteristics: { FN: '伊莉娅', LN: '星语', EC: '银色' },
-          misc: { PE: { 1: { TX: '仅由 Tauri 丢弃' } } },
-        },
-      },
-      lua: 'TRP3_Profiles = { ["rpbox-12"] = {} }',
-    })
-    mocks.confirm.mockResolvedValue(true)
-    mocks.invoke.mockImplementation(async (command: string) => {
-      if (command === 'scan_profiles') {
-        return { accounts: [{ account_id: 'WOW-ACCOUNT-B' }] }
-      }
-      return undefined
-    })
-    localStorage.setItem('wow_path', 'C:\\Games\\World of Warcraft\\_retail_\\WTF')
-    ;(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {}
+  it('routes game writes through cloud targets and the backup page without local writes from the editor', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: '/character-cards/:id/edit', component: CharacterCardEditor }],
     })
     await router.push('/character-cards/12/edit')
     await router.isReady()
-
     const wrapper = mount(CharacterCardEditor, {
-      attachTo: document.body,
-      global: {
-        plugins: [createPinia(), router, i18n],
-        stubs: {
-          TiptapEditor: editorStub,
-          PostQuickJump: true,
-          ImageCropperDialog: true,
-          RModal: modalStub,
-          CharacterCardPortrait: true,
-        },
-      },
+      global: { plugins: [createPinia(), router, i18n], stubs: { TiptapEditor: editorStub, PostQuickJump: true, ImageCropperDialog: true, RModal: modalStub, CharacterCardPortrait: true } },
     })
     await flushPromises()
-
-    await wrapper.findAll<HTMLInputElement>('#character-panel-basic input')[0].setValue('已保存的伊莉娅')
-    const writeBackButton = wrapper.findAll<HTMLButtonElement>('button')
-      .find((button) => button.text().includes('写回本地 TRP3'))!
-    expect(writeBackButton.attributes('disabled')).toBeUndefined()
-    await writeBackButton.trigger('click')
-    await flushPromises()
-
-    expect(mocks.invoke).toHaveBeenCalledWith('scan_profiles', {
-      wowPath: 'C:\\Games\\World of Warcraft\\_retail_\\WTF',
-    })
-    expect(wrapper.text()).toContain('此账号暂无云端备份')
-    const profileField = wrapper.findAll('label')
-      .find((label) => label.text().includes('TRP3 profile ID'))!
-      .get('input')
-    await profileField.setValue('new-local-profile')
-    const continueButton = wrapper.findAll<HTMLButtonElement>('button')
-      .find((button) => button.text().includes('继续写回'))!
-    await continueButton.trigger('click')
-    await flushPromises()
-
-    expect(mocks.getCharacterCardTRP3Lua).toHaveBeenCalledWith(12)
-    expect(mocks.invoke).toHaveBeenCalledWith('write_character_card_profile', expect.objectContaining({
-      wowPath: 'C:\\Games\\World of Warcraft\\_retail_\\WTF',
-      accountId: 'WOW-ACCOUNT-B',
-      profileId: 'new-local-profile',
-      profile: expect.objectContaining({ profileName: '伊莉娅·星语' }),
-    }))
+    expect(wrapper.find('a[href="/tools/trp3/12"]').exists()).toBe(true)
+    expect(wrapper.find('a[href="/sync?mode=cloud"]').exists()).toBe(true)
+    expect(wrapper.find('.writeback-sheet').exists()).toBe(false)
+    expect(mocks.invoke).not.toHaveBeenCalled()
     expect(mocks.writeBackCharacterCardToTRP3).not.toHaveBeenCalled()
-    const localWriteCallIndex = mocks.invoke.mock.calls.findIndex(([command]) => command === 'write_character_card_profile')
-    expect(mocks.updateCharacterCard.mock.invocationCallOrder[0])
-      .toBeLessThan(mocks.getCharacterCardTRP3Lua.mock.invocationCallOrder[0])
-    expect(mocks.getCharacterCardTRP3Lua.mock.invocationCallOrder[0])
-      .toBeLessThan(mocks.invoke.mock.invocationCallOrder[localWriteCallIndex])
-    expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      expect.stringContaining('本次未修改云端账号备份'),
-      7000,
-    )
-    wrapper.unmount()
-  })
-
-  it('keeps a successful local write when the optional cloud sync fails', async () => {
-    const importedCard: CharacterCard = {
-      ...card,
-      source_backup_id: 7,
-      source_account_id: 'WOW-ACCOUNT-B',
-      source_profile_id: 'shared-profile',
-    }
-    mocks.getCharacterCard.mockResolvedValue(importedCard)
-    mocks.listAccountBackups.mockResolvedValue([{ id: 7, account_id: 'WOW-ACCOUNT-B', version: 4 }])
-    mocks.getCharacterCardTRP3Lua.mockResolvedValue({
-      profile_id: 'shared-profile',
-      profile: { profileName: '伊莉娅·星语', player: { characteristics: { FN: '伊莉娅' } } },
-      lua: 'TRP3_Profiles = {}',
-    })
-    mocks.writeBackCharacterCardToTRP3.mockRejectedValue(new Error('云端暂时不可用'))
-    mocks.confirm.mockResolvedValue(true)
-    mocks.invoke.mockImplementation(async (command: string) => {
-      if (command === 'scan_profiles') return { accounts: [{ account_id: 'WOW-ACCOUNT-B' }] }
-      return { snapshot: { id: 'local-snapshot' } }
-    })
-    localStorage.setItem('wow_path', 'C:\\Games\\World of Warcraft\\_retail_\\WTF')
-    ;(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {}
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/character-cards/:id/edit', component: CharacterCardEditor }],
-    })
-    await router.push('/character-cards/12/edit')
-    await router.isReady()
-
-    const wrapper = mount(CharacterCardEditor, {
-      attachTo: document.body,
-      global: {
-        plugins: [createPinia(), router, i18n],
-        stubs: {
-          TiptapEditor: editorStub,
-          PostQuickJump: true,
-          ImageCropperDialog: true,
-          RModal: modalStub,
-          CharacterCardPortrait: true,
-        },
-      },
-    })
-    await flushPromises()
-
-    const writeBackButton = wrapper.findAll<HTMLButtonElement>('button')
-      .find((button) => button.text().includes('写回本地 TRP3'))!
-    await writeBackButton.trigger('click')
-    await flushPromises()
-
-    const cloudOption = wrapper.get<HTMLInputElement>('.writeback-sheet__cloud-option input')
-    expect(cloudOption.element.checked).toBe(true)
-    expect(wrapper.text()).toContain('本地写入成功后，同步更新云端账号备份（可选）')
-    const continueButton = wrapper.findAll<HTMLButtonElement>('button')
-      .find((button) => button.text().includes('继续写回'))!
-    await continueButton.trigger('click')
-    await flushPromises()
-
-    const localWriteCallIndex = mocks.invoke.mock.calls.findIndex(([command]) => command === 'write_character_card_profile')
-    expect(localWriteCallIndex).toBeGreaterThanOrEqual(0)
-    expect(mocks.writeBackCharacterCardToTRP3).toHaveBeenCalledWith(12, expect.objectContaining({
-      backup_id: 7,
-      profile_id: 'shared-profile',
-    }))
-    expect(mocks.invoke.mock.invocationCallOrder[localWriteCallIndex])
-      .toBeLessThan(mocks.writeBackCharacterCardToTRP3.mock.invocationCallOrder[0])
-    expect(mocks.toastWarning).toHaveBeenCalledWith(
-      '本地已成功、云端未更新：云端暂时不可用',
-      8000,
-    )
-    expect(mocks.toastError).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

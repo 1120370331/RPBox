@@ -10,6 +10,7 @@ import { useToastStore } from '@shared/stores/toast'
 import { useMobileUpdater } from '@/composables/useMobileUpdater'
 import { resolveInAppPathFromUrl } from '@/utils/appLink'
 import RToast from './components/RToast.vue'
+import RDialog from '../../client/src/components/RDialog.vue'
 import AchievementCelebration from '../../client/src/components/AchievementCelebration.vue'
 import { buildAchievementProgressContext } from '@/utils/achievementProgress'
 import { detectNewAchievements } from '../../client/src/utils/achievementCompletion'
@@ -251,5 +252,6 @@ onBeforeUnmount(() => {
     :celebration="toast.activeAchievement"
     @dismiss="toast.dismissAchievement"
   />
+  <RDialog />
   <RToast />
 </template>

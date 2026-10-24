@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -15,7 +14,6 @@ import {
   updateCharacterCard,
   uploadCharacterCardImpressionImage,
   uploadCharacterCardPortrait,
-  writeBackCharacterCardToTRP3,
   type CharacterCard,
   type CharacterCardAdditionalInfo,
   type CharacterCardImpressionImageKind,
@@ -23,14 +21,12 @@ import {
   type CharacterCardPortraitImage,
   type CharacterCardTRP3Color,
 } from '@/api/characterCard'
-import { listAccountBackups, type AccountBackup } from '@/api/accountBackup'
 import { resolveApiUrl } from '@/api/item'
 import AuthenticatedImage from '@/components/AuthenticatedImage.vue'
 import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import CharacterCardColorField from '@/components/character-cards/CharacterCardColorField.vue'
 import CharacterCardGalleryImage from '@/components/character-cards/CharacterCardGalleryImage.vue'
 import CharacterCardImpressionMark from '@/components/character-cards/CharacterCardImpressionMark.vue'
-import LocalTRP3VersionHistory from '@/components/sync/LocalTRP3VersionHistory.vue'
 import PostQuickJump from '@/components/PostQuickJump.vue'
 import RModal from '@/components/RModal.vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
@@ -59,9 +55,7 @@ interface ImpressionUploadTarget {
   kind: CharacterCardImpressionImageKind
 }
 
-interface LocalAccountOption {
-  account_id: string
-}
+
 
 type RichTextTab = Exclude<CharacterCardEditorTab, 'basic' | 'traits'>
 type SaveStatus = 'saved' | 'waiting' | 'saving' | 'failed'
@@ -94,24 +88,15 @@ const cropperOpen = ref(false)
 const cropperFile = ref<File | null>(null)
 const portraitUploading = ref(false)
 const syncing = ref(false)
-const writingBack = ref(false)
 const uploadedPortraitPreview = ref('')
 const portraitPreviewObjectUrls = new Set<string>()
 const portraitPreviewOpen = ref(false)
 const portraits = ref<CharacterCardPortraitImage[]>([])
 const selectedPortraitId = ref<number | null>(null)
 
-const writeBackSetupOpen = ref(false)
-const writeBackHistoryOpen = ref(false)
 const luaPreviewOpen = ref(false)
 const luaPreviewLoading = ref(false)
 const luaPreview = ref('')
-const localAccounts = ref<LocalAccountOption[]>([])
-const cloudBackups = ref<AccountBackup[]>([])
-const writeBackAccountId = ref('')
-const writeBackProfileId = ref('')
-const writeBackSnapshotName = ref('')
-const syncCloudAfterWriteBack = ref(false)
 
 const impressionImageInput = ref<HTMLInputElement | null>(null)
 const impressionUploadTarget = ref<ImpressionUploadTarget | null>(null)
@@ -150,8 +135,6 @@ const selectedPortrait = computed(() => (
   portraits.value.find((portrait) => portrait.id === selectedPortraitId.value)
   || getCharacterCardCoverPortrait(portraits.value)
 ))
-const writeBackBackup = computed(() => cloudBackups.value.find((backup) => backup.account_id === writeBackAccountId.value))
-const historyAccountId = computed(() => writeBackAccountId.value || card.value?.source_account_id || '')
 const publicReviewPending = computed(() => (
   form.status === 'published'
   && form.visibility === 'public'
@@ -184,13 +167,7 @@ let saveRequested = false
 let manualFeedbackRequested = false
 let detailNavigationRequested = false
 
-const isTauriRuntime = computed(() => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window)
-const wowPath = computed(() => localStorage.getItem('wow_path')?.trim() || '')
-const writeBackDisabledReason = computed(() => {
-  if (!isTauriRuntime.value) return t('characterCards.editor.desktopOnly')
-  if (!wowPath.value) return t('characterCards.editor.wowPathRequired')
-  return ''
-})
+
 const canSyncFromBackup = computed(() => Boolean(card.value?.source_backup_id && card.value?.source_profile_id))
 
 watch(cardId, () => void loadCard(), { immediate: true })
@@ -200,9 +177,7 @@ watch(() => form.class_color, (value) => {
 watch(() => form.name_color, (value) => {
   if (form.class_color !== value) form.class_color = value
 })
-watch(writeBackAccountId, (accountId) => {
-  syncCloudAfterWriteBack.value = cloudBackups.value.some((backup) => backup.account_id === accountId)
-})
+
 watch(formSnapshot, (snapshot) => {
   if (loading.value || !card.value) return
   if (snapshot === originalSnapshot.value) {
@@ -825,38 +800,6 @@ async function syncFromBackup() {
   }
 }
 
-function createDefaultProfileId() {
-  return `RPBOX_${card.value?.id || 'NEW'}_${Date.now().toString(36).toUpperCase()}`
-}
-
-async function openWriteBackSetup() {
-  if (!card.value || writeBackDisabledReason.value || writingBack.value) return
-  writingBack.value = true
-  try {
-    const [localResult, backups] = await Promise.all([
-      invoke<{ accounts?: LocalAccountOption[] }>('scan_profiles', { wowPath: wowPath.value }),
-      listAccountBackups().catch(() => []),
-    ])
-    localAccounts.value = localResult.accounts || []
-    cloudBackups.value = backups
-    writeBackAccountId.value = (
-      localAccounts.value.find((account) => account.account_id === card.value?.source_account_id)?.account_id
-      || localAccounts.value[0]?.account_id
-      || ''
-    )
-    syncCloudAfterWriteBack.value = cloudBackups.value.some(
-      (backup) => backup.account_id === writeBackAccountId.value,
-    )
-    writeBackProfileId.value = card.value.source_profile_id || createDefaultProfileId()
-    writeBackSnapshotName.value = t('characterCards.editor.snapshotDefault', { name: displayName.value })
-    writeBackSetupOpen.value = true
-  } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : t('characterCards.editor.accountsFailed'))
-  } finally {
-    writingBack.value = false
-  }
-}
-
 async function previewTRP3Lua() {
   if (!card.value || luaPreviewLoading.value) return
   luaPreviewLoading.value = true
@@ -870,76 +813,6 @@ async function previewTRP3Lua() {
     toast.error(error instanceof Error ? error.message : t('characterCards.editor.luaFailed'))
   } finally {
     luaPreviewLoading.value = false
-  }
-}
-
-async function writeBackToLocalTRP3() {
-  if (!card.value || writeBackDisabledReason.value || writingBack.value) return
-  if (!writeBackAccountId.value || !writeBackProfileId.value.trim()) {
-    toast.warning(t('characterCards.editor.writeTargetRequired'))
-    return
-  }
-  const confirmed = await dialog.confirm({
-    title: t('characterCards.editor.writeConfirmTitle'),
-    message: t('characterCards.editor.writeConfirmMessage', {
-      account: writeBackAccountId.value,
-      profile: writeBackProfileId.value.trim(),
-      cloudAction: t(writeBackBackup.value && syncCloudAfterWriteBack.value
-        ? 'characterCards.editor.cloudWillSync'
-        : 'characterCards.editor.cloudWillNotSync'),
-    }),
-    type: 'error',
-    confirmText: t('characterCards.editor.writeConfirm'),
-  })
-  if (!confirmed) return
-
-  writingBack.value = true
-  try {
-    const savedCard = isDirty.value || saving.value
-      ? await flushCardChanges()
-      : card.value
-    if (!savedCard) return
-    const targetProfileId = writeBackProfileId.value.trim()
-    const exported = await getCharacterCardTRP3Lua(savedCard.id)
-    await invoke('write_character_card_profile', {
-      wowPath: wowPath.value,
-      accountId: writeBackAccountId.value,
-      profileId: targetProfileId,
-      profile: exported.profile,
-      snapshotName: writeBackSnapshotName.value.trim() || null,
-    })
-    writeBackProfileId.value = targetProfileId
-    writeBackSetupOpen.value = false
-
-    const backup = writeBackBackup.value
-    if (backup && syncCloudAfterWriteBack.value) {
-      try {
-        await writeBackCharacterCardToTRP3(savedCard.id, {
-          backup_id: backup.id,
-          profile_id: targetProfileId,
-          snapshot_name: writeBackSnapshotName.value.trim() || undefined,
-        })
-        if (card.value?.id === savedCard.id) {
-          card.value = {
-            ...card.value,
-            source_backup_id: backup.id,
-            source_account_id: backup.account_id,
-            source_profile_id: targetProfileId,
-          }
-        }
-        toast.success(t('characterCards.editor.writeCloudSuccess'), 7000)
-      } catch (error: unknown) {
-        const reason = error instanceof Error ? error.message : t('characterCards.editor.cloudSyncFailed')
-        toast.warning(t('characterCards.editor.localSuccessCloudFailed', { reason }), 8000)
-      }
-      return
-    }
-
-    toast.success(t('characterCards.editor.localSuccess'), 7000)
-  } catch (error: unknown) {
-    toast.error(error instanceof Error ? error.message : t('characterCards.editor.localFailed'))
-  } finally {
-    writingBack.value = false
   }
 }
 
@@ -1089,17 +962,16 @@ async function goBack() {
             </button>
           </div>
 
-          <div class="local-writeback" :class="{ disabled: Boolean(writeBackDisabledReason) }">
-            <span><i class="ri-hard-drive-3-line" aria-hidden="true"></i>{{ t('characterCards.editor.desktopInterop') }}</span>
-            <p>{{ writeBackDisabledReason || t('characterCards.editor.writeSafetyHint') }}</p>
+          <div class="local-writeback">
+            <span><i class="ri-cloud-line" aria-hidden="true"></i>游戏子账号与云端存档</span>
+            <p>人物卡独立保存；在在线编辑器选择子账号后保存云端存档，再由人物卡备份同步到本地。</p>
             <div class="local-writeback__actions">
               <button type="button" :disabled="luaPreviewLoading" @click="previewTRP3Lua">{{ t('characterCards.editor.previewLua') }}</button>
-              <button type="button" :disabled="Boolean(writeBackDisabledReason) || writingBack" @click="openWriteBackSetup">
-                {{ writingBack ? t('characterCards.editor.readingAccount') : t('characterCards.editor.writeLocal') }}
-              </button>
-              <button type="button" :disabled="Boolean(writeBackDisabledReason)" @click="writeBackHistoryOpen = true">{{ t('characterCards.editor.localVersions') }}</button>
+              <RouterLink :to="`/tools/trp3/${card.id}`">选择子账号 / 保存云端存档</RouterLink>
+              <RouterLink :to="{ path: '/sync', query: { mode: 'cloud' } }">人物卡备份 / 同步到本地</RouterLink>
             </div>
           </div>
+
         </aside>
 
         <section class="editor-ledger">
@@ -1501,64 +1373,12 @@ async function goBack() {
         </div>
       </RModal>
 
-      <RModal v-model="writeBackSetupOpen" :title="t('characterCards.editor.writeSetupTitle')" width="620px">
-        <div class="writeback-sheet">
-          <header>
-            <span>{{ t('characterCards.editor.writeKicker') }}</span>
-            <h3>{{ t('characterCards.editor.writeLocation') }}</h3>
-            <p>{{ t('characterCards.editor.writeLocationBody') }}</p>
-          </header>
-          <label>
-            <span>{{ t('characterCards.editor.localAccount') }}</span>
-            <select v-model="writeBackAccountId">
-              <option value="" disabled>{{ t('characterCards.editor.selectAccount') }}</option>
-              <option v-for="account in localAccounts" :key="account.account_id" :value="account.account_id">{{ account.account_id }}</option>
-            </select>
-          </label>
-          <label>
-            <span>TRP3 profile ID</span>
-            <input v-model.trim="writeBackProfileId" maxlength="128" autocomplete="off" />
-            <small>{{ card.source_profile_id ? t('characterCards.editor.sourceIdHint') : t('characterCards.editor.generatedIdHint') }}</small>
-          </label>
-          <label>
-            <span>{{ t('characterCards.editor.snapshotName') }}</span>
-            <input v-model.trim="writeBackSnapshotName" maxlength="120" autocomplete="off" />
-            <small>{{ t('characterCards.editor.snapshotHint') }}</small>
-          </label>
-          <div class="writeback-sheet__account-note">
-            <i :class="writeBackBackup ? 'ri-cloud-line' : 'ri-hard-drive-2-line'" aria-hidden="true"></i>
-            {{ writeBackBackup ? t('characterCards.editor.cloudBackupFound', { version: writeBackBackup.version }) : t('characterCards.editor.cloudBackupMissing') }}
-          </div>
-          <label v-if="writeBackBackup" class="writeback-sheet__cloud-option">
-            <input v-model="syncCloudAfterWriteBack" type="checkbox" />
-            <span>{{ t('characterCards.editor.syncCloud') }}</span>
-            <small>{{ t('characterCards.editor.syncCloudHint') }}</small>
-          </label>
-          <footer>
-            <button type="button" class="button button--quiet" @click="writeBackSetupOpen = false">{{ t('characterCards.common.cancel') }}</button>
-            <button type="button" class="button button--primary" :disabled="writingBack || !writeBackAccountId || !writeBackProfileId.trim()" @click="writeBackToLocalTRP3">
-              <i :class="writingBack ? 'ri-loader-4-line spin' : 'ri-file-transfer-line'" aria-hidden="true"></i>
-              {{ writingBack ? t('characterCards.editor.writing') : t('characterCards.editor.continueWrite') }}
-            </button>
-          </footer>
-        </div>
-      </RModal>
-
       <RModal v-model="luaPreviewOpen" :title="t('characterCards.editor.luaPreviewTitle')" width="760px">
         <div class="lua-preview">
           <p v-if="isDirty"><i class="ri-information-line"></i> {{ t('characterCards.editor.unsavedPreviewHint') }}</p>
           <div v-if="luaPreviewLoading" class="lua-preview__loading"><i class="ri-loader-4-line spin"></i>{{ t('characterCards.editor.generatingLua') }}</div>
           <pre v-else>{{ luaPreview }}</pre>
         </div>
-      </RModal>
-
-      <RModal v-model="writeBackHistoryOpen" :title="t('characterCards.editor.localHistoryTitle')" width="820px">
-        <LocalTRP3VersionHistory
-          v-if="historyAccountId && wowPath"
-          :wow-path="wowPath"
-          :account-id="historyAccountId"
-        />
-        <div v-else class="lua-preview__loading">{{ t('characterCards.editor.historySelectHint') }}</div>
       </RModal>
 
       <PostQuickJump v-model="quickJumpOpen" :on-insert="insertQuickJump" />

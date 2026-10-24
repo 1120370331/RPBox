@@ -145,3 +145,9 @@ function onMaskClick() {
   }
 }
 </style>
+
+<style scoped>
+
+@media(max-width:600px){.r-modal__mask{padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}.r-modal{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 16px)}.r-modal__header{padding:12px 16px;flex-shrink:0;gap:8px}.r-modal__title{font-size:17px;min-width:0}.r-modal__close{width:44px;height:44px;flex-shrink:0}.r-modal__body{padding:16px;min-height:0;overscroll-behavior:contain}.r-modal__footer{padding:12px 16px;flex-wrap:wrap}}
+
+</style>

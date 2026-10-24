@@ -75,7 +75,7 @@ func migrateAccountBackupUniqueIndex(db *gorm.DB) error {
 	statements := []string{
 		"DROP INDEX IF EXISTS idx_account_backups_account_id",
 		"DROP INDEX IF EXISTS idx_user_account",
-		"CREATE UNIQUE INDEX IF NOT EXISTS idx_user_account ON account_backups(user_id, account_id)",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_user_account ON account_backups(user_id, account_id, game_flavor)",
 	}
 	if db.Dialector.Name() == "postgres" {
 		statements = append([]string{
@@ -190,6 +190,7 @@ func Init(cfg *config.DatabaseConfig) error {
 		&model.ProfileVersion{},
 		&model.AccountBackup{},
 		&model.AccountBackupVersion{},
+		&model.CharacterCardTarget{},
 		&model.Story{},
 		&model.StoryEntry{},
 		&model.StoryMusicTrack{},

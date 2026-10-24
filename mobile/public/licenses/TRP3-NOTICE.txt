@@ -1,0 +1,7 @@
+TRP3 online editor: RPBox web adaptation.
+UI layout and bundled textures derived from Total RP 3.
+Copyright The Total RP 3 Authors. Licensed under Apache-2.0.
+Reference: https://github.com/Total-RP/Total-RP-3
+Icon names/file IDs derived from LibRPMedia (public domain).
+Reference: https://github.com/wow-rp-addons/LibRPMedia
+Data version: 12.1.5.70391. Icons remain property of Blizzard Entertainment.

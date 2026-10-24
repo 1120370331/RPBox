@@ -37,3 +37,7 @@ watch(() => [route.fullPath, user.user?.id] as const, ([path, id]) => {
 <style scoped>
 .app-navigation{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-panel-bg);font-size:12px;color:var(--color-text-secondary)}.navigation-up{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;padding-right:16px;border-right:1px solid var(--color-border);font-weight:600}.app-navigation a{color:var(--color-text-secondary);text-decoration:none}.app-navigation a:hover{color:var(--color-accent)}nav{min-width:0}ol{display:flex;align-items:center;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}li{display:flex;align-items:center;gap:6px}li>span{color:var(--color-text-main);font-weight:600}.app-navigation a:focus-visible{outline:2px solid var(--color-accent);outline-offset:4px}
 </style>
+
+<style scoped>
+@media(max-width:600px){.app-navigation{align-items:flex-start;flex-direction:column;gap:4px;padding:8px 12px}.navigation-up{border-right:0;min-height:40px}.app-navigation nav{width:100%}.app-navigation li{min-height:28px;overflow-wrap:anywhere}}
+</style>

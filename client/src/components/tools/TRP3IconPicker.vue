@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import RModal from '@/components/RModal.vue'
-import WowIcon from '@/components/WowIcon.vue'
-import { normalizeTRP3Icon } from '@/utils/trp3Markup'
-import { useIconPageImages } from '@/composables/useIconPageImages'
+import RModal from '../RModal.vue'
+import WowIcon from '../WowIcon.vue'
+import { normalizeTRP3Icon } from '../../utils/trp3Markup'
+import { useIconPageImages } from '../../composables/useIconPageImages'
 const props = defineProps<{ modelValue: boolean; selected?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; select: [value: string] }>()
 const icons = ref<Array<{ id: number; name: string }>>([])
@@ -29,7 +29,7 @@ watch(() => props.modelValue, async open => {
   if (icons.value.length) return
   loading.value = true
   try {
-    const data = (await import('@/data/trp3Icons.json')).default
+    const data = (await import('../../data/trp3Icons.json')).default
     icons.value = data.map(row => ({ id: Number(row[0]), name: String(row[1]).toLowerCase() }))
   } catch { error.value = '图标目录加载失败，请关闭后重新打开。' } finally { loading.value = false }
 })
@@ -57,4 +57,10 @@ function applyCustom() {
 <style scoped>
 .icon-grid img{display:block;object-fit:cover;border-radius:2px}.icon-placeholder{display:block;width:42px;height:42px;border-radius:2px;background:linear-gradient(120deg,#24221e,#484033,#24221e);animation:icon-pulse 1.2s ease-in-out infinite alternate}.icon-placeholder.failed{display:grid;place-items:center;animation:none;color:#d4c7b0;font-size:20px}.icon-count button{margin-left:12px;border:0;background:transparent;color:var(--link-color);cursor:pointer;font-size:11px}@keyframes icon-pulse{to{opacity:.45}}@media(prefers-reduced-motion:reduce){.icon-placeholder{animation:none}}
 .trp3-icon-picker{padding:4px;color:var(--color-text-main)}.icon-search{display:flex;gap:10px}.icon-search input,.icon-custom input{flex:1;min-width:0}.icon-search :is(input,select),.icon-custom input{height:38px;padding:0 10px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--input-text)}.icon-count{font-size:12px;color:var(--color-text-secondary);margin:14px 0}.icon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:6px;min-height:190px;max-height:380px;overflow-y:auto;padding:3px}.icon-grid button{display:grid;place-items:center;padding:3px;border:1px solid #5b5140;border-radius:4px;background:#151515;cursor:pointer;min-height:48px}.icon-grid button:hover,.icon-grid button.selected{outline:2px solid #e8bd57;outline-offset:0}.icon-pagination{display:flex;justify-content:center;align-items:center;gap:18px;margin:16px 0;font-size:12px}.icon-pagination button,.icon-custom button{padding:7px 12px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-card-bg);color:var(--color-text-main);cursor:pointer}.icon-pagination button:disabled{opacity:.4;cursor:default}.icon-custom{display:flex;align-items:center;gap:10px;border-top:1px solid var(--color-border);padding-top:16px}.icon-error{color:var(--color-danger);font-size:12px}.icon-empty{text-align:center;color:var(--color-text-secondary)}button:focus-visible{outline:3px solid var(--color-accent)}
+</style>
+
+<style scoped>
+
+@media(max-width:600px){.icon-search{flex-direction:column;gap:8px}.icon-search :is(input,select),.icon-custom input{min-height:44px;font-size:16px}.icon-grid{max-height:42dvh}.icon-custom{flex-wrap:wrap}.icon-custom input{flex-basis:calc(100% - 60px)}.icon-custom button{width:100%;min-height:44px}.icon-pagination{gap:12px}.icon-pagination button{min-height:44px}.icon-count{line-height:1.8}}
+
 </style>

@@ -25,7 +25,7 @@ func TestDeleteAccount(t *testing.T) {
 		&model.Profile{},
 		&model.ProfileVersion{},
 		&model.AccountBackup{},
-		&model.AccountBackupVersion{},
+		&model.AccountBackupVersion{}, &model.CharacterCardTarget{},
 		&model.Story{},
 		&model.StoryEntry{},
 		&model.StoryBookmark{},

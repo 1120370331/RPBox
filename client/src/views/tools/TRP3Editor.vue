@@ -2,20 +2,22 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { createCharacterCard, getCharacterCard, getCharacterCardTRP3Lua, listMyCharacterCards, updateCharacterCard, type CharacterCard, type CharacterCardSource, type CharacterCardSummary, type CharacterCardPersonalityTrait, type TRP3About, type TRP3AboutSection, type UpdateCharacterCardRequest } from '@/api/characterCard'
-import { createCharacterCardDraft, createEmptyCharacterCardDraft } from '@/utils/characterCardDraft'
-import { trp3TraitIcons } from '@/data/trp3TraitIcons'
-import { normalizeTRP3About } from '@/utils/trp3Markup'
-import { normalizeCharacterCardHexForCSS } from '@/utils/characterCardColor'
+import { createCharacterCard, getCharacterCard, getCharacterCardTRP3Lua, listMyCharacterCards, saveCharacterCardToCloud, type CharacterCardSaveTarget, type CharacterCard, type CharacterCardSource, type CharacterCardSummary, type CharacterCardPersonalityTrait, type TRP3About, type TRP3AboutSection, type UpdateCharacterCardRequest } from '@/api/characterCard'
+import { createCharacterCardDraft, createEmptyCharacterCardDraft } from '../../utils/characterCardDraft'
+import { trp3TraitIcons } from '../../data/trp3TraitIcons'
+import { normalizeTRP3About } from '../../utils/trp3Markup'
+import { normalizeCharacterCardHexForCSS } from '../../utils/characterCardColor'
+import { downloadTextFile } from '@/utils/downloadText'
 import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
 import { useDialog } from '@/composables/useDialog'
-import CharacterCardPicker from '@/components/tools/CharacterCardPicker.vue'
-import type { CardOrigin, CharacterCardChoice, LocalCharacterSource } from '@/utils/characterCardSelection'
-import WowIcon from '@/components/WowIcon.vue'
-import TRP3IconPicker from '@/components/tools/TRP3IconPicker.vue'
-import TRP3MarkupEditor from '@/components/tools/TRP3MarkupEditor.vue'
-import TRP3AboutPreview from '@/components/tools/TRP3AboutPreview.vue'
+import CharacterSaveTargets from '../../components/tools/CharacterSaveTargets.vue'
+import CharacterCardPicker from '../../components/tools/CharacterCardPicker.vue'
+import type { CharacterCardChoice, LocalCharacterSource } from '../../utils/characterCardSelection'
+import WowIcon from '../../components/WowIcon.vue'
+import TRP3IconPicker from '../../components/tools/TRP3IconPicker.vue'
+import TRP3MarkupEditor from '../../components/tools/TRP3MarkupEditor.vue'
+import TRP3AboutPreview from '../../components/tools/TRP3AboutPreview.vue'
 
 const route = useRoute(), router = useRouter(), user = useUserStore(), toast = useToastStore(), dialog = useDialog()
 const { t } = useI18n()
@@ -29,7 +31,9 @@ const editorBody = ref<HTMLElement | null>(null)
 const loadingBodyHeight = ref(0)
 interface CreatedCardViewport { id: number; top: number; left: number; height: number }
 let createdCardViewport: CreatedCardViewport | null = null
-const pickerOpen = ref(false), pickerOrigin = ref<CardOrigin | ''>('')
+const pickerOpen = ref(false)
+const saveTargets = ref<CharacterCardSaveTarget[]>([])
+const targetPicker = ref<InstanceType<typeof CharacterSaveTargets> | null>(null)
 const iconOpen = ref(false), selectedIcon = ref('')
 let iconSetter: ((value: string) => void) | null = null
 let loadToken = 0
@@ -54,7 +58,7 @@ async function loadCard() {
   const viewport = createdCardViewport?.id === cardId.value ? createdCardViewport : null
   createdCardViewport = null
   loadingBodyHeight.value = viewport?.height || 0
-  card.value = null; error.value = ''; savedAt.value = ''; preview.value = false
+  saveTargets.value = []; card.value = null; error.value = ''; savedAt.value = ''; preview.value = false
   if (!cardId.value) { loading.value = false; return }
   loading.value = true
   try {
@@ -94,7 +98,7 @@ async function canLeave() {
 }
 onBeforeRouteLeave(canLeave)
 onBeforeRouteUpdate(async to => to.params.id === route.params.id || await canLeave())
-function openPicker(origin: CardOrigin | '' = '') { pickerOrigin.value = origin; pickerOpen.value = true }
+function openPicker() { pickerOpen.value = true }
 async function chooseCard(choice: CharacterCardChoice) {
   if (saving.value || creating.value) return
   if (choice.kind === 'archive') {
@@ -115,7 +119,7 @@ async function create(source?: CharacterCardSource, localSource?: LocalCharacter
     const localPlayer = localProfile?.player as Record<string, unknown> | undefined
     if (localPlayer?.about) localPlayer.about = normalizeTRP3About(localPlayer.about)
     const created = await createCharacterCard(localSource ? {
-      source_type: 'local', source_account_id: localSource.account_id,
+      source_type: 'local', source_game_flavor: localSource.game_flavor, source_account_id: localSource.account_id,
       source_profile_id: localSource.profile_id, local_profile: localProfile,
     } : source ? { source_type: 'backup', source_backup_id: source.backup_id, source_profile_id: source.profile_id } : { source_type: 'blank' })
     // The previous draft was explicitly discarded above; avoid a second prompt.
@@ -142,14 +146,17 @@ function payload(): Partial<UpdateCharacterCardRequest> {
 }
 async function save() {
   if (!card.value || saving.value) return false
+  if (!saveTargets.value.length) { toast.warning('请选择至少一个保存子账号'); return false }
   saving.value = true
   try {
-    const saved = await updateCharacterCard(card.value.id, payload())
+    const targetCount = saveTargets.value.length
+    const saved = await saveCharacterCardToCloud(card.value.id, payload(), saveTargets.value)
     if (!saved.trp3_about) throw new Error('服务端尚未支持 TRP3 模板保存，请更新后端后重试。')
     form.name_color = form.class_color
     card.value = saved; snapshot.value = currentSnapshot.value
     savedAt.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    toast.success('已保存到对应的 RPBox 人物卡档案')
+    toast.success(`已保存人物卡及 ${targetCount} 个子账号的云端存档；本地文件未改动`)
+    await targetPicker.value?.refresh(true)
     void loadList()
     return true
   } catch (e) { toast.error(e instanceof Error ? e.message : '保存失败，请重试'); return false } finally { saving.value = false }
@@ -159,9 +166,7 @@ async function exportLua() {
   if (dirty.value && !(await save())) return
   try {
     const data = await getCharacterCardTRP3Lua(card.value.id)
-    const url = URL.createObjectURL(new Blob([data.lua], { type: 'text/plain;charset=utf-8' }))
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = `TRP3-${card.value.id}.lua`; anchor.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    await downloadTextFile(`TRP3-${card.value.id}.lua`, data.lua)
   } catch (e) { toast.error(e instanceof Error ? e.message : '导出失败') }
 }
 function pickIcon(value: string | undefined, setter: (value: string) => void) { selectedIcon.value = value || ''; iconSetter = setter; iconOpen.value = true }
@@ -183,10 +188,10 @@ function sectionIcon(section: TRP3AboutSection) { pickIcon(section.IC, value => 
     <RouterLink class="trp3-back" to="/tools"><i class="ri-arrow-left-line" aria-hidden="true"></i> 工具箱</RouterLink>
     <header class="online-heading"><div><h1>在线人物卡编辑器</h1><p>Total RP 3 的角色档案工作台，直接连接你的 RPBox 人物卡。</p></div><RouterLink v-if="card" :to="`/character-cards/${card.id}`" class="archive-link">查看 RPBox 档案 <i class="ri-arrow-right-up-line" aria-hidden="true"></i></RouterLink></header>
     <section class="archive-selector" aria-label="选择关联人物卡">
-      <div class="archive-choice-control"><span>关联 RPBox 人物卡</span><button type="button" :disabled="saving || creating || listLoading" aria-label="搜索选择人物卡" @click="openPicker()"><i class="ri-search-line" aria-hidden="true"></i><span>{{ card ? (card.display_name || title) + ' · #' + card.id : '搜索名字，或选择人物卡来源…' }}</span><i class="ri-arrow-down-s-line" aria-hidden="true"></i></button></div>
-      <button type="button" :disabled="saving || creating" @click="create()"><i class="ri-add-line" aria-hidden="true"></i> {{ creating ? '创建中…' : '新建人物卡' }}</button><button type="button" :disabled="saving || creating" @click="openPicker('cloud')">从云备份导入</button>
+      <div class="archive-choice-control"><span>关联 RPBox 人物卡</span><button type="button" :disabled="saving || creating || listLoading" aria-label="搜索选择人物卡" @click="openPicker()"><i class="ri-search-line" aria-hidden="true"></i><span>{{ card ? (card.display_name || title) + ' · #' + card.id : '按名称搜索 / 选择人物卡…' }}</span><i class="ri-arrow-down-s-line" aria-hidden="true"></i></button></div>
+      <button type="button" :disabled="saving || creating" @click="create()"><i class="ri-add-line" aria-hidden="true"></i> {{ creating ? '创建中…' : '新建人物卡' }}</button><button type="button" :disabled="saving || creating" @click="openPicker()">导入人物卡</button>
       <p v-if="listError" role="alert">{{ listError }} <button type="button" @click="loadList">重试</button></p>
-      <div v-if="card" class="linked-archive"><i class="ri-link" aria-hidden="true"></i><span>已关联 RPBox 人物卡 #{{ card.id }} · 保存会直接更新这张档案</span><RouterLink :to="`/character-cards/${card.id}`">打开关联档案</RouterLink></div>
+      <div v-if="card" class="linked-archive"><i class="ri-link" aria-hidden="true"></i><span>已关联 RPBox 人物卡 #{{ card.id }} · 保存会更新这张档案及所选子账号的云端存档</span><RouterLink :to="`/character-cards/${card.id}`">打开关联档案</RouterLink></div>
     </section>
     <div ref="editorBody" class="trp3-editor-body" :style="loading && loadingBodyHeight ? { minHeight: `${loadingBodyHeight}px` } : undefined">
     <div v-if="loading" class="trp3-state" role="status">读取人物卡…</div>
@@ -227,14 +232,15 @@ function sectionIcon(section: TRP3AboutSection) { pickIcon(section.IC, value => 
             <div v-else><fieldset v-for="section in template3Sections" :key="section.key" class="trp3-group"><legend>{{ section.title }}</legend><div class="section-tools"><button class="trp3-icon-button" type="button" :aria-label="`${section.title}图标`" @click="sectionIcon(about.T3[section.key])"><WowIcon :icon="about.T3[section.key].IC || 'inv_misc_book_09'" :size="42" /></button><select v-model="about.T3[section.key].BK" :aria-label="`${section.title}背景`"><option :value="undefined">默认背景</option><option :value="1">深色</option><option :value="7">羊皮纸</option><option v-if="about.T3[section.key].BK && about.T3[section.key].BK !== 1 && about.T3[section.key].BK !== 7" :value="about.T3[section.key].BK">原背景 {{ about.T3[section.key].BK }}</option></select></div><TRP3MarkupEditor v-model="about.T3[section.key].TX" :label="`${section.title}正文`" :rows="5" /></fieldset></div>
           </template>
         </fieldset>
-        <footer class="trp3-footer"><span role="status">{{ saving ? '正在保存…' : dirty ? '有未保存的修改' : savedAt ? `已保存 · ${savedAt}` : '已与 RPBox 档案关联' }}</span><button class="trp3-button" type="button" :disabled="saving" @click="exportLua">导出 TRP3 Lua</button><button class="trp3-button save-button" type="button" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存到 RPBox' }}</button></footer>
+        <footer class="trp3-footer"><span role="status">{{ saving ? '正在保存…' : dirty ? '有未保存的修改' : savedAt ? `已保存 · ${savedAt}` : '已与 RPBox 档案关联' }}</span><button class="trp3-button" type="button" :disabled="saving" @click="exportLua">导出 TRP3 Lua</button><button class="trp3-button save-button" type="button" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存到所选云端存档' }}</button></footer>
       </div>
-      <div class="archive-meta"><label>RPBox 档案名称<input v-model="form.display_name" :disabled="saving || creating" maxlength="256" placeholder="用于档案列表的名称" /></label><p>保存更新当前人物卡；公开发布与审核可在 RPBox 档案页面完成。</p></div>
+      <div class="archive-meta"><label>RPBox 档案名称<input v-model="form.display_name" :disabled="saving || creating" maxlength="256" placeholder="用于档案列表的名称" /></label><p>保存到勾选的子账号云端存档；需要同步到游戏时，请前往人物卡备份。</p></div>
     </template>
     </div>
+    <CharacterSaveTargets v-if="card" ref="targetPicker" :card="card" :busy="saving || creating" @change="saveTargets = $event" @save="save" />
     <footer class="trp3-credit">基于 Total RP 3 的界面布局与格式语法适配。<a href="/licenses/TRP3-NOTICE.txt" target="_blank" rel="noopener">来源与许可</a></footer>
     <TRP3IconPicker v-model="iconOpen" :selected="selectedIcon" @select="applyIcon" />
-    <CharacterCardPicker v-model="pickerOpen" :cards="cards" :current-card-id="cardId" :initial-origin="pickerOrigin" :busy="saving || creating" @select="chooseCard" />
+    <CharacterCardPicker v-model="pickerOpen" :cards="cards" :current-card-id="cardId" :busy="saving || creating" @select="chooseCard" />
   </main>
 </template>
 

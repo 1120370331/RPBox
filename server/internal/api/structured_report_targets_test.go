@@ -24,6 +24,7 @@ func newStructuredReportTargetTestDB(t *testing.T) *gorm.DB {
 		&model.ContentReport{},
 		&model.AdminActionLog{},
 		&model.CharacterCard{},
+		&model.CharacterCardTarget{},
 		&model.CharacterCardPublication{},
 		&model.CharacterCardSubmission{},
 		&model.CharacterCardPortrait{},

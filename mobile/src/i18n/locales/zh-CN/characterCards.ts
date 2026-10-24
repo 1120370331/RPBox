@@ -1,4 +1,6 @@
+import desktopCharacterCards from '../../../../../client/src/i18n/locales/zh-CN/characterCards'
 export default {
+  versions: desktopCharacterCards.versions,
   common: {
     unnamed: '未命名人物',
     card: '人物卡',

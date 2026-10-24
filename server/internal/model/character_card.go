@@ -22,10 +22,11 @@ type CharacterCard struct {
 	ID     uint `gorm:"primarykey" json:"id"`
 	UserID uint `gorm:"index;not null" json:"user_id"`
 
-	CharacterID     *uint  `gorm:"index" json:"character_id"`
-	SourceBackupID  *uint  `gorm:"index" json:"source_backup_id"`
-	SourceAccountID string `gorm:"size:32" json:"source_account_id"`
-	SourceProfileID string `gorm:"size:128" json:"source_profile_id"`
+	CharacterID      *uint  `gorm:"index" json:"character_id"`
+	SourceBackupID   *uint  `gorm:"index" json:"source_backup_id"`
+	SourceGameFlavor string `gorm:"size:32" json:"source_game_flavor"`
+	SourceAccountID  string `gorm:"size:32" json:"source_account_id"`
+	SourceProfileID  string `gorm:"size:128" json:"source_profile_id"`
 
 	FirstName          string `gorm:"size:128" json:"first_name"`
 	LastName           string `gorm:"size:128" json:"last_name"`
@@ -51,6 +52,7 @@ type CharacterCard struct {
 	// through typed API fields instead of leaking storage JSON to clients.
 	TRP3AdditionalInfoJSON string `gorm:"type:text;not null;default:'[]'" json:"-"`
 	TRP3PersonalityJSON    string `gorm:"type:text;not null;default:'[]'" json:"-"`
+	TRP3ProfileJSON        string `gorm:"type:text;not null;default:''" json:"-"`
 	TRP3AboutJSON          string `gorm:"type:text;not null;default:''" json:"-"`
 
 	Summary         string `gorm:"size:1000" json:"summary"`

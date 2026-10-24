@@ -44,8 +44,9 @@ var (
 )
 
 type characterCardDTO struct {
-	ID     uint `json:"id"`
-	UserID uint `json:"user_id"`
+	SourceGameFlavor string `json:"source_game_flavor,omitempty"`
+	ID               uint   `json:"id"`
+	UserID           uint   `json:"user_id"`
 
 	CharacterID     *uint  `json:"character_id,omitempty"`
 	SourceBackupID  *uint  `json:"source_backup_id,omitempty"`
@@ -94,6 +95,8 @@ type characterCardDTO struct {
 }
 
 type characterCardSourceDTO struct {
+	GameFlavor      string    `json:"game_flavor"`
+	LinkedCardID    uint      `json:"linked_card_id,omitempty"`
 	SourceBackupID  uint      `json:"backup_id"`
 	SourceAccountID string    `json:"account_id"`
 	SourceProfileID string    `json:"profile_id"`
@@ -111,15 +114,17 @@ type characterCardSourceDTO struct {
 }
 
 type createCharacterCardRequest struct {
-	SourceType      string          `json:"source_type"`
-	SourceBackupID  *uint           `json:"source_backup_id"`
-	SourceProfileID string          `json:"source_profile_id"`
-	SourceAccountID string          `json:"source_account_id"`
-	LocalProfile    json.RawMessage `json:"local_profile"`
+	SourceGameFlavor string          `json:"source_game_flavor"`
+	SourceType       string          `json:"source_type"`
+	SourceBackupID   *uint           `json:"source_backup_id"`
+	SourceProfileID  string          `json:"source_profile_id"`
+	SourceAccountID  string          `json:"source_account_id"`
+	LocalProfile     json.RawMessage `json:"local_profile"`
 }
 
 type updateCharacterCardRequest struct {
-	CharacterID optionalCharacterCardUint `json:"character_id"`
+	CloudTargets *[]characterCardSaveTarget `json:"cloud_targets"`
+	CharacterID  optionalCharacterCardUint  `json:"character_id"`
 
 	FirstName          *string                              `json:"first_name"`
 	LastName           *string                              `json:"last_name"`
@@ -248,13 +253,22 @@ func (s *Server) listCharacterCardSources(c *gin.Context) {
 	userID := c.GetUint("userID")
 	var backups []model.AccountBackup
 	if err := database.DB.Where("user_id = ?", userID).
-		Select("id", "account_id", "profiles_data", "updated_at").
+		Select("id", "account_id", "game_flavor", "profiles_data", "updated_at").
 		Order("updated_at DESC, id DESC").
 		Find(&backups).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询人物卡来源失败"})
 		return
 	}
 
+	bindings := []model.CharacterCardTarget{}
+	if err := database.DB.Model(&model.CharacterCardTarget{}).Joins("JOIN account_backups ON account_backups.id = character_card_targets.backup_id").Where("account_backups.user_id = ?", userID).Select("character_card_targets.*").Find(&bindings).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡关联失败"})
+		return
+	}
+	linkedCards := map[string]uint{}
+	for _, binding := range bindings {
+		linkedCards[fmt.Sprintf("%d/%s", binding.BackupID, binding.ProfileID)] = binding.CharacterCardID
+	}
 	sources := make([]characterCardSourceDTO, 0)
 	for _, backup := range backups {
 		if err := validateCharacterCardSourceAccountID(backup.AccountID); err != nil {
@@ -296,6 +310,7 @@ func (s *Server) listCharacterCardSources(c *gin.Context) {
 				continue
 			}
 			sources = append(sources, characterCardSourceDTO{
+				GameFlavor: backup.GameFlavor, LinkedCardID: linkedCards[fmt.Sprintf("%d/%s", backup.ID, profileID)],
 				SourceBackupID:  backup.ID,
 				SourceAccountID: backup.AccountID,
 				SourceProfileID: profileID,
@@ -408,6 +423,10 @@ func (s *Server) createCharacterCard(c *gin.Context) {
 			if err != nil {
 				return err
 			}
+			if rawProfiles, err := decodeCharacterCardProfileMap(backup.ProfilesData); err == nil {
+				card.TRP3ProfileJSON = string(rawProfiles[req.SourceProfileID])
+			}
+			card.SourceGameFlavor = backup.GameFlavor
 			card.SourceBackupID = &backup.ID
 			card.SourceAccountID = backup.AccountID
 			card.SourceProfileID = req.SourceProfileID
@@ -568,7 +587,9 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 
 	var card model.CharacterCard
 	if err := database.DB.Where("id = ? AND user_id = ?", id, userID).First(&card).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if failure, ok := err.(*apiError); ok {
+			c.JSON(failure.status, gin.H{"error": failure.message})
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取人物卡失败"})
@@ -582,6 +603,16 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 		return
 	}
 
+	if strings.HasSuffix(c.FullPath(), "/save-cloud") && req.CloudTargets == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择保存子账号"})
+		return
+	}
+	if req.CloudTargets != nil {
+		if err := validateCloudTargets(*req.CloudTargets); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
 	candidate := card
 	updates := make(map[string]interface{})
 	applyCharacterCardStringUpdate(req.FirstName, &candidate.FirstName, "first_name", updates, true)
@@ -776,7 +807,7 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 		}
 	}
 
-	if len(updates) == 0 && !impressionsNeedSave {
+	if len(updates) == 0 && !impressionsNeedSave && req.CloudTargets == nil {
 		portraitsByCard, _ := loadCharacterCardPortraits(database.DB, []uint{card.ID})
 		c.JSON(http.StatusOK, gin.H{"character_card": s.buildCharacterCardDTO(card, impressionPlan.Rows, portraitsByCard[card.ID], true, true)})
 		return
@@ -841,6 +872,9 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 				return err
 			}
 		}
+		if req.CloudTargets != nil {
+			return saveCharacterCardTargets(tx, candidate, impressionPlan.Rows, *req.CloudTargets)
+		}
 		return nil
 	})
 	if err != nil {
@@ -848,7 +882,9 @@ func (s *Server) updateCharacterCard(c *gin.Context) {
 			s.cleanupOwnedCharacterCardPortrait(c, userID, candidate.PortraitImage)
 		}
 		s.cleanupGeneratedCharacterCardImpressionImages(c, userID, impressionPlan)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if failure, ok := err.(*apiError); ok {
+			c.JSON(failure.status, gin.H{"error": failure.message})
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "人物卡不存在"})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新人物卡失败"})
@@ -982,6 +1018,9 @@ func deleteCharacterCardRecords(tx *gorm.DB, card model.CharacterCard) error {
 		return err
 	}
 	if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardImpression{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("character_card_id = ?", card.ID).Delete(&model.CharacterCardTarget{}).Error; err != nil {
 		return err
 	}
 	return tx.Where("id = ? AND user_id = ?", card.ID, card.UserID).Delete(&model.CharacterCard{}).Error
@@ -1178,6 +1217,7 @@ func (s *Server) buildCharacterCardDTO(card model.CharacterCard, impressions []m
 		dto.SourceBackupID = card.SourceBackupID
 		dto.SourceAccountID = card.SourceAccountID
 		dto.SourceProfileID = card.SourceProfileID
+		dto.SourceGameFlavor = card.SourceGameFlavor
 		dto.ReviewComment = card.ReviewComment
 		dto.ReviewedAt = card.ReviewedAt
 	}

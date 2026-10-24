@@ -95,7 +95,7 @@ func TestAccountBackupUniqueIndexIncludesUserID(t *testing.T) {
 	if err := db.Raw("PRAGMA index_info(idx_user_account)").Scan(&columns).Error; err != nil {
 		t.Fatalf("index info: %v", err)
 	}
-	if len(columns) != 2 || columns[0].Name != "user_id" || columns[1].Name != "account_id" {
+	if len(columns) != 3 || columns[0].Name != "user_id" || columns[1].Name != "account_id" || columns[2].Name != "game_flavor" {
 		raw, _ := json.Marshal(columns)
 		t.Fatalf("unexpected index columns: %s", string(raw))
 	}

@@ -389,6 +389,7 @@ onMounted(() => {
       </section>
 
       <div class="menu-section">
+        <button class="menu-item" aria-label="工具箱" @click="router.push('/tools')"><i class="ri-tools-line" aria-hidden="true" /><span>工具箱</span><i class="ri-arrow-right-s-line arrow" aria-hidden="true" /></button>
         <button class="menu-item" @click="router.push('/profiles')">
           <i class="ri-id-card-line" />
           <span>{{ $t('profile.menu.cloudProfiles') }}</span>

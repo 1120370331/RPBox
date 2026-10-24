@@ -27,6 +27,11 @@ func createLocalCharacterCard(db *gorm.DB, userID uint, req createCharacterCardR
 	if err != nil {
 		return card, nil, fmt.Errorf("本地人物卡格式无效: %w", err)
 	}
+	if !validGameFlavor(req.SourceGameFlavor) {
+		return card, nil, errors.New("游戏版本无效")
+	}
+	card.SourceGameFlavor = req.SourceGameFlavor
+	card.TRP3ProfileJSON = string(req.LocalProfile)
 	card.SourceAccountID = req.SourceAccountID
 	card.SourceProfileID = req.SourceProfileID
 	applyTRP3CharacterCardFields(&card, profile.Fields)

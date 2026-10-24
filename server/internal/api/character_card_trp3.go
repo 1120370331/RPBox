@@ -42,6 +42,12 @@ func (s *Server) exportCharacterCardTRP3Lua(c *gin.Context) {
 		profileID = fmt.Sprintf("rpbox-%d", card.ID)
 	}
 	var existing interface{}
+	if card.TRP3ProfileJSON != "" {
+		if err := json.Unmarshal([]byte(card.TRP3ProfileJSON), &existing); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "原始人物卡数据无法解析"})
+			return
+		}
+	}
 	if card.SourceBackupID != nil && *card.SourceBackupID != 0 && strings.TrimSpace(card.SourceProfileID) != "" {
 		var backup model.AccountBackup
 		if err := database.DB.Where("id = ? AND user_id = ?", *card.SourceBackupID, userID).First(&backup).Error; err == nil {
