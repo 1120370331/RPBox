@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { gameFlavors, gameFlavorLabel, getGameInstallations, configuredGameFlavor, selectGameInstallation } from '@/utils/gameInstallations'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { dialog } from '../../composables/useDialog'
@@ -56,18 +57,49 @@ interface AccountInfo {
 type WorkflowStep = 'scan' | 'backup' | 'upload' | 'verify' | 'finish'
 
 const router = useRouter()
+const route = useRoute()
+const desktop = '__TAURI_INTERNALS__' in window
+const installations = ref(getGameInstallations())
+const selectedFlavor = ref(typeof route.query.flavor === 'string' ? route.query.flavor : configuredGameFlavor(localStorage.getItem('wow_path') || ''))
+const canUseLocal = computed(() => desktop && !!wowPath.value && !!selectedFlavor.value && configuredGameFlavor(wowPath.value) === selectedFlavor.value)
+async function changeInstallation(event: Event) {
+ const path = (event.target as HTMLSelectElement).value
+ const installation = installations.value.find(item => item.path === path)
+ if (!installation) return
+ selectGameInstallation(installation); wowPath.value = installation.path; selectedFlavor.value = installation.flavor
+ selectedAccount.value = ''; fullBackupData.value = null
+ await loadProfiles()
+}
+async function changeFlavor() { selectedAccount.value = ''; fullBackupData.value = null; await loadProfiles() }
+
+const legacyFlavor = ref('_retail_')
+async function labelLegacy() {
+ if (!selectedAccount.value || selectedFlavor.value) return
+ const target = legacyFlavor.value
+ if (!(await dialog.confirm({ title: '标记旧存档版本', message: `将 ${selectedAccount.value} 标记为${gameFlavorLabel(target)}。请确认其真实来源；不同版本的数据不会自动合并。`, type: 'warning' }))) return
+ try { await accountBackupApi.labelLegacyAccountBackup(selectedAccount.value, target); selectedFlavor.value = target; await loadProfiles() }
+ catch (e) { await dialog.alert({ title: '未能标记', message: e instanceof Error ? e.message : String(e), type: 'error' }) }
+}
 const { t } = useI18n()
 const accounts = ref<AccountInfo[]>([])
-const selectedAccount = ref('')
+const selectedAccount = ref(typeof route.query.account === 'string' ? route.query.account : '')
 const isLoading = ref(false)
 const isSyncing = ref(false)
 const cloudBackups = ref<Map<string, accountBackupApi.AccountBackup>>(new Map())
 const mounted = ref(false)
+interface AppliedBackupReceipt { local: string; cloud: string }
+const appliedBackups = ref<Record<string, AppliedBackupReceipt>>({})
+try {
+  const saved: unknown = JSON.parse(localStorage.getItem('rpbox_applied_account_backups') || '{}')
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) appliedBackups.value = saved as Record<string, AppliedBackupReceipt>
+} catch { /* A missing receipt only means the two checksums must be compared again. */ }
+function appliedBackupKey() { return JSON.stringify([wowPath.value.replace(/\\/g, '/').toLowerCase(), selectedFlavor.value, selectedAccount.value]) }
+
 const wowPath = ref('')
 const search = ref('')
 const isAuthed = ref(!!localStorage.getItem('token'))
 const authMessage = ref('')
-const viewMode = ref<'upload' | 'restore' | 'cloud'>('upload')
+const viewMode = ref<'upload' | 'restore' | 'cloud'>(!desktop || route.query.mode === 'cloud' ? 'cloud' : 'upload')
 const showConfirmModal = ref(false)
 const isRestoring = ref(false)
 const fullBackupData = ref<accountBackupApi.AccountBackup | null>(null)
@@ -194,6 +226,8 @@ const accountSyncStatus = computed<'synced' | 'pending' | 'conflict'>(() => {
     match: backup.checksum === localChecksum
   })
   if (backup.checksum === localChecksum) return 'synced'
+  const receipt = appliedBackups.value[appliedBackupKey()]
+  if (receipt?.local === localChecksum && receipt.cloud === backup.checksum) return 'synced'
   return 'conflict'
 })
 
@@ -332,7 +366,7 @@ async function loadFullBackup() {
   }
   isLoadingCloudData.value = true
   try {
-    fullBackupData.value = await accountBackupApi.getAccountBackup(selectedAccount.value)
+    fullBackupData.value = await accountBackupApi.getAccountBackup(selectedAccount.value, selectedFlavor.value)
   } catch {
     fullBackupData.value = null
   } finally {
@@ -349,16 +383,12 @@ watch([viewMode, selectedAccount], ([mode]) => {
 
 onMounted(async () => {
   const savedPath = localStorage.getItem('wow_path')
-  if (!savedPath) {
-    router.replace({ path: '/sync/setup', query: { redirect: '/sync', required: '1' } })
-    return
-  }
   if (!isAuthed.value) {
     authMessage.value = t('sync.tip.authRequired')
     router.push('/login?redirect=/sync')
     return
   }
-  wowPath.value = savedPath
+  wowPath.value = savedPath || ''
   await loadProfiles()
   setTimeout(() => mounted.value = true, 50)
 })
@@ -369,8 +399,8 @@ async function loadProfiles() {
   try {
     console.log('[Sync] 开始加载...')
     const [localResult, backupList] = await Promise.all([
-      invoke<{ accounts: AccountInfo[] }>('scan_profiles', { wowPath: localStorage.getItem('wow_path') || '' }),
-      accountBackupApi.listAccountBackups().catch(() => [])
+      canUseLocal.value ? invoke<{ accounts: AccountInfo[] }>('scan_profiles', { wowPath: wowPath.value }) : Promise.resolve({ accounts: [] as AccountInfo[] }),
+      accountBackupApi.listAccountBackups()
     ])
     console.log('[Sync] 本地扫描结果:', localResult.accounts.map(a => ({
       account: a.account_id,
@@ -382,13 +412,18 @@ async function loadProfiles() {
       checksum: b.checksum
     })))
 
-    accounts.value = localResult.accounts
-    const stillExists = localResult.accounts.find(a => a.account_id === selectedAccount.value)
-    if (!stillExists && localResult.accounts.length > 0) {
-      selectedAccount.value = localResult.accounts[0].account_id
+    const matchingBackups = backupList.filter(backup => (backup.game_flavor || '') === selectedFlavor.value)
+    accounts.value = [...localResult.accounts]
+    for (const backup of matchingBackups) {
+      if (!accounts.value.some(account => account.account_id === backup.account_id)) accounts.value.push({ account_id: backup.account_id, profiles: [] })
     }
-    cloudBackups.value.clear()
-    backupList.forEach(b => cloudBackups.value.set(b.account_id, b))
+    if (!accounts.value.some(account => account.account_id === selectedAccount.value)) selectedAccount.value = accounts.value[0]?.account_id || ''
+    cloudBackups.value = new Map(matchingBackups.map(backup => [backup.account_id, backup]))
+    if (viewMode.value === 'cloud') await loadFullBackup()
+    return true
+  } catch (e) {
+    await dialog.alert({ title: '读取失败', message: e instanceof Error ? e.message : String(e), type: 'error' })
+
   } finally {
     isLoading.value = false
   }
@@ -400,6 +435,7 @@ function getStatus(_id: string): 'synced' | 'pending' | 'conflict' {
 }
 
 async function openConfirmModal() {
+  if (!canUseLocal.value) { await dialog.alert({ title: '请设置游戏目录', message: '本地备份需要在桌面客户端选择与当前游戏版本匹配的目录。', type: 'warning' }); return }
   if (!isAuthed.value) {
     await dialog.alert({ title: t('sync.dialog.tip'), message: t('sync.dialog.loginFirst'), type: 'warning' })
     router.push('/login?redirect=/sync')
@@ -456,6 +492,7 @@ async function confirmUpload() {
   try {
     await accountBackupApi.upsertAccountBackup({
       account_id: selectedAccount.value,
+      game_flavor: selectedFlavor.value,
       profiles_data: JSON.stringify(profilesData),
       profiles_count: currentProfiles.value.length,
       tools_data: toolsDb?.raw_data,
@@ -493,7 +530,7 @@ async function confirmDelete() {
   if (!pendingDeleteAccount.value) return
   isDeleting.value = true
   try {
-    await accountBackupApi.deleteAccountBackup(pendingDeleteAccount.value)
+    await accountBackupApi.deleteAccountBackup(pendingDeleteAccount.value, selectedFlavor.value)
     cloudBackups.value.delete(pendingDeleteAccount.value)
     await dialog.alert({ title: t('sync.dialog.success'), message: t('sync.dialog.deleteSuccess'), type: 'success' })
   } catch (e: any) {
@@ -506,6 +543,7 @@ async function confirmDelete() {
 }
 
 async function restoreAll() {
+  if (!canUseLocal.value) { await dialog.alert({ title: '请设置游戏目录', message: '请在桌面客户端选择与云端存档版本一致的游戏目录，再同步到本地。', type: 'warning' }); return }
   if (!isAuthed.value) {
     await dialog.alert({ title: t('sync.dialog.tip'), message: t('sync.dialog.loginFirstRestore'), type: 'warning' })
     router.push('/login?redirect=/sync')
@@ -530,7 +568,7 @@ async function restoreAll() {
   isRestoring.value = true
   try {
     // 获取完整备份数据
-    const fullBackup = await accountBackupApi.getAccountBackup(selectedAccount.value)
+    const fullBackup = await accountBackupApi.getAccountBackup(selectedAccount.value, selectedFlavor.value)
     if (!fullBackup.profiles_data) {
       await dialog.alert({ title: t('sync.dialog.error'), message: t('sync.dialog.cloudDataEmpty'), type: 'error' })
       return
@@ -548,25 +586,11 @@ async function restoreAll() {
       rawTrp3DataLua: fullBackup.raw_trp3_data_lua || null,
       rawTrp3ExtendedLua: fullBackup.raw_trp3_extended_lua || null
     })
-    // 重新扫描本地数据
-    await loadProfiles()
-    // 写回后本地checksum可能变化，同步到云端避免显示冲突
-    const newChecksum = computeLocalChecksum()
-    if (newChecksum && newChecksum !== fullBackup.checksum) {
-      await accountBackupApi.upsertAccountBackup({
-        account_id: selectedAccount.value,
-        profiles_data: fullBackup.profiles_data,
-        profiles_count: fullBackup.profiles_count,
-        tools_data: fullBackup.tools_data,
-        tools_count: fullBackup.tools_count,
-        runtime_data: fullBackup.runtime_data,
-        runtime_size_kb: fullBackup.runtime_size_kb,
-        config_data: fullBackup.config_data,
-        extra_data: fullBackup.extra_data,
-        checksum: newChecksum,
-        snapshot_reason: 'restore_sync'
-      })
-      await loadProfiles()
+    // Remember the exact local fingerprint produced by this successful restore.
+    // A later local edit or a new cloud version invalidates this receipt automatically.
+    if (await loadProfiles()) {
+      appliedBackups.value[appliedBackupKey()] = { local: computeLocalChecksum(), cloud: fullBackup.checksum }
+      localStorage.setItem('rpbox_applied_account_backups', JSON.stringify(appliedBackups.value))
     }
     await dialog.alert({ title: t('sync.dialog.success'), message: t('sync.dialog.restoreSuccess'), type: 'success' })
   } catch (e: any) {
@@ -577,6 +601,7 @@ async function restoreAll() {
 }
 
 async function handleCloudVersionRestored(backup: accountBackupApi.AccountBackup) {
+  if ((backup.game_flavor || '') !== selectedFlavor.value) return
   cloudBackups.value.set(backup.account_id, backup)
   if (backup.account_id === selectedAccount.value) await loadFullBackup()
 }
@@ -596,6 +621,13 @@ const workflowSteps = computed(() => [
 
 <template>
   <div class="sync-page" :class="{ 'animate-in': mounted }">
+    <section class="sync-target-settings">
+      <label>云端游戏版本 <select v-model="selectedFlavor" :disabled="isLoading || isSyncing || isRestoring" @change="changeFlavor"><option value="">旧存档（版本未标记）</option><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
+      <label v-if="desktop && installations.length">本机写回目录 <select :value="wowPath" :disabled="isLoading || isSyncing || isRestoring" @change="changeInstallation"><option v-for="item in installations" :key="item.path" :value="item.path">{{ gameFlavorLabel(item.flavor) }} · {{ item.path }}</option></select></label>
+      <RouterLink to="/tools/rpbox/install">管理游戏目录</RouterLink>
+      <div v-if="!selectedFlavor && currentBackup"><select v-model="legacyFlavor" aria-label="旧存档所属版本"><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select><button type="button" @click="labelLegacy">标记旧存档版本</button></div>
+      <p v-if="!canUseLocal">可以查看和管理云端存档。本地写回需在桌面客户端设置至少一个匹配版本的游戏目录；未标记版本的旧存档不会自动写入。</p>
+    </section>
     <div v-if="!isAuthed" class="auth-tip anim-item" style="--delay: 0">
       <i class="ri-information-line"></i>
       <span>{{ authMessage || $t('sync.tip.authRequired') }}</span>
@@ -645,22 +677,22 @@ const workflowSteps = computed(() => [
         </div>
         <div class="account-info">
           <span class="label">{{ $t('sync.toolbar.selectAccount') }}</span>
-          <select v-model="selectedAccount" class="account-select">
+          <select v-model="selectedAccount" class="account-select" :disabled="isLoading || isSyncing || isRestoring">
             <option v-for="acc in accounts" :key="acc.account_id" :value="acc.account_id">
-              {{ acc.account_id }}
+              {{ acc.account_id }} · {{ gameFlavorLabel(selectedFlavor) }}
             </option>
           </select>
         </div>
         <div class="refresh-info">
           <span class="label">{{ $t('sync.toolbar.refresh') }}</span>
-          <button class="btn-icon" @click="loadProfiles" :disabled="isLoading" :title="$t('sync.toolbar.refresh')">
+          <button class="btn-icon" @click="loadProfiles" :disabled="isLoading || isSyncing || isRestoring" :title="$t('sync.toolbar.refresh')">
           <i class="ri-refresh-line"></i>
         </button>
         </div>
         <button
           class="btn-primary"
           @click="viewMode === 'upload' ? openConfirmModal() : restoreAll()"
-          :disabled="viewMode === 'upload' ? (isSyncing || toSyncList.length === 0) : (isRestoring || !hasCloudData)"
+          :disabled="!canUseLocal || (viewMode === 'upload' ? (isSyncing || toSyncList.length === 0) : (isRestoring || !hasCloudData))"
         >
           <i v-if="isSyncing || isRestoring" class="ri-loader-4-line spin"></i>
           <i v-else :class="viewMode === 'upload' ? 'ri-save-3-line' : 'ri-download-2-line'"></i>
@@ -670,7 +702,7 @@ const workflowSteps = computed(() => [
     </header>
 
     <!-- 总览卡片 -->
-    <div class="overview-grid anim-item" style="--delay: 1">
+    <div v-if="canUseLocal" class="overview-grid anim-item" style="--delay: 1">
       <div class="overview-card">
         <div class="title">{{ $t('sync.overview.backupProgress', { account: selectedAccount || $t('sync.overview.notSelected') }) }}</div>
         <div class="progress">
@@ -976,10 +1008,10 @@ const workflowSteps = computed(() => [
           <div class="panel-title">
             <i class="ri-shield-star-line"></i>
             <span v-if="viewMode === 'upload'">{{ $t('sync.workflow.title') }}</span>
-            <span v-else>{{ $t('sync.workflow.restoreTitle') }}</span>
+            <span v-else-if="viewMode === 'restore'">{{ $t('sync.workflow.restoreTitle') }}</span><span v-else>{{ $t('sync.cloud.title') }}</span>
           </div>
-          <div class="tag" v-if="viewMode === 'upload'">{{ $t('sync.workflow.prdBackup') }}</div>
-          <div class="tag" v-else>{{ $t('sync.workflow.prdRestore') }}</div>
+          <div class="tag" v-if="viewMode === 'upload'">上传前保留云端历史</div>
+          <div class="tag" v-else-if="viewMode === 'restore'">写回前备份本地文件 · 请先退出游戏</div>
         </div>
 
         <div class="panel-body right-body" v-if="viewMode === 'upload'">
@@ -1052,7 +1084,7 @@ const workflowSteps = computed(() => [
               <li><i class="ri-history-line"></i> {{ $t('sync.restore.keepVersions') }}</li>
             </ul>
             <div class="cta-row">
-              <button class="btn-primary" :disabled="isRestoring || !hasCloudData" @click="restoreAll">
+              <button class="btn-primary" :disabled="!canUseLocal || isRestoring || !hasCloudData" @click="restoreAll">
                 <i v-if="isRestoring" class="ri-loader-4-line spin"></i>
                 <i v-else class="ri-cloud-download-line"></i>
                 {{ isRestoring ? $t('sync.toolbar.restoring') : $t('sync.restore.restoreFromCloud') }}
@@ -1061,7 +1093,7 @@ const workflowSteps = computed(() => [
           </div>
           <div class="card version-history-card">
             <LocalTRP3VersionHistory
-              v-if="selectedAccount && wowPath"
+              v-if="selectedAccount && canUseLocal"
               :wow-path="wowPath"
               :account-id="selectedAccount"
               @restored="handleLocalVersionRestored"
@@ -1069,7 +1101,7 @@ const workflowSteps = computed(() => [
           </div>
           <div v-if="selectedAccount && currentBackup" class="card version-history-card">
             <AccountBackupVersionHistory
-              :account-id="selectedAccount"
+              :account-id="selectedAccount" :game-flavor="selectedFlavor"
               @restored="handleCloudVersionRestored"
             />
           </div>
@@ -1102,7 +1134,7 @@ const workflowSteps = computed(() => [
           <div v-else class="cloud-content">
             <div class="cloud-section version-history-card">
               <AccountBackupVersionHistory
-                :account-id="selectedAccount"
+                :account-id="selectedAccount" :game-flavor="selectedFlavor"
                 @restored="handleCloudVersionRestored"
               />
             </div>
@@ -2512,4 +2544,12 @@ const workflowSteps = computed(() => [
   .left-panel { width: 100%; min-width: auto; }
   .divider-handle { display: none; }
 }
+</style>
+
+<style scoped>
+.sync-target-settings{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:20px;padding:16px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-card-bg);font-size:13px}.sync-target-settings label{display:flex;gap:8px;align-items:center;min-width:0}.sync-target-settings select{max-width:430px;padding:8px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--color-text-main)}.sync-target-settings p{flex-basis:100%;font-size:12px;color:var(--color-text-secondary);margin:0}.sync-target-settings a{color:var(--color-accent)}
+</style>
+
+<style scoped>
+@media(max-width:600px){.sync-page{padding:12px 6px}.sync-target-settings{padding:14px;gap:12px}.sync-target-settings label{display:grid;flex-basis:100%;gap:8px}.sync-target-settings select{width:100%;max-width:100%;min-width:0;min-height:44px;font-size:16px}.sync-target-settings>div{width:100%;display:grid;gap:8px}.sync-target-settings button{min-height:44px}.topbar{flex-direction:column;align-items:stretch;gap:16px}.breadcrumbs{flex-wrap:wrap;font-size:12px}.mode-tabs{display:flex;flex-wrap:wrap;gap:6px}.mode-tabs button{min-height:44px;flex:1;padding:8px}.toolbar-actions{flex-direction:column;align-items:stretch;gap:12px}.account-info{min-width:0;width:100%}.account-select{width:100%;min-width:0;min-height:44px;font-size:16px}.path-info .value{overflow-wrap:anywhere;white-space:normal}.panel-header{flex-wrap:wrap;gap:8px;padding:14px}.right-body{padding:12px}.cloud-summary,.cloud-list{grid-template-columns:minmax(0,1fr)}.cloud-card{min-width:0}.cloud-header{flex-wrap:wrap;gap:8px}.version-history-card{min-width:0;max-width:100%}.modal{width:calc(100vw - 24px);max-height:calc(100dvh - 32px);overflow-y:auto;padding:16px}.confirm-table{overflow-x:auto}.btn-primary,.btn-secondary{min-height:44px}.sync-target-settings a{display:flex;align-items:center;min-height:44px}}
 </style>

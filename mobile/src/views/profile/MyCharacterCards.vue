@@ -159,6 +159,7 @@ onMounted(loadCards)
     </header>
 
     <main class="sub-body ledger-body">
+      <RouterLink class="tool-editor-entry" to="/tools/trp3">在线编辑器 / 子账号云端保存 <i class="ri-arrow-right-line" /></RouterLink>
       <section class="status-ledger" :aria-label="t('characterCards.management.statusSummary')">
         <div v-for="entry in statusLedger" :key="entry.status" :data-status-count="entry.status">
           <strong>{{ entry.count }}</strong>
@@ -731,4 +732,8 @@ onMounted(loadCards)
     font-size: 7px;
   }
 }
+</style>
+
+<style scoped>
+.tool-editor-entry{display:flex;align-items:center;gap:8px;min-height:44px;margin-top:12px;color:var(--color-accent);font-size:13px;flex-wrap:wrap}
 </style>

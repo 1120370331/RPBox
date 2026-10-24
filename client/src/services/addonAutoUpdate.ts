@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { configuredGameFlavor } from '@/utils/gameInstallations'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
@@ -40,7 +41,7 @@ function canAutoUpdate(target: AddonTarget) {
     wowPath: localStorage.getItem('wow_path') || '',
     flavor: localStorage.getItem('selected_flavor') || '_retail_',
   }
-  return localStorage.getItem(STORAGE_KEY) === 'true' && !!target.wowPath && targetKey(target) === targetKey(currentTarget)
+  return target.flavor === '_retail_' && localStorage.getItem(STORAGE_KEY) === 'true' && !!target.wowPath && targetKey(target) === targetKey(currentTarget)
 }
 
 function targetKey(target: AddonTarget) {
@@ -62,6 +63,10 @@ export function isAddonBusy(target: AddonTarget, id: string) {
 
 /** Shares concurrent installs and excludes conflicting installs/uninstalls for the same target. */
 export function runAddonOperation<T>(target: AddonTarget, id: string, action: 'install' | 'uninstall', operation: () => Promise<T>): Promise<T> {
+  const detectedFlavor = configuredGameFlavor(target.wowPath)
+  if (action === 'install' && id === 'rpbox' && (target.flavor !== '_retail_' || (detectedFlavor && detectedFlavor !== target.flavor))) {
+    return Promise.reject(new Error('当前 RPBox 安装包仅支持正式服，请在插件管理中选择匹配版本的目录和安装包。'))
+  }
   const key = operationKey(target, id)
   const existing = operations.get(key)
   if (existing) {

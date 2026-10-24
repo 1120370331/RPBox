@@ -12,7 +12,7 @@ defineProps<{
   hasMore?: boolean
 }>()
 defineEmits<{ refresh: []; retry: [] }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const failedImages = ref(new Set<string>())
 const contentTypes = {
   post: { icon: 'ri-article-line', route: '/community/post/' },
@@ -26,6 +26,27 @@ function cover(entry: HomeContent) {
   return getImageUrl(entry.kind === 'post' ? 'post-cover' : 'item-preview', entry.id, {
     w: 600, q: 80, v: entry.cover_updated_at || entry.updated_at,
   })
+}
+
+function metrics(entry: HomeContent) {
+  const values = [
+    entry.kind === 'item'
+      ? { label: t('home.feed.metrics.downloads'), icon: 'ri-download-2-line', value: entry.downloads }
+      : { label: t('home.feed.metrics.views'), icon: 'ri-eye-line', value: entry.view_count },
+    { label: t('home.feed.metrics.likes'), icon: 'ri-heart-3-line', value: entry.like_count },
+    { label: t('home.feed.metrics.favorites'), icon: 'ri-bookmark-3-line', value: entry.favorite_count },
+  ]
+  if (entry.kind === 'rpdb') {
+    values.push({ label: t('home.feed.metrics.lists'), icon: 'ri-list-check-3', value: entry.list_count })
+  } else if (entry.kind === 'post') {
+    values.push({ label: t('home.feed.metrics.comments'), icon: 'ri-chat-3-line', value: entry.comment_count })
+  }
+  return values
+}
+
+function formatCount(value?: number) {
+  if (value === undefined || !Number.isFinite(value)) return '—'
+  return new Intl.NumberFormat(locale.value, { notation: 'compact', maximumFractionDigits: 1 }).format(value)
 }
 </script>
 
@@ -46,26 +67,34 @@ function cover(entry: HomeContent) {
     </div>
     <p v-else-if="entries.length === 0 && !error" class="feed-empty">{{ t('home.feed.empty') }}</p>
     <div v-else class="feed-grid">
-      <RouterLink v-for="(entry, index) in entries" :key="homeContentKey(entry)" class="feed-card" :to="`${contentTypes[entry.kind].route}${entry.id}`">
-        <div class="feed-card__media">
+      <RouterLink v-for="(entry, index) in entries" :key="homeContentKey(entry)" class="work-card feed-card" :to="`${contentTypes[entry.kind].route}${entry.id}`">
+        <div class="work-card__media" :class="{ empty: !cover(entry) }">
           <img v-if="cover(entry)" :src="cover(entry)" alt="" loading="lazy" @error="failedImages.add(homeContentKey(entry))" />
-          <div v-else class="feed-card__placeholder"><i :class="contentTypes[entry.kind].icon" aria-hidden="true"></i></div>
-          <span v-if="featured" class="feed-card__rank" :aria-label="t('home.feed.rank', { rank: index + 1 })">{{ index + 1 }}</span>
-          <span class="feed-card__kind">{{ t(`home.feed.kinds.${entry.kind}`) }}</span>
+          <div v-else class="work-card__placeholder"><i :class="contentTypes[entry.kind].icon" aria-hidden="true"></i></div>
+          <div class="work-card__shade"></div>
+          <span class="work-card__type"><i :class="contentTypes[entry.kind].icon" aria-hidden="true"></i>{{ t(`home.feed.kinds.${entry.kind}`) }}</span>
+          <span v-if="featured" class="work-card__media-count" :aria-label="t('home.feed.rank', { rank: index + 1 })"><i class="ri-fire-line" aria-hidden="true"></i>{{ index + 1 }}</span>
+          <div class="work-card__headline"><h3>{{ entry.title }}</h3></div>
         </div>
-        <div class="feed-card__body">
-          <h3>{{ entry.title }}</h3>
-          <span class="feed-card__author">{{ entry.author_name }}</span>
-          <div class="feed-card__footer">
-            <span v-if="featured"><i class="ri-fire-line" aria-hidden="true"></i>{{ t('home.feed.weeklyScore', { score: entry.weekly_score }) }}</span>
-            <span v-else>{{ t(entry.reason === 'interest' ? 'home.feed.interestReason' : 'home.feed.popularReason') }}</span>
-            <i class="ri-arrow-right-line" aria-hidden="true"></i>
+        <div class="work-card__body">
+          <div class="work-card__details">
+            <div class="work-card__author">
+              <span class="author-mark">{{ entry.author_name?.charAt(0) || '?' }}</span>
+              <b>{{ entry.author_name }}</b>
+            </div>
+          </div>
+          <div class="work-card__metrics feed-card__metrics" :style="{ '--metrics-count': metrics(entry).length }" :aria-label="t('home.feed.metrics.label')">
+            <span v-for="metric in metrics(entry)" :key="metric.label" :title="metric.label" :aria-label="`${metric.label} ${formatCount(metric.value)}`">
+              <i :class="metric.icon" aria-hidden="true"></i><b>{{ formatCount(metric.value) }}</b>
+            </span>
           </div>
         </div>
       </RouterLink>
     </div>
   </section>
 </template>
+
+<style scoped src="./rpdb/RPDBWorkCard.css"></style>
 
 <style scoped>
 .home-content-row { min-width: 0; }
@@ -77,30 +106,18 @@ function cover(entry: HomeContent) {
 .feed-refresh:hover:not(:disabled), .feed-error button:hover { border-color: var(--color-accent); }
 .feed-refresh:disabled { opacity: 0.5; cursor: default; }
 .feed-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.feed-card { min-width: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-panel-bg); color: var(--color-text-main); text-decoration: none; box-shadow: var(--shadow-sm); transition: transform 0.18s ease, border-color 0.18s ease; }
-.feed-card:hover { transform: translateY(-3px); border-color: var(--color-accent); }
+.feed-card { text-decoration: none; }
 .feed-card:focus-visible, button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
-.feed-card__media { position: relative; height: 144px; overflow: hidden; background: var(--icon-bg); }
-.feed-card__media img { width: 100%; height: 100%; object-fit: cover; }
-.feed-card__placeholder { display: grid; place-items: center; width: 100%; height: 100%; color: var(--icon-color); background: linear-gradient(140deg, var(--icon-bg), var(--color-card-bg)); }
-.feed-card__placeholder > i { font-size: 40px; opacity: 0.7; }
-.feed-card__rank { position: absolute; left: 12px; top: 12px; display: grid; place-items: center; width: 30px; height: 34px; background: var(--btn-primary-bg); color: var(--btn-primary-text); border-radius: 4px 4px 10px 10px; font-family: 'Consolas', monospace; font-weight: 700; }
-.feed-card__kind { position: absolute; right: 10px; bottom: 10px; padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-panel-bg); color: var(--color-text-main); font-size: 11px; }
-.feed-card__body { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
-.feed-card h3 { min-height: 44px; margin: 0; font-size: 15px; line-height: 22px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.feed-card__author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); font-size: 12px; }
-.feed-card__footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: 11px; }
-.feed-card__footer span { display: inline-flex; align-items: center; gap: 5px; }
-.feed-card__footer > i { color: var(--color-accent); }
+.feed-card__metrics { grid-template-columns: repeat(var(--metrics-count, 4), minmax(0, 1fr)); }
 .feed-empty, .feed-error { margin: 0; padding: 24px; border: 1px dashed var(--color-border); border-radius: 12px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.7; }
 .feed-error { margin-bottom: 12px; }
 .feed-error button { margin-left: 8px; padding: 4px 8px; }
-.feed-skeleton { overflow: hidden; min-height: 265px; background: var(--color-panel-bg); border: 1px solid var(--color-border); border-radius: 14px; }
-.feed-skeleton div { height: 144px; background: var(--color-card-bg); }
+.feed-skeleton { overflow: hidden; min-height: 250px; background: var(--color-card-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.feed-skeleton div { height: 180px; background: var(--color-panel-bg); }
 .feed-skeleton span { display: block; height: 12px; margin: 20px 16px; border-radius: 4px; background: var(--color-card-bg); }
 .feed-skeleton span:last-child { width: 40%; }
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 680px) { .feed-grid { grid-template-columns: 1fr; } .feed-card__media { height: 180px; } .feed-heading { align-items: flex-start; } }
+@media (max-width: 680px) { .feed-grid { grid-template-columns: 1fr; } .feed-heading { align-items: flex-start; } }
 @media (prefers-reduced-motion: reduce) { .feed-card { transition: none; } .feed-card:hover { transform: none; } .spinning { animation: none; } }
 </style>

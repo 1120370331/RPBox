@@ -30,6 +30,21 @@ const router = createRouter({
       component: () => import('./views/legal/PrivacyPolicy.vue'),
     },
     {
+      path: '/tools',
+      component: () => import('./views/tools/ToolLayout.vue'),
+      children: [
+        { path: '', name: 'tools', component: () => import('../../client/src/views/tools/Toolbox.vue') },
+        { path: 'rpbox', name: 'tool-rpbox', component: () => import('./views/tools/RPBoxTool.vue') },
+        { path: 'rpbox/install', name: 'tool-rpbox-install', component: () => import('./views/tools/PluginGuide.vue') },
+        { path: 'trp3/:id?', name: 'tool-trp3', component: () => import('../../client/src/views/tools/TRP3Editor.vue') },
+      ],
+    },
+    {
+      path: '/sync',
+      component: () => import('./views/tools/ToolLayout.vue'),
+      children: [{ path: '', name: 'cloud-backups', component: () => import('./views/tools/CloudBackups.vue') }],
+    },
+    {
       path: '/',
       component: () => import('./components/MobileLayout.vue'),
       children: [

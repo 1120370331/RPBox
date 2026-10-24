@@ -13,7 +13,7 @@ import {
 import { useDialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
 
-const props = defineProps<{ accountId: string }>()
+const props = defineProps<{ accountId: string; gameFlavor?: string }>()
 const emit = defineEmits<{
   restored: [backup: AccountBackup]
 }>()
@@ -51,7 +51,7 @@ const detailProfiles = computed(() => {
   }
 })
 
-watch(() => props.accountId, () => void loadVersions())
+watch(() => [props.accountId, props.gameFlavor], () => void loadVersions())
 onMounted(() => void loadVersions())
 
 function formatDate(value: string) {
@@ -91,7 +91,7 @@ async function loadVersions() {
   }
   loading.value = true
   try {
-    versions.value = await getAccountBackupVersions(props.accountId)
+    versions.value = await getAccountBackupVersions(props.accountId, props.gameFlavor)
   } catch (error: unknown) {
     versions.value = []
     toast.error(error instanceof Error ? error.message : t('characterCards.versions.cloud.loadFailed'))
@@ -108,7 +108,7 @@ async function toggleDetail(version: AccountBackupVersion) {
   }
   busyId.value = version.id
   try {
-    detail.value = await getAccountBackupVersion(props.accountId, version.id)
+    detail.value = await getAccountBackupVersion(props.accountId, version.id, props.gameFlavor)
     expandedId.value = version.id
   } catch (error: unknown) {
     toast.error(error instanceof Error ? error.message : t('characterCards.versions.cloud.detailFailed'))
@@ -127,7 +127,7 @@ async function saveRename(version: AccountBackupVersion) {
   if (!name || busyId.value !== null) return
   busyId.value = version.id
   try {
-    const updated = await renameAccountBackupVersion(props.accountId, version.id, name)
+    const updated = await renameAccountBackupVersion(props.accountId, version.id, name, props.gameFlavor)
     versions.value = versions.value.map((item) => item.id === updated.id ? { ...item, ...updated } : item)
     renameId.value = null
     toast.success(t('characterCards.versions.cloud.renamed'))
@@ -155,6 +155,7 @@ async function restoreVersion(version: AccountBackupVersion) {
       props.accountId,
       version.id,
       t('characterCards.versions.cloud.restoreSnapshotName', { time: formatDate(new Date().toISOString()) }),
+      props.gameFlavor,
     )
     emit('restored', result.backup)
     await loadVersions()
@@ -176,7 +177,7 @@ async function deleteVersion(version: AccountBackupVersion) {
   if (!confirmed) return
   busyId.value = version.id
   try {
-    await deleteAccountBackupVersion(props.accountId, version.id)
+    await deleteAccountBackupVersion(props.accountId, version.id, props.gameFlavor)
     versions.value = versions.value.filter((item) => item.id !== version.id)
     if (expandedId.value === version.id) {
       expandedId.value = null
@@ -279,4 +280,12 @@ async function deleteVersion(version: AccountBackupVersion) {
 @keyframes cloud-history-spin { to { transform: rotate(360deg); } }
 @media (max-width: 680px) { .cloud-version { grid-template-columns: 42px minmax(0, 1fr); } .cloud-version__actions { grid-column: 2; max-width: none; justify-content: flex-start; } .cloud-version__detail { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { .cloud-history__spin { animation: none; } }
+</style>
+
+<style scoped>
+@media(max-width:600px){.cloud-history{padding:14px 10px}.cloud-version{padding:12px 8px;gap:10px;grid-template-columns:32px minmax(0,1fr)}.cloud-history button{min-height:44px}.cloud-version__actions{grid-column:1/-1;gap:8px}.cloud-version__actions button{flex:1}.cloud-version__rename{grid-template-columns:1fr 1fr}.cloud-version__rename input{grid-column:1/-1;font-size:16px;min-height:44px}.cloud-version__profiles b{overflow-wrap:anywhere;max-width:100%}.cloud-version__name{overflow-wrap:anywhere}}
+</style>
+
+<style scoped>
+@media(max-width:600px){.cloud-history,.cloud-history__list{min-width:0;max-width:100%}.cloud-history__header>div{min-width:0}.cloud-history__header h3{overflow-wrap:anywhere}.cloud-history__header button{flex-shrink:0}.cloud-version__source{overflow-wrap:anywhere}.cloud-version__number{width:32px;height:32px}}
 </style>

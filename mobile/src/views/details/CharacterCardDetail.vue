@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TRP3AboutPreview from '../../../../client/src/components/tools/TRP3AboutPreview.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -680,7 +681,8 @@ watch(activeTab, hydrateRichLinks)
         </section>
 
         <section v-show="activeTab === 'background'" class="detail-sheet" role="tabpanel">
-          <div v-if="backgroundHtml" ref="backgroundRef" class="rich-content" v-html="backgroundHtml" @click="handleRichContentClick" />
+          <TRP3AboutPreview v-if="card.trp3_about" :about="card.trp3_about" />
+          <div v-else-if="backgroundHtml" ref="backgroundRef" class="rich-content" v-html="backgroundHtml" @click="handleRichContentClick" />
           <p v-else class="empty-section">{{ t('characterCards.detail.emptySection') }}</p>
         </section>
 

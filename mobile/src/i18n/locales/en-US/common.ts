@@ -1,5 +1,7 @@
 export default {
   button: {
+    confirm: 'Confirm',
+    cancel: 'Cancel',
     back: 'Back',
     prev: 'Previous',
     next: 'Next',

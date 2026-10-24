@@ -10,14 +10,16 @@ const modal = defineComponent({ template:'<div><slot /></div>' })
 afterEach(() => { delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__; localStorage.clear(); vi.clearAllMocks() })
 
 describe('CharacterCardPicker', () => {
-  it('keeps source selection optional and explains local availability in the browser', async () => {
-    mocks.sources.mockResolvedValue({ sources:[{ backup_id:1, account_id:'A', profile_id:'P', display_name:'云端游侠', class:'游侠' }] })
+  it('searches names without categorizing cards by source or matching their profession', async () => {
+    mocks.sources.mockResolvedValue({ sources:[{ backup_id:1, account_id:'A', profile_id:'P', display_name:'艾琳晨星', class:'游侠' }] })
     const wrapper = mount(CharacterCardPicker,{ props:{ modelValue:true,cards:[] },global:{stubs:{RModal:modal,RouterLink:true}} })
     await flushPromises()
-    expect((wrapper.get('[aria-label="人物卡来源"]').element as HTMLSelectElement).value).toBe('')
-    await wrapper.get('[aria-label="人物卡关键词"]').setValue('游侠')
+    expect(wrapper.find('select').exists()).toBe(false)
+    expect(wrapper.find('.character-choice__source').exists()).toBe(false)
+    await wrapper.get('[aria-label="人物卡名称"]').setValue('晨星')
     expect(wrapper.findAll('.character-choice')).toHaveLength(1)
-    await wrapper.get('[aria-label="人物卡来源"]').setValue('local')
+    await wrapper.get('[aria-label="人物卡名称"]').setValue('游侠')
+    expect(wrapper.findAll('.character-choice')).toHaveLength(0)
     expect(wrapper.text()).toContain('需要在 RPBox 桌面客户端读取')
     expect(mocks.invoke).not.toHaveBeenCalled()
     wrapper.unmount()
@@ -33,7 +35,7 @@ describe('CharacterCardPicker', () => {
     const wrapper=mount(CharacterCardPicker,{props:{modelValue:true,cards:[]},global:{stubs:{RModal:modal,RouterLink:true}}})
     await flushPromises()
     expect(mocks.invoke).toHaveBeenCalledWith('scan_profiles',{wowPath:'C:/WoW/_retail_'})
-    await wrapper.get('[aria-label="人物卡关键词"]').setValue('艾琳 法师')
+    await wrapper.get('[aria-label="人物卡名称"]').setValue('艾琳')
     await wrapper.get('.character-choice').trigger('click')
     const choice=wrapper.emitted('select')?.[0]?.[0] as {kind:string;source:{profile_id:string;profile:unknown}}
     expect(choice.kind).toBe('local');expect(choice.source.profile_id).toBe('two')

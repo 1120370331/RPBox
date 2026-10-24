@@ -80,7 +80,7 @@ func TestMigrateAccountBackupUniqueIndex(t *testing.T) {
 	if err := db.Raw("PRAGMA index_info(idx_user_account)").Scan(&columns).Error; err != nil {
 		t.Fatalf("index info after migration: %v", err)
 	}
-	if len(columns) != 2 || columns[0].Name != "user_id" || columns[1].Name != "account_id" {
+	if len(columns) != 3 || columns[0].Name != "user_id" || columns[1].Name != "account_id" || columns[2].Name != "game_flavor" {
 		t.Fatalf("unexpected migrated index columns: %+v", columns)
 	}
 

@@ -19,6 +19,26 @@ on:
         options:
           - stable
           - beta
+      builder:
+        description: 'Windows builder (start scripts/start-local-runner.ps1 before choosing local)'
+        required: true
+        default: hosted
+        type: choice
+        options:
+          - hosted
+          - local
+      build_only:
+        description: 'Build and verify a temporary upload without publishing an update'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-client-production
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: '20'
@@ -35,12 +55,15 @@ jobs:
       - name: Resolve version and channel
         id: meta
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-            CHANNEL="${{ inputs.channel }}"
+            VERSION="$INPUT_VERSION"
+            CHANNEL="$INPUT_CHANNEL"
           else
             TAG="${GITHUB_REF_NAME}"
             CHANNEL="stable"
@@ -88,234 +111,146 @@ jobs:
           echo "Resolved client release: version=$VERSION channel=$CHANNEL metadata_file=$METADATA_FILE"
 
   build-windows:
-    name: Build Windows Client
-    runs-on: windows-latest
+    name: Build and Publish Windows Client
+    # Tags keep using hosted Windows. Local execution is an explicit dispatch choice.
+    runs-on: ${{ fromJSON(inputs.builder == 'local' && '["self-hosted", "Windows", "X64", "rpbox-release"]' || '["windows-latest"]') }}
     needs: release-meta
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_VERSION: ${{ needs.release-meta.outputs.version }}
+      RELEASE_CHANNEL: ${{ needs.release-meta.outputs.channel }}
+      RUSTUP_TOOLCHAIN: stable
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          # Avoid downloading mobile screenshots, marketing assets and reference repos.
+          sparse-checkout: |
+            client
+            shared
+            scripts
+
+      - name: Configure persistent local build cache
+        run: |
+          $target = Join-Path $env:GITHUB_WORKSPACE 'client/src-tauri/target'
+          if ('${{ runner.environment }}' -eq 'self-hosted') {
+            # Outside checkout: checkout can safely clean source and node_modules.
+            $target = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_WORKSPACE '../_rpbox-cache/cargo-target'))
+          }
+          "CARGO_TARGET_DIR=$target" >> $env:GITHUB_ENV
+          "RELEASE_ARTIFACT_DIR=$(Join-Path $env:RUNNER_TEMP "client-release-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT")" >> $env:GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          # The local npm cache already persists; do not archive the user's global cache.
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: client/package-lock.json
 
-      - name: Setup Rust
+      - name: Check deployment connection before compiling
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          if (-not $env:SERVER_HOST) { throw 'Missing deployment host.' }
+          $knownHosts = Join-Path $env:RUNNER_TEMP 'rpbox-known-hosts'
+          if ($env:SSH_KNOWN_HOSTS) {
+            $env:SSH_KNOWN_HOSTS | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
+          } else {
+            # Windows OpenSSH 9.5 keyscan has KEX bugs; use Git for Windows' scanner.
+            $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
+            if (-not (Test-Path -LiteralPath $keyscan)) { $keyscan = (Get-Command ssh-keyscan).Source }
+            $keys = & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST
+            if ($LASTEXITCODE -ne 0 -or -not $keys) { throw 'SSH host-key scan failed before build.' }
+            $keys | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
+          }
+          "SSH_KNOWN_HOSTS_FILE=$knownHosts" >> $env:GITHUB_ENV
+
+      - name: Setup Rust on hosted Windows
+        if: runner.environment == 'github-hosted'
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies on hosted Windows
+        if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: client/src-tauri -> target
+
+      - name: Verify local Rust toolchain
+        if: runner.environment == 'self-hosted'
+        run: |
+          rustup run stable cargo --version
+          if ($LASTEXITCODE -ne 0) { throw 'Install stable Rust before starting the runner.' }
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: client
 
       - name: Sync client version files
-        run: node scripts/sync-client-version.mjs "${{ needs.release-meta.outputs.version }}"
+        run: node scripts/sync-client-version.mjs $env:RELEASE_VERSION
 
-      - name: Show synced versions
-        shell: pwsh
+      - name: Prepare isolated NSIS tools
         run: |
-          Write-Host "tauri.conf.json version:"
-          (Get-Content client/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          Write-Host "Cargo.toml package version:"
-          (Select-String -Path client/src-tauri/Cargo.toml -Pattern '^version = ".*"$' | Select-Object -First 1).Line
-          Write-Host "package.json version:"
-          (Get-Content client/package.json -Raw | ConvertFrom-Json).version
+          ./scripts/prepare-windows-bundler.ps1 -TargetDirectory $env:CARGO_TARGET_DIR -ConfigPath (Join-Path $env:RUNNER_TEMP 'tauri-ci-config.json')
 
-      - name: Build Tauri app
-        run: npm run tauri build
+      - name: Build signed NSIS installer
         working-directory: client
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VITE_API_BASE: https://ksxvodevhonx.sealosbja.site/api/v1
-
-      - name: List bundle outputs
-        shell: pwsh
         run: |
-          Get-ChildItem -Recurse -Force client/src-tauri/target/release/bundle
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Missing updater signing key.' }
+          $installer = Join-Path $env:CARGO_TARGET_DIR "release/bundle/nsis/RPBox_$($env:RELEASE_VERSION)_x64-setup.exe"
+          # Never reuse a stale same-version package or signature after a failed build.
+          foreach ($file in @($installer, "$installer.sig")) {
+            if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
+          }
+          npm run tauri -- build --ci --bundles nsis --config (Join-Path $env:RUNNER_TEMP 'tauri-ci-config.json') -- --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Tauri build failed.' }
 
-      - name: Upload artifacts
+      - name: Prepare exact release artifacts
+        env:
+          TAG_NAME: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          ./scripts/prepare-client-release.ps1 -Version $env:RELEASE_VERSION -Channel $env:RELEASE_CHANNEL -BundleDirectory (Join-Path $env:CARGO_TARGET_DIR 'release/bundle/nsis') -OutputDirectory $env:RELEASE_ARTIFACT_DIR -TagName $env:TAG_NAME
+
+      - name: Archive installer and signature
         uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts
-          path: client/src-tauri/target/release/bundle/**
+          path: |
+            ${{ env.RELEASE_ARTIFACT_DIR }}/RPBox_${{ env.RELEASE_VERSION }}_x64-setup.exe
+            ${{ env.RELEASE_ARTIFACT_DIR }}/RPBox_${{ env.RELEASE_VERSION }}_x64-setup.exe.sig
+            ${{ env.RELEASE_ARTIFACT_DIR }}/latest.json
+            ${{ env.RELEASE_ARTIFACT_DIR }}/SHA256SUMS
           if-no-files-found: error
+          compression-level: 0
 
-  deploy:
-    name: Deploy to Server
-    runs-on: ubuntu-latest
-    needs:
-      - release-meta
-      - build-windows
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-artifacts
-          path: artifacts
-
-      - name: List downloaded artifacts
-        run: |
-          echo "=== Artifacts directory structure ==="
-          find artifacts -type f | head -50
-          echo "=== Looking for EXE files ==="
-          find artifacts -name "*.exe" -type f
-          echo "=== Looking for SIG files ==="
-          find artifacts -name "*.sig" -type f
-
-      - name: Prepare updater metadata
+      - name: Upload directly from the builder (verify only when build_only)
         env:
-          VERSION: ${{ needs.release-meta.outputs.version }}
-          CHANNEL: ${{ needs.release-meta.outputs.channel }}
-          TAG_NAME: ${{ github.ref_name }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          RELEASE_PATH: ${{ secrets.RELEASE_PATH }}
+          VERIFY_ONLY: ${{ inputs.build_only == true }}
         run: |
-          DEFAULT_NOTES="修复若干已知问题，优化使用体验并提升稳定性。"
-          NOTES_FILE="client/release-notes/${VERSION}.txt"
-          if [ "$CHANNEL" = "beta" ] && [ -f "client/release-notes/beta/${VERSION}.txt" ]; then
-            NOTES_FILE="client/release-notes/beta/${VERSION}.txt"
-          fi
-          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          NOTES_FROM_FILE=""
-          if [ -f "$NOTES_FILE" ]; then
-            NOTES_FROM_FILE="$(cat "$NOTES_FILE")"
-          fi
-
-          TAG_NOTES="$(git for-each-ref "refs/tags/${TAG_NAME}" --format='%(contents)')"
-          if [ -z "$TAG_NOTES" ] && [ -z "$NOTES_FROM_FILE" ]; then
-            TAG_NOTES="$DEFAULT_NOTES"
-          fi
-
-          export VERSION PUB_DATE NOTES_FROM_FILE TAG_NOTES
-          export CHANNEL
-          python3 - <<'PY'
-          import json
-          import os
-
-          version = os.environ["VERSION"]
-          channel = os.environ["CHANNEL"]
-          pub_date = os.environ["PUB_DATE"]
-          notes = (os.environ.get("NOTES_FROM_FILE") or "").strip()
-          if not notes:
-              notes = (os.environ.get("TAG_NOTES") or "").strip()
-
-          notes = notes.replace("\r\n", "\n").replace("\r", "\n")
-
-          data = {
-              "latest_version": version,
-              "notes": notes,
-              "pub_date": pub_date,
-              "channel": channel,
-          }
-
-          with open("latest.json", "w", encoding="utf-8") as f:
-              json.dump(data, f, ensure_ascii=False)
-          PY
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known_hosts
-        run: ssh-keyscan -H -p 2233 ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Upload to server
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          VERSION="${{ needs.release-meta.outputs.version }}"
-          CHANNEL="${{ needs.release-meta.outputs.channel }}"
-          METADATA_FILE="${{ needs.release-meta.outputs.metadata_file }}"
-          REMOTE_BASE="${{ secrets.RELEASE_PATH }}"
-          REMOTE_DIR="$REMOTE_BASE/$VERSION"
-
-          # 查找构建产物
-          EXE_PATH=$(find artifacts -type f -path "*/nsis/*" -name "RPBox_*_x64-setup.exe" | head -n1)
-          [ -z "$EXE_PATH" ] && EXE_PATH=$(find artifacts -type f -name "RPBox_*_x64-setup.exe" | head -n1)
-          [ -z "$EXE_PATH" ] && { echo "ERROR: setup exe not found"; exit 1; }
-          SIG_PATH="${EXE_PATH}.sig"
-          [ ! -f "$SIG_PATH" ] && { echo "ERROR: signature not found"; exit 1; }
-
-          SSH_HOST="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
-          SSH_OPTS=(-p 2233 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=30)
-          SCP_OPTS=(-P 2233 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o ConnectTimeout=30)
-
-          upload_with_retry() {
-            local src="$1"
-            local dest="$2"
-            local attempt
-            for attempt in 1 2 3; do
-              if scp "${SCP_OPTS[@]}" "$src" "${SSH_HOST}:$dest"; then
-                return 0
-              fi
-
-              if [ "$attempt" -lt 3 ]; then
-                echo "Upload failed for $src (attempt $attempt), retrying..."
-                sleep $((attempt * 15))
-              fi
-            done
-
-            echo "ERROR: failed to upload $src after 3 attempts"
-            return 1
-          }
-
-          run_ssh_with_retry() {
-            local command="$1"
-            local attempt
-            for attempt in 1 2 3; do
-              if ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$command"; then
-                return 0
-              fi
-
-              if [ "$attempt" -lt 3 ]; then
-                echo "Remote command failed (attempt $attempt), retrying..."
-                sleep $((attempt * 15))
-              fi
-            done
-
-            echo "ERROR: remote command failed after 3 attempts"
-            return 1
-          }
-
-          run_ssh_with_retry "mkdir -p '$REMOTE_DIR' '$REMOTE_BASE'"
-
-          REMOTE_EXE_FINAL="$REMOTE_DIR/$(basename "$EXE_PATH")"
-          REMOTE_EXE_TMP="$REMOTE_EXE_FINAL.part"
-          REMOTE_SIG_FINAL="$REMOTE_DIR/$(basename "$SIG_PATH")"
-          REMOTE_SIG_TMP="$REMOTE_SIG_FINAL.part"
-          REMOTE_META_VER_FINAL="$REMOTE_DIR/latest.json"
-          REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
-          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/$METADATA_FILE"
-          REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
-
-          upload_with_retry "$EXE_PATH" "$REMOTE_EXE_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_EXE_TMP' '$REMOTE_EXE_FINAL'"
-
-          upload_with_retry "$SIG_PATH" "$REMOTE_SIG_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_SIG_TMP' '$REMOTE_SIG_FINAL'"
-
-          upload_with_retry latest.json "$REMOTE_META_VER_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_META_VER_TMP' '$REMOTE_META_VER_FINAL'"
-
-          upload_with_retry latest.json "$REMOTE_META_LATEST_TMP"
-          run_ssh_with_retry "mv -f '$REMOTE_META_LATEST_TMP' '$REMOTE_META_LATEST_FINAL'"
-
-          echo "Uploaded $CHANNEL client release metadata to $REMOTE_META_LATEST_FINAL"
+          ./scripts/publish-client-release.ps1 -Version $env:RELEASE_VERSION -Channel $env:RELEASE_CHANNEL -ArtifactDirectory $env:RELEASE_ARTIFACT_DIR -ServerHost $env:SERVER_HOST -ServerUser $env:SERVER_USER -RemotePath $env:RELEASE_PATH -VerifyOnly:($env:VERIFY_ONLY -eq 'true')
 
   update-pages:
     name: Update GitHub Pages
     runs-on: ubuntu-latest
     needs:
       - release-meta
-      - deploy
-    if: needs.release-meta.outputs.channel == 'stable'
+      - build-windows
+    if: needs.release-meta.outputs.channel == 'stable' && inputs.build_only != true
     permissions:
       contents: write
     steps:

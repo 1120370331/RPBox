@@ -3,7 +3,24 @@ import { request } from '@shared/api/request'
 export type CharacterCardStatus = 'draft' | 'published'
 export type CharacterCardVisibility = 'private' | 'public'
 export type CharacterCardReviewStatus = 'none' | 'pending' | 'approved' | 'rejected'
-export type CharacterCardSourceType = 'blank' | 'backup'
+export type CharacterCardSourceType = 'blank' | 'backup' | 'local'
+
+export interface TRP3AboutSection {
+  TX: string
+  IC?: string
+  BK?: number
+  [key: string]: unknown
+}
+
+export interface TRP3About {
+  TE: 1 | 2 | 3
+  BK?: number
+  MU?: number
+  T1: TRP3AboutSection
+  T2: TRP3AboutSection[]
+  T3: { PH: TRP3AboutSection; PS: TRP3AboutSection; HI: TRP3AboutSection }
+  [key: string]: unknown
+}
 
 export interface CharacterCardPortrait {
   id: number
@@ -55,6 +72,8 @@ export interface CharacterCardPersonalityTrait {
 }
 
 export interface CharacterCardSource {
+  game_flavor?: string
+  linked_card_id?: number
   backup_id: number
   account_id: string
   profile_id: string
@@ -72,6 +91,7 @@ export interface CharacterCardSource {
 }
 
 export interface CharacterCardSummary {
+  source_game_flavor?: string
   id: number
   user_id: number
   character_id?: number | null
@@ -114,6 +134,7 @@ export interface CharacterCardSummary {
 }
 
 export interface CharacterCard extends CharacterCardSummary {
+  trp3_about?: TRP3About | null
   background_story: string
   first_impression: string
   impressions: CharacterCardImpression[]
@@ -128,12 +149,16 @@ export interface CharacterCardShare {
 }
 
 export interface CreateCharacterCardRequest {
+  source_account_id?: string
+  source_game_flavor?: string
+  local_profile?: Record<string, unknown>
   source_type: CharacterCardSourceType
   source_backup_id?: number
   source_profile_id?: string
 }
 
 export interface UpdateCharacterCardRequest {
+  trp3_about?: TRP3About | null
   character_id?: number | null
   first_name: string
   last_name: string
@@ -284,4 +309,17 @@ export async function deleteCharacterCardPortrait(
 ): Promise<CharacterCard> {
   const response = await request.delete<unknown>(`/character-cards/${id}/portraits/${portraitId}`)
   return unwrapCharacterCard(response)
+}
+
+export interface CharacterCardSaveTarget { backup_id: number; profile_id: string; expected_version: number }
+export async function getCharacterCardTargets(id: number): Promise<{ targets: Array<{ backup_id: number; profile_id: string }> }> {
+  return unwrapData(await request.get<{ targets: Array<{ backup_id: number; profile_id: string }> }>(`/character-cards/${id}/cloud-targets`))
+}
+export async function saveCharacterCardToCloud(id: number, payload: Partial<UpdateCharacterCardRequest>, targets: CharacterCardSaveTarget[]): Promise<CharacterCard> {
+  return unwrapCharacterCard(await request.put(`/character-cards/${id}/save-cloud`, { ...payload, cloud_targets: targets }))
+}
+
+export interface CharacterCardTRP3Export { profile_id: string; profile: Record<string, unknown>; lua: string }
+export async function getCharacterCardTRP3Lua(id: number): Promise<CharacterCardTRP3Export> {
+  return unwrapData(await request.get<CharacterCardTRP3Export>(`/character-cards/${id}/trp3-lua`))
 }

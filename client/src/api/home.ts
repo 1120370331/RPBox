@@ -5,6 +5,12 @@ export interface HomeContent {
   kind: 'post' | 'rpdb' | 'item'
   title: string
   author_name: string
+  view_count?: number
+  like_count?: number
+  favorite_count?: number
+  comment_count?: number
+  list_count?: number
+  downloads?: number
   has_cover: boolean
   cover_url: string
   cover_updated_at?: string

@@ -26,6 +26,11 @@ async fn detect_wow_paths() -> Vec<wow_path::WowInstallation> {
 }
 
 #[tauri::command]
+async fn inspect_wow_installations(path: String) -> Vec<wow_path::WowInstallation> {
+    wow_path::inspect_wow_installations(&path)
+}
+
+#[tauri::command]
 async fn validate_wow_path(path: String) -> bool {
     wow_path::validate_wow_path(&path)
 }
@@ -904,6 +909,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             parse_trp3_file,
             detect_wow_paths,
+            inspect_wow_installations,
             validate_wow_path,
             normalize_wow_path,
             scan_profiles,

@@ -21,6 +21,7 @@ const notificationStore = useNotificationStore()
 const sidebarBadgesStore = useSidebarBadgesStore()
 const router = useRouter()
 const route = useRoute()
+const compactTools = computed(() => route.path.startsWith('/tools') || route.path.startsWith('/sync'))
 const mounted = ref(false)
 const jumpReturn = ref<JumpReturnInfo | null>(null)
 const mainContentRef = ref<HTMLElement | null>(null)
@@ -340,7 +341,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-layout" :class="{ 'animate-in': mounted }">
+  <div class="app-layout" :class="{ 'animate-in': mounted, 'compact-tools': compactTools }">
+    <nav v-if="compactTools" class="tools-mobile-navigation" aria-label="工具导航"><RouterLink to="/tools"><i class="ri-tools-line" /> 工具箱</RouterLink><RouterLink to="/sync">人物卡备份</RouterLink><RouterLink :to="userStore.user ? `/user/${userStore.user.id}` : '/login'">个人主页</RouterLink></nav>
     <!-- 侧边栏 -->
     <aside class="sidebar">
       <div class="logo-area">
@@ -1011,4 +1013,8 @@ onBeforeUnmount(() => {
     gap: 7px;
   }
 }
+</style>
+
+<style scoped>
+.tools-mobile-navigation{display:none}@media(max-width:600px){.app-layout.compact-tools{flex-direction:column;height:100dvh}.compact-tools .sidebar{display:none}.compact-tools .main-content{min-width:0;min-height:0;padding:10px 6px max(16px,env(safe-area-inset-bottom))}.tools-mobile-navigation{display:flex;flex-shrink:0;gap:12px;justify-content:space-between;align-items:center;padding:env(safe-area-inset-top,0px) 12px 0;background:var(--color-panel-bg);border-bottom:1px solid var(--color-border)}.tools-mobile-navigation a{display:flex;align-items:center;gap:6px;min-height:48px;text-decoration:none;color:var(--color-text-main);font-size:13px}}
 </style>

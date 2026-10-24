@@ -11,8 +11,8 @@ export default {
     refresh: 'Refresh', retry: 'Try again', loading: 'Loading content',
     empty: 'No public content yet. Explore the community.',
     loadFailed: 'Could not load content. Please try again.', noMore: 'No more recommendations available yet',
-    rank: 'Seven-day popularity rank {rank}', weeklyScore: 'Weekly popularity {score}',
-    interestReason: 'Matches your interests', popularReason: 'Popular recently',
+    rank: 'Seven-day popularity rank {rank}',
+    metrics: { label: 'Content statistics', views: 'Views', likes: 'Likes', favorites: 'Favorites', comments: 'Comments', lists: 'Added to lists', downloads: 'Downloads' },
     kinds: { post: 'Community', rpdb: 'RP Database', item: 'Creative Market' },
   },
   quickActions: {

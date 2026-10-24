@@ -25,7 +25,7 @@ func (s *Server) listAccountBackups(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	var backups []model.AccountBackup
 	if err := database.DB.Where("user_id = ?", userID).
-		Select("id, user_id, account_id, profiles_count, tools_count, runtime_size_kb, checksum, version, created_at, updated_at").
+		Select("id, user_id, account_id, game_flavor, profiles_count, tools_count, runtime_size_kb, checksum, version, created_at, updated_at").
 		Order("updated_at DESC, id DESC").Find(&backups).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询备份失败"})
 		return
@@ -48,6 +48,7 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	var req struct {
 		AccountID      string `json:"account_id" binding:"required"`
+		GameFlavor     string `json:"game_flavor"`
 		ProfilesData   string `json:"profiles_data" binding:"required"`
 		ProfilesCount  int    `json:"profiles_count"`
 		ToolsData      string `json:"tools_data"`
@@ -64,6 +65,10 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": validator.TranslateError(err)})
+		return
+	}
+	if !validGameFlavor(req.GameFlavor) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "游戏版本无效"})
 		return
 	}
 	if err := validateCharacterCardSourceAccountID(req.AccountID); err != nil {
@@ -84,14 +89,14 @@ func (s *Server) upsertAccountBackup(c *gin.Context) {
 		req.AccountID, req.ProfilesCount, len(req.ToolsData), req.ToolsCount, len(req.RuntimeData), req.RuntimeSizeKB, len(req.RawTrp3Lua), len(req.RawTrp3Data), len(req.RawTrp3Ext))
 
 	var existing model.AccountBackup
-	err = database.DB.Where("user_id = ? AND account_id = ?", userID, req.AccountID).First(&existing).Error
+	err = database.DB.Where("user_id = ? AND account_id = ? AND game_flavor = ?", userID, req.AccountID, req.GameFlavor).First(&existing).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		backup := model.AccountBackup{
-			UserID: userID, AccountID: req.AccountID,
+			UserID: userID, AccountID: req.AccountID, GameFlavor: req.GameFlavor,
 			ProfilesData: req.ProfilesData, ProfilesCount: req.ProfilesCount,
 			ToolsData: req.ToolsData, ToolsCount: req.ToolsCount,
 			RuntimeData: req.RuntimeData, RuntimeSizeKB: req.RuntimeSizeKB,
@@ -149,6 +154,9 @@ func (s *Server) deleteAccountBackup(c *gin.Context) {
 	}
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("backup_id = ?", backup.ID).Delete(&model.AccountBackupVersion{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("backup_id = ?", backup.ID).Delete(&model.CharacterCardTarget{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&backup).Error
@@ -281,7 +289,7 @@ func ownedAccountBackup(c *gin.Context) (model.AccountBackup, bool) {
 		return model.AccountBackup{}, false
 	}
 	var backup model.AccountBackup
-	if err := database.DB.Where("user_id = ? AND account_id = ?", userID, accountID).First(&backup).Error; err != nil {
+	if err := database.DB.Where("user_id = ? AND account_id = ? AND game_flavor = ?", userID, accountID, c.Query("game_flavor")).First(&backup).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "备份不存在"})
 		return model.AccountBackup{}, false
 	}

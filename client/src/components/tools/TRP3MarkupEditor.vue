@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import RModal from '@/components/RModal.vue'
+import RModal from '../RModal.vue'
 import TRP3IconPicker from './TRP3IconPicker.vue'
 const props = withDefaults(defineProps<{ modelValue: string; label?: string; rows?: number }>(), { label: '关于内容', rows: 16 })
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -43,4 +43,10 @@ function insertMedia() {
 </template>
 <style scoped>
 .trp3-toolbar{border:1px solid #75674b;padding:8px 10px 10px;margin:0 0 10px;border-radius:3px}.trp3-toolbar legend{margin:auto;padding:0 8px;color:#ffd46b;font-size:12px}.trp3-toolbar>div{display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap}.trp3-toolbar button,.trp3-toolbar select{min-height:26px;padding:3px 11px;border:1px solid #8c7860;border-radius:3px;background:linear-gradient(#84362d,#4b1714);box-shadow:inset 0 0 0 1px #2a1710;color:#ffd470;font-size:12px;cursor:pointer}.trp3-toolbar select{background:#26221d}.trp3-toolbar button:hover{filter:brightness(1.25)}textarea{box-sizing:border-box;width:100%;resize:vertical;padding:14px;border:1px solid #75674b;border-radius:3px;background:#121211;color:#eee6d1;font-family:Consolas,'Noto Sans SC',monospace;font-size:13px;line-height:1.8;tab-size:2;min-height:120px}textarea:focus{outline:1px solid #d3b269}.toolbar-color input{width:26px;height:26px;padding:1px;border:1px solid #8c7860;background:#222;cursor:pointer}.media-form{display:grid;gap:14px;color:var(--color-text-main)}.media-form label{display:grid;gap:7px;font-size:13px}.media-form input{height:36px;padding:0 10px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--input-text)}.media-dimensions{display:grid;grid-template-columns:1fr 1fr;gap:12px}.media-form button{padding:10px;border:0;border-radius:6px;background:var(--btn-primary-bg);color:var(--btn-primary-text);cursor:pointer}.media-form p{color:var(--color-danger);font-size:12px}.trp3-toolbar :is(button,select):focus-visible{outline:2px solid #ffd470;outline-offset:2px}
+</style>
+
+<style scoped>
+
+@media(max-width:600px){.trp3-toolbar{min-width:0;padding:8px 4px}.trp3-toolbar button,.trp3-toolbar select{min-height:44px;padding:6px 10px}.toolbar-color input{width:44px;height:44px}textarea{font-size:16px;padding:10px;min-height:220px}.media-form input{width:100%;min-width:0;height:44px;font-size:16px}.media-dimensions{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+
 </style>

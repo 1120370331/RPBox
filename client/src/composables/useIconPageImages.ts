@@ -1,5 +1,5 @@
 import { onBeforeUnmount, reactive, watch, type Ref } from 'vue'
-import { trp3IconURL } from '@/utils/trp3Markup'
+import { trp3IconURL } from '../utils/trp3Markup'
 
 const MAX_CONCURRENT = 6
 const MAX_CACHED = 320

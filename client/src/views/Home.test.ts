@@ -23,6 +23,7 @@ const entry = (id: number, kind: HomeContent['kind'] = 'post'): HomeContent => (
   id, kind, title: `内容 ${kind}-${id}`, author_name: '创作者', has_cover: true,
   cover_url: '/uploads/cover.png', cover_updated_at: '2026-10-22', updated_at: '2026-10-22',
   weekly_score: 12, reason: 'interest',
+  view_count: 128, like_count: 24, favorite_count: 9, comment_count: 6, list_count: 4, downloads: 37,
 })
 const feed = (entries: HomeContent[], hasMore = true): HomeFeedResponse => ({ entries, personalized: true, has_more: hasMore })
 let wrapper: VueWrapper
@@ -66,6 +67,27 @@ describe('home discovery feed', () => {
     expect(rows[0]!.findAll('.feed-card').map(card => card.attributes('href'))).toEqual(['/community/post/1', '/rpdb/2', '/market/3'])
     expect(rows[0]!.find('img').attributes('src')).toContain('v=2026-10-22')
     expect(rows[1]!.find('.feed-refresh').exists()).toBe(true)
+    const cards = rows[0]!.findAll('.feed-card')
+    expect(cards[0]!.findAll('.work-card__metrics span').map(metric => metric.attributes('title'))).toEqual(['浏览', '点赞', '收藏', '评论'])
+    expect(cards[0]!.findAll('.work-card__metrics b').map(metric => metric.text())).toEqual(['128', '24', '9', '6'])
+    expect(cards[1]!.findAll('.work-card__metrics span').map(metric => metric.attributes('title'))).toEqual(['浏览', '点赞', '收藏', '加入清单'])
+    expect(cards[1]!.findAll('.work-card__metrics b').map(metric => metric.text())).toEqual(['128', '24', '9', '4'])
+    expect(cards[2]!.findAll('.work-card__metrics span').map(metric => metric.attributes('title'))).toEqual(['下载', '点赞', '收藏'])
+    expect(cards[2]!.findAll('.work-card__metrics b').map(metric => metric.text())).toEqual(['37', '24', '9'])
+    for (const row of rows) {
+      for (const metrics of row.findAll('.work-card__metrics')) {
+        expect(metrics.text()).not.toContain('七日人气')
+        expect(metrics.text()).not.toContain('兴趣')
+      }
+    }
+  })
+
+  it('shows unavailable counters as unknown while preserving genuine zero values', async () => {
+    mocks.featured.mockResolvedValueOnce(feed([{ ...entry(1), view_count: undefined, like_count: 0 }]))
+    await openHome()
+    const counters = wrapper.findAll('.home-content-row')[0]!.findAll('.work-card__metrics b')
+    expect(counters[0]!.text()).toBe('—')
+    expect(counters[1]!.text()).toBe('0')
   })
 
   it('excludes previous cards while refreshing and prevents overlapping refreshes', async () => {

@@ -2,12 +2,14 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { selectGameInstallation, inferGameFlavor, gameFlavorLabel } from '@/utils/gameInstallations'
 import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
 
 interface DetectedPath {
   path: string
   version: string | { Retail?: null; Classic?: null }
   accounts: string[]
+  flavor: string
 }
 
 const router = useRouter()
@@ -72,15 +74,14 @@ async function browseFolder() {
       title: t('sync.setup.selectWowDirTitle')
     })
     if (selected) {
-      // 智能规范化路径
       const { invoke } = await import('@tauri-apps/api/core')
-      const normalized = await invoke<string | null>('normalize_wow_path', { path: selected })
-      if (normalized) {
-        selectedPath.value = normalized
-        pathError.value = ''
-      } else {
-        pathError.value = t('sync.setup.errorInvalidPath')
-      }
+      const installs = await invoke<DetectedPath[]>('inspect_wow_installations', { path: selected })
+      if (installs.length) {
+        detectedPaths.value = installs
+        selectedPath.value = installs.length === 1 ? installs[0]!.path : ''
+        pathError.value = installs.length > 1 ? '发现多个游戏版本，请选择要添加的目录。' : ''
+      } else { pathError.value = t('sync.setup.errorInvalidPath') }
+
     }
   } catch (e) {
     console.error('打开文件夹选择器失败:', e)
@@ -99,9 +100,15 @@ async function validateAndNext() {
 
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    const result = await invoke<{ accounts: any[] }>('scan_profiles', {
-      wowPath: selectedPath.value
-    })
+    const installs = await invoke<DetectedPath[]>('inspect_wow_installations', { path: selectedPath.value })
+    if (installs.length !== 1) {
+      detectedPaths.value = installs; selectedPath.value = ''
+      pathError.value = installs.length ? '请选择具体游戏版本目录。' : t('sync.setup.errorInvalidPath')
+      return
+    }
+    selectedPath.value = installs[0]!.path
+    detectedPaths.value = installs
+    const result = await invoke<{ accounts: Array<{ profiles?: unknown[] }> }>('scan_profiles', { wowPath: selectedPath.value }).catch(() => ({ accounts: [] }))
     profileCount.value = result.accounts.reduce((sum, a) => sum + (a.profiles?.length || 0), 0)
     currentStep.value = 2
   } catch (e) {
@@ -112,7 +119,7 @@ async function validateAndNext() {
 }
 
 function complete() {
-  localStorage.setItem('wow_path', selectedPath.value)
+  selectGameInstallation({ path: selectedPath.value, flavor: detectedPaths.value.find(item => item.path === selectedPath.value)?.flavor || inferGameFlavor(selectedPath.value) })
   const rawRedirect = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
   const redirect = typeof rawRedirect === 'string' && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
     ? rawRedirect
@@ -153,7 +160,7 @@ function complete() {
             :class="{ selected: selectedPath === p.path }"
             @click="selectPath(p.path)"
           >
-            <span class="path-name">{{ p.path }}</span>
+            <span class="path-name">{{ gameFlavorLabel(p.flavor) }} · {{ p.path }}</span>
             <span class="path-info">{{ $t('sync.setup.accountCount', { count: p.accounts?.length || 0 }) }}</span>
           </div>
         </div>

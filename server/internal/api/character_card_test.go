@@ -1388,7 +1388,7 @@ func newCharacterCardTestServer(t *testing.T) (*gorm.DB, *Server, model.User, mo
 	db := testutil.NewTestDB(t,
 		&model.User{}, &model.AccountBackup{}, &model.AccountBackupVersion{}, &model.Character{},
 		&model.CharacterCard{}, &model.CharacterCardPortrait{}, &model.CharacterCardImpression{}, &model.CharacterCardPublication{},
-		&model.CharacterCardSubmission{},
+		&model.CharacterCardSubmission{}, &model.CharacterCardTarget{},
 	)
 	sqlDB, err := db.DB()
 	if err != nil {

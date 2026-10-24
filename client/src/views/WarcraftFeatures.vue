@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getGameInstallations, selectGameInstallation, removeGameInstallation, inferGameFlavor, gameFlavors, gameFlavorLabel } from '@/utils/gameInstallations'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
@@ -19,6 +20,7 @@ interface WowInstallation {
   path: string
   version: string | Record<string, null>
   accounts: string[]
+  flavor?: string
 }
 
 interface Trp3AddonInfo {
@@ -94,6 +96,8 @@ defineProps<{ pageTitle?: string }>()
 const toast = useToastStore()
 let progressUnlisten: UnlistenFn | null = null
 
+const desktop = '__TAURI_INTERNALS__' in window
+const installations = ref(getGameInstallations())
 const mounted = ref(false)
 const wowPath = ref(localStorage.getItem('wow_path') || '')
 const detectedPaths = ref<WowInstallation[]>([])
@@ -101,7 +105,7 @@ const trp3Status = ref<Trp3AddonCheckResult | null>(null)
 const trp3Latest = ref<TRP3LatestResponse | null>(null)
 const rpboxInstalledInfo = ref<InstalledAddonInfo | null>(null)
 const rpboxLatestVersion = ref('')
-const selectedFlavor = ref(localStorage.getItem('selected_flavor') || '_retail_')
+const selectedFlavor = ref(inferGameFlavor(wowPath.value) || localStorage.getItem('selected_flavor') || '_retail_')
 const checkingPaths = ref(false)
 const checkingPlugins = ref(false)
 const installingPluginIds = ref<PluginCardId[]>([])
@@ -162,6 +166,10 @@ const pluginCards = computed<PluginCard[]>(() => [
 onMounted(async () => {
   window.addEventListener(ADDONS_UPDATED_EVENT, handleAddonsUpdated)
   setTimeout(() => mounted.value = true, 50)
+  if (!desktop) {
+    try { rpboxLatestVersion.value = (await getAddonLatest()).version } catch { pluginError.value = '插件版本读取失败，请稍后重试。' }
+    return
+  }
   await bindProgressEvents()
   if (wowPath.value) {
     await refreshPluginStatus()
@@ -346,7 +354,7 @@ function buildTrp3Card(
     latestVersion: addon?.latestVersion || (hasWowPath.value ? '待获取' : '选择目录后检测'),
     sourceUrl: addon?.sourceUrl,
     action: progress?.label || getActionText(state, installed, busy),
-    canInstall: hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
+    canInstall: selectedFlavor.value === '_retail_' && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
     canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
     busy,
     progressLabel: progress?.label || '',
@@ -371,7 +379,7 @@ function buildRpboxCard(): PluginCard {
     currentVersion: installed ? rpboxInstalledInfo.value?.version || '未知' : '未安装',
     latestVersion: rpboxLatestVersion.value || (hasWowPath.value ? '待获取' : '选择目录后检测'),
     action: progress?.label || getActionText(state, installed, busy),
-    canInstall: hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!rpboxLatestVersion.value,
+    canInstall: selectedFlavor.value === '_retail_' && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!rpboxLatestVersion.value,
     canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
     busy,
     progressLabel: progress?.label || '',
@@ -413,22 +421,21 @@ async function detectPaths() {
 
 async function selectWowPath(path: string) {
   wowPath.value = path
-  localStorage.setItem('wow_path', path)
+  const flavor = detectedPaths.value.find(item => item.path === path)?.flavor || installations.value.find(item => item.path === path)?.flavor || inferGameFlavor(path)
+  selectedFlavor.value = flavor
+  selectGameInstallation({ path, flavor })
+  installations.value = getGameInstallations()
   detectedPaths.value = []
   pathError.value = ''
   await refreshPluginStatus()
 }
 
-function clearWowPath() {
-  localStorage.removeItem('wow_path')
-  wowPath.value = ''
-  trp3Status.value = null
-  trp3Latest.value = null
-  rpboxInstalledInfo.value = null
-  rpboxLatestVersion.value = ''
-  installNotice.value = ''
-  pluginError.value = ''
-  void detectPaths()
+async function clearWowPath() {
+  if (installations.value.length <= 1) { toast.warning('至少保留一个游戏目录，请先添加新目录。'); return }
+  if (!(await dialog.confirm({ title: '移除目录', message: '仅移除此目录配置，游戏文件与云端存档不会删除。', type: 'warning' }))) return
+  removeGameInstallation(wowPath.value)
+  installations.value = getGameInstallations()
+  await selectWowPath(localStorage.getItem('wow_path') || '')
 }
 
 function goToSetup() {
@@ -436,7 +443,6 @@ function goToSetup() {
 }
 
 function goToFeature(route: string) {
-  if (!hasWowPath.value) return
   router.push(route)
 }
 
@@ -465,7 +471,7 @@ async function refreshPluginStatus() {
   }))
   candidates.push({ id: 'rpbox', installed: !!rpboxInstalledInfo.value?.installed,
     currentVersion: rpboxInstalledInfo.value?.version, latestVersion: rpboxLatestVersion.value })
-  const updated = await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, candidates)
+  const updated = selectedFlavor.value === '_retail_' ? await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, candidates) : []
   if (updated.length) await Promise.allSettled([checkTrp3Addons(), checkRpboxAddon()])
   checkingPlugins.value = false
 }
@@ -513,6 +519,7 @@ async function checkRpboxAddon() {
 
 async function installPlugin(card: PluginCard) {
   if (!card.canInstall || !wowPath.value) return
+  if (selectedFlavor.value !== '_retail_') { toast.warning('请使用对应游戏版本的下载页，当前自动安装包仅适用于正式服。'); return }
   if (card.id === 'rpbox') {
     await installRpboxAddon()
     return
@@ -741,7 +748,7 @@ async function openAddonFolder() {
           <button v-if="hasWowPath" type="button" class="text-btn danger" @click="clearWowPath">清除</button>
           <button type="button" class="primary-btn" @click="goToSetup">
             <i class="ri-folder-settings-line"></i>
-            {{ hasWowPath ? '更换目录' : '设置目录' }}
+            {{ hasWowPath ? '添加目录' : '设置目录' }}
           </button>
         </div>
       </div>
@@ -751,8 +758,9 @@ async function openAddonFolder() {
           <i :class="hasWowPath ? 'ri-hard-drive-3-line' : 'ri-lock-line'"></i>
         </span>
         <span class="directory-copy">
-          <small>当前游戏目录</small>
-          <strong>{{ trp3Status?.wowPath || wowPath || '未选择，下面功能已锁定' }}</strong>
+          <small>当前游戏目录 · {{ gameFlavorLabel(selectedFlavor) }}</small>
+          <select v-if="installations.length > 1" :value="wowPath" :disabled="checkingPlugins || installingPluginIds.length > 0" aria-label="切换游戏目录" @change="selectWowPath(($event.target as HTMLSelectElement).value)"><option v-for="item in installations" :key="item.path" :value="item.path">{{ gameFlavorLabel(item.flavor) }} · {{ item.path }}</option></select>
+          <strong>{{ trp3Status?.wowPath || wowPath || '本机尚未设置目录' }}</strong>
         </span>
       </div>
 
@@ -782,20 +790,20 @@ async function openAddonFolder() {
       </div>
     </section>
 
-    <section class="feature-row lockable anim-item" :class="{ locked: !hasWowPath }" style="--delay: 2">
+    <section class="feature-row anim-item" style="--delay: 2">
       <div class="row-heading">
         <div class="heading-copy">
           <h2>功能快捷入口</h2>
         </div>
       </div>
 
-      <div class="locked-content feature-grid">
+      <div class="feature-grid">
         <button
           v-for="entry in featureEntries"
           :key="entry.route"
           type="button"
           class="feature-card"
-          :disabled="!hasWowPath"
+          :disabled="entry.route !== '/sync' && !hasWowPath"
           @click="goToFeature(entry.route)"
         >
           <span class="feature-icon"><i :class="entry.icon"></i></span>
@@ -809,10 +817,19 @@ async function openAddonFolder() {
 
       <div v-if="!hasWowPath" class="lock-banner feature-lock">
         <i class="ri-lock-line"></i>
-        <span>目录未设置，快捷入口暂不可用。</span>
+        <span>云端人物卡备份可直接使用；本地操作需要设置目录。</span>
       </div>
     </section>
 
+    <section class="directory-row edition-downloads">
+      <h2>按游戏版本下载插件</h2>
+      <label>游戏版本 <select v-model="selectedFlavor" aria-label="插件下载游戏版本" :disabled="desktop && hasWowPath"><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
+      <p>当前选择：{{ gameFlavorLabel(selectedFlavor) }}。桌面端以所选目录的版本为准。</p>
+      <a :href="`https://www.curseforge.com/wow/addons/total-rp-3/files/all?gameVersionTypeId=${selectedFlavor === '_retail_' ? 1 : selectedFlavor === '_classic_era_' ? 2 : 0}`" target="_blank" rel="noopener">Total RP 3 · 版本下载页 ↗</a>
+      <a href="https://www.curseforge.com/wow/addons/total-rp-3-extended/files/all" target="_blank" rel="noopener">TRP3 Extended · 版本下载页 ↗</a>
+      <a v-if="selectedFlavor === '_retail_' && rpboxLatestVersion" :href="getAddonDownloadUrl(rpboxLatestVersion)" target="_blank" rel="noopener">RPBox Addon · 正式服下载 ↗</a>
+      <p v-if="selectedFlavor !== '_retail_'">请在发布页核对版本兼容性。RPBox 插件目前仅有正式服安装包，其他版本不会自动安装正式服包。</p>
+    </section>
     <section class="plugin-row lockable anim-item" :class="{ locked: !hasWowPath }" style="--delay: 3">
       <div class="row-heading">
         <div class="heading-copy">
@@ -884,7 +901,6 @@ async function openAddonFolder() {
                 type="button"
                 class="icon-btn compact-icon"
                 title="打开来源页面"
-                :disabled="!hasWowPath"
                 @click="openSourcePage(card)"
               >
                 <i class="ri-github-line"></i>
@@ -1562,4 +1578,12 @@ h3 {
     max-width: none;
   }
 }
+</style>
+
+<style scoped>
+.edition-downloads{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.edition-downloads h2,.edition-downloads p{flex-basis:100%}.edition-downloads a{color:var(--color-accent)}.directory-copy select,.edition-downloads select{max-width:100%;padding:8px;border:1px solid var(--input-border);border-radius:6px;background:var(--input-bg);color:var(--color-text-main)}
+</style>
+
+<style scoped>
+@media(max-width:600px){.plugin-grid{grid-template-columns:minmax(0,1fr)}.directory-copy select{width:100%;min-width:0;font-size:16px;min-height:44px}.edition-downloads{gap:12px}.edition-downloads label{display:grid;gap:8px;flex-basis:100%;min-width:0}.edition-downloads select{width:100%;min-width:0;font-size:16px;min-height:44px}.edition-downloads a{display:flex;align-items:center;min-height:44px;line-height:1.6;overflow-wrap:anywhere}.directory-actions button{min-height:44px}.feature-card{padding:16px}}
 </style>

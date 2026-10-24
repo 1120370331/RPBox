@@ -46,9 +46,9 @@ func TestHomeFeaturedUsesSevenDayInteractionsAndEnforcesVisibility(t *testing.T)
 	db, viewer, author, other := newHomeFeedDB(t)
 	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 	old := model.Post{AuthorID: author.ID, Title: "Lifetime popular", Content: "secret body", Status: "published", ReviewStatus: "approved", IsPublic: true, LikeCount: 99999, CreatedAt: now.Add(-365 * 24 * time.Hour)}
-	post := model.Post{AuthorID: author.ID, Title: "Recent post", Content: "body", Status: "published", ReviewStatus: "approved", IsPublic: true, CoverImage: "data:image/png;base64,SECRET", CreatedAt: now.Add(-30 * 24 * time.Hour)}
-	item := model.Item{AuthorID: other.ID, Name: "Recent favorite", Status: "published", ReviewStatus: "approved", IsPublic: true}
-	work := model.RPDBWork{AuthorID: other.ID, Title: "Recent work", Status: "published", ReviewStatus: "approved", Visibility: "public", IsPublic: true}
+	post := model.Post{AuthorID: author.ID, Title: "Recent post", Content: "body", Status: "published", ReviewStatus: "approved", IsPublic: true, CoverImage: "data:image/png;base64,SECRET", CreatedAt: now.Add(-30 * 24 * time.Hour), ViewCount: 128, LikeCount: 24, FavoriteCount: 9, CommentCount: 6}
+	item := model.Item{AuthorID: other.ID, Name: "Recent favorite", Status: "published", ReviewStatus: "approved", IsPublic: true, Downloads: 37, LikeCount: 14, FavoriteCount: 5}
+	work := model.RPDBWork{AuthorID: other.ID, Title: "Recent work", Status: "published", ReviewStatus: "approved", Visibility: "public", IsPublic: true, ViewCount: 212, LikeCount: 45, FavoriteCount: 32, ListCount: 7}
 	for _, value := range []interface{}{&old, &post, &item, &work} {
 		homeCreate(t, db, value)
 	}
@@ -64,6 +64,16 @@ func TestHomeFeaturedUsesSevenDayInteractionsAndEnforcesVisibility(t *testing.T)
 	}
 	if len(feed.Entries) != 3 || feed.Entries[0].Kind != "item" || feed.Entries[0].WeeklyScore != 5 || feed.Entries[1].Kind != "rpdb" || feed.Entries[1].WeeklyScore != 4 || feed.Entries[2].ID != post.ID || feed.Entries[2].WeeklyScore != 3 {
 		t.Fatalf("incorrect seven-day ranking: %+v", feed.Entries)
+	}
+	itemCard, workCard, postCard := feed.Entries[0], feed.Entries[1], feed.Entries[2]
+	if itemCard.Downloads == nil || *itemCard.Downloads != 37 || itemCard.LikeCount != 14 || itemCard.FavoriteCount != 5 || itemCard.ViewCount != nil || itemCard.CommentCount != nil {
+		t.Fatalf("incorrect market statistics: %+v", itemCard)
+	}
+	if workCard.ViewCount == nil || *workCard.ViewCount != 212 || workCard.LikeCount != 45 || workCard.FavoriteCount != 32 || workCard.ListCount == nil || *workCard.ListCount != 7 {
+		t.Fatalf("incorrect RPDB statistics: %+v", workCard)
+	}
+	if postCard.ViewCount == nil || *postCard.ViewCount != 128 || postCard.LikeCount != 24 || postCard.FavoriteCount != 9 || postCard.CommentCount == nil || *postCard.CommentCount != 6 || postCard.ListCount != nil {
+		t.Fatalf("incorrect post statistics: %+v", postCard)
 	}
 	payload, _ := json.Marshal(feed)
 	if strings.Contains(string(payload), "base64") || strings.Contains(string(payload), "secret body") {

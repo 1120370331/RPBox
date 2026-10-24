@@ -71,6 +71,8 @@ export interface CharacterCardImpression extends CharacterCardImpressionUpdate {
 }
 
 export interface CharacterCardSource {
+  game_flavor?: string
+  linked_card_id?: number
   backup_id: number
   account_id: string
   profile_id: string
@@ -90,6 +92,7 @@ export interface CharacterCardSummary {
   user_id: number
   character_id?: number | null
   source_backup_id?: number | null
+  source_game_flavor?: string
   source_account_id?: string | null
   source_profile_id?: string | null
   first_name: string
@@ -146,6 +149,7 @@ export interface CreateCharacterCardRequest {
   source_type: CharacterCardSourceType
   source_backup_id?: number
   source_profile_id?: string
+  source_game_flavor?: string
   source_account_id?: string
   local_profile?: Record<string, unknown>
 }
@@ -360,4 +364,12 @@ export function getCharacterCardPortraitUrl(
     ...options,
     v: card.portrait_image_updated_at || card.updated_at,
   })
+}
+
+export interface CharacterCardSaveTarget { backup_id: number; profile_id: string; expected_version: number }
+export async function getCharacterCardTargets(id: number): Promise<{ targets: Array<{ backup_id: number; profile_id: string }> }> {
+  return unwrapData(await request.get<{ targets: Array<{ backup_id: number; profile_id: string }> }>(`/character-cards/${id}/cloud-targets`))
+}
+export async function saveCharacterCardToCloud(id: number, payload: Partial<UpdateCharacterCardRequest>, targets: CharacterCardSaveTarget[]): Promise<CharacterCard> {
+  return unwrapCharacterCard(await request.put(`/character-cards/${id}/save-cloud`, { ...payload, cloud_targets: targets }))
 }
