@@ -38,7 +38,7 @@ watch(visible, async open => {
 }, { immediate: true })
 function trapTab(event: KeyboardEvent) {
   if (!controlled.value) return
-  const elements = focusableElements(), first = elements[0], last = elements.at(-1)
+  const elements = focusableElements(), first = elements[0], last = elements[elements.length - 1]
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
 }
