@@ -4,6 +4,7 @@ import json
 import os
 from collections import deque
 from glob import glob
+from urllib.parse import urlencode
 
 from PIL import Image, ImageFilter
 import numpy as np
@@ -285,6 +286,7 @@ def load_configs(config_dir):
 
 def process_pack(pack):
     pack_id = pack["id"]
+    cache_query = "?" + urlencode({"cv": pack["cache_version"]}) if pack.get("cache_version") else ""
     name = pack["name"]
     source_image = pack["source_image"]
     grid = pack["grid"]
@@ -386,14 +388,14 @@ def process_pack(pack):
             "id": item_id,
             "name": item["name"],
             "text": item.get("text", ""),
-            "file": f"/emotes/{pack_id}/{item_id}.png",
+            "file": f"/emotes/{pack_id}/{item_id}.png{cache_query}",
         })
 
     icon_id = pack.get("icon_id") or (items[0]["id"] if items else "")
     pack_out = {
         "id": pack_id,
         "name": name,
-        "icon": f"/emotes/{pack_id}/{icon_id}.png" if icon_id else "",
+        "icon": f"/emotes/{pack_id}/{icon_id}.png{cache_query}" if icon_id else "",
         "items": items_out,
     }
     return pack_out

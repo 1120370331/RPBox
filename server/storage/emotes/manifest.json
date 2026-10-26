@@ -106,13 +106,13 @@
     {
       "id": "skarr",
       "name": "斯卡尔表情包",
-      "icon": "/emotes/skarr/01.png",
+      "icon": "/emotes/skarr/01.png?cv=2",
       "items": [
         {
           "id": "01",
           "name": "贴贴",
           "text": "贴贴",
-          "file": "/emotes/skarr/01.png",
+          "file": "/emotes/skarr/01.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -120,7 +120,7 @@
           "id": "02",
           "name": "抱抱",
           "text": "抱抱",
-          "file": "/emotes/skarr/02.png",
+          "file": "/emotes/skarr/02.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -128,7 +128,7 @@
           "id": "03",
           "name": "谢谢老板",
           "text": "谢谢老板",
-          "file": "/emotes/skarr/03.png",
+          "file": "/emotes/skarr/03.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -136,7 +136,7 @@
           "id": "04",
           "name": "辛苦啦",
           "text": "辛苦啦",
-          "file": "/emotes/skarr/04.png",
+          "file": "/emotes/skarr/04.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -144,7 +144,7 @@
           "id": "05",
           "name": "给你小花",
           "text": "给你小花",
-          "file": "/emotes/skarr/05.png",
+          "file": "/emotes/skarr/05.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -152,7 +152,7 @@
           "id": "06",
           "name": "蹲蹲",
           "text": "蹲蹲",
-          "file": "/emotes/skarr/06.png",
+          "file": "/emotes/skarr/06.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -160,7 +160,7 @@
           "id": "07",
           "name": "然后呢",
           "text": "然后呢",
-          "file": "/emotes/skarr/07.png",
+          "file": "/emotes/skarr/07.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -168,7 +168,7 @@
           "id": "08",
           "name": "黑脸",
           "text": "",
-          "file": "/emotes/skarr/08.png",
+          "file": "/emotes/skarr/08.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -176,7 +176,7 @@
           "id": "09",
           "name": "学到了",
           "text": "学到了",
-          "file": "/emotes/skarr/09.png",
+          "file": "/emotes/skarr/09.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -184,7 +184,7 @@
           "id": "10",
           "name": "展开讲讲",
           "text": "展开讲讲",
-          "file": "/emotes/skarr/10.png",
+          "file": "/emotes/skarr/10.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -192,7 +192,7 @@
           "id": "11",
           "name": "太会了",
           "text": "太会了",
-          "file": "/emotes/skarr/11.png",
+          "file": "/emotes/skarr/11.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -200,7 +200,7 @@
           "id": "12",
           "name": "神仙！",
           "text": "神仙！",
-          "file": "/emotes/skarr/12.png",
+          "file": "/emotes/skarr/12.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -208,7 +208,7 @@
           "id": "13",
           "name": "我直接收藏",
           "text": "我直接收藏",
-          "file": "/emotes/skarr/13.png",
+          "file": "/emotes/skarr/13.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -216,7 +216,7 @@
           "id": "14",
           "name": "去死！",
           "text": "去死！",
-          "file": "/emotes/skarr/14.png",
+          "file": "/emotes/skarr/14.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -224,7 +224,7 @@
           "id": "15",
           "name": "饭饭，香香",
           "text": "饭饭，香香",
-          "file": "/emotes/skarr/15.png",
+          "file": "/emotes/skarr/15.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -232,7 +232,7 @@
           "id": "16",
           "name": "啊？",
           "text": "啊？",
-          "file": "/emotes/skarr/16.png",
+          "file": "/emotes/skarr/16.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -240,7 +240,7 @@
           "id": "17",
           "name": "绷不住了",
           "text": "绷不住了",
-          "file": "/emotes/skarr/17.png",
+          "file": "/emotes/skarr/17.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -248,7 +248,7 @@
           "id": "18",
           "name": "我裂开了",
           "text": "我裂开了",
-          "file": "/emotes/skarr/18.png",
+          "file": "/emotes/skarr/18.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -256,7 +256,7 @@
           "id": "19",
           "name": "你认真的？",
           "text": "你认真的？",
-          "file": "/emotes/skarr/19.png",
+          "file": "/emotes/skarr/19.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -264,7 +264,7 @@
           "id": "20",
           "name": "是我本人",
           "text": "是我本人",
-          "file": "/emotes/skarr/20.png",
+          "file": "/emotes/skarr/20.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -272,7 +272,7 @@
           "id": "21",
           "name": "我的锅",
           "text": "我的锅",
-          "file": "/emotes/skarr/21.png",
+          "file": "/emotes/skarr/21.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -280,7 +280,7 @@
           "id": "22",
           "name": "无语",
           "text": "……",
-          "file": "/emotes/skarr/22.png",
+          "file": "/emotes/skarr/22.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -288,7 +288,7 @@
           "id": "23",
           "name": "容我缓缓",
           "text": "容我缓缓",
-          "file": "/emotes/skarr/23.png",
+          "file": "/emotes/skarr/23.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -296,7 +296,7 @@
           "id": "24",
           "name": "问题不大",
           "text": "问题不大",
-          "file": "/emotes/skarr/24.png",
+          "file": "/emotes/skarr/24.png?cv=2",
           "width": 320,
           "height": 320
         },
@@ -304,7 +304,7 @@
           "id": "25",
           "name": "下次一定",
           "text": "下次一定",
-          "file": "/emotes/skarr/25.png",
+          "file": "/emotes/skarr/25.png?cv=2",
           "width": 320,
           "height": 320
         }
