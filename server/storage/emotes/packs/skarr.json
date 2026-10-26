@@ -1,0 +1,165 @@
+{
+  "id": "skarr",
+  "name": "斯卡尔表情包",
+  "source_image": "style-demos/Skarr.png",
+  "grid": {
+    "rows": 5,
+    "cols": 5
+  },
+  "output_dir": "server/storage/emotes/skarr",
+  "size": 320,
+  "background_mode": "none",
+  "icon_id": "01",
+  "items": [
+    {
+      "id": "01",
+      "name": "贴贴",
+      "text": "贴贴",
+      "index": 1
+    },
+    {
+      "id": "02",
+      "name": "抱抱",
+      "text": "抱抱",
+      "index": 2
+    },
+    {
+      "id": "03",
+      "name": "谢谢老板",
+      "text": "谢谢老板",
+      "index": 3
+    },
+    {
+      "id": "04",
+      "name": "辛苦啦",
+      "text": "辛苦啦",
+      "index": 4
+    },
+    {
+      "id": "05",
+      "name": "给你小花",
+      "text": "给你小花",
+      "index": 5
+    },
+    {
+      "id": "06",
+      "name": "蹲蹲",
+      "text": "蹲蹲",
+      "index": 6
+    },
+    {
+      "id": "07",
+      "name": "然后呢",
+      "text": "然后呢",
+      "index": 7
+    },
+    {
+      "id": "08",
+      "name": "黑脸",
+      "text": "",
+      "index": 8
+    },
+    {
+      "id": "09",
+      "name": "学到了",
+      "text": "学到了",
+      "index": 9
+    },
+    {
+      "id": "10",
+      "name": "展开讲讲",
+      "text": "展开讲讲",
+      "index": 10
+    },
+    {
+      "id": "11",
+      "name": "太会了",
+      "text": "太会了",
+      "index": 11
+    },
+    {
+      "id": "12",
+      "name": "神仙！",
+      "text": "神仙！",
+      "index": 12
+    },
+    {
+      "id": "13",
+      "name": "我直接收藏",
+      "text": "我直接收藏",
+      "index": 13
+    },
+    {
+      "id": "14",
+      "name": "去死！",
+      "text": "去死！",
+      "index": 14
+    },
+    {
+      "id": "15",
+      "name": "饭饭，香香",
+      "text": "饭饭，香香",
+      "index": 15
+    },
+    {
+      "id": "16",
+      "name": "啊？",
+      "text": "啊？",
+      "index": 16
+    },
+    {
+      "id": "17",
+      "name": "绷不住了",
+      "text": "绷不住了",
+      "index": 17
+    },
+    {
+      "id": "18",
+      "name": "我裂开了",
+      "text": "我裂开了",
+      "index": 18
+    },
+    {
+      "id": "19",
+      "name": "你认真的？",
+      "text": "你认真的？",
+      "index": 19
+    },
+    {
+      "id": "20",
+      "name": "是我本人",
+      "text": "是我本人",
+      "index": 20
+    },
+    {
+      "id": "21",
+      "name": "我的锅",
+      "text": "我的锅",
+      "index": 21
+    },
+    {
+      "id": "22",
+      "name": "无语",
+      "text": "……",
+      "index": 22
+    },
+    {
+      "id": "23",
+      "name": "容我缓缓",
+      "text": "容我缓缓",
+      "index": 23
+    },
+    {
+      "id": "24",
+      "name": "问题不大",
+      "text": "问题不大",
+      "index": 24
+    },
+    {
+      "id": "25",
+      "name": "下次一定",
+      "text": "下次一定",
+      "index": 25
+    }
+  ]
+}
