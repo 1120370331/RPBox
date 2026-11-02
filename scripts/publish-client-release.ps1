@@ -41,7 +41,8 @@ if (@(Compare-Object $expectedSums $actualSums).Count -ne 0) { throw 'Release ch
 function Invoke-TransferCommand {
     param([string]$Program, [string[]]$Arguments)
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-        & $Program @Arguments
+        # Surface ssh/scp diagnostics; otherwise a failed transfer is invisible in the CI log.
+        & $Program @Arguments 2>&1 | ForEach-Object { Write-Host "$_" }
         if ($LASTEXITCODE -eq 0) { return }
         if ($attempt -eq $Attempts) { throw "$Program failed after $Attempts attempt(s)." }
         Start-Sleep -Seconds (5 * $attempt)
