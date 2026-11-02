@@ -1,0 +1,60 @@
+name: SSH Deploy Probe
+
+# Temporary diagnostic workflow: prints the exact ssh failure of the Windows deploy path.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe Windows SSH deploy
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Probe
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          function Show([string]$label, [object[]]$lines) {
+            Write-Host "=== $label"
+            foreach ($line in $lines) { Write-Host "| $line" }
+          }
+          $ErrorActionPreference = 'Continue'
+          Show 'windows-ssh-version' @(& ssh -V 2>&1)
+          Show 'ssh-path' @(Get-Command ssh | ForEach-Object Source)
+          Show 'git-ssh-version' @(& "$(Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh.exe')" -V 2>&1)
+
+          $temp = Join-Path $env:RUNNER_TEMP 'probe'
+          New-Item -ItemType Directory -Force -Path $temp | Out-Null
+          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          & icacls $temp /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
+          $keyPath = Join-Path $temp 'deploy.key'
+          ($env:SSH_PRIVATE_KEY.Trim().Replace("`r", '') + "`n") | Set-Content -LiteralPath $keyPath -NoNewline -Encoding utf8NoBOM
+          $keyLines = @(Get-Content -LiteralPath $keyPath)
+          Show 'key-shape' @("lines=$($keyLines.Count)", "first=$($keyLines[0])", "last=$($keyLines[-1])", "bytes=$((Get-Item $keyPath).Length)")
+
+          $knownHosts = Join-Path $temp 'known_hosts'
+          $hostKeys = if ($env:SSH_KNOWN_HOSTS) { $env:SSH_KNOWN_HOSTS } else {
+            $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
+            & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST
+          }
+          $hostKeys | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
+          Show 'known-hosts' @("lines=$(@($hostKeys).Count)", "bytes=$((Get-Item $knownHosts).Length)")
+
+          $target = "$($env:SERVER_USER)@$($env:SERVER_HOST)"
+          $common = @('-F', 'none', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=`"$knownHosts`"", '-o', 'ConnectTimeout=30')
+
+          $output = @(& ssh '-v' (@('-p', '2233') + $common) @($target, 'echo probe-ok') 2>&1 | ForEach-Object { "$_" })
+          Show "windows-ssh exit=$LASTEXITCODE" $output
+
+          $gitSsh = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh.exe'
+          $output2 = @(& $gitSsh '-v' (@('-p', '2233') + $common) @($target, 'echo probe-ok') 2>&1 | ForEach-Object { "$_" })
+          Show "git-ssh exit=$LASTEXITCODE" $output2
