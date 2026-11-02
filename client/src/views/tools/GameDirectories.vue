@@ -19,6 +19,8 @@ const desktop = '__TAURI_INTERNALS__' in window
 const installations = ref(getGameInstallations())
 const activePath = ref(localStorage.getItem('wow_path') || '')
 const choosing = ref(false)
+const detecting = ref(false)
+const busy = computed(() => choosing.value || detecting.value)
 const error = ref('')
 const confirming = ref(false)
 const editing = ref(false)
@@ -43,8 +45,34 @@ function chooseCandidate() {
   const registered = installations.value.find(item => sameGamePath(item.path, draftPath.value))
   draftFlavor.value = registered?.flavor || candidate.value?.flavor || ''
 }
+function confirmCandidates(result: InspectedDirectory[]) {
+  candidates.value = result
+  draftPath.value = result.length === 1 ? result[0]!.path : ''
+  editing.value = false
+  chooseCandidate()
+  confirming.value = true
+}
+async function detectDirectories() {
+  if (!desktop || busy.value || confirming.value) return
+  const current = ++request
+  detecting.value = true
+  error.value = ''
+  try {
+    const result = await invoke<InspectedDirectory[]>('detect_wow_paths')
+    if (current !== request) return
+    if (!result.length) {
+      error.value = '未自动检测到游戏目录，请点击“添加目录”手动选择。'
+      return
+    }
+    confirmCandidates(result)
+  } catch (reason) {
+    if (current === request) error.value = `自动检测失败：${reason instanceof Error ? reason.message : String(reason)}。可重试或手动添加目录。`
+  } finally {
+    if (current === request) detecting.value = false
+  }
+}
 async function addDirectory() {
-  if (!desktop || choosing.value) return
+  if (!desktop || busy.value || confirming.value) return
   const current = ++request
   choosing.value = true
   error.value = ''
@@ -57,11 +85,7 @@ async function addDirectory() {
       error.value = '未找到游戏目录，请选择包含游戏程序或 WTF/Account 的目录。'
       return
     }
-    candidates.value = result
-    draftPath.value = result.length === 1 ? result[0]!.path : ''
-    editing.value = false
-    chooseCandidate()
-    confirming.value = true
+    confirmCandidates(result)
   } catch (reason) {
     if (current === request) error.value = reason instanceof Error ? reason.message : String(reason)
   } finally {
@@ -101,8 +125,11 @@ async function remove(item: GameInstallation) {
 <template>
   <main class="directories-page">
     <header class="directories-heading">
-      <div><h1>游戏目录</h1><p>先选择目录，再确认对应的游戏版本。</p></div>
-      <button class="directory-primary" type="button" :disabled="!desktop || choosing" @click="addDirectory"><i :class="choosing ? 'ri-loader-4-line' : 'ri-folder-add-line'" aria-hidden="true" />{{ choosing ? '正在识别…' : '添加目录' }}</button>
+      <div><h1>游戏目录</h1><p>自动检测或手动添加目录，再确认对应的游戏版本。</p></div>
+      <div class="directories-heading-actions">
+        <button class="directory-detect" type="button" :disabled="!desktop || busy || confirming" :aria-busy="detecting" @click="detectDirectories"><i :class="detecting ? 'ri-loader-4-line' : 'ri-search-line'" aria-hidden="true" />{{ detecting ? '正在检测…' : '自动检测' }}</button>
+        <button class="directory-primary" type="button" :disabled="!desktop || busy || confirming" @click="addDirectory"><i :class="choosing ? 'ri-loader-4-line' : 'ri-folder-add-line'" aria-hidden="true" />{{ choosing ? '正在识别…' : '添加目录' }}</button>
+      </div>
     </header>
     <p v-if="!desktop" class="directory-notice">请在桌面客户端选择本机游戏目录。</p>
     <p v-if="error" class="directory-error" role="alert">{{ error }}</p>
@@ -113,9 +140,9 @@ async function remove(item: GameInstallation) {
           <code>{{ item.path }}</code>
         </div>
         <div class="directory-entry-actions">
-          <button v-if="!sameGamePath(activePath, item.path) && item.flavor" type="button" @click="activate(item)">设为当前</button>
-          <button type="button" @click="editVersion(item)">修改版本</button>
-          <button class="directory-remove" type="button" @click="remove(item)">移除</button>
+          <button v-if="!sameGamePath(activePath, item.path) && item.flavor" type="button" :disabled="busy" @click="activate(item)">设为当前</button>
+          <button type="button" :disabled="busy" @click="editVersion(item)">修改版本</button>
+          <button class="directory-remove" type="button" :disabled="busy" @click="remove(item)">移除</button>
         </div>
       </article>
     </div>
@@ -139,6 +166,7 @@ async function remove(item: GameInstallation) {
 <style scoped>
 .directories-page { max-width: 1080px; margin: 0 auto; padding: 28px 20px 48px; color: var(--color-text-main); }
 .directories-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
+.directories-heading-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .directories-heading h1 { margin: 0 0 8px; font-size: 28px; }
 .directories-heading p, .directories-empty p { margin: 0; color: var(--color-text-secondary); font-size: 14px; line-height: 1.7; }
 .directories-page button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-panel-bg); color: var(--color-text-main); font: inherit; font-size: 13px; cursor: pointer; }
