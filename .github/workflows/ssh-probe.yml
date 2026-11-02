@@ -16,13 +16,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            scripts
-
-      - name: Probe publish script with fake artifacts
+      - name: Probe
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
@@ -30,26 +24,45 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          $ErrorActionPreference = 'Continue'
-          $temp = Join-Path $env:RUNNER_TEMP 'probe'
-          New-Item -ItemType Directory -Force -Path (Join-Path $temp 'art') | Out-Null
-          $names = @('RPBox_1.0.6-6_x64-setup.exe', 'RPBox_1.0.6-6_x64-setup.exe.sig', 'latest.json')
-          foreach ($name in $names) {
-            $path = Join-Path $temp "art/$name"
-            if ($name -eq 'latest.json') {
-              '{"latest_version":"1.0.6-6","notes":"probe","channel":"beta"}' | Set-Content -LiteralPath $path -Encoding utf8NoBOM
-            } else {
-              'probe' | Set-Content -LiteralPath $path -Encoding utf8NoBOM
-            }
-          }
-          $sums = foreach ($name in $names) {
-            (Get-FileHash -LiteralPath (Join-Path $temp "art/$name") -Algorithm SHA256).Hash.ToLowerInvariant() + "  $name"
-          }
-          [IO.File]::WriteAllText((Join-Path $temp 'art/SHA256SUMS'), ($sums -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("rpbox-probe-" + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $tempDirectory | Out-Null
+          $keyPath = Join-Path $tempDirectory 'deploy.key'
+          $knownHosts = Join-Path $tempDirectory 'known_hosts'
+          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          & icacls $tempDirectory /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
+          ($env:SSH_PRIVATE_KEY.Trim().Replace("`r", '') + "`n") | Set-Content -LiteralPath $keyPath -NoNewline -Encoding utf8NoBOM
+          $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
+          & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
+          Write-Host "key=$keyPath size=$((Get-Item $keyPath).Length) known=$((Get-Item $knownHosts).Length)"
 
-          Write-Host '=== running publish script (verify only)'
-          $output = @(& ./scripts/publish-client-release.ps1 -Version 1.0.6-6 -Channel beta -ArtifactDirectory (Join-Path $temp 'art') -ServerHost $env:SERVER_HOST -ServerUser $env:SERVER_USER -RemotePath $env:RELEASE_PATH -VerifyOnly 2>&1 | ForEach-Object { "$_" })
-          $code = $LASTEXITCODE
-          Write-Host "=== publish exit=$code"
-          foreach ($line in $output) { Write-Host "| $line" }
-          exit 0
+          function Invoke-TransferCommand {
+            param([string]$Program, [string[]]$Arguments)
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              & $Program @Arguments 2>&1 | ForEach-Object { Write-Host "$_" }
+              Write-Host "inner attempt=$attempt exit=$LASTEXITCODE"
+              if ($LASTEXITCODE -eq 0) { return }
+              Start-Sleep -Seconds 3
+            }
+            throw "$Program failed after 3 attempt(s)."
+          }
+
+          $common = @('-F', 'none', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=`"$knownHosts`"", '-o', 'ConnectTimeout=30', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4')
+          $target = "$($env:SERVER_USER)@$($env:SERVER_HOST)"
+          $staging = "$($env:RELEASE_PATH.TrimEnd('/'))/.probe-" + [guid]::NewGuid().ToString('N')
+
+          Write-Host '=== direct call with -v'
+          & ssh '-v' (@('-p', '2233') + $common) @($target, "mkdir -p '$staging'") 2>&1 | ForEach-Object { Write-Host "| $_" }
+          Write-Host "direct exit=$LASTEXITCODE"
+
+          Write-Host '=== function call without -v (same as the script)'
+          try {
+            Invoke-TransferCommand 'ssh' (@('-p', '2233') + $common + @($target, "mkdir -p '$staging'"))
+            Write-Host 'function call succeeded'
+          } catch {
+            Write-Host "function call failed: $($_.Exception.Message)"
+          }
+
+          & ssh (@('-p', '2233') + $common) @($target, "rmdir '$staging' || true") 2>&1 | Out-Null
+          Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
