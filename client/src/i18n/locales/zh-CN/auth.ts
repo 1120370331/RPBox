@@ -4,7 +4,7 @@ export default {
     subtitle: '欢迎回来',
     username: '用户名',
     password: '密码',
-    usernamePlaceholder: '请输入用户名',
+    usernamePlaceholder: '请输入用户名或邮箱',
     passwordPlaceholder: '请输入密码',
     submit: '登录',
     submitting: '登录中...',

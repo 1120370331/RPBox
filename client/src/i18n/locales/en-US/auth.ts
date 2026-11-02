@@ -4,7 +4,7 @@ export default {
     subtitle: 'Welcome back',
     username: 'Username',
     password: 'Password',
-    usernamePlaceholder: 'Enter username',
+    usernamePlaceholder: 'Enter username or email',
     passwordPlaceholder: 'Enter password',
     submit: 'Login',
     submitting: 'Logging in...',

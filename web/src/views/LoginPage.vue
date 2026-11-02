@@ -47,7 +47,7 @@ async function handleLogin() {
       <form @submit.prevent="handleLogin" class="form">
         <RInput
           v-model="username"
-          placeholder="用户名"
+          placeholder="用户名或邮箱"
           autocomplete="username"
         />
         <RInput
