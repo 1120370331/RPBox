@@ -1,6 +1,6 @@
 name: SSH Deploy Probe
 
-# Temporary diagnostic workflow: prints the exact ssh failure of the Windows deploy path.
+# Temporary diagnostic workflow: reproduces the Windows publish step without building an installer.
 on:
   workflow_dispatch:
 
@@ -16,45 +16,40 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - name: Probe
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts
+
+      - name: Probe publish script with fake artifacts
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          RELEASE_PATH: ${{ secrets.RELEASE_PATH }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          function Show([string]$label, [object[]]$lines) {
-            Write-Host "=== $label"
-            foreach ($line in $lines) { Write-Host "| $line" }
-          }
           $ErrorActionPreference = 'Continue'
-          Show 'windows-ssh-version' @(& ssh -V 2>&1)
-          Show 'ssh-path' @(Get-Command ssh | ForEach-Object Source)
-          Show 'git-ssh-version' @(& "$(Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh.exe')" -V 2>&1)
-
           $temp = Join-Path $env:RUNNER_TEMP 'probe'
-          New-Item -ItemType Directory -Force -Path $temp | Out-Null
-          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          & icacls $temp /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
-          $keyPath = Join-Path $temp 'deploy.key'
-          ($env:SSH_PRIVATE_KEY.Trim().Replace("`r", '') + "`n") | Set-Content -LiteralPath $keyPath -NoNewline -Encoding utf8NoBOM
-          $keyLines = @(Get-Content -LiteralPath $keyPath)
-          Show 'key-shape' @("lines=$($keyLines.Count)", "first=$($keyLines[0])", "last=$($keyLines[-1])", "bytes=$((Get-Item $keyPath).Length)")
-
-          $knownHosts = Join-Path $temp 'known_hosts'
-          $hostKeys = if ($env:SSH_KNOWN_HOSTS) { $env:SSH_KNOWN_HOSTS } else {
-            $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
-            & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST
+          New-Item -ItemType Directory -Force -Path (Join-Path $temp 'art') | Out-Null
+          $names = @('RPBox_1.0.6-6_x64-setup.exe', 'RPBox_1.0.6-6_x64-setup.exe.sig', 'latest.json')
+          foreach ($name in $names) {
+            $path = Join-Path $temp "art/$name"
+            if ($name -eq 'latest.json') {
+              '{"latest_version":"1.0.6-6","notes":"probe","channel":"beta"}' | Set-Content -LiteralPath $path -Encoding utf8NoBOM
+            } else {
+              'probe' | Set-Content -LiteralPath $path -Encoding utf8NoBOM
+            }
           }
-          $hostKeys | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
-          Show 'known-hosts' @("lines=$(@($hostKeys).Count)", "bytes=$((Get-Item $knownHosts).Length)")
+          $sums = foreach ($name in $names) {
+            (Get-FileHash -LiteralPath (Join-Path $temp "art/$name") -Algorithm SHA256).Hash.ToLowerInvariant() + "  $name"
+          }
+          [IO.File]::WriteAllText((Join-Path $temp 'art/SHA256SUMS'), ($sums -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 
-          $target = "$($env:SERVER_USER)@$($env:SERVER_HOST)"
-          $common = @('-F', 'none', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=`"$knownHosts`"", '-o', 'ConnectTimeout=30')
-
-          $output = @(& ssh '-v' (@('-p', '2233') + $common) @($target, 'echo probe-ok') 2>&1 | ForEach-Object { "$_" })
-          Show "windows-ssh exit=$LASTEXITCODE" $output
-
-          $gitSsh = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh.exe'
-          $output2 = @(& $gitSsh '-v' (@('-p', '2233') + $common) @($target, 'echo probe-ok') 2>&1 | ForEach-Object { "$_" })
-          Show "git-ssh exit=$LASTEXITCODE" $output2
+          Write-Host '=== running publish script (verify only)'
+          $output = @(& ./scripts/publish-client-release.ps1 -Version 1.0.6-6 -Channel beta -ArtifactDirectory (Join-Path $temp 'art') -ServerHost $env:SERVER_HOST -ServerUser $env:SERVER_USER -RemotePath $env:RELEASE_PATH -VerifyOnly 2>&1 | ForEach-Object { "$_" })
+          $code = $LASTEXITCODE
+          Write-Host "=== publish exit=$code"
+          foreach ($line in $output) { Write-Host "| $line" }
+          exit 0
