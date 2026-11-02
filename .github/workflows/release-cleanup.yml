@@ -1,0 +1,81 @@
+name: Release Cleanup
+
+# Temporary ops workflow: prunes old client release directories on the release server.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only print what would be deleted'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Cleanup release directories
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Prune old releases
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          RELEASE_PATH: ${{ secrets.RELEASE_PATH }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("rpbox-cleanup-" + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $tempDirectory | Out-Null
+          $keyPath = Join-Path $tempDirectory 'deploy.key'
+          $knownHosts = Join-Path $tempDirectory 'known_hosts'
+          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          & icacls $tempDirectory /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
+          ($env:SSH_PRIVATE_KEY.Trim().Replace("`r", '') + "`n") | Set-Content -LiteralPath $keyPath -NoNewline -Encoding utf8NoBOM
+          $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
+          & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
+
+          $bash = @'
+          exec 2>&1
+          set -eu
+          base="__BASE__"
+          export dry="__DRY__"
+          cd "$base"
+          keep="$( {
+              ls -1d [0-9]* 2>/dev/null | sed 's:/$::' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$' | sort -V | tail -n 3
+              for pointer in latest.json latest-beta.json; do
+                  [ -f "$pointer" ] && sed -n 's/.*"latest_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pointer"
+              done
+          } | sort -u )"
+          echo "KEEP:"; echo "$keep"
+          echo "BEFORE:"; df -h / | tail -1; du -sh "$base"
+          for dir in $(ls -1d [0-9]* 2>/dev/null | sed 's:/$::'); do
+              if echo "$keep" | grep -qx "$dir"; then
+                  echo "KEEP   $dir"
+                  continue
+              fi
+              echo "DELETE $dir"
+              if [ "$dry" != "1" ]; then rm -rf -- "$dir"; fi
+          done
+          for dir in $(ls -1d .upload-* 2>/dev/null | sed 's:/$::'); do
+              echo "STAGING $dir"
+              if [ "$dry" != "1" ]; then rm -rf -- "$dir"; fi
+          done
+          echo "AFTER:"; df -h / | tail -1; du -sh "$base"
+          '@
+          $bash = $bash.Replace('__BASE__', $env:RELEASE_PATH.TrimEnd('/')).Replace('__DRY__', $env:DRY_RUN)
+          $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($bash))
+          $common = @('-F', 'none', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=`"$knownHosts`"", '-o', 'ConnectTimeout=30')
+          $target = "$($env:SERVER_USER)@$($env:SERVER_HOST)"
+          $output = @(& ssh (@('-p', '2233') + $common) @($target, "echo $encoded | base64 -d | bash") 2>&1 | ForEach-Object { "$_" })
+          Write-Host "exit=$LASTEXITCODE"
+          foreach ($line in $output) { Write-Host "| $line" }
+          Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
