@@ -50,10 +50,15 @@ jobs:
           $base = $env:RELEASE_PATH.TrimEnd('/')
 
           if ($env:MODE -eq 'prune') {
-            $command = "cd '$base' && echo '== deleting' && ls -1d [0-9]* | sed 's:/`$::' | sort -V | head -n -3 | tee /dev/stderr | xargs -r rm -rf -- 2>&1 && echo '== staging' && ls -1d .upload-* 2>/dev/null | xargs -r rm -rf -- 2>&1 ; echo '== after' ; df -h / | tail -1 ; du -sh '$base'"
+            $remote = @'
+          cd @BASE@ && echo '== deleting' && ls -1d [0-9]* | sed 's:/$::' | sort -V | head -n -3 | xargs -r rm -rf -- 2>&1 ; echo '== staging' ; ls -1d .upload-* 2>/dev/null | xargs -r rm -rf -- 2>&1 ; echo '== after' ; df -h / | tail -1 ; du -sh @BASE@ ; ls -1d @BASE@/[0-9]* 2>/dev/null
+          '@
           } else {
-            $command = "cd '$base' && echo '== versions' && ls -1d [0-9]* | sed 's:/`$::' | sort -V | tr '\n' ' ' && echo && echo '== pointers' && grep -o '\"latest_version\"[^,]*' latest.json latest-beta.json 2>&1 && echo '== disk' && df -h / | tail -1 && du -sh '$base'"
+            $remote = @'
+          cd @BASE@ && echo '== versions' && ls -1d [0-9]* | sed 's:/$::' | sort -V | tr '\n' ' ' && echo && echo '== pointers' && grep -o '"latest_version"[^,]*' latest.json latest-beta.json 2>&1 && echo '== disk' && df -h / | tail -1 && du -sh @BASE@
+          '@
           }
+          $command = $remote.Trim().Replace('@BASE@', $base)
           Write-Host "mode=$($env:MODE)"
           $output = @(& ssh (@('-p', '2233') + $common) @($target, $command) 2>&1 | ForEach-Object { "$_" })
           Write-Host "exit=$LASTEXITCODE"
