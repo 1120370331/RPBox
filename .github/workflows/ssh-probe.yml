@@ -1,6 +1,6 @@
 name: SSH Deploy Probe
 
-# Temporary diagnostic workflow: reproduces the Windows publish step without building an installer.
+# Temporary diagnostic workflow: inspects disk usage on the release server.
 on:
   workflow_dispatch:
 
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   probe:
-    name: Probe Windows SSH deploy
+    name: Probe server disk usage
     runs-on: windows-latest
     timeout-minutes: 10
     defaults:
@@ -40,21 +40,16 @@ jobs:
           $base = $env:RELEASE_PATH.TrimEnd('/')
 
           $commands = @(
-            'echo hello',
-            'id',
-            'pwd',
-            "ls -ld '$base'",
-            "ls -ld '$base' 2>&1",
-            "mkdir -p '$base' 2>&1",
-            "mkdir -p '$base/.probe-a' 2>&1",
-            "mkdir -p '$base/.probe-b'",
-            "rmdir '$base/.probe-a' '$base/.probe-b' 2>&1",
-            'df -h . 2>&1'
+            'df -h / 2>&1',
+            'df -h / 2>&1 | tail -3',
+            "du -sh '$base' 2>&1",
+            "du -sh '$base'/* 2>&1 | sort -h | tail -12",
+            "ls -la '$base' 2>&1 | tail -12",
+            'df -i / 2>&1 | tail -2'
           )
           foreach ($command in $commands) {
             $output = @(& ssh (@('-p', '2233') + $common) @($target, $command) 2>&1 | ForEach-Object { "$_" })
             Write-Host "=== $command"
-            Write-Host "    exit=$LASTEXITCODE lines=$($output.Count)"
             foreach ($line in $output) { Write-Host "    | $line" }
           }
           Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
