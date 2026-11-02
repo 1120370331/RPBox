@@ -35,34 +35,26 @@ jobs:
           ($env:SSH_PRIVATE_KEY.Trim().Replace("`r", '') + "`n") | Set-Content -LiteralPath $keyPath -NoNewline -Encoding utf8NoBOM
           $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
           & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
-          Write-Host "key=$keyPath size=$((Get-Item $keyPath).Length) known=$((Get-Item $knownHosts).Length)"
-
-          function Invoke-TransferCommand {
-            param([string]$Program, [string[]]$Arguments)
-            for ($attempt = 1; $attempt -le 3; $attempt++) {
-              & $Program @Arguments 2>&1 | ForEach-Object { Write-Host "$_" }
-              Write-Host "inner attempt=$attempt exit=$LASTEXITCODE"
-              if ($LASTEXITCODE -eq 0) { return }
-              Start-Sleep -Seconds 3
-            }
-            throw "$Program failed after 3 attempt(s)."
-          }
-
-          $common = @('-F', 'none', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=`"$knownHosts`"", '-o', 'ConnectTimeout=30', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4')
+          $common = @('-F', 'none', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=`"$knownHosts`"", '-o', 'ConnectTimeout=30')
           $target = "$($env:SERVER_USER)@$($env:SERVER_HOST)"
-          $staging = "$($env:RELEASE_PATH.TrimEnd('/'))/.probe-" + [guid]::NewGuid().ToString('N')
+          $base = $env:RELEASE_PATH.TrimEnd('/')
 
-          Write-Host '=== direct call with -v'
-          & ssh '-v' (@('-p', '2233') + $common) @($target, "mkdir -p '$staging'") 2>&1 | ForEach-Object { Write-Host "| $_" }
-          Write-Host "direct exit=$LASTEXITCODE"
-
-          Write-Host '=== function call without -v (same as the script)'
-          try {
-            Invoke-TransferCommand 'ssh' (@('-p', '2233') + $common + @($target, "mkdir -p '$staging'"))
-            Write-Host 'function call succeeded'
-          } catch {
-            Write-Host "function call failed: $($_.Exception.Message)"
+          $commands = @(
+            'echo hello',
+            'id',
+            'pwd',
+            "ls -ld '$base'",
+            "ls -ld '$base' 2>&1",
+            "mkdir -p '$base' 2>&1",
+            "mkdir -p '$base/.probe-a' 2>&1",
+            "mkdir -p '$base/.probe-b'",
+            "rmdir '$base/.probe-a' '$base/.probe-b' 2>&1",
+            'df -h . 2>&1'
+          )
+          foreach ($command in $commands) {
+            $output = @(& ssh (@('-p', '2233') + $common) @($target, $command) 2>&1 | ForEach-Object { "$_" })
+            Write-Host "=== $command"
+            Write-Host "    exit=$LASTEXITCODE lines=$($output.Count)"
+            foreach ($line in $output) { Write-Host "    | $line" }
           }
-
-          & ssh (@('-p', '2233') + $common) @($target, "rmdir '$staging' || true") 2>&1 | Out-Null
           Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
