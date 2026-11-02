@@ -91,7 +91,8 @@ try {
     $remoteDirectory = "$remoteBase/$Version"
     $staging = "$remoteBase/.upload-$Version-$([guid]::NewGuid().ToString('N'))"
     $metadataFile = if ($Channel -eq 'beta') { 'latest-beta.json' } else { 'latest.json' }
-    Invoke-TransferCommand ssh (@('-p', "$ServerPort") + $common + @($target, "mkdir -p '$staging'"))
+    # The remote SSH server drops stderr, so merge it into stdout to keep failures diagnosable.
+    Invoke-TransferCommand ssh (@('-p', "$ServerPort") + $common + @($target, "mkdir -p '$staging' 2>&1"))
     # One SCP connection for all four files; installers are already compressed.
     $files = @($names | ForEach-Object { Join-Path $ArtifactDirectory $_ })
     Invoke-TransferCommand scp (@('-P', "$ServerPort") + $common + $files + @("${target}:$staging/"))
