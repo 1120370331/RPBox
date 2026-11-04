@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -103,6 +102,10 @@ func (s *Service) RunOnce() {
 		return
 	}
 	defer atomic.StoreInt32(&s.running, 0)
+	if err := s.checkOSSReady(); err != nil {
+		log.Printf("[Backup] skipped: OSS unavailable: %v", err)
+		return
+	}
 
 	startedAt := time.Now()
 	filePath, objectKey, err := s.dumpDatabase()
@@ -112,22 +115,15 @@ func (s *Service) RunOnce() {
 	}
 	log.Printf("[Backup] dump created: %s", filePath)
 
-	if s.ossEnabled() {
-		if err := s.uploadToOSS(filePath, objectKey); err != nil {
-			log.Printf("[Backup] upload failed: %v", err)
-		} else {
-			log.Printf("[Backup] uploaded to oss: %s", objectKey)
-			// 上传成功后立即删除本地文件，节省磁盘空间
-			if err := os.Remove(filePath); err != nil {
-				log.Printf("[Backup] remove local file failed: %v", err)
-			}
-		}
+	if err := s.uploadAndVerify(filePath, objectKey); err != nil {
+		log.Printf("[Backup] upload or verification failed, local dump retained: %v", err)
+		return
 	}
-
-	s.cleanupLocal()
-	if s.ossEnabled() {
-		s.cleanupOSS()
+	log.Printf("[Backup] uploaded and verified in oss: %s", objectKey)
+	if err := os.Remove(filePath); err != nil {
+		log.Printf("[Backup] remove verified local file failed: %v", err)
 	}
+	s.cleanupOSS()
 
 	log.Printf("[Backup] finished in %s", time.Since(startedAt).Truncate(time.Second))
 }
@@ -196,40 +192,6 @@ func (s *Service) dumpDatabase() (string, string, error) {
 	}
 
 	return fullPath, objectKey, nil
-}
-
-func (s *Service) cleanupLocal() {
-	retention := s.retentionDays()
-	if retention <= 0 {
-		return
-	}
-
-	root := s.backupDir()
-	if root == "" {
-		return
-	}
-
-	cutoff := time.Now().AddDate(0, 0, -retention)
-	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			log.Printf("[Backup] cleanup local: %v", err)
-			return nil
-		}
-		if d.IsDir() || !isBackupFile(p) {
-			return nil
-		}
-		info, infoErr := d.Info()
-		if infoErr != nil {
-			log.Printf("[Backup] cleanup local: %v", infoErr)
-			return nil
-		}
-		if info.ModTime().Before(cutoff) {
-			if removeErr := os.Remove(p); removeErr != nil {
-				log.Printf("[Backup] cleanup local: remove %s failed: %v", p, removeErr)
-			}
-		}
-		return nil
-	})
 }
 
 func (s *Service) cleanupOSS() {
