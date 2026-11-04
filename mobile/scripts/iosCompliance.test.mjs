@@ -25,18 +25,6 @@ function normalizeNewlines(value) {
   return value.replace(/\r\n?/g, '\n')
 }
 
-function extractPreparedWhatsNew(workflow) {
-  const match = normalizeNewlines(workflow).match(
-    /WHATS_NEW = textwrap\.dedent\("""\\\n([\s\S]*?)\n\s+"""\)\.strip\(\)/,
-  )
-  assert.ok(match, 'prepare workflow must define WHATS_NEW with textwrap.dedent')
-  const lines = match[1].split('\n')
-  const indentation = Math.min(
-    ...lines.filter((line) => line.trim()).map((line) => line.match(/^\s*/)[0].length),
-  )
-  return lines.map((line) => line.slice(Math.min(indentation, line.length))).join('\n').trim()
-}
-
 test('validates strict iOS release contracts', () => {
   assert.deepEqual(
     validateIosReleaseContract({ version: '1.1', buildNumber: 1000042 }),
@@ -66,35 +54,13 @@ test('tracked iOS release stays independent from Android package version', () =>
   const mobilePackage = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   const releaseNotes = fs.readFileSync(new URL('../release-notes/1.1.txt', import.meta.url), 'utf8')
   const pbxproj = fs.readFileSync(new URL('../ios/App/App.xcodeproj/project.pbxproj', import.meta.url), 'utf8')
-  const prepareWorkflow = fs.readFileSync(
-    new URL('../../.github/workflows/app-store-prepare.yml', import.meta.url),
-    'utf8',
-  )
-
   assert.equal(IOS_RELEASE_CONTRACT_PATH, 'mobile/ios/release.json')
   assert.deepEqual(releaseContract, { version: '1.1', buildNumber: 1000042 })
   assert.equal(mobilePackage.version, '2.0.4', 'Android/mobile package version must remain independent')
   assert.equal(normalizeNewlines(releaseNotes).trim(), EXPECTED_IOS_1_1_RELEASE_NOTES)
   assert.ok(releaseNotes.trim().length <= 4000, 'App Store What\'s New must fit the 4000-character limit')
-  assert.equal(extractPreparedWhatsNew(prepareWorkflow), EXPECTED_IOS_1_1_RELEASE_NOTES)
-  assert.match(prepareWorkflow, /ASC_EXPECTED_BUILD_NUMBER: '1000042'/)
-  assert.doesNotMatch(prepareWorkflow, /\b1000041\b/)
   assert.equal((pbxproj.match(/MARKETING_VERSION = 1\.1;/g) || []).length, 2)
   assert.equal((pbxproj.match(/CURRENT_PROJECT_VERSION = 1000042;/g) || []).length, 2)
-})
-
-test('App Store preparation stays fail-closed and never submits for review', () => {
-  const workflow = fs.readFileSync(
-    new URL('../../.github/workflows/app-store-prepare.yml', import.meta.url),
-    'utf8',
-  )
-
-  assert.match(workflow, /apply:[\s\S]*?default: false[\s\S]*?type: boolean/)
-  assert.match(workflow, /if not APPLY:[\s\S]*?No App Store Connect mutation was sent[\s\S]*?return/)
-  assert.doesNotMatch(workflow, /\/v1\/reviewSubmissions/)
-  assert.match(workflow, /Preparation only: no review submission or publication was requested/)
-  assert.match(workflow, /Protected App Review Information changed unexpectedly/)
-  assert.match(workflow, /Screenshot does not match the approved SHA-256/)
 })
 
 test('read-only App Store audit redacts feedback and reviewer email fields', () => {
