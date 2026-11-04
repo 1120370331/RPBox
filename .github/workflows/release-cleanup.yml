@@ -1,11 +1,12 @@
 name: Release Cleanup
 
-# Temporary ops workflow: surveys and prunes old client release directories on the release server.
 on:
+  schedule:
+    - cron: '17 */2 * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'survey prints the release history, prune keeps the three newest versions'
+        description: 'Survey only, or prune inactive desktop releases and package caches'
         required: true
         default: survey
         type: choice
@@ -16,51 +17,40 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-disk-cleanup
+  cancel-in-progress: false
+
 jobs:
   cleanup:
-    name: Cleanup release directories
-    runs-on: windows-latest
+    name: Clean reproducible files on production
+    runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        shell: pwsh
     steps:
-      - name: Run release cleanup
+      - uses: actions/checkout@v4
+      - name: Survey or prune production disk
+        shell: bash
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           RELEASE_PATH: ${{ secrets.RELEASE_PATH }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          MODE: ${{ inputs.mode }}
+          MODE: ${{ github.event_name == 'schedule' && 'prune' || inputs.mode }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $false
-          $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ("rpbox-cleanup-" + [guid]::NewGuid().ToString('N'))
-          New-Item -ItemType Directory -Path $tempDirectory | Out-Null
-          $keyPath = Join-Path $tempDirectory 'deploy.key'
-          $knownHosts = Join-Path $tempDirectory 'known_hosts'
-          $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          & icacls $tempDirectory /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
-          ($env:SSH_PRIVATE_KEY.Trim().Replace("`r", '') + "`n") | Set-Content -LiteralPath $keyPath -NoNewline -Encoding utf8NoBOM
-          $keyscan = Join-Path (Split-Path -Parent (Get-Command git).Source) '../usr/bin/ssh-keyscan.exe'
-          & $keyscan -4 -T 30 -p 2233 $env:SERVER_HOST | Set-Content -LiteralPath $knownHosts -Encoding utf8NoBOM
-          $common = @('-F', 'none', '-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=`"$knownHosts`"", '-o', 'ConnectTimeout=30')
-          $target = "$($env:SERVER_USER)@$($env:SERVER_HOST)"
-          $base = $env:RELEASE_PATH.TrimEnd('/')
-
-          if ($env:MODE -eq 'prune') {
-            $remote = @'
-          cd @BASE@ && echo '== deleting' && ls -1d [0-9]* | sed 's:/$::' | sort -V | head -n -3 | xargs -r rm -rf -- 2>&1 ; echo '== staging' ; ls -1d .upload-* 2>/dev/null | xargs -r rm -rf -- 2>&1 ; echo '== after' ; df -h / | tail -1 ; du -sh @BASE@ ; ls -1d @BASE@/[0-9]* 2>/dev/null
-          '@
-          } else {
-            $remote = @'
-          cd @BASE@ && echo '== versions' && ls -1d [0-9]* | sed 's:/$::' | sort -V | tr '\n' ' ' && echo && echo '== pointers' && grep -o '"latest_version"[^,]*' latest.json latest-beta.json 2>&1 && echo '== disk' && df -h / | tail -1 && du -sh @BASE@
-          '@
-          }
-          $command = $remote.Trim().Replace('@BASE@', $base)
-          Write-Host "mode=$($env:MODE)"
-          $output = @(& ssh (@('-p', '2233') + $common) @($target, $command) 2>&1 | ForEach-Object { "$_" })
-          Write-Host "exit=$LASTEXITCODE"
-          foreach ($line in $output) { Write-Host "| $line" }
-          Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
+          set -euo pipefail
+          temp_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$temp_dir"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$temp_dir/deploy.key"
+          chmod 600 "$temp_dir/deploy.key"
+          if [[ -n "$SSH_KNOWN_HOSTS" ]]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > "$temp_dir/known_hosts"
+          else
+            ssh-keyscan -4 -T 30 -p 2233 "$SERVER_HOST" > "$temp_dir/known_hosts"
+          fi
+          test -s "$temp_dir/known_hosts"
+          remote_command="bash -s -- $(printf '%q' "$MODE") $(printf '%q' "$RELEASE_PATH")"
+          ssh -p 2233 -i "$temp_dir/deploy.key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o "UserKnownHostsFile=$temp_dir/known_hosts" -o ConnectTimeout=30 \
+            "$SERVER_USER@$SERVER_HOST" "$remote_command" < scripts/cleanup-production-disk.sh
