@@ -1,6 +1,8 @@
 name: Migrate Local Database Backups to OSS
 
 on:
+  schedule:
+    - cron: '43 */6 * * *'
   workflow_dispatch:
     inputs:
       apply:
@@ -46,9 +48,9 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          APPLY: ${{ inputs.apply }}
-          LIMIT: ${{ inputs.limit }}
-          CONFIRMATION: ${{ inputs.confirmation }}
+          APPLY: ${{ github.event_name == 'schedule' && 'true' || inputs.apply }}
+          LIMIT: ${{ github.event_name == 'schedule' && '0' || inputs.limit }}
+          CONFIRMATION: ${{ github.event_name == 'schedule' && 'UPLOAD-VERIFY-DELETE' || inputs.confirmation }}
         run: |
           set -euo pipefail
           [[ "$LIMIT" =~ ^[0-9]+$ ]]
