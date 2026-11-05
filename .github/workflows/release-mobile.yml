@@ -5,6 +5,15 @@ on:
     tags:
       - 'mobile-v*'
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Android release channel
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - beta
 
 env:
   NODE_VERSION: '20'
@@ -23,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
+      channel: ${{ steps.version.outputs.CHANNEL }}
 
     steps:
       - name: Checkout code
@@ -59,22 +69,28 @@ jobs:
       - name: Get version from tag
         id: version
         shell: bash
+        env:
+          INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
           REF="${GITHUB_REF#refs/*/}"
           PACKAGE_VERSION=$(node -p "require('./mobile/package.json').version")
           if [[ "$GITHUB_REF" == refs/tags/mobile-v* ]]; then
             VERSION="${REF#mobile-v}"
+            CHANNEL=stable
             if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
               echo "ERROR: mobile tag version must exactly match mobile/package.json (${PACKAGE_VERSION})."
               exit 1
             fi
           else
             VERSION="$PACKAGE_VERSION"
+            CHANNEL="${INPUT_CHANNEL:-stable}"
           fi
+          [[ "$CHANNEL" == stable || "$CHANNEL" == beta ]] || { echo "ERROR: invalid Android channel" >&2; exit 1; }
           VERSION_CODE="$(ANDROID_RELEASE_VERSION="$VERSION" node ./mobile/scripts/androidReleaseConfig.mjs version-code)"
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_OUTPUT"
 
       - name: Sync mobile package version
         run: |
@@ -252,7 +268,9 @@ jobs:
           cp "$APK_PATH" "artifacts/RPBox_${VERSION}_android.apk"
           cp "$AAB_PATH" "artifacts/RPBox_${VERSION}_android.aab"
 
-          export VERSION NOTES_FILE PUB_DATE ANDROID_RELEASE_BASE_URL
+          META_FILENAME=latest-android.json
+          if [[ "${{ steps.version.outputs.CHANNEL }}" == beta ]]; then META_FILENAME=latest-beta-android.json; fi
+          export VERSION NOTES_FILE PUB_DATE ANDROID_RELEASE_BASE_URL META_FILENAME
           python3 - <<'PY'
           import json
           import os
@@ -275,7 +293,7 @@ jobs:
             "url": f"{release_base_url}/{version}/RPBox_{version}_android.apk",
             "mandatory": False,
           }
-          Path("artifacts/latest-android.json").write_text(
+          Path("artifacts", os.environ["META_FILENAME"]).write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
           )
@@ -335,6 +353,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.build-android.outputs.version }}"
+          CHANNEL="${{ needs.build-android.outputs.channel }}"
           REMOTE_BASE="${MOBILE_RELEASE_PATH:-}"
           if [ -z "$REMOTE_BASE" ] && [ -n "${RELEASE_PATH:-}" ]; then
             REMOTE_BASE="${RELEASE_PATH%/}/mobile"
@@ -347,18 +366,20 @@ jobs:
 
           APK_PATH="artifacts/RPBox_${VERSION}_android.apk"
           AAB_PATH="artifacts/RPBox_${VERSION}_android.aab"
-          META_PATH="artifacts/latest-android.json"
+          META_FILENAME=latest-android.json
+          if [[ "$CHANNEL" == beta ]]; then META_FILENAME=latest-beta-android.json; fi
+          META_PATH="artifacts/$META_FILENAME"
           [ ! -f "$APK_PATH" ] && { echo "ERROR: apk artifact missing"; exit 1; }
           [ ! -f "$AAB_PATH" ] && { echo "ERROR: aab artifact missing from Actions artifact"; exit 1; }
-          [ ! -f "$META_PATH" ] && { echo "ERROR: latest-android.json missing"; exit 1; }
+          [ ! -f "$META_PATH" ] && { echo "ERROR: $META_FILENAME missing"; exit 1; }
 
           ssh -p 2233 "$REMOTE_TARGET" "mkdir -p '$REMOTE_DIR' '$REMOTE_BASE'"
 
           REMOTE_APK_FINAL="$REMOTE_DIR/RPBox_${VERSION}_android.apk"
           REMOTE_APK_TMP="$REMOTE_APK_FINAL.part"
-          REMOTE_META_VER_FINAL="$REMOTE_DIR/latest-android.json"
+          REMOTE_META_VER_FINAL="$REMOTE_DIR/$META_FILENAME"
           REMOTE_META_VER_TMP="$REMOTE_META_VER_FINAL.part"
-          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/latest-android.json"
+          REMOTE_META_LATEST_FINAL="$REMOTE_BASE/$META_FILENAME"
           REMOTE_META_LATEST_TMP="$REMOTE_META_LATEST_FINAL.part"
 
           scp -P 2233 -C "$APK_PATH" "$REMOTE_TARGET:$REMOTE_APK_TMP"
@@ -373,6 +394,7 @@ jobs:
   update-pages:
     name: Update GitHub Pages
     runs-on: ubuntu-latest
+    if: needs.build-android.outputs.channel == 'stable'
     needs:
       - build-android
       - deploy-android
