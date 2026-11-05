@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonLatest, getTRP3Latest } from '@/api/addon'
+import { supportsRpboxAddon } from '@/utils/gameInstallations'
 import { listItems } from '@/api/item'
 import { listEvents, listPosts } from '@/api/post'
 import { listRPDBWorks } from '@/api/rpdb'
@@ -167,7 +168,7 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
         invoke<Trp3AddonCheckResult>('check_trp3_addons', { wowPath }),
         getTRP3Latest(),
         invoke<InstalledAddonInfo>('check_addon_installed', { wowPath, flavor }),
-        getAddonLatest(flavor),
+        supportsRpboxAddon(flavor) ? getAddonLatest(flavor) : Promise.resolve({ version: '', downloadUrl: '' }),
       ])
 
       const updates: string[] = []

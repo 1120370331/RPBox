@@ -157,6 +157,7 @@ onMounted(async () => {
   window.addEventListener(ADDONS_UPDATED_EVENT, handleAddonsUpdated)
   setTimeout(() => mounted.value = true, 50)
   if (!desktop) {
+    if (selectedFlavor.value && !supportsRpboxAddon(selectedFlavor.value)) return
     try { rpboxLatestVersion.value = (await getAddonLatest(selectedFlavor.value)).version } catch { pluginError.value = '插件版本读取失败，请稍后重试。' }
     return
   }
@@ -474,6 +475,11 @@ async function checkRpboxAddon() {
     wowPath: wowPath.value,
     flavor: selectedFlavor.value,
   })
+
+  if (!supportsRpboxAddon(selectedFlavor.value)) {
+    rpboxLatestVersion.value = ''
+    return
+  }
 
   try {
     const latest = await getAddonLatest(selectedFlavor.value)
