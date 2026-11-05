@@ -1,0 +1,75 @@
+name: Migrate Local Database Backups to OSS
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Upload, verify, and remove verified local dumps
+        required: true
+        default: false
+        type: boolean
+      limit:
+        description: Maximum dumps per run; 0 means all
+        required: true
+        default: '0'
+        type: string
+      confirmation:
+        description: Type UPLOAD-VERIFY-DELETE when apply is enabled
+        required: true
+        default: DRY-RUN
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-backup-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Upload and verify database dumps
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.13'
+          cache-dependency-path: server/go.sum
+      - name: Build migration utility
+        run: go -C server build -o "$RUNNER_TEMP/backupmigrate" ./cmd/backupmigrate
+      - name: Run on production
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          APPLY: ${{ inputs.apply }}
+          LIMIT: ${{ inputs.limit }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$LIMIT" =~ ^[0-9]+$ ]]
+          if [[ "$APPLY" == true && "$CONFIRMATION" != UPLOAD-VERIFY-DELETE ]]; then
+            echo 'Apply confirmation did not match' >&2
+            exit 2
+          fi
+          temp_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$temp_dir"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$temp_dir/deploy.key"
+          chmod 600 "$temp_dir/deploy.key"
+          if [[ -n "$SSH_KNOWN_HOSTS" ]]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > "$temp_dir/known_hosts"
+          else
+            ssh-keyscan -4 -T 30 -p 2233 "$SERVER_HOST" > "$temp_dir/known_hosts"
+          fi
+          test -s "$temp_dir/known_hosts"
+          ssh_args=(-p 2233 -i "$temp_dir/deploy.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$temp_dir/known_hosts" -o ConnectTimeout=30)
+          remote_path="/tmp/rpbox-backupmigrate-$GITHUB_RUN_ID"
+          scp -P 2233 "${ssh_args[@]:2}" "$RUNNER_TEMP/backupmigrate" "$SERVER_USER@$SERVER_HOST:$remote_path"
+          flags="-limit $LIMIT"
+          if [[ "$APPLY" == true ]]; then flags="-apply $flags"; fi
+          ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
+            "cd ~/RPBox/server && '$remote_path' $flags; code=\$?; rm -f -- '$remote_path'; exit \$code"
