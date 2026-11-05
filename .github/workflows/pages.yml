@@ -50,6 +50,7 @@ jobs:
           mkdir -p dist
           mkdir -p dist/.well-known
           cp shared/download.html shared/open-app.html shared/privacy.html shared/mainpic.webp shared/.nojekyll shared/CNAME shared/index.html shared/404.html dist/
+          cp -R shared/assets dist/
 
           ANDROID_PACKAGE_ID="app.rpbox.mobile"
           ANDROID_SHA256=""
@@ -65,10 +66,28 @@ jobs:
           import json
           import os
           from pathlib import Path
+          from urllib.request import urlopen
 
           dist = Path("dist")
           well_known = dist / ".well-known"
           well_known.mkdir(parents=True, exist_ok=True)
+
+          # Refresh public acknowledgements without coupling the static page to
+          # API availability. The committed, verified snapshot is the fallback.
+          try:
+            with urlopen("https://ksxvodevhonx.sealosbja.site/api/v1/sponsors", timeout=8) as response:
+              sponsors = json.load(response).get("users")
+            if not isinstance(sponsors, list):
+              raise ValueError("Invalid sponsor list")
+            public_sponsors = [
+              {"username": sponsor["username"], "role": sponsor.get("role", "")}
+              for sponsor in sponsors
+              if isinstance(sponsor, dict) and isinstance(sponsor.get("username"), str) and sponsor["username"].strip()
+            ]
+            if public_sponsors:
+              (dist / "assets/landing/sponsors.json").write_text(json.dumps(public_sponsors, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          except Exception as error:
+            print(f"Using verified sponsor snapshot: {type(error).__name__}")
 
           assetlinks = []
           package_id = os.environ.get("ANDROID_PACKAGE_ID", "").strip()
