@@ -13,13 +13,11 @@ import {
   validateIosReleaseContract,
 } from './iosCompliance.mjs'
 
-const EXPECTED_IOS_1_1_RELEASE_NOTES = `RPBox iOS 1.1 更新：
+const EXPECTED_IOS_1_2_RELEASE_NOTES = `RPBox iOS 1.2 测试版：
 
-1. 新增独立的 RPBox 人物卡入口，可查看自己的卡片，并从空白或 TRP3 云备份创建。
-2. 支持编辑人物卡资料、背景故事、第一印象与其他内容，管理角色大图、发布送审和私密状态。
-3. 完善公会解散、人物卡与公会举报、隐藏和屏蔽流程，举报可由版主按具体对象处理。
-4. 补齐中英文隐私政策、服务条款、账号删除说明与安全操作提示。
-5. 优化图片选择、预览、分享和多处移动端布局与无障碍体验。`
+1. 人物卡云端备份新增《魔兽世界：无限》独立版本，避免与正式服及怀旧服存档混用。
+2. 插件安装指引可选择无限服并下载对应的 RPBox Addon 测试包。
+3. 延续人物卡、剧情归档与社区功能的近期改进。`
 
 function normalizeNewlines(value) {
   return value.replace(/\r\n?/g, '\n')
@@ -52,15 +50,15 @@ test('tracked iOS release stays independent from Android package version', () =>
     fs.readFileSync(new URL(`../ios/release.json`, import.meta.url), 'utf8'),
   ))
   const mobilePackage = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-  const releaseNotes = fs.readFileSync(new URL('../release-notes/1.1.txt', import.meta.url), 'utf8')
+  const releaseNotes = fs.readFileSync(new URL('../release-notes/1.2.txt', import.meta.url), 'utf8')
   const pbxproj = fs.readFileSync(new URL('../ios/App/App.xcodeproj/project.pbxproj', import.meta.url), 'utf8')
   assert.equal(IOS_RELEASE_CONTRACT_PATH, 'mobile/ios/release.json')
-  assert.deepEqual(releaseContract, { version: '1.1', buildNumber: 1000042 })
+  assert.deepEqual(releaseContract, { version: '1.2', buildNumber: 1000043 })
   assert.equal(mobilePackage.version, '2.0.4', 'Android/mobile package version must remain independent')
-  assert.equal(normalizeNewlines(releaseNotes).trim(), EXPECTED_IOS_1_1_RELEASE_NOTES)
+  assert.equal(normalizeNewlines(releaseNotes).trim(), EXPECTED_IOS_1_2_RELEASE_NOTES)
   assert.ok(releaseNotes.trim().length <= 4000, 'App Store What\'s New must fit the 4000-character limit')
-  assert.equal((pbxproj.match(/MARKETING_VERSION = 1\.1;/g) || []).length, 2)
-  assert.equal((pbxproj.match(/CURRENT_PROJECT_VERSION = 1000042;/g) || []).length, 2)
+  assert.equal((pbxproj.match(/MARKETING_VERSION = 1\.2;/g) || []).length, 2)
+  assert.equal((pbxproj.match(/CURRENT_PROJECT_VERSION = 1000043;/g) || []).length, 2)
 })
 
 test('read-only App Store audit redacts feedback and reviewer email fields', () => {
