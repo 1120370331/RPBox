@@ -53,6 +53,10 @@ const sponsorLevel = computed(() => {
 })
 const canUseTheme = computed(() => sponsorLevel.value >= 3)
 
+function canSelectTheme(theme: Theme) {
+  return theme.free === true || canUseTheme.value
+}
+
 const mounted = ref(false)
 const activeTab = ref<'general' | 'account'>('general')
 const settingsTabs = ['general', 'account'] as const
@@ -481,19 +485,19 @@ watch(() => localeStore.currentLocale, (newLocale) => {
             <h3>{{ $t('settings.appearance.theme') }}</h3>
             <p>{{ $t('settings.appearance.themeDesc') }}</p>
           </div>
-          <span v-if="!canUseTheme" class="sponsor-badge">
-            <i class="ri-vip-crown-line"></i> {{ $t('settings.appearance.sponsorOnly') }}
-          </span>
         </div>
         <div class="card-body">
-          <div class="theme-preview-shell" :class="{ locked: !canUseTheme }">
+          <div class="theme-preview-shell">
             <div class="theme-grid">
-              <div
+              <button
                 v-for="theme in themes"
                 :key="theme.id"
+                type="button"
                 class="theme-item"
-                :class="{ active: canUseTheme && themeStore.currentThemeId === theme.id }"
-                @click="canUseTheme && themeStore.setTheme(theme.id)"
+                :class="{ active: themeStore.currentThemeId === theme.id }"
+                :disabled="!canSelectTheme(theme)"
+                :aria-pressed="themeStore.currentThemeId === theme.id"
+                @click="canSelectTheme(theme) && themeStore.setTheme(theme.id)"
               >
                 <div class="theme-preview" :style="getThemePreviewStyle(theme)">
                   <div class="preview-sidebar"></div>
@@ -503,8 +507,9 @@ watch(() => localeStore.currentLocale, (newLocale) => {
                   </div>
                 </div>
                 <span class="theme-name">{{ theme.name }}</span>
-                <i v-if="canUseTheme && themeStore.currentThemeId === theme.id" class="ri-checkbox-circle-fill theme-check"></i>
-              </div>
+                <span class="theme-access">{{ $t(theme.free ? 'settings.appearance.free' : 'settings.appearance.sponsorOnly') }}</span>
+                <i v-if="themeStore.currentThemeId === theme.id" class="ri-checkbox-circle-fill theme-check"></i>
+              </button>
             </div>
             <div v-if="!canUseTheme" class="theme-locked">
               <div class="locked-content">
@@ -1767,13 +1772,11 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   gap: 16px;
 }
 
-.theme-preview-shell.locked .theme-grid {
-  opacity: 1;
-  filter: saturate(0.9);
-}
-
 .theme-item {
   position: relative;
+  font: inherit;
+  color: var(--color-text-main);
+  text-align: center;
   cursor: pointer;
   border-radius: 12px;
   padding: 8px;
@@ -1782,24 +1785,31 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   transition: all 0.2s;
 }
 
-.theme-item:hover {
-  background: rgba(128, 64, 48, 0.05);
+.theme-item:hover:not(:disabled) {
+  background: var(--color-card-bg-hover);
   border-color: var(--color-border);
 }
 
-.theme-preview-shell.locked .theme-item {
-  cursor: default;
-  pointer-events: none;
+.theme-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
-.theme-preview-shell.locked .theme-item:hover {
-  background: var(--color-card-bg);
-  border-color: transparent;
+.theme-item:focus-visible {
+  outline: 2px solid var(--input-focus);
+  outline-offset: 3px;
+}
+
+.theme-access {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
 }
 
 .theme-item.active {
   border-color: var(--color-secondary);
-  background: rgba(128, 64, 48, 0.08);
+  background: var(--color-primary-light);
 }
 
 .theme-preview {
@@ -1857,20 +1867,9 @@ watch(() => localeStore.currentLocale, (newLocale) => {
 }
 
 .theme-locked {
-  position: absolute;
-  inset: -8px;
   display: flex;
-  align-items: flex-end;
   justify-content: flex-end;
-  padding: 16px;
-  text-align: center;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.16), transparent 32%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.18));
-  border: 1px solid color-mix(in srgb, var(--color-border-light, #F1E4D7) 70%, transparent);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-  z-index: 2;
+  margin-top: 18px;
 }
 
 .locked-content {

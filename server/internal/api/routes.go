@@ -62,6 +62,9 @@ func (s *Server) setupRoutes() {
 		// 预设标签（公开）
 		v1.GET("/tags/preset", s.getPresetTags)
 
+		// 公开赞助鸣谢名单（不包含账号私密资料）
+		v1.GET("/sponsors", s.listSponsors)
+
 		// RP 数据库公开浏览
 		v1.GET("/rpdb/works", s.listRPDBWorks)
 		v1.GET("/rpdb/works/hot", s.listRPDBHotWorks)
@@ -307,7 +310,6 @@ func (s *Server) setupRoutes() {
 			auth.POST("/user/bind-email", s.bindEmail)
 			auth.POST("/sponsor-codes/redeem", s.redeemSponsorCode)
 			auth.POST("/reports", s.createContentReport)
-			auth.GET("/sponsors", s.listSponsors)
 			auth.GET("/users/search", s.searchUsers)
 			auth.GET("/users/:id", s.getUserProfile)
 			auth.GET("/users/:id/guilds", s.getUserGuilds)

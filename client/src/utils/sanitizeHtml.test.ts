@@ -44,6 +44,29 @@ describe('sanitizeRichHtml', () => {
     expect(clean).not.toContain('data:image')
   })
 
+  it('keeps reader-collapsible sections but still strips active content inside them', () => {
+    const clean = sanitizeRichHtml(`
+      <details class="rpbox-collapse" open>
+        <summary class="rpbox-collapse__summary">剧透警告</summary>
+        <div class="rpbox-collapse__body">
+          <p>隐藏内容</p>
+          <script>alert(1)</script>
+          <img src="/uploads/hidden.png" onerror="alert(2)">
+        </div>
+      </details>
+    `)
+
+    expect(clean).toContain('<details')
+    expect(clean).toContain('</details>')
+    expect(clean).toContain('class="rpbox-collapse"')
+    expect(clean).toContain('class="rpbox-collapse__body"')
+    expect(clean).toMatch(/<details[^>]*\bopen\b/)
+    expect(clean).toContain('剧透警告')
+    expect(clean).toContain('<p>隐藏内容</p>')
+    expect(clean).toContain('src="/uploads/hidden.png"')
+    expect(clean).not.toMatch(/script|onerror/i)
+  })
+
   it('preserves RPBox jump cards, mentions and emotes while rejecting unsafe jump URLs', () => {
     const clean = sanitizeRichHtml(`
       <a class="jump-card jump-card--rpdb-item" role="link" tabindex="0"

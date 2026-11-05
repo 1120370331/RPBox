@@ -102,6 +102,7 @@ export interface ThemeColors {
 export interface Theme {
   id: string
   name: string
+  free?: boolean
   colors: ThemeColors
 }
 
@@ -109,6 +110,7 @@ export interface Theme {
 const classicTheme: Theme = {
   id: 'classic',
   name: '经典咖啡',
+  free: true,
   colors: {
     // 主色调
     primary: '#4B3621',
@@ -516,8 +518,85 @@ const dreamyPinkBlueTheme: Theme = {
   },
 }
 
+// 免费深色主题：浓咖啡底色、奶油文字与低饱和黄铜强调色。
+const darkCoffeeTheme: Theme = {
+  id: 'dark-coffee',
+  name: '深色咖啡',
+  free: true,
+  colors: {
+    ...classicTheme.colors,
+    primary: '#D5B182',
+    primaryHover: '#E9CBA2',
+    primaryLight: 'rgba(213, 177, 130, 0.12)',
+    secondary: '#C49A71',
+    secondaryHover: '#DAB58A',
+    accent: '#D3AA72',
+    accentHover: '#E7C492',
+    accentContrast: '#251B15',
+    background: '#211A16',
+    highlight: '#DDB982',
+    sidebarBg: '#191410',
+    sidebarText: '#F0DEC4',
+    sidebarTextMuted: '#B8A38B',
+    sidebarHover: 'rgba(213, 177, 130, 0.12)',
+    panelBg: '#2C231D',
+    cardBg: '#342A22',
+    cardBgHover: '#403227',
+    textMain: '#F0E2CF',
+    textLight: '#FFF2DE',
+    textSecondary: '#C7B39B',
+    textMuted: '#AC967E',
+    border: '#594534',
+    borderLight: '#44352A',
+    borderHover: '#AB855B',
+    btnPrimaryBg: '#D3AA72',
+    btnPrimaryText: '#251B15',
+    btnPrimaryHover: '#E7C492',
+    btnSecondaryBg: '#493728',
+    btnSecondaryText: '#E6CBA6',
+    btnSecondaryHover: '#5B4431',
+    btnOutlineBorder: '#826342',
+    btnOutlineText: '#E6CBA6',
+    btnOutlineHover: 'rgba(213, 177, 130, 0.12)',
+    btnDangerBg: '#B74F49',
+    btnDangerText: '#FFF5EA',
+    btnDangerHover: '#C6635A',
+    inputBg: '#241C17',
+    inputBorder: '#66503C',
+    inputFocus: '#D3AA72',
+    inputPlaceholder: '#AD967C',
+    inputPlaceholderEnabled: '#BCA58C',
+    switchActive: '#D3AA72',
+    switchInactive: '#625040',
+    checkboxActive: '#D3AA72',
+    tagBg: '#493728',
+    tagText: '#E6CBA6',
+    badgeBg: '#D3AA72',
+    shadowBase: '12, 8, 5',
+    scrollbarThumb: '#64503E',
+    scrollbarThumbHover: '#A1805A',
+    iconBg: '#493728',
+    iconColor: '#D9B583',
+    linkColor: '#DEB986',
+    linkHover: '#F2D6AE',
+    gradientStart: '#5C412C',
+    gradientEnd: '#2A2018',
+    gradientText: '#F4E3CB',
+    gradientTextMuted: '#D2B89A',
+    gradientSurface: 'rgba(244, 227, 203, 0.08)',
+    gradientSurfaceHover: 'rgba(244, 227, 203, 0.14)',
+    gradientBorder: 'rgba(213, 177, 130, 0.25)',
+    success: '#ACC58D',
+    successLight: 'rgba(172, 197, 141, 0.12)',
+    warning: '#E2B569',
+    warningLight: 'rgba(226, 181, 105, 0.12)',
+    warningBorder: 'rgba(226, 181, 105, 0.32)',
+    warningDark: '#F0CC91',
+  },
+}
+
 // 所有可用主题
-export const themes: Theme[] = [classicTheme, tealTheme, blackGoldTheme, dreamyPinkBlueTheme]
+export const themes: Theme[] = [classicTheme, darkCoffeeTheme, tealTheme, blackGoldTheme, dreamyPinkBlueTheme]
 
 // 获取主题 by ID
 export function getThemeById(id: string): Theme {

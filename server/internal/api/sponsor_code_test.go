@@ -71,7 +71,8 @@ func TestListSponsorsIncludesExpiredLimitedSponsor(t *testing.T) {
 	}
 
 	server := newTestServer(t, db)
-	resp := performRequest(server.router, http.MethodGet, "/api/v1/sponsors", nil, newTestToken(t, expired))
+	// The public website must be able to read acknowledgements without a token.
+	resp := performRequest(server.router, http.MethodGet, "/api/v1/sponsors", nil, "")
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", resp.Code, resp.Body.String())
 	}
@@ -94,6 +95,23 @@ func TestListSponsorsIncludesExpiredLimitedSponsor(t *testing.T) {
 	}
 	if !payload.Users[0].IsSponsor || payload.Users[0].SponsorLevel != 3 {
 		t.Fatalf("expected expired sponsor acknowledgement level 3, got is_sponsor=%v level=%d", payload.Users[0].IsSponsor, payload.Users[0].SponsorLevel)
+	}
+	if got := resp.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("expected public cross-origin access, got %q", got)
+	}
+	var publicPayload struct {
+		Users []map[string]interface{} `json:"users"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &publicPayload); err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{"id": true, "username": true, "avatar": true, "role": true, "is_sponsor": true, "sponsor_level": true, "name_color": true, "name_bold": true}
+	for _, sponsor := range publicPayload.Users {
+		for field := range sponsor {
+			if !allowed[field] {
+				t.Fatalf("private or unexpected field in public sponsor response: %s", field)
+			}
+		}
 	}
 }
 

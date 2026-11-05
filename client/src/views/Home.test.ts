@@ -7,13 +7,13 @@ import i18n from '@/i18n'
 import type { HomeContent, HomeFeedResponse } from '@/api/home'
 import Home from './Home.vue'
 
-const mocks = vi.hoisted(() => ({ featured: vi.fn(), recommendations: vi.fn(), signIn: vi.fn() }))
+const mocks = vi.hoisted(() => ({ featured: vi.fn(), recommendations: vi.fn(), signIn: vi.fn(), getUserInfo: vi.fn() }))
 vi.mock('@/api/home', () => ({
   getHomeFeatured: mocks.featured,
   getHomeRecommendations: mocks.recommendations,
   homeContentKey: (entry: HomeContent) => `${entry.kind}:${entry.id}`,
 }))
-vi.mock('@/api/user', () => ({ signInDaily: mocks.signIn }))
+vi.mock('@/api/user', () => ({ signInDaily: mocks.signIn, getUserInfo: mocks.getUserInfo }))
 vi.mock('@/api/item', () => ({
   getImageUrl: (type: string, id: number, options: { v: string }) => `/images/${type}/${id}?v=${options.v}`,
   resolveApiUrl: (url: string) => url,
@@ -35,13 +35,14 @@ beforeEach(() => {
   i18n.global.locale.value = 'zh-CN'
   mocks.featured.mockResolvedValue(feed([entry(1), entry(2, 'rpdb'), entry(3, 'item')]))
   mocks.recommendations.mockResolvedValue(feed([entry(4), entry(5, 'rpdb'), entry(6, 'item')]))
+  mocks.getUserInfo.mockResolvedValue({ id: 1, username: 'reader', signed_in_today: false })
 })
 afterEach(() => { wrapper?.unmount(); document.body.innerHTML = '' })
 
-async function openHome() {
+async function openHome(initialSignedInToday?: boolean) {
   const pinia = createPinia()
   store = useUserStore(pinia)
-  store.setAuth('test-token', { id: 1, username: 'reader' })
+  store.setAuth('test-token', { id: 1, username: 'reader', signed_in_today: initialSignedInToday })
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/', component: Home },
     { path: '/community/post/:id', component: { template: '<div />' } },
@@ -152,5 +153,49 @@ describe('home discovery feed', () => {
     expect(wrapper.findAll('.feed-card')).toHaveLength(0)
     expect(wrapper.get('[role="alert"]').text()).toContain('内容加载失败')
     expect(wrapper.get('.feed-empty').text()).toContain('还没有可展示的公开内容')
+  })
+})
+
+describe('home sign-in status', () => {
+  it('refreshes the sign-in state from the server when the home page opens', async () => {
+    mocks.getUserInfo.mockResolvedValueOnce({ id: 1, username: 'reader', signed_in_today: true })
+    await openHome()
+    expect(mocks.getUserInfo).toHaveBeenCalledTimes(1)
+    expect(store.user?.signed_in_today).toBe(true)
+    expect(wrapper.get('.sign-in-btn').text()).toContain('今日已签到')
+    expect(wrapper.get('.sign-in-btn').attributes('disabled')).toBeDefined()
+  })
+
+  it('offers sign-in again once the stored state is from a previous day', async () => {
+    mocks.getUserInfo.mockResolvedValueOnce({ id: 1, username: 'reader', signed_in_today: false })
+    await openHome(true)
+    expect(store.user?.signed_in_today).toBe(false)
+    expect(wrapper.get('.sign-in-btn').text()).toContain('立即签到')
+    expect(wrapper.get('.sign-in-btn').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('.sign-in-copy').text()).toContain('每日签到可领取')
+  })
+
+  it('keeps the last known state when the refresh fails', async () => {
+    mocks.getUserInfo.mockRejectedValueOnce(new Error('offline'))
+    await openHome(true)
+    expect(store.user?.signed_in_today).toBe(true)
+    expect(wrapper.get('.sign-in-btn').text()).toContain('今日已签到')
+  })
+
+  it('does not let a slow refresh overwrite a completed sign-in', async () => {
+    let finishRefresh!: (value: Record<string, unknown>) => void
+    mocks.getUserInfo.mockImplementationOnce(() => new Promise(resolve => { finishRefresh = resolve }))
+    mocks.signIn.mockResolvedValue({
+      message: '签到成功', granted: true, points_delta: 10, experience_delta: 10, signed_in_today: true,
+    })
+    await openHome()
+    await wrapper.get('.sign-in-btn').trigger('click')
+    await flushPromises()
+    expect(store.user?.signed_in_today).toBe(true)
+
+    finishRefresh({ id: 1, username: 'reader', signed_in_today: false })
+    await flushPromises()
+    expect(store.user?.signed_in_today).toBe(true)
+    expect(wrapper.get('.sign-in-btn').text()).toContain('今日已签到')
   })
 })

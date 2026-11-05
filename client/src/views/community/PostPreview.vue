@@ -176,7 +176,7 @@ function handlePreviewContentClick(event: MouseEvent) {
 
             <div class="zen-divider"></div>
 
-            <div ref="articleContentRef" class="article-content" v-html="sanitizedPreviewContent" @click="handlePreviewContentClick"></div>
+            <div ref="articleContentRef" class="article-content rpbox-post-body" v-html="sanitizedPreviewContent" @click="handlePreviewContentClick"></div>
           </div>
         </article>
 

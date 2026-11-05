@@ -13,6 +13,7 @@ import { useToast } from '@/composables/useToast'
 import { searchUsers, type UserMentionItem } from '@/api/user'
 import { useThemeStore } from '@/stores/theme'
 import { buildNameStyle } from '@/utils/userNameStyle'
+import { CollapsibleBlockExtension } from './editor/collapsibleBlock'
 
 const props = defineProps<{
   modelValue: string
@@ -732,7 +733,7 @@ const JumpLinkExtension = Node.create({
 const editor = useEditor({
   content: props.modelValue,
   extensions: [
-    StarterKit,
+    StarterKit.configure({ link: false }),
     Placeholder.configure({
       placeholder: props.placeholder || '开始写作...',
     }),
@@ -754,6 +755,7 @@ const editor = useEditor({
     }),
     JumpLinkExtension,
     AttachmentCardExtension,
+    CollapsibleBlockExtension,
     MentionExtension.configure({
       HTMLAttributes: {
         class: 'mention',
@@ -1080,6 +1082,10 @@ function insertContent(html: string) {
   editor.value?.chain().focus().insertContent(html).run()
 }
 
+function insertCollapsibleBlock() {
+  editor.value?.commands.insertCollapsibleBlock()
+}
+
 defineExpose({
   insertContent,
 })
@@ -1195,6 +1201,14 @@ defineExpose({
         title="代码块"
       >
         <i class="ri-code-box-line"></i>
+      </button>
+      <button
+        type="button"
+        :class="{ active: editor?.isActive('collapsibleBlock') }"
+        @click="insertCollapsibleBlock"
+        title="折叠区块"
+      >
+        <i class="ri-collapse-diagonal-line"></i>
       </button>
       <span class="divider"></span>
       <button

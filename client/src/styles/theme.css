@@ -1,6 +1,17 @@
 /* RPBox 主题覆盖样式 */
 /* 全局提供主题默认值；仅启用输入控件的占位文字强制使用可读颜色。 */
 
+:root[data-theme="dark-coffee"] {
+  color-scheme: dark;
+}
+
+/* The sync notice predates theme tokens; keep it legible on the coffee palette. */
+:root[data-theme="dark-coffee"] .cloud-tip {
+  background: var(--color-primary-light);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
 /* ========== 按钮样式 ========== */
 
 /* 主要按钮 */

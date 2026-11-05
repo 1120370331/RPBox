@@ -738,6 +738,10 @@ func normalizeSponsorDisplayRole(role string) string {
 
 // listSponsors 获取赞助者名单
 func (s *Server) listSponsors(c *gin.Context) {
+	// This public, read-only acknowledgement list can be embedded by the website.
+	// Keep the explicit response DTO below: never serialize the full User model.
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Writer.Header().Del("Access-Control-Allow-Credentials")
 	// 先读取文件维护名单，支持按用户名覆盖默认文案，便于后续直接编辑 JSON。
 	extraSponsors := loadExtraSponsors()
 	extraRoleByName := make(map[string]string, len(extraSponsors))

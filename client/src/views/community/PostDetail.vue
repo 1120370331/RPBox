@@ -893,7 +893,7 @@ async function handleBlockCommentAuthor(comment: CommentWithAuthor) {
 
             <div class="zen-divider"></div>
 
-            <div ref="articleContentRef" class="article-content" v-html="sanitizedPostContent" @click="handleArticleClick"></div>
+            <div ref="articleContentRef" class="article-content rpbox-post-body" v-html="sanitizedPostContent" @click="handleArticleClick"></div>
           </div>
 
           <!-- 作者操作 -->

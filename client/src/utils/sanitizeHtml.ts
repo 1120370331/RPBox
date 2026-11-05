@@ -5,14 +5,14 @@ import createDOMPurify, {
 } from 'dompurify'
 
 const RICH_TEXT_TAGS = [
-  'a', 'b', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'figcaption', 'figure',
+  'a', 'b', 'blockquote', 'br', 'code', 'del', 'details', 'div', 'em', 'figcaption', 'figure',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'img', 'li', 'mark', 'ol', 'p',
-  'pre', 's', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'u', 'ul',
+  'pre', 's', 'small', 'span', 'strike', 'strong', 'sub', 'summary', 'sup', 'u', 'ul',
 ]
 
 const RICH_TEXT_ATTRIBUTES = [
   'alt', 'aria-disabled', 'aria-label', 'class', 'contenteditable', 'download', 'draggable',
-  'height', 'href', 'loading', 'rel', 'role', 'src', 'style', 'tabindex', 'target',
+  'height', 'href', 'loading', 'open', 'rel', 'role', 'src', 'style', 'tabindex', 'target',
   'title', 'width',
 ]
 

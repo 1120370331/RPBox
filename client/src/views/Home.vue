@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '@/stores/user'
 import { useToastStore } from '@/stores/toast'
-import { signInDaily } from '@/api/user'
+import { getUserInfo, signInDaily } from '@/api/user'
 import { getHomeFeatured, getHomeRecommendations, homeContentKey, type HomeContent } from '@/api/home'
 import HomeContentRow from '@/components/HomeContentRow.vue'
 
@@ -23,6 +23,7 @@ const recommendationsError = ref('')
 const hasMoreRecommendations = ref(false)
 let servedKeys: string[] = []
 let feedGeneration = 0
+let signInStatusGeneration = 0
 
 watch([() => userStore.token, () => userStore.user?.id], () => {
   feedGeneration++
@@ -86,7 +87,26 @@ async function loadRecommendations(refresh = false) {
 
 onMounted(() => {
   setTimeout(() => mounted.value = true, 50)
+  void refreshSignInStatus()
 })
+
+// 回到首页时刷新签到状态：本地缓存的是上次登录时的结果，跨天后会过期
+async function refreshSignInStatus() {
+  if (!userStore.token || !userStore.user) return
+  const generation = ++signInStatusGeneration
+  try {
+    const info = await getUserInfo()
+    // 请求期间切换账号或已完成签到，丢弃这次的结果
+    if (generation !== signInStatusGeneration || userStore.user?.id !== info.id) return
+    userStore.mergeUser({
+      signed_in_today: info.signed_in_today,
+      total_sign_in_days: info.total_sign_in_days,
+      consecutive_sign_in_days: info.consecutive_sign_in_days,
+    })
+  } catch {
+    // 静默失败，保留上次已知状态
+  }
+}
 
 const signInHint = computed(() => (
   userStore.user?.signed_in_today
@@ -97,6 +117,7 @@ const signInHint = computed(() => (
 async function handleDailySignIn() {
   if (signingIn.value || userStore.user?.signed_in_today) return
   signingIn.value = true
+  signInStatusGeneration++ // 让进行中的状态刷新作废，避免旧结果覆盖签到结果
   try {
     const result = await signInDaily()
     userStore.mergeUser(result)

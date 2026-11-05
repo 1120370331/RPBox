@@ -538,7 +538,7 @@ onMounted(async () => {
             </span>
             <time>{{ formatTime(post.created_at) }}</time>
           </div>
-          <div ref="articleContentRef" class="content" v-html="postContentHtml" @click="handleContentClick" />
+          <div ref="articleContentRef" class="content rpbox-post-body" v-html="postContentHtml" @click="handleContentClick" />
         </article>
 
         <section class="action-row" :class="{ 'with-edit': canEdit }">

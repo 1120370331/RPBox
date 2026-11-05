@@ -52,6 +52,7 @@ export default {
   appearance: {
     theme: 'Theme',
     themeDesc: 'Choose your preferred color scheme',
+    free: 'Free',
     themeLight: 'Light',
     themeDark: 'Dark',
     themeSystem: 'System',

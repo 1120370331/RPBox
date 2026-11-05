@@ -52,6 +52,7 @@ export default {
   appearance: {
     theme: '主题配色',
     themeDesc: '选择您喜欢的界面配色方案',
+    free: '免费',
     themeLight: '浅色',
     themeDark: '深色',
     themeSystem: '跟随系统',

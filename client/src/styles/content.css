@@ -911,3 +911,93 @@
     transition: none;
   }
 }
+
+/* ===== 正文折叠区块：读者点击标题展开/收起 ===== */
+
+.rpbox-collapse {
+  margin: 18px 0;
+  border: 1px solid var(--color-border, #E8DCCF);
+  border-left: 3px solid color-mix(in srgb, var(--color-secondary) 55%, var(--color-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-secondary) 4%, transparent);
+  overflow: hidden;
+}
+
+.rpbox-collapse > summary {
+  position: relative;
+  padding: 11px 16px 11px 38px;
+  color: var(--color-text-main, #2C1810);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.rpbox-collapse > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rpbox-collapse > summary::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 17px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-70%) rotate(-45deg);
+  transition: transform 0.2s ease;
+}
+
+.rpbox-collapse[open] > summary::before {
+  transform: translateY(-30%) rotate(45deg);
+}
+
+.rpbox-collapse > summary:hover {
+  background: color-mix(in srgb, var(--color-secondary) 8%, transparent);
+}
+
+.rpbox-collapse > summary:focus-visible {
+  outline: 2px solid var(--color-secondary, #804030);
+  outline-offset: -2px;
+}
+
+.rpbox-collapse__body {
+  padding: 2px 16px 12px;
+  border-top: 1px dashed var(--color-border, #E8DCCF);
+}
+
+.rpbox-collapse__body > *:first-child {
+  margin-top: 12px;
+}
+
+.rpbox-collapse__body > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Numbered post lists keep their markers on the same left edge as the body. */
+.rpbox-post-body ol {
+  padding-inline-start: 0;
+  list-style-position: inside;
+}
+
+.rpbox-post-body ol ol {
+  padding-inline-start: 1.5em;
+}
+
+/* Tiptap stores list text in a paragraph; keep it beside the inside marker. */
+.rpbox-post-body ol > li > p:first-child {
+  display: inline;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rpbox-collapse > summary,
+  .rpbox-collapse > summary::before {
+    transition: none;
+  }
+}
