@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getGameInstallations, selectGameInstallation, sameGamePath, gameFlavors, gameFlavorLabel, supportsRpboxAddon } from '@/utils/gameInstallations'
+import { getGameInstallations, selectGameInstallation, sameGamePath, gameFlavors, gameFlavorLabel, supportsRpboxAddon, supportsManagedAddonFlavor } from '@/utils/gameInstallations'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
@@ -27,6 +27,7 @@ interface Trp3AddonInfo {
   curseforgeUrl: string
   sourceUrl: string
   downloadUrl: string
+  compatibilityNote?: string
 }
 
 interface Trp3AddonCheckResult {
@@ -225,14 +226,15 @@ function mergeTrp3Latest(
     latestCheckNote: latest?.note || localStatus.latestCheckNote,
     addons: localStatus.addons.map(addon => {
       const latestAddon = latestById.get(addon.id)
-      const latestVersion = latestAddon?.latestVersion || addon.latestVersion
+      const latestVersion = latestAddon ? latestAddon.latestVersion : addon.latestVersion
       return {
         ...addon,
         name: latestAddon?.name || addon.name,
         latestVersion,
         curseforgeUrl: latestAddon?.curseforgeUrl || addon.curseforgeUrl,
         sourceUrl: latestAddon?.sourceUrl || addon.sourceUrl,
-        downloadUrl: latestAddon?.downloadUrl || addon.downloadUrl,
+        downloadUrl: latestAddon ? latestAddon.downloadUrl : addon.downloadUrl,
+        compatibilityNote: latestAddon?.compatibilityNote || '',
         requiresUpdate: !addon.installed || isAddonVersionNewer(latestVersion, addon.version),
       }
     }),
@@ -339,12 +341,12 @@ function buildTrp3Card(
     desc,
     icon,
     state,
-    status: getStateText(state),
+    status: addon?.compatibilityNote || getStateText(state),
     currentVersion: installed ? addon?.version || '未知' : '未安装',
-    latestVersion: addon?.latestVersion || (hasWowPath.value ? '待获取' : '选择目录后检测'),
+    latestVersion: addon?.compatibilityNote ? '不兼容' : addon?.latestVersion || (hasWowPath.value ? '待获取' : '选择目录后检测'),
     sourceUrl: addon?.sourceUrl,
     action: progress?.label || getActionText(state, installed, busy),
-    canInstall: supportsRpboxAddon(selectedFlavor.value) && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
+    canInstall: supportsManagedAddonFlavor(selectedFlavor.value) && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
     canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
     busy,
     progressLabel: progress?.label || '',
@@ -382,6 +384,7 @@ function getTrp3State(addon: Trp3AddonInfo | undefined): PluginState {
   if (!hasWowPath.value) return 'locked'
   if (checkingPlugins.value && !addon) return 'checking'
   if (!addon) return 'idle'
+  if (addon.compatibilityNote) return 'locked'
   if (!addon.installed) return 'missing'
   if (addon.requiresUpdate) return 'update'
   return 'ready'
@@ -439,7 +442,7 @@ async function refreshPluginStatus() {
   }))
   candidates.push({ id: 'rpbox', installed: !!rpboxInstalledInfo.value?.installed,
     currentVersion: rpboxInstalledInfo.value?.version, latestVersion: rpboxLatestVersion.value })
-  const updated = supportsRpboxAddon(selectedFlavor.value) ? await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, candidates) : []
+  const updated = supportsManagedAddonFlavor(selectedFlavor.value) ? await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, candidates) : []
   if (updated.length) await Promise.allSettled([checkTrp3Addons(), checkRpboxAddon()])
   checkingPlugins.value = false
 }
@@ -460,7 +463,7 @@ async function checkTrp3Addons() {
   })
 
   try {
-    const latest = await getTRP3Latest()
+    const latest = await getTRP3Latest(selectedFlavor.value)
     trp3Latest.value = latest
     trp3Status.value = mergeTrp3Latest(localStatus, latest)
   } catch (e: any) {
@@ -492,7 +495,7 @@ async function checkRpboxAddon() {
 
 async function installPlugin(card: PluginCard) {
   if (!card.canInstall || !wowPath.value) return
-  if (!supportsRpboxAddon(selectedFlavor.value)) { toast.warning('当前游戏版本没有兼容的自动安装包。'); return }
+  if (!supportsManagedAddonFlavor(selectedFlavor.value)) { toast.warning('当前游戏版本没有经过验证的自动安装包。'); return }
   if (card.id === 'rpbox') {
     await installRpboxAddon()
     return

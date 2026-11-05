@@ -13,11 +13,10 @@ import {
   validateIosReleaseContract,
 } from './iosCompliance.mjs'
 
-const EXPECTED_IOS_1_3_RELEASE_NOTES = `RPBox iOS 1.3 测试版：
+const EXPECTED_IOS_1_4_RELEASE_NOTES = `RPBox iOS 1.4 测试版：
 
-1. 延续《魔兽世界：无限》人物卡存档版本选择与插件指引。
-2. 帖子有序列表编号与正文左边线对齐，折叠区块可在阅读时展开或收起。
-3. 包含近期主题与首页签到状态改进。`
+1. 插件指引按魔兽客户端类型展示各自兼容的下载版本。
+2. 对没有官方兼容包的客户端明确提示，避免安装错误版本。`
 
 function normalizeNewlines(value) {
   return value.replace(/\r\n?/g, '\n')
@@ -50,15 +49,15 @@ test('tracked iOS release stays independent from Android package version', () =>
     fs.readFileSync(new URL(`../ios/release.json`, import.meta.url), 'utf8'),
   ))
   const mobilePackage = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-  const releaseNotes = fs.readFileSync(new URL('../release-notes/1.3.txt', import.meta.url), 'utf8')
+  const releaseNotes = fs.readFileSync(new URL('../release-notes/1.4.txt', import.meta.url), 'utf8')
   const pbxproj = fs.readFileSync(new URL('../ios/App/App.xcodeproj/project.pbxproj', import.meta.url), 'utf8')
   assert.equal(IOS_RELEASE_CONTRACT_PATH, 'mobile/ios/release.json')
-  assert.deepEqual(releaseContract, { version: '1.3', buildNumber: 1000044 })
-  assert.equal(mobilePackage.version, '2.0.5', 'Android/mobile package version must remain independent')
-  assert.equal(normalizeNewlines(releaseNotes).trim(), EXPECTED_IOS_1_3_RELEASE_NOTES)
+  assert.deepEqual(releaseContract, { version: '1.4', buildNumber: 1000045 })
+  assert.equal(mobilePackage.version, '2.0.6', 'Android/mobile package version must remain independent')
+  assert.equal(normalizeNewlines(releaseNotes).trim(), EXPECTED_IOS_1_4_RELEASE_NOTES)
   assert.ok(releaseNotes.trim().length <= 4000, 'App Store What\'s New must fit the 4000-character limit')
-  assert.equal((pbxproj.match(/MARKETING_VERSION = 1\.3;/g) || []).length, 2)
-  assert.equal((pbxproj.match(/CURRENT_PROJECT_VERSION = 1000044;/g) || []).length, 2)
+  assert.equal((pbxproj.match(/MARKETING_VERSION = 1\.4;/g) || []).length, 2)
+  assert.equal((pbxproj.match(/CURRENT_PROJECT_VERSION = 1000045;/g) || []).length, 2)
 })
 
 test('read-only App Store audit redacts feedback and reviewer email fields', () => {

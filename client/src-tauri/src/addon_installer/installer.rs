@@ -144,6 +144,32 @@ fn is_forever_destination(flavor: &str, version_dir: &Path) -> bool {
             .is_some_and(|name| name.eq_ignore_ascii_case("_forever_"))
 }
 
+fn required_trp3_interface(
+    flavor: &str,
+    version_dir: &Path,
+) -> Result<Option<&'static str>, String> {
+    let directory_flavor = version_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    let flavor = if flavor.is_empty() {
+        directory_flavor
+    } else {
+        flavor
+    };
+    match flavor {
+        "_forever_" => Ok(Some("16001")),
+        "_classic_" => Ok(Some("50504")),
+        "_classic_era_" => Ok(Some("11509")),
+        "_classic_anniversary_" => Ok(Some("20506")),
+        "_retail_" | "" => Ok(None),
+        "_ptr_" | "_beta_" | "_classic_ptr_" | "_classic_beta_" => {
+            Err("测试客户端暂无经过验证的自动安装包，请到插件官方页面选择对应版本".to_string())
+        }
+        _ => Err("未知的游戏客户端类型".to_string()),
+    }
+}
+
 fn zip_declares_interface(data: &[u8], toc_path: &Path, interface: &str) -> Result<bool, String> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
         .map_err(|error| format!("打开插件包失败: {error}"))?;
@@ -301,17 +327,17 @@ where
     );
 
     let version_dir = get_version_dir(wow_path);
-    if is_forever_destination(flavor, &version_dir)
-        && !zip_declares_interface(
+    if let Some(interface) = required_trp3_interface(flavor, &version_dir)? {
+        if !zip_declares_interface(
             &zip_data,
             &PathBuf::from(addon.primary_folder).join(addon.toc),
-            "16001",
-        )?
-    {
-        return Err(format!(
-            "{} 安装包不支持《魔兽世界：无限》（Interface 16001）",
-            addon.name
-        ));
+            interface,
+        )? {
+            return Err(format!(
+                "{} 安装包不支持当前游戏客户端（Interface {interface}）",
+                addon.name
+            ));
+        }
     }
     let addons_dir = version_dir.join("Interface").join("AddOns");
     fs::create_dir_all(&addons_dir).map_err(|e| format!("创建 AddOns 目录失败: {}", e))?;
@@ -344,17 +370,17 @@ pub fn install_trp3_addon_zip_data(
         .ok_or_else(|| format!("未知的插件: {}", addon_id))?;
 
     let version_dir = get_version_dir(wow_path);
-    if is_forever_destination(flavor, &version_dir)
-        && !zip_declares_interface(
+    if let Some(interface) = required_trp3_interface(flavor, &version_dir)? {
+        if !zip_declares_interface(
             zip_data,
             &PathBuf::from(addon.primary_folder).join(addon.toc),
-            "16001",
-        )?
-    {
-        return Err(format!(
-            "{} 安装包不支持《魔兽世界：无限》（Interface 16001）",
-            addon.name
-        ));
+            interface,
+        )? {
+            return Err(format!(
+                "{} 安装包不支持当前游戏客户端（Interface {interface}）",
+                addon.name
+            ));
+        }
     }
     let addons_dir = version_dir.join("Interface").join("AddOns");
     fs::create_dir_all(&addons_dir).map_err(|e| format!("创建 AddOns 目录失败: {}", e))?;
@@ -917,6 +943,44 @@ mod tests {
             .addons
             .iter()
             .any(|addon| addon.id == "total-rp-3" && addon.installed));
+    }
+
+    #[test]
+    fn classic_trp3_install_uses_the_classic_interface_and_never_writes_a_retail_zip() {
+        let temp = tempfile::tempdir().unwrap();
+        let classic = temp.path().join("_classic_era_");
+        std::fs::create_dir(&classic).unwrap();
+        let retail_zip = addon_zip("totalRP3/totalRP3.toc", "120105, 16001");
+        assert!(install_trp3_addon_zip_data(
+            &classic.to_string_lossy(),
+            "total-rp-3",
+            &retail_zip,
+            "_classic_era_",
+        )
+        .is_err());
+        assert!(!classic.join("Interface").exists());
+
+        let classic_zip = addon_zip("totalRP3/totalRP3.toc", "120100, 11509, 20506, 50504");
+        let installed = install_trp3_addon_zip_data(
+            &classic.to_string_lossy(),
+            "total-rp-3",
+            &classic_zip,
+            "_classic_era_",
+        )
+        .unwrap();
+        assert!(installed
+            .addons
+            .iter()
+            .any(|addon| addon.id == "total-rp-3" && addon.installed));
+        assert_eq!(
+            required_trp3_interface("_classic_", &classic).unwrap(),
+            Some("50504")
+        );
+        assert_eq!(
+            required_trp3_interface("_classic_anniversary_", &classic).unwrap(),
+            Some("20506")
+        );
+        assert!(required_trp3_interface("_classic_ptr_", &classic).is_err());
     }
 
     #[test]

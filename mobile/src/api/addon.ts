@@ -32,6 +32,7 @@ export interface TRP3AddonLatestInfo {
   sourceUrl: string
   curseforgeUrl: string
   license: string
+  compatibilityNote?: string
 }
 
 export interface TRP3LatestResponse {
@@ -49,8 +50,8 @@ export async function getAddonLatest(flavor = ''): Promise<AddonLatestResponse> 
   return request.get<AddonLatestResponse>(`/addon/latest?flavor=${encodeURIComponent(flavor)}`)
 }
 
-export async function getTRP3Latest(): Promise<TRP3LatestResponse> {
-  return request.get<TRP3LatestResponse>('/addon/trp3/latest')
+export async function getTRP3Latest(flavor = ''): Promise<TRP3LatestResponse> {
+  return request.get<TRP3LatestResponse>(`/addon/trp3/latest?flavor=${encodeURIComponent(flavor)}`)
 }
 
 export function getAddonDownloadUrl(version: string): string {

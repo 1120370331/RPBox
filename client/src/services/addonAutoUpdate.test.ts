@@ -89,6 +89,17 @@ describe('automatic addon updates', () => {
     expect(mocks.invoke).not.toHaveBeenCalledWith('install_addon_from_url', expect.objectContaining({ wowPath: target.wowPath }))
   })
 
+  it('updates Classic TRP3 with its selected flavor but skips the retail-only RPBox addon', async () => {
+    const classic = { wowPath: 'D:\\World of Warcraft\\_classic_era_', flavor: '_classic_era_' }
+    registerGameInstallation({ path: classic.wowPath, flavor: classic.flavor })
+    localStorage.setItem('wow_path', classic.wowPath)
+    localStorage.setItem('selected_flavor', classic.flavor)
+    const candidates = [rpbox, { id: 'total-rp-3', installed: true, currentVersion: '3.3.6', latestVersion: '3.4.1', downloadUrl: 'https://rpbox.test/classic-trp3.zip' }]
+    expect(await autoUpdateAddons(classic, candidates)).toEqual(['total-rp-3'])
+    expect(mocks.invoke).toHaveBeenCalledWith('install_trp3_addon_with_progress', expect.objectContaining({ flavor: '_classic_era_' }))
+    expect(mocks.invoke).not.toHaveBeenCalledWith('install_addon_from_url', expect.anything())
+  })
+
   it('does not install missing addons, downgrade versions, or act on unknown metadata', async () => {
     const candidates = [
       { ...rpbox, installed: false },

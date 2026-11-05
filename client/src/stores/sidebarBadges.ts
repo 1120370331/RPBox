@@ -166,7 +166,7 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
       const flavor = localStorage.getItem('selected_flavor') || '_retail_'
       const [trp3Local, trp3Latest, rpboxLocal, rpboxLatest] = await Promise.allSettled([
         invoke<Trp3AddonCheckResult>('check_trp3_addons', { wowPath }),
-        getTRP3Latest(),
+        getTRP3Latest(flavor),
         invoke<InstalledAddonInfo>('check_addon_installed', { wowPath, flavor }),
         supportsRpboxAddon(flavor) ? getAddonLatest(flavor) : Promise.resolve({ version: '', downloadUrl: '' }),
       ])

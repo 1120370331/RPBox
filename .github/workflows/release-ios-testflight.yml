@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'iOS version; must match mobile/ios/release.json (for example 1.3)'
+        description: 'iOS version; must match mobile/ios/release.json (for example 1.4)'
         required: false
       build_number:
         description: 'Optional retry build number; must be numeric and higher than the tracked iOS build'

@@ -11,6 +11,9 @@ export const gameFlavors = [
 ]
 export function gameFlavorLabel(flavor?: string) { return gameFlavors.find(item => item.value === flavor)?.label || '旧存档（版本未标记）' }
 export function supportsRpboxAddon(flavor?: string) { return flavor === '_retail_' || flavor === '_forever_' }
+export function supportsManagedAddonFlavor(flavor?: string) {
+  return supportsRpboxAddon(flavor) || flavor === '_classic_' || flavor === '_classic_era_' || flavor === '_classic_anniversary_'
+}
 export function inferGameFlavor(path: string) {
   const parts = path.replace(/\\/g, '/').toLowerCase().split('/')
   return gameFlavors.find(item => parts.includes(item.value))?.value || ''

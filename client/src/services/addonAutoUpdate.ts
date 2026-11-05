@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { configuredGameFlavor, gamePathKey, getGameInstallations, sameGamePath, supportsRpboxAddon } from '@/utils/gameInstallations'
+import { configuredGameFlavor, gamePathKey, getGameInstallations, sameGamePath, supportsRpboxAddon, supportsManagedAddonFlavor } from '@/utils/gameInstallations'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
@@ -41,7 +41,7 @@ function canAutoUpdate(target: AddonTarget) {
     wowPath: localStorage.getItem('wow_path') || '',
     flavor: localStorage.getItem('selected_flavor') || '_retail_',
   }
-  return supportsRpboxAddon(target.flavor) && configuredGameFlavor(target.wowPath) === target.flavor
+  return supportsManagedAddonFlavor(target.flavor) && configuredGameFlavor(target.wowPath) === target.flavor
     && localStorage.getItem(STORAGE_KEY) === 'true' && !!target.wowPath && targetKey(target) === targetKey(currentTarget)
 }
 
@@ -96,6 +96,7 @@ export async function autoUpdateAddons(target: AddonTarget, candidates: AddonUpd
   const updated: string[] = []
   for (const addon of candidates) {
     if (!canAutoUpdate(target)) break
+    if (addon.id === 'rpbox' && !supportsRpboxAddon(target.flavor)) continue
     if (!addon.installed || !knownVersion(addon.currentVersion) || !knownVersion(addon.latestVersion)
       || !isAddonVersionNewer(addon.latestVersion, addon.currentVersion)) continue
     if (!Object.prototype.hasOwnProperty.call(addonNames, addon.id)) continue

@@ -23,17 +23,18 @@ import (
 )
 
 type TRP3AddonLatestInfo struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	ProjectID     int    `json:"projectId"`
-	Repository    string `json:"repository"`
-	LatestVersion string `json:"latestVersion"`
-	DownloadURL   string `json:"downloadUrl"`
-	FileName      string `json:"fileName"`
-	FileDate      string `json:"fileDate,omitempty"`
-	SourceURL     string `json:"sourceUrl"`
-	CurseForgeURL string `json:"curseforgeUrl"`
-	License       string `json:"license"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	ProjectID         int    `json:"projectId"`
+	Repository        string `json:"repository"`
+	LatestVersion     string `json:"latestVersion"`
+	DownloadURL       string `json:"downloadUrl"`
+	FileName          string `json:"fileName"`
+	FileDate          string `json:"fileDate,omitempty"`
+	SourceURL         string `json:"sourceUrl"`
+	CurseForgeURL     string `json:"curseforgeUrl"`
+	License           string `json:"license"`
+	CompatibilityNote string `json:"compatibilityNote,omitempty"`
 }
 
 type TRP3LatestResponse struct {
@@ -172,16 +173,28 @@ var trp3GitHubProjects = []trp3GitHubProject{
 }
 
 func (s *Server) getTRP3Latest(c *gin.Context) {
-	latest, err := s.loadTRP3Latest(c.Request.Context())
+	flavor := strings.TrimSpace(firstNonEmpty(c.Query("flavor"), c.Query("game_flavor")))
+	if !validGameFlavor(flavor) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported game flavor"})
+		return
+	}
+	latest, err := s.trp3LatestForFlavor(c.Request.Context(), flavor)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	publicLatest := cloneTRP3Latest(latest)
 	for i := range publicLatest.Addons {
+		if publicLatest.Addons[i].DownloadURL == "" {
+			continue
+		}
+		path := "/api/v1/addon/trp3/download/" + url.PathEscape(publicLatest.Addons[i].ID)
+		if flavor != "" {
+			path += "?flavor=" + url.QueryEscape(flavor)
+		}
 		publicLatest.Addons[i].DownloadURL = buildPublicURL(
 			c,
-			"/api/v1/addon/trp3/download/"+url.PathEscape(publicLatest.Addons[i].ID),
+			path,
 		)
 	}
 	c.Header("Cache-Control", "public, max-age=300")
@@ -189,6 +202,11 @@ func (s *Server) getTRP3Latest(c *gin.Context) {
 }
 
 func (s *Server) downloadTRP3Addon(c *gin.Context) {
+	flavor := strings.TrimSpace(firstNonEmpty(c.Query("flavor"), c.Query("game_flavor")))
+	if !validGameFlavor(flavor) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported game flavor"})
+		return
+	}
 	addonID := strings.TrimSpace(c.Param("id"))
 	project, ok := findTRP3GitHubProject(addonID)
 	if !ok {
@@ -196,7 +214,7 @@ func (s *Server) downloadTRP3Addon(c *gin.Context) {
 		return
 	}
 
-	latest, err := s.loadTRP3Latest(c.Request.Context())
+	latest, err := s.trp3LatestForFlavor(c.Request.Context(), flavor)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

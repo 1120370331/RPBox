@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { getAddonLatest, getAddonDownloadUrl } from '@/api/addon'
+import { getAddonLatest, getAddonDownloadUrl, getTRP3Latest, type TRP3AddonLatestInfo } from '@/api/addon'
 import { gameFlavors, gameFlavorLabel, supportsRpboxAddon } from '../../../../client/src/utils/gameInstallations'
 const flavor = ref('_retail_'), version = ref(''), error = ref('')
+const thirdPartyAddons = ref<TRP3AddonLatestInfo[]>([])
 let requestId = 0
 async function load() {
   const current = ++requestId
   error.value = ''
   version.value = ''
-  if (!supportsRpboxAddon(flavor.value)) return
-  try {
-    const latest = await getAddonLatest(flavor.value)
-    if (current === requestId) version.value = latest.version
-  } catch {
-    if (current === requestId) error.value = '暂时无法获取此游戏版本的插件，请重试。'
-  }
+  thirdPartyAddons.value = []
+  const [trp3, rpbox] = await Promise.allSettled([
+    getTRP3Latest(flavor.value),
+    supportsRpboxAddon(flavor.value) ? getAddonLatest(flavor.value) : Promise.resolve(null),
+  ])
+  if (current !== requestId) return
+  if (trp3.status === 'fulfilled') thirdPartyAddons.value = trp3.value.addons
+  else error.value = '暂时无法获取第三方插件的兼容版本。'
+  if (rpbox.status === 'fulfilled' && rpbox.value) version.value = rpbox.value.version
+  else if (rpbox.status === 'rejected') error.value = '暂时无法获取此游戏版本的 RPBox 插件，请重试。'
 }
 onMounted(load)
 watch(flavor, load)
@@ -25,8 +29,16 @@ watch(flavor, load)
     <p>手机端可以编辑、保存云端人物卡。插件需要在安装魔兽世界的电脑上使用。</p>
     <label>游戏版本<select v-model="flavor" aria-label="插件游戏版本"><option v-for="item in gameFlavors" :key="item.value" :value="item.value">{{ item.label }}</option></select></label>
     <h2>{{ gameFlavorLabel(flavor) }}</h2>
-    <a href="https://www.curseforge.com/wow/addons/total-rp-3/files/all" target="_blank" rel="noopener">Total RP 3 下载页 <i class="ri-external-link-line" /></a>
-    <a href="https://www.curseforge.com/wow/addons/total-rp-3-extended/files/all" target="_blank" rel="noopener">TRP3 Extended 下载页 <i class="ri-external-link-line" /></a>
+    <template v-if="thirdPartyAddons.length">
+      <template v-for="addon in thirdPartyAddons" :key="addon.id">
+        <a v-if="addon.downloadUrl" :href="addon.downloadUrl" target="_blank" rel="noopener">{{ addon.name }} {{ addon.latestVersion }} · {{ gameFlavorLabel(flavor) }}下载 <i class="ri-download-line" /></a>
+        <p v-else>{{ addon.name }}：{{ addon.compatibilityNote || '没有经过验证的兼容安装包' }}</p>
+      </template>
+    </template>
+    <template v-else>
+      <a href="https://www.curseforge.com/wow/addons/total-rp-3/files/all" target="_blank" rel="noopener">Total RP 3 官方文件页 <i class="ri-external-link-line" /></a>
+      <a href="https://www.curseforge.com/wow/addons/total-rp-3-extended/files/all" target="_blank" rel="noopener">TRP3 Extended 官方文件页 <i class="ri-external-link-line" /></a>
+    </template>
     <a v-if="supportsRpboxAddon(flavor) && version" :href="getAddonDownloadUrl(version)" target="_blank" rel="noopener">RPBox Addon {{ version }} · {{ gameFlavorLabel(flavor) }}下载 <i class="ri-download-line" /></a>
     <p v-if="!supportsRpboxAddon(flavor)">RPBox 当前没有此版本的插件安装包。第三方插件请在下载页核对适用版本。</p>
     <p v-if="error" role="alert">{{ error }} <button @click="load">重试</button></p>
