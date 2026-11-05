@@ -12,7 +12,7 @@ import (
 )
 
 func TestReviewPostEditAppliesCoverImage(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.PostEditRequest{})
+	db := testutil.NewTestDB(t, &model.User{}, &model.Post{}, &model.PostEditRequest{}, &model.Notification{})
 	author := model.User{Username: "author", Email: "author@example.com", PassHash: "hash", Role: "user"}
 	moderator := model.User{Username: "moderator", Email: "mod@example.com", PassHash: "hash", Role: "moderator"}
 	if err := db.Create(&[]*model.User{&author, &moderator}).Error; err != nil {
@@ -77,6 +77,17 @@ func TestReviewPostEditAppliesCoverImage(t *testing.T) {
 	db.Model(&model.PostEditRequest{}).Where("id = ?", edit.ID).Count(&remaining)
 	if remaining != 0 {
 		t.Fatalf("expected edit request to be deleted, got %d", remaining)
+	}
+
+	var notification model.Notification
+	if err := db.Where("user_id = ?", author.ID).First(&notification).Error; err != nil {
+		t.Fatalf("load approval notification: %v", err)
+	}
+	if notification.Type != "system" || notification.TargetType != "post" || notification.TargetID != post.ID {
+		t.Fatalf("unexpected approval notification: %+v", notification)
+	}
+	if notification.Content != "你的帖子《New title》的编辑审核已通过。" {
+		t.Fatalf("unexpected approval message: %q", notification.Content)
 	}
 }
 

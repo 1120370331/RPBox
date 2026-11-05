@@ -372,6 +372,7 @@ func (s *Server) reviewPostEdit(c *gin.Context) {
 	if req.Action == "approve" {
 		s.bumpPostListCache(c.Request.Context())
 		notifyPostFollowers(*reviewedPost)
+		notifyModerationResult(edit.AuthorID, "post", reviewedPost.ID, "帖子《"+reviewedPost.Title+"》的编辑", "approve", req.Comment)
 
 		ensurePostCoverUpdatedAt(reviewedPost)
 		reviewedPost.CoverImage = postCoverURL(*reviewedPost)
