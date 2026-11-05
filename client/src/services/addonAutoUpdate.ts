@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { configuredGameFlavor, gamePathKey, getGameInstallations, sameGamePath } from '@/utils/gameInstallations'
+import { configuredGameFlavor, gamePathKey, getGameInstallations, sameGamePath, supportsRpboxAddon } from '@/utils/gameInstallations'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
@@ -41,7 +41,7 @@ function canAutoUpdate(target: AddonTarget) {
     wowPath: localStorage.getItem('wow_path') || '',
     flavor: localStorage.getItem('selected_flavor') || '_retail_',
   }
-  return target.flavor === '_retail_' && configuredGameFlavor(target.wowPath) === target.flavor
+  return supportsRpboxAddon(target.flavor) && configuredGameFlavor(target.wowPath) === target.flavor
     && localStorage.getItem(STORAGE_KEY) === 'true' && !!target.wowPath && targetKey(target) === targetKey(currentTarget)
 }
 
@@ -69,8 +69,8 @@ export function runAddonOperation<T>(target: AddonTarget, id: string, action: 'i
     return Promise.reject(new Error('请先在游戏目录页登记目录并确认游戏版本。'))
   }
   const detectedFlavor = configuredGameFlavor(target.wowPath)
-  if (action === 'install' && id === 'rpbox' && (target.flavor !== '_retail_' || (detectedFlavor && detectedFlavor !== target.flavor))) {
-    return Promise.reject(new Error('当前 RPBox 安装包仅支持正式服，请在插件管理中选择匹配版本的目录和安装包。'))
+  if (action === 'install' && id === 'rpbox' && (!supportsRpboxAddon(target.flavor) || (detectedFlavor && detectedFlavor !== target.flavor))) {
+    return Promise.reject(new Error('当前游戏版本没有兼容的 RPBox 安装包，请在插件管理中选择匹配版本的目录。'))
   }
   const key = operationKey(target, id)
   const existing = operations.get(key)
@@ -114,7 +114,7 @@ export async function autoUpdateAddons(target: AddonTarget, candidates: AddonUpd
         if (addon.id === 'rpbox') {
           await invoke('install_addon_from_url', { ...target, downloadUrl: getAddonDownloadUrl(addon.latestVersion!), pluginId: 'rpbox' })
         } else {
-          await invoke('install_trp3_addon_with_progress', { wowPath: target.wowPath, addonId: addon.id, downloadUrl: addon.downloadUrl })
+          await invoke('install_trp3_addon_with_progress', { wowPath: target.wowPath, addonId: addon.id, downloadUrl: addon.downloadUrl, flavor: target.flavor })
         }
         return true
       })

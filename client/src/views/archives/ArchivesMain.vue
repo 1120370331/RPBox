@@ -15,7 +15,7 @@ import StagingPool from './StagingPool.vue'
 import StoryList from './StoryList.vue'
 import { createStory, addStoryEntries, getExistingStoryEntrySourceIds, listStories, type CreateStoryEntryRequest, type Story, type StoryFilterParams } from '@/api/story'
 import { listTags, addStoryTag, type Tag } from '@/api/tag'
-import { getAddonManifest } from '@/api/addon'
+import { getAddonManifest, addonLatestForFlavor } from '@/api/addon'
 import { ADDONS_UPDATED_EVENT, autoUpdateAddons, addonAutoUpdateEnabled } from '@/services/addonAutoUpdate'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
 import { getGuild, type Guild } from '@/api/guild'
@@ -23,6 +23,7 @@ import { useToast } from '@/composables/useToast'
 import { useDialog } from '@/composables/useDialog'
 import type { ChatRecord, IdentityEndpoint, ProfileSnapshot } from '@/types/chatLog'
 import { sanitizeRichHtml } from '@/utils/sanitizeHtml'
+import { configuredGameFlavor } from '@/utils/gameInstallations'
 
 interface InstalledAddonInfo {
   installed: boolean
@@ -165,7 +166,7 @@ const showAddonInstaller = ref(false)
 const addonInstalled = ref(false)
 const addonVersion = ref<string | null>(null)
 const addonChecking = ref(false)
-const selectedFlavor = ref('_retail_')
+const selectedFlavor = ref(configuredGameFlavor(wowPath.value) || '_retail_')
 const addonUpdateDialogRef = ref<InstanceType<typeof AddonUpdateDialog> | null>(null)
 
 // 使用提示（可永久关闭）
@@ -208,7 +209,7 @@ async function checkAddonUpdate() {
     if (!installedInfo?.installed) return
 
     const manifest = await getAddonManifest()
-    const latestVersion = normalizeAddonVersion(manifest.latest)
+    const latestVersion = normalizeAddonVersion(addonLatestForFlavor(manifest, selectedFlavor.value))
     const currentVersion = normalizeAddonVersion(installedInfo.version)
 
     if (!latestVersion || !currentVersion) return
@@ -253,7 +254,7 @@ async function handleCheckAddonUpdate() {
     if (!currentVersion) return
 
     const manifest = await getAddonManifest()
-    const latestVersion = normalizeAddonVersion(manifest.latest)
+    const latestVersion = normalizeAddonVersion(addonLatestForFlavor(manifest, selectedFlavor.value))
 
     if (!isAddonVersionNewer(latestVersion, currentVersion)) {
       // 使用 toast 提示（需要导入 toast）
@@ -295,6 +296,7 @@ onMounted(() => {
     return
   }
   wowPath.value = savedPath
+  selectedFlavor.value = configuredGameFlavor(savedPath) || '_retail_'
   setTimeout(() => mounted.value = true, 50)
   checkAddonUpdate()  // 检查插件更新
 })

@@ -1126,9 +1126,15 @@ async fn install_trp3_addon(
     wow_path: String,
     addon_id: String,
     download_url: String,
+    flavor: Option<String>,
 ) -> Result<addon_installer::Trp3AddonCheckResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        addon_installer::install_trp3_addon(&wow_path, &addon_id, &download_url)
+        addon_installer::install_trp3_addon(
+            &wow_path,
+            &addon_id,
+            &download_url,
+            flavor.as_deref().unwrap_or(""),
+        )
     })
     .await
     .map_err(|e| format!("TRP3 插件安装任务失败: {}", e))?
@@ -1140,6 +1146,7 @@ async fn install_trp3_addon_with_progress(
     wow_path: String,
     addon_id: String,
     download_url: String,
+    flavor: Option<String>,
 ) -> Result<addon_installer::Trp3AddonCheckResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let progress_app = app.clone();
@@ -1147,6 +1154,7 @@ async fn install_trp3_addon_with_progress(
             &wow_path,
             &addon_id,
             &download_url,
+            flavor.as_deref().unwrap_or(""),
             move |progress| {
                 let _ = progress_app.emit("addon-install-progress", progress);
             },
@@ -1161,9 +1169,15 @@ async fn install_trp3_addon_zip(
     wow_path: String,
     addon_id: String,
     zip_data: Vec<u8>,
+    flavor: Option<String>,
 ) -> Result<addon_installer::Trp3AddonCheckResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        addon_installer::install_trp3_addon_zip_data(&wow_path, &addon_id, &zip_data)
+        addon_installer::install_trp3_addon_zip_data(
+            &wow_path,
+            &addon_id,
+            &zip_data,
+            flavor.as_deref().unwrap_or(""),
+        )
     })
     .await
     .map_err(|e| format!("TRP3 插件安装任务失败: {}", e))?
@@ -1173,9 +1187,14 @@ async fn install_trp3_addon_zip(
 async fn install_all_trp3_addons(
     wow_path: String,
     addons: Vec<addon_installer::Trp3AddonInstallRequest>,
+    flavor: Option<String>,
 ) -> Result<addon_installer::Trp3AddonCheckResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        addon_installer::install_all_trp3_addons(&wow_path, &addons)
+        addon_installer::install_all_trp3_addons(
+            &wow_path,
+            &addons,
+            flavor.as_deref().unwrap_or(""),
+        )
     })
     .await
     .map_err(|e| format!("TRP3 插件安装任务失败: {}", e))?

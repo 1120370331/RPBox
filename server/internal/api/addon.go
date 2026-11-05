@@ -22,9 +22,10 @@ type AddonVersionInfo struct {
 
 // AddonManifest 插件版本清单
 type AddonManifest struct {
-	Name     string             `json:"name"`
-	Latest   string             `json:"latest"`
-	Versions []AddonVersionInfo `json:"versions"`
+	Name           string             `json:"name"`
+	Latest         string             `json:"latest"`
+	LatestByFlavor map[string]string  `json:"latestByFlavor,omitempty"`
+	Versions       []AddonVersionInfo `json:"versions"`
 }
 
 // getAddonStoragePath 获取插件存储路径
@@ -86,9 +87,23 @@ func (s *Server) getAddonLatest(c *gin.Context) {
 		return
 	}
 
+	version := manifest.Latest
+	switch c.Query("flavor") {
+	case "", "_retail_":
+	case "_forever_":
+		version = manifest.LatestByFlavor["_forever_"]
+		if version == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no compatible RPBox addon for this game version"})
+			return
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported game version"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"version":     manifest.Latest,
-		"downloadUrl": fmt.Sprintf("/api/v1/addon/download/%s", manifest.Latest),
+		"version":     version,
+		"downloadUrl": fmt.Sprintf("/api/v1/addon/download/%s", version),
 	})
 }
 

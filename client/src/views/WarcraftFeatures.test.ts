@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getGameInstallations, registerGameInstallation } from '@/utils/gameInstallations'
 import WarcraftFeatures from './WarcraftFeatures.vue'
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn() }))
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), getAddonLatest: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }))
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: vi.fn() }))
-vi.mock('@/api/addon', () => ({ getAddonLatest: async () => ({ version: '1.0.13' }), getTRP3Latest: async () => ({ addons: [] }), getAddonDownloadUrl: () => 'https://example.test/addon.zip' }))
+vi.mock('@/api/addon', () => ({ getAddonLatest: mocks.getAddonLatest, getTRP3Latest: async () => ({ addons: [] }), getAddonDownloadUrl: () => 'https://example.test/addon.zip' }))
 vi.mock('@/services/addonAutoUpdate', () => ({ ADDONS_UPDATED_EVENT: 'addon-test-event', autoUpdateAddons: async () => [], isAddonBusy: () => false, runAddonOperation: vi.fn() }))
 const retail = { path: 'D:/WoW/_retail_', flavor: '_retail_' }
 const classic = { path: 'D:/WoW/_classic_era_', flavor: '_classic_era_' }
@@ -18,6 +18,7 @@ beforeEach(() => {
   localStorage.clear(); vi.clearAllMocks()
   Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {}, configurable: true })
   mocks.invoke.mockImplementation(async (command: string) => command === 'check_trp3_addons' ? { addons: [] } : { installed: false, version: null, path: null })
+  mocks.getAddonLatest.mockResolvedValue({ version: '1.0.15-beta.1' })
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; Reflect.deleteProperty(window, '__TAURI_INTERNALS__') })
 async function openPage() {
@@ -52,5 +53,14 @@ describe('installer registered-directory selection', () => {
     expect(view.get('.installation-version strong').text()).toBe('经典怀旧服')
     expect(mocks.invoke).toHaveBeenCalledWith('check_addon_installed', { wowPath: classic.path, flavor: classic.flavor })
     expect(getGameInstallations()).toHaveLength(2)
+  })
+  it('offers the dedicated beta addon for a registered Forever client', async () => {
+    registerGameInstallation({ path: 'D:/WoW/_forever_', flavor: '_forever_' })
+    const { view } = await openPage()
+    expect(view.get('.installation-version strong').text()).toBe('魔兽：无限')
+    expect(mocks.getAddonLatest).toHaveBeenCalledWith('_forever_')
+    const rpboxCard = view.findAll('.plugin-card').find(card => card.text().includes('RPBox Addon'))
+    expect(rpboxCard?.find('button.primary-btn').attributes('disabled')).toBeUndefined()
+    expect(rpboxCard?.text()).toContain('1.0.15-beta.1')
   })
 })

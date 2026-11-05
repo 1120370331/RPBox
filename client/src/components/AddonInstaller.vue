@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonLatest, getAddonDownloadUrl } from '@/api/addon'
 import { runAddonOperation } from '@/services/addonAutoUpdate'
-import { getGameInstallations, gameFlavorLabel, sameGamePath } from '@/utils/gameInstallations'
+import { getGameInstallations, gameFlavorLabel, sameGamePath, supportsRpboxAddon } from '@/utils/gameInstallations'
 import RModal from './RModal.vue'
 import RButton from './RButton.vue'
 
@@ -49,7 +49,7 @@ const statusText = computed(() => {
 async function checkInstalled() {
   installedInfo.value = null
   if (!selectedInstallation.value || !selectedFlavor.value) { error.value = '请先在游戏目录页登记并确认目录。'; return }
-  if (selectedFlavor.value !== '_retail_') { error.value = 'RPBox Addon 当前仅提供正式服安装包。'; return }
+  if (!supportsRpboxAddon(selectedFlavor.value)) { error.value = '当前游戏版本没有兼容的 RPBox Addon 安装包。'; return }
   checking.value = true
   error.value = ''
   try {
@@ -57,7 +57,7 @@ async function checkInstalled() {
       wowPath: props.wowPath,
       flavor: selectedFlavor.value,
     })
-    const latest = await getAddonLatest()
+    const latest = await getAddonLatest(selectedFlavor.value)
     latestVersion.value = latest.version
   } catch (e: any) {
     error.value = e.message || '检测失败'
@@ -67,7 +67,7 @@ async function checkInstalled() {
 }
 
 async function installAddon() {
-  if (!selectedInstallation.value || selectedFlavor.value !== '_retail_') return
+  if (!selectedInstallation.value || !supportsRpboxAddon(selectedFlavor.value)) return
   loading.value = true
   error.value = ''
   try {
@@ -141,7 +141,7 @@ watch(() => [props.modelValue, props.wowPath], ([visible]) => {
         v-if="!installedInfo?.installed || needsUpdate"
         type="primary"
         :loading="loading"
-        :disabled="checking || !latestVersion || !selectedInstallation || selectedFlavor !== '_retail_'"
+        :disabled="checking || !latestVersion || !selectedInstallation || !supportsRpboxAddon(selectedFlavor)"
         @click="installAddon"
       >
         {{ installedInfo?.installed ? '更新插件' : '安装插件' }}

@@ -23,7 +23,7 @@ type characterCardSaveTarget struct {
 
 func validGameFlavor(flavor string) bool {
 	switch flavor {
-	case "", "_retail_", "_classic_", "_classic_era_", "_classic_anniversary_", "_ptr_", "_beta_", "_classic_ptr_", "_classic_beta_":
+	case "", "_retail_", "_forever_", "_classic_", "_classic_era_", "_classic_anniversary_", "_ptr_", "_beta_", "_classic_ptr_", "_classic_beta_":
 		return true
 	}
 	return false

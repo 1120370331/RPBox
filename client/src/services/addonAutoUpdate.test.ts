@@ -70,13 +70,23 @@ describe('automatic addon updates', () => {
       expect(installations()).toHaveLength(4)
       expect(mocks.invoke).toHaveBeenCalledWith('install_addon_from_url', { ...target, pluginId: 'rpbox', downloadUrl: 'https://rpbox.test/addon/1.1.0' })
       for (const id of trp3Ids) {
-        expect(mocks.invoke).toHaveBeenCalledWith('install_trp3_addon_with_progress', { wowPath: target.wowPath, addonId: id, downloadUrl: `https://download.test/${id}.zip` })
+        expect(mocks.invoke).toHaveBeenCalledWith('install_trp3_addon_with_progress', { wowPath: target.wowPath, addonId: id, downloadUrl: `https://download.test/${id}.zip`, flavor: '_retail_' })
       }
       expect(listener).toHaveBeenCalledTimes(4)
       expect(localStorage.getItem('addon_last_checked_version')).toBe('1.1.0')
     } finally {
       window.removeEventListener(ADDONS_UPDATED_EVENT, listener)
     }
+  })
+
+  it('updates a registered Forever client without touching the retail installation', async () => {
+    const forever = { wowPath: 'D:\\World of Warcraft\\_forever_', flavor: '_forever_' }
+    registerGameInstallation({ path: forever.wowPath, flavor: forever.flavor })
+    localStorage.setItem('wow_path', forever.wowPath)
+    localStorage.setItem('selected_flavor', forever.flavor)
+    expect(await autoUpdateAddons(forever, [rpbox])).toEqual(['rpbox'])
+    expect(mocks.invoke).toHaveBeenCalledWith('install_addon_from_url', expect.objectContaining({ wowPath: forever.wowPath, flavor: '_forever_' }))
+    expect(mocks.invoke).not.toHaveBeenCalledWith('install_addon_from_url', expect.objectContaining({ wowPath: target.wowPath }))
   })
 
   it('does not install missing addons, downgrade versions, or act on unknown metadata', async () => {

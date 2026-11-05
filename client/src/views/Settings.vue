@@ -12,7 +12,7 @@ import { useLocaleStore, type LocaleType } from '@/stores/locale'
 import { deleteAccount, redeemSponsorCode, uploadAvatar } from '@/api/user'
 import { dialog } from '@/composables/useDialog'
 import { useUpdater } from '@/composables/useUpdater'
-import { getAddonManifest } from '@/api/addon'
+import { getAddonManifest, addonLatestForFlavor } from '@/api/addon'
 import { bumpImageCacheVersion } from '@/utils/imageCache'
 import { buildNameStyle } from '@/utils/userNameStyle'
 import { isAddonVersionNewer } from '@/utils/addonVersion'
@@ -376,13 +376,18 @@ async function handleCheckAddonUpdate() {
     console.log('[Settings] 调用 getAddonManifest API...')
     const manifest = await getAddonManifest()
     console.log('[Settings] 获取到 manifest:', manifest)
-    const latestVersion = manifest.latest
+    const flavor = localStorage.getItem('selected_flavor') || '_retail_'
+    const latestVersion = addonLatestForFlavor(manifest, flavor)
+    if (!latestVersion) {
+      toast.warning('当前游戏版本暂无兼容的 RPBox Addon 更新包')
+      return
+    }
 
     if (!isAddonVersionNewer(latestVersion, addonVersion.value)) {
       toast.success(t('settings.addon.alreadyLatest'))
     } else {
       if (addonAutoUpdateEnabled.value) {
-        await autoUpdateAddons({ wowPath: wowPath.value, flavor: localStorage.getItem('selected_flavor') || '_retail_' }, [{
+        await autoUpdateAddons({ wowPath: wowPath.value, flavor }, [{
           id: 'rpbox', installed: true, currentVersion: addonVersion.value, latestVersion,
         }])
         await checkAddonInstalled()
@@ -391,7 +396,6 @@ async function handleCheckAddonUpdate() {
       console.log('[Settings] 发现新版本:', latestVersion)
       const latestVersionInfo = manifest.versions.find(v => v.version === latestVersion)
       const changelog = latestVersionInfo?.changelog || t('settings.addon.noChangelog')
-      const flavor = localStorage.getItem('selected_flavor') || '_retail_'
       console.log('[Settings] 显示更新对话框')
       addonUpdateDialogRef.value?.show(addonVersion.value, latestVersion, changelog, wowPath.value, flavor)
     }

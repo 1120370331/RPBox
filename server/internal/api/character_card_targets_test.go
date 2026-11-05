@@ -15,6 +15,7 @@ func TestCharacterCardCloudTargetsAtomicAndEditionIsolated(t *testing.T) {
 	backups := []model.AccountBackup{
 		{UserID: owner.ID, AccountID: "WOW1", GameFlavor: "_retail_", ProfilesData: `{"same":{"player":{"characteristics":{"FN":"old"}},"custom":{"keep":1}},"unrelated":{"profileName":"keep"}}`, Version: 1},
 		{UserID: owner.ID, AccountID: "WOW1", GameFlavor: "_classic_era_", ProfilesData: `{"same":{"player":{"characteristics":{"FN":"classic"}},"custom":{"keep":2}}}`, Version: 1},
+		{UserID: owner.ID, AccountID: "WOW1", GameFlavor: "_forever_", ProfilesData: `{"same":{"player":{"characteristics":{"FN":"forever"}},"custom":{"keep":3}}}`, Version: 1},
 		{UserID: other.ID, AccountID: "WOW1", GameFlavor: "_retail_", ProfilesData: `{}`, Version: 1},
 	}
 	if err := db.Create(&backups).Error; err != nil {
@@ -32,13 +33,13 @@ func TestCharacterCardCloudTargetsAtomicAndEditionIsolated(t *testing.T) {
 	}
 	endpoint := fmt.Sprintf("/api/v1/character-cards/%d/save-cloud", body.Card.ID)
 	payload := map[string]interface{}{"first_name": "new", "cloud_targets": []characterCardSaveTarget{
-		{BackupID: backups[0].ID, ProfileID: "same", ExpectedVersion: 1}, {BackupID: backups[1].ID, ProfileID: "same", ExpectedVersion: 1},
+		{BackupID: backups[0].ID, ProfileID: "same", ExpectedVersion: 1}, {BackupID: backups[1].ID, ProfileID: "same", ExpectedVersion: 1}, {BackupID: backups[2].ID, ProfileID: "same", ExpectedVersion: 1},
 	}}
 	response := performRequest(server.router, http.MethodPut, endpoint, payload, token)
 	if response.Code != 200 {
 		t.Fatalf("save: %d %s", response.Code, response.Body.String())
 	}
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		var backup model.AccountBackup
 		if err := db.First(&backup, backups[i].ID).Error; err != nil {
 			t.Fatal(err)
@@ -66,12 +67,12 @@ func TestCharacterCardCloudTargetsAtomicAndEditionIsolated(t *testing.T) {
 	}
 	var bindingCount int64
 	db.Model(&model.CharacterCardTarget{}).Where("character_card_id = ?", card.ID).Count(&bindingCount)
-	if bindingCount != 2 {
+	if bindingCount != 3 {
 		t.Fatalf("bindings %d", bindingCount)
 	}
 	// A late unauthorized target must roll back even the earlier valid target and card edit.
 	payload["first_name"] = "must-roll-back"
-	payload["cloud_targets"] = []characterCardSaveTarget{{BackupID: backups[0].ID, ProfileID: "same", ExpectedVersion: 2}, {BackupID: backups[2].ID, ProfileID: "same", ExpectedVersion: 1}}
+	payload["cloud_targets"] = []characterCardSaveTarget{{BackupID: backups[0].ID, ProfileID: "same", ExpectedVersion: 2}, {BackupID: backups[3].ID, ProfileID: "same", ExpectedVersion: 1}}
 	response = performRequest(server.router, http.MethodPut, endpoint, payload, token)
 	if response.Code != 404 {
 		t.Fatalf("ownership: %d %s", response.Code, response.Body.String())
@@ -102,7 +103,7 @@ func TestCharacterCardCloudTargetsAtomicAndEditionIsolated(t *testing.T) {
 	if first.Version != 2 {
 		t.Fatal("registration overwrote archive")
 	}
-	for _, flavor := range []string{"_retail_", "_classic_era_"} {
+	for _, flavor := range []string{"_retail_", "_classic_era_", "_forever_"} {
 		response = performRequest(server.router, http.MethodGet, "/api/v1/account-backups/WOW1?game_flavor="+flavor, nil, token)
 		if response.Code != 200 {
 			t.Fatalf("edition lookup: %d %s", response.Code, response.Body.String())

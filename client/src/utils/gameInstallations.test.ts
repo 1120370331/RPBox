@@ -3,6 +3,7 @@ import { configuredGameFlavor, getGameInstallations, registerGameInstallation, r
 
 const retail = { path: 'D:\\World of Warcraft\\_retail_', flavor: '_retail_' }
 const classic = { path: 'E:\\World of Warcraft\\_classic_era_', flavor: '_classic_era_' }
+const forever = { path: 'D:\\World of Warcraft\\_forever_', flavor: '_forever_' }
 beforeEach(() => localStorage.clear())
 describe('registered game directories', () => {
   it('deduplicates client/WTF/Account paths and makes the confirmed edition authoritative', () => {
@@ -35,5 +36,13 @@ describe('registered game directories', () => {
     expect(() => registerGameInstallation({ path: retail.path, flavor: '' })).toThrow()
     expect(() => registerGameInstallation({ path: '', flavor: '_retail_' })).toThrow()
     expect(getGameInstallations()).toEqual([])
+  })
+  it('keeps the Forever client separate from retail even for the same account name', () => {
+    registerGameInstallation(retail)
+    registerGameInstallation(forever)
+    expect(getGameInstallations()).toHaveLength(2)
+    expect(configuredGameFlavor(forever.path + '/WTF/Account')).toBe('_forever_')
+    selectGameInstallation(forever)
+    expect(localStorage.getItem('selected_flavor')).toBe('_forever_')
   })
 })

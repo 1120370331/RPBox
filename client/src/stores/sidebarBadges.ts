@@ -167,7 +167,7 @@ export const useSidebarBadgesStore = defineStore('sidebarBadges', () => {
         invoke<Trp3AddonCheckResult>('check_trp3_addons', { wowPath }),
         getTRP3Latest(),
         invoke<InstalledAddonInfo>('check_addon_installed', { wowPath, flavor }),
-        getAddonLatest(),
+        getAddonLatest(flavor),
       ])
 
       const updates: string[] = []

@@ -136,6 +136,47 @@ fn get_version_dir(wow_path: &str) -> PathBuf {
     raw_path
 }
 
+fn is_forever_destination(flavor: &str, version_dir: &Path) -> bool {
+    flavor == "_forever_"
+        || version_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("_forever_"))
+}
+
+fn zip_declares_interface(data: &[u8], toc_path: &Path, interface: &str) -> Result<bool, String> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
+        .map_err(|error| format!("打开插件包失败: {error}"))?;
+    for index in 0..archive.len() {
+        let mut file = archive
+            .by_index(index)
+            .map_err(|error| format!("读取插件包失败: {error}"))?;
+        if !file
+            .enclosed_name()
+            .is_some_and(|name| name.ends_with(toc_path))
+        {
+            continue;
+        }
+        let mut content = String::new();
+        file.by_ref()
+            .take(64 * 1024)
+            .read_to_string(&mut content)
+            .map_err(|error| format!("读取插件 TOC 失败: {error}"))?;
+        return Ok(content.lines().any(|line| {
+            let line = line.trim().trim_start_matches('\u{feff}');
+            let versions = line
+                .strip_prefix("## Interface:")
+                .or_else(|| line.strip_prefix("## Interface-Camelot:"));
+            versions.is_some_and(|versions| {
+                versions
+                    .split(|character: char| character == ',' || character.is_whitespace())
+                    .any(|version| version == interface)
+            })
+        }));
+    }
+    Ok(false)
+}
+
 fn find_toc_path(addon_path: &Path, toc_name: &str) -> Option<PathBuf> {
     let direct_path = addon_path.join(toc_name);
     if direct_path.exists() {
@@ -221,8 +262,9 @@ pub fn install_trp3_addon(
     wow_path: &str,
     addon_id: &str,
     download_url: &str,
+    flavor: &str,
 ) -> Result<Trp3AddonCheckResult, String> {
-    install_trp3_addon_with_progress(wow_path, addon_id, download_url, |_| {})
+    install_trp3_addon_with_progress(wow_path, addon_id, download_url, flavor, |_| {})
 }
 
 /// 下载并安装指定 TRP3 插件包，并回传下载/写入阶段进度。
@@ -230,6 +272,7 @@ pub fn install_trp3_addon_with_progress<F>(
     wow_path: &str,
     addon_id: &str,
     download_url: &str,
+    flavor: &str,
     mut progress: F,
 ) -> Result<Trp3AddonCheckResult, String>
 where
@@ -258,6 +301,18 @@ where
     );
 
     let version_dir = get_version_dir(wow_path);
+    if is_forever_destination(flavor, &version_dir)
+        && !zip_declares_interface(
+            &zip_data,
+            &PathBuf::from(addon.primary_folder).join(addon.toc),
+            "16001",
+        )?
+    {
+        return Err(format!(
+            "{} 安装包不支持《魔兽世界：无限》（Interface 16001）",
+            addon.name
+        ));
+    }
     let addons_dir = version_dir.join("Interface").join("AddOns");
     fs::create_dir_all(&addons_dir).map_err(|e| format!("创建 AddOns 目录失败: {}", e))?;
 
@@ -281,6 +336,7 @@ pub fn install_trp3_addon_zip_data(
     wow_path: &str,
     addon_id: &str,
     zip_data: &[u8],
+    flavor: &str,
 ) -> Result<Trp3AddonCheckResult, String> {
     let addon = TRP3_ADDONS
         .iter()
@@ -288,6 +344,18 @@ pub fn install_trp3_addon_zip_data(
         .ok_or_else(|| format!("未知的插件: {}", addon_id))?;
 
     let version_dir = get_version_dir(wow_path);
+    if is_forever_destination(flavor, &version_dir)
+        && !zip_declares_interface(
+            zip_data,
+            &PathBuf::from(addon.primary_folder).join(addon.toc),
+            "16001",
+        )?
+    {
+        return Err(format!(
+            "{} 安装包不支持《魔兽世界：无限》（Interface 16001）",
+            addon.name
+        ));
+    }
     let addons_dir = version_dir.join("Interface").join("AddOns");
     fs::create_dir_all(&addons_dir).map_err(|e| format!("创建 AddOns 目录失败: {}", e))?;
 
@@ -301,6 +369,7 @@ pub fn install_trp3_addon_zip_data(
 pub fn install_all_trp3_addons(
     wow_path: &str,
     addons: &[Trp3AddonInstallRequest],
+    flavor: &str,
 ) -> Result<Trp3AddonCheckResult, String> {
     for addon in TRP3_ADDONS {
         let download_url = addons
@@ -308,7 +377,7 @@ pub fn install_all_trp3_addons(
             .find(|request| request.addon_id == addon.id)
             .map(|request| request.download_url.as_str())
             .ok_or_else(|| format!("缺少 {} 的下载地址", addon.name))?;
-        install_trp3_addon(wow_path, addon.id, download_url)?;
+        install_trp3_addon(wow_path, addon.id, download_url, flavor)?;
     }
     Ok(check_trp3_addons(wow_path))
 }
@@ -332,11 +401,9 @@ pub fn uninstall_trp3_addon(
             continue;
         }
         if addon_path.is_dir() {
-            fs::remove_dir_all(&addon_path)
-                .map_err(|e| format!("删除 {} 失败: {}", folder, e))?;
+            fs::remove_dir_all(&addon_path).map_err(|e| format!("删除 {} 失败: {}", folder, e))?;
         } else {
-            fs::remove_file(&addon_path)
-                .map_err(|e| format!("删除 {} 失败: {}", folder, e))?;
+            fs::remove_file(&addon_path).map_err(|e| format!("删除 {} 失败: {}", folder, e))?;
         }
     }
 
@@ -574,7 +641,8 @@ where
         let percent = total_bytes.map(|total: u64| {
             ((downloaded_bytes.saturating_mul(100) / total.max(1)).min(99)) as u8
         });
-        let should_report = percent != last_percent || downloaded_bytes - last_reported_bytes >= 256 * 1024;
+        let should_report =
+            percent != last_percent || downloaded_bytes - last_reported_bytes >= 256 * 1024;
 
         if should_report {
             last_percent = percent;
@@ -584,7 +652,11 @@ where
                 None => "下载中".to_string(),
             };
             let detail = match total_bytes {
-                Some(total) => format!("{} / {}", format_bytes(downloaded_bytes), format_bytes(total)),
+                Some(total) => format!(
+                    "{} / {}",
+                    format_bytes(downloaded_bytes),
+                    format_bytes(total)
+                ),
                 None => format!("已下载 {}", format_bytes(downloaded_bytes)),
             };
             emit_progress(
@@ -604,7 +676,11 @@ where
         plugin_id,
         "下载完成",
         &match total_bytes {
-            Some(total) => format!("{} / {}", format_bytes(downloaded_bytes), format_bytes(total)),
+            Some(total) => format!(
+                "{} / {}",
+                format_bytes(downloaded_bytes),
+                format_bytes(total)
+            ),
             None => format!("已下载 {}", format_bytes(downloaded_bytes)),
         },
         Some(100),
@@ -691,8 +767,13 @@ fn read_toc_version(toc_path: &Path) -> Option<String> {
 
 /// 安装插件（从zip数据）
 /// wow_path 可能是 WTF 目录或版本目录
-pub fn install_addon(wow_path: &str, _flavor: &str, zip_data: &[u8]) -> Result<String, String> {
+pub fn install_addon(wow_path: &str, flavor: &str, zip_data: &[u8]) -> Result<String, String> {
     let version_dir = get_version_dir(wow_path);
+    if is_forever_destination(flavor, &version_dir)
+        && !zip_declares_interface(zip_data, Path::new("RPBox_Addon/RPBox_Addon.toc"), "16001")?
+    {
+        return Err("RPBox Addon 安装包不支持《魔兽世界：无限》（Interface 16001）".to_string());
+    }
     let addons_dir = version_dir.join("Interface").join("AddOns");
 
     // 确保 AddOns 目录存在
@@ -779,6 +860,64 @@ pub fn uninstall_addon(wow_path: &str, flavor: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+
+    fn addon_zip(toc_name: &str, interface_line: &str) -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        writer
+            .start_file(toc_name, zip::write::FileOptions::default())
+            .unwrap();
+        writer
+            .write_all(format!("## Interface: {interface_line}\n## Version: 1.0.0\n").as_bytes())
+            .unwrap();
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn forever_destination_rejects_a_retail_only_addon_before_writing_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let forever = temp.path().join("_forever_");
+        std::fs::create_dir(&forever).unwrap();
+        let retail_zip = addon_zip("RPBox_Addon/RPBox_Addon.toc", "120100");
+        assert!(install_addon(&forever.to_string_lossy(), "_forever_", &retail_zip).is_err());
+        assert!(!forever.join("Interface").exists());
+        let compatible_zip = addon_zip("RPBox_Addon/RPBox_Addon.toc", "120100, 16001");
+        assert!(zip_declares_interface(
+            &compatible_zip,
+            Path::new("RPBox_Addon/RPBox_Addon.toc"),
+            "16001",
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn forever_trp3_install_requires_the_matching_interface() {
+        let temp = tempfile::tempdir().unwrap();
+        let forever = temp.path().join("_forever_");
+        std::fs::create_dir(&forever).unwrap();
+        let retail_zip = addon_zip("totalRP3/totalRP3.toc", "120100");
+        assert!(install_trp3_addon_zip_data(
+            &forever.to_string_lossy(),
+            "total-rp-3",
+            &retail_zip,
+            "_forever_",
+        )
+        .is_err());
+        assert!(!forever.join("Interface").exists());
+
+        let compatible_zip = addon_zip("totalRP3/totalRP3.toc", "120100, 16001");
+        let installed = install_trp3_addon_zip_data(
+            &forever.to_string_lossy(),
+            "total-rp-3",
+            &compatible_zip,
+            "_forever_",
+        )
+        .unwrap();
+        assert!(installed
+            .addons
+            .iter()
+            .any(|addon| addon.id == "total-rp-3" && addon.installed));
+    }
 
     #[test]
     fn musician_definition_supports_official_release_downloads() {

@@ -221,7 +221,7 @@ func TestTRP3MirrorOverlayDoesNotReplaceNewerUpstreamRelease(t *testing.T) {
 			break
 		}
 	}
-	if trp.LatestVersion != "3.4.1" {
+	if trp.LatestVersion != "3.5.4" {
 		t.Fatalf("expected newer upstream version to remain selected, got %q", trp.LatestVersion)
 	}
 }

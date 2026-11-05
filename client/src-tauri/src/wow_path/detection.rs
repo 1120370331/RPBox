@@ -46,6 +46,7 @@ pub fn detect_wow_paths() -> Vec<WowInstallation> {
 
 const FLAVORS: &[&str] = &[
     "_retail_",
+    "_forever_",
     "_classic_",
     "_classic_era_",
     "_classic_anniversary_",
@@ -67,6 +68,7 @@ fn client_flavor(path: &std::path::Path) -> Option<String> {
         let product = line.split('|').nth(product_column)?.trim();
         let flavor = match product {
             "wow" => "_retail_",
+            "wowf" => "_forever_",
             "wow_classic" => "_classic_",
             "wow_classic_era" => "_classic_era_",
             "wow_classic_anniversary" => "_classic_anniversary_",
@@ -177,6 +179,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         for flavor in [
             "_retail_",
+            "_forever_",
             "_classic_",
             "_classic_era_",
             "_classic_anniversary_",
@@ -184,7 +187,7 @@ mod tests {
             std::fs::create_dir_all(temp.path().join(flavor).join("WTF/Account/WOW1")).unwrap();
         }
         let detected = inspect_wow_installations(&temp.path().to_string_lossy());
-        assert_eq!(detected.len(), 4);
+        assert_eq!(detected.len(), 5);
         assert!(detected.iter().all(|item| item.accounts == vec!["WOW1"]));
         assert!(normalize_wow_path(&temp.path().to_string_lossy()).is_none());
         assert_eq!(
@@ -205,6 +208,21 @@ mod tests {
         .unwrap();
         let detected = inspect_wow_installations(&temp.path().to_string_lossy());
         assert_eq!(detected[0].flavor, "_classic_era_");
+    }
+
+    #[test]
+    fn detects_forever_client_from_product_metadata() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("Wow.exe"), "").unwrap();
+        std::fs::write(
+            temp.path().join(".build.info"),
+            "Active!DEC:1|Product!STRING:0\n1|wowf\n",
+        )
+        .unwrap();
+        let detected = inspect_wow_installations(&temp.path().to_string_lossy());
+        assert_eq!(detected.len(), 1);
+        assert_eq!(detected[0].flavor, "_forever_");
+        assert!(matches!(&detected[0].version, WowVersion::Retail));
     }
 
     #[test]

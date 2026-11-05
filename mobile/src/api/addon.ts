@@ -11,6 +11,7 @@ export interface AddonVersionInfo {
 export interface AddonManifest {
   name: string
   latest: string
+  latestByFlavor?: Record<string, string>
   versions: AddonVersionInfo[]
 }
 
@@ -44,8 +45,8 @@ export async function getAddonManifest(): Promise<AddonManifest> {
   return request.get<AddonManifest>('/addon/manifest')
 }
 
-export async function getAddonLatest(): Promise<AddonLatestResponse> {
-  return request.get<AddonLatestResponse>('/addon/latest')
+export async function getAddonLatest(flavor = ''): Promise<AddonLatestResponse> {
+  return request.get<AddonLatestResponse>(`/addon/latest?flavor=${encodeURIComponent(flavor)}`)
 }
 
 export async function getTRP3Latest(): Promise<TRP3LatestResponse> {

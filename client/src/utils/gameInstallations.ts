@@ -1,5 +1,6 @@
 export const gameFlavors = [
   { value: '_retail_', label: '正式服' },
+  { value: '_forever_', label: '魔兽：无限' },
   { value: '_classic_', label: '怀旧服（进度服）' },
   { value: '_classic_era_', label: '经典怀旧服' },
   { value: '_classic_anniversary_', label: '周年怀旧服' },
@@ -9,6 +10,7 @@ export const gameFlavors = [
   { value: '_classic_beta_', label: '怀旧 Beta' },
 ]
 export function gameFlavorLabel(flavor?: string) { return gameFlavors.find(item => item.value === flavor)?.label || '旧存档（版本未标记）' }
+export function supportsRpboxAddon(flavor?: string) { return flavor === '_retail_' || flavor === '_forever_' }
 export function inferGameFlavor(path: string) {
   const parts = path.replace(/\\/g, '/').toLowerCase().split('/')
   return gameFlavors.find(item => parts.includes(item.value))?.value || ''

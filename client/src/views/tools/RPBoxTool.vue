@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { getAddonDownloadUrl, getAddonLatest } from '@/api/addon'
+import { gameFlavorLabel } from '../../utils/gameInstallations'
 import { useUserStore } from '@/stores/user'
 const props = defineProps<{ characterArchiveRoute?: string; storyArchiveRoute?: string }>()
 const userStore = useUserStore()
 const characterArchivePath = computed(() => props.characterArchiveRoute || (userStore.user ? `/user/${userStore.user.id}` : '/tools/trp3'))
 const desktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const version = ref('')
+const flavor = localStorage.getItem('selected_flavor') || '_retail_'
 const downloadError = ref('')
 async function loadVersion() {
   downloadError.value = ''
-  try { version.value = (await getAddonLatest()).version } catch { downloadError.value = '暂时无法获取插件版本，请重试。' }
+  try { version.value = (await getAddonLatest(flavor)).version } catch { downloadError.value = '暂时无法获取此游戏版本的插件，请重试。' }
 }
 onMounted(() => { if (!desktop) void loadVersion() })
 </script>
@@ -25,7 +27,7 @@ onMounted(() => { if (!desktop) void loadVersion() })
       <RouterLink :to="storyArchiveRoute || '/archives'"><i class="ri-book-open-line" aria-hidden="true"></i><div><h2>剧情归档</h2><p>导入聊天记录，整理、回顾与分享 RP 剧情。</p></div><i class="ri-arrow-right-line" aria-hidden="true"></i></RouterLink>
     </section>
     <section class="install-guide">
-      <div class="guide-heading"><div><span>从游戏内开始</span><h2>安装 RPBox 配套插件</h2></div><RouterLink v-if="desktop" class="primary" to="/tools/rpbox/install">打开插件安装器 <i class="ri-arrow-right-line" aria-hidden="true"></i></RouterLink><a v-else-if="version" class="primary" :href="getAddonDownloadUrl(version)" download>下载 RPBox 插件 {{ version }} <i class="ri-download-2-line" aria-hidden="true"></i></a><button v-else-if="downloadError" type="button" @click="loadVersion">{{ downloadError }}</button><span v-else role="status">获取插件版本…</span></div>
+      <div class="guide-heading"><div><span>从游戏内开始</span><h2>安装 RPBox 配套插件</h2></div><RouterLink v-if="desktop" class="primary" to="/tools/rpbox/install">打开插件安装器 <i class="ri-arrow-right-line" aria-hidden="true"></i></RouterLink><a v-else-if="version" class="primary" :href="getAddonDownloadUrl(version)" download>下载 RPBox 插件 {{ version }} · {{ gameFlavorLabel(flavor) }} <i class="ri-download-2-line" aria-hidden="true"></i></a><button v-else-if="downloadError" type="button" @click="loadVersion">{{ downloadError }}</button><span v-else role="status">获取插件版本…</span></div>
       <ol><li><strong>登记游戏目录</strong><p>先选择游戏目录，确认识别到的游戏版本后保存；需要时可手动修改。</p><RouterLink v-if="desktop" to="/tools/directories">管理游戏目录</RouterLink></li><li><strong>安装并启用插件</strong><p>退出游戏后，将压缩包中的 <code>RPBox_Addon</code> 文件夹放入 <code>Interface/AddOns</code>。进入角色选择界面，在插件列表启用 RPBox Addon 和 Total RP 3。</p></li><li><strong>开始记录，然后同步</strong><p>进入游戏使用插件记录 RP 对话；退出游戏或执行 <code>/reload</code> 使数据写入磁盘，再通过人物卡备份和剧情归档入口导入。</p></li></ol>
       <p class="guide-note">{{ desktop ? '桌面版可以扫描游戏目录并一键安装、更新插件。' : '网页版可编辑云端档案；自动扫描游戏目录、安装插件和读取本地游戏数据需要 RPBox 桌面客户端。' }}</p>
       <RouterLink v-if="!desktop" class="installer-link" to="/tools/rpbox/install">查看桌面版安装流程 <i class="ri-arrow-right-up-line" aria-hidden="true"></i></RouterLink>

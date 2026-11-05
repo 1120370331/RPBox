@@ -11,7 +11,14 @@ export interface AddonVersionInfo {
 export interface AddonManifest {
   name: string
   latest: string
+  latestByFlavor?: Record<string, string>
   versions: AddonVersionInfo[]
+}
+
+export function addonLatestForFlavor(manifest: AddonManifest, flavor: string): string {
+  if (flavor === '_forever_') return manifest.latestByFlavor?._forever_ || ''
+  if (!flavor || flavor === '_retail_') return manifest.latest
+  return ''
 }
 
 export interface AddonLatestResponse {
@@ -44,8 +51,8 @@ export async function getAddonManifest(): Promise<AddonManifest> {
   return request.get<AddonManifest>('/addon/manifest')
 }
 
-export async function getAddonLatest(): Promise<AddonLatestResponse> {
-  return request.get<AddonLatestResponse>('/addon/latest')
+export async function getAddonLatest(flavor = ''): Promise<AddonLatestResponse> {
+  return request.get<AddonLatestResponse>(`/addon/latest?flavor=${encodeURIComponent(flavor)}`)
 }
 
 export async function getTRP3Latest(): Promise<TRP3LatestResponse> {

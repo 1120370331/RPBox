@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getGameInstallations, selectGameInstallation, sameGamePath, gameFlavors, gameFlavorLabel } from '@/utils/gameInstallations'
+import { getGameInstallations, selectGameInstallation, sameGamePath, gameFlavors, gameFlavorLabel, supportsRpboxAddon } from '@/utils/gameInstallations'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
@@ -157,7 +157,7 @@ onMounted(async () => {
   window.addEventListener(ADDONS_UPDATED_EVENT, handleAddonsUpdated)
   setTimeout(() => mounted.value = true, 50)
   if (!desktop) {
-    try { rpboxLatestVersion.value = (await getAddonLatest()).version } catch { pluginError.value = '插件版本读取失败，请稍后重试。' }
+    try { rpboxLatestVersion.value = (await getAddonLatest(selectedFlavor.value)).version } catch { pluginError.value = '插件版本读取失败，请稍后重试。' }
     return
   }
   await bindProgressEvents()
@@ -343,7 +343,7 @@ function buildTrp3Card(
     latestVersion: addon?.latestVersion || (hasWowPath.value ? '待获取' : '选择目录后检测'),
     sourceUrl: addon?.sourceUrl,
     action: progress?.label || getActionText(state, installed, busy),
-    canInstall: selectedFlavor.value === '_retail_' && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
+    canInstall: supportsRpboxAddon(selectedFlavor.value) && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
     canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
     busy,
     progressLabel: progress?.label || '',
@@ -368,7 +368,7 @@ function buildRpboxCard(): PluginCard {
     currentVersion: installed ? rpboxInstalledInfo.value?.version || '未知' : '未安装',
     latestVersion: rpboxLatestVersion.value || (hasWowPath.value ? '待获取' : '选择目录后检测'),
     action: progress?.label || getActionText(state, installed, busy),
-    canInstall: selectedFlavor.value === '_retail_' && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!rpboxLatestVersion.value,
+    canInstall: supportsRpboxAddon(selectedFlavor.value) && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!rpboxLatestVersion.value,
     canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
     busy,
     progressLabel: progress?.label || '',
@@ -438,7 +438,7 @@ async function refreshPluginStatus() {
   }))
   candidates.push({ id: 'rpbox', installed: !!rpboxInstalledInfo.value?.installed,
     currentVersion: rpboxInstalledInfo.value?.version, latestVersion: rpboxLatestVersion.value })
-  const updated = selectedFlavor.value === '_retail_' ? await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, candidates) : []
+  const updated = supportsRpboxAddon(selectedFlavor.value) ? await autoUpdateAddons({ wowPath: wowPath.value, flavor: selectedFlavor.value }, candidates) : []
   if (updated.length) await Promise.allSettled([checkTrp3Addons(), checkRpboxAddon()])
   checkingPlugins.value = false
 }
@@ -476,7 +476,7 @@ async function checkRpboxAddon() {
   })
 
   try {
-    const latest = await getAddonLatest()
+    const latest = await getAddonLatest(selectedFlavor.value)
     rpboxLatestVersion.value = latest.version
   } catch (e: any) {
     rpboxLatestVersion.value = ''
@@ -486,7 +486,7 @@ async function checkRpboxAddon() {
 
 async function installPlugin(card: PluginCard) {
   if (!card.canInstall || !wowPath.value) return
-  if (selectedFlavor.value !== '_retail_') { toast.warning('请使用对应游戏版本的下载页，当前自动安装包仅适用于正式服。'); return }
+  if (!supportsRpboxAddon(selectedFlavor.value)) { toast.warning('当前游戏版本没有兼容的自动安装包。'); return }
   if (card.id === 'rpbox') {
     await installRpboxAddon()
     return
@@ -579,6 +579,7 @@ async function installTrp3Addon(addon: Trp3AddonInfo) {
       wowPath: wowPath.value,
       addonId: addon.id,
       downloadUrl: addon.downloadUrl,
+      flavor: selectedFlavor.value,
     }))
     setPluginProgress(addon.id, {
       label: '检测中',
@@ -619,7 +620,7 @@ async function installRpboxAddon() {
   try {
     let latestVersion = rpboxLatestVersion.value
     if (!latestVersion) {
-      const latest = await getAddonLatest()
+      const latest = await getAddonLatest(selectedFlavor.value)
       latestVersion = latest.version
       rpboxLatestVersion.value = latest.version
     }
