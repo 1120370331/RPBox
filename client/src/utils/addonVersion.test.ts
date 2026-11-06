@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAddonVersionNewer } from './addonVersion'
+import { addonReleaseTypeLabel, isAddonVersionNewer } from './addonVersion'
 
 describe('isAddonVersionNewer', () => {
   it('does not offer a downgrade as an update', () => {
@@ -17,5 +17,13 @@ describe('isAddonVersionNewer', () => {
 
   it('does not guess when the remote version is not comparable', () => {
     expect(isAddonVersionNewer('latest', '3.4.1')).toBe(false)
+  })
+})
+
+describe('addonReleaseTypeLabel', () => {
+  it('labels releases without changing the version identifier', () => {
+    expect(addonReleaseTypeLabel('1.0.15-beta.1')).toBe('测试版')
+    expect(addonReleaseTypeLabel('v1.0.14')).toBe('正式版')
+    expect(addonReleaseTypeLabel('未知')).toBe('')
   })
 })

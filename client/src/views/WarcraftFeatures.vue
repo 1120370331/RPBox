@@ -13,7 +13,7 @@ import {
 } from '@/api/addon'
 import { dialog } from '@/composables/useDialog'
 import { useToastStore } from '@/stores/toast'
-import { isAddonVersionNewer } from '@/utils/addonVersion'
+import { addonReleaseTypeLabel, isAddonVersionNewer } from '@/utils/addonVersion'
 import { ADDONS_UPDATED_EVENT, autoUpdateAddons, isAddonBusy, runAddonOperation, type AddonUpdateCandidate } from '@/services/addonAutoUpdate'
 
 interface Trp3AddonInfo {
@@ -57,6 +57,9 @@ interface PluginCard {
   status: string
   currentVersion: string
   latestVersion: string
+  versionFlavor?: string
+  currentReleaseType?: string
+  latestReleaseType?: string
   sourceUrl?: string
   action: string
   canInstall: boolean
@@ -344,6 +347,7 @@ function buildTrp3Card(
     status: addon?.compatibilityNote || getStateText(state),
     currentVersion: installed ? addon?.version || '未知' : '未安装',
     latestVersion: addon?.compatibilityNote ? '不兼容' : addon?.latestVersion || (hasWowPath.value ? '待获取' : '选择目录后检测'),
+    versionFlavor: addon?.downloadUrl ? gameFlavorLabel(selectedFlavor.value) : undefined,
     sourceUrl: addon?.sourceUrl,
     action: progress?.label || getActionText(state, installed, busy),
     canInstall: supportsManagedAddonFlavor(selectedFlavor.value) && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!addon?.downloadUrl,
@@ -370,6 +374,9 @@ function buildRpboxCard(): PluginCard {
     status: getStateText(state),
     currentVersion: installed ? rpboxInstalledInfo.value?.version || '未知' : '未安装',
     latestVersion: rpboxLatestVersion.value || (hasWowPath.value ? '待获取' : '选择目录后检测'),
+    versionFlavor: rpboxLatestVersion.value ? gameFlavorLabel(selectedFlavor.value) : undefined,
+    currentReleaseType: installed ? addonReleaseTypeLabel(rpboxInstalledInfo.value?.version) : undefined,
+    latestReleaseType: addonReleaseTypeLabel(rpboxLatestVersion.value),
     action: progress?.label || getActionText(state, installed, busy),
     canInstall: supportsRpboxAddon(selectedFlavor.value) && hasWowPath.value && !checkingPlugins.value && !busy && (state === 'missing' || state === 'update') && !!rpboxLatestVersion.value,
     canUninstall: hasWowPath.value && !checkingPlugins.value && !busy && installed,
@@ -798,8 +805,8 @@ async function openAddonFolder() {
             </div>
 
             <div class="version-lines">
-              <span><small>本地</small><strong>{{ card.currentVersion }}</strong></span>
-              <span><small>最新</small><strong>{{ card.latestVersion }}</strong></span>
+              <span><small>本地</small><strong>{{ card.currentVersion }}</strong><em v-if="card.currentReleaseType" class="version-type-tag">{{ card.currentReleaseType }}</em></span>
+              <span><small>最新</small><strong>{{ card.latestVersion }}</strong><span v-if="card.versionFlavor || card.latestReleaseType" class="version-tags"><em v-if="card.versionFlavor" class="version-type-tag">{{ card.versionFlavor }}</em><em v-if="card.latestReleaseType" class="version-type-tag">{{ card.latestReleaseType }}</em></span></span>
             </div>
 
             <div v-if="card.progressLabel" class="plugin-progress" :class="{ active: card.busy, unknown: card.progressPercent === null }">
@@ -1276,6 +1283,26 @@ h3 {
 .version-lines strong {
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.version-lines .version-tags {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0;
+  background: none;
+}
+
+.version-type-tag {
+  align-self: flex-start;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.3;
 }
 
 .plugin-progress {

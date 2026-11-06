@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getAddonDownloadUrl } from '@/api/addon'
+import { addonReleaseTypeLabel } from '@/utils/addonVersion'
+import { gameFlavorLabel } from '@/utils/gameInstallations'
 import { useToastStore } from '@/stores/toast'
 import { runAddonOperation } from '@/services/addonAutoUpdate'
 
@@ -108,11 +110,13 @@ defineExpose({
             <div class="version-item">
               <span class="label">当前版本：</span>
               <span class="version current">{{ displayCurrentVersion }}</span>
+              <span v-if="addonReleaseTypeLabel(currentVersion)" class="version-type-tag">{{ addonReleaseTypeLabel(currentVersion) }}</span>
             </div>
             <i class="ri-arrow-right-line arrow-icon"></i>
             <div class="version-item">
               <span class="label">最新版本：</span>
               <span class="version latest">{{ displayLatestVersion }}</span>
+              <span class="version-type-tag">{{ gameFlavorLabel(flavor) }} · {{ addonReleaseTypeLabel(latestVersion) }}</span>
             </div>
           </div>
 
@@ -282,6 +286,11 @@ defineExpose({
 .version.latest {
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
+}
+
+.version-type-tag {
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 .arrow-icon {

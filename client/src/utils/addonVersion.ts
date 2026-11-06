@@ -21,6 +21,13 @@ function parseVersion(version: string | null | undefined): ParsedVersion | null 
   }
 }
 
+/** Labels a known add-on version without changing its install/update identifier. */
+export function addonReleaseTypeLabel(version: string | null | undefined): string {
+  const parsed = parseVersion(version)
+  if (!parsed) return ''
+  return parsed.prerelease ? '测试版' : '正式版'
+}
+
 function comparePrereleaseIdentifier(a: string, b: string) {
   const numeric = /^\d+$/
   const aIsNumeric = numeric.test(a)

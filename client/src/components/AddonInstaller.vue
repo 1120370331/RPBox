@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { getAddonLatest, getAddonDownloadUrl } from '@/api/addon'
 import { runAddonOperation } from '@/services/addonAutoUpdate'
 import { getGameInstallations, gameFlavorLabel, sameGamePath, supportsRpboxAddon } from '@/utils/gameInstallations'
+import { addonReleaseTypeLabel } from '@/utils/addonVersion'
 import RModal from './RModal.vue'
 import RButton from './RButton.vue'
 
@@ -48,6 +49,7 @@ const statusText = computed(() => {
 
 async function checkInstalled() {
   installedInfo.value = null
+  latestVersion.value = ''
   if (!selectedInstallation.value || !selectedFlavor.value) { error.value = '请先在游戏目录页登记并确认目录。'; return }
   if (!supportsRpboxAddon(selectedFlavor.value)) { error.value = '当前游戏版本没有兼容的 RPBox Addon 安装包。'; return }
   checking.value = true
@@ -122,6 +124,11 @@ watch(() => [props.modelValue, props.wowPath], ([visible]) => {
       <div class="addon-installer__status" :class="{ 'addon-installer__status--error': error }">
         {{ error || statusText }}
       </div>
+      <div v-if="latestVersion" class="addon-installer__version">
+        可安装版本 <strong>v{{ latestVersion }}</strong>
+        <span class="addon-installer__version-tag">{{ gameFlavorLabel(selectedFlavor) }}</span>
+        <span class="addon-installer__version-tag">{{ addonReleaseTypeLabel(latestVersion) }}</span>
+      </div>
 
       <!-- 使用提示 -->
       <div class="addon-installer__tips">
@@ -152,6 +159,8 @@ watch(() => [props.modelValue, props.wowPath], ([visible]) => {
 
 <style scoped>
 .addon-installer__path { overflow-wrap: anywhere; font-size: 13px; color: var(--color-text-secondary); }
+.addon-installer__version { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.addon-installer__version-tag { padding: 2px 7px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-text-secondary); font-size: 11px; }
 .addon-installer {
   display: flex;
   flex-direction: column;

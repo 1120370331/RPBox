@@ -15,7 +15,7 @@ import { useUpdater } from '@/composables/useUpdater'
 import { getAddonManifest, addonLatestForFlavor } from '@/api/addon'
 import { bumpImageCacheVersion } from '@/utils/imageCache'
 import { buildNameStyle } from '@/utils/userNameStyle'
-import { isAddonVersionNewer } from '@/utils/addonVersion'
+import { addonReleaseTypeLabel, isAddonVersionNewer } from '@/utils/addonVersion'
 import { ADDONS_UPDATED_EVENT, addonAutoUpdateEnabled, setAddonAutoUpdateEnabled, autoUpdateAddons } from '@/services/addonAutoUpdate'
 import AddonUpdateDialog from '@/components/AddonUpdateDialog.vue'
 import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
@@ -724,6 +724,7 @@ watch(() => localeStore.currentLocale, (newLocale) => {
               <div class="status-text">
                 <span class="status-label">{{ $t('settings.addon.installed') }}</span>
                 <span class="status-version">v{{ addonVersion }}</span>
+                <span v-if="addonReleaseTypeLabel(addonVersion)" class="status-version-type">{{ addonReleaseTypeLabel(addonVersion) }}</span>
               </div>
             </div>
             <button
@@ -1737,6 +1738,11 @@ watch(() => localeStore.currentLocale, (newLocale) => {
   font-size: 13px;
   color: var(--icon-color);
   font-weight: 500;
+}
+
+.status-version-type {
+  color: var(--color-text-secondary);
+  font-size: 11px;
 }
 
 .status-desc {

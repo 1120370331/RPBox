@@ -65,6 +65,7 @@ describe('installer registered-directory selection', () => {
     const rpboxCard = view.findAll('.plugin-card').find(card => card.text().includes('RPBox Addon'))
     expect(rpboxCard?.find('button.primary-btn').attributes('disabled')).toBeUndefined()
     expect(rpboxCard?.text()).toContain('1.0.15-beta.1')
+    expect(rpboxCard?.findAll('.version-type-tag').map(tag => tag.text())).toEqual(['魔兽：无限', '测试版'])
   })
   it('offers the Classic TRP3 package while disabling unsupported Extended', async () => {
     registerGameInstallation(classic)
@@ -83,6 +84,7 @@ describe('installer registered-directory selection', () => {
     const trp3 = view.findAll('.plugin-card').find(card => card.text().includes('Total RP 3'))!
     const extended = view.findAll('.plugin-card').find(card => card.text().includes('Total RP 3: Extended'))!
     expect(trp3.text()).toContain('3.4.1')
+    expect(trp3.find('.version-type-tag').text()).toBe('经典怀旧服')
     expect(trp3.find('button.primary-btn').attributes('disabled')).toBeUndefined()
     expect(extended.text()).toContain('怀旧服不支持')
     expect(extended.find('button.primary-btn').attributes('disabled')).toBeDefined()
