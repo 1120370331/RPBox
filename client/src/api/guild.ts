@@ -4,6 +4,7 @@ export interface Guild {
   id: number
   name: string
   server?: string
+  game_flavor?: '_retail_' | '_forever_'
   description: string
   icon: string
   color: string
@@ -78,6 +79,7 @@ export function sortGuildMembers(members: GuildMember[]): GuildMember[] {
 export interface CreateGuildRequest {
   name: string
   server?: string
+  game_flavor?: '_retail_' | '_forever_'
   description?: string
   icon?: string
   color?: string
@@ -188,6 +190,7 @@ export interface PublicGuildsQuery {
   keyword?: string
   faction?: string
   server?: string
+  game_flavor?: '_retail_' | '_forever_'
 }
 
 export async function listPublicGuilds(query?: PublicGuildsQuery): Promise<{ guilds: Guild[] }> {
@@ -195,6 +198,7 @@ export async function listPublicGuilds(query?: PublicGuildsQuery): Promise<{ gui
   if (query?.keyword) params.append('keyword', query.keyword)
   if (query?.faction) params.append('faction', query.faction)
   if (query?.server) params.append('server', query.server)
+  if (query?.game_flavor) params.append('game_flavor', query.game_flavor)
   const queryStr = params.toString()
   return request.get(`/public/guilds${queryStr ? '?' + queryStr : ''}`)
 }

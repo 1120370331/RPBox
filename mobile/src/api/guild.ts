@@ -23,6 +23,7 @@ export interface Guild {
   my_role?: 'owner' | 'admin' | 'member'
   auto_approve?: boolean
   server?: string
+  game_flavor?: '_retail_' | '_forever_'
   created_at: string
   updated_at: string
 }
@@ -68,10 +69,11 @@ export function listGuilds() {
   return request.get<{ guilds: Guild[] }>('/guilds')
 }
 
-export function listPublicGuilds(query?: { keyword?: string; faction?: string }) {
+export function listPublicGuilds(query?: { keyword?: string; faction?: string; game_flavor?: '_retail_' | '_forever_' }) {
   const params = new URLSearchParams()
   if (query?.keyword) params.append('keyword', query.keyword)
   if (query?.faction) params.append('faction', query.faction)
+  if (query?.game_flavor) params.append('game_flavor', query.game_flavor)
   const qs = params.toString()
   return request.get<{ guilds: Guild[] }>(`/public/guilds${qs ? '?' + qs : ''}`)
 }

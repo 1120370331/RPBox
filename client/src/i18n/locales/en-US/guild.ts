@@ -50,6 +50,10 @@ export default {
   search: 'Search guilds...',
   searchPlaceholder: 'Search guild name...',
   allFactions: 'All Factions',
+  serverType: 'Server',
+  allServers: 'All',
+  retailServer: 'Retail',
+  foreverServer: 'WoW Infinite',
   loading: 'Loading...',
   joinModal: {
     title: 'Join Guild',

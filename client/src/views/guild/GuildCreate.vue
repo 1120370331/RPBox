@@ -15,6 +15,7 @@ const name = ref('')
 const description = ref('')
 const slogan = ref('')
 const server = ref('')
+const gameFlavor = ref<'_retail_' | '_forever_'>('_retail_')
 const serverError = computed(() => Array.from(server.value.trim()).length > 128
   ? t('common.validation.maxLength', { n: 128 }) : '')
 const faction = ref('')
@@ -66,6 +67,7 @@ async function handleCreate() {
       description: description.value,
       slogan: slogan.value,
       server: server.value,
+      game_flavor: gameFlavor.value,
       faction: faction.value,
       color: color.value.replace('#', ''),
       banner: bannerPreview.value || undefined
@@ -133,6 +135,13 @@ async function handleCreate() {
       </div>
 
       <div class="row">
+        <div class="field">
+          <label>{{ t('guild.serverType') }}</label>
+          <select v-model="gameFlavor">
+            <option value="_retail_">{{ t('guild.retailServer') }}</option>
+            <option value="_forever_">{{ t('guild.foreverServer') }}</option>
+          </select>
+        </div>
         <div class="field">
           <label>{{ t('guild.create.server') }}</label>
           <RInput v-model="server" :placeholder="t('guild.create.serverPlaceholder')" :error="serverError" clearable />

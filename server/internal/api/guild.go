@@ -25,6 +25,7 @@ import (
 type CreateGuildRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Server      string `json:"server"`
+	GameFlavor  string `json:"game_flavor"`
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 	Color       string `json:"color"`
@@ -39,6 +40,7 @@ type CreateGuildRequest struct {
 type UpdateGuildRequest struct {
 	Name                  string  `json:"name"`
 	Server                *string `json:"server"` // nil 保持原值，空字符串清空
+	GameFlavor            *string `json:"game_flavor"`
 	Description           string  `json:"description"`
 	Icon                  string  `json:"icon"`
 	Color                 string  `json:"color"`
@@ -164,6 +166,13 @@ func validateGuildCommonFields(nameRequired bool, name, description, icon, color
 func normalizeCreateGuildRequest(req *CreateGuildRequest) error {
 	trimGuildRequestFields(&req.Name, &req.Description, &req.Icon, &req.Color, &req.Slogan, &req.Faction)
 	req.Server = strings.TrimSpace(req.Server)
+	req.GameFlavor = strings.TrimSpace(req.GameFlavor)
+	if req.GameFlavor == "" {
+		req.GameFlavor = "_retail_"
+	}
+	if req.GameFlavor != "_retail_" && req.GameFlavor != "_forever_" {
+		return fmt.Errorf("无效服务器类型")
+	}
 	if utf8.RuneCountInString(req.Server) > 128 {
 		return fmt.Errorf("服务器名称不能超过128个字符")
 	}
@@ -185,6 +194,12 @@ func normalizeUpdateGuildRequest(req *UpdateGuildRequest) error {
 		*req.Server = strings.TrimSpace(*req.Server)
 		if utf8.RuneCountInString(*req.Server) > 128 {
 			return fmt.Errorf("服务器名称不能超过128个字符")
+		}
+	}
+	if req.GameFlavor != nil {
+		*req.GameFlavor = strings.TrimSpace(*req.GameFlavor)
+		if *req.GameFlavor != "_retail_" && *req.GameFlavor != "_forever_" {
+			return fmt.Errorf("无效服务器类型")
 		}
 	}
 
@@ -252,7 +267,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 	if len(guildIDs) > 0 {
 		// 列表查询排除大字段（banner）以提高性能
 		// banner 通过独立的图片 API 访问
-		database.DB.Select("id, name, server, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
+		database.DB.Select("id, name, server, game_flavor, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
 	}
 
 	// 获取有 banner 的公会 ID 列表
@@ -364,6 +379,7 @@ func (s *Server) createGuild(c *gin.Context) {
 	guild := model.Guild{
 		Name:        req.Name,
 		Server:      req.Server,
+		GameFlavor:  req.GameFlavor,
 		Description: req.Description,
 		Icon:        req.Icon,
 		Color:       req.Color,
@@ -516,6 +532,9 @@ func (s *Server) updateGuild(c *gin.Context) {
 	updates := make(map[string]interface{})
 	if req.Server != nil {
 		updates["server"] = *req.Server
+	}
+	if req.GameFlavor != nil {
+		updates["game_flavor"] = *req.GameFlavor
 	}
 	if req.Name != "" {
 		updates["name"] = req.Name
@@ -1275,6 +1294,13 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 	}
 	// 只显示已审核通过的公开公会
 	query := database.DB.Where("status = ? AND is_public = ?", "approved", true)
+	if flavor := strings.TrimSpace(c.Query("game_flavor")); flavor != "" {
+		if flavor != "_retail_" && flavor != "_forever_" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效服务器类型"})
+			return
+		}
+		query = query.Where("game_flavor = ?", flavor)
+	}
 
 	// 支持搜索
 	if keyword := c.Query("keyword"); keyword != "" {
@@ -1288,7 +1314,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 
 	// 列表查询排除大字段（banner）以提高性能
 	// banner 通过独立的图片 API 访问
-	query.Select("id, name, server, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+	query.Select("id, name, server, game_flavor, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
 	visibleGuilds := make([]model.Guild, 0, len(guilds))
 	for _, guild := range guilds {
 		if !exclusions.excludes(reportTargetGuild, guild.ID, guild.OwnerID) {

@@ -60,6 +60,10 @@ export default {
   search: '搜索公会...',
   searchPlaceholder: '搜索公会名称...',
   allFactions: '全部阵营',
+  serverType: '服务器',
+  allServers: '全部',
+  retailServer: '正式服',
+  foreverServer: '魔兽：无限',
   loading: '加载中...',
   joinModal: {
     title: '加入公会',

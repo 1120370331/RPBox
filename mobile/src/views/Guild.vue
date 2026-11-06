@@ -23,6 +23,7 @@ const loading = ref(false)
 const activeTab = ref<'public' | 'my'>('public')
 const keyword = ref('')
 const faction = ref('')
+const gameFlavor = ref<'' | '_retail_' | '_forever_'>('')
 const inviteCode = ref('')
 const joining = ref(false)
 
@@ -67,6 +68,7 @@ async function loadPublicGuilds() {
   const res = await listPublicGuilds({
     keyword: keyword.value.trim() || undefined,
     faction: faction.value || undefined,
+    game_flavor: gameFlavor.value || undefined,
   })
   publicGuilds.value = res.guilds || []
 }
@@ -188,6 +190,11 @@ onMounted(loadPublicTabData)
           <option value="horde">{{ $t('guild.faction.horde') }}</option>
           <option value="neutral">{{ $t('guild.faction.neutral') }}</option>
         </select>
+        <select v-model="gameFlavor" class="faction-select" :aria-label="$t('guild.serverType')">
+          <option value="">{{ $t('guild.allServers') }}</option>
+          <option value="_retail_">{{ $t('guild.retailServer') }}</option>
+          <option value="_forever_">{{ $t('guild.foreverServer') }}</option>
+        </select>
         <button class="small-btn" @click="handleSearch">{{ $t('guild.actions.search') }}</button>
       </div>
     </div>
@@ -228,6 +235,7 @@ onMounted(loadPublicTabData)
               <div class="meta-row">
                 <span><i class="ri-user-line" /> {{ guild.member_count }} {{ $t('guild.info.members') }}</span>
                 <span><i class="ri-book-open-line" /> {{ guild.story_count }} {{ $t('guild.info.stories') }}</span>
+                <span><i class="ri-gamepad-line" /> {{ $t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
               </div>
             </div>
           </div>

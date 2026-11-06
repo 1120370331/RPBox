@@ -6,6 +6,10 @@ export default {
   emptyMy: 'You have not joined any guild yet',
   searchPlaceholder: 'Search guild name...',
   allFactions: 'All Factions',
+  serverType: 'Server',
+  allServers: 'All',
+  retailServer: 'Retail',
+  foreverServer: 'WoW Infinite',
   tabs: {
     public: 'Guild Plaza',
     my: 'My Guilds',

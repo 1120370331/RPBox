@@ -33,6 +33,7 @@ const saving = ref(false)
 const editForm = ref({
   name: '',
   server: '',
+  game_flavor: '_retail_' as '_retail_' | '_forever_',
   slogan: '',
   description: '',
   lore: '',
@@ -139,6 +140,7 @@ function openSettings() {
   editForm.value = {
     name: guild.value.name,
     server: guild.value.server ?? '',
+    game_flavor: guild.value.game_flavor === '_forever_' ? '_forever_' : '_retail_',
     slogan: guild.value.slogan || '',
     description: guild.value.description || '',
     lore: guild.value.lore || '',
@@ -329,6 +331,7 @@ async function saveSettings() {
     await updateGuild(guildId, {
       name: editForm.value.name,
       server: editForm.value.server,
+      game_flavor: editForm.value.game_flavor,
       slogan: editForm.value.slogan,
       description: editForm.value.description,
       lore: editForm.value.lore,
@@ -487,6 +490,10 @@ onMounted(loadGuild)
               </div>
               <ul class="info-list">
                 <li>
+                  <span class="label">{{ t('guild.serverType') }}</span>
+                  <span class="value">{{ t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
+                </li>
+                <li>
                   <span class="label">{{ t('guild.info.server') }}</span>
                   <span class="value guild-server">{{ guild.server ?? '' }}</span>
                 </li>
@@ -618,6 +625,13 @@ onMounted(loadGuild)
         <div class="form-section">
           <label>{{ t('guild.create.server') }}</label>
           <RInput v-model="editForm.server" :placeholder="t('guild.create.serverPlaceholder')" :error="serverError" clearable />
+        </div>
+        <div class="form-section">
+          <label>{{ t('guild.serverType') }}</label>
+          <select v-model="editForm.game_flavor">
+            <option value="_retail_">{{ t('guild.retailServer') }}</option>
+            <option value="_forever_">{{ t('guild.foreverServer') }}</option>
+          </select>
         </div>
 
         <div class="form-section">

@@ -32,6 +32,7 @@ const applying = ref(false)
 // 筛选条件
 const keyword = ref('')
 const faction = ref('')
+const gameFlavor = ref<'' | '_retail_' | '_forever_'>('')
 
 const displayGuilds = computed(() => {
   return activeTab.value === 'my' ? myGuilds.value : publicGuilds.value
@@ -50,7 +51,8 @@ async function loadPublicGuilds() {
   try {
     const res = await listPublicGuilds({
       keyword: keyword.value || undefined,
-      faction: faction.value || undefined
+      faction: faction.value || undefined,
+      game_flavor: gameFlavor.value || undefined
     })
     publicGuilds.value = res.guilds || []
   } catch (e) {
@@ -215,6 +217,11 @@ onMounted(loadData)
         <option value="horde">{{ t('guild.info.horde') }}</option>
         <option value="neutral">{{ t('guild.info.neutral') }}</option>
       </select>
+      <select v-model="gameFlavor" :aria-label="t('guild.serverType')" @change="handleSearch">
+        <option value="">{{ t('guild.allServers') }}</option>
+        <option value="_retail_">{{ t('guild.retailServer') }}</option>
+        <option value="_forever_">{{ t('guild.foreverServer') }}</option>
+      </select>
       <RButton @click="handleSearch">{{ t('guild.action.search') }}</RButton>
     </div>
 
@@ -251,6 +258,7 @@ onMounted(loadData)
               <span><i class="ri-user-line"></i> {{ guild.member_count }} {{ t('guild.info.members') }}</span>
               <span><i class="ri-book-line"></i> {{ guild.story_count }} {{ t('guild.info.stories') }}</span>
               <span v-if="guild.server" class="server"><i class="ri-server-line"></i> {{ guild.server }}</span>
+              <span class="server"><i class="ri-gamepad-line"></i> {{ t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
             </div>
             <span v-if="guild.my_role" class="role-badge">{{ getRoleLabel(guild.my_role) }}</span>
 

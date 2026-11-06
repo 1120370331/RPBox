@@ -306,6 +306,7 @@ onMounted(loadDetail)
               <div class="meta">
                 <span><i class="ri-user-line" /> {{ guild.member_count }} {{ $t('guild.info.members') }}</span>
                 <span><i class="ri-book-open-line" /> {{ guild.story_count }} {{ $t('guild.info.stories') }}</span>
+                <span><i class="ri-gamepad-line" /> {{ $t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
               </div>
             </div>
           </div>
