@@ -198,10 +198,10 @@ onMounted(loadPublicTabData)
             <option value="neutral">{{ $t('guild.faction.neutral') }}</option>
           </select>
         </label>
+        <button class="small-btn" @click="handleSearch">{{ $t('guild.actions.search') }}</button>
         <div class="filter-field version-field" role="group" :aria-label="$t('guild.filterVersion')"><small>{{ $t('guild.filterVersion') }}</small>
           <GuildVersionSelect v-model="selectedGameFlavors" :label="$t('guild.filterVersion')" :all-label="$t('guild.allServers')" :retail-label="$t('guild.retailServer')" :forever-label="$t('guild.foreverServer')" allow-all @change="handleSearch" />
         </div>
-        <button class="small-btn" @click="handleSearch">{{ $t('guild.actions.search') }}</button>
       </div>
     </div>
 
@@ -344,6 +344,7 @@ onMounted(loadPublicTabData)
 }
 
 .version-field { flex-basis: 100%; }
+.version-field :deep(.guild-version-trigger) { min-height: 44px; }
 
 .filter-field small {
   color: var(--color-text-secondary);
