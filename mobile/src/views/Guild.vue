@@ -15,6 +15,7 @@ import {
 } from '@/api/guild'
 import { resolveApiUrl } from '@/api/image'
 import { guildGameFlavors, type GuildGameFlavor } from '@shared/utils/guildGameFlavors'
+import GuildVersionSelect from '@shared/components/GuildVersionSelect.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -114,11 +115,6 @@ async function handleSearch() {
   await loadPublicTabData()
 }
 
-function showAllVersions() {
-  selectedGameFlavors.value = []
-  void handleSearch()
-}
-
 async function handleJoinByCode() {
   if (!inviteCode.value.trim() || joining.value) return
   joining.value = true
@@ -203,11 +199,7 @@ onMounted(loadPublicTabData)
           </select>
         </label>
         <div class="filter-field version-field" role="group" :aria-label="$t('guild.filterVersion')"><small>{{ $t('guild.filterVersion') }}</small>
-          <div class="version-options">
-            <button type="button" :class="{ active: selectedGameFlavors.length === 0 }" @click="showAllVersions">{{ $t('guild.allServers') }}</button>
-            <label><input v-model="selectedGameFlavors" type="checkbox" value="_retail_" @change="handleSearch" />{{ $t('guild.retailServer') }}</label>
-            <label><input v-model="selectedGameFlavors" type="checkbox" value="_forever_" @change="handleSearch" />{{ $t('guild.foreverServer') }}</label>
-          </div>
+          <GuildVersionSelect v-model="selectedGameFlavors" :label="$t('guild.filterVersion')" :all-label="$t('guild.allServers')" :retail-label="$t('guild.retailServer')" :forever-label="$t('guild.foreverServer')" allow-all @change="handleSearch" />
         </div>
         <button class="small-btn" @click="handleSearch">{{ $t('guild.actions.search') }}</button>
       </div>
@@ -352,11 +344,6 @@ onMounted(loadPublicTabData)
 }
 
 .version-field { flex-basis: 100%; }
-.version-options { display: flex; flex-wrap: wrap; gap: 6px; }
-.version-options button,
-.version-options label { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 5px 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--input-bg); color: var(--text-dark); font-size: 12px; white-space: nowrap; }
-.version-options button.active { border-color: var(--color-accent); color: var(--color-accent); }
-.version-options input { accent-color: var(--color-accent); }
 
 .filter-field small {
   color: var(--color-text-secondary);

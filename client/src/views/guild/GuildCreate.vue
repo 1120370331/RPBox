@@ -8,6 +8,7 @@ import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
 import type { GuildGameFlavor } from '@shared/utils/guildGameFlavors'
+import GuildVersionSelect from '@shared/components/GuildVersionSelect.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -139,10 +140,7 @@ async function handleCreate() {
       <div class="row">
         <div class="field">
           <label>{{ t('guild.filterVersion') }}</label>
-          <div class="flavor-options">
-            <label><input v-model="gameFlavors" type="checkbox" value="_retail_" />{{ t('guild.retailServer') }}</label>
-            <label><input v-model="gameFlavors" type="checkbox" value="_forever_" />{{ t('guild.foreverServer') }}</label>
-          </div>
+          <GuildVersionSelect v-model="gameFlavors" :label="t('guild.filterVersion')" :all-label="t('guild.allServers')" :retail-label="t('guild.retailServer')" :forever-label="t('guild.foreverServer')" />
           <small v-if="flavorError" class="field-error">{{ flavorError }}</small>
         </div>
         <div class="field">
@@ -211,9 +209,6 @@ async function handleCreate() {
   color: var(--color-text-main);
 }
 
-.flavor-options { display: flex; flex-wrap: wrap; gap: 8px; }
-.field .flavor-options label { display: inline-flex; align-items: center; gap: 6px; padding: 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); font-size: 13px; }
-.flavor-options input { accent-color: var(--color-accent); }
 .field-error { color: var(--color-danger, #b91c1c); font-size: 12px; }
 
 .banner-upload {

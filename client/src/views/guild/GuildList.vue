@@ -11,6 +11,7 @@ import REmpty from '@/components/REmpty.vue'
 import RModal from '@/components/RModal.vue'
 import RInput from '@/components/RInput.vue'
 import { guildGameFlavors, type GuildGameFlavor } from '@shared/utils/guildGameFlavors'
+import GuildVersionSelect from '@shared/components/GuildVersionSelect.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -178,11 +179,6 @@ function getVersionLabel(guild: Guild): string {
   return guildGameFlavors(guild).map(flavor => t(flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer')).join(' · ')
 }
 
-function showAllVersions() {
-  selectedGameFlavors.value = []
-  handleSearch()
-}
-
 function getGuildBannerStyle(guild: Guild) {
   if (guild.banner_url) {
     return {
@@ -230,11 +226,7 @@ onMounted(loadData)
         </select>
       </label>
       <div class="filter-field version-field" role="group" :aria-label="t('guild.filterVersion')"><small>{{ t('guild.filterVersion') }}</small>
-        <div class="version-options">
-          <button type="button" :class="{ active: selectedGameFlavors.length === 0 }" @click="showAllVersions">{{ t('guild.allServers') }}</button>
-          <label><input v-model="selectedGameFlavors" type="checkbox" value="_retail_" @change="handleSearch" />{{ t('guild.retailServer') }}</label>
-          <label><input v-model="selectedGameFlavors" type="checkbox" value="_forever_" @change="handleSearch" />{{ t('guild.foreverServer') }}</label>
-        </div>
+        <GuildVersionSelect v-model="selectedGameFlavors" :label="t('guild.filterVersion')" :all-label="t('guild.allServers')" :retail-label="t('guild.retailServer')" :forever-label="t('guild.foreverServer')" allow-all @change="handleSearch" />
       </div>
       <RButton @click="handleSearch">{{ t('guild.action.search') }}</RButton>
     </div>
@@ -409,13 +401,7 @@ onMounted(loadData)
   min-width: 120px;
 }
 
-.version-field { min-width: 250px; }
-
-.version-options { display: flex; align-items: center; gap: 6px; min-height: 38px; }
-.version-options button,
-.version-options label { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--color-text-main); font-size: 12px; white-space: nowrap; cursor: pointer; }
-.version-options button.active { border-color: var(--color-accent); color: var(--color-accent); }
-.version-options input { accent-color: var(--color-accent); }
+.version-field { min-width: 200px; }
 
 .filter-field small {
   color: var(--color-text-secondary);

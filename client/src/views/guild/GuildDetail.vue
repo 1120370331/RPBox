@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { guildGameFlavors, type GuildGameFlavor } from '@shared/utils/guildGameFlavors'
+import GuildVersionSelect from '@shared/components/GuildVersionSelect.vue'
 import { getGuild, leaveGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
 import { useDialog } from '@/composables/useDialog'
@@ -630,10 +631,7 @@ onMounted(loadGuild)
         </div>
         <div class="form-section">
           <label>{{ t('guild.filterVersion') }}</label>
-          <div class="flavor-options">
-            <label><input v-model="editForm.game_flavors" type="checkbox" value="_retail_" />{{ t('guild.retailServer') }}</label>
-            <label><input v-model="editForm.game_flavors" type="checkbox" value="_forever_" />{{ t('guild.foreverServer') }}</label>
-          </div>
+          <GuildVersionSelect v-model="editForm.game_flavors" :label="t('guild.filterVersion')" :all-label="t('guild.allServers')" :retail-label="t('guild.retailServer')" :forever-label="t('guild.foreverServer')" />
           <small v-if="flavorError" class="field-error">{{ flavorError }}</small>
         </div>
 
@@ -1404,9 +1402,6 @@ onMounted(loadGuild)
   color-scheme: light;
 }
 
-.flavor-options { display: flex; flex-wrap: wrap; gap: 8px; }
-.form-section .flavor-options label { display: inline-flex; align-items: center; gap: 6px; padding: 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); font-size: 13px; }
-.flavor-options input { accent-color: var(--color-accent); }
 .field-error { color: var(--color-danger, #b91c1c); font-size: 12px; }
 
 .form-section select:focus {

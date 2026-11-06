@@ -90,7 +90,9 @@ describe('create server form', () => {
   it('can register one guild on both WoW versions', async () => {
     const { wrapper } = await page(GuildCreate, '/guild/create')
     await wrapper.get('input[placeholder="输入公会名称"]').setValue('跨服公会')
-    await wrapper.get('input[type="checkbox"][value="_forever_"]').setValue(true)
+    await wrapper.get('button[aria-label^="版本："]').trigger('click')
+    await flushPromises()
+    document.querySelector<HTMLInputElement>('.guild-version-menu input[value="_forever_"]')!.click()
     await wrapper.findAll('button').find(button => button.text() === '创建')!.trigger('click')
     await flushPromises()
     expect(mocks.post.mock.calls[0][1].game_flavors).toEqual(['_retail_', '_forever_'])
