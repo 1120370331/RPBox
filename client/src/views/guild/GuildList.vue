@@ -10,6 +10,7 @@ import RButton from '@/components/RButton.vue'
 import REmpty from '@/components/REmpty.vue'
 import RModal from '@/components/RModal.vue'
 import RInput from '@/components/RInput.vue'
+import { guildGameFlavors, type GuildGameFlavor } from '@shared/utils/guildGameFlavors'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -32,7 +33,7 @@ const applying = ref(false)
 // 筛选条件
 const keyword = ref('')
 const faction = ref('')
-const gameFlavor = ref<'' | '_retail_' | '_forever_'>('')
+const selectedGameFlavors = ref<GuildGameFlavor[]>([])
 
 const displayGuilds = computed(() => {
   return activeTab.value === 'my' ? myGuilds.value : publicGuilds.value
@@ -52,7 +53,7 @@ async function loadPublicGuilds() {
     const res = await listPublicGuilds({
       keyword: keyword.value || undefined,
       faction: faction.value || undefined,
-      game_flavor: gameFlavor.value || undefined
+      game_flavors: selectedGameFlavors.value
     })
     publicGuilds.value = res.guilds || []
   } catch (e) {
@@ -173,6 +174,15 @@ function getFactionClass(f: string): string {
   return f || 'neutral'
 }
 
+function getVersionLabel(guild: Guild): string {
+  return guildGameFlavors(guild).map(flavor => t(flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer')).join(' · ')
+}
+
+function showAllVersions() {
+  selectedGameFlavors.value = []
+  handleSearch()
+}
+
 function getGuildBannerStyle(guild: Guild) {
   if (guild.banner_url) {
     return {
@@ -211,17 +221,21 @@ onMounted(loadData)
     <!-- 筛选栏（仅公会广场显示） -->
     <div v-if="activeTab === 'public'" class="filter-bar">
       <RInput v-model="keyword" :placeholder="t('guild.searchPlaceholder')" class="search-input" @keyup.enter="handleSearch" />
-      <select v-model="faction" @change="handleSearch">
-        <option value="">{{ t('guild.allFactions') }}</option>
-        <option value="alliance">{{ t('guild.info.alliance') }}</option>
-        <option value="horde">{{ t('guild.info.horde') }}</option>
-        <option value="neutral">{{ t('guild.info.neutral') }}</option>
-      </select>
-      <select v-model="gameFlavor" :aria-label="t('guild.serverType')" @change="handleSearch">
-        <option value="">{{ t('guild.allServers') }}</option>
-        <option value="_retail_">{{ t('guild.retailServer') }}</option>
-        <option value="_forever_">{{ t('guild.foreverServer') }}</option>
-      </select>
+      <label class="filter-field"><small>{{ t('guild.filterFaction') }}</small>
+        <select v-model="faction" @change="handleSearch">
+          <option value="">{{ t('guild.allFactions') }}</option>
+          <option value="alliance">{{ t('guild.info.alliance') }}</option>
+          <option value="horde">{{ t('guild.info.horde') }}</option>
+          <option value="neutral">{{ t('guild.info.neutral') }}</option>
+        </select>
+      </label>
+      <div class="filter-field version-field" role="group" :aria-label="t('guild.filterVersion')"><small>{{ t('guild.filterVersion') }}</small>
+        <div class="version-options">
+          <button type="button" :class="{ active: selectedGameFlavors.length === 0 }" @click="showAllVersions">{{ t('guild.allServers') }}</button>
+          <label><input v-model="selectedGameFlavors" type="checkbox" value="_retail_" @change="handleSearch" />{{ t('guild.retailServer') }}</label>
+          <label><input v-model="selectedGameFlavors" type="checkbox" value="_forever_" @change="handleSearch" />{{ t('guild.foreverServer') }}</label>
+        </div>
+      </div>
       <RButton @click="handleSearch">{{ t('guild.action.search') }}</RButton>
     </div>
 
@@ -236,8 +250,12 @@ onMounted(loadData)
       <div v-for="guild in displayGuilds" :key="guild.id" class="guild-card" @click="router.push(`/guild/${guild.id}`)">
         <!-- 头图 -->
         <div class="card-banner" :style="getGuildBannerStyle(guild)">
-          <div v-if="guild.faction" class="faction-badge" :class="getFactionClass(guild.faction)">
-            {{ getFactionLabel(guild.faction) }}
+          <div class="banner-badges">
+            <span class="version-badge" :title="getVersionLabel(guild)">{{ getVersionLabel(guild) }}</span>
+            <span v-if="guild.server" class="server-badge" :title="guild.server">{{ guild.server }}</span>
+            <span v-if="guild.faction" class="faction-badge" :class="getFactionClass(guild.faction)">
+              {{ getFactionLabel(guild.faction) }}
+            </span>
           </div>
         </div>
         <!-- 卡片内容 -->
@@ -257,8 +275,6 @@ onMounted(loadData)
             <div class="guild-meta">
               <span><i class="ri-user-line"></i> {{ guild.member_count }} {{ t('guild.info.members') }}</span>
               <span><i class="ri-book-line"></i> {{ guild.story_count }} {{ t('guild.info.stories') }}</span>
-              <span v-if="guild.server" class="server"><i class="ri-server-line"></i> {{ guild.server }}</span>
-              <span class="server"><i class="ri-gamepad-line"></i> {{ t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
             </div>
             <span v-if="guild.my_role" class="role-badge">{{ getRoleLabel(guild.my_role) }}</span>
 
@@ -380,13 +396,35 @@ onMounted(loadData)
 
 .filter-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 20px;
-  align-items: center;
+  align-items: flex-end;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 120px;
+}
+
+.version-field { min-width: 250px; }
+
+.version-options { display: flex; align-items: center; gap: 6px; min-height: 38px; }
+.version-options button,
+.version-options label { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--color-text-main); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.version-options button.active { border-color: var(--color-accent); color: var(--color-accent); }
+.version-options input { accent-color: var(--color-accent); }
+
+.filter-field small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
 }
 
 .filter-bar .search-input {
   flex: 1;
+  min-width: 180px;
   max-width: 300px;
 }
 
@@ -484,15 +522,34 @@ onMounted(loadData)
     linear-gradient(135deg, var(--gradient-start, #D4A373), var(--gradient-end, #4B3621));
 }
 
-.faction-badge {
+.banner-badges {
   position: absolute;
   top: 12px;
   right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+}
+
+.faction-badge,
+.server-badge,
+.version-badge {
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
   color: #fff;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-badge,
+.version-badge {
+  background: rgba(44, 24, 16, 0.78);
 }
 
 .faction-badge.alliance {

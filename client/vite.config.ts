@@ -10,6 +10,7 @@ const config: UserConfig & { test: TestUserConfig } = {
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      '@shared': resolve(__dirname, '../shared'),
     },
   },
   clearScreen: false,

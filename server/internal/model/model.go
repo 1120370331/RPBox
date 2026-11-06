@@ -324,6 +324,7 @@ type Guild struct {
 	Name            string     `gorm:"size:128;not null" json:"name"`
 	Server          string     `gorm:"size:128;default:''" json:"server"`                            // 可选的服务器名称，旧记录为空
 	GameFlavor      string     `gorm:"size:32;not null;default:'_retail_';index" json:"game_flavor"` // 正式服或无限服
+	GameFlavors     []string   `gorm:"serializer:json;type:text" json:"game_flavors,omitempty"`      // 可同时属于多个客户端版本
 	Description     string     `gorm:"type:text" json:"description"`
 	Icon            string     `gorm:"size:128" json:"icon"`
 	Color           string     `gorm:"size:8" json:"color"`

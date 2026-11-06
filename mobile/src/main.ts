@@ -7,11 +7,13 @@ import App from './App.vue'
 import 'remixicon/fonts/remixicon.css'
 import '@client/styles/content.css'
 import './styles/mobile.css'
+import { useThemeStore } from '@shared/stores/theme'
 
 const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
+useThemeStore(pinia).initTheme()
 app.use(router)
 app.use(i18n)
 app.mount('#app')

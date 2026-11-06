@@ -131,26 +131,64 @@ const tealTheme: Theme = {
   },
 }
 
-export const themes: Theme[] = [classicTheme, tealTheme]
+const darkCoffeeTheme: Theme = {
+  id: 'dark-coffee',
+  name: '深色咖啡',
+  colors: {
+    ...classicTheme.colors,
+    primary: '#D5B182', primaryHover: '#E9CBA2', primaryLight: 'rgba(213, 177, 130, 0.12)',
+    secondary: '#C49A71', secondaryHover: '#DAB58A',
+    accent: '#D3AA72', accentHover: '#E7C492',
+    background: '#211A16', highlight: '#DDB982',
+    sidebarBg: '#191410', sidebarText: '#F0DEC4',
+    sidebarTextMuted: '#B8A38B', sidebarHover: 'rgba(213, 177, 130, 0.12)',
+    panelBg: '#2C231D', cardBg: '#342A22', cardBgHover: '#403227',
+    textMain: '#F0E2CF', textLight: '#FFF2DE', textSecondary: '#C7B39B', textMuted: '#AC967E',
+    border: '#594534', borderLight: '#44352A', borderHover: '#AB855B',
+    btnPrimaryBg: '#D3AA72', btnPrimaryText: '#251B15', btnPrimaryHover: '#E7C492',
+    btnSecondaryBg: '#493728', btnSecondaryText: '#E6CBA6', btnSecondaryHover: '#5B4431',
+    btnOutlineBorder: '#826342', btnOutlineText: '#E6CBA6', btnOutlineHover: 'rgba(213, 177, 130, 0.12)',
+    btnDangerBg: '#B74F49', btnDangerHover: '#C6635A',
+    inputBg: '#241C17', inputBorder: '#66503C', inputFocus: '#D3AA72', inputPlaceholder: '#AD967C',
+    switchActive: '#D3AA72', switchInactive: '#625040', checkboxActive: '#D3AA72',
+    tagBg: '#493728', tagText: '#E6CBA6', badgeBg: '#D3AA72',
+    shadowBase: '12, 8, 5', scrollbarThumb: '#64503E', scrollbarThumbHover: '#A1805A',
+    iconBg: '#493728', iconColor: '#D9B583', linkColor: '#DEB986', linkHover: '#F2D6AE',
+    gradientStart: '#5C412C', gradientEnd: '#2A2018',
+    success: '#ACC58D', successLight: 'rgba(172, 197, 141, 0.12)',
+    warning: '#E2B569', warningLight: 'rgba(226, 181, 105, 0.12)',
+    warningBorder: 'rgba(226, 181, 105, 0.32)', warningDark: '#F0CC91',
+  },
+}
+
+export const themes: Theme[] = [classicTheme, darkCoffeeTheme, tealTheme]
 
 export function getThemeById(id: string): Theme {
   return themes.find((t) => t.id === id) || classicTheme
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  const currentThemeId = ref(localStorage.getItem('theme') || 'classic')
-  const currentTheme = computed(() => getThemeById(currentThemeId.value))
+  const currentThemeId = ref(localStorage.getItem('theme') || 'system')
+  const darkMedia = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)') : null
+  const systemDark = ref(darkMedia?.matches ?? false)
+  const systemTheme = computed(() => systemDark.value ? darkCoffeeTheme : classicTheme)
+  const currentTheme = computed(() => currentThemeId.value === 'system' ? systemTheme.value : getThemeById(currentThemeId.value))
+  let listening = false
 
   function setTheme(themeId: string) {
-    const theme = getThemeById(themeId)
-    currentThemeId.value = theme.id
-    localStorage.setItem('theme', theme.id)
-    applyTheme(theme)
+    currentThemeId.value = themeId === 'system' ? 'system' : getThemeById(themeId).id
+    localStorage.setItem('theme', currentThemeId.value)
+    applyTheme(currentTheme.value)
   }
 
   function applyTheme(theme: Theme) {
     const root = document.documentElement
     const c = theme.colors
+    root.dataset.theme = theme.id
+    root.dataset.themePreference = currentThemeId.value
+    root.style.colorScheme = theme.id === 'dark-coffee' ? 'dark' : 'light'
+    root.style.setProperty('--color-text-dark', c.textMain)
     const map: Record<string, string> = {
       '--color-primary': c.primary, '--color-primary-hover': c.primaryHover,
       '--color-primary-light': c.primaryLight, '--color-secondary': c.secondary,
@@ -196,8 +234,15 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function initTheme() {
+    if (darkMedia && !listening) {
+      darkMedia.addEventListener('change', (event: MediaQueryListEvent) => {
+        systemDark.value = event.matches
+        if (currentThemeId.value === 'system') applyTheme(systemTheme.value)
+      })
+      listening = true
+    }
     applyTheme(currentTheme.value)
   }
 
-  return { currentThemeId, currentTheme, setTheme, initTheme }
+  return { currentThemeId, currentTheme, systemDark, setTheme, initTheme }
 })

@@ -154,25 +154,11 @@ end
 
 function UI.GetTheme()
     local config = RPBox_Config or {}
-    local theme = UI.NormalizeTheme(config.uiTheme)
-    if RPBox_Config and config.uiTheme ~= theme then config.uiTheme = theme end
-    return theme
+    return UI.NormalizeTheme(config.uiTheme)
 end
 
 function UI.IsModern()
     return UI.GetTheme() == UI.THEME_MODERN
-end
-
-function UI.IsStyled()
-    return UI.IsModern()
-end
-
-local function GetThemeColors()
-    return UI.COLORS
-end
-
-local function ResolveThemeColor(color, fallbackRole)
-    return color or UI.COLORS[fallbackRole]
 end
 
 local function EnsureWindowChrome(frame)
@@ -206,14 +192,10 @@ local function EnsureWindowChrome(frame)
     closeLabel:SetText("X")
     closeButton:SetScript("OnClick", function() frame:Hide() end)
     closeButton:HookScript("OnEnter", function(self)
-        local colors = GetThemeColors()
-        SetBackdrop(self, colors.dangerSoft, colors.danger)
-        ApplyTextColor(closeLabel, colors.text)
+        SetBackdrop(self, UI.COLORS.dangerSoft, UI.COLORS.danger)
     end)
     closeButton:HookScript("OnLeave", function(self)
-        local colors = GetThemeColors()
-        SetBackdrop(self, colors.raised, colors.border)
-        ApplyTextColor(closeLabel, colors.text)
+        SetBackdrop(self, UI.COLORS.raised, UI.COLORS.border)
     end)
 
     frame._rpboxModernChrome = titleBar
@@ -221,7 +203,6 @@ local function EnsureWindowChrome(frame)
     frame._rpboxModernTitle = title
     frame._rpboxModernContext = context
     frame._rpboxModernClose = closeButton
-    frame._rpboxModernCloseLabel = closeLabel
 end
 
 local WINDOW_CHROME_KEYS = {
@@ -244,22 +225,19 @@ end
 local function ApplyWindow(frame)
     EnsureWindowChrome(frame)
     local options = frame._rpboxThemeOptions or {}
-    local theme = UI.GetTheme()
-    local styled = UI.IsStyled()
-    local colors = GetThemeColors()
-    frame._rpboxTheme = theme
+    local modern = UI.IsModern()
+    frame._rpboxTheme = modern and UI.THEME_MODERN or UI.THEME_CLASSIC
 
-    if styled then
+    if modern then
         SetNativeWindowChromeShown(frame, false)
-        SetBackdrop(frame, colors.canvas, colors.border)
-        SetBackdrop(frame._rpboxModernChrome, colors.title, colors.borderDim)
-        SetBackdrop(frame._rpboxModernRail, colors.accent, colors.accent)
-        SetBackdrop(frame._rpboxModernClose, colors.raised, colors.border)
+        SetBackdrop(frame, UI.COLORS.canvas, UI.COLORS.border)
+        SetBackdrop(frame._rpboxModernChrome, UI.COLORS.title, UI.COLORS.borderDim)
+        SetBackdrop(frame._rpboxModernRail, UI.COLORS.accent, UI.COLORS.accent)
+        SetBackdrop(frame._rpboxModernClose, UI.COLORS.raised, UI.COLORS.border)
         frame._rpboxModernTitle:SetText(options.title or "RPBox")
         frame._rpboxModernContext:SetText(options.context or "CHRONICLE")
-        ApplyTextColor(frame._rpboxModernTitle, colors.text)
-        ApplyTextColor(frame._rpboxModernContext, colors.accent)
-        ApplyTextColor(frame._rpboxModernCloseLabel, colors.text)
+        ApplyTextColor(frame._rpboxModernTitle, UI.COLORS.text)
+        ApplyTextColor(frame._rpboxModernContext, UI.COLORS.accent)
         SetShown(frame._rpboxModernChrome, true)
         SetShown(frame._rpboxModernRail, true)
     else
@@ -289,10 +267,8 @@ end
 
 local function ApplyPanel(frame)
     local options = frame._rpboxThemeOptions or {}
-    if UI.IsStyled() then
-        local background = ResolveThemeColor(options.background, options.inset and "raised" or "surface")
-        local border = ResolveThemeColor(options.border, options.inset and "border" or "borderDim")
-        SetBackdrop(frame, background, border)
+    if UI.IsModern() then
+        SetBackdrop(frame, options.background or UI.COLORS.surface, options.border or UI.COLORS.borderDim)
         if options.alwaysVisible then frame:Show() end
     elseif options.modernOnly then
         frame:Hide()
@@ -313,7 +289,7 @@ end
 local function ApplyButton(button)
     local options = button._rpboxThemeOptions or {}
     local fontString = GetFontString(button)
-    if not UI.IsStyled() then
+    if not UI.IsModern() then
         SetTemplateTexturesShown(button, true)
         ClearBackdrop(button)
         RestoreTextColor(fontString)
@@ -325,30 +301,29 @@ local function ApplyButton(button)
     local selected = button._rpboxSelected == true
     local enabled = not button.IsEnabled or button:IsEnabled()
     local hovered = button._rpboxHovered == true
-    local colors = GetThemeColors()
-    local background = colors.raised
-    local border = colors.border
-    local textColor = colors.text
+    local background = UI.COLORS.raised
+    local border = UI.COLORS.border
+    local textColor = UI.COLORS.text
 
     if options.variant == "danger" then
-        background = hovered and colors.dangerSoft or colors.raised
-        border = hovered and colors.danger or colors.border
+        background = hovered and UI.COLORS.dangerSoft or UI.COLORS.raised
+        border = hovered and UI.COLORS.danger or UI.COLORS.border
     elseif selected then
-        background = colors.accentSoft
-        border = colors.accent
+        background = UI.COLORS.accentSoft
+        border = UI.COLORS.accent
     elseif hovered and enabled then
-        background = colors.hover
-        border = colors.accent
+        background = UI.COLORS.hover
+        border = UI.COLORS.accent
     elseif not enabled then
-        background = colors.surface
-        border = colors.borderDim
-        textColor = colors.muted
+        background = UI.COLORS.surface
+        border = UI.COLORS.borderDim
+        textColor = UI.COLORS.muted
     end
 
     SetBackdrop(button, background, border)
     ApplyTextColor(fontString, textColor)
     if button._rpboxActiveLine then
-        SetBackdrop(button._rpboxActiveLine, colors.accent, colors.accent)
+        SetBackdrop(button._rpboxActiveLine, UI.COLORS.accent, UI.COLORS.accent)
         SetShown(button._rpboxActiveLine, selected)
     end
 end
@@ -393,7 +368,7 @@ function UI.RefreshButton(button)
 end
 
 local function ApplyEditBox(editBox)
-    if not UI.IsStyled() then
+    if not UI.IsModern() then
         SetTemplateTexturesShown(editBox, true)
         ClearBackdrop(editBox)
         if editBox.SetTextColor and editBox._rpboxOriginalTextColor then
@@ -404,15 +379,14 @@ local function ApplyEditBox(editBox)
     end
 
     SetTemplateTexturesShown(editBox, false)
-    local colors = GetThemeColors()
-    local border = editBox._rpboxFocused and colors.accent or colors.border
-    SetBackdrop(editBox, colors.input, border)
+    local border = editBox._rpboxFocused and UI.COLORS.accent or UI.COLORS.border
+    SetBackdrop(editBox, UI.COLORS.input, border)
     if editBox.SetTextColor then
         if not editBox._rpboxOriginalTextColor and editBox.GetTextColor then
             local r, g, b, a = editBox:GetTextColor()
             editBox._rpboxOriginalTextColor = { r, g, b, a }
         end
-        editBox:SetTextColor(colors.text[1], colors.text[2], colors.text[3], 1)
+        editBox:SetTextColor(UI.COLORS.text[1], UI.COLORS.text[2], UI.COLORS.text[3], 1)
     end
 end
 
@@ -436,7 +410,7 @@ end
 
 local function ApplyDropdown(dropdown)
     local dropdownText = GetNamedWidget(dropdown, "Text", "Text")
-    if not UI.IsStyled() then
+    if not UI.IsModern() then
         SetTemplateTexturesShown(dropdown, true)
         ClearBackdrop(dropdown)
         RestoreTextColor(dropdownText)
@@ -445,14 +419,13 @@ local function ApplyDropdown(dropdown)
     end
 
     SetTemplateTexturesShown(dropdown, false)
-    local colors = GetThemeColors()
     SetBackdrop(
         dropdown,
-        dropdown._rpboxHovered and colors.hover or colors.input,
-        dropdown._rpboxHovered and colors.accent or colors.border
+        dropdown._rpboxHovered and UI.COLORS.hover or UI.COLORS.input,
+        dropdown._rpboxHovered and UI.COLORS.accent or UI.COLORS.border
     )
-    ApplyTextColor(dropdownText, colors.text)
-    ApplyTextColor(dropdown._rpboxDropdownArrow, colors.accent)
+    ApplyTextColor(dropdownText, UI.COLORS.text)
+    ApplyTextColor(dropdown._rpboxDropdownArrow, UI.COLORS.accent)
     SetShown(dropdown._rpboxDropdownArrow, true)
 end
 
@@ -482,7 +455,7 @@ function UI.RegisterDropdown(dropdown)
 end
 
 local function ApplyCheckButton(checkButton)
-    if not UI.IsStyled() then
+    if not UI.IsModern() then
         SetTemplateTexturesShown(checkButton, true)
         SetShown(checkButton._rpboxCheckSurface, false)
         SetShown(checkButton._rpboxCheckMark, false)
@@ -490,9 +463,8 @@ local function ApplyCheckButton(checkButton)
     end
 
     SetTemplateTexturesShown(checkButton, false)
-    local colors = GetThemeColors()
-    SetBackdrop(checkButton._rpboxCheckSurface, colors.input, colors.border)
-    SetBackdrop(checkButton._rpboxCheckMark, colors.accent, colors.accent)
+    SetBackdrop(checkButton._rpboxCheckSurface, UI.COLORS.input, UI.COLORS.border)
+    SetBackdrop(checkButton._rpboxCheckMark, UI.COLORS.accent, UI.COLORS.accent)
     SetShown(checkButton._rpboxCheckSurface, true)
     SetShown(checkButton._rpboxCheckMark, checkButton:GetChecked() == true)
 end
@@ -563,20 +535,19 @@ end
 
 local function ApplyScrollButton(button)
     if not button or not button._rpboxScrollSurface then return end
-    local styled = UI.IsStyled()
-    SetShown(button._rpboxScrollSurface, styled)
-    SetShown(button._rpboxScrollGlyph, styled)
-    if not styled then return end
+    local modern = UI.IsModern()
+    SetShown(button._rpboxScrollSurface, modern)
+    SetShown(button._rpboxScrollGlyph, modern)
+    if not modern then return end
 
     local enabled = not button.IsEnabled or button:IsEnabled()
     local hovered = button._rpboxHovered == true and enabled
-    local colors = GetThemeColors()
     SetBackdrop(
         button._rpboxScrollSurface,
-        hovered and colors.hover or colors.raised,
-        hovered and colors.accent or colors.borderDim
+        hovered and UI.COLORS.hover or UI.COLORS.raised,
+        hovered and UI.COLORS.accent or UI.COLORS.borderDim
     )
-    ApplyTextColor(button._rpboxScrollGlyph, enabled and colors.accent or colors.muted)
+    ApplyTextColor(button._rpboxScrollGlyph, enabled and UI.COLORS.accent or UI.COLORS.muted)
 end
 
 local function EnsureScrollButton(button, glyph)
@@ -634,23 +605,22 @@ end
 local function ApplyScrollFrame(scrollFrame)
     local scrollBar = EnsureScrollFrameChrome(scrollFrame)
     if not scrollBar then return end
-    local styled = UI.IsStyled()
-    SetTemplateTexturesShown(scrollBar, not styled)
-    SetShown(scrollFrame._rpboxScrollTrack, styled)
+    local modern = UI.IsModern()
+    SetTemplateTexturesShown(scrollBar, not modern)
+    SetShown(scrollFrame._rpboxScrollTrack, modern)
     ApplyScrollButton(scrollFrame._rpboxScrollUpButton)
     ApplyScrollButton(scrollFrame._rpboxScrollDownButton)
 
     local thumb = scrollFrame._rpboxScrollThumb
-    if styled then
-        local colors = GetThemeColors()
+    if modern then
         if scrollFrame._rpboxScrollTrack and scrollFrame._rpboxScrollTrack.SetColorTexture then
-            local color = colors.input
+            local color = UI.COLORS.input
             scrollFrame._rpboxScrollTrack:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
         end
         if thumb then
             if thumb.SetTexture then thumb:SetTexture(WHITE_TEXTURE) end
             if thumb.SetVertexColor then
-                local color = colors.accent
+                local color = UI.COLORS.accent
                 thumb:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
             end
             if thumb.SetAlpha then thumb:SetAlpha(1) end
@@ -667,19 +637,15 @@ function UI.RegisterScrollFrame(scrollFrame)
     ApplyScrollFrame(scrollFrame)
 end
 
+local TEXT_ROLE_COLORS = {
+    heading = UI.COLORS.accent,
+    primary = UI.COLORS.text,
+    muted = UI.COLORS.muted,
+}
+
 local function ApplyStyledText(fontString)
-    if UI.IsStyled() then
-        local colors = GetThemeColors()
-        local role = fontString._rpboxTextRole
-        local roleColors = {
-            heading = colors.accent,
-            primary = colors.text,
-            secondary = colors.text,
-            muted = colors.muted,
-            success = colors.text,
-            danger = colors.danger,
-        }
-        ApplyTextColor(fontString, roleColors[role] or colors.text)
+    if UI.IsModern() then
+        ApplyTextColor(fontString, TEXT_ROLE_COLORS[fontString._rpboxTextRole] or UI.COLORS.text)
     else
         RestoreTextColor(fontString)
     end

@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,37 +24,39 @@ import (
 
 // CreateGuildRequest 创建公会请求
 type CreateGuildRequest struct {
-	Name        string `json:"name" binding:"required"`
-	Server      string `json:"server"`
-	GameFlavor  string `json:"game_flavor"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
-	Color       string `json:"color"`
-	Banner      string `json:"banner"`
-	Slogan      string `json:"slogan"`
-	Lore        string `json:"lore"`
-	Faction     string `json:"faction"`
-	Layout      int    `json:"layout"`
+	Name        string    `json:"name" binding:"required"`
+	Server      string    `json:"server"`
+	GameFlavor  string    `json:"game_flavor"`
+	GameFlavors *[]string `json:"game_flavors"`
+	Description string    `json:"description"`
+	Icon        string    `json:"icon"`
+	Color       string    `json:"color"`
+	Banner      string    `json:"banner"`
+	Slogan      string    `json:"slogan"`
+	Lore        string    `json:"lore"`
+	Faction     string    `json:"faction"`
+	Layout      int       `json:"layout"`
 }
 
 // UpdateGuildRequest 更新公会请求
 type UpdateGuildRequest struct {
-	Name                  string  `json:"name"`
-	Server                *string `json:"server"` // nil 保持原值，空字符串清空
-	GameFlavor            *string `json:"game_flavor"`
-	Description           string  `json:"description"`
-	Icon                  string  `json:"icon"`
-	Color                 string  `json:"color"`
-	Banner                string  `json:"banner"`
-	Slogan                string  `json:"slogan"`
-	Lore                  string  `json:"lore"`
-	Faction               string  `json:"faction"`
-	Layout                int     `json:"layout"`
-	VisitorCanViewStories *bool   `json:"visitor_can_view_stories"` // 访客可查看剧情
-	VisitorCanViewPosts   *bool   `json:"visitor_can_view_posts"`   // 访客可查看帖子
-	MemberCanViewStories  *bool   `json:"member_can_view_stories"`  // 成员可查看剧情
-	MemberCanViewPosts    *bool   `json:"member_can_view_posts"`    // 成员可查看帖子
-	AutoApprove           *bool   `json:"auto_approve"`             // 自动审核（无需审核直接加入）
+	Name                  string    `json:"name"`
+	Server                *string   `json:"server"` // nil 保持原值，空字符串清空
+	GameFlavor            *string   `json:"game_flavor"`
+	GameFlavors           *[]string `json:"game_flavors"`
+	Description           string    `json:"description"`
+	Icon                  string    `json:"icon"`
+	Color                 string    `json:"color"`
+	Banner                string    `json:"banner"`
+	Slogan                string    `json:"slogan"`
+	Lore                  string    `json:"lore"`
+	Faction               string    `json:"faction"`
+	Layout                int       `json:"layout"`
+	VisitorCanViewStories *bool     `json:"visitor_can_view_stories"` // 访客可查看剧情
+	VisitorCanViewPosts   *bool     `json:"visitor_can_view_posts"`   // 访客可查看帖子
+	MemberCanViewStories  *bool     `json:"member_can_view_stories"`  // 成员可查看剧情
+	MemberCanViewPosts    *bool     `json:"member_can_view_posts"`    // 成员可查看帖子
+	AutoApprove           *bool     `json:"auto_approve"`             // 自动审核（无需审核直接加入）
 }
 
 // JoinGuildRequest 加入公会请求
@@ -166,13 +169,19 @@ func validateGuildCommonFields(nameRequired bool, name, description, icon, color
 func normalizeCreateGuildRequest(req *CreateGuildRequest) error {
 	trimGuildRequestFields(&req.Name, &req.Description, &req.Icon, &req.Color, &req.Slogan, &req.Faction)
 	req.Server = strings.TrimSpace(req.Server)
-	req.GameFlavor = strings.TrimSpace(req.GameFlavor)
-	if req.GameFlavor == "" {
-		req.GameFlavor = "_retail_"
+	if req.GameFlavors != nil && len(*req.GameFlavors) == 0 {
+		return fmt.Errorf("至少选择一个版本")
 	}
-	if req.GameFlavor != "_retail_" && req.GameFlavor != "_forever_" {
-		return fmt.Errorf("无效服务器类型")
+	var requested []string
+	if req.GameFlavors != nil {
+		requested = *req.GameFlavors
 	}
+	flavors, err := normalizeGuildGameFlavors(requested, req.GameFlavor)
+	if err != nil {
+		return err
+	}
+	req.GameFlavors = &flavors
+	req.GameFlavor = flavors[0]
 	if utf8.RuneCountInString(req.Server) > 128 {
 		return fmt.Errorf("服务器名称不能超过128个字符")
 	}
@@ -202,6 +211,21 @@ func normalizeUpdateGuildRequest(req *UpdateGuildRequest) error {
 			return fmt.Errorf("无效服务器类型")
 		}
 	}
+	if req.GameFlavors != nil {
+		if len(*req.GameFlavors) == 0 {
+			return fmt.Errorf("至少选择一个版本")
+		}
+		flavors, err := normalizeGuildGameFlavors(*req.GameFlavors, "")
+		if err != nil {
+			return err
+		}
+		req.GameFlavors = &flavors
+		primary := flavors[0]
+		req.GameFlavor = &primary
+	} else if req.GameFlavor != nil {
+		flavors := []string{*req.GameFlavor}
+		req.GameFlavors = &flavors
+	}
 
 	if err := validateGuildCommonFields(false, req.Name, req.Description, req.Icon, req.Color, req.Slogan, req.Lore, req.Faction); err != nil {
 		return err
@@ -212,6 +236,30 @@ func normalizeUpdateGuildRequest(req *UpdateGuildRequest) error {
 	}
 
 	return nil
+}
+
+func normalizeGuildGameFlavors(values []string, legacy string) ([]string, error) {
+	if len(values) == 0 {
+		if strings.TrimSpace(legacy) == "" {
+			legacy = "_retail_"
+		}
+		values = []string{legacy}
+	}
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		flavor := strings.TrimSpace(value)
+		if flavor != "_retail_" && flavor != "_forever_" {
+			return nil, fmt.Errorf("无效服务器类型")
+		}
+		seen[flavor] = true
+	}
+	result := make([]string, 0, len(seen))
+	for _, flavor := range []string{"_retail_", "_forever_"} {
+		if seen[flavor] {
+			result = append(result, flavor)
+		}
+	}
+	return result, nil
 }
 
 func (s *Server) loadGuildDirectMediaURLMap(guildIDs []uint) (map[uint]string, map[uint]string) {
@@ -267,7 +315,7 @@ func (s *Server) listGuilds(c *gin.Context) {
 	if len(guildIDs) > 0 {
 		// 列表查询排除大字段（banner）以提高性能
 		// banner 通过独立的图片 API 访问
-		database.DB.Select("id, name, server, game_flavor, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
+		database.DB.Select("id, name, server, game_flavor, game_flavors, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Where("id IN ?", guildIDs).Find(&guilds)
 	}
 
 	// 获取有 banner 的公会 ID 列表
@@ -380,6 +428,7 @@ func (s *Server) createGuild(c *gin.Context) {
 		Name:        req.Name,
 		Server:      req.Server,
 		GameFlavor:  req.GameFlavor,
+		GameFlavors: *req.GameFlavors,
 		Description: req.Description,
 		Icon:        req.Icon,
 		Color:       req.Color,
@@ -535,6 +584,14 @@ func (s *Server) updateGuild(c *gin.Context) {
 	}
 	if req.GameFlavor != nil {
 		updates["game_flavor"] = *req.GameFlavor
+	}
+	if req.GameFlavors != nil {
+		encoded, err := json.Marshal(*req.GameFlavors)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "版本保存失败"})
+			return
+		}
+		updates["game_flavors"] = string(encoded)
 	}
 	if req.Name != "" {
 		updates["name"] = req.Name
@@ -1294,12 +1351,23 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 	}
 	// 只显示已审核通过的公开公会
 	query := database.DB.Where("status = ? AND is_public = ?", "approved", true)
-	if flavor := strings.TrimSpace(c.Query("game_flavor")); flavor != "" {
-		if flavor != "_retail_" && flavor != "_forever_" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效服务器类型"})
+	if requested := c.QueryArray("game_flavor"); len(requested) > 0 {
+		flavors, err := normalizeGuildGameFlavors(requested, "")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		query = query.Where("game_flavor = ?", flavor)
+		var matches *gorm.DB
+		for _, flavor := range flavors {
+			condition := database.DB.Where("game_flavors LIKE ?", "%\""+flavor+"\"%")
+			condition = condition.Or("(game_flavors IS NULL OR game_flavors = '') AND game_flavor = ?", flavor)
+			if matches == nil {
+				matches = condition
+			} else {
+				matches = matches.Or(condition)
+			}
+		}
+		query = query.Where(matches)
 	}
 
 	// 支持搜索
@@ -1314,7 +1382,7 @@ func (s *Server) listPublicGuilds(c *gin.Context) {
 
 	// 列表查询排除大字段（banner）以提高性能
 	// banner 通过独立的图片 API 访问
-	query.Select("id, name, server, game_flavor, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
+	query.Select("id, name, server, game_flavor, game_flavors, description, icon, color, slogan, faction, layout, owner_id, invite_code, member_count, story_count, status, visitor_can_view_stories, visitor_can_view_posts, member_can_view_stories, member_can_view_posts, auto_approve, banner_updated_at, avatar_updated_at, created_at, updated_at").Order("member_count DESC, created_at DESC").Find(&guilds)
 	visibleGuilds := make([]model.Guild, 0, len(guilds))
 	for _, guild := range guilds {
 		if !exclusions.excludes(reportTargetGuild, guild.ID, guild.OwnerID) {

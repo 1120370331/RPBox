@@ -490,6 +490,24 @@ watch(() => localeStore.currentLocale, (newLocale) => {
           <div class="theme-preview-shell">
             <div class="theme-grid">
               <button
+                type="button"
+                class="theme-item"
+                :class="{ active: themeStore.currentThemeId === 'system' }"
+                :aria-pressed="themeStore.currentThemeId === 'system'"
+                @click="themeStore.setTheme('system')"
+              >
+                <div class="theme-preview" :style="getThemePreviewStyle(themeStore.systemTheme)">
+                  <div class="preview-sidebar"></div>
+                  <div class="preview-content">
+                    <div class="preview-header"></div>
+                    <div class="preview-card"></div>
+                  </div>
+                </div>
+                <span class="theme-name">{{ t('settings.appearance.themeSystem') }}</span>
+                <span class="theme-access">{{ t('settings.appearance.free') }}</span>
+                <i v-if="themeStore.currentThemeId === 'system'" class="ri-checkbox-circle-fill theme-check"></i>
+              </button>
+              <button
                 v-for="theme in themes"
                 :key="theme.id"
                 type="button"

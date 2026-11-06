@@ -23,7 +23,11 @@ vi.mock('@/api/addon', () => ({ getAddonManifest: vi.fn() }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ replace: mocks.replace, push: vi.fn(), back: vi.fn() }) }))
 vi.mock('@/stores/user', () => ({ useUserStore: () => ({ user: { id: 42, username: 'test' }, logout: mocks.logout, removeAccountHistoryItem: mocks.removeAccountHistoryItem }) }))
 vi.mock('@/stores/toast', () => ({ useToastStore: () => ({ error: mocks.error, success: mocks.success, warning: vi.fn() }) }))
-vi.mock('@/stores/theme', () => ({ themes: [], useThemeStore: () => ({ currentThemeId: 'classic' }) }))
+vi.mock('@/stores/theme', () => ({ themes: [], useThemeStore: () => ({
+  currentThemeId: 'system',
+  systemTheme: { colors: { sidebarBg: '#191410', background: '#211A16', panelBg: '#2C231D', accent: '#D3AA72' } },
+  setTheme: vi.fn(),
+}) }))
 vi.mock('@/stores/locale', () => ({ useLocaleStore: () => ({ currentLocale: 'zh-CN', setLocale: vi.fn() }) }))
 vi.mock('@/utils/userNameStyle', () => ({ buildNameStyle: () => ({}) }))
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: async () => '1.0.0' }))

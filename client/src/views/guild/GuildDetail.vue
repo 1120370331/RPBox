@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { guildGameFlavors, type GuildGameFlavor } from '@shared/utils/guildGameFlavors'
 import { getGuild, leaveGuild, listGuildMembers, updateGuild, uploadGuildBanner, uploadGuildAvatar, listGuildApplications, applyGuild, sortGuildMembers, type Guild, type GuildMember } from '@/api/guild'
 import { getImageUrl } from '@/api/item'
 import { useDialog } from '@/composables/useDialog'
@@ -33,7 +34,7 @@ const saving = ref(false)
 const editForm = ref({
   name: '',
   server: '',
-  game_flavor: '_retail_' as '_retail_' | '_forever_',
+  game_flavors: ['_retail_'] as GuildGameFlavor[],
   slogan: '',
   description: '',
   lore: '',
@@ -47,6 +48,7 @@ const editForm = ref({
 })
 const serverError = computed(() => Array.from(editForm.value.server.trim()).length > 128
   ? t('common.validation.maxLength', { n: 128 }) : '')
+const flavorError = computed(() => editForm.value.game_flavors.length ? '' : t('guild.selectVersion'))
 const bannerFile = ref<File | null>(null)
 const bannerPreview = ref('')
 const heroBannerInput = ref<HTMLInputElement | null>(null)
@@ -140,7 +142,7 @@ function openSettings() {
   editForm.value = {
     name: guild.value.name,
     server: guild.value.server ?? '',
-    game_flavor: guild.value.game_flavor === '_forever_' ? '_forever_' : '_retail_',
+    game_flavors: guildGameFlavors(guild.value),
     slogan: guild.value.slogan || '',
     description: guild.value.description || '',
     lore: guild.value.lore || '',
@@ -312,7 +314,7 @@ function handleImageCropperError(error: Error) {
 }
 
 async function saveSettings() {
-  if (!guild.value || serverError.value) return
+  if (!guild.value || serverError.value || flavorError.value) return
   saving.value = true
   try {
     if (avatarFile.value) {
@@ -331,7 +333,7 @@ async function saveSettings() {
     await updateGuild(guildId, {
       name: editForm.value.name,
       server: editForm.value.server,
-      game_flavor: editForm.value.game_flavor,
+      game_flavors: editForm.value.game_flavors,
       slogan: editForm.value.slogan,
       description: editForm.value.description,
       lore: editForm.value.lore,
@@ -490,8 +492,8 @@ onMounted(loadGuild)
               </div>
               <ul class="info-list">
                 <li>
-                  <span class="label">{{ t('guild.serverType') }}</span>
-                  <span class="value">{{ t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
+                  <span class="label">{{ t('guild.filterVersion') }}</span>
+                  <span class="value">{{ guildGameFlavors(guild).map(flavor => t(flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer')).join(' · ') }}</span>
                 </li>
                 <li>
                   <span class="label">{{ t('guild.info.server') }}</span>
@@ -627,11 +629,12 @@ onMounted(loadGuild)
           <RInput v-model="editForm.server" :placeholder="t('guild.create.serverPlaceholder')" :error="serverError" clearable />
         </div>
         <div class="form-section">
-          <label>{{ t('guild.serverType') }}</label>
-          <select v-model="editForm.game_flavor">
-            <option value="_retail_">{{ t('guild.retailServer') }}</option>
-            <option value="_forever_">{{ t('guild.foreverServer') }}</option>
-          </select>
+          <label>{{ t('guild.filterVersion') }}</label>
+          <div class="flavor-options">
+            <label><input v-model="editForm.game_flavors" type="checkbox" value="_retail_" />{{ t('guild.retailServer') }}</label>
+            <label><input v-model="editForm.game_flavors" type="checkbox" value="_forever_" />{{ t('guild.foreverServer') }}</label>
+          </div>
+          <small v-if="flavorError" class="field-error">{{ flavorError }}</small>
         </div>
 
         <div class="form-section">
@@ -1400,6 +1403,11 @@ onMounted(loadGuild)
   color: var(--color-text-main);
   color-scheme: light;
 }
+
+.flavor-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.form-section .flavor-options label { display: inline-flex; align-items: center; gap: 6px; padding: 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); font-size: 13px; }
+.flavor-options input { accent-color: var(--color-accent); }
+.field-error { color: var(--color-danger, #b91c1c); font-size: 12px; }
 
 .form-section select:focus {
   outline: none;

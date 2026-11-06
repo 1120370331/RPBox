@@ -6,6 +6,8 @@ export default {
   emptyMy: 'You have not joined any guild yet',
   searchPlaceholder: 'Search guild name...',
   allFactions: 'All Factions',
+  filterFaction: 'Faction',
+  filterVersion: 'Version',
   serverType: 'Server',
   allServers: 'All',
   retailServer: 'Retail',

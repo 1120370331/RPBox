@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { guildGameFlavors } from '@shared/utils/guildGameFlavors'
 import { useToastStore } from '@shared/stores/toast'
 import { useUserStore } from '@shared/stores/user'
 import { createContentReport } from '@/api/safety'
@@ -306,7 +307,7 @@ onMounted(loadDetail)
               <div class="meta">
                 <span><i class="ri-user-line" /> {{ guild.member_count }} {{ $t('guild.info.members') }}</span>
                 <span><i class="ri-book-open-line" /> {{ guild.story_count }} {{ $t('guild.info.stories') }}</span>
-                <span><i class="ri-gamepad-line" /> {{ $t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
+                <span><i class="ri-gamepad-line" /> {{ guildGameFlavors(guild).map(flavor => $t(flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer')).join(' · ') }}</span>
               </div>
             </div>
           </div>

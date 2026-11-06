@@ -9,6 +9,7 @@ import './styles/animations.css'
 import './styles/content.css'
 import './styles/theme.css'
 import { handleDesktopDeepLinkUrls } from './utils/desktopDeepLink'
+import { useThemeStore } from './stores/theme'
 
 function isTauriRuntime() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -43,7 +44,9 @@ async function setupDesktopDeepLinks() {
 
 async function bootstrap() {
   const app = createApp(App)
-  app.use(createPinia())
+  const pinia = createPinia()
+  app.use(pinia)
+  useThemeStore(pinia).initTheme()
   app.use(i18n)
   app.use(router)
   app.mount('#app')

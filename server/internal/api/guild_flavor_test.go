@@ -13,11 +13,11 @@ func TestPublicGuildGameFlavorFilter(t *testing.T) {
 	db, server, owner := newGuildServerFixture(t)
 	token := newTestToken(t, owner)
 
-	create := func(name, flavor string) model.Guild {
+	create := func(name string, flavors []string) model.Guild {
 		t.Helper()
-		body := map[string]string{"name": name}
-		if flavor != "" {
-			body["game_flavor"] = flavor
+		body := map[string]interface{}{"name": name}
+		if flavors != nil {
+			body["game_flavors"] = flavors
 		}
 		response := performRequest(server.router, http.MethodPost, "/api/v1/guilds", body, token)
 		if response.Code != http.StatusCreated {
@@ -33,19 +33,28 @@ func TestPublicGuildGameFlavorFilter(t *testing.T) {
 		return guild
 	}
 
-	retail := create("Retail guild", "")
-	forever := create("Infinite guild", "_forever_")
-	if retail.GameFlavor != "_retail_" || forever.GameFlavor != "_forever_" {
-		t.Fatalf("created flavors: retail=%q infinite=%q", retail.GameFlavor, forever.GameFlavor)
+	retail := create("Retail guild", nil)
+	both := create("Cross-server guild", []string{"_forever_", "_retail_"})
+	forever := model.Guild{Name: "Infinite guild", GameFlavor: "_forever_", GameFlavors: []string{"_forever_"}, OwnerID: owner.ID, InviteCode: "infinite-test", Status: "approved", IsPublic: true}
+	if err := db.Create(&forever).Error; err != nil {
+		t.Fatal(err)
+	}
+	if retail.GameFlavor != "_retail_" || forever.GameFlavor != "_forever_" || both.GameFlavor != "_retail_" || len(both.GameFlavors) != 2 {
+		t.Fatalf("created flavors: retail=%v infinite=%v both=%v", retail.GameFlavors, forever.GameFlavors, both.GameFlavors)
+	}
+	// Existing rows may have only the legacy single-flavor column.
+	if err := db.Model(&model.Guild{}).Where("id = ?", retail.ID).Update("game_flavors", nil).Error; err != nil {
+		t.Fatal(err)
 	}
 
 	for _, tc := range []struct {
 		query string
 		want  []uint
 	}{
-		{"", []uint{retail.ID, forever.ID}},
-		{"?game_flavor=_retail_", []uint{retail.ID}},
-		{"?game_flavor=_forever_", []uint{forever.ID}},
+		{"", []uint{retail.ID, forever.ID, both.ID}},
+		{"?game_flavor=_retail_", []uint{retail.ID, both.ID}},
+		{"?game_flavor=_forever_", []uint{forever.ID, both.ID}},
+		{"?game_flavor=_retail_&game_flavor=_forever_", []uint{retail.ID, forever.ID, both.ID}},
 	} {
 		response := performRequest(server.router, http.MethodGet, "/api/v1/public/guilds"+tc.query, nil, "")
 		if response.Code != http.StatusOK {
@@ -76,12 +85,16 @@ func TestPublicGuildGameFlavorFilter(t *testing.T) {
 		t.Fatal(fmt.Sprintf("invalid flavor status=%d body=%s", invalid.Code, invalid.Body.String()))
 	}
 
-	changed := performRequest(server.router, http.MethodPut, fmt.Sprintf("/api/v1/guilds/%d", retail.ID), map[string]string{"game_flavor": "_forever_"}, token)
+	changed := performRequest(server.router, http.MethodPut, fmt.Sprintf("/api/v1/guilds/%d", retail.ID), map[string]interface{}{"game_flavors": []string{"_forever_", "_retail_"}}, token)
 	if changed.Code != http.StatusOK {
 		t.Fatalf("update flavor: status=%d body=%s", changed.Code, changed.Body.String())
 	}
 	var stored model.Guild
-	if err := db.First(&stored, retail.ID).Error; err != nil || stored.GameFlavor != "_forever_" {
-		t.Fatalf("stored flavor=%q err=%v", stored.GameFlavor, err)
+	if err := db.First(&stored, retail.ID).Error; err != nil || stored.GameFlavor != "_retail_" || len(stored.GameFlavors) != 2 {
+		t.Fatalf("stored flavors=%v primary=%q err=%v", stored.GameFlavors, stored.GameFlavor, err)
+	}
+	invalidUpdate := performRequest(server.router, http.MethodPut, fmt.Sprintf("/api/v1/guilds/%d", retail.ID), map[string]interface{}{"game_flavors": []string{}}, token)
+	if invalidUpdate.Code != http.StatusBadRequest {
+		t.Fatalf("empty flavors status=%d body=%s", invalidUpdate.Code, invalidUpdate.Body.String())
 	}
 }

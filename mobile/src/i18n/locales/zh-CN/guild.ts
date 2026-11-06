@@ -6,6 +6,8 @@ export default {
   emptyMy: '你还没有加入公会',
   searchPlaceholder: '搜索公会名称...',
   allFactions: '全部阵营',
+  filterFaction: '阵营',
+  filterVersion: '版本',
   serverType: '服务器',
   allServers: '全部',
   retailServer: '正式服',

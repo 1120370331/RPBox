@@ -604,18 +604,22 @@ export function getThemeById(id: string): Theme {
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  // 当前主题 ID
-  const currentThemeId = ref(localStorage.getItem('theme') || 'classic')
+  // 新用户跟随系统；已手动选择的主题继续使用原设置。
+  const currentThemeId = ref(localStorage.getItem('theme') || 'system')
+  const darkMedia = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)') : null
+  const systemDark = ref(darkMedia?.matches ?? false)
+  const systemTheme = computed(() => systemDark.value ? darkCoffeeTheme : classicTheme)
+  let listening = false
 
   // 当前主题对象
-  const currentTheme = computed(() => getThemeById(currentThemeId.value))
+  const currentTheme = computed(() => currentThemeId.value === 'system' ? systemTheme.value : getThemeById(currentThemeId.value))
 
   // 切换主题
   function setTheme(themeId: string) {
-    const theme = getThemeById(themeId)
-    currentThemeId.value = theme.id
-    localStorage.setItem('theme', theme.id)
-    applyTheme(theme)
+    currentThemeId.value = themeId === 'system' ? 'system' : getThemeById(themeId).id
+    localStorage.setItem('theme', currentThemeId.value)
+    applyTheme(currentTheme.value)
   }
 
   // 应用主题到 DOM
@@ -623,6 +627,8 @@ export const useThemeStore = defineStore('theme', () => {
     const root = document.documentElement
     const c = theme.colors
     root.dataset.theme = theme.id
+    root.dataset.themePreference = currentThemeId.value
+    root.style.colorScheme = theme.id === 'dark-coffee' || theme.id === 'black-gold' ? 'dark' : 'light'
 
     // 主色调
     root.style.setProperty('--color-primary', c.primary)
@@ -732,12 +738,22 @@ export const useThemeStore = defineStore('theme', () => {
 
   // 初始化主题
   function initTheme() {
+    if (darkMedia && !listening) {
+      const onSystemChange = (event: MediaQueryListEvent) => {
+        systemDark.value = event.matches
+        if (currentThemeId.value === 'system') applyTheme(systemTheme.value)
+      }
+      darkMedia.addEventListener('change', onSystemChange)
+      listening = true
+    }
     applyTheme(currentTheme.value)
   }
 
   return {
     currentThemeId,
     currentTheme,
+    systemTheme,
+    systemDark,
     setTheme,
     initTheme,
   }

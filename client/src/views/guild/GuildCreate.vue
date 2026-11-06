@@ -7,6 +7,7 @@ import { useDialog } from '@/composables/useDialog'
 import ImageCropperDialog from '@/components/ImageCropperDialog.vue'
 import RButton from '@/components/RButton.vue'
 import RInput from '@/components/RInput.vue'
+import type { GuildGameFlavor } from '@shared/utils/guildGameFlavors'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -15,7 +16,8 @@ const name = ref('')
 const description = ref('')
 const slogan = ref('')
 const server = ref('')
-const gameFlavor = ref<'_retail_' | '_forever_'>('_retail_')
+const gameFlavors = ref<GuildGameFlavor[]>(['_retail_'])
+const flavorError = computed(() => gameFlavors.value.length ? '' : t('guild.selectVersion'))
 const serverError = computed(() => Array.from(server.value.trim()).length > 128
   ? t('common.validation.maxLength', { n: 128 }) : '')
 const faction = ref('')
@@ -59,7 +61,7 @@ function handleBannerCropperError(error: Error) {
 }
 
 async function handleCreate() {
-  if (!name.value.trim() || serverError.value) return
+  if (!name.value.trim() || serverError.value || flavorError.value) return
   creating.value = true
   try {
     const guild = await createGuild({
@@ -67,7 +69,7 @@ async function handleCreate() {
       description: description.value,
       slogan: slogan.value,
       server: server.value,
-      game_flavor: gameFlavor.value,
+      game_flavors: gameFlavors.value,
       faction: faction.value,
       color: color.value.replace('#', ''),
       banner: bannerPreview.value || undefined
@@ -136,11 +138,12 @@ async function handleCreate() {
 
       <div class="row">
         <div class="field">
-          <label>{{ t('guild.serverType') }}</label>
-          <select v-model="gameFlavor">
-            <option value="_retail_">{{ t('guild.retailServer') }}</option>
-            <option value="_forever_">{{ t('guild.foreverServer') }}</option>
-          </select>
+          <label>{{ t('guild.filterVersion') }}</label>
+          <div class="flavor-options">
+            <label><input v-model="gameFlavors" type="checkbox" value="_retail_" />{{ t('guild.retailServer') }}</label>
+            <label><input v-model="gameFlavors" type="checkbox" value="_forever_" />{{ t('guild.foreverServer') }}</label>
+          </div>
+          <small v-if="flavorError" class="field-error">{{ flavorError }}</small>
         </div>
         <div class="field">
           <label>{{ t('guild.create.server') }}</label>
@@ -207,6 +210,11 @@ async function handleCreate() {
   font-weight: 500;
   color: var(--color-text-main);
 }
+
+.flavor-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.field .flavor-options label { display: inline-flex; align-items: center; gap: 6px; padding: 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); font-size: 13px; }
+.flavor-options input { accent-color: var(--color-accent); }
+.field-error { color: var(--color-danger, #b91c1c); font-size: 12px; }
 
 .banner-upload {
   height: 160px;

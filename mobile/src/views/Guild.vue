@@ -14,6 +14,7 @@ import {
   type GuildApplication,
 } from '@/api/guild'
 import { resolveApiUrl } from '@/api/image'
+import { guildGameFlavors, type GuildGameFlavor } from '@shared/utils/guildGameFlavors'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -23,7 +24,7 @@ const loading = ref(false)
 const activeTab = ref<'public' | 'my'>('public')
 const keyword = ref('')
 const faction = ref('')
-const gameFlavor = ref<'' | '_retail_' | '_forever_'>('')
+const selectedGameFlavors = ref<GuildGameFlavor[]>([])
 const inviteCode = ref('')
 const joining = ref(false)
 
@@ -51,6 +52,10 @@ function factionLabel(name?: Guild['faction']) {
   return t(`guild.faction.${name}`)
 }
 
+function versionLabel(guild: Guild) {
+  return guildGameFlavors(guild).map(flavor => t(flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer')).join(' · ')
+}
+
 function isMember(guildId: number) {
   return myGuilds.value.some((g) => g.id === guildId)
 }
@@ -68,7 +73,7 @@ async function loadPublicGuilds() {
   const res = await listPublicGuilds({
     keyword: keyword.value.trim() || undefined,
     faction: faction.value || undefined,
-    game_flavor: gameFlavor.value || undefined,
+    game_flavors: selectedGameFlavors.value,
   })
   publicGuilds.value = res.guilds || []
 }
@@ -107,6 +112,11 @@ async function loadMyTabData() {
 
 async function handleSearch() {
   await loadPublicTabData()
+}
+
+function showAllVersions() {
+  selectedGameFlavors.value = []
+  void handleSearch()
 }
 
 async function handleJoinByCode() {
@@ -184,17 +194,21 @@ onMounted(loadPublicTabData)
         <input v-model="keyword" :placeholder="$t('guild.searchPlaceholder')" @keyup.enter="handleSearch" />
       </div>
       <div class="search-actions">
-        <select v-model="faction" class="faction-select">
-          <option value="">{{ $t('guild.allFactions') }}</option>
-          <option value="alliance">{{ $t('guild.faction.alliance') }}</option>
-          <option value="horde">{{ $t('guild.faction.horde') }}</option>
-          <option value="neutral">{{ $t('guild.faction.neutral') }}</option>
-        </select>
-        <select v-model="gameFlavor" class="faction-select" :aria-label="$t('guild.serverType')">
-          <option value="">{{ $t('guild.allServers') }}</option>
-          <option value="_retail_">{{ $t('guild.retailServer') }}</option>
-          <option value="_forever_">{{ $t('guild.foreverServer') }}</option>
-        </select>
+        <label class="filter-field"><small>{{ $t('guild.filterFaction') }}</small>
+          <select v-model="faction" class="faction-select">
+            <option value="">{{ $t('guild.allFactions') }}</option>
+            <option value="alliance">{{ $t('guild.faction.alliance') }}</option>
+            <option value="horde">{{ $t('guild.faction.horde') }}</option>
+            <option value="neutral">{{ $t('guild.faction.neutral') }}</option>
+          </select>
+        </label>
+        <div class="filter-field version-field" role="group" :aria-label="$t('guild.filterVersion')"><small>{{ $t('guild.filterVersion') }}</small>
+          <div class="version-options">
+            <button type="button" :class="{ active: selectedGameFlavors.length === 0 }" @click="showAllVersions">{{ $t('guild.allServers') }}</button>
+            <label><input v-model="selectedGameFlavors" type="checkbox" value="_retail_" @change="handleSearch" />{{ $t('guild.retailServer') }}</label>
+            <label><input v-model="selectedGameFlavors" type="checkbox" value="_forever_" @change="handleSearch" />{{ $t('guild.foreverServer') }}</label>
+          </div>
+        </div>
         <button class="small-btn" @click="handleSearch">{{ $t('guild.actions.search') }}</button>
       </div>
     </div>
@@ -219,7 +233,11 @@ onMounted(loadPublicTabData)
           @click="router.push({ name: 'guild-detail', params: { id: guild.id } })"
         >
           <div class="guild-banner" :style="getGuildBanner(guild) ? { backgroundImage: `url(${getGuildBanner(guild)})` } : undefined">
-            <span v-if="guild.faction" class="faction-chip">{{ factionLabel(guild.faction) }}</span>
+            <div class="banner-badges">
+              <span class="version-chip">{{ versionLabel(guild) }}</span>
+              <span v-if="guild.server" class="server-chip">{{ guild.server }}</span>
+              <span v-if="guild.faction" class="faction-chip">{{ factionLabel(guild.faction) }}</span>
+            </div>
           </div>
           <div class="guild-main">
             <div class="avatar-wrap" :style="{ background: `#${guild.color || 'B87333'}` }">
@@ -235,7 +253,6 @@ onMounted(loadPublicTabData)
               <div class="meta-row">
                 <span><i class="ri-user-line" /> {{ guild.member_count }} {{ $t('guild.info.members') }}</span>
                 <span><i class="ri-book-open-line" /> {{ guild.story_count }} {{ $t('guild.info.stories') }}</span>
-                <span><i class="ri-gamepad-line" /> {{ $t(guild.game_flavor === '_forever_' ? 'guild.foreverServer' : 'guild.retailServer') }}</span>
               </div>
             </div>
           </div>
@@ -320,12 +337,35 @@ onMounted(loadPublicTabData)
 
 .search-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+  align-items: flex-end;
+}
+
+.filter-field {
+  flex: 1 1 120px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.version-field { flex-basis: 100%; }
+.version-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.version-options button,
+.version-options label { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 5px 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--input-bg); color: var(--text-dark); font-size: 12px; white-space: nowrap; }
+.version-options button.active { border-color: var(--color-accent); color: var(--color-accent); }
+.version-options input { accent-color: var(--color-accent); }
+
+.filter-field small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
 }
 
 .faction-select {
-  flex: 1;
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 8px;
@@ -402,7 +442,7 @@ onMounted(loadPublicTabData)
 }
 
 .guild-banner {
-  height: 84px;
+  height: 96px;
   background: linear-gradient(135deg, #7b5f45, #4b3621);
   background-size: cover;
   background-position: center;
@@ -411,13 +451,27 @@ onMounted(loadPublicTabData)
   padding: 8px;
 }
 
-.faction-chip {
+.banner-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.faction-chip,
+.server-chip,
+.version-chip {
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 11px;
   height: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .guild-main {

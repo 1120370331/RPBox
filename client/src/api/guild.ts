@@ -1,10 +1,12 @@
 import request from './request'
+import type { GuildGameFlavor } from '@shared/utils/guildGameFlavors'
 
 export interface Guild {
   id: number
   name: string
   server?: string
-  game_flavor?: '_retail_' | '_forever_'
+  game_flavor?: GuildGameFlavor
+  game_flavors?: GuildGameFlavor[]
   description: string
   icon: string
   color: string
@@ -79,7 +81,8 @@ export function sortGuildMembers(members: GuildMember[]): GuildMember[] {
 export interface CreateGuildRequest {
   name: string
   server?: string
-  game_flavor?: '_retail_' | '_forever_'
+  game_flavor?: GuildGameFlavor
+  game_flavors?: GuildGameFlavor[]
   description?: string
   icon?: string
   color?: string
@@ -190,7 +193,7 @@ export interface PublicGuildsQuery {
   keyword?: string
   faction?: string
   server?: string
-  game_flavor?: '_retail_' | '_forever_'
+  game_flavors?: GuildGameFlavor[]
 }
 
 export async function listPublicGuilds(query?: PublicGuildsQuery): Promise<{ guilds: Guild[] }> {
@@ -198,7 +201,7 @@ export async function listPublicGuilds(query?: PublicGuildsQuery): Promise<{ gui
   if (query?.keyword) params.append('keyword', query.keyword)
   if (query?.faction) params.append('faction', query.faction)
   if (query?.server) params.append('server', query.server)
-  if (query?.game_flavor) params.append('game_flavor', query.game_flavor)
+  query?.game_flavors?.forEach(flavor => params.append('game_flavor', flavor))
   const queryStr = params.toString()
   return request.get(`/public/guilds${queryStr ? '?' + queryStr : ''}`)
 }
